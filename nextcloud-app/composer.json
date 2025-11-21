@@ -1,0 +1,17 @@
+{
+    "name": "nextclaude/nextclaude",
+    "description": "Claude AI Integration for Nextcloud",
+    "type": "project",
+    "license": "AGPL-3.0-or-later",
+    "require-dev": {
+        "phpunit/phpunit": "^10.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "OCA\\NextClaude\\": "lib/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    }
+}

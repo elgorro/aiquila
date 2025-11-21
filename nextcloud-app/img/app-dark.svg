@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Cloud -->
+  <path fill="#fff" d="M24 14c-.1 0-.2 0-.3.01A7 7 0 0010 12a6 6 0 000 12h14a4 4 0 000-8z"/>
+  <!-- AI Sparkle -->
+  <path fill="#0082c9" d="M20 10l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/>
+  <circle fill="#0082c9" cx="25" cy="8" r="1"/>
+  <circle fill="#0082c9" cx="17" cy="6" r=".7"/>
+</svg>

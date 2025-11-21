@@ -1,0 +1,11 @@
+# Default owner for everything
+* @sirgorro
+
+# MCP Server
+/mcp-server/ @sirgorro
+
+# Nextcloud App
+/nextcloud-app/ @sirgorro
+
+# Documentation
+/docs/ @sirgorro

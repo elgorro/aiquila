@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+mcp-server/dist/
+*.js.map
+
+# Environment & secrets
+.env
+.env.local
+*.pem
+**/credentials.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Package locks (keep package-lock.json, ignore others)
+yarn.lock
+pnpm-lock.yaml
+
+# Nextcloud dev
+nextcloud-app/js/*.js.map
+nextcloud-app/build/
+
+# Temp files
+*.tmp
+*.bak
+.claude/
