@@ -1,0 +1,50 @@
+name: Nextcloud App Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  sign-and-release:
+    name: Sign Nextcloud App
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Build app package
+        run: |
+          mkdir -p build/nextclaude
+          cp -r nextcloud-app/appinfo build/nextclaude/
+          cp -r nextcloud-app/lib build/nextclaude/
+          cp -r nextcloud-app/templates build/nextclaude/
+          cp -r nextcloud-app/js build/nextclaude/
+          cp -r nextcloud-app/css build/nextclaude/
+          cp -r nextcloud-app/img build/nextclaude/
+
+      - name: Sign app
+        if: ${{ env.NC_SIGN_KEY != '' }}
+        env:
+          NC_SIGN_KEY: ${{ secrets.NC_SIGN_KEY }}
+          NC_SIGN_CERT: ${{ secrets.NC_SIGN_CERT }}
+        run: |
+          echo "$NC_SIGN_KEY" > sign-key.pem
+          echo "$NC_SIGN_CERT" > sign-cert.crt
+          # Sign using Nextcloud's occ command or krankerl
+          # krankerl package --sign --key sign-key.pem --cert sign-cert.crt
+
+      - name: Create tarball
+        run: |
+          cd build
+          tar -czvf nextclaude-${{ github.ref_name }}.tar.gz nextclaude/
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/nextclaude-${{ github.ref_name }}.tar.gz

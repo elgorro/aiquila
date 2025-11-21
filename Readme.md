@@ -60,6 +60,7 @@ Add to Claude Desktop config (`~/.config/claude/claude_desktop_config.json`):
 - [Installation Guide](docs/installation.md)
 - [Development Guide](docs/development.md)
 - [Configuration & Connectivity](docs/connectivity.md)
+- [CI/CD Workflows](docs/ci-cd.md)
 - [Best Practices](docs/best-practices.md)
 
 ## Requirements
