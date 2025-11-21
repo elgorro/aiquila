@@ -12,7 +12,8 @@
       "Bash(git rm:*)",
       "Bash(.gitignore)",
       "Bash(npm run lint)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npm run format:*)"
     ],
     "deny": [],
     "ask": []

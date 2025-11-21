@@ -36,9 +36,9 @@ describe('MCP Tools', () => {
       const items = await client.getDirectoryContents('/');
 
       const listing = Array.isArray(items) ? items : [];
-      const formatted = listing.map((item: any) =>
-        `${item.type === 'directory' ? '📁' : '📄'} ${item.basename}`
-      ).join('\n');
+      const formatted = listing
+        .map((item: any) => `${item.type === 'directory' ? '📁' : '📄'} ${item.basename}`)
+        .join('\n');
 
       expect(formatted).toBe('📁 Documents\n📄 readme.txt');
     });
