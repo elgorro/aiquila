@@ -63,6 +63,10 @@ Add to Claude Desktop config (`~/.config/claude/claude_desktop_config.json`):
 - [CI/CD Workflows](docs/ci-cd.md)
 - [Best Practices](docs/best-practices.md)
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for planned features and development phases.
+
 ## Requirements
 
 - Nextcloud Hub 10 (31.x)
