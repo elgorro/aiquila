@@ -10,7 +10,9 @@
       "Bash(git add:*)",
       "Bash(git branch:*)",
       "Bash(git rm:*)",
-      "Bash(.gitignore)"
+      "Bash(.gitignore)",
+      "Bash(npm run lint)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

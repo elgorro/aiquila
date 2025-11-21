@@ -178,7 +178,7 @@ server.tool(
     content += `\n## Ingredients\n\n${ingredients}\n\n## Instructions\n\n${instructions}`;
 
     // Try to create Recipes folder if it doesn't exist
-    try { await client.createDirectory("/Recipes"); } catch {}
+    try { await client.createDirectory("/Recipes"); } catch { /* ignore if exists */ }
     await client.putFileContents(`/Recipes/${slug}.md`, content);
     return { content: [{ type: "text", text: `Recipe saved: /Recipes/${slug}.md` }] };
   }
@@ -195,7 +195,7 @@ server.tool(
   async ({ title, content }) => {
     const client = getClient();
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    try { await client.createDirectory("/Notes"); } catch {}
+    try { await client.createDirectory("/Notes"); } catch { /* ignore if exists */ }
     await client.putFileContents(`/Notes/${slug}.md`, `# ${title}\n\n${content}`);
     return { content: [{ type: "text", text: `Note saved: /Notes/${slug}.md` }] };
   }
