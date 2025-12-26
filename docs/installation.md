@@ -23,7 +23,7 @@ npm run build
 
 1. Log into your Nextcloud instance
 2. Go to **Settings → Security → Devices & sessions**
-3. Create a new app password (name it "NextClaude MCP")
+3. Create a new app password (name it "AIquila MCP")
 4. Save the generated password securely
 
 ### 3. Configure Claude Desktop
@@ -33,9 +33,9 @@ Edit `~/.config/claude/claude_desktop_config.json` (Linux) or `~/Library/Applica
 ```json
 {
   "mcpServers": {
-    "nextclaude": {
+    "aiquila": {
       "command": "node",
-      "args": ["/absolute/path/to/nextclaude/mcp-server/dist/index.js"],
+      "args": ["/absolute/path/to/aiquila/mcp-server/dist/index.js"],
       "env": {
         "NEXTCLOUD_URL": "https://cloud.yourdomain.com",
         "NEXTCLOUD_USER": "your-username",
@@ -48,7 +48,7 @@ Edit `~/.config/claude/claude_desktop_config.json` (Linux) or `~/Library/Applica
 
 ### 4. Restart Claude Desktop
 
-The NextClaude tools will now be available in your Claude conversations.
+The AIquila tools will now be available in your Claude conversations.
 
 ## Nextcloud App Installation
 
@@ -57,12 +57,12 @@ The Nextcloud app provides AI features directly within the Nextcloud web interfa
 ### 1. Copy the app
 
 ```bash
-cp -r nextcloud-app /path/to/nextcloud/apps/nextclaude
+cp -r nextcloud-app /path/to/nextcloud/apps/aiquila
 ```
 
 Or create a symlink for development:
 ```bash
-ln -s /path/to/nextclaude/nextcloud-app /path/to/nextcloud/apps/nextclaude
+ln -s /path/to/aiquila/nextcloud-app /path/to/nextcloud/apps/aiquila
 ```
 
 ### 2. Enable the app
@@ -70,23 +70,23 @@ ln -s /path/to/nextclaude/nextcloud-app /path/to/nextcloud/apps/nextclaude
 Via command line:
 ```bash
 cd /path/to/nextcloud
-sudo -u www-data php occ app:enable nextclaude
+sudo -u www-data php occ app:enable aiquila
 ```
 
 Or via web interface:
 1. Go to **Settings → Apps**
-2. Find "NextClaude" in the list
+2. Find "AIquila" in the list
 3. Click **Enable**
 
 ### 3. Configure API key
 
 **Admin configuration** (applies to all users):
-1. Go to **Settings → Administration → NextClaude**
+1. Go to **Settings → Administration → AIquila**
 2. Enter your Claude API key
 3. Click Save
 
 **User configuration** (overrides admin key):
-1. Go to **Settings → NextClaude**
+1. Go to **Settings → AIquila**
 2. Enter your personal Claude API key
 
 ## Verification

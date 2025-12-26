@@ -3,7 +3,7 @@
 ## Project Structure
 
 ```
-nextclaude/
+aiquila/
 ├── mcp-server/          # MCP server (TypeScript/Node.js)
 │   ├── src/
 │   │   ├── index.ts     # Main server with all tools
@@ -92,8 +92,8 @@ composer install  # If available
 ### Linking to Nextcloud
 
 ```bash
-ln -s /path/to/nextclaude/nextcloud-app /path/to/nextcloud/apps/nextclaude
-sudo -u www-data php /path/to/nextcloud/occ app:enable nextclaude
+ln -s /path/to/aiquila/nextcloud-app /path/to/nextcloud/apps/aiquila
+sudo -u www-data php /path/to/nextcloud/occ app:enable aiquila
 ```
 
 ### Adding a new API endpoint
@@ -121,7 +121,7 @@ Edit `js/fileactions.js` to register new actions:
 ```javascript
 fileActions.registerAction({
     name: 'my-action',
-    displayName: t('nextclaude', 'My Action'),
+    displayName: t('aiquila', 'My Action'),
     mime: 'text',
     permissions: OC.PERMISSION_READ,
     actionHandler: async function(fileName, context) {
@@ -171,7 +171,7 @@ tail -f ~/.config/claude/logs/mcp.log  # Linux
 
 ```php
 // Add to your code temporarily
-\OC::$server->getLogger()->debug('Debug message', ['app' => 'nextclaude']);
+\OC::$server->getLogger()->debug('Debug message', ['app' => 'aiquila']);
 ```
 
 Check logs:

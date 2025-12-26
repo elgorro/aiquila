@@ -1,7 +1,7 @@
 {
-  "name": "nextclaude-mcp",
+  "name": "aiquila-mcp",
   "version": "0.1.0",
-  "description": "MCP server for Nextcloud integration with Claude",
+  "description": "AIquila - MCP server for Nextcloud integration with Claude AI",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -17,7 +17,9 @@
   "keywords": [
     "mcp",
     "nextcloud",
-    "claude"
+    "claude",
+    "ai",
+    "aiquila"
   ],
   "author": "",
   "license": "MIT",

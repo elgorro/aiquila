@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a bug to help improve NextClaude
+about: Report a bug to help improve AIquila
 title: '[Bug]: '
 labels: bug
 assignees: ''
@@ -24,7 +24,7 @@ What you expected to happen.
 
 ## Environment
 - Nextcloud version:
-- NextClaude version:
+- AIquila version:
 - Node.js version (for MCP):
 - PHP version:
 - OS:

@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest a new feature for NextClaude
+about: Suggest a new feature for AIquila
 title: '[Feature]: '
 labels: enhancement
 assignees: ''

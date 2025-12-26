@@ -77,7 +77,7 @@ describe('MCP Tools', () => {
 
       let vtodo = `BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//NextClaude//MCP//EN
+PRODID:-//AIquila//MCP//EN
 BEGIN:VTODO
 UID:${uid}
 DTSTAMP:20241201T120000Z

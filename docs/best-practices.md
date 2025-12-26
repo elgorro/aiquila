@@ -11,8 +11,8 @@
 
 ### Nextcloud App Passwords
 
-- Create dedicated app passwords for NextClaude
-- Use descriptive names (e.g., "NextClaude MCP - Home Server")
+- Create dedicated app passwords for AIquila
+- Use descriptive names (e.g., "AIquila MCP - Home Server")
 - Revoke unused passwords promptly
 - Monitor active sessions in Nextcloud security settings
 
@@ -114,7 +114,7 @@ npm run build
 ```bash
 cd /path/to/nextcloud
 sudo -u www-data php occ upgrade
-sudo -u www-data php occ app:update nextclaude
+sudo -u www-data php occ app:update aiquila
 ```
 
 ## Contributing
@@ -137,7 +137,7 @@ Use conventional commits:
 
 ## Roadmap Considerations
 
-When extending NextClaude:
+When extending AIquila:
 
 1. **New MCP tools**: Keep them focused and single-purpose
 2. **New NC endpoints**: Follow Nextcloud API conventions

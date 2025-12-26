@@ -1,6 +1,6 @@
 # CI/CD Workflows
 
-NextClaude uses GitHub Actions for continuous integration and deployment.
+AIquila uses GitHub Actions for continuous integration and deployment.
 
 ## Workflows Overview
 
@@ -46,8 +46,8 @@ npm run format
 Triggered when you push a version tag.
 
 **Creates:**
-- `nextclaude-mcp-vX.X.X.tar.gz` - MCP server package
-- `nextclaude-nc-vX.X.X.tar.gz` - Nextcloud app package
+- `aiquila-mcp-vX.X.X.tar.gz` - MCP server package
+- `aiquila-nc-vX.X.X.tar.gz` - Nextcloud app package
 
 **How to release:**
 ```bash

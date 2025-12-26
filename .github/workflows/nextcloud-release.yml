@@ -20,13 +20,13 @@ jobs:
 
       - name: Build app package
         run: |
-          mkdir -p build/nextclaude
-          cp -r nextcloud-app/appinfo build/nextclaude/
-          cp -r nextcloud-app/lib build/nextclaude/
-          cp -r nextcloud-app/templates build/nextclaude/
-          cp -r nextcloud-app/js build/nextclaude/
-          cp -r nextcloud-app/css build/nextclaude/
-          cp -r nextcloud-app/img build/nextclaude/
+          mkdir -p build/aiquila
+          cp -r nextcloud-app/appinfo build/aiquila/
+          cp -r nextcloud-app/lib build/aiquila/
+          cp -r nextcloud-app/templates build/aiquila/
+          cp -r nextcloud-app/js build/aiquila/
+          cp -r nextcloud-app/css build/aiquila/
+          cp -r nextcloud-app/img build/aiquila/
 
       - name: Sign app
         if: ${{ env.NC_SIGN_KEY != '' }}
@@ -42,9 +42,9 @@ jobs:
       - name: Create tarball
         run: |
           cd build
-          tar -czvf nextclaude-${{ github.ref_name }}.tar.gz nextclaude/
+          tar -czvf aiquila-${{ github.ref_name }}.tar.gz aiquila/
 
       - name: Upload to release
         uses: softprops/action-gh-release@v1
         with:
-          files: build/nextclaude-${{ github.ref_name }}.tar.gz
+          files: build/aiquila-${{ github.ref_name }}.tar.gz

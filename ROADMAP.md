@@ -1,4 +1,4 @@
-# NextClaude Roadmap
+# AIquila Roadmap
 
 ## Phase 1: Foundation ✅
 *Current release*

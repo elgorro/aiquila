@@ -16,7 +16,7 @@
           │ WebDAV / CalDAV
           ▼
 ┌─────────────────────┐         ┌─────────────────────┐
-│   Nextcloud         │◄────────│   NextClaude App    │
+│   Nextcloud         │◄────────│   AIquila App    │
 │   Instance          │         │   (PHP)             │
 └─────────────────────┘         └─────────┬───────────┘
                                           │ HTTPS
@@ -47,7 +47,7 @@ Location:
 ```json
 {
   "mcpServers": {
-    "nextclaude": {
+    "aiquila": {
       "command": "node",
       "args": ["/path/to/mcp-server/dist/index.js"],
       "env": {
@@ -72,14 +72,14 @@ The MCP server must be accessible from your device. Options:
 
 ### Admin Settings
 
-Path: **Settings → Administration → NextClaude**
+Path: **Settings → Administration → AIquila**
 
 - **API Key**: Claude API key (starts with `sk-ant-`)
 - This key is used for all users who don't have a personal key
 
 ### User Settings
 
-Path: **Settings → NextClaude**
+Path: **Settings → AIquila**
 
 - Users can set their own API key to override the admin key
 - Useful for billing separation or different API plans
@@ -110,7 +110,7 @@ The Nextcloud server needs outbound access to:
 Always use Nextcloud App Passwords instead of your main password:
 
 1. Go to **Settings → Security → Devices & sessions**
-2. Enter a name (e.g., "NextClaude MCP")
+2. Enter a name (e.g., "AIquila MCP")
 3. Click **Create new app password**
 4. Use this password in your configuration
 

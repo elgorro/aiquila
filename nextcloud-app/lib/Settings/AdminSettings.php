@@ -1,6 +1,6 @@
 <?php
 
-namespace OCA\NextClaude\Settings;
+namespace OCA\AIquila\Settings;
 
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
@@ -14,15 +14,15 @@ class AdminSettings implements ISettings {
     }
 
     public function getForm(): TemplateResponse {
-        $apiKey = $this->config->getAppValue('nextclaude', 'api_key', '');
-        return new TemplateResponse('nextclaude', 'admin', [
+        $apiKey = $this->config->getAppValue('aiquila', 'api_key', '');
+        return new TemplateResponse('aiquila', 'admin', [
             'api_key' => $apiKey ? '********' : '',
             'has_key' => !empty($apiKey),
         ], '');
     }
 
     public function getSection(): string {
-        return 'nextclaude';
+        return 'aiquila';
     }
 
     public function getPriority(): int {

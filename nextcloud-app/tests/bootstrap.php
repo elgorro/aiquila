@@ -1,7 +1,7 @@
 <?php
 
 /**
- * PHPUnit bootstrap for NextClaude tests
+ * PHPUnit bootstrap for AIquila tests
  *
  * For standalone testing, mock the Nextcloud interfaces.
  * For integration testing, this should be run within Nextcloud's test framework.
@@ -9,7 +9,7 @@
 
 // Autoload app classes
 spl_autoload_register(function ($class) {
-    $prefix = 'OCA\\NextClaude\\';
+    $prefix = 'OCA\\AIquila\\';
     $baseDir = __DIR__ . '/../lib/';
 
     $len = strlen($prefix);

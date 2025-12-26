@@ -1,6 +1,6 @@
 <?php
 
-namespace OCA\NextClaude\Controller;
+namespace OCA\AIquila\Controller;
 
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JSONResponse;
@@ -10,7 +10,7 @@ use OCP\IConfig;
 class SettingsController extends Controller {
     private IConfig $config;
     private ?string $userId;
-    private string $appName = 'nextclaude';
+    private string $appName = 'aiquila';
 
     public function __construct(string $appName, IRequest $request, IConfig $config, ?string $userId) {
         parent::__construct($appName, $request);

@@ -26,7 +26,7 @@ function getClient(): WebDAVClient {
 }
 
 const server = new McpServer({
-  name: 'nextclaude',
+  name: 'aiquila',
   version: '0.1.0',
 });
 
@@ -149,7 +149,7 @@ server.tool(
     const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     let vtodo = `BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//NextClaude//MCP//EN
+PRODID:-//AIquila//MCP//EN
 BEGIN:VTODO
 UID:${uid}
 DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z
@@ -220,7 +220,7 @@ server.tool(
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('NextClaude MCP server running');
+  console.error('AIquila MCP server running');
 }
 
 main().catch(console.error);

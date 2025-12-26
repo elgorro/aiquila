@@ -1,8 +1,8 @@
 <?php
 
-namespace OCA\NextClaude\Tests\Unit;
+namespace OCA\AIquila\Tests\Unit;
 
-use OCA\NextClaude\Service\ClaudeService;
+use OCA\AIquila\Service\ClaudeService;
 use OCP\IConfig;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IClient;
@@ -27,7 +27,7 @@ class ClaudeServiceTest extends TestCase {
 
     public function testGetApiKeyReturnsUserKeyFirst(): void {
         $this->config->method('getUserValue')
-            ->with('testuser', 'nextclaude', 'api_key', '')
+            ->with('testuser', 'aiquila', 'api_key', '')
             ->willReturn('user-api-key');
 
         $result = $this->service->getApiKey('testuser');
@@ -36,11 +36,11 @@ class ClaudeServiceTest extends TestCase {
 
     public function testGetApiKeyFallsBackToAdminKey(): void {
         $this->config->method('getUserValue')
-            ->with('testuser', 'nextclaude', 'api_key', '')
+            ->with('testuser', 'aiquila', 'api_key', '')
             ->willReturn('');
 
         $this->config->method('getAppValue')
-            ->with('nextclaude', 'api_key', '')
+            ->with('aiquila', 'api_key', '')
             ->willReturn('admin-api-key');
 
         $result = $this->service->getApiKey('testuser');

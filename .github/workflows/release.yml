@@ -32,11 +32,11 @@ jobs:
       - name: Package MCP Server
         run: |
           cd mcp-server
-          tar -czvf ../nextclaude-mcp-${{ github.ref_name }}.tar.gz dist/ package.json README.md
+          tar -czvf ../aiquila-mcp-${{ github.ref_name }}.tar.gz dist/ package.json README.md
 
       - name: Package Nextcloud App
         run: |
-          tar -czvf nextclaude-nc-${{ github.ref_name }}.tar.gz \
+          tar -czvf aiquila-nc-${{ github.ref_name }}.tar.gz \
             --exclude='nextcloud-app/tests' \
             --exclude='nextcloud-app/vendor' \
             nextcloud-app/
@@ -46,5 +46,5 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            nextclaude-mcp-${{ github.ref_name }}.tar.gz
-            nextclaude-nc-${{ github.ref_name }}.tar.gz
+            aiquila-mcp-${{ github.ref_name }}.tar.gz
+            aiquila-nc-${{ github.ref_name }}.tar.gz

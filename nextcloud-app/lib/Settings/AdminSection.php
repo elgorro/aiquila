@@ -1,6 +1,6 @@
 <?php
 
-namespace OCA\NextClaude\Settings;
+namespace OCA\AIquila\Settings;
 
 use OCP\IL10N;
 use OCP\IURLGenerator;
@@ -16,11 +16,11 @@ class AdminSection implements IIconSection {
     }
 
     public function getID(): string {
-        return 'nextclaude';
+        return 'aiquila';
     }
 
     public function getName(): string {
-        return $this->l->t('NextClaude');
+        return $this->l->t('AIquila');
     }
 
     public function getPriority(): int {
@@ -28,6 +28,6 @@ class AdminSection implements IIconSection {
     }
 
     public function getIcon(): string {
-        return $this->urlGenerator->imagePath('nextclaude', 'app-dark.svg');
+        return $this->urlGenerator->imagePath('aiquila', 'app-dark.svg');
     }
 }

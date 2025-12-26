@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 <info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
-    <id>nextclaude</id>
-    <name>NextClaude</name>
+    <id>aiquila</id>
+    <name>AIquila</name>
     <summary>Claude AI Integration for Nextcloud</summary>
     <description><![CDATA[
-Integrate Claude AI into your Nextcloud instance.
+AIquila brings Claude AI capabilities to your Nextcloud instance.
 
 Features:
 - Chat with Claude about your files
@@ -15,16 +15,16 @@ Features:
     ]]></description>
     <version>0.1.0</version>
     <licence>agpl</licence>
-    <author mail="dev@example.com">NextClaude</author>
-    <namespace>NextClaude</namespace>
+    <author mail="dev@example.com">AIquila</author>
+    <namespace>AIquila</namespace>
     <category>integration</category>
     <category>tools</category>
-    <bugs>https://github.com/yourrepo/nextclaude/issues</bugs>
+    <bugs>https://github.com/yourrepo/aiquila/issues</bugs>
     <dependencies>
         <nextcloud min-version="31" max-version="31"/>
     </dependencies>
     <settings>
-        <admin>OCA\NextClaude\Settings\AdminSettings</admin>
-        <admin-section>OCA\NextClaude\Settings\AdminSection</admin-section>
+        <admin>OCA\AIquila\Settings\AdminSettings</admin>
+        <admin-section>OCA\AIquila\Settings\AdminSection</admin-section>
     </settings>
 </info>

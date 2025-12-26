@@ -1,6 +1,6 @@
 <?php
 
-namespace OCA\NextClaude\AppInfo;
+namespace OCA\AIquila\AppInfo;
 
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
@@ -9,7 +9,7 @@ use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\Util;
 
 class Application extends App implements IBootstrap {
-    public const APP_ID = 'nextclaude';
+    public const APP_ID = 'aiquila';
 
     public function __construct() {
         parent::__construct(self::APP_ID);

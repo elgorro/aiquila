@@ -1,6 +1,6 @@
 <?php
 
-namespace OCA\NextClaude\Service;
+namespace OCA\AIquila\Service;
 
 use OCP\IConfig;
 use OCP\Http\Client\IClientService;
@@ -8,7 +8,7 @@ use OCP\Http\Client\IClientService;
 class ClaudeService {
     private IConfig $config;
     private IClientService $clientService;
-    private string $appName = 'nextclaude';
+    private string $appName = 'aiquila';
 
     public function __construct(IConfig $config, IClientService $clientService) {
         $this->config = $config;

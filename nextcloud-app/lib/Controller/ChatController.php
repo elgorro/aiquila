@@ -1,11 +1,11 @@
 <?php
 
-namespace OCA\NextClaude\Controller;
+namespace OCA\AIquila\Controller;
 
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
-use OCA\NextClaude\Service\ClaudeService;
+use OCA\AIquila\Service\ClaudeService;
 
 class ChatController extends Controller {
     private ClaudeService $claudeService;
