@@ -1,10 +1,10 @@
 document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('nextclaude-admin-form');
-    const status = document.getElementById('nextclaude-status');
+    const form = document.getElementById('aiquila-admin-form');
+    const status = document.getElementById('aiquila-status');
 
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
-        const apiKey = document.getElementById('nextclaude-api-key').value;
+        const apiKey = document.getElementById('aiquila-api-key').value;
 
         if (!apiKey) {
             status.textContent = 'Please enter an API key';
@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
         status.textContent = 'Saving...';
 
         try {
-            const response = await fetch(OC.generateUrl('/apps/nextclaude/api/admin/settings'), {
+            const response = await fetch(OC.generateUrl('/apps/aiquila/api/admin/settings'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -25,8 +25,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (response.ok) {
                 status.textContent = 'Saved!';
-                document.getElementById('nextclaude-api-key').value = '';
-                document.getElementById('nextclaude-api-key').placeholder = 'API key configured';
+                document.getElementById('aiquila-api-key').value = '';
+                document.getElementById('aiquila-api-key').placeholder = 'API key configured';
             } else {
                 status.textContent = 'Error saving';
             }

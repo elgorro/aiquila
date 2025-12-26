@@ -1,19 +1,19 @@
-#nextclaude-admin {
+#aiquila-admin {
     max-width: 600px;
 }
 
-#nextclaude-admin-form {
+#aiquila-admin-form {
     display: flex;
     flex-direction: column;
     gap: 10px;
     margin-top: 15px;
 }
 
-#nextclaude-admin-form input {
+#aiquila-admin-form input {
     max-width: 400px;
 }
 
-#nextclaude-status {
+#aiquila-status {
     color: var(--color-success);
     margin-left: 10px;
 }

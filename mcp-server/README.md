@@ -1,4 +1,4 @@
-# NextClaude MCP Server
+# AIquila MCP Server
 
 MCP (Model Context Protocol) server that connects Claude to your Nextcloud instance.
 
@@ -26,9 +26,9 @@ Add to `~/.config/claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "nextclaude": {
+    "aiquila": {
       "command": "node",
-      "args": ["/path/to/nextclaude/mcp-server/dist/index.js"],
+      "args": ["/path/to/aiquila/mcp-server/dist/index.js"],
       "env": {
         "NEXTCLOUD_URL": "https://your-nextcloud.example.com",
         "NEXTCLOUD_USER": "your-username",

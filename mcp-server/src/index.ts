@@ -34,10 +34,11 @@ const server = new McpServer({
 server.tool(
   'list_files',
   'List files and folders in a Nextcloud directory',
-  { path: z.string().default('/').describe('Directory path to list') },
+  { path: z.string().optional().describe('Directory path to list') },
   async ({ path }) => {
+    const dirPath = path || '/';
     const client = getClient();
-    const items = await client.getDirectoryContents(path);
+    const items = await client.getDirectoryContents(dirPath);
     const listing = Array.isArray(items) ? items : items.data;
     const formatted = listing
       .map((item: any) => `${item.type === 'directory' ? '📁' : '📄'} ${item.basename}`)
