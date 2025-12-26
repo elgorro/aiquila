@@ -1,5 +1,5 @@
 /**
- * NextClaude File Actions
+ * AIquila File Actions
  * Adds "Ask Claude" to file context menu
  */
 
@@ -20,8 +20,8 @@
     ];
 
     fileActions.registerAction({
-        name: 'nextclaude-ask',
-        displayName: t('nextclaude', 'Ask Claude'),
+        name: 'aiquila-ask',
+        displayName: t('aiquila', 'Ask Claude'),
         mime: 'text',
         permissions: OC.PERMISSION_READ,
         iconClass: 'icon-comment',
@@ -32,29 +32,29 @@
             // Create modal dialog
             const dialog = document.createElement('div');
             dialog.innerHTML = `
-                <div id="nextclaude-dialog" style="padding: 20px;">
+                <div id="aiquila-dialog" style="padding: 20px;">
                     <h3>Ask Claude about "${fileName}"</h3>
-                    <textarea id="nextclaude-prompt" placeholder="What would you like to know about this file?" style="width: 100%; height: 100px; margin: 10px 0;"></textarea>
+                    <textarea id="aiquila-prompt" placeholder="What would you like to know about this file?" style="width: 100%; height: 100px; margin: 10px 0;"></textarea>
                     <div style="margin-top: 10px;">
-                        <button id="nextclaude-summarize" class="primary">Summarize</button>
-                        <button id="nextclaude-ask-btn" class="primary">Ask</button>
+                        <button id="aiquila-summarize" class="primary">Summarize</button>
+                        <button id="aiquila-ask-btn" class="primary">Ask</button>
                     </div>
-                    <div id="nextclaude-response" style="margin-top: 15px; white-space: pre-wrap;"></div>
+                    <div id="aiquila-response" style="margin-top: 15px; white-space: pre-wrap;"></div>
                 </div>
             `;
 
-            OC.dialogs.message(dialog.innerHTML, t('nextclaude', 'NextClaude'), 'none', OC.dialogs.YES_NO_BUTTONS, function() {}, true);
+            OC.dialogs.message(dialog.innerHTML, t('aiquila', 'AIquila'), 'none', OC.dialogs.YES_NO_BUTTONS, function() {}, true);
 
             setTimeout(() => {
-                const summarizeBtn = document.getElementById('nextclaude-summarize');
-                const askBtn = document.getElementById('nextclaude-ask-btn');
-                const responseDiv = document.getElementById('nextclaude-response');
-                const promptInput = document.getElementById('nextclaude-prompt');
+                const summarizeBtn = document.getElementById('aiquila-summarize');
+                const askBtn = document.getElementById('aiquila-ask-btn');
+                const responseDiv = document.getElementById('aiquila-response');
+                const promptInput = document.getElementById('aiquila-prompt');
 
                 async function callClaude(action, data) {
                     responseDiv.textContent = 'Loading...';
                     try {
-                        const response = await fetch(OC.generateUrl(`/apps/nextclaude/api/${action}`), {
+                        const response = await fetch(OC.generateUrl(`/apps/aiquila/api/${action}`), {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
