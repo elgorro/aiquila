@@ -90,4 +90,37 @@ class ClaudeService {
     public function summarize(string $content, ?string $userId = null): array {
         return $this->ask("Summarize the following content concisely:\n\n$content", '', $userId);
     }
+
+    /**
+     * Get current configuration for display/testing
+     */
+    public function getConfiguration(): array {
+        return [
+            'api_key' => $this->config->getAppValue($this->appName, 'api_key', ''),
+            'model' => $this->getModel(),
+            'max_tokens' => $this->getMaxTokens(),
+            'timeout' => $this->getApiTimeout(),
+        ];
+    }
+
+    /**
+     * Send a message to Claude (wrapper for ask() for testing)
+     */
+    public function sendMessage(string $prompt, ?string $userId = null, ?string $filePath = null): string {
+        $context = '';
+
+        // If file path provided, try to read it
+        if ($filePath) {
+            // This would need file access implementation
+            // For now, just use the prompt
+        }
+
+        $result = $this->ask($prompt, $context, $userId);
+
+        if (isset($result['error'])) {
+            throw new \Exception($result['error']);
+        }
+
+        return $result['response'] ?? 'No response';
+    }
 }

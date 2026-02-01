@@ -4,32 +4,38 @@
  */
 
 (function() {
-    if (!OCA.Files) return;
+    console.log('[AIquila] Initializing file actions');
+
+    // Wait for Files app to be ready
+    if (!OCA.Files) {
+        console.warn('[AIquila] OCA.Files not available yet, retrying...');
+        setTimeout(arguments.callee, 100);
+        return;
+    }
+
+    if (!OCA.Files.fileActions) {
+        console.warn('[AIquila] fileActions not available yet, retrying...');
+        setTimeout(arguments.callee, 100);
+        return;
+    }
 
     const fileActions = OCA.Files.fileActions;
-    if (!fileActions) return;
+    console.log('[AIquila] fileActions available, registering action');
 
     // File size limits
     const DEFAULT_MAX_SIZE = 5 * 1024 * 1024; // 5MB default
     const WARNING_SIZE = 5 * 1024 * 1024; // Warn at 5MB
 
-    // Supported file types for text analysis
-    const supportedMimes = [
-        'text/plain',
-        'text/markdown',
-        'text/html',
-        'application/json',
-        'application/xml',
-        'text/csv',
-    ];
-
-    fileActions.registerAction({
-        name: 'aiquila-ask',
-        displayName: t('aiquila', 'Ask Claude'),
-        mime: 'text',
-        permissions: OC.PERMISSION_READ,
-        iconClass: 'icon-comment',
-        actionHandler: async function(fileName, context) {
+    try {
+        fileActions.registerAction({
+            name: 'AiquilaAsk',
+            displayName: t('aiquila', 'Ask Claude'),
+            mime: 'all',  // Changed from 'text' to 'all' to show for all files
+            permissions: OC.PERMISSION_READ,
+            icon: OC.imagePath('core', 'actions/comment'),
+            type: OCA.Files.FileActions.TYPE_DROPDOWN,  // Show in dropdown menu
+            actionHandler: async function(fileName, context) {
+                console.log('[AIquila] Action triggered for:', fileName);
             const filePath = context.dir + '/' + fileName;
             const fileSize = context.fileInfoModel.get('size');
 
@@ -113,4 +119,10 @@
             }, 100);
         },
     });
+
+    console.log('[AIquila] File action registered successfully');
+
+    } catch (error) {
+        console.error('[AIquila] Error registering file action:', error);
+    }
 })();
