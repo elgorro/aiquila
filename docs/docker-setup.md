@@ -222,6 +222,18 @@ make shell-nc
 php occ app:list                    # List all apps
 php occ app:enable aiquila          # Enable AIquila
 php occ user:list                   # List users
+
+# AIquila configuration (recommended method)
+php occ aiquila:configure --show                           # Show current configuration
+php occ aiquila:configure --api-key "sk-ant-..."           # Set API key
+php occ aiquila:configure --model "claude-sonnet-4-20250514"  # Set model
+php occ aiquila:configure --max-tokens 8192                # Set max tokens (1-100000)
+php occ aiquila:configure --timeout 60                     # Set timeout in seconds (10-1800)
+
+# Set multiple values at once
+php occ aiquila:configure --model "claude-3-7-sonnet-20250219" --max-tokens 16384 --timeout 120
+
+# Alternative: Direct config manipulation (not recommended)
 php occ config:app:get aiquila      # Get AIquila config
 php occ config:app:set aiquila api_key --value="sk-ant-..."  # Set API key
 ```
