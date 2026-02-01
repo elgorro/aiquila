@@ -26,5 +26,6 @@ Features:
     <settings>
         <admin>OCA\AIquila\Settings\AdminSettings</admin>
         <admin-section>OCA\AIquila\Settings\AdminSection</admin-section>
+        <personal>OCA\AIquila\Settings\UserSettings</personal>
     </settings>
 </info>
