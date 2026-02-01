@@ -39,6 +39,9 @@
 - [ ] Token usage tracking
 - [ ] Streaming responses
 
+### Infrastructure
+- [ ] Docker dev environment for improved testing capabilities
+
 ---
 
 ## Phase 3: Advanced Features
