@@ -15,9 +15,16 @@ class AdminSettings implements ISettings {
 
     public function getForm(): TemplateResponse {
         $apiKey = $this->config->getAppValue('aiquila', 'api_key', '');
+        $model = $this->config->getAppValue('aiquila', 'model', 'claude-sonnet-4-20250514');
+        $maxTokens = $this->config->getAppValue('aiquila', 'max_tokens', '4096');
+        $apiTimeout = $this->config->getAppValue('aiquila', 'api_timeout', '30');
+
         return new TemplateResponse('aiquila', 'admin', [
             'api_key' => $apiKey ? '********' : '',
             'has_key' => !empty($apiKey),
+            'model' => $model,
+            'max_tokens' => $maxTokens,
+            'api_timeout' => $apiTimeout,
         ], '');
     }
 

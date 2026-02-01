@@ -10,9 +10,35 @@ class ClaudeService {
     private IClientService $clientService;
     private string $appName = 'aiquila';
 
+    // Default configuration values
+    private const DEFAULT_API_TIMEOUT = 30; // seconds
+    private const DEFAULT_API_MODEL = 'claude-sonnet-4-20250514';
+    private const DEFAULT_MAX_TOKENS = 4096;
+
     public function __construct(IConfig $config, IClientService $clientService) {
         $this->config = $config;
         $this->clientService = $clientService;
+    }
+
+    /**
+     * Get configured API timeout
+     */
+    private function getApiTimeout(): int {
+        return (int)$this->config->getAppValue($this->appName, 'api_timeout', (string)self::DEFAULT_API_TIMEOUT);
+    }
+
+    /**
+     * Get configured model
+     */
+    private function getModel(): string {
+        return $this->config->getAppValue($this->appName, 'model', self::DEFAULT_API_MODEL);
+    }
+
+    /**
+     * Get configured max tokens
+     */
+    private function getMaxTokens(): int {
+        return (int)$this->config->getAppValue($this->appName, 'max_tokens', (string)self::DEFAULT_MAX_TOKENS);
     }
 
     public function getApiKey(?string $userId = null): string {
@@ -47,10 +73,11 @@ class ClaudeService {
                     'content-type' => 'application/json',
                 ],
                 'body' => json_encode([
-                    'model' => 'claude-sonnet-4-20250514',
-                    'max_tokens' => 4096,
+                    'model' => $this->getModel(),
+                    'max_tokens' => $this->getMaxTokens(),
                     'messages' => $messages,
                 ]),
+                'timeout' => $this->getApiTimeout(),
             ]);
 
             $data = json_decode($response->getBody(), true);

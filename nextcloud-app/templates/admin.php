@@ -13,12 +13,57 @@ style('aiquila', 'admin');
     </p>
 
     <form id="aiquila-admin-form">
-        <label for="aiquila-api-key">Claude API Key</label>
-        <input type="password"
-               id="aiquila-api-key"
-               name="api_key"
-               placeholder="<?php echo $_['has_key'] ? 'API key configured' : 'sk-ant-...'; ?>"
-               value="">
+        <div class="form-group">
+            <label for="aiquila-api-key">Claude API Key</label>
+            <input type="password"
+                   id="aiquila-api-key"
+                   name="api_key"
+                   placeholder="<?php echo $_['has_key'] ? 'API key configured' : 'sk-ant-...'; ?>"
+                   value="">
+        </div>
+
+        <h3>Advanced Settings</h3>
+
+        <div class="form-group">
+            <label for="aiquila-model">Claude Model</label>
+            <input type="text"
+                   id="aiquila-model"
+                   name="model"
+                   value="<?php echo $_['model']; ?>"
+                   placeholder="claude-sonnet-4-20250514"
+                   list="model-suggestions">
+            <datalist id="model-suggestions">
+                <option value="claude-sonnet-4-20250514">
+                <option value="claude-opus-4-20250514">
+                <option value="claude-3-7-sonnet-20250219">
+                <option value="claude-3-5-haiku-20241022">
+            </datalist>
+            <p class="hint">Default: claude-sonnet-4-20250514 (enter any Claude model identifier)</p>
+        </div>
+
+        <div class="form-group">
+            <label for="aiquila-max-tokens">Max Tokens</label>
+            <input type="number"
+                   id="aiquila-max-tokens"
+                   name="max_tokens"
+                   value="<?php echo $_['max_tokens']; ?>"
+                   min="1"
+                   max="100000"
+                   step="100">
+            <p class="hint">Default: 4096 (range: 1-100,000)</p>
+        </div>
+
+        <div class="form-group">
+            <label for="aiquila-timeout">API Timeout (seconds)</label>
+            <input type="number"
+                   id="aiquila-timeout"
+                   name="api_timeout"
+                   value="<?php echo $_['api_timeout']; ?>"
+                   min="10"
+                   max="1800"
+                   step="5">
+            <p class="hint">Default: 30 seconds (range: 10-1800 = up to 30 minutes)</p>
+        </div>
 
         <button type="submit" class="primary">Save</button>
         <span id="aiquila-status"></span>

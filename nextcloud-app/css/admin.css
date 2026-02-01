@@ -2,15 +2,43 @@
     max-width: 600px;
 }
 
+#aiquila-admin h3 {
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+
 #aiquila-admin-form {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 15px;
     margin-top: 15px;
 }
 
-#aiquila-admin-form input {
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.form-group label {
+    font-weight: bold;
+}
+
+.form-group input,
+.form-group select {
     max-width: 400px;
+    padding: 8px;
+}
+
+.form-group .hint {
+    color: var(--color-text-maxcontrast);
+    font-size: 0.9em;
+    margin: 0;
+}
+
+.settings-hint {
+    color: var(--color-text-maxcontrast);
+    margin-bottom: 15px;
 }
 
 #aiquila-status {

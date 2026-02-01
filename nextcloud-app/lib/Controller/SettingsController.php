@@ -38,16 +38,40 @@ class SettingsController extends Controller {
     }
 
     /**
-     * Save admin-level API key
+     * Save admin-level settings
      */
     public function saveAdmin(): JSONResponse {
         $apiKey = $this->request->getParam('api_key', '');
+        $model = $this->request->getParam('model', '');
+        $maxTokens = $this->request->getParam('max_tokens', '');
+        $apiTimeout = $this->request->getParam('api_timeout', '');
 
-        if (empty($apiKey)) {
-            return new JSONResponse(['status' => 'error', 'message' => 'API key cannot be empty'], 400);
+        // Save API key if provided
+        if (!empty($apiKey)) {
+            $this->config->setAppValue($this->appName, 'api_key', $apiKey);
         }
 
-        $this->config->setAppValue($this->appName, 'api_key', $apiKey);
+        // Save model if provided
+        if (!empty($model)) {
+            $this->config->setAppValue($this->appName, 'model', $model);
+        }
+
+        // Save max tokens if provided
+        if (!empty($maxTokens)) {
+            $maxTokensInt = (int)$maxTokens;
+            if ($maxTokensInt >= 1 && $maxTokensInt <= 100000) {
+                $this->config->setAppValue($this->appName, 'max_tokens', (string)$maxTokensInt);
+            }
+        }
+
+        // Save timeout if provided
+        if (!empty($apiTimeout)) {
+            $apiTimeoutInt = (int)$apiTimeout;
+            if ($apiTimeoutInt >= 10 && $apiTimeoutInt <= 1800) {
+                $this->config->setAppValue($this->appName, 'api_timeout', (string)$apiTimeoutInt);
+            }
+        }
+
         return new JSONResponse(['status' => 'ok']);
     }
 }
