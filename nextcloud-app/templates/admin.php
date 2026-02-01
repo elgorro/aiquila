@@ -49,7 +49,7 @@ style('aiquila', 'admin');
                    value="<?php echo $_['max_tokens']; ?>"
                    min="1"
                    max="100000"
-                   step="100">
+                   step="1">
             <p class="hint">Default: 4096 (range: 1-100,000)</p>
         </div>
 
