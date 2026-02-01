@@ -2,6 +2,8 @@
 
 namespace OCA\AIquila\AppInfo;
 
+use OCA\AIquila\Public\IAIquila;
+use OCA\AIquila\Service\AIquilaService;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -16,6 +18,10 @@ class Application extends App implements IBootstrap {
     }
 
     public function register(IRegistrationContext $context): void {
+        // Register AIquila service for use by other apps
+        $context->registerService(IAIquila::class, function ($c) {
+            return $c->get(AIquilaService::class);
+        });
     }
 
     public function boot(IBootContext $context): void {
