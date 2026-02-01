@@ -10,7 +10,7 @@ use OCP\IConfig;
 class SettingsController extends Controller {
     private IConfig $config;
     private ?string $userId;
-    protected string $appName = 'aiquila';
+    protected $appName = 'aiquila';
 
     public function __construct(string $appName, IRequest $request, IConfig $config, ?string $userId) {
         parent::__construct($appName, $request);
