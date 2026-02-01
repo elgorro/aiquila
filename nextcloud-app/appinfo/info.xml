@@ -28,4 +28,7 @@ Features:
         <admin-section>OCA\AIquila\Settings\AdminSection</admin-section>
         <personal>OCA\AIquila\Settings\UserSettings</personal>
     </settings>
+    <commands>
+        <command>OCA\AIquila\Command\ConfigureCommand</command>
+    </commands>
 </info>
