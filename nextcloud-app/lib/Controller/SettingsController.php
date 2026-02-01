@@ -36,4 +36,18 @@ class SettingsController extends Controller {
         $this->config->setUserValue($this->userId, $this->appName, 'api_key', $apiKey);
         return new JSONResponse(['status' => 'ok']);
     }
+
+    /**
+     * Save admin-level API key
+     */
+    public function saveAdmin(): JSONResponse {
+        $apiKey = $this->request->getParam('api_key', '');
+
+        if (empty($apiKey)) {
+            return new JSONResponse(['status' => 'error', 'message' => 'API key cannot be empty'], 400);
+        }
+
+        $this->config->setAppValue($this->appName, 'api_key', $apiKey);
+        return new JSONResponse(['status' => 'ok']);
+    }
 }
