@@ -23,6 +23,8 @@ AIquila connects your Nextcloud instance with Claude AI, enabling two-way integr
 - Document summarization
 - Content generation and editing
 - Admin and per-user API key configuration
+- Configurable model, token limits, and timeouts
+- Rate limiting and input validation
 
 ## Quick Start
 

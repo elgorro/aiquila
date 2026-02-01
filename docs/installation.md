@@ -78,16 +78,21 @@ Or via web interface:
 2. Find "AIquila" in the list
 3. Click **Enable**
 
-### 3. Configure API key
+### 3. Configure API key and settings
 
 **Admin configuration** (applies to all users):
 1. Go to **Settings → Administration → AIquila**
 2. Enter your Claude API key
-3. Click Save
+3. (Optional) Configure advanced settings:
+   - **Claude Model**: Choose or enter any Claude model (default: claude-sonnet-4-20250514)
+   - **Max Tokens**: Set response length limit (1-100,000, default: 4096)
+   - **API Timeout**: Set request timeout in seconds (10-1800, default: 30)
+4. Click Save
 
 **User configuration** (overrides admin key):
-1. Go to **Settings → AIquila**
+1. Go to **Settings → Personal → AIquila**
 2. Enter your personal Claude API key
+3. Click Save or Clear Key to remove override
 
 ## Verification
 
