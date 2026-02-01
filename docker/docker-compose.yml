@@ -72,16 +72,10 @@ services:
       AIQUILA_CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
     volumes:
       - nextcloud_data:/var/www/html
-      # Mount AIquila app for development
-      - ../nextcloud-app:/var/www/html/custom_apps/aiquila:ro
-      # Custom configuration
-      - ./nextcloud/custom.config.php:/var/www/html/config/custom.config.php:ro
-      # Custom entrypoint
-      - ./nextcloud/entrypoint.sh:/entrypoint-custom.sh:ro
+      # Note: To mount AIquila app for development, first let Nextcloud initialize,
+      # then add: ../nextcloud-app:/var/www/html/custom_apps/aiquila
     ports:
       - "8080:80"
-    entrypoint: /entrypoint-custom.sh
-    command: apache2-foreground
     networks:
       - aiquila-network
 
