@@ -15,7 +15,7 @@ class ChatController extends Controller {
     private ICache $cache;
 
     // Constants for validation and rate limiting
-    private const MAX_CONTENT_LENGTH = 100000; // 100KB
+    private const MAX_CONTENT_LENGTH = 5242880; // 5MB (5 * 1024 * 1024)
     private const RATE_LIMIT_REQUESTS = 10;
     private const RATE_LIMIT_WINDOW = 60; // seconds
 
@@ -76,7 +76,7 @@ class ChatController extends Controller {
         $totalLength = strlen($prompt) + strlen($context);
         if (!$this->validateContentLength($prompt . $context)) {
             return new JSONResponse([
-                'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / 1024) . 'KB'
+                'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
             ], 413);
         }
 
@@ -104,7 +104,7 @@ class ChatController extends Controller {
         // Validate content length
         if (!$this->validateContentLength($content)) {
             return new JSONResponse([
-                'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / 1024) . 'KB'
+                'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
             ], 413);
         }
 
