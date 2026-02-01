@@ -7,11 +7,13 @@ Complete guide for setting up and using the AIquila Docker development environme
 The Docker environment provides a complete, isolated development setup with:
 
 - **PostgreSQL 16** - Production-grade database
-- **Nextcloud 31** - Test instance with AIquila app mounted
+- **Nextcloud 31** - Test instance for development
 - **Redis 7** - Caching and performance
 - **MCP Server** - Development container with hot reload
 - **MailHog** - Email testing and debugging
 - **Adminer** - Database management UI
+
+**Note:** This setup requires manual configuration after first start. The AIquila app needs to be installed after Nextcloud initializes.
 
 ## Quick Start
 
@@ -20,17 +22,22 @@ The Docker environment provides a complete, isolated development setup with:
 - Docker Engine 20.10+
 - Docker Compose 2.0+
 - 4GB+ RAM available for Docker
+- **Linux users:** Ensure your user is in the `docker` group:
+  ```bash
+  sudo usermod -aG docker $USER
+  newgrp docker  # Or log out and back in
+  ```
 
 ### Initial Setup
 
 ```bash
 # Navigate to docker directory
-cd /home/sirgorro/Dev/aiquila/docker
+cd docker
 
 # Copy environment template
 cp .env.example .env
 
-# Edit environment variables (optional - defaults work fine)
+# (Optional) Edit environment variables - defaults work fine
 nano .env
 
 # Start all services
@@ -39,29 +46,62 @@ make up
 
 ### First Time Setup
 
+**Step 1: Start Docker Services**
+
 The first time you run `make up`, Docker will:
 
 1. Download all required images (~2-3 GB)
 2. Create PostgreSQL database
-3. Install Nextcloud
-4. Enable AIquila app
-5. Create test user for MCP server
-6. Configure Redis caching
-7. Set up MailHog for email testing
+3. Create Redis cache
+4. Start Nextcloud (takes 2-3 minutes to initialize)
+5. Start MailHog and Adminer
 
-This takes 2-3 minutes. Watch progress with:
-
+Watch progress with:
 ```bash
 make logs
 ```
 
+**Step 2: Initialize Nextcloud**
+
+1. Open http://localhost:8080 in your browser
+2. Complete the Nextcloud installation wizard:
+   - Create admin account (default: admin/admin123)
+   - Database is already configured (PostgreSQL)
+   - Click "Install"
+
+**Step 3: Install AIquila App**
+
+After Nextcloud is installed, enable the AIquila app:
+
+**Option A: Via Web Interface**
+1. Go to **Apps** in Nextcloud
+2. Enable "AIquila" from the list
+
+**Option B: Manual Copy**
+```bash
+# Copy AIquila app into Nextcloud container
+docker cp ../nextcloud-app/. aiquila-nextcloud:/var/www/html/custom_apps/aiquila/
+
+# Set permissions
+docker exec -u root aiquila-nextcloud chown -R www-data:www-data /var/www/html/custom_apps/aiquila
+
+# Enable the app
+docker exec -u www-data aiquila-nextcloud php occ app:enable aiquila
+```
+
+**Step 4: Configure AIquila**
+
+1. Go to **Settings → Administration → AIquila**
+2. Enter your Claude API key
+3. (Optional) Configure model, max tokens, timeout
+
 ### Access Points
 
-Once started, access the services at:
+Once all services are running and configured:
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| **Nextcloud** | http://localhost:8080 | admin / admin123 |
+| **Nextcloud** | http://localhost:8080 | Set during installation |
 | **MailHog UI** | http://localhost:8025 | (no auth) |
 | **Adminer** | http://localhost:8081 | See below |
 
@@ -72,18 +112,23 @@ Once started, access the services at:
 - Password: `nextcloud_secure_password` (or your .env value)
 - Database: `nextcloud`
 
+**MCP Server:**
+- Runs in container, accessible at `http://nextcloud:80` from within Docker network
+- Logs: `make logs-mcp`
+
 ## Development Workflow
 
 ### Live Code Reloading
 
 **Nextcloud App:**
-- Code in `nextcloud-app/` is mounted into the container
-- Changes to PHP/JS/CSS are immediately reflected
-- No rebuild needed
-- Just refresh your browser
+After copying the app into the container (see Step 3 above), you can:
+- Make changes to files in `nextcloud-app/`
+- Manually copy updates: `docker cp nextcloud-app/. aiquila-nextcloud:/var/www/html/custom_apps/aiquila/`
+- Or use a bind mount (advanced - see Troubleshooting section)
+- Refresh browser to see changes
 
 **MCP Server:**
-- Code in `mcp-server/` is mounted into the container
+- Code in `mcp-server/` is automatically mounted into the container
 - Uses `tsx` for hot reload
 - Changes automatically restart the server
 - Watch logs with: `make logs-mcp`
@@ -244,20 +289,17 @@ make down
 make up
 ```
 
-### Custom Nextcloud Configuration
+### Redis and Database Configuration
 
-Edit `docker/nextcloud/custom.config.php` to modify Nextcloud settings:
+Redis and PostgreSQL are pre-configured via environment variables in `docker-compose.yml`:
 
-- Redis configuration
-- Debug settings
-- App paths
-- Upload limits
-- etc.
+- Redis is automatically configured as Nextcloud's session handler
+- PostgreSQL connection is set via `POSTGRES_*` environment variables
+- No manual configuration needed
 
-Changes require Nextcloud restart:
-
+To verify Redis is working:
 ```bash
-docker-compose restart nextcloud
+docker exec aiquila-nextcloud php occ config:list | grep redis
 ```
 
 ### Port Conflicts
@@ -316,13 +358,38 @@ make reset
 make up
 ```
 
-### AIquila App Not Enabled
+### AIquila App Not Found
+
+The app needs to be manually copied into the container after Nextcloud initializes:
 
 ```bash
-make shell-nc
-php occ app:enable aiquila
-php occ app:list | grep aiquila
+# Copy app files
+docker cp nextcloud-app/. aiquila-nextcloud:/var/www/html/custom_apps/aiquila/
+
+# Fix permissions
+docker exec -u root aiquila-nextcloud chown -R www-data:www-data /var/www/html/custom_apps/aiquila
+
+# Enable the app
+docker exec -u www-data aiquila-nextcloud php occ app:enable aiquila
+
+# Verify
+docker exec -u www-data aiquila-nextcloud php occ app:list | grep aiquila
 ```
+
+### Live Development with App Bind Mount (Advanced)
+
+To enable live reloading of Nextcloud app changes, you can mount the app after initial setup:
+
+1. First, complete the initial Nextcloud installation
+2. Uncomment the bind mount in `docker-compose.yml`:
+   ```yaml
+   volumes:
+     - nextcloud_data:/var/www/html
+     - ../nextcloud-app:/var/www/html/custom_apps/aiquila  # Uncomment this
+   ```
+3. Restart: `make restart`
+
+**Note:** This must be done AFTER Nextcloud is fully initialized, or it will prevent installation.
 
 ### Permission Errors
 

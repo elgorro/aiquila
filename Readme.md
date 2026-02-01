@@ -39,19 +39,24 @@ make up
 ```
 
 This starts a complete environment with:
-- Nextcloud 31 with AIquila app pre-installed
-- PostgreSQL database
-- Redis caching
+- Nextcloud 31 (requires manual initialization)
+- PostgreSQL 16 database
+- Redis 7 caching
 - MCP server with hot reload
 - MailHog for email testing
 - Adminer for database management
 
+After services start:
+1. Open http://localhost:8080 and complete Nextcloud setup
+2. Copy AIquila app into container (see [Docker Setup Guide](docs/docker-setup.md))
+3. Configure Claude API key in Settings
+
 Access points:
-- **Nextcloud**: http://localhost:8080 (admin/admin123)
+- **Nextcloud**: http://localhost:8080
 - **MailHog**: http://localhost:8025
 - **Adminer**: http://localhost:8081
 
-See [Docker Setup Guide](docs/docker-setup.md) for detailed instructions.
+See [Docker Setup Guide](docs/docker-setup.md) for complete step-by-step instructions.
 
 ### MCP Server Setup (Manual)
 ```bash
