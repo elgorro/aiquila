@@ -7,7 +7,7 @@ Complete guide for setting up and using the AIquila Docker development environme
 The Docker environment provides a complete, isolated development setup with:
 
 - **PostgreSQL 16** - Production-grade database
-- **Nextcloud 31** - Test instance for development
+- **Nextcloud 32** - Test instance for development
 - **Redis 7** - Caching and performance
 - **MCP Server** - Development container with hot reload
 - **MailHog** - Email testing and debugging

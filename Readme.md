@@ -108,7 +108,7 @@ See [ROADMAP.md](ROADMAP.md) for planned features and development phases.
 - 4GB+ RAM for Docker
 
 ### For Manual Setup
-- Nextcloud Hub 10 (31.x)
+- Nextcloud Hub 10 (31.x-32.x)
 - Node.js 18+ (for MCP server)
 - PostgreSQL 15+ (recommended) or MySQL/MariaDB
 - Claude API key from [console.anthropic.com](https://console.anthropic.com)

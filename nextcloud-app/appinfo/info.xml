@@ -21,7 +21,7 @@ Features:
     <category>tools</category>
     <bugs>https://github.com/yourrepo/aiquila/issues</bugs>
     <dependencies>
-        <nextcloud min-version="31" max-version="31"/>
+        <nextcloud min-version="31" max-version="32"/>
     </dependencies>
     <settings>
         <admin>OCA\AIquila\Settings\AdminSettings</admin>
