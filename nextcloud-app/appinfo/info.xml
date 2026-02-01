@@ -13,7 +13,7 @@ Features:
 - Generate and edit content
 - Text improvements (spellcheck, rewrite)
     ]]></description>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
     <licence>agpl</licence>
     <author mail="dev@example.com">AIquila</author>
     <namespace>AIquila</namespace>
