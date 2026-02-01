@@ -1,0 +1,23 @@
+FROM node:18-alpine
+
+# Install development dependencies
+RUN apk add --no-cache \
+    git \
+    curl
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev dependencies)
+RUN npm install
+
+# Copy source code (will be overridden by volume mount in dev)
+COPY . .
+
+# Expose debug port for Node.js debugging
+EXPOSE 9229
+
+# Default command (can be overridden in docker-compose)
+CMD ["npm", "run", "dev"]

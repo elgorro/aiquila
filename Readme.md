@@ -28,7 +28,32 @@ AIquila connects your Nextcloud instance with Claude AI, enabling two-way integr
 
 ## Quick Start
 
-### MCP Server Setup
+### Docker Development Environment (Recommended)
+
+The easiest way to get started with development:
+
+```bash
+cd docker
+cp .env.example .env
+make up
+```
+
+This starts a complete environment with:
+- Nextcloud 31 with AIquila app pre-installed
+- PostgreSQL database
+- Redis caching
+- MCP server with hot reload
+- MailHog for email testing
+- Adminer for database management
+
+Access points:
+- **Nextcloud**: http://localhost:8080 (admin/admin123)
+- **MailHog**: http://localhost:8025
+- **Adminer**: http://localhost:8081
+
+See [Docker Setup Guide](docs/docker-setup.md) for detailed instructions.
+
+### MCP Server Setup (Manual)
 ```bash
 cd mcp-server
 npm install
@@ -59,6 +84,7 @@ Add to Claude Desktop config (`~/.config/claude/claude_desktop_config.json`):
 
 ## Documentation
 
+- [Docker Setup Guide](docs/docker-setup.md) - **Start here for development**
 - [Installation Guide](docs/installation.md)
 - [Development Guide](docs/development.md)
 - [Configuration & Connectivity](docs/connectivity.md)
@@ -71,8 +97,15 @@ See [ROADMAP.md](ROADMAP.md) for planned features and development phases.
 
 ## Requirements
 
+### For Docker Development
+- Docker Engine 20.10+
+- Docker Compose 2.0+
+- 4GB+ RAM for Docker
+
+### For Manual Setup
 - Nextcloud Hub 10 (31.x)
 - Node.js 18+ (for MCP server)
+- PostgreSQL 15+ (recommended) or MySQL/MariaDB
 - Claude API key from [console.anthropic.com](https://console.anthropic.com)
 
 ## License
