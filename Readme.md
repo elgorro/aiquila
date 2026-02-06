@@ -23,10 +23,45 @@ AIquila connects your Nextcloud instance with Claude AI, enabling two-way integr
 - Document summarization
 - Content generation and editing
 - Admin and per-user API key configuration
+- Configurable model, token limits, and timeouts
+- Rate limiting and input validation
+
+### AIquila Internal API (Nextcloud → AIquila)
+ - Shared functions
 
 ## Quick Start
 
-### MCP Server Setup
+### Docker Development Environment (Recommended)
+
+The easiest way to get started with development:
+
+```bash
+cd docker
+cp .env.example .env
+make up
+```
+
+This starts a complete environment with:
+- Nextcloud 31 (requires manual initialization)
+- PostgreSQL 16 database
+- Redis 7 caching
+- MCP server with hot reload
+- MailHog for email testing
+- Adminer for database management
+
+After services start:
+1. Open http://localhost:8080 and complete Nextcloud setup
+2. Copy AIquila app into container (see [Docker Setup Guide](docs/docker-setup.md))
+3. Configure Claude API key in Settings
+
+Access points:
+- **Nextcloud**: http://localhost:8080
+- **MailHog**: http://localhost:8025
+- **Adminer**: http://localhost:8081
+
+See [Docker Setup Guide](docs/docker-setup.md) for complete step-by-step instructions.
+
+### MCP Server Setup (Manual)
 ```bash
 cd mcp-server
 npm install
@@ -57,11 +92,13 @@ Add to Claude Desktop config (`~/.config/claude/claude_desktop_config.json`):
 
 ## Documentation
 
+- [Docs Overview](docs/README.md)
+- [Docker Setup Guide](docs/dev/docker-setup.md) - **Start here for development**
 - [Installation Guide](docs/installation.md)
-- [Development Guide](docs/development.md)
+- [Development Guide](docs/dev/development.md)
 - [Configuration & Connectivity](docs/connectivity.md)
-- [CI/CD Workflows](docs/ci-cd.md)
-- [Best Practices](docs/best-practices.md)
+- [CI/CD Workflows](docs/dev/ci-cd.md)
+- [Best Practices](docs/dev/best-practices.md)
 
 ## Roadmap
 
@@ -69,8 +106,15 @@ See [ROADMAP.md](ROADMAP.md) for planned features and development phases.
 
 ## Requirements
 
-- Nextcloud Hub 10 (31.x)
+### For Docker Development
+- Docker Engine 20.10+
+- Docker Compose 2.0+
+- 4GB+ RAM for Docker
+
+### For Manual Setup
+- Nextcloud Hub 10 (31.x-32.x)
 - Node.js 18+ (for MCP server)
+- PostgreSQL 15+ (recommended) or MySQL/MariaDB
 - Claude API key from [console.anthropic.com](https://console.anthropic.com)
 
 ## License

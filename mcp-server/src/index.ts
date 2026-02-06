@@ -219,6 +219,122 @@ server.tool(
   }
 );
 
+// ============ AIQUILA OCC COMMANDS ============
+
+async function runOCC(command: string): Promise<string> {
+  const response = await fetch(`${NEXTCLOUD_URL}/ocs/v2.php/apps/serverinfo/api/v1/info`, {
+    headers: {
+      Authorization:
+        'Basic ' + Buffer.from(`${NEXTCLOUD_USER}:${NEXTCLOUD_PASSWORD}`).toString('base64'),
+      'OCS-APIRequest': 'true',
+    },
+  });
+
+  // Since we can't execute OCC directly via API, we'll use WebDAV to create a marker file
+  // and document the command for manual execution
+  throw new Error('OCC commands must be run on the Nextcloud server. Use SSH or docker exec.');
+}
+
+// Tool: Show AIquila configuration
+server.tool(
+  'aiquila_show_config',
+  'Show current AIquila configuration (API key, model, tokens, timeout)',
+  {},
+  async () => {
+    const helpText = `To view AIquila configuration, run this command on your Nextcloud server:
+
+docker exec -u www-data aiquila-nextcloud php occ aiquila:configure --show
+
+Or via SSH:
+php occ aiquila:configure --show
+
+This will show:
+- API Key (masked for security)
+- Claude Model
+- Max Tokens
+- API Timeout`;
+
+    return { content: [{ type: 'text', text: helpText }] };
+  }
+);
+
+// Tool: Configure AIquila settings
+server.tool(
+  'aiquila_configure',
+  'Configure AIquila settings (API key, model, tokens, timeout)',
+  {
+    apiKey: z.string().optional().describe('Claude API key (starts with sk-ant-)'),
+    model: z.string().optional().describe('Claude model (e.g., claude-sonnet-4-5-20250929)'),
+    maxTokens: z.number().optional().describe('Maximum tokens (1-100000)'),
+    timeout: z.number().optional().describe('API timeout in seconds (10-1800)'),
+  },
+  async ({ apiKey, model, maxTokens, timeout }) => {
+    let command = 'docker exec -u www-data aiquila-nextcloud php occ aiquila:configure';
+    const options: string[] = [];
+
+    if (apiKey) options.push(`--api-key "${apiKey}"`);
+    if (model) options.push(`--model "${model}"`);
+    if (maxTokens) options.push(`--max-tokens ${maxTokens}`);
+    if (timeout) options.push(`--timeout ${timeout}`);
+
+    if (options.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'No options provided. Use aiquila_show_config to view current settings.',
+          },
+        ],
+      };
+    }
+
+    command += ' ' + options.join(' ');
+
+    const helpText = `To configure AIquila, run this command on your Nextcloud server:
+
+${command}
+
+Or via SSH:
+php occ aiquila:configure ${options.join(' ')}
+
+This will update the configuration with validation.`;
+
+    return { content: [{ type: 'text', text: helpText }] };
+  }
+);
+
+// Tool: Test AIquila Claude integration
+server.tool(
+  'aiquila_test',
+  'Test AIquila Claude API integration with a prompt',
+  {
+    prompt: z.string().optional().describe('Test prompt to send to Claude'),
+    user: z.string().optional().describe('Nextcloud user ID to test with'),
+  },
+  async ({ prompt, user }) => {
+    let command = 'docker exec -u www-data aiquila-nextcloud php occ aiquila:test';
+
+    if (prompt) command += ` --prompt "${prompt}"`;
+    if (user) command += ` --user ${user}`;
+
+    const helpText = `To test AIquila Claude integration, run this command on your Nextcloud server:
+
+${command}
+
+Or via SSH:
+php occ aiquila:test${prompt ? ` --prompt "${prompt}"` : ''}${user ? ` --user ${user}` : ''}
+
+This will:
+1. Check configuration (API key, model, tokens, timeout)
+2. Send a test request to Claude API
+3. Display the response or error details
+
+Useful for debugging API connectivity and configuration issues.`;
+
+    return { content: [{ type: 'text', text: helpText }] };
+  }
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);

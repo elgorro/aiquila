@@ -1,0 +1,53 @@
+#aiquila-user {
+    margin-bottom: 20px;
+}
+
+#aiquila-user h2 {
+    margin-bottom: 10px;
+}
+
+.settings-hint {
+    color: var(--color-text-maxcontrast);
+    margin-bottom: 15px;
+}
+
+.settings-note {
+    color: var(--color-text-maxcontrast);
+    font-size: 0.9em;
+    margin-top: 15px;
+    font-style: italic;
+}
+
+#aiquila-user-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 600px;
+}
+
+#aiquila-user-form label {
+    font-weight: bold;
+}
+
+#aiquila-user-form input[type="password"] {
+    width: 100%;
+    padding: 8px;
+}
+
+#aiquila-user-form button {
+    align-self: flex-start;
+    margin-right: 10px;
+}
+
+#aiquila-user-status {
+    display: inline-block;
+    margin-left: 10px;
+}
+
+#aiquila-user-status.success {
+    color: var(--color-success);
+}
+
+#aiquila-user-status.error {
+    color: var(--color-error);
+}

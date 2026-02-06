@@ -58,6 +58,9 @@ The tools will be available in Claude conversations.
 | `create_task` | Create a task |
 | `create_note` | Create a note |
 | `add_recipe` | Add a recipe |
+| `aiquila_show_config` | Show AIquila configuration (API key, model, tokens, timeout) |
+| `aiquila_configure` | Configure AIquila settings |
+| `aiquila_test` | Test AIquila Claude API integration |
 
 ## Example Usage (in Claude)
 

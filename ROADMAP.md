@@ -1,7 +1,7 @@
 # AIquila Roadmap
 
 ## Phase 1: Foundation ✅
-*Current release*
+*Release: v0.1.1*
 
 ### MCP Server
 - [x] File operations (list, read, write, delete)
@@ -11,8 +11,11 @@
 
 ### Nextcloud App
 - [x] Admin/user API key settings
+- [x] User settings UI with personal API key override
 - [x] "Ask Claude" file action
 - [x] Document summarization API
+- [x] Input validation and rate limiting
+- [x] Configurable settings (model, tokens, timeout)
 
 ### Infrastructure
 - [x] CI/CD workflows
@@ -33,9 +36,11 @@
 
 ### Nextcloud App
 - [ ] Conversation history storage
-- [ ] Multiple model selection
 - [ ] Token usage tracking
 - [ ] Streaming responses
+
+### Infrastructure
+- [ ] Docker dev environment for improved testing capabilities
 
 ---
 
