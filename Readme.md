@@ -26,6 +26,9 @@ AIquila connects your Nextcloud instance with Claude AI, enabling two-way integr
 - Configurable model, token limits, and timeouts
 - Rate limiting and input validation
 
+### AIquila Internal API (Nextcloud → AIquila)
+ - Shared functions
+
 ## Quick Start
 
 ### Docker Development Environment (Recommended)
@@ -89,12 +92,13 @@ Add to Claude Desktop config (`~/.config/claude/claude_desktop_config.json`):
 
 ## Documentation
 
-- [Docker Setup Guide](docs/docker-setup.md) - **Start here for development**
+- [Docs Overview](docs/README.md)
+- [Docker Setup Guide](docs/dev/docker-setup.md) - **Start here for development**
 - [Installation Guide](docs/installation.md)
-- [Development Guide](docs/development.md)
+- [Development Guide](docs/dev/development.md)
 - [Configuration & Connectivity](docs/connectivity.md)
-- [CI/CD Workflows](docs/ci-cd.md)
-- [Best Practices](docs/best-practices.md)
+- [CI/CD Workflows](docs/dev/ci-cd.md)
+- [Best Practices](docs/dev/best-practices.md)
 
 ## Roadmap
 

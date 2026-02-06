@@ -264,7 +264,7 @@ server.tool(
   'Configure AIquila settings (API key, model, tokens, timeout)',
   {
     apiKey: z.string().optional().describe('Claude API key (starts with sk-ant-)'),
-    model: z.string().optional().describe('Claude model (e.g., claude-sonnet-4-20250514)'),
+    model: z.string().optional().describe('Claude model (e.g., claude-sonnet-4-5-20250929)'),
     maxTokens: z.number().optional().describe('Maximum tokens (1-100000)'),
     timeout: z.number().optional().describe('API timeout in seconds (10-1800)'),
   },

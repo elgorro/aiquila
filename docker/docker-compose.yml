@@ -36,7 +36,10 @@ services:
 
   # Nextcloud with AIquila App
   nextcloud:
-    image: nextcloud:32-apache
+    build:
+      context: ./nextcloud
+      dockerfile: Dockerfile
+    image: aiquila-nextcloud:latest
     container_name: aiquila-nextcloud
     restart: unless-stopped
     depends_on:
@@ -72,8 +75,8 @@ services:
       AIQUILA_CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
     volumes:
       - nextcloud_data:/var/www/html
-      # Note: To mount AIquila app for development, first let Nextcloud initialize,
-      # then add: ../nextcloud-app:/var/www/html/custom_apps/aiquila
+      # Mount AIquila app for development
+      - ../nextcloud-app:/var/www/html/custom_apps/aiquila:cached
     ports:
       - "8080:80"
     networks:

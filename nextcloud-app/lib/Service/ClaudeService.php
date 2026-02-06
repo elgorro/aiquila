@@ -12,7 +12,7 @@ class ClaudeService {
 
     // Default configuration values
     private const DEFAULT_API_TIMEOUT = 30; // seconds
-    private const DEFAULT_API_MODEL = 'claude-sonnet-4-20250514';
+    private const DEFAULT_API_MODEL = 'claude-sonnet-4-5-20250929';
     private const DEFAULT_MAX_TOKENS = 4096;
 
     public function __construct(IConfig $config, IClientService $clientService) {
@@ -83,7 +83,26 @@ class ClaudeService {
             $data = json_decode($response->getBody(), true);
             return ['response' => $data['content'][0]['text'] ?? ''];
         } catch (\Exception $e) {
-            return ['error' => $e->getMessage()];
+            // Try to extract full error response from HTTP exceptions
+            $errorMessage = $e->getMessage();
+
+            // Check if the exception has a getResponse method (Guzzle exceptions)
+            if (method_exists($e, 'getResponse') && $e->getResponse()) {
+                try {
+                    $responseBody = (string)$e->getResponse()->getBody();
+                    $errorData = json_decode($responseBody, true);
+                    if (isset($errorData['error']['message'])) {
+                        return ['error' => $errorData['error']['message']];
+                    }
+                    if ($responseBody) {
+                        return ['error' => $responseBody];
+                    }
+                } catch (\Exception $parseException) {
+                    // If we can't parse, fall through to original message
+                }
+            }
+
+            return ['error' => $errorMessage];
         }
     }
 

@@ -31,5 +31,6 @@ Features:
     <commands>
         <command>OCA\AIquila\Command\ConfigureCommand</command>
         <command>OCA\AIquila\Command\TestCommand</command>
+        <command>OCA\AIquila\Command\TestSDKCommand</command>
     </commands>
 </info>

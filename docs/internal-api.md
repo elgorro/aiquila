@@ -246,13 +246,26 @@ Administrators can configure AIquila via:
 
 **Web UI:**
 - Settings → Administration → AIquila
+- Click "Test Configuration" button to verify settings work correctly
 
 **OCC Command:**
 ```bash
 php occ aiquila:configure --api-key "sk-ant-..." \
-  --model "claude-sonnet-4-20250514" \
+  --model "claude-sonnet-4-5-20250929" \
   --max-tokens 8192 \
   --timeout 60
+```
+
+**Testing Configuration:**
+```bash
+# Test with default prompt
+php occ aiquila:test
+
+# Test with custom prompt
+php occ aiquila:test --prompt "Hello, Claude!"
+
+# Test with specific user
+php occ aiquila:test --user john
 ```
 
 ### User Configuration

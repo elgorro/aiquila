@@ -30,15 +30,16 @@ style('aiquila', 'admin');
                    id="aiquila-model"
                    name="model"
                    value="<?php echo $_['model']; ?>"
-                   placeholder="claude-sonnet-4-20250514"
+                   placeholder="claude-sonnet-4-5-20250929"
                    list="model-suggestions">
             <datalist id="model-suggestions">
+                <option value="claude-sonnet-4-5-20250929">
+                <option value="claude-haiku-4-5-20251001">
+                <option value="claude-opus-4-5-20251101">
                 <option value="claude-sonnet-4-20250514">
                 <option value="claude-opus-4-20250514">
-                <option value="claude-3-7-sonnet-20250219">
-                <option value="claude-3-5-haiku-20241022">
             </datalist>
-            <p class="hint">Default: claude-sonnet-4-20250514 (enter any Claude model identifier)</p>
+            <p class="hint">Default: claude-sonnet-4-5-20250929 (Claude Sonnet 4.5, latest recommended model)</p>
         </div>
 
         <div class="form-group">
@@ -66,6 +67,30 @@ style('aiquila', 'admin');
         </div>
 
         <button type="submit" class="primary">Save</button>
+        <button type="button" id="aiquila-test-config" class="secondary">Test Configuration</button>
         <span id="aiquila-status"></span>
     </form>
+
+    <div id="aiquila-test-result" style="display: none;">
+        <h3>Test Result</h3>
+        <pre id="aiquila-test-output"></pre>
+    </div>
+
+    <div class="aiquila-resources">
+        <h3>MCP</h3>
+        <ul>
+            <li><a href="https://github.com/elgorro/aiquila/tree/main/docs/installation/mcp-installation.md" target="_blank" rel="noopener noreferrer">🧭 Free MCP Installation</a></li>
+            <li><a href="https://modelcontextprotocol.io/docs/getting-started/intro" target="_blank" rel="noopener noreferrer">📖 What's MCP?</a></li>
+        </ul>
+    </div>
+
+    <div class="aiquila-resources">
+        <h3>Resources</h3>
+        <ul>
+            <li><a href="https://github.com/elgorro/aiquila" target="_blank" rel="noopener noreferrer">📦 GitHub Repository</a></li>
+            <li><a href="https://github.com/elgorro/aiquila/tree/main/docs" target="_blank" rel="noopener noreferrer">📖 Documentation</a></li>
+            <li><a href="https://github.com/elgorro/aiquila/issues" target="_blank" rel="noopener noreferrer">🐛 Report Issues</a></li>
+            <li><a href="https://github.com/elgorro/aiquila/discussions" target="_blank" rel="noopener noreferrer">💬 Discussions</a></li>
+        </ul>
+    </div>
 </div>

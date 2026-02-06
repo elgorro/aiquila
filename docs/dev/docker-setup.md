@@ -89,7 +89,31 @@ docker exec -u root aiquila-nextcloud chown -R www-data:www-data /var/www/html/c
 docker exec -u www-data aiquila-nextcloud php occ app:enable aiquila
 ```
 
-**Step 4: Configure AIquila**
+**Step 4: Install Anthropic PHP SDK (Optional)**
+
+AIquila can use the official Anthropic PHP SDK for better error handling and features.
+
+**Note:** Composer is pre-installed in the Nextcloud container via our custom Dockerfile.
+
+```bash
+# Install SDK dependencies (composer is already available)
+sudo docker exec -u www-data aiquila-nextcloud bash -c 'cd /var/www/html/custom_apps/aiquila && composer install --no-dev'
+
+# Verify vendor directory synced to host (automatic via volume mount)
+ls -la nextcloud-app/vendor
+
+# Test SDK installation
+sudo docker exec -u www-data aiquila-nextcloud php /var/www/html/occ aiquila:test-sdk
+```
+
+The custom Nextcloud image includes:
+- **Composer 2.x** - Pre-installed and ready to use
+- **Git & Unzip** - Required for Composer dependencies
+- **Volume mount** - Automatic sync between container and host
+
+See [SDK-MIGRATION.md](../nextcloud-app/SDK-MIGRATION.md) for more details.
+
+**Step 5: Configure AIquila**
 
 1. Go to **Settings → Administration → AIquila**
 2. Enter your Claude API key
@@ -232,6 +256,12 @@ php occ aiquila:configure --timeout 60                     # Set timeout in seco
 
 # Set multiple values at once
 php occ aiquila:configure --model "claude-3-7-sonnet-20250219" --max-tokens 16384 --timeout 120
+
+# AIquila testing commands
+php occ aiquila:test                # Test HTTP client implementation
+php occ aiquila:test-sdk            # Test Anthropic SDK implementation
+php occ aiquila:test-sdk --stream   # Test streaming mode
+php occ aiquila:test-sdk --prompt "Custom test prompt"
 
 # Alternative: Direct config manipulation (not recommended)
 php occ config:app:get aiquila      # Get AIquila config
@@ -388,20 +418,36 @@ docker exec -u www-data aiquila-nextcloud php occ app:enable aiquila
 docker exec -u www-data aiquila-nextcloud php occ app:list | grep aiquila
 ```
 
-### Live Development with App Bind Mount (Advanced)
+### Live Development with App Bind Mount (Recommended)
 
-To enable live reloading of Nextcloud app changes, you can mount the app after initial setup:
+The docker-compose.yml now includes a volume mount for instant code syncing:
 
-1. First, complete the initial Nextcloud installation
-2. Uncomment the bind mount in `docker-compose.yml`:
-   ```yaml
-   volumes:
-     - nextcloud_data:/var/www/html
-     - ../nextcloud-app:/var/www/html/custom_apps/aiquila  # Uncomment this
-   ```
-3. Restart: `make restart`
+```yaml
+volumes:
+  - nextcloud_data:/var/www/html
+  - ../nextcloud-app:/var/www/html/custom_apps/aiquila:cached
+```
 
-**Note:** This must be done AFTER Nextcloud is fully initialized, or it will prevent installation.
+This means:
+- **All file changes** in `nextcloud-app/` are instantly available in Docker
+- **No manual copying** with `docker cp` needed
+- **Composer dependencies** (vendor/) are automatically synced
+
+**One-time setup after enabling app:**
+
+After you install Composer and the Anthropic SDK in the container, copy the vendor directory to your host:
+
+```bash
+# Copy vendor directory from Docker to host (one-time only)
+sudo docker cp aiquila-nextcloud:/var/www/html/custom_apps/aiquila/vendor /home/sirgorro/Dev/aiquila/nextcloud-app/
+sudo chown -R $(whoami):$(whoami) /home/sirgorro/Dev/aiquila/nextcloud-app/vendor
+
+# Copy composer.lock for version control
+sudo docker cp aiquila-nextcloud:/var/www/html/custom_apps/aiquila/composer.lock /home/sirgorro/Dev/aiquila/nextcloud-app/
+sudo chown $(whoami):$(whoami) /home/sirgorro/Dev/aiquila/nextcloud-app/composer.lock
+```
+
+After this one-time setup, the volume mount handles all file syncing automatically!
 
 ### Permission Errors
 
