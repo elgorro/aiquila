@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { fetchOCS } from "../../client/ocs.js";
 
 /**
  * Nextcloud Group Management Tools
- * Provides group management via OCC commands
+ * Provides group management via OCS Provisioning API
  */
 
 /**
@@ -11,45 +12,40 @@ import { z } from "zod";
 export const listGroupsTool = {
   name: 'list_groups',
   description: 'List all groups in the Nextcloud instance',
-  inputSchema: z.object({}),
-  handler: async () => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ group:list`;
-    const sshCommand = `php occ group:list`;
+  inputSchema: z.object({
+    search: z.string().optional().describe('Search/filter string for group names'),
+    limit: z.number().optional().describe('Maximum number of groups to return'),
+    offset: z.number().optional().describe('Offset for pagination'),
+  }),
+  handler: async (args: { search?: string; limit?: number; offset?: number }) => {
+    try {
+      const queryParams: Record<string, string> = {};
+      if (args.search) queryParams.search = args.search;
+      if (args.limit !== undefined) queryParams.limit = String(args.limit);
+      if (args.offset !== undefined) queryParams.offset = String(args.offset);
 
-    const helpText = `To list all groups, run this command on your Nextcloud server:
+      const result = await fetchOCS<{ groups: string[] }>(
+        "/ocs/v2.php/cloud/groups",
+        { queryParams }
+      );
 
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
+      const groups = result.ocs.data.groups;
 
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-This will display:
-- Group name
-- List of members in each group
-
-**Example output:**
-\`\`\`
-- admin: alice, bob
-- users: alice, bob, charlie, diana
-- marketing: charlie, diana
-- developers: alice, bob
-\`\`\`
-
-**For more detailed group information:**
-- To count users: \`php occ group:list --output=json | jq\`
-- To see specific group: Check group info using user:info for members`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Groups (${groups.length}):\n${groups.join('\n')}`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error listing groups: ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 
@@ -63,44 +59,28 @@ export const getGroupInfoTool = {
     groupId: z.string().describe('The group ID (name) to get information about'),
   }),
   handler: async (args: { groupId: string }) => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ group:list ${args.groupId}`;
-    const sshCommand = `php occ group:list ${args.groupId}`;
+    try {
+      const result = await fetchOCS<{ users: string[] }>(
+        `/ocs/v2.php/cloud/groups/${encodeURIComponent(args.groupId)}`
+      );
 
-    const helpText = `To get information about group "${args.groupId}", run this command on your Nextcloud server:
+      const users = result.ocs.data.users;
 
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-This will display:
-- Group name
-- All members of the group
-
-**Example output:**
-\`\`\`
-- ${args.groupId}: alice, bob, charlie
-\`\`\`
-
-**Additional information:**
-To see detailed info about each member, use \`user:info\` command for individual users.
-
-**Common groups:**
-- \`admin\` - Administrators with full access
-- \`users\` - Default group for regular users
-- Custom groups - Department or team-based groups`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Group "${args.groupId}" members (${users.length}):\n${users.join('\n')}`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error getting group info for "${args.groupId}": ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 
@@ -115,50 +95,30 @@ export const addUserToGroupTool = {
     groupId: z.string().describe('The group ID (name) to add the user to'),
   }),
   handler: async (args: { userId: string; groupId: string }) => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ group:adduser ${args.groupId} ${args.userId}`;
-    const sshCommand = `php occ group:adduser ${args.groupId} ${args.userId}`;
+    try {
+      await fetchOCS(
+        `/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/groups`,
+        {
+          method: 'POST',
+          body: { groupid: args.groupId },
+        }
+      );
 
-    const helpText = `To add user "${args.userId}" to group "${args.groupId}", run this command on your Nextcloud server:
-
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-**What this does:**
-- Adds user to the specified group
-- User inherits group permissions
-- User gains access to group folders and resources
-- User can see shared items from group members
-
-**Success output:**
-\`\`\`
-User "${args.userId}" added to group "${args.groupId}"
-\`\`\`
-
-**Important notes:**
-- If the group doesn't exist, you'll need to create it first:
-  - Docker: \`docker exec -u www-data aiquila-nextcloud php occ group:add ${args.groupId}\`
-  - SSH: \`php occ group:add ${args.groupId}\`
-- Adding user to \`admin\` group grants administrator privileges
-- User can be member of multiple groups simultaneously
-
-**Common use cases:**
-- Add user to \`admin\` for administrative access
-- Add user to department groups for team collaboration
-- Add user to project-specific groups for resource access`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `User "${args.userId}" has been added to group "${args.groupId}".`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error adding user "${args.userId}" to group "${args.groupId}": ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 
@@ -173,55 +133,30 @@ export const removeUserFromGroupTool = {
     groupId: z.string().describe('The group ID (name) to remove the user from'),
   }),
   handler: async (args: { userId: string; groupId: string }) => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ group:removeuser ${args.groupId} ${args.userId}`;
-    const sshCommand = `php occ group:removeuser ${args.groupId} ${args.userId}`;
+    try {
+      await fetchOCS(
+        `/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/groups`,
+        {
+          method: 'DELETE',
+          body: { groupid: args.groupId },
+        }
+      );
 
-    const helpText = `⚠️  **CAUTION:** This will remove user "${args.userId}" from group "${args.groupId}".
-
-To remove this user from the group, run this command on your Nextcloud server:
-
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-**What this does:**
-- Removes user from the specified group
-- User loses group permissions
-- User may lose access to group folders and resources
-- User's shared items from this group may become inaccessible
-
-**Success output:**
-\`\`\`
-User "${args.userId}" removed from group "${args.groupId}"
-\`\`\`
-
-**Important warnings:**
-- ⚠️  Removing from \`admin\` group removes administrator privileges
-- ⚠️  User may lose access to files shared with the group
-- ⚠️  Cannot remove the last admin from the \`admin\` group
-- ⚠️  Group folder access will be revoked
-
-**Does NOT:**
-- Delete the user's personal files
-- Remove the user's account
-- Delete the group itself
-
-**To delete a group entirely:**
-- Docker: \`docker exec -u www-data aiquila-nextcloud php occ group:delete ${args.groupId}\`
-- SSH: \`php occ group:delete ${args.groupId}\``;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `User "${args.userId}" has been removed from group "${args.groupId}".`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error removing user "${args.userId}" from group "${args.groupId}": ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 

@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { fetchOCS } from "../../client/ocs.js";
 
 /**
  * Nextcloud App Management Tools
- * Provides app management via OCC commands
+ * Provides app management via OCS Provisioning API
  */
 
 /**
@@ -12,57 +13,41 @@ export const listAppsTool = {
   name: 'list_apps',
   description: 'List all installed Nextcloud apps with their enabled/disabled status',
   inputSchema: z.object({
-    showDisabled: z.boolean().optional().describe('Show only disabled apps (default: show all)'),
+    filter: z.enum(['all', 'enabled', 'disabled']).optional()
+      .describe('Filter apps by status: "all", "enabled", or "disabled" (default: all)'),
   }),
-  handler: async (args: { showDisabled?: boolean }) => {
-    const flag = args.showDisabled ? ' --disabled' : '';
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ app:list${flag}`;
-    const sshCommand = `php occ app:list${flag}`;
+  handler: async (args: { filter?: string }) => {
+    try {
+      const queryParams: Record<string, string> = {};
+      if (args.filter === 'enabled') {
+        queryParams.filter = 'enabled';
+      } else if (args.filter === 'disabled') {
+        queryParams.filter = 'disabled';
+      }
 
-    const helpText = `To list installed apps, run this command on your Nextcloud server:
+      const result = await fetchOCS<{ apps: string[] }>(
+        "/ocs/v2.php/cloud/apps",
+        { queryParams }
+      );
 
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
+      const apps = result.ocs.data.apps;
+      const filterLabel = args.filter && args.filter !== 'all' ? ` (${args.filter})` : '';
 
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-This will display:
-- **Enabled apps**: Apps currently active
-- **Disabled apps**: Apps installed but not active${args.showDisabled ? '' : '\n- Use \`showDisabled: true\` to see only disabled apps'}
-
-**Example output:**
-\`\`\`
-Enabled:
-  - activity: 2.19.0
-  - files: 2.0.0
-  - photos: 2.3.0
-  - tasks: 0.15.0
-
-Disabled:
-  - survey_client: 1.16.0
-  - firstrunwizard: 2.16.0
-\`\`\`
-
-**Common apps:**
-- \`files\` - File management (core)
-- \`activity\` - Activity feed
-- \`photos\` - Photo gallery
-- \`tasks\` - Task management
-- \`notes\` - Note taking
-- \`deck\` - Kanban boards
-- \`mail\` - Email client`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Nextcloud apps${filterLabel}:\n${apps.join('\n')}`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error listing apps: ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 
@@ -76,57 +61,26 @@ export const getAppInfoTool = {
     appId: z.string().describe('The app ID (e.g., "tasks", "deck", "photos")'),
   }),
   handler: async (args: { appId: string }) => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ app:getpath ${args.appId}`;
-    const sshCommand = `php occ app:getpath ${args.appId}`;
+    try {
+      const result = await fetchOCS<Record<string, unknown>>(
+        `/ocs/v2.php/cloud/apps/${encodeURIComponent(args.appId)}`
+      );
 
-    const helpText = `To get information about app "${args.appId}", run this command on your Nextcloud server:
-
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-This will display the app's installation path.
-
-**For more detailed information:**
-\`\`\`bash
-# Get app version and status
-php occ app:list | grep ${args.appId}
-
-# Check if app is enabled
-php occ app:list --enabled | grep ${args.appId}
-
-# View app info from app store
-https://apps.nextcloud.com/apps/${args.appId}
-\`\`\`
-
-**Example output:**
-\`\`\`
-/var/www/nextcloud/apps/${args.appId}
-\`\`\`
-
-**Common app IDs:**
-- \`files\` - File management
-- \`activity\` - Activity tracking
-- \`photos\` - Photo gallery
-- \`tasks\` - Task management
-- \`notes\` - Notes app
-- \`deck\` - Project boards
-- \`mail\` - Email client
-- \`calendar\` - Calendar
-- \`contacts\` - Contacts`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(result.ocs.data, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error getting app info for "${args.appId}": ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 
@@ -140,56 +94,27 @@ export const enableAppTool = {
     appId: z.string().describe('The app ID to enable (e.g., "tasks", "deck", "photos")'),
   }),
   handler: async (args: { appId: string }) => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ app:enable ${args.appId}`;
-    const sshCommand = `php occ app:enable ${args.appId}`;
+    try {
+      await fetchOCS(
+        `/ocs/v2.php/cloud/apps/${encodeURIComponent(args.appId)}`,
+        { method: 'POST' }
+      );
 
-    const helpText = `To enable app "${args.appId}", run this command on your Nextcloud server:
-
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-**What this does:**
-- Activates the app
-- App becomes available in Nextcloud interface
-- App functionality is restored
-- App settings are preserved
-
-**Success output:**
-\`\`\`
-${args.appId} enabled
-\`\`\`
-
-**Important notes:**
-- App must already be installed
-- May require database migrations on first enable
-- Some apps may require configuration after enabling
-- Check app requirements (PHP version, dependencies)
-
-**If app is not installed:**
-Install it first via:
-- Web UI: Apps → Search for app → Install
-- OCC: \`php occ app:install ${args.appId}\` (if available)
-
-**Common apps to enable:**
-- \`tasks\` - Task management
-- \`notes\` - Note taking
-- \`deck\` - Kanban boards
-- \`photos\` - Photo gallery
-- \`mail\` - Email client`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `App "${args.appId}" has been enabled successfully.`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error enabling app "${args.appId}": ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 
@@ -203,62 +128,27 @@ export const disableAppTool = {
     appId: z.string().describe('The app ID to disable (e.g., "tasks", "deck", "photos")'),
   }),
   handler: async (args: { appId: string }) => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ app:disable ${args.appId}`;
-    const sshCommand = `php occ app:disable ${args.appId}`;
+    try {
+      await fetchOCS(
+        `/ocs/v2.php/cloud/apps/${encodeURIComponent(args.appId)}`,
+        { method: 'DELETE' }
+      );
 
-    const helpText = `⚠️  **CAUTION:** This will disable app "${args.appId}" and remove its functionality.
-
-To disable this app, run this command on your Nextcloud server:
-
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-**What this does:**
-- Deactivates the app
-- Removes app from Nextcloud interface
-- App functionality becomes unavailable
-- **Data is preserved** (can be re-enabled)
-
-**Does NOT:**
-- Delete the app files
-- Remove app data from database
-- Uninstall the app
-- Delete user data created by the app
-
-**Success output:**
-\`\`\`
-${args.appId} disabled
-\`\`\`
-
-**Important warnings:**
-- ⚠️  Users lose access to app features immediately
-- ⚠️  Cannot disable core apps (files, settings, etc.)
-- ⚠️  Some apps are required by other apps
-- ⚠️  App can be re-enabled with \`app:enable\`
-
-**To permanently remove an app:**
-1. First disable: \`php occ app:disable ${args.appId}\`
-2. Then remove: \`php occ app:remove ${args.appId}\`
-
-**Common reasons to disable apps:**
-- Troubleshooting conflicts
-- Reducing resource usage
-- Security concerns
-- Unused functionality`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `App "${args.appId}" has been disabled successfully. Data is preserved and the app can be re-enabled.`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error disabling app "${args.appId}": ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 

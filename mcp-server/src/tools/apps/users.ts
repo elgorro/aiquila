@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { fetchOCS } from "../../client/ocs.js";
 
 /**
  * Nextcloud User Management Tools
- * Provides user account management via OCC commands
+ * Provides user account management via OCS Provisioning API
  */
 
 /**
@@ -12,44 +13,39 @@ export const listUsersTool = {
   name: 'list_users',
   description: 'List all users in the Nextcloud instance',
   inputSchema: z.object({
-    showDisabled: z.boolean().optional().describe('Include disabled users in the list (default: false)'),
+    search: z.string().optional().describe('Search/filter string for user IDs'),
+    limit: z.number().optional().describe('Maximum number of users to return'),
+    offset: z.number().optional().describe('Offset for pagination'),
   }),
-  handler: async (args: { showDisabled?: boolean }) => {
-    const showDisabledFlag = args.showDisabled ? ' --disabled' : '';
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ user:list${showDisabledFlag}`;
-    const sshCommand = `php occ user:list${showDisabledFlag}`;
+  handler: async (args: { search?: string; limit?: number; offset?: number }) => {
+    try {
+      const queryParams: Record<string, string> = {};
+      if (args.search) queryParams.search = args.search;
+      if (args.limit !== undefined) queryParams.limit = String(args.limit);
+      if (args.offset !== undefined) queryParams.offset = String(args.offset);
 
-    const helpText = `To list all users, run this command on your Nextcloud server:
+      const result = await fetchOCS<{ users: string[] }>(
+        "/ocs/v2.php/cloud/users",
+        { queryParams }
+      );
 
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
+      const users = result.ocs.data.users;
 
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-This will display:
-- User ID (login name)
-- Display name
-- Email address
-${args.showDisabled ? '- Disabled users (if any)' : ''}
-
-**Example output:**
-\`\`\`
-- alice: Alice Smith (alice@example.com)
-- bob: Bob Jones (bob@example.com)
-- admin: Administrator (admin@example.com)
-\`\`\``;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Users (${users.length}):\n${users.join('\n')}`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error listing users: ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 
@@ -63,49 +59,26 @@ export const getUserInfoTool = {
     userId: z.string().describe('The user ID (login name) to get information about'),
   }),
   handler: async (args: { userId: string }) => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ user:info ${args.userId}`;
-    const sshCommand = `php occ user:info ${args.userId}`;
+    try {
+      const result = await fetchOCS<Record<string, unknown>>(
+        `/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}`
+      );
 
-    const helpText = `To get information about user "${args.userId}", run this command on your Nextcloud server:
-
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-This will display:
-- User ID (login name)
-- Display name
-- Email address
-- Groups the user belongs to
-- Quota settings
-- Last login time
-- Account enabled status
-- Backend (database, LDAP, etc.)
-
-**Example output:**
-\`\`\`
-  - user_id: ${args.userId}
-  - display_name: Alice Smith
-  - email: alice@example.com
-  - groups: admin, users
-  - quota: 10 GB
-  - last_seen: 2024-02-07 10:30:00
-  - enabled: true
-  - backend: Database
-\`\`\``;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(result.ocs.data, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error getting user info for "${args.userId}": ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 
@@ -119,40 +92,27 @@ export const enableUserTool = {
     userId: z.string().describe('The user ID (login name) to enable'),
   }),
   handler: async (args: { userId: string }) => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ user:enable ${args.userId}`;
-    const sshCommand = `php occ user:enable ${args.userId}`;
+    try {
+      await fetchOCS(
+        `/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/enable`,
+        { method: 'PUT' }
+      );
 
-    const helpText = `To enable user "${args.userId}", run this command on your Nextcloud server:
-
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-**What this does:**
-- Re-enables the user account
-- User can log in again
-- User's files and data remain intact
-- User regains access to all their resources
-
-**Success output:**
-\`\`\`
-The specified user is enabled
-\`\`\`
-
-**Note:** If the user is already enabled, you'll see a message indicating the user is already enabled.`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `User "${args.userId}" has been enabled successfully.`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error enabling user "${args.userId}": ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 
@@ -166,51 +126,27 @@ export const disableUserTool = {
     userId: z.string().describe('The user ID (login name) to disable'),
   }),
   handler: async (args: { userId: string }) => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ user:disable ${args.userId}`;
-    const sshCommand = `php occ user:disable ${args.userId}`;
+    try {
+      await fetchOCS(
+        `/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/disable`,
+        { method: 'PUT' }
+      );
 
-    const helpText = `⚠️  **CAUTION:** This will disable user "${args.userId}" and prevent them from logging in.
-
-To disable this user, run this command on your Nextcloud server:
-
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-**What this does:**
-- Prevents the user from logging in
-- User's files and data are preserved
-- User's shares remain active
-- Can be reversed with \`user:enable\`
-
-**Does NOT:**
-- Delete the user's files
-- Remove the user's account
-- Delete the user's shares
-
-**Success output:**
-\`\`\`
-The specified user is disabled
-\`\`\`
-
-**To permanently delete a user instead**, use:
-- Docker: \`docker exec -u www-data aiquila-nextcloud php occ user:delete ${args.userId}\`
-- SSH: \`php occ user:delete ${args.userId}\`
-
-**Note:** Cannot disable admin users while they are the only admin.`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `User "${args.userId}" has been disabled. The account data is preserved and can be re-enabled.`,
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error disabling user "${args.userId}": ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 
