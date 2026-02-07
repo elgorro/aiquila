@@ -1,10 +1,12 @@
 name: Lint
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  paths:
+      - 'mcp-server/**'
+      - '!mcp-server/**/*.md'
+      - '!mcp-server/**/tests/**'
 
 jobs:
   eslint:

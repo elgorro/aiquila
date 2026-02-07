@@ -21,6 +21,8 @@
 - [x] CI/CD workflows
 - [x] Documentation
 - [x] Tests
+- [x] Automated GitHub releases (separate for MCP & Nextcloud)
+- [x] Nextcloud App Store publishing (semi-automated with approval gate)
 
 ---
 
@@ -70,6 +72,23 @@
 - [ ] Comprehensive error handling
 - [ ] Internationalization (i18n)
 - [ ] User documentation portal
+
+---
+
+## Future Automation Ideas
+
+### Release Process Improvements
+- [ ] Automated version bumping across all files (package.json, info.xml)
+  - Consider: [semantic-release](https://github.com/semantic-release/semantic-release) or [release-please](https://github.com/googleapis/release-please)
+- [ ] Automated changelog generation from conventional commits
+  - Consider: conventional-changelog or semantic-release
+- [ ] Version consistency validation (pre-commit hook)
+- [ ] Automated dependency updates (Dependabot/Renovate)
+
+### Distribution
+- [ ] npm package publishing for MCP server
+- [ ] Homebrew formula for easy installation
+- [ ] Docker images for MCP server
 
 ---
 

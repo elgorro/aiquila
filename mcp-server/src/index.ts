@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createClient, WebDAVClient } from 'webdav';
+import { createClient, WebDAVClient, FileStat } from 'webdav';
 
 // Configuration from environment
 const NEXTCLOUD_URL = process.env.NEXTCLOUD_URL || '';
@@ -42,7 +42,7 @@ server.tool(
     const items = await client.getDirectoryContents(path || '/');
     const listing = Array.isArray(items) ? items : items.data;
     const formatted = listing
-      .map((item: any) => `${item.type === 'directory' ? '📁' : '📄'} ${item.basename}`)
+      .map((item: FileStat) => `${item.type === 'directory' ? '📁' : '📄'} ${item.basename}`)
       .join('\n');
     return { content: [{ type: 'text', text: formatted || 'Empty directory' }] };
   }
@@ -221,15 +221,9 @@ server.tool(
 
 // ============ AIQUILA OCC COMMANDS ============
 
-async function runOCC(command: string): Promise<string> {
-  const response = await fetch(`${NEXTCLOUD_URL}/ocs/v2.php/apps/serverinfo/api/v1/info`, {
-    headers: {
-      Authorization:
-        'Basic ' + Buffer.from(`${NEXTCLOUD_USER}:${NEXTCLOUD_PASSWORD}`).toString('base64'),
-      'OCS-APIRequest': 'true',
-    },
-  });
-
+// Note: OCC commands must be run on the Nextcloud server via SSH or docker exec.
+// This function is kept for future API integration when available.
+async function runOCC(_command: string): Promise<string> {
   // Since we can't execute OCC directly via API, we'll use WebDAV to create a marker file
   // and document the command for manual execution
   throw new Error('OCC commands must be run on the Nextcloud server. Use SSH or docker exec.');

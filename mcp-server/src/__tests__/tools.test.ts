@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { FileStat } from 'webdav';
 
 // Mock webdav client
 const mockClient = {
@@ -37,7 +38,7 @@ describe('MCP Tools', () => {
 
       const listing = Array.isArray(items) ? items : [];
       const formatted = listing
-        .map((item: any) => `${item.type === 'directory' ? '📁' : '📄'} ${item.basename}`)
+        .map((item: FileStat) => `${item.type === 'directory' ? '📁' : '📄'} ${item.basename}`)
         .join('\n');
 
       expect(formatted).toBe('📁 Documents\n📄 readme.txt');

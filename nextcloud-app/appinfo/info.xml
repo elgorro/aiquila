@@ -14,12 +14,21 @@ Features:
 - Text improvements (spellcheck, rewrite)
     ]]></description>
     <version>0.1.1</version>
-    <licence>agpl</licence>
-    <author mail="dev@example.com">AIquila</author>
-    <namespace>AIquila</namespace>
+    <licence>AGPL-3.0-or-later</licence>
+    <author mail="aiquila@mailbox.org">elgorro</author>
+    <documentation>
+        <user>https://github.com/elgorro/aiquila/blob/main/docs/README.md</user>
+        <admin>https://github.com/elgorro/aiquila/blob/main/docs/README.md</admin>
+        <developer>https://github.com/elgorro/aiquila/blob/main/docs/README.md</developer>
+    </documentation>
     <category>integration</category>
     <category>tools</category>
-    <bugs>https://github.com/yourrepo/aiquila/issues</bugs>
+    <category>tools</category>
+    <website>https://github.com/elgorro/aiquila</website>
+    <discussion>https://github.com/elgorro/aiquila/discussions</discussion>
+    <bugs>https://github.com/elgorro/aiquila/issues</bugs>
+    <repository>https://github.com/elgorro/aiquila</repository>
+    <donation>https://liberapay.com/elgorro/donate</donation>
     <dependencies>
         <nextcloud min-version="31" max-version="32"/>
     </dependencies>

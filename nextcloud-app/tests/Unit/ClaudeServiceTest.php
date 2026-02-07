@@ -58,6 +58,12 @@ class ClaudeServiceTest extends TestCase {
 
     public function testAskMakesApiCallWithCorrectPayload(): void {
         $this->config->method('getUserValue')->willReturn('test-api-key');
+        $this->config->method('getAppValue')->willReturnCallback(function ($app, $key, $default) {
+            if ($key === 'model') return 'claude-sonnet-4-5-20250929';
+            if ($key === 'max_tokens') return '4096';
+            if ($key === 'api_timeout') return '30';
+            return $default;
+        });
 
         $response = $this->createMock(IResponse::class);
         $response->method('getBody')->willReturn(json_encode([
@@ -70,7 +76,7 @@ class ClaudeServiceTest extends TestCase {
                 'https://api.anthropic.com/v1/messages',
                 $this->callback(function ($options) {
                     $body = json_decode($options['body'], true);
-                    return $body['model'] === 'claude-sonnet-4-20250514'
+                    return $body['model'] === 'claude-sonnet-4-5-20250929'
                         && $body['max_tokens'] === 4096
                         && count($body['messages']) === 1;
                 })
@@ -83,6 +89,12 @@ class ClaudeServiceTest extends TestCase {
 
     public function testSummarizeCallsAskWithSummarizePrompt(): void {
         $this->config->method('getUserValue')->willReturn('test-api-key');
+        $this->config->method('getAppValue')->willReturnCallback(function ($app, $key, $default) {
+            if ($key === 'model') return 'claude-sonnet-4-5-20250929';
+            if ($key === 'max_tokens') return '4096';
+            if ($key === 'api_timeout') return '30';
+            return $default;
+        });
 
         $response = $this->createMock(IResponse::class);
         $response->method('getBody')->willReturn(json_encode([
