@@ -164,7 +164,7 @@ jobs:
       - name: Create Git tag
         run: |
           VERSION=${{ needs.check-version.outputs.version }}
-          TAG_NAME="nc-v${VERSION}"
+          TAG_NAME="aiquila-v${VERSION}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -197,7 +197,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: nc-v${{ needs.check-version.outputs.version }}
+          tag_name: aiquila-v${{ needs.check-version.outputs.version }}
           name: Nextcloud App v${{ needs.check-version.outputs.version }}
           body: |
             ## AIquila Nextcloud App Release v${{ needs.check-version.outputs.version }}
@@ -267,7 +267,7 @@ jobs:
       - name: Get release assets
         run: |
           VERSION=${{ needs.check-version.outputs.version }}
-          TAG_NAME="nc-v${VERSION}"
+          TAG_NAME="aiquila-v${VERSION}"
 
           # Get the release download URL
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/aiquila.tar.gz"
