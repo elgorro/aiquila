@@ -27,7 +27,7 @@ import { sharesTools } from './tools/apps/shares.js';
 
 const server = new McpServer({
   name: 'aiquila',
-  version: '0.1.5',
+  version: '0.1.6',
 });
 
 /**
