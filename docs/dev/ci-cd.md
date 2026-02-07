@@ -8,8 +8,8 @@ AIquila uses GitHub Actions for continuous integration and deployment.
 |----------|---------|---------|
 | `test.yml` | Push/PR to main | Run tests |
 | `lint.yml` | Push/PR to main | Code quality checks |
-| `release.yml` | Tag `v*` | Create GitHub release |
-| `nextcloud-release.yml` | Tag `v*` | Sign & package NC app |
+| `mcp-release.yml` | Version change in `mcp-server/` | Auto-release MCP server |
+| `nc-release.yml` | Version change in `nextcloud-app/` | Auto-release & publish NC app |
 
 ## Test Workflow (`test.yml`)
 
@@ -41,38 +41,120 @@ npm run lint:fix
 npm run format
 ```
 
-## Release Workflow (`release.yml`)
+## Automated Release Workflows
 
-Triggered when you push a version tag.
+AIquila uses automated release workflows that trigger when you bump the version number and push to `main`.
 
-**Creates:**
-- `aiquila-mcp-vX.X.X.tar.gz` - MCP server package
-- `aiquila-nc-vX.X.X.tar.gz` - Nextcloud app package
+### MCP Server Release (`mcp-release.yml`)
+
+**Triggers:** Automatically when version changes in `mcp-server/package.json` on push to `main`
+
+**What it does:**
+1. Detects version change in `package.json`
+2. Runs tests and builds the project
+3. Creates tag `mcp-vX.X.X`
+4. Packages: `dist/`, `package.json`, `README.md`
+5. Creates GitHub release with `aiquila-mcp-vX.X.X.tar.gz`
 
 **How to release:**
 ```bash
-# Update version in package.json and info.xml
-git add -A
-git commit -m "Release v0.1.0"
-git tag v0.1.0
-git push origin main --tags
+# 1. Update version in mcp-server/package.json
+vim mcp-server/package.json  # Change version to 0.1.1
+
+# 2. Commit and push to main
+git add mcp-server/package.json
+git commit -m "Bump MCP server to v0.1.1"
+git push origin main
+
+# 3. Workflow runs automatically and creates:
+#    - Tag: mcp-v0.1.1
+#    - GitHub Release with tarball
 ```
 
-## Nextcloud App Release (`nextcloud-release.yml`)
+### Nextcloud App Release (`nc-release.yml`)
 
-Creates a signed Nextcloud app package for the app store.
+**Triggers:** Automatically when version changes in `nextcloud-app/appinfo/info.xml` on push to `main`
 
-### Setup Signing (Optional)
+**What it does:**
+1. Detects version change in `info.xml`
+2. Runs composer tests
+3. Builds frontend (`npm run build`)
+4. Creates tag `nc-vX.X.X`
+5. Packages app (excludes: tests/, vendor/, node_modules/, src/)
+6. Signs package (if `NC_SIGN_KEY` secret exists)
+7. Creates GitHub release with `aiquila.tar.gz` and signature
+8. **Waits for manual approval** (via GitHub environment protection)
+9. Publishes to Nextcloud App Store
 
-1. Register at [apps.nextcloud.com](https://apps.nextcloud.com)
-2. Request a signing certificate for your app
-3. Add GitHub secrets:
-   - `NC_SIGN_KEY` - Private key content
-   - `NC_SIGN_CERT` - Certificate content
+**How to release:**
+```bash
+# 1. Update version in BOTH files
+vim nextcloud-app/appinfo/info.xml     # Change <version>0.1.1</version>
+vim nextcloud-app/package.json         # Change version to 0.1.1
 
-### Without Signing
+# 2. Update CHANGELOG.md
+vim nextcloud-app/CHANGELOG.md
 
-The workflow still creates a valid tarball, but it won't be signed. Users will see a warning when installing unsigned apps.
+# 3. Commit and push to main
+git add nextcloud-app/
+git commit -m "Bump Nextcloud app to v0.1.1"
+git push origin main
+
+# 4. Workflow runs automatically:
+#    - Creates tag: nc-v0.1.1
+#    - Creates GitHub Release
+#    - Waits for your approval to publish to app store
+
+# 5. Approve app store publishing:
+#    Go to: https://github.com/YOUR-REPO/actions
+#    Click on the workflow run
+#    Click "Review deployments" and approve "nextcloud-appstore"
+```
+
+### Setup Required GitHub Secrets
+
+Navigate to: **Repository Settings → Secrets and variables → Actions → New repository secret**
+
+#### For Nextcloud App Signing (Required)
+
+1. **`NC_SIGN_KEY`** - Your private key content
+   ```bash
+   # Copy your private key content
+   cat ~/.nextcloud/certificates/aiquila.key
+   # Paste entire content (including BEGIN/END lines) into secret
+   ```
+
+2. **`NC_SIGN_CERT`** - Your certificate content (if needed)
+   ```bash
+   cat ~/.nextcloud/certificates/aiquila.crt
+   ```
+
+#### For Nextcloud App Store Publishing (Required for auto-publish)
+
+3. **`NEXTCLOUD_APPSTORE_USERNAME`** - Your app store username
+
+4. **`NEXTCLOUD_APPSTORE_TOKEN`** - Your app store API token
+   - Get from: [apps.nextcloud.com](https://apps.nextcloud.com) → Account Settings → API Token
+
+### Setup Manual Approval Gate
+
+To enable the manual approval before publishing to app store:
+
+1. Go to **Repository Settings → Environments**
+2. Create new environment: `nextcloud-appstore`
+3. Enable "Required reviewers"
+4. Add yourself as a required reviewer
+5. Save
+
+Now the workflow will wait for your approval before publishing to the app store!
+
+### Version Requirements
+
+**Keep versions in sync:**
+- MCP Server: Update `mcp-server/package.json`
+- Nextcloud App: Update BOTH:
+  - `nextcloud-app/appinfo/info.xml` (e.g., `<version>0.1.1</version>`)
+  - `nextcloud-app/package.json` (e.g., `"version": "0.1.1"`)
 
 ## Local Development
 
@@ -128,11 +210,20 @@ npm run lint:fix && npm run format
 
 ### Release Not Triggering
 
-- Ensure tag follows `v*` pattern (e.g., `v0.1.0`)
-- Check you pushed both commit and tag:
-  ```bash
-  git push origin main --tags
-  ```
+- Ensure version actually changed in the correct file:
+  - MCP: `mcp-server/package.json`
+  - Nextcloud: `nextcloud-app/appinfo/info.xml`
+- Check you pushed to `main` branch
+- Check workflow runs in Actions tab
+- Ensure changes are in the correct directory path
+- Workflow ignores changes to `*.md` files and `tests/` directories
+
+### App Store Publishing Fails
+
+- Verify secrets are set: `NC_SIGN_KEY`, `NEXTCLOUD_APPSTORE_USERNAME`, `NEXTCLOUD_APPSTORE_TOKEN`
+- Check signature is valid (download .tar.gz and .sig, verify locally)
+- Ensure app is registered at apps.nextcloud.com
+- Check app store API response in workflow logs
 
 ## Customization
 

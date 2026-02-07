@@ -1,0 +1,143 @@
+name: MCP Server Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'mcp-server/**'
+      - '!mcp-server/**/*.md'
+      - '!mcp-server/**/tests/**'
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version-changed: ${{ steps.check.outputs.changed }}
+      version: ${{ steps.check.outputs.version }}
+      previous-version: ${{ steps.check.outputs.previous }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if version changed
+        id: check
+        run: |
+          CURRENT_VERSION=$(node -p "require('./mcp-server/package.json').version")
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+          # Check if this is the first commit or if package.json changed
+          if git show HEAD~1:mcp-server/package.json 2>/dev/null; then
+            PREVIOUS_VERSION=$(git show HEAD~1:mcp-server/package.json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf8')).version")
+            echo "previous=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+
+            if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+              echo "changed=true" >> $GITHUB_OUTPUT
+              echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
+            else
+              echo "changed=false" >> $GITHUB_OUTPUT
+              echo "Version unchanged: $CURRENT_VERSION"
+            fi
+          else
+            # First commit, consider it changed
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "previous=0.0.0" >> $GITHUB_OUTPUT
+            echo "First version: $CURRENT_VERSION"
+          fi
+
+  release:
+    needs: check-version
+    if: needs.check-version.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: mcp-server
+        run: npm ci
+
+      - name: Run tests
+        working-directory: mcp-server
+        run: npm test
+
+      - name: Build
+        working-directory: mcp-server
+        run: npm run build
+
+      - name: Verify build output
+        run: |
+          if [ ! -f "mcp-server/dist/index.js" ]; then
+            echo "Error: Build output not found at mcp-server/dist/index.js"
+            exit 1
+          fi
+          echo "Build verified successfully"
+
+      - name: Create release package
+        run: |
+          VERSION=${{ needs.check-version.outputs.version }}
+          PACKAGE_NAME="aiquila-mcp-v${VERSION}"
+
+          mkdir -p /tmp/${PACKAGE_NAME}
+          cp -r mcp-server/dist /tmp/${PACKAGE_NAME}/
+          cp mcp-server/package.json /tmp/${PACKAGE_NAME}/
+          cp mcp-server/README.md /tmp/${PACKAGE_NAME}/
+
+          cd /tmp
+          tar -czf ${PACKAGE_NAME}.tar.gz ${PACKAGE_NAME}
+          mv ${PACKAGE_NAME}.tar.gz $GITHUB_WORKSPACE/
+
+          echo "Created package: ${PACKAGE_NAME}.tar.gz"
+
+      - name: Create Git tag
+        run: |
+          VERSION=${{ needs.check-version.outputs.version }}
+          TAG_NAME="mcp-v${VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "${TAG_NAME}" -m "MCP Server Release ${VERSION}"
+          git push origin "${TAG_NAME}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: mcp-v${{ needs.check-version.outputs.version }}
+          name: MCP Server v${{ needs.check-version.outputs.version }}
+          body: |
+            ## MCP Server Release v${{ needs.check-version.outputs.version }}
+
+            **Previous version:** ${{ needs.check-version.outputs.previous-version }}
+
+            ### Installation
+
+            ```bash
+            # Download and extract
+            wget https://github.com/${{ github.repository }}/releases/download/mcp-v${{ needs.check-version.outputs.version }}/aiquila-mcp-v${{ needs.check-version.outputs.version }}.tar.gz
+            tar -xzf aiquila-mcp-v${{ needs.check-version.outputs.version }}.tar.gz
+            cd aiquila-mcp-v${{ needs.check-version.outputs.version }}
+
+            # Install dependencies and run
+            npm install --production
+            npm start
+            ```
+
+            ### Requirements
+            - Node.js 20 or higher
+
+            ---
+            *This release was automatically created by GitHub Actions*
+          files: |
+            aiquila-mcp-v${{ needs.check-version.outputs.version }}.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

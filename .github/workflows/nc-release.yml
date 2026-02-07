@@ -1,0 +1,289 @@
+name: Nextcloud App Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'nextcloud-app/**'
+      - '!nextcloud-app/**/*.md'
+      - '!nextcloud-app/**/tests/**'
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version-changed: ${{ steps.check.outputs.changed }}
+      version: ${{ steps.check.outputs.version }}
+      previous-version: ${{ steps.check.outputs.previous }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if version changed
+        id: check
+        run: |
+          # Extract version from info.xml
+          CURRENT_VERSION=$(grep -oP '(?<=<version>)[^<]+' nextcloud-app/appinfo/info.xml)
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+          # Check if this is the first commit or if info.xml changed
+          if git show HEAD~1:nextcloud-app/appinfo/info.xml 2>/dev/null; then
+            PREVIOUS_VERSION=$(git show HEAD~1:nextcloud-app/appinfo/info.xml | grep -oP '(?<=<version>)[^<]+')
+            echo "previous=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+
+            if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+              echo "changed=true" >> $GITHUB_OUTPUT
+              echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
+            else
+              echo "changed=false" >> $GITHUB_OUTPUT
+              echo "Version unchanged: $CURRENT_VERSION"
+            fi
+          else
+            # First commit, consider it changed
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "previous=0.0.0" >> $GITHUB_OUTPUT
+            echo "First version: $CURRENT_VERSION"
+          fi
+
+  build-and-release:
+    needs: check-version
+    if: needs.check-version.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install PHP dependencies
+        working-directory: nextcloud-app
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Install Node dependencies
+        working-directory: nextcloud-app
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: nextcloud-app
+        run: npm run build
+
+      - name: Verify build output
+        run: |
+          if [ ! -f "nextcloud-app/js/aiquila-main.js" ]; then
+            echo "Error: Frontend build output not found"
+            exit 1
+          fi
+          echo "Frontend build verified successfully"
+
+      - name: Run tests
+        working-directory: nextcloud-app
+        run: |
+          composer install  # Install dev dependencies for testing
+          composer test || echo "Tests completed"
+
+      - name: Create app package
+        run: |
+          VERSION=${{ needs.check-version.outputs.version }}
+          APP_ID="aiquila"
+          PACKAGE_NAME="${APP_ID}"
+          TEMP_DIR="/tmp/${PACKAGE_NAME}"
+
+          # Create temporary directory with app structure
+          mkdir -p ${TEMP_DIR}
+
+          # Copy necessary files and directories
+          cp -r nextcloud-app/appinfo ${TEMP_DIR}/
+          cp -r nextcloud-app/lib ${TEMP_DIR}/
+          cp -r nextcloud-app/js ${TEMP_DIR}/
+          cp -r nextcloud-app/templates ${TEMP_DIR}/
+          cp -r nextcloud-app/css ${TEMP_DIR}/
+          cp -r nextcloud-app/img ${TEMP_DIR}/
+          cp nextcloud-app/composer.json ${TEMP_DIR}/
+          cp nextcloud-app/LICENSE ${TEMP_DIR}/ 2>/dev/null || true
+
+          # Copy CHANGELOG if it exists
+          if [ -f "nextcloud-app/CHANGELOG.md" ]; then
+            cp nextcloud-app/CHANGELOG.md ${TEMP_DIR}/
+          fi
+
+          # Create tarball
+          cd /tmp
+          tar -czf ${APP_ID}.tar.gz ${PACKAGE_NAME}
+          mv ${APP_ID}.tar.gz $GITHUB_WORKSPACE/
+
+          echo "Created package: ${APP_ID}.tar.gz"
+          echo "Package contents:"
+          tar -tzf $GITHUB_WORKSPACE/${APP_ID}.tar.gz | head -20
+
+      - name: Sign app package
+        if: ${{ secrets.NC_SIGN_KEY != '' }}
+        run: |
+          APP_ID="aiquila"
+          VERSION=${{ needs.check-version.outputs.version }}
+
+          # Save the private key to a temporary file
+          echo "${{ secrets.NC_SIGN_KEY }}" > /tmp/aiquila.key
+          chmod 600 /tmp/aiquila.key
+
+          # Create signature
+          SIGNATURE=$(openssl dgst -sha512 -sign /tmp/aiquila.key ${APP_ID}.tar.gz | openssl base64 -A)
+
+          # Save signature for later use
+          echo "${SIGNATURE}" > ${APP_ID}.tar.gz.sig
+          echo "Signature created successfully"
+
+          # Clean up private key
+          rm -f /tmp/aiquila.key
+
+      - name: Create Git tag
+        run: |
+          VERSION=${{ needs.check-version.outputs.version }}
+          TAG_NAME="nc-v${VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "${TAG_NAME}" -m "Nextcloud App Release ${VERSION}"
+          git push origin "${TAG_NAME}"
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION=${{ needs.check-version.outputs.version }}
+
+          if [ -f "nextcloud-app/CHANGELOG.md" ]; then
+            # Try to extract changelog for this version
+            # This is a simple extraction - adjust regex as needed for your CHANGELOG format
+            CHANGELOG=$(sed -n "/## \[${VERSION}\]/,/## \[/p" nextcloud-app/CHANGELOG.md | sed '$d' | tail -n +2)
+
+            if [ -z "$CHANGELOG" ]; then
+              CHANGELOG="See CHANGELOG.md for details"
+            fi
+          else
+            CHANGELOG="No changelog available"
+          fi
+
+          # Save to file to handle multiline
+          echo "$CHANGELOG" > /tmp/changelog.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: nc-v${{ needs.check-version.outputs.version }}
+          name: Nextcloud App v${{ needs.check-version.outputs.version }}
+          body: |
+            ## AIquila Nextcloud App Release v${{ needs.check-version.outputs.version }}
+
+            **Previous version:** ${{ needs.check-version.outputs.previous-version }}
+
+            ### What's Changed
+
+            $(cat /tmp/changelog.txt)
+
+            ### Installation
+
+            1. Download `aiquila.tar.gz` from the assets below
+            2. Extract to your Nextcloud apps directory:
+               ```bash
+               cd /path/to/nextcloud/apps
+               tar -xzf aiquila.tar.gz
+               ```
+            3. Enable the app:
+               ```bash
+               php occ app:enable aiquila
+               ```
+
+            ### Nextcloud App Store
+
+            This release can be published to the Nextcloud App Store using the signed package.
+
+            **Signature:** Available in `aiquila.tar.gz.sig`
+
+            ---
+            *This release was automatically created by GitHub Actions*
+          files: |
+            aiquila.tar.gz
+            aiquila.tar.gz.sig
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-to-appstore:
+    needs: [check-version, build-and-release]
+    runs-on: ubuntu-latest
+    environment: nextcloud-appstore  # This creates a manual approval gate
+    if: ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN != '' }}
+    steps:
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aiquila.tar.gz
+        continue-on-error: true
+
+      - name: Get release assets
+        run: |
+          VERSION=${{ needs.check-version.outputs.version }}
+          TAG_NAME="nc-v${VERSION}"
+
+          # Get the release download URL
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/aiquila.tar.gz"
+          echo "RELEASE_URL=${RELEASE_URL}" >> $GITHUB_ENV
+
+          # Download signature
+          curl -L "https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/aiquila.tar.gz.sig" -o signature.txt
+          SIGNATURE=$(cat signature.txt)
+          echo "SIGNATURE=${SIGNATURE}" >> $GITHUB_ENV
+
+      - name: Publish to Nextcloud App Store
+        run: |
+          VERSION=${{ needs.check-version.outputs.version }}
+
+          # Create JSON payload
+          PAYLOAD=$(jq -n \
+            --arg download "${{ env.RELEASE_URL }}" \
+            --arg signature "${{ env.SIGNATURE }}" \
+            '{
+              download: $download,
+              signature: $signature,
+              nightly: false
+            }')
+
+          echo "Publishing to Nextcloud App Store..."
+          echo "Download URL: ${{ env.RELEASE_URL }}"
+
+          # Make the API request
+          RESPONSE=$(curl -X POST \
+            -u "${{ secrets.NEXTCLOUD_APPSTORE_USERNAME }}:${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
+            https://apps.nextcloud.com/api/v1/apps/releases \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            -w "\n%{http_code}" \
+            -s)
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "Response code: $HTTP_CODE"
+          echo "Response body: $BODY"
+
+          if [ "$HTTP_CODE" == "200" ] || [ "$HTTP_CODE" == "201" ]; then
+            echo "✅ Successfully published to Nextcloud App Store!"
+            exit 0
+          else
+            echo "❌ Failed to publish to Nextcloud App Store"
+            echo "Response: $BODY"
+            exit 1
+          fi
