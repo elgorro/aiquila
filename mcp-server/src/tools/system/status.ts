@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { fetchOCS, fetchStatus } from "../../client/ocs.js";
 
 /**
  * Nextcloud System Status Tools
- * Provides system diagnostics and monitoring via OCC commands
+ * Provides system diagnostics and monitoring via OCS API
  */
 
 /**
@@ -13,69 +14,50 @@ export const systemStatusTool = {
   description: 'Get Nextcloud system status including version, installation path, and configuration',
   inputSchema: z.object({}),
   handler: async () => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ status`;
-    const sshCommand = `php occ status`;
+    try {
+      const [status, capabilities] = await Promise.all([
+        fetchStatus(),
+        fetchOCS<Record<string, unknown>>("/ocs/v2.php/cloud/capabilities"),
+      ]);
 
-    const helpText = `To check Nextcloud system status, run this command on your Nextcloud server:
+      const result = {
+        status,
+        capabilities: capabilities.ocs.data,
+      };
 
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-This will display:
-- Nextcloud installation status
-- Nextcloud version
-- Version string
-- Installation directory
-- Configuration directory
-- Data directory
-
-**Example output:**
-\`\`\`json
-{
-  "installed": true,
-  "version": "28.0.1.1",
-  "versionstring": "28.0.1",
-  "edition": "",
-  "maintenance": false,
-  "needsDbUpgrade": false,
-  "productname": "Nextcloud",
-  "extendedSupport": false
-}
-\`\`\`
-
-**For more detailed system information**, you can also run:
-- \`php occ --version\` - Show Nextcloud version
-- \`php occ check\` - Check dependencies
-- \`php occ integrity:check-core\` - Check core integrity`;
-
-    return {
-      content: [{
-        type: 'text',
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error fetching system status: ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 
 /**
  * Run setup checks to verify system configuration
+ * Note: This requires server-side OCC access and cannot be performed via the REST API.
  */
 export const setupChecksTool = {
   name: 'run_setup_checks',
-  description: 'Run Nextcloud setup checks to verify security and configuration',
+  description: 'Get instructions for running Nextcloud setup checks (requires server-side OCC access)',
   inputSchema: z.object({}),
   handler: async () => {
     const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ setupchecks`;
     const sshCommand = `php occ setupchecks`;
 
-    const helpText = `To run Nextcloud setup checks, run this command on your Nextcloud server:
+    const helpText = `**Note:** Setup checks require server-side OCC access and cannot be performed via the REST API.
+
+To run Nextcloud setup checks, run this command on your Nextcloud server:
 
 **Docker:**
 \`\`\`bash
@@ -106,32 +88,11 @@ This will perform comprehensive checks on:
 - PHP modules and extensions
 - Database compatibility
 - Cron job configuration
-- File locking setup
-
-**Output levels:**
-- ✅ **SUCCESS** - Everything is configured correctly
-- ⚠️  **WARNING** - Minor issues or recommendations
-- ❌ **ERROR** - Critical issues that should be fixed
-
-**Example output:**
-\`\`\`
-[✅] PHP version: 8.2.15 - OK
-[✅] Database: MySQL 8.0.35 - OK
-[⚠️ ] PHP memory limit: 512M (recommended: 1024M)
-[✅] HTTPS configured correctly
-[❌] Cron not configured - using AJAX
-[✅] All required PHP modules installed
-\`\`\`
-
-**Common warnings and how to fix them:**
-- **Memory limit too low**: Increase \`memory_limit\` in php.ini
-- **Cron not configured**: Set up system cron job
-- **Missing PHP modules**: Install required extensions
-- **HTTPS not configured**: Configure SSL/TLS certificate`;
+- File locking setup`;
 
     return {
       content: [{
-        type: 'text',
+        type: 'text' as const,
         text: helpText,
       }],
     };
