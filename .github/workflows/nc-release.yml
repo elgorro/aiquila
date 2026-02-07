@@ -128,13 +128,23 @@ jobs:
           tar -tzf $GITHUB_WORKSPACE/${APP_ID}.tar.gz | head -20
 
       - name: Sign app package
-        if: ${{ secrets.NC_SIGN_KEY != '' }}
+        continue-on-error: true
         run: |
           APP_ID="aiquila"
           VERSION=${{ needs.check-version.outputs.version }}
 
+          # Check if signing key is available
+          if [ -z "$NC_SIGN_KEY" ]; then
+            echo "⚠️  NC_SIGN_KEY not configured - skipping signing"
+            echo "Package will be unsigned. Set NC_SIGN_KEY secret for signed releases."
+            echo "Unsigned packages can still be used but will show a warning in Nextcloud."
+            exit 0
+          fi
+
+          echo "🔐 Signing package..."
+
           # Save the private key to a temporary file
-          echo "${{ secrets.NC_SIGN_KEY }}" > /tmp/aiquila.key
+          echo "$NC_SIGN_KEY" > /tmp/aiquila.key
           chmod 600 /tmp/aiquila.key
 
           # Create signature
@@ -142,10 +152,12 @@ jobs:
 
           # Save signature for later use
           echo "${SIGNATURE}" > ${APP_ID}.tar.gz.sig
-          echo "Signature created successfully"
+          echo "✅ Signature created successfully"
 
           # Clean up private key
           rm -f /tmp/aiquila.key
+        env:
+          NC_SIGN_KEY: ${{ secrets.NC_SIGN_KEY }}
 
       - name: Create Git tag
         run: |
@@ -225,8 +237,23 @@ jobs:
     needs: [check-version, build-and-release]
     runs-on: ubuntu-latest
     environment: nextcloud-appstore  # This creates a manual approval gate
-    if: ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN != '' }}
     steps:
+      - name: Check app store credentials
+        run: |
+          if [ -z "$APPSTORE_TOKEN" ] || [ -z "$APPSTORE_USERNAME" ]; then
+            echo "⚠️  Nextcloud App Store credentials not configured"
+            echo "Skipping app store publishing."
+            echo ""
+            echo "To enable automatic publishing, configure these secrets:"
+            echo "  - NEXTCLOUD_APPSTORE_USERNAME"
+            echo "  - NEXTCLOUD_APPSTORE_TOKEN"
+            exit 1
+          fi
+          echo "✅ App store credentials configured"
+        env:
+          APPSTORE_TOKEN: ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}
+          APPSTORE_USERNAME: ${{ secrets.NEXTCLOUD_APPSTORE_USERNAME }}
+
       - name: Download release artifact
         uses: actions/download-artifact@v4
         with:
