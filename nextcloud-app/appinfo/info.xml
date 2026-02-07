@@ -13,7 +13,7 @@ Features:
 - Generate and edit content
 - Text improvements (spellcheck, rewrite)
     ]]></description>
-    <version>0.1.3</version>
+    <version>0.1.4</version>
     <licence>AGPL-3.0-or-later</licence>
     <author mail="aiquila@mailbox.org">elgorro</author>
     <documentation>
@@ -23,7 +23,7 @@ Features:
     </documentation>
     <category>integration</category>
     <category>tools</category>
-    <category>tools</category>
+    <category>ai</category>
     <website>https://github.com/elgorro/aiquila</website>
     <discussion>https://github.com/elgorro/aiquila/discussions</discussion>
     <bugs>https://github.com/elgorro/aiquila/issues</bugs>
