@@ -2,7 +2,6 @@
 /node_modules/
 /js-dist/
 npm-debug.log*
-package-lock.json
 
 # Composer
 /vendor/
