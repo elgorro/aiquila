@@ -9,12 +9,15 @@ import { securityTools } from './tools/system/security.js';
 
 // Import app-specific tools
 import { tasksTools } from './tools/apps/tasks.js';
+import { calendarTools } from './tools/apps/calendar.js';
 import { cookbookTools } from './tools/apps/cookbook.js';
 import { notesTools } from './tools/apps/notes.js';
 import { aiquilaTools } from './tools/apps/aiquila.js';
 import { usersTools } from './tools/apps/users.js';
 import { groupsTools } from './tools/apps/groups.js';
 import { sharesTools } from './tools/apps/shares.js';
+import { contactsTools } from './tools/apps/contacts.js';
+import { mailTools } from './tools/apps/mail.js';
 
 /**
  * AIquila MCP Server
@@ -22,7 +25,7 @@ import { sharesTools } from './tools/apps/shares.js';
  *
  * Architecture:
  * - System tools: Core operations (files, status, apps, security)
- * - App tools: Nextcloud integrations (Tasks, Cookbook, Notes, Users, Groups, Shares, AIquila)
+ * - App tools: Nextcloud integrations (Calendar, Tasks, Cookbook, Notes, Mail, Users, Groups, Shares, AIquila)
  */
 
 const server = new McpServer({
@@ -45,6 +48,15 @@ function registerTools() {
 
   // Register system status tools
   statusTools.forEach((tool) => {
+    // @ts-expect-error - TS2589: Type instantiation depth limit in MCP SDK (known issue with complex Zod schemas)
+    server.registerTool(tool.name, {
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }, tool.handler);
+  });
+
+  // Register Calendar app tools
+  calendarTools.forEach((tool) => {
     // @ts-expect-error - TS2589: Type instantiation depth limit in MCP SDK (known issue with complex Zod schemas)
     server.registerTool(tool.name, {
       description: tool.description,
@@ -126,6 +138,24 @@ function registerTools() {
 
   // Register Share Management tools
   sharesTools.forEach((tool) => {
+    // @ts-expect-error - TS2589: Type instantiation depth limit in MCP SDK (known issue with complex Zod schemas)
+    server.registerTool(tool.name, {
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }, tool.handler);
+  });
+
+  // Register Contacts app tools
+  contactsTools.forEach((tool) => {
+    // @ts-expect-error - TS2589: Type instantiation depth limit in MCP SDK (known issue with complex Zod schemas)
+    server.registerTool(tool.name, {
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }, tool.handler);
+  });
+
+  // Register Mail app tools
+  mailTools.forEach((tool) => {
     // @ts-expect-error - TS2589: Type instantiation depth limit in MCP SDK (known issue with complex Zod schemas)
     server.registerTool(tool.name, {
       description: tool.description,
