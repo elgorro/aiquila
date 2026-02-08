@@ -8,6 +8,7 @@
 - [x] Task creation via CalDAV
 - [x] Notes creation
 - [x] Recipe creation
+- [] SSE Support
 
 ### Nextcloud App
 - [x] Admin/user API key settings

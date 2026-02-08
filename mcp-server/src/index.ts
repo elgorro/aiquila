@@ -30,7 +30,7 @@ import { mailTools } from './tools/apps/mail.js';
 
 const server = new McpServer({
   name: 'aiquila',
-  version: '0.1.6',
+  version: '0.1.7',
 });
 
 /**
