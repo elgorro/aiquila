@@ -3,6 +3,7 @@
 namespace OCA\AIquila\Service;
 
 use OCA\AIquila\Public\IAIquila;
+use OCP\Files\NotFoundException;
 use OCP\IConfig;
 use OCP\Notification\IManager as INotificationManager;
 use Psr\Log\LoggerInterface;
@@ -15,6 +16,8 @@ use Psr\Log\LoggerInterface;
  */
 class AIquilaService implements IAIquila {
     private ClaudeService $claudeService;
+    private ClaudeSDKService $claudeSDKService;
+    private FileService $fileService;
     private IConfig $config;
     private INotificationManager $notificationManager;
     private LoggerInterface $logger;
@@ -22,11 +25,15 @@ class AIquilaService implements IAIquila {
 
     public function __construct(
         ClaudeService $claudeService,
+        ClaudeSDKService $claudeSDKService,
+        FileService $fileService,
         IConfig $config,
         INotificationManager $notificationManager,
         LoggerInterface $logger
     ) {
         $this->claudeService = $claudeService;
+        $this->claudeSDKService = $claudeSDKService;
+        $this->fileService = $fileService;
         $this->config = $config;
         $this->notificationManager = $notificationManager;
         $this->logger = $logger;
@@ -98,9 +105,30 @@ class AIquilaService implements IAIquila {
             'file' => $filePath,
         ]);
 
-        // TODO: Implement file reading via Nextcloud APIs
-        // For now, return error
-        return ['error' => 'File analysis not yet implemented. Use ask() with file content for now.'];
+        try {
+            $fileData = $this->fileService->getContent($filePath, $userId);
+            $mimeType = $fileData['mimeType'];
+
+            if (str_starts_with($mimeType, 'image/')) {
+                return $this->claudeSDKService->askWithImage(
+                    $prompt,
+                    $fileData['content'], // already base64
+                    $mimeType,
+                    $userId
+                );
+            }
+
+            // Text and other files: pass content as context
+            $context = "File: {$fileData['name']} ({$mimeType}, {$fileData['size']} bytes)\n\n"
+                     . $fileData['content'];
+            return $this->claudeService->ask($prompt, $context, $userId);
+
+        } catch (NotFoundException $e) {
+            return ['error' => 'File not found: ' . $filePath];
+        } catch (\Exception $e) {
+            $this->logger->error('AIquila: Exception in analyzeFile()', ['exception' => $e->getMessage()]);
+            return ['error' => 'File analysis error: ' . $e->getMessage()];
+        }
     }
 
     /**

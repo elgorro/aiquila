@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { executeOCC } from "../../client/aiquila.js";
 
 /**
  * Nextcloud Security & Integrity Tools
- * These require server-side OCC access and cannot be performed via the REST API.
+ * Verify system and app integrity via OCC commands
  */
 
 /**
@@ -10,47 +11,42 @@ import { z } from "zod";
  */
 export const checkCoreIntegrityTool = {
   name: 'check_core_integrity',
-  description: 'Get instructions for verifying Nextcloud core system integrity (requires server-side OCC access)',
+  description: 'Verify Nextcloud core system integrity by checking file signatures against the official release',
   inputSchema: z.object({}),
   handler: async () => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ integrity:check-core`;
-    const sshCommand = `php occ integrity:check-core`;
+    try {
+      const result = await executeOCC("integrity:check-core");
 
-    const helpText = `**Note:** Integrity checks require server-side OCC access and cannot be performed via the REST API.
+      let output = "";
+      if (result.success) {
+        output += "Core integrity check passed.\n\n";
+      } else {
+        output += `Core integrity check found issues (exit code: ${result.exitCode}).\n\n`;
+      }
 
-To check Nextcloud core integrity, run this command on your Nextcloud server:
+      if (result.stdout) {
+        output += result.stdout;
+      }
+      if (result.stderr) {
+        output += `\n--- stderr ---\n${result.stderr}`;
+      }
 
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-**What this checks:**
-- Verifies core Nextcloud files haven't been modified
-- Checks file signatures against official Nextcloud release
-- Detects unauthorized changes or tampering
-
-**Expected output (if integrity is OK):**
-\`\`\`
-No errors have been found.
-\`\`\`
-
-**Result types:**
-- **EXTRA_FILE:** File exists but shouldn't -- review and remove if suspicious
-- **INVALID_HASH:** File has been modified -- compare with official version
-- **MISSING_FILE:** Required file is missing -- reinstall may be needed`;
-
-    return {
-      content: [{
-        type: 'text' as const,
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: output.trim(),
+        }],
+        isError: !result.success,
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error checking core integrity: ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 
@@ -59,46 +55,44 @@ No errors have been found.
  */
 export const checkAppIntegrityTool = {
   name: 'check_app_integrity',
-  description: 'Get instructions for verifying integrity of a specific Nextcloud app (requires server-side OCC access)',
+  description: 'Verify integrity of a specific Nextcloud app by checking file signatures against its official release',
   inputSchema: z.object({
     appId: z.string().describe('The app ID to check (e.g., "tasks", "deck", "photos")'),
   }),
   handler: async (args: { appId: string }) => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ integrity:check-app ${args.appId}`;
-    const sshCommand = `php occ integrity:check-app ${args.appId}`;
+    try {
+      const result = await executeOCC("integrity:check-app", [args.appId]);
 
-    const helpText = `**Note:** Integrity checks require server-side OCC access and cannot be performed via the REST API.
+      let output = "";
+      if (result.success) {
+        output += `App "${args.appId}" integrity check passed.\n\n`;
+      } else {
+        output += `App "${args.appId}" integrity check found issues (exit code: ${result.exitCode}).\n\n`;
+      }
 
-To check integrity of app "${args.appId}", run this command on your Nextcloud server:
+      if (result.stdout) {
+        output += result.stdout;
+      }
+      if (result.stderr) {
+        output += `\n--- stderr ---\n${result.stderr}`;
+      }
 
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-**What this checks:**
-- Verifies app files haven't been modified
-- Checks file signatures against app's official release
-- Detects unauthorized changes
-
-**Expected output (if integrity is OK):**
-\`\`\`
-No errors have been found.
-\`\`\`
-
-**Note:** Only apps with signatures can be checked. Custom/unsigned apps cannot be verified.`;
-
-    return {
-      content: [{
-        type: 'text' as const,
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: output.trim(),
+        }],
+        isError: !result.success,
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error checking app integrity for "${args.appId}": ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 

@@ -6,6 +6,7 @@ import { fileSystemTools } from './tools/system/files.js';
 import { statusTools } from './tools/system/status.js';
 import { appsTools } from './tools/system/apps.js';
 import { securityTools } from './tools/system/security.js';
+import { occTools } from './tools/system/occ.js';
 
 // Import app-specific tools
 import { tasksTools } from './tools/apps/tasks.js';
@@ -30,7 +31,7 @@ import { mailTools } from './tools/apps/mail.js';
 
 const server = new McpServer({
   name: 'aiquila',
-  version: '0.1.7',
+  version: '0.1.8',
 });
 
 /**
@@ -120,6 +121,15 @@ function registerTools() {
 
   // Register App Management tools
   appsTools.forEach((tool) => {
+    // @ts-expect-error - TS2589: Type instantiation depth limit in MCP SDK (known issue with complex Zod schemas)
+    server.registerTool(tool.name, {
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }, tool.handler);
+  });
+
+  // Register OCC execution tools
+  occTools.forEach((tool) => {
     // @ts-expect-error - TS2589: Type instantiation depth limit in MCP SDK (known issue with complex Zod schemas)
     server.registerTool(tool.name, {
       description: tool.description,

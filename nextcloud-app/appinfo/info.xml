@@ -3,6 +3,7 @@
       xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
     <id>aiquila</id>
     <name>AIquila</name>
+    <namespace>AIquila</namespace>
     <summary>Claude AI Integration for Nextcloud</summary>
     <description><![CDATA[
 AIquila brings Claude AI capabilities to your Nextcloud instance.
@@ -13,7 +14,7 @@ Features:
 - Generate and edit content
 - Text improvements (spellcheck, rewrite)
     ]]></description>
-    <version>0.1.4</version>
+    <version>0.1.8</version>
     <licence>AGPL-3.0-or-later</licence>
     <author mail="aiquila@mailbox.org">elgorro</author>
     <documentation>

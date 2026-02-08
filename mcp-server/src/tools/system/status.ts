@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { fetchOCS, fetchStatus } from "../../client/ocs.js";
+import { executeOCC } from "../../client/aiquila.js";
 
 /**
  * Nextcloud System Status Tools
@@ -45,57 +46,45 @@ export const systemStatusTool = {
 
 /**
  * Run setup checks to verify system configuration
- * Note: This requires server-side OCC access and cannot be performed via the REST API.
  */
 export const setupChecksTool = {
   name: 'run_setup_checks',
-  description: 'Get instructions for running Nextcloud setup checks (requires server-side OCC access)',
+  description: 'Run Nextcloud setup checks to verify system configuration (security, performance, PHP modules, etc.)',
   inputSchema: z.object({}),
   handler: async () => {
-    const dockerCommand = `docker exec -u www-data aiquila-nextcloud php occ setupchecks`;
-    const sshCommand = `php occ setupchecks`;
+    try {
+      const result = await executeOCC("setupchecks");
 
-    const helpText = `**Note:** Setup checks require server-side OCC access and cannot be performed via the REST API.
+      let output = "";
+      if (result.success) {
+        output += "Setup checks completed successfully.\n\n";
+      } else {
+        output += `Setup checks found issues (exit code: ${result.exitCode}).\n\n`;
+      }
 
-To run Nextcloud setup checks, run this command on your Nextcloud server:
+      if (result.stdout) {
+        output += result.stdout;
+      }
+      if (result.stderr) {
+        output += `\n--- stderr ---\n${result.stderr}`;
+      }
 
-**Docker:**
-\`\`\`bash
-${dockerCommand}
-\`\`\`
-
-**SSH:**
-\`\`\`bash
-${sshCommand}
-\`\`\`
-
-This will perform comprehensive checks on:
-
-**Security:**
-- HTTPS configuration
-- Security headers
-- PHP security settings
-- Database security
-- File permissions
-
-**Performance:**
-- PHP memory limits
-- PHP opcache configuration
-- Database configuration
-- Caching setup
-
-**Configuration:**
-- PHP modules and extensions
-- Database compatibility
-- Cron job configuration
-- File locking setup`;
-
-    return {
-      content: [{
-        type: 'text' as const,
-        text: helpText,
-      }],
-    };
+      return {
+        content: [{
+          type: 'text' as const,
+          text: output.trim(),
+        }],
+        isError: !result.success,
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error running setup checks: ${error instanceof Error ? error.message : String(error)}`,
+        }],
+        isError: true,
+      };
+    }
   },
 };
 

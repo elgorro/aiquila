@@ -16,7 +16,8 @@
       "Bash(npm run format:*)",
       "Bash(npm run build:*)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []
