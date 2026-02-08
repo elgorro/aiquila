@@ -504,6 +504,13 @@ async function resolveEventByUid(
     headers: { Depth: "1" },
   });
 
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `CalDAV REPORT failed for calendar "${calendarName}": ${response.status} - ${errorText}`,
+    );
+  }
+
   const responseText = await response.text();
 
   const hrefMatch = responseText.match(/<d:href>([^<]+)<\/d:href>/);
@@ -672,6 +679,13 @@ export const listEventsTool = {
         body: reportBody,
         headers: { Depth: "1" },
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `CalDAV REPORT failed for calendar "${args.calendarName}": ${response.status} - ${errorText}`,
+        );
+      }
 
       const responseText = await response.text();
       let events = parseVEvents(responseText);
@@ -971,27 +985,40 @@ export const createEventTool = {
         body: vevent,
         headers: {
           "Content-Type": "text/calendar; charset=utf-8",
+          "If-None-Match": "*",
         },
       });
 
-      if (response.ok) {
-        const timeInfo = isAllDay
-          ? formatICalDate(args.dtstart)
-          : `${formatICalDate(args.dtstart)} - ${formatICalDate(dtend)}`;
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Event created successfully: ${args.summary}\n  When: ${timeInfo}\n  UID: ${eventUid}`,
-            },
-          ],
-        };
-      } else {
+      // CalDAV PUT for creation should return 201 (Created) or 204 (No Content)
+      if (response.status !== 201 && response.status !== 204) {
         const errorText = await response.text();
         throw new Error(
-          `Failed to create event: ${response.status} - ${errorText}`,
+          `Failed to create event: server returned ${response.status} (expected 201 or 204) - ${errorText}`,
         );
       }
+
+      // Verify the event was actually persisted
+      try {
+        await resolveEventByUid(args.calendarName, eventUid);
+      } catch {
+        throw new Error(
+          `Event creation appeared to succeed (HTTP ${response.status}) but the event ` +
+            `could not be verified. The server may have rejected the request silently. ` +
+            `UID: ${eventUid}`,
+        );
+      }
+
+      const timeInfo = isAllDay
+        ? formatICalDate(args.dtstart)
+        : `${formatICalDate(args.dtstart)} - ${formatICalDate(dtend)}`;
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Event created successfully: ${args.summary}\n  When: ${timeInfo}\n  UID: ${eventUid}`,
+          },
+        ],
+      };
     } catch (error) {
       return {
         content: [

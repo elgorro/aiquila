@@ -407,6 +407,13 @@ async function resolveContactByUid(
     headers: { Depth: "1" },
   });
 
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `CardDAV REPORT failed for address book "${addressBookName}": ${response.status} - ${errorText}`,
+    );
+  }
+
   const responseText = await response.text();
 
   const hrefMatch = responseText.match(/<d:href>([^<]+)<\/d:href>/);
@@ -557,6 +564,13 @@ export const listContactsTool = {
         body: reportBody,
         headers: { Depth: "1" },
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `CardDAV REPORT failed for address book "${args.addressBookName}": ${response.status} - ${errorText}`,
+        );
+      }
 
       const responseText = await response.text();
       let contacts = parseVCards(responseText);
@@ -809,24 +823,26 @@ export const createContactTool = {
         body: vcard,
         headers: {
           "Content-Type": "text/vcard; charset=utf-8",
+          "If-None-Match": "*",
         },
       });
 
-      if (response.ok) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Contact created successfully: ${args.fullName}\n  UID: ${contactUid}`,
-            },
-          ],
-        };
-      } else {
+      // CardDAV PUT for creation should return 201 (Created) or 204 (No Content)
+      if (response.status !== 201 && response.status !== 204) {
         const errorText = await response.text();
         throw new Error(
-          `Failed to create contact: ${response.status} - ${errorText}`,
+          `Failed to create contact: server returned ${response.status} (expected 201 or 204) - ${errorText}`,
         );
       }
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Contact created successfully: ${args.fullName}\n  UID: ${contactUid}`,
+          },
+        ],
+      };
     } catch (error) {
       return {
         content: [

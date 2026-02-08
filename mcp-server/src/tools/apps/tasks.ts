@@ -344,6 +344,13 @@ async function resolveTaskByUid(
     headers: { Depth: "1" },
   });
 
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `CalDAV REPORT failed for calendar "${calendarName}": ${response.status} - ${errorText}`,
+    );
+  }
+
   const responseText = await response.text();
 
   const hrefMatch = responseText.match(/<d:href>([^<]+)<\/d:href>/);
@@ -454,6 +461,13 @@ export const listTasksTool = {
           Depth: "1",
         },
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `CalDAV REPORT failed for calendar "${args.calendarName}": ${response.status} - ${errorText}`,
+        );
+      }
 
       const responseText = await response.text();
       let tasks = parseVTodos(responseText);
@@ -617,24 +631,26 @@ export const createTaskTool = {
       body: vtodo,
       headers: {
         "Content-Type": "text/calendar; charset=utf-8",
+        "If-None-Match": "*",
       },
     });
 
-    if (response.ok) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Task created successfully: ${args.summary} (UID: ${taskUid})`,
-          },
-        ],
-      };
-    } else {
+    // CalDAV PUT for creation should return 201 (Created) or 204 (No Content)
+    if (response.status !== 201 && response.status !== 204) {
       const errorText = await response.text();
       throw new Error(
-        `Failed to create task: ${response.status} - ${errorText}`,
+        `Failed to create task: server returned ${response.status} (expected 201 or 204) - ${errorText}`,
       );
     }
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `Task created successfully: ${args.summary} (UID: ${taskUid})`,
+        },
+      ],
+    };
   },
 };
 
