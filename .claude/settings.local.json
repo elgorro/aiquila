@@ -13,7 +13,10 @@
       "Bash(.gitignore)",
       "Bash(npm run lint)",
       "Bash(git commit:*)",
-      "Bash(npm run format:*)"
+      "Bash(npm run format:*)",
+      "Bash(npm run build:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []
