@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { executeOCC } from "../../client/aiquila.js";
 
 /**
  * AIquila Internal Tools
@@ -6,13 +7,19 @@ import { z } from "zod";
  */
 
 /**
- * Helper function to run OCC commands
- * NOTE: Currently throws error as it requires API integration
+ * Helper function to run OCC commands via the AIquila app API
  */
 async function runOCC(command: string, args: string[] = []): Promise<string> {
-  throw new Error(
-    "OCC command execution not yet implemented. This will be available when the AIquila API is ready."
-  );
+  const result = await executeOCC(command, args);
+
+  if (!result.success) {
+    const errorMsg = result.stderr || result.error || "Unknown error";
+    throw new Error(
+      `OCC command failed (exit ${result.exitCode}): ${errorMsg}`
+    );
+  }
+
+  return result.stdout || "";
 }
 
 /**

@@ -30,7 +30,7 @@ class ClaudeSDKService {
     /**
      * Get Anthropic client instance
      */
-    private function getClient(?string $userId = null): Client {
+    protected function getClient(?string $userId = null): Client {
         $apiKey = $this->getApiKey($userId);
         if (!$apiKey) {
             throw new \RuntimeException('No API key configured');
@@ -189,6 +189,77 @@ class ClaudeSDKService {
             'max_tokens' => $this->getMaxTokens(),
             'timeout' => (int)$this->config->getAppValue($this->appName, 'api_timeout', '30'),
         ];
+    }
+
+    /**
+     * Ask Claude about an image using vision capabilities.
+     *
+     * @param string $prompt What to ask about the image
+     * @param string $base64Image Base64-encoded image data
+     * @param string $mimeType Image mime type (image/jpeg, image/png, image/gif, image/webp)
+     * @param string|null $userId User ID for API key
+     * @return array ['response' => string] or ['error' => string]
+     */
+    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null): array {
+        try {
+            $client = $this->getClient($userId);
+
+            $response = $client->messages->create([
+                'model' => $this->getModel(),
+                'max_tokens' => $this->getMaxTokens(),
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => [
+                            [
+                                'type' => 'image',
+                                'source' => [
+                                    'type' => 'base64',
+                                    'media_type' => $mimeType,
+                                    'data' => $base64Image,
+                                ],
+                            ],
+                            [
+                                'type' => 'text',
+                                'text' => $prompt,
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
+
+            $responseText = '';
+            foreach ($response->content as $content) {
+                if ($content->type === 'text') {
+                    $responseText .= $content->text;
+                }
+            }
+
+            $this->logger->info('AIquila SDK: Image analysis response', [
+                'stop_reason' => $response->stopReason ?? 'unknown',
+                'usage' => [
+                    'input_tokens' => $response->usage->inputTokens ?? 0,
+                    'output_tokens' => $response->usage->outputTokens ?? 0,
+                ]
+            ]);
+
+            return ['response' => $responseText];
+
+        } catch (\Exception $e) {
+            $this->logger->error('AIquila SDK: Image analysis error', [
+                'error' => $e->getMessage(),
+                'class' => get_class($e)
+            ]);
+
+            $errorMessage = $e->getMessage();
+            if (str_contains($errorMessage, 'authentication') || str_contains($errorMessage, 'api_key')) {
+                return ['error' => 'Invalid API key. Please check your configuration.'];
+            } elseif (str_contains($errorMessage, 'rate limit')) {
+                return ['error' => 'Rate limit exceeded. Please try again later.'];
+            } else {
+                return ['error' => 'Image analysis error: ' . $errorMessage];
+            }
+        }
     }
 
     /**

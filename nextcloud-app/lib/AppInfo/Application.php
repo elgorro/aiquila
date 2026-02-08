@@ -13,8 +13,8 @@ use OCP\Util;
 class Application extends App implements IBootstrap {
     public const APP_ID = 'aiquila';
 
-    public function __construct() {
-        parent::__construct(self::APP_ID);
+    public function __construct(array $params = []) {
+        parent::__construct(self::APP_ID, $params);
 
         // Load Composer autoloader for Anthropic SDK
         $vendorAutoload = __DIR__ . '/../../vendor/autoload.php';

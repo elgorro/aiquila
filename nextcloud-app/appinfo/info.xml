@@ -3,17 +3,32 @@
       xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
     <id>aiquila</id>
     <name>AIquila</name>
+    <namespace>AIquila</namespace>
     <summary>Claude AI Integration for Nextcloud</summary>
     <description><![CDATA[
-AIquila brings Claude AI capabilities to your Nextcloud instance.
+**AIquila** brings [Claude AI](https://www.anthropic.com/claude) capabilities directly into your [Nextcloud](https://nextcloud.com) instance — private, self-hosted, and under your control.
 
-Features:
-- Chat with Claude about your files
-- Summarize documents
-- Generate and edit content
-- Text improvements (spellcheck, rewrite)
+> **Early Release** — This app is under active development. Features and APIs may change. Feedback and contributions are welcome.
+
+### Features
+
+- **Chat** — Converse with Claude about your files and documents
+- **Summarize** — Generate concise summaries of any document
+- **Create & Edit** — Draft, rewrite, and refine content with AI assistance
+- **Text Tools** — Spellcheck, rephrase, and improve your writing
+
+### Resources
+
+- [Documentation](https://github.com/elgorro/aiquila/blob/main/docs/README.md)
+- [Source Code](https://github.com/elgorro/aiquila)
+- [Report Issues](https://github.com/elgorro/aiquila/issues)
+- [Discussions](https://github.com/elgorro/aiquila/discussions)
+
+---
+
+Built with [Claude](https://www.anthropic.com/claude) by [Anthropic](https://www.anthropic.com). Made possible by the [Nextcloud](https://nextcloud.com) platform and its open-source community. Thank you.
     ]]></description>
-    <version>0.1.4</version>
+    <version>0.1.8</version>
     <licence>AGPL-3.0-or-later</licence>
     <author mail="aiquila@mailbox.org">elgorro</author>
     <documentation>

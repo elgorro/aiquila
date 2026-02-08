@@ -1,4 +1,4 @@
-.PHONY: help up down restart logs logs-nc logs-mcp status shell-nc shell-mcp shell-db build clean reset test-nc test-mcp
+.PHONY: help up down restart logs logs-nc logs-mcp status shell-nc shell-mcp shell-db build clean reset test-nc test-mcp install-test install-test-clean
 
 # Default target
 help:
@@ -20,6 +20,8 @@ help:
 	@echo "  make reset        - Full reset (removes volumes - DESTRUCTIVE)"
 	@echo "  make test-nc      - Run Nextcloud app tests"
 	@echo "  make test-mcp     - Run MCP server tests"
+	@echo "  make install-test - Start installation test environment (port 8090)"
+	@echo "  make install-test-clean - Clean up installation test"
 	@echo ""
 	@echo "Quick access URLs:"
 	@echo "  Nextcloud:  http://localhost:8080"
@@ -111,3 +113,11 @@ test-nc:
 test-mcp:
 	@echo "🧪 Running MCP server tests..."
 	docker-compose exec mcp-server npm test
+
+# Installation test environment
+install-test:
+	@echo "🧪 Starting installation test environment..."
+	$(MAKE) -C installation up
+
+install-test-clean:
+	$(MAKE) -C installation clean
