@@ -112,6 +112,7 @@ jobs:
           cp -r nextcloud-app/templates ${TEMP_DIR}/
           cp -r nextcloud-app/css ${TEMP_DIR}/
           cp -r nextcloud-app/img ${TEMP_DIR}/
+          cp -r nextcloud-app/vendor ${TEMP_DIR}/
           cp nextcloud-app/composer.json ${TEMP_DIR}/
           cp nextcloud-app/LICENSE ${TEMP_DIR}/ 2>/dev/null || true
 
