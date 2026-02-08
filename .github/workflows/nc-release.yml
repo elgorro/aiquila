@@ -245,19 +245,17 @@ jobs:
     steps:
       - name: Check app store credentials
         run: |
-          if [ -z "$APPSTORE_TOKEN" ] || [ -z "$APPSTORE_USERNAME" ]; then
+          if [ -z "$APPSTORE_TOKEN" ]; then
             echo "⚠️  Nextcloud App Store credentials not configured"
             echo "Skipping app store publishing."
             echo ""
-            echo "To enable automatic publishing, configure these secrets:"
-            echo "  - NEXTCLOUD_APPSTORE_USERNAME"
+            echo "To enable automatic publishing, configure this secret:"
             echo "  - NEXTCLOUD_APPSTORE_TOKEN"
             exit 1
           fi
           echo "✅ App store credentials configured"
         env:
           APPSTORE_TOKEN: ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}
-          APPSTORE_USERNAME: ${{ secrets.NEXTCLOUD_APPSTORE_USERNAME }}
 
       - name: Download release artifact
         uses: actions/download-artifact@v4
@@ -298,10 +296,10 @@ jobs:
 
           # Make the API request
           RESPONSE=$(curl -X POST \
-            -u "${{ secrets.NEXTCLOUD_APPSTORE_USERNAME }}:${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
-            https://apps.nextcloud.com/api/v1/apps/releases \
+            -H "Authorization: Token ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD" \
+            https://apps.nextcloud.com/api/v1/apps/releases \
             -w "\n%{http_code}" \
             -s)
 
