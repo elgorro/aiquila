@@ -111,25 +111,64 @@ SUMMARY:${title}`;
     });
   });
 
-  describe('add_recipe', () => {
-    it('should generate markdown recipe', () => {
-      const name = 'Pasta Carbonara';
-      const ingredients = '- 400g spaghetti\n- 200g pancetta';
-      const instructions = '1. Cook pasta\n2. Fry pancetta';
-      const servings = '4';
-      const prepTime = '30 min';
+  describe('create_recipe', () => {
+    it('should create recipe folder and recipe.json', async () => {
+      mockClient.getDirectoryContents.mockResolvedValue([]);
+      mockClient.createDirectory.mockResolvedValue(undefined);
+      mockClient.putFileContents.mockResolvedValue(undefined);
 
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      let content = `# ${name}\n\n`;
-      if (servings) content += `**Servings:** ${servings}\n`;
-      if (prepTime) content += `**Prep Time:** ${prepTime}\n`;
-      content += `\n## Ingredients\n\n${ingredients}\n\n## Instructions\n\n${instructions}`;
+      const { createRecipeTool } = await import('../tools/apps/cookbook.js');
+      const result = await createRecipeTool.handler({
+        name: 'Pasta Carbonara',
+        recipeIngredient: ['400g spaghetti', '200g pancetta'],
+        recipeInstructions: ['Cook pasta', 'Fry pancetta'],
+        recipeYield: 4,
+      });
 
-      expect(slug).toBe('pasta-carbonara');
-      expect(content).toContain('# Pasta Carbonara');
-      expect(content).toContain('**Servings:** 4');
-      expect(content).toContain('## Ingredients');
-      expect(content).toContain('- 400g spaghetti');
+      expect(mockClient.createDirectory).toHaveBeenCalledWith('/Recipes/pasta-carbonara');
+      expect(mockClient.putFileContents).toHaveBeenCalledWith(
+        '/Recipes/pasta-carbonara/recipe.json',
+        expect.stringContaining('"name": "Pasta Carbonara"'),
+        { overwrite: true },
+      );
+      expect(result.content[0].text).toContain('created successfully');
+      expect(result.content[0].text).toContain('pasta-carbonara');
+    });
+
+    it('should append suffix for duplicate folder names', async () => {
+      mockClient.getDirectoryContents.mockResolvedValue([
+        { type: 'directory', basename: 'pasta-carbonara' },
+      ]);
+      mockClient.createDirectory.mockResolvedValue(undefined);
+      mockClient.putFileContents.mockResolvedValue(undefined);
+
+      const { createRecipeTool } = await import('../tools/apps/cookbook.js');
+      const result = await createRecipeTool.handler({ name: 'Pasta Carbonara' });
+
+      expect(mockClient.createDirectory).toHaveBeenCalledWith('/Recipes/pasta-carbonara-2');
+      expect(result.content[0].text).toContain('pasta-carbonara-2');
+    });
+
+    it('should build valid schema.org recipe JSON', async () => {
+      mockClient.getDirectoryContents.mockResolvedValue([]);
+      mockClient.createDirectory.mockResolvedValue(undefined);
+      mockClient.putFileContents.mockResolvedValue(undefined);
+
+      const { createRecipeTool } = await import('../tools/apps/cookbook.js');
+      await createRecipeTool.handler({
+        name: 'Test Recipe',
+        recipeCategory: 'Easy',
+        keywords: 'test,simple',
+      });
+
+      const writtenJson = JSON.parse(mockClient.putFileContents.mock.calls[0][1]);
+      expect(writtenJson['@context']).toBe('http://schema.org');
+      expect(writtenJson['@type']).toBe('Recipe');
+      expect(writtenJson.name).toBe('Test Recipe');
+      expect(writtenJson.recipeCategory).toBe('Easy');
+      expect(writtenJson.keywords).toBe('test,simple');
+      expect(writtenJson.id).toBeDefined();
+      expect(writtenJson.dateCreated).toBeDefined();
     });
   });
 
@@ -895,11 +934,26 @@ END:VCALENDAR</c:calendar-data>
   });
 
   describe('list_recipes', () => {
-    it('should return formatted recipe list', async () => {
+    const sampleRecipeJson = (name: string, category: string, keywords: string) =>
+      JSON.stringify({
+        id: '123', name, description: '', url: '', image: '',
+        prepTime: 'PT30M', cookTime: 'PT1H', totalTime: 'PT1H30M',
+        recipeCategory: category, keywords, recipeYield: 4,
+        tool: [], recipeIngredient: [], recipeInstructions: [],
+        nutrition: { '@type': 'NutritionInformation' },
+        '@context': 'http://schema.org', '@type': 'Recipe',
+        dateModified: '2024-12-01T00:00:00+0000', dateCreated: '2024-11-01T00:00:00+0000',
+        datePublished: null, printImage: true, imageUrl: '',
+      });
+
+    it('should list recipe folders and parse recipe.json', async () => {
       mockClient.getDirectoryContents.mockResolvedValue([
-        { type: 'file', basename: 'Pasta Carbonara.md', size: 1500, lastmod: '2024-11-20' },
-        { type: 'file', basename: 'Chicken Curry.md', size: 2000, lastmod: '2024-12-05' },
+        { type: 'directory', basename: 'pasta-carbonara' },
+        { type: 'directory', basename: 'chicken-curry' },
       ]);
+      mockClient.getFileContents
+        .mockResolvedValueOnce(sampleRecipeJson('Pasta Carbonara', 'Italian', 'pasta'))
+        .mockResolvedValueOnce(sampleRecipeJson('Chicken Curry', 'Indian', 'curry,spicy'));
 
       const { listRecipesTool } = await import('../tools/apps/cookbook.js');
       const result = await listRecipesTool.handler({});
@@ -911,9 +965,12 @@ END:VCALENDAR</c:calendar-data>
 
     it('should filter recipes by search term', async () => {
       mockClient.getDirectoryContents.mockResolvedValue([
-        { type: 'file', basename: 'Pasta Carbonara.md', size: 1500, lastmod: '2024-11-20' },
-        { type: 'file', basename: 'Chicken Curry.md', size: 2000, lastmod: '2024-12-05' },
+        { type: 'directory', basename: 'pasta-carbonara' },
+        { type: 'directory', basename: 'chicken-curry' },
       ]);
+      mockClient.getFileContents
+        .mockResolvedValueOnce(sampleRecipeJson('Pasta Carbonara', 'Italian', 'pasta'))
+        .mockResolvedValueOnce(sampleRecipeJson('Chicken Curry', 'Indian', 'curry,spicy'));
 
       const { listRecipesTool } = await import('../tools/apps/cookbook.js');
       const result = await listRecipesTool.handler({ search: 'pasta' });
@@ -923,6 +980,38 @@ END:VCALENDAR</c:calendar-data>
       expect(result.content[0].text).toContain('1 found');
     });
 
+    it('should filter recipes by category', async () => {
+      mockClient.getDirectoryContents.mockResolvedValue([
+        { type: 'directory', basename: 'pasta-carbonara' },
+        { type: 'directory', basename: 'chicken-curry' },
+      ]);
+      mockClient.getFileContents
+        .mockResolvedValueOnce(sampleRecipeJson('Pasta Carbonara', 'Italian', 'pasta'))
+        .mockResolvedValueOnce(sampleRecipeJson('Chicken Curry', 'Indian', 'curry,spicy'));
+
+      const { listRecipesTool } = await import('../tools/apps/cookbook.js');
+      const result = await listRecipesTool.handler({ category: 'indian' });
+
+      expect(result.content[0].text).toContain('Chicken Curry');
+      expect(result.content[0].text).not.toContain('Pasta Carbonara');
+    });
+
+    it('should filter recipes by keyword', async () => {
+      mockClient.getDirectoryContents.mockResolvedValue([
+        { type: 'directory', basename: 'pasta-carbonara' },
+        { type: 'directory', basename: 'chicken-curry' },
+      ]);
+      mockClient.getFileContents
+        .mockResolvedValueOnce(sampleRecipeJson('Pasta Carbonara', 'Italian', 'pasta'))
+        .mockResolvedValueOnce(sampleRecipeJson('Chicken Curry', 'Indian', 'curry,spicy'));
+
+      const { listRecipesTool } = await import('../tools/apps/cookbook.js');
+      const result = await listRecipesTool.handler({ keyword: 'spicy' });
+
+      expect(result.content[0].text).toContain('Chicken Curry');
+      expect(result.content[0].text).not.toContain('Pasta Carbonara');
+    });
+
     it('should handle empty recipes folder', async () => {
       mockClient.getDirectoryContents.mockResolvedValue([]);
 
@@ -930,6 +1019,22 @@ END:VCALENDAR</c:calendar-data>
       const result = await listRecipesTool.handler({});
 
       expect(result.content[0].text).toContain('No recipes found');
+    });
+
+    it('should skip folders without valid recipe.json', async () => {
+      mockClient.getDirectoryContents.mockResolvedValue([
+        { type: 'directory', basename: 'valid-recipe' },
+        { type: 'directory', basename: 'broken-recipe' },
+      ]);
+      mockClient.getFileContents
+        .mockResolvedValueOnce(sampleRecipeJson('Valid Recipe', 'Easy', ''))
+        .mockRejectedValueOnce(new Error('404 Not Found'));
+
+      const { listRecipesTool } = await import('../tools/apps/cookbook.js');
+      const result = await listRecipesTool.handler({});
+
+      expect(result.content[0].text).toContain('Valid Recipe');
+      expect(result.content[0].text).toContain('1 found');
     });
 
     it('should handle errors', async () => {
@@ -944,24 +1049,129 @@ END:VCALENDAR</c:calendar-data>
   });
 
   describe('get_recipe', () => {
-    it('should return recipe content', async () => {
-      const recipeContent = '# Pasta Carbonara\n\n## Ingredients\n\n- 400g spaghetti';
-      mockClient.getFileContents.mockResolvedValue(recipeContent);
+    it('should return formatted recipe details', async () => {
+      const recipeJson = JSON.stringify({
+        id: '123', name: 'Pasta Carbonara', description: 'Classic Italian',
+        url: '', image: '', prepTime: 'PT15M', cookTime: 'PT20M', totalTime: 'PT35M',
+        recipeCategory: 'Italian', keywords: 'pasta,quick',
+        recipeYield: 4, tool: ['Pot'], recipeIngredient: ['400g spaghetti', '200g pancetta'],
+        recipeInstructions: ['Cook pasta', 'Fry pancetta'],
+        nutrition: { '@type': 'NutritionInformation', calories: '500 kJ' },
+        '@context': 'http://schema.org', '@type': 'Recipe',
+        dateModified: '2024-12-01T00:00:00+0000', dateCreated: '2024-11-01T00:00:00+0000',
+        datePublished: null, printImage: true, imageUrl: '',
+      });
+      mockClient.getFileContents.mockResolvedValue(recipeJson);
 
       const { getRecipeTool } = await import('../tools/apps/cookbook.js');
-      const result = await getRecipeTool.handler({ name: 'Pasta Carbonara' });
+      const result = await getRecipeTool.handler({ folderName: 'pasta-carbonara' });
 
-      expect(result.content[0].text).toBe(recipeContent);
+      expect(result.content[0].text).toContain('Pasta Carbonara');
+      expect(result.content[0].text).toContain('400g spaghetti');
+      expect(result.content[0].text).toContain('Cook pasta');
+      expect(result.content[0].text).toContain('Italian');
+      expect(mockClient.getFileContents).toHaveBeenCalledWith(
+        '/Recipes/pasta-carbonara/recipe.json',
+        { format: 'text' },
+      );
     });
 
     it('should handle nonexistent recipe', async () => {
       mockClient.getFileContents.mockRejectedValue(new Error('404 Not Found'));
 
       const { getRecipeTool } = await import('../tools/apps/cookbook.js');
-      const result = await getRecipeTool.handler({ name: 'Nonexistent' });
+      const result = await getRecipeTool.handler({ folderName: 'nonexistent' });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('404');
+    });
+  });
+
+  describe('update_recipe', () => {
+    it('should merge provided fields into existing recipe', async () => {
+      const existingJson = JSON.stringify({
+        id: '123', name: 'Pasta Carbonara', description: 'Classic',
+        url: '', image: '', prepTime: 'PT15M', cookTime: 'PT20M', totalTime: 'PT35M',
+        recipeCategory: 'Italian', keywords: 'pasta',
+        recipeYield: 4, tool: [], recipeIngredient: ['400g spaghetti'],
+        recipeInstructions: ['Cook pasta'],
+        nutrition: { '@type': 'NutritionInformation' },
+        '@context': 'http://schema.org', '@type': 'Recipe',
+        dateModified: '2024-12-01T00:00:00+0000', dateCreated: '2024-11-01T00:00:00+0000',
+        datePublished: null, printImage: true, imageUrl: '',
+      });
+      mockClient.getFileContents.mockResolvedValue(existingJson);
+      mockClient.putFileContents.mockResolvedValue(undefined);
+
+      const { updateRecipeTool } = await import('../tools/apps/cookbook.js');
+      const result = await updateRecipeTool.handler({
+        folderName: 'pasta-carbonara',
+        description: 'Updated description',
+        recipeYield: 6,
+      });
+
+      expect(result.content[0].text).toContain('updated successfully');
+      const writtenJson = JSON.parse(mockClient.putFileContents.mock.calls[0][1]);
+      expect(writtenJson.description).toBe('Updated description');
+      expect(writtenJson.recipeYield).toBe(6);
+      expect(writtenJson.name).toBe('Pasta Carbonara'); // preserved
+      expect(writtenJson.recipeIngredient).toEqual(['400g spaghetti']); // preserved
+    });
+
+    it('should handle nonexistent recipe', async () => {
+      mockClient.getFileContents.mockRejectedValue(new Error('404 Not Found'));
+
+      const { updateRecipeTool } = await import('../tools/apps/cookbook.js');
+      const result = await updateRecipeTool.handler({
+        folderName: 'nonexistent',
+        name: 'New Name',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('404');
+    });
+  });
+
+  describe('delete_recipe', () => {
+    it('should delete recipe folder', async () => {
+      mockClient.deleteFile.mockResolvedValue(undefined);
+
+      const { deleteRecipeTool } = await import('../tools/apps/cookbook.js');
+      const result = await deleteRecipeTool.handler({ folderName: 'pasta-carbonara' });
+
+      expect(mockClient.deleteFile).toHaveBeenCalledWith('/Recipes/pasta-carbonara');
+      expect(result.content[0].text).toContain('deleted successfully');
+    });
+
+    it('should handle nonexistent recipe folder', async () => {
+      mockClient.deleteFile.mockRejectedValue(new Error('404 Not Found'));
+
+      const { deleteRecipeTool } = await import('../tools/apps/cookbook.js');
+      const result = await deleteRecipeTool.handler({ folderName: 'nonexistent' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('404');
+    });
+  });
+
+  describe('list_recipe_categories', () => {
+    it('should return unique categories', async () => {
+      mockClient.getDirectoryContents.mockResolvedValue([
+        { type: 'directory', basename: 'pasta' },
+        { type: 'directory', basename: 'curry' },
+        { type: 'directory', basename: 'salad' },
+      ]);
+      mockClient.getFileContents
+        .mockResolvedValueOnce(JSON.stringify({ name: 'Pasta', recipeCategory: 'Italian', keywords: '', recipeYield: 0 }))
+        .mockResolvedValueOnce(JSON.stringify({ name: 'Curry', recipeCategory: 'Indian', keywords: '', recipeYield: 0 }))
+        .mockResolvedValueOnce(JSON.stringify({ name: 'Salad', recipeCategory: 'Italian', keywords: '', recipeYield: 0 }));
+
+      const { listRecipeCategoriesTool } = await import('../tools/apps/cookbook.js');
+      const result = await listRecipeCategoriesTool.handler();
+
+      expect(result.content[0].text).toContain('Indian');
+      expect(result.content[0].text).toContain('Italian');
+      expect(result.content[0].text).toContain('2'); // 2 unique categories
     });
   });
 
@@ -1192,12 +1402,28 @@ END:VCALENDAR</c:calendar-data>
   });
 
   describe('create_event', () => {
+    // Mock REPORT response for post-creation verification
+    const verifyResponse = `<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/event.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"etag-verify"</d:getetag>
+      <c:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:test-uid
+SUMMARY:Test
+DTSTART:20240315T120000Z
+END:VEVENT
+END:VCALENDAR</c:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
     it('should create a timed event', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        status: 201,
-        text: () => Promise.resolve(''),
-      });
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({ ok: true, status: 207, text: () => Promise.resolve(verifyResponse) });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
       const result = await createEventTool.handler({
@@ -1224,11 +1450,9 @@ END:VCALENDAR</c:calendar-data>
     });
 
     it('should create an all-day event with default end', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        status: 201,
-        text: () => Promise.resolve(''),
-      });
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({ ok: true, status: 207, text: () => Promise.resolve(verifyResponse) });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
       const result = await createEventTool.handler({
@@ -1245,11 +1469,9 @@ END:VCALENDAR</c:calendar-data>
     });
 
     it('should create event with attendees and alarm', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        status: 201,
-        text: () => Promise.resolve(''),
-      });
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({ ok: true, status: 207, text: () => Promise.resolve(verifyResponse) });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
       await createEventTool.handler({
@@ -1273,11 +1495,9 @@ END:VCALENDAR</c:calendar-data>
     });
 
     it('should create event with recurrence rule', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        status: 201,
-        text: () => Promise.resolve(''),
-      });
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({ ok: true, status: 207, text: () => Promise.resolve(verifyResponse) });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
       await createEventTool.handler({

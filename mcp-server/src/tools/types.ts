@@ -58,5 +58,6 @@ export function getNextcloudConfig(): NextcloudConfig {
     );
   }
 
-  return { url, user, password };
+  // Strip trailing slashes to prevent double-slash URLs in CalDAV paths
+  return { url: url.replace(/\/+$/, ""), user, password };
 }
