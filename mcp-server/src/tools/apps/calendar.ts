@@ -59,6 +59,20 @@ interface ParsedAttendee {
 }
 
 // ---------------------------------------------------------------------------
+// XML helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a regex that matches an XML element with any namespace prefix.
+ * e.g. nsTagContent("calendar-data") matches <c:calendar-data>, <cal:calendar-data>, <calendar-data>
+ */
+function nsTagContent(localName: string): RegExp {
+  return new RegExp(
+    `<(?:[a-zA-Z][a-zA-Z0-9]*:)?${localName}[^>]*>([\\s\\S]*?)</(?:[a-zA-Z][a-zA-Z0-9]*:)?${localName}>`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // iCalendar helpers
 // ---------------------------------------------------------------------------
 
@@ -175,7 +189,7 @@ function parseCalendars(responseXml: string): ParsedCalendar[] {
     const enabledMatch = block.match(/<x2:calendar-enabled[^>]*>([^<]*)<\/x2:calendar-enabled>/);
     const orderMatch = block.match(/<x1:calendar-order[^>]*>([^<]*)<\/x1:calendar-order>/);
 
-    const compSet = block.match(/<c:supported-calendar-component-set>([\s\S]*?)<\/c:supported-calendar-component-set>/);
+    const compSet = block.match(nsTagContent("supported-calendar-component-set"));
     const components = compSet ? compSet[1] : "";
 
     const url = hrefMatch?.[1] || "";
@@ -237,9 +251,7 @@ function parseVEvents(responseXml: string): ParsedEvent[] {
     const etagMatch = responseBlock.match(
       /<d:getetag>"?([^"<]+)"?<\/d:getetag>/,
     );
-    const calDataMatch = responseBlock.match(
-      /<c:calendar-data[^>]*>([\s\S]*?)<\/c:calendar-data>/,
-    );
+    const calDataMatch = responseBlock.match(nsTagContent("calendar-data"));
     if (!calDataMatch) continue;
 
     const icalData = calDataMatch[1];
@@ -518,7 +530,7 @@ async function resolveEventByUid(
     /<d:getetag>"?([^"<]+)"?<\/d:getetag>/,
   );
   const calDataMatch = responseText.match(
-    /<c:calendar-data[^>]*>([\s\S]*?)<\/c:calendar-data>/,
+    nsTagContent("calendar-data"),
   );
 
   if (!hrefMatch || !etagMatch || !calDataMatch) {
