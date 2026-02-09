@@ -41,6 +41,20 @@ interface ParsedTask {
 }
 
 // ---------------------------------------------------------------------------
+// XML helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a regex that matches an XML element with any namespace prefix.
+ * e.g. nsTagContent("calendar-data") matches <c:calendar-data>, <cal:calendar-data>, <calendar-data>
+ */
+function nsTagContent(localName: string): RegExp {
+  return new RegExp(
+    `<(?:[a-zA-Z][a-zA-Z0-9]*:)?${localName}[^>]*>([\\s\\S]*?)</(?:[a-zA-Z][a-zA-Z0-9]*:)?${localName}>`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // iCalendar helpers
 // ---------------------------------------------------------------------------
 
@@ -154,7 +168,7 @@ function parseVTodos(responseXml: string): ParsedTask[] {
       /<d:getetag>"?([^"<]+)"?<\/d:getetag>/,
     );
     const calDataMatch = responseBlock.match(
-      /<c:calendar-data[^>]*>([\s\S]*?)<\/c:calendar-data>/,
+      nsTagContent("calendar-data"),
     );
     if (!calDataMatch) continue;
 
@@ -358,7 +372,7 @@ async function resolveTaskByUid(
     /<d:getetag>"?([^"<]+)"?<\/d:getetag>/,
   );
   const calDataMatch = responseText.match(
-    /<c:calendar-data[^>]*>([\s\S]*?)<\/c:calendar-data>/,
+    nsTagContent("calendar-data"),
   );
 
   if (!hrefMatch || !etagMatch || !calDataMatch) {

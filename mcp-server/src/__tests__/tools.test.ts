@@ -611,6 +611,29 @@ END:VCALENDAR</c:calendar-data></d:prop></d:propstat></d:response>
       expect(result.content[0].text).toContain('1 found');
     });
 
+    it('should parse tasks when server uses cal: namespace prefix', async () => {
+      const vtodoResponse = `<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+  <d:response><d:propstat><d:prop><d:getetag>"etag-cal"</d:getetag><cal:calendar-data>BEGIN:VCALENDAR
+BEGIN:VTODO
+UID:task-cal
+SUMMARY:Namespace test
+STATUS:NEEDS-ACTION
+END:VTODO
+END:VCALENDAR</cal:calendar-data></d:prop></d:propstat></d:response>
+</d:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(vtodoResponse),
+      });
+
+      const { listTasksTool } = await import('../tools/apps/tasks.js');
+      const result = await listTasksTool.handler({ calendarName: 'tasks' });
+
+      expect(result.content[0].text).toContain('Namespace test');
+      expect(result.content[0].text).toContain('1 found');
+    });
+
     it('should parse tasks with subtask relationships and categories', async () => {
       const vtodoResponse = `<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
   <d:response><d:propstat><d:prop><c:calendar-data>BEGIN:VCALENDAR
@@ -1222,6 +1245,34 @@ END:VCALENDAR</c:calendar-data>
       expect(result.content[0].text).toContain('(disabled)');
     });
 
+    it('should parse component support with cal: namespace prefix', async () => {
+      const propfindResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:cal="urn:ietf:params:xml:ns:caldav" xmlns:x1="http://apple.com/ns/ical/" xmlns:x2="http://owncloud.org/ns">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/</d:href>
+    <d:propstat><d:prop>
+      <d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>
+      <d:displayname>Personal</d:displayname>
+      <x2:calendar-enabled>1</x2:calendar-enabled>
+      <cal:supported-calendar-component-set><cal:comp name="VEVENT"/><cal:comp name="VTODO"/></cal:supported-calendar-component-set>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(propfindResponse),
+      });
+
+      const { listCalendarsTool } = await import('../tools/apps/calendar.js');
+      const result = await listCalendarsTool.handler();
+
+      expect(result.content[0].text).toContain('1 found');
+      expect(result.content[0].text).toContain('Personal');
+      expect(result.content[0].text).toContain('events');
+      expect(result.content[0].text).toContain('tasks');
+    });
+
     it('should handle empty calendar list', async () => {
       const emptyResponse = `<d:multistatus xmlns:d="DAV:">
   <d:response>
@@ -1323,6 +1374,38 @@ END:VCALENDAR</c:calendar-data>
       expect(result.content[0].text).toContain('Company holiday');
       expect(result.content[0].text).toContain('all day');
       expect(result.content[0].text).toContain('UID: event-2');
+    });
+
+    it('should parse events when server uses cal: namespace prefix', async () => {
+      const calPrefixResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/event-1.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"etag-ev1"</d:getetag>
+      <cal:calendar-data>BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:event-cal
+SUMMARY:Namespace prefix test
+DTSTART:20240315T090000Z
+DTEND:20240315T093000Z
+END:VEVENT
+END:VCALENDAR</cal:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(calPrefixResponse),
+      });
+
+      const { listEventsTool } = await import('../tools/apps/calendar.js');
+      const result = await listEventsTool.handler({ calendarName: 'personal' });
+
+      expect(result.content[0].text).toContain('1 found');
+      expect(result.content[0].text).toContain('Namespace prefix test');
+      expect(result.content[0].text).toContain('UID: event-cal');
     });
 
     it('should handle empty event list', async () => {
