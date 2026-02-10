@@ -7,6 +7,7 @@ import { statusTools } from './tools/system/status.js';
 import { appsTools } from './tools/system/apps.js';
 import { securityTools } from './tools/system/security.js';
 import { occTools } from './tools/system/occ.js';
+import { tagsTools } from './tools/system/tags.js';
 
 // Import app-specific tools
 import { tasksTools } from './tools/apps/tasks.js';
@@ -166,6 +167,15 @@ function registerTools() {
 
   // Register Mail app tools
   mailTools.forEach((tool) => {
+    // @ts-expect-error - TS2589: Type instantiation depth limit in MCP SDK (known issue with complex Zod schemas)
+    server.registerTool(tool.name, {
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }, tool.handler);
+  });
+
+  // Register File Tag tools
+  tagsTools.forEach((tool) => {
     // @ts-expect-error - TS2589: Type instantiation depth limit in MCP SDK (known issue with complex Zod schemas)
     server.registerTool(tool.name, {
       description: tool.description,

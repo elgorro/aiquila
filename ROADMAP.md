@@ -8,7 +8,6 @@
 - [x] Task creation via CalDAV
 - [x] Notes creation
 - [x] Recipe creation
-- [] SSE Support
 
 ### Nextcloud App
 - [x] Admin/user API key settings
@@ -31,19 +30,27 @@
 *Target: v0.2.0*
 
 ### MCP Server
+- [ ] SSE Support
 - [ ] Photo tagging via Claude Vision API
-- [ ] Calendar event creation
-- [ ] Native Cookbook app API integration
-- [ ] Search files by content
-- [ ] List/complete tasks
+- [x] Calendar event creation
+- [x] Native Cookbook app API integration
+- [x] Search files by content
+- [x] List/complete tasks
+- [x] Mail integration
+- [x] System API integration
+- [x] Contacts integration
 
 ### Nextcloud App
 - [ ] Conversation history storage
 - [ ] Token usage tracking
-- [ ] Streaming responses
+- [x] Streaming responses
+- [ ] Fileaccess in chat window
 
 ### Infrastructure
 - [ ] Docker dev environment for improved testing capabilities
+- [ ] Docker for MCP-Server
+- [ ] Update docs
+
 
 ---
 
@@ -54,7 +61,7 @@
 - [ ] Bulk file operations
 - [ ] Nextcloud Talk integration
 - [ ] Deck (kanban) integration
-- [ ] Contacts integration
+
 
 ### Nextcloud App
 - [ ] Multi-turn conversations with file context
@@ -64,7 +71,22 @@
 
 ---
 
-## Phase 4: Polish & Distribution
+## Phase 4: Other providers
+*Target: v0.4.0*
+
+### MCP Server
+- [ ] Mistral-API integration
+- [ ] Coworker implemantation
+
+
+
+### Nextcloud App
+- [ ] Mistral-API
+- [ ] UI for switching model
+- [ ] Coworker (repeated/scheduled jobs)
+---
+
+## Final Phase: Polish & Distribution
 *Target: v1.0.0*
 
 - [ ] Nextcloud App Store submission
