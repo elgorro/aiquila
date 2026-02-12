@@ -1,4 +1,4 @@
-import { getNextcloudConfig } from "../tools/types.js";
+import { getNextcloudConfig } from '../tools/types.js';
 
 /**
  * Make an authenticated request to the Nextcloud Mail app REST API.
@@ -15,7 +15,7 @@ export async function fetchMailAPI(
   } = {}
 ): Promise<Response> {
   const config = getNextcloudConfig();
-  const auth = Buffer.from(`${config.user}:${config.password}`).toString("base64");
+  const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
 
   let url = `${config.url}/index.php/apps/mail/api${endpoint}`;
   if (options.queryParams) {
@@ -25,18 +25,18 @@ export async function fetchMailAPI(
 
   const headers: Record<string, string> = {
     Authorization: `Basic ${auth}`,
-    "OCS-APIRequest": "true",
-    Accept: "application/json",
+    'OCS-APIRequest': 'true',
+    Accept: 'application/json',
   };
 
   let body: string | undefined;
   if (options.body) {
     body = JSON.stringify(options.body);
-    headers["Content-Type"] = "application/json";
+    headers['Content-Type'] = 'application/json';
   }
 
   return fetch(url, {
-    method: options.method || "GET",
+    method: options.method || 'GET',
     headers,
     body,
   });

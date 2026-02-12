@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { fetchCalDAV } from "../../client/caldav.js";
-import { getNextcloudConfig } from "../types.js";
+import { z } from 'zod';
+import { fetchCalDAV } from '../../client/caldav.js';
+import { getNextcloudConfig } from '../types.js';
 
 /**
  * Nextcloud Contacts App Tools
@@ -62,23 +62,23 @@ interface ParsedContact {
 // ---------------------------------------------------------------------------
 
 function unfoldVCardLines(text: string): string {
-  return text.replace(/\r?\n[ \t]/g, "");
+  return text.replace(/\r?\n[ \t]/g, '');
 }
 
 function escapeVCardValue(value: string): string {
   return value
-    .replace(/\\/g, "\\\\")
-    .replace(/;/g, "\\;")
-    .replace(/,/g, "\\,")
-    .replace(/\n/g, "\\n");
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\n/g, '\\n');
 }
 
 function unescapeVCardValue(value: string): string {
   return value
-    .replace(/\\n/gi, "\n")
-    .replace(/\\,/g, ",")
-    .replace(/\\;/g, ";")
-    .replace(/\\\\/g, "\\");
+    .replace(/\\n/gi, '\n')
+    .replace(/\\,/g, ',')
+    .replace(/\\;/g, ';')
+    .replace(/\\\\/g, '\\');
 }
 
 /**
@@ -96,14 +96,10 @@ function extractType(params: string): string | undefined {
  * - property exists -> replace its value
  * - property absent -> insert before END:VCARD
  */
-function setVCardProperty(
-  vcardData: string,
-  propName: string,
-  value: string | null,
-): string {
-  const regex = new RegExp(`^${propName}(;[^:]*)?:.*$`, "mi");
+function setVCardProperty(vcardData: string, propName: string, value: string | null): string {
+  const regex = new RegExp(`^${propName}(;[^:]*)?:.*$`, 'mi');
   if (value === null) {
-    return vcardData.replace(regex, "").replace(/(\r?\n){2,}/g, "\r\n");
+    return vcardData.replace(regex, '').replace(/(\r?\n){2,}/g, '\r\n');
   }
   if (regex.test(vcardData)) {
     return vcardData.replace(regex, `${propName}:${value}`);
@@ -115,8 +111,8 @@ function setVCardProperty(
  * Remove all instances of a multi-valued property (e.g. EMAIL, TEL, ADR).
  */
 function removeAllVCardProperty(vcardData: string, propName: string): string {
-  const regex = new RegExp(`^${propName}(;[^:]*)?:.*\\r?\\n?`, "gmi");
-  return vcardData.replace(regex, "");
+  const regex = new RegExp(`^${propName}(;[^:]*)?:.*\\r?\\n?`, 'gmi');
+  return vcardData.replace(regex, '');
 }
 
 // ---------------------------------------------------------------------------
@@ -129,21 +125,19 @@ function removeAllVCardProperty(vcardData: string, propName: string): string {
 function parseAddressBooks(responseXml: string): ParsedAddressBook[] {
   const books: ParsedAddressBook[] = [];
 
-  const responseBlocks = responseXml.match(
-    /<d:response>[\s\S]*?<\/d:response>/g,
-  );
+  const responseBlocks = responseXml.match(/<d:response>[\s\S]*?<\/d:response>/g);
   if (!responseBlocks) return books;
 
   for (const block of responseBlocks) {
     const resourceTypes = block.match(/<d:resourcetype>([\s\S]*?)<\/d:resourcetype>/);
-    if (!resourceTypes || !resourceTypes[1].includes("addressbook")) continue;
+    if (!resourceTypes || !resourceTypes[1].includes('addressbook')) continue;
 
     const hrefMatch = block.match(/<d:href>([^<]+)<\/d:href>/);
     const displayNameMatch = block.match(/<d:displayname>([^<]*)<\/d:displayname>/);
     const ctagMatch = block.match(/<cs:getctag>([^<]*)<\/cs:getctag>/);
 
-    const url = hrefMatch?.[1] || "";
-    const name = displayNameMatch?.[1] || url.split("/").filter(Boolean).pop() || "";
+    const url = hrefMatch?.[1] || '';
+    const name = displayNameMatch?.[1] || url.split('/').filter(Boolean).pop() || '';
 
     books.push({
       displayName: name,
@@ -163,8 +157,8 @@ function parseVCardBlock(vcardText: string): ParsedContact | null {
   const lines = unfolded.split(/\r?\n/);
 
   const contact: ParsedContact = {
-    uid: "",
-    fullName: "",
+    uid: '',
+    fullName: '',
     emails: [],
     phones: [],
     addresses: [],
@@ -177,74 +171,74 @@ function parseVCardBlock(vcardText: string): ParsedContact | null {
 
     const [, rawName, params, rawValue] = propMatch;
     const name = rawName.toUpperCase();
-    const value = rawValue || "";
-    const paramStr = params || "";
+    const value = rawValue || '';
+    const paramStr = params || '';
 
     switch (name) {
-      case "UID":
+      case 'UID':
         contact.uid = value;
         break;
-      case "FN":
+      case 'FN':
         contact.fullName = unescapeVCardValue(value);
         break;
-      case "N": {
+      case 'N': {
         // N:family;given;additional;prefix;suffix
-        const parts = value.split(";");
-        contact.lastName = unescapeVCardValue(parts[0] || "");
-        contact.firstName = unescapeVCardValue(parts[1] || "");
+        const parts = value.split(';');
+        contact.lastName = unescapeVCardValue(parts[0] || '');
+        contact.firstName = unescapeVCardValue(parts[1] || '');
         if (parts[3]) contact.prefix = unescapeVCardValue(parts[3]);
         if (parts[4]) contact.suffix = unescapeVCardValue(parts[4]);
         break;
       }
-      case "EMAIL":
+      case 'EMAIL':
         contact.emails.push({
           value: unescapeVCardValue(value),
           type: extractType(paramStr),
         });
         break;
-      case "TEL":
+      case 'TEL':
         contact.phones.push({
           value: unescapeVCardValue(value),
           type: extractType(paramStr),
         });
         break;
-      case "ADR": {
+      case 'ADR': {
         // ADR:PO;ext;street;city;region;postal;country
-        const adrParts = value.split(";");
+        const adrParts = value.split(';');
         contact.addresses.push({
-          street: unescapeVCardValue(adrParts[2] || ""),
-          city: unescapeVCardValue(adrParts[3] || ""),
-          region: unescapeVCardValue(adrParts[4] || ""),
-          postalCode: unescapeVCardValue(adrParts[5] || ""),
-          country: unescapeVCardValue(adrParts[6] || ""),
+          street: unescapeVCardValue(adrParts[2] || ''),
+          city: unescapeVCardValue(adrParts[3] || ''),
+          region: unescapeVCardValue(adrParts[4] || ''),
+          postalCode: unescapeVCardValue(adrParts[5] || ''),
+          country: unescapeVCardValue(adrParts[6] || ''),
           type: extractType(paramStr),
         });
         break;
       }
-      case "ORG":
-        contact.org = unescapeVCardValue(value.split(";")[0]);
+      case 'ORG':
+        contact.org = unescapeVCardValue(value.split(';')[0]);
         break;
-      case "TITLE":
+      case 'TITLE':
         contact.title = unescapeVCardValue(value);
         break;
-      case "NOTE":
+      case 'NOTE':
         contact.note = unescapeVCardValue(value);
         break;
-      case "BDAY":
+      case 'BDAY':
         contact.birthday = value;
         break;
-      case "URL":
+      case 'URL':
         contact.url = value;
         break;
-      case "CATEGORIES":
+      case 'CATEGORIES':
         contact.categories.push(
           ...value
-            .split(",")
+            .split(',')
             .map((c) => unescapeVCardValue(c.trim()))
-            .filter(Boolean),
+            .filter(Boolean)
         );
         break;
-      case "REV":
+      case 'REV':
         contact.rev = value;
         break;
     }
@@ -260,9 +254,7 @@ function parseVCardBlock(vcardText: string): ParsedContact | null {
 function parseVCards(responseXml: string): ParsedContact[] {
   const contacts: ParsedContact[] = [];
 
-  const responseBlocks = responseXml.match(
-    /<d:response>[\s\S]*?<\/d:response>/g,
-  );
+  const responseBlocks = responseXml.match(/<d:response>[\s\S]*?<\/d:response>/g);
   if (!responseBlocks) return contacts;
 
   for (const block of responseBlocks) {
@@ -271,7 +263,7 @@ function parseVCards(responseXml: string): ParsedContact[] {
 
     // Match address-data with any namespace prefix or none
     const cardDataMatch = block.match(
-      /<(?:[a-z0-9]+:)?address-data[^>]*>([\s\S]*?)<\/(?:[a-z0-9]+:)?address-data>/,
+      /<(?:[a-z0-9]+:)?address-data[^>]*>([\s\S]*?)<\/(?:[a-z0-9]+:)?address-data>/
     );
     if (!cardDataMatch) continue;
 
@@ -297,7 +289,7 @@ function parseVCards(responseXml: string): ParsedContact[] {
 // ---------------------------------------------------------------------------
 
 function formatContact(contact: ParsedContact): string {
-  let line = contact.fullName || "(no name)";
+  let line = contact.fullName || '(no name)';
 
   if (contact.org) line += ` — ${contact.org}`;
   if (contact.title) line += `, ${contact.title}`;
@@ -305,14 +297,14 @@ function formatContact(contact: ParsedContact): string {
   if (contact.emails.length > 0) {
     const emailStr = contact.emails
       .map((e) => (e.type ? `${e.value} (${e.type})` : e.value))
-      .join(", ");
+      .join(', ');
     line += `\n    Email: ${emailStr}`;
   }
 
   if (contact.phones.length > 0) {
     const phoneStr = contact.phones
       .map((p) => (p.type ? `${p.value} (${p.type})` : p.value))
-      .join(", ");
+      .join(', ');
     line += `\n    Phone: ${phoneStr}`;
   }
 
@@ -322,7 +314,7 @@ function formatContact(contact: ParsedContact): string {
 }
 
 function formatContactDetail(contact: ParsedContact): string {
-  let line = `Name: ${contact.fullName || "(no name)"}`;
+  let line = `Name: ${contact.fullName || '(no name)'}`;
 
   if (contact.firstName || contact.lastName) {
     const nameParts: string[] = [];
@@ -330,7 +322,7 @@ function formatContactDetail(contact: ParsedContact): string {
     if (contact.firstName) nameParts.push(contact.firstName);
     if (contact.lastName) nameParts.push(contact.lastName);
     if (contact.suffix) nameParts.push(contact.suffix);
-    line += `\n  Structured name: ${nameParts.join(" ")}`;
+    line += `\n  Structured name: ${nameParts.join(' ')}`;
   }
 
   if (contact.org) line += `\n  Organization: ${contact.org}`;
@@ -338,22 +330,21 @@ function formatContactDetail(contact: ParsedContact): string {
 
   if (contact.emails.length > 0) {
     for (const e of contact.emails) {
-      line += `\n  Email${e.type ? ` (${e.type})` : ""}: ${e.value}`;
+      line += `\n  Email${e.type ? ` (${e.type})` : ''}: ${e.value}`;
     }
   }
 
   if (contact.phones.length > 0) {
     for (const p of contact.phones) {
-      line += `\n  Phone${p.type ? ` (${p.type})` : ""}: ${p.value}`;
+      line += `\n  Phone${p.type ? ` (${p.type})` : ''}: ${p.value}`;
     }
   }
 
   if (contact.addresses.length > 0) {
     for (const a of contact.addresses) {
-      const parts = [a.street, a.city, a.region, a.postalCode, a.country]
-        .filter(Boolean);
+      const parts = [a.street, a.city, a.region, a.postalCode, a.country].filter(Boolean);
       if (parts.length > 0) {
-        line += `\n  Address${a.type ? ` (${a.type})` : ""}: ${parts.join(", ")}`;
+        line += `\n  Address${a.type ? ` (${a.type})` : ''}: ${parts.join(', ')}`;
       }
     }
   }
@@ -362,7 +353,7 @@ function formatContactDetail(contact: ParsedContact): string {
   if (contact.url) line += `\n  URL: ${contact.url}`;
 
   if (contact.categories.length > 0) {
-    line += `\n  Groups: ${contact.categories.join(", ")}`;
+    line += `\n  Groups: ${contact.categories.join(', ')}`;
   }
 
   if (contact.note) {
@@ -383,7 +374,7 @@ function formatContactDetail(contact: ParsedContact): string {
  */
 async function resolveContactByUid(
   addressBookName: string,
-  uid: string,
+  uid: string
 ): Promise<{ href: string; etag: string; vcardData: string }> {
   const config = getNextcloudConfig();
   const cardDavUrl = `${config.url}/remote.php/dav/addressbooks/users/${config.user}/${addressBookName}/`;
@@ -402,32 +393,28 @@ async function resolveContactByUid(
 </cr:addressbook-query>`;
 
   const response = await fetchCalDAV(cardDavUrl, {
-    method: "REPORT",
+    method: 'REPORT',
     body: reportBody,
-    headers: { Depth: "1" },
+    headers: { Depth: '1' },
   });
 
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
-      `CardDAV REPORT failed for address book "${addressBookName}": ${response.status} - ${errorText}`,
+      `CardDAV REPORT failed for address book "${addressBookName}": ${response.status} - ${errorText}`
     );
   }
 
   const responseText = await response.text();
 
   const hrefMatch = responseText.match(/<d:href>([^<]+)<\/d:href>/);
-  const etagMatch = responseText.match(
-    /<d:getetag>"?([^"<]+)"?<\/d:getetag>/,
-  );
+  const etagMatch = responseText.match(/<d:getetag>"?([^"<]+)"?<\/d:getetag>/);
   const cardDataMatch = responseText.match(
-    /<(?:[a-z0-9]+:)?address-data[^>]*>([\s\S]*?)<\/(?:[a-z0-9]+:)?address-data>/,
+    /<(?:[a-z0-9]+:)?address-data[^>]*>([\s\S]*?)<\/(?:[a-z0-9]+:)?address-data>/
   );
 
   if (!hrefMatch || !etagMatch || !cardDataMatch) {
-    throw new Error(
-      `Contact with UID "${uid}" not found in address book "${addressBookName}"`,
-    );
+    throw new Error(`Contact with UID "${uid}" not found in address book "${addressBookName}"`);
   }
 
   return {
@@ -445,9 +432,9 @@ async function resolveContactByUid(
  * List all address books available to the user.
  */
 export const listAddressBooksTool = {
-  name: "list_address_books",
+  name: 'list_address_books',
   description:
-    "List all address books available to the current user, including their display names and metadata.",
+    'List all address books available to the current user, including their display names and metadata.',
   inputSchema: z.object({}),
   handler: async () => {
     try {
@@ -464,9 +451,9 @@ export const listAddressBooksTool = {
 </d:propfind>`;
 
       const response = await fetchCalDAV(cardDavUrl, {
-        method: "PROPFIND",
+        method: 'PROPFIND',
         body: propfindBody,
-        headers: { Depth: "1" },
+        headers: { Depth: '1' },
       });
 
       const responseText = await response.text();
@@ -476,20 +463,18 @@ export const listAddressBooksTool = {
         return {
           content: [
             {
-              type: "text" as const,
-              text: "No address books found.",
+              type: 'text' as const,
+              text: 'No address books found.',
             },
           ],
         };
       }
 
-      const formatted = books
-        .map((b) => `${b.displayName}\n    URL: ${b.url}`)
-        .join("\n\n");
+      const formatted = books.map((b) => `${b.displayName}\n    URL: ${b.url}`).join('\n\n');
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Address books (${books.length} found):\n\n${formatted}`,
           },
         ],
@@ -498,7 +483,7 @@ export const listAddressBooksTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error listing address books: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -512,36 +497,32 @@ export const listAddressBooksTool = {
  * List contacts from an address book.
  */
 export const listContactsTool = {
-  name: "list_contacts",
+  name: 'list_contacts',
   description:
-    "List contacts from a Nextcloud address book. Optionally search by name. Returns name, email, phone, organization, and UID for each contact.",
+    'List contacts from a Nextcloud address book. Optionally search by name. Returns name, email, phone, organization, and UID for each contact.',
   inputSchema: z.object({
     addressBookName: z
       .string()
-      .default("contacts")
+      .default('contacts')
       .describe("The address book name (default: 'contacts')"),
     search: z
       .string()
       .optional()
-      .describe("Search term to filter contacts by name (case-insensitive contains match)"),
+      .describe('Search term to filter contacts by name (case-insensitive contains match)'),
     limit: z
       .number()
       .min(1)
       .max(200)
       .optional()
-      .describe("Maximum number of contacts to return (default: 50)"),
+      .describe('Maximum number of contacts to return (default: 50)'),
   }),
-  handler: async (args: {
-    addressBookName: string;
-    search?: string;
-    limit?: number;
-  }) => {
+  handler: async (args: { addressBookName: string; search?: string; limit?: number }) => {
     try {
       const config = getNextcloudConfig();
       const cardDavUrl = `${config.url}/remote.php/dav/addressbooks/users/${config.user}/${args.addressBookName}/`;
       const limit = args.limit || 50;
 
-      let filterXml = "";
+      let filterXml = '';
       if (args.search) {
         filterXml = `
   <cr:filter>
@@ -560,15 +541,15 @@ export const listContactsTool = {
 </cr:addressbook-query>`;
 
       const response = await fetchCalDAV(cardDavUrl, {
-        method: "REPORT",
+        method: 'REPORT',
         body: reportBody,
-        headers: { Depth: "1" },
+        headers: { Depth: '1' },
       });
 
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(
-          `CardDAV REPORT failed for address book "${args.addressBookName}": ${response.status} - ${errorText}`,
+          `CardDAV REPORT failed for address book "${args.addressBookName}": ${response.status} - ${errorText}`
         );
       }
 
@@ -588,15 +569,15 @@ export const listContactsTool = {
           ? `No contacts found matching "${args.search}" in "${args.addressBookName}".`
           : `No contacts found in "${args.addressBookName}".`;
         return {
-          content: [{ type: "text" as const, text: msg }],
+          content: [{ type: 'text' as const, text: msg }],
         };
       }
 
-      const formatted = contacts.map(formatContact).join("\n\n");
+      const formatted = contacts.map(formatContact).join('\n\n');
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Contacts in "${args.addressBookName}" (${contacts.length} found):\n\n${formatted}`,
           },
         ],
@@ -605,7 +586,7 @@ export const listContactsTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error listing contacts: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -619,22 +600,19 @@ export const listContactsTool = {
  * Get a single contact by UID.
  */
 export const getContactTool = {
-  name: "get_contact",
+  name: 'get_contact',
   description:
-    "Get detailed information about a single contact by its UID, including all properties like name, email, phone, address, organization, birthday, notes, and groups.",
+    'Get detailed information about a single contact by its UID, including all properties like name, email, phone, address, organization, birthday, notes, and groups.',
   inputSchema: z.object({
-    uid: z.string().describe("The UID of the contact"),
+    uid: z.string().describe('The UID of the contact'),
     addressBookName: z
       .string()
-      .default("contacts")
+      .default('contacts')
       .describe("The address book name (default: 'contacts')"),
   }),
   handler: async (args: { uid: string; addressBookName: string }) => {
     try {
-      const { vcardData } = await resolveContactByUid(
-        args.addressBookName,
-        args.uid,
-      );
+      const { vcardData } = await resolveContactByUid(args.addressBookName, args.uid);
 
       const contact = parseVCardBlock(unfoldVCardLines(vcardData));
       if (!contact) {
@@ -644,7 +622,7 @@ export const getContactTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: formatContactDetail(contact),
           },
         ],
@@ -653,7 +631,7 @@ export const getContactTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error getting contact: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -667,71 +645,59 @@ export const getContactTool = {
  * Create a new contact.
  */
 export const createContactTool = {
-  name: "create_contact",
+  name: 'create_contact',
   description:
-    "Create a new contact in a Nextcloud address book with name, email, phone, address, organization, and other properties.",
+    'Create a new contact in a Nextcloud address book with name, email, phone, address, organization, and other properties.',
   inputSchema: z.object({
     fullName: z.string().describe("The contact's full display name (required)"),
     addressBookName: z
       .string()
-      .default("contacts")
+      .default('contacts')
       .describe("The address book name (default: 'contacts')"),
-    firstName: z.string().optional().describe("First/given name"),
-    lastName: z.string().optional().describe("Last/family name"),
-    prefix: z.string().optional().describe("Name prefix (e.g. Dr., Mr.)"),
-    suffix: z.string().optional().describe("Name suffix (e.g. Jr., III)"),
+    firstName: z.string().optional().describe('First/given name'),
+    lastName: z.string().optional().describe('Last/family name'),
+    prefix: z.string().optional().describe('Name prefix (e.g. Dr., Mr.)'),
+    suffix: z.string().optional().describe('Name suffix (e.g. Jr., III)'),
     emails: z
       .array(
         z.object({
-          value: z.string().describe("Email address"),
-          type: z
-            .enum(["HOME", "WORK", "OTHER"])
-            .optional()
-            .describe("Email type"),
-        }),
+          value: z.string().describe('Email address'),
+          type: z.enum(['HOME', 'WORK', 'OTHER']).optional().describe('Email type'),
+        })
       )
       .optional()
-      .describe("Email addresses"),
+      .describe('Email addresses'),
     phones: z
       .array(
         z.object({
-          value: z.string().describe("Phone number"),
+          value: z.string().describe('Phone number'),
           type: z
-            .enum(["HOME", "WORK", "CELL", "FAX", "PAGER", "OTHER"])
+            .enum(['HOME', 'WORK', 'CELL', 'FAX', 'PAGER', 'OTHER'])
             .optional()
-            .describe("Phone type"),
-        }),
+            .describe('Phone type'),
+        })
       )
       .optional()
-      .describe("Phone numbers"),
+      .describe('Phone numbers'),
     addresses: z
       .array(
         z.object({
-          street: z.string().optional().describe("Street address"),
-          city: z.string().optional().describe("City"),
-          region: z.string().optional().describe("State or province"),
-          postalCode: z.string().optional().describe("Postal/ZIP code"),
-          country: z.string().optional().describe("Country"),
-          type: z
-            .enum(["HOME", "WORK", "OTHER"])
-            .optional()
-            .describe("Address type"),
-        }),
+          street: z.string().optional().describe('Street address'),
+          city: z.string().optional().describe('City'),
+          region: z.string().optional().describe('State or province'),
+          postalCode: z.string().optional().describe('Postal/ZIP code'),
+          country: z.string().optional().describe('Country'),
+          type: z.enum(['HOME', 'WORK', 'OTHER']).optional().describe('Address type'),
+        })
       )
       .optional()
-      .describe("Physical addresses"),
-    org: z.string().optional().describe("Organization name"),
-    title: z.string().optional().describe("Job title"),
-    note: z.string().optional().describe("Notes about the contact"),
-    birthday: z
-      .string()
-      .optional()
-      .describe("Birthday in YYYY-MM-DD or YYYYMMDD format"),
-    url: z.string().optional().describe("Website URL"),
-    categories: z
-      .array(z.string())
-      .optional()
-      .describe("Groups/categories for the contact"),
+      .describe('Physical addresses'),
+    org: z.string().optional().describe('Organization name'),
+    title: z.string().optional().describe('Job title'),
+    note: z.string().optional().describe('Notes about the contact'),
+    birthday: z.string().optional().describe('Birthday in YYYY-MM-DD or YYYYMMDD format'),
+    url: z.string().optional().describe('Website URL'),
+    categories: z.array(z.string()).optional().describe('Groups/categories for the contact'),
   }),
   handler: async (args: {
     fullName: string;
@@ -761,38 +727,38 @@ export const createContactTool = {
       const config = getNextcloudConfig();
       const contactUid = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
       const cardDavUrl = `${config.url}/remote.php/dav/addressbooks/users/${config.user}/${args.addressBookName}/${contactUid}.vcf`;
-      const now = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+      const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 
       // Build N property: family;given;additional;prefix;suffix
-      const family = args.lastName ? escapeVCardValue(args.lastName) : "";
-      const given = args.firstName ? escapeVCardValue(args.firstName) : "";
-      const prefix = args.prefix ? escapeVCardValue(args.prefix) : "";
-      const suffix = args.suffix ? escapeVCardValue(args.suffix) : "";
+      const family = args.lastName ? escapeVCardValue(args.lastName) : '';
+      const given = args.firstName ? escapeVCardValue(args.firstName) : '';
+      const prefix = args.prefix ? escapeVCardValue(args.prefix) : '';
+      const suffix = args.suffix ? escapeVCardValue(args.suffix) : '';
 
       let vcard = `BEGIN:VCARD\r\nVERSION:3.0\r\nPRODID:-//AIquila//MCP Server//EN\r\nUID:${contactUid}\r\nREV:${now}\r\nFN:${escapeVCardValue(args.fullName)}\r\nN:${family};${given};;${prefix};${suffix}`;
 
       if (args.emails) {
         for (const email of args.emails) {
-          const typeParam = email.type ? `;TYPE=${email.type}` : "";
+          const typeParam = email.type ? `;TYPE=${email.type}` : '';
           vcard += `\r\nEMAIL${typeParam}:${email.value}`;
         }
       }
 
       if (args.phones) {
         for (const phone of args.phones) {
-          const typeParam = phone.type ? `;TYPE=${phone.type}` : "";
+          const typeParam = phone.type ? `;TYPE=${phone.type}` : '';
           vcard += `\r\nTEL${typeParam}:${phone.value}`;
         }
       }
 
       if (args.addresses) {
         for (const addr of args.addresses) {
-          const typeParam = addr.type ? `;TYPE=${addr.type}` : "";
-          const street = addr.street ? escapeVCardValue(addr.street) : "";
-          const city = addr.city ? escapeVCardValue(addr.city) : "";
-          const region = addr.region ? escapeVCardValue(addr.region) : "";
-          const postalCode = addr.postalCode ? escapeVCardValue(addr.postalCode) : "";
-          const country = addr.country ? escapeVCardValue(addr.country) : "";
+          const typeParam = addr.type ? `;TYPE=${addr.type}` : '';
+          const street = addr.street ? escapeVCardValue(addr.street) : '';
+          const city = addr.city ? escapeVCardValue(addr.city) : '';
+          const region = addr.region ? escapeVCardValue(addr.region) : '';
+          const postalCode = addr.postalCode ? escapeVCardValue(addr.postalCode) : '';
+          const country = addr.country ? escapeVCardValue(addr.country) : '';
           vcard += `\r\nADR${typeParam}:;;${street};${city};${region};${postalCode};${country}`;
         }
       }
@@ -813,17 +779,17 @@ export const createContactTool = {
         vcard += `\r\nURL:${args.url}`;
       }
       if (args.categories && args.categories.length > 0) {
-        vcard += `\r\nCATEGORIES:${args.categories.map(escapeVCardValue).join(",")}`;
+        vcard += `\r\nCATEGORIES:${args.categories.map(escapeVCardValue).join(',')}`;
       }
 
       vcard += `\r\nEND:VCARD`;
 
       const response = await fetchCalDAV(cardDavUrl, {
-        method: "PUT",
+        method: 'PUT',
         body: vcard,
         headers: {
-          "Content-Type": "text/vcard; charset=utf-8",
-          "If-None-Match": "*",
+          'Content-Type': 'text/vcard; charset=utf-8',
+          'If-None-Match': '*',
         },
       });
 
@@ -831,14 +797,14 @@ export const createContactTool = {
       if (response.status !== 201 && response.status !== 204) {
         const errorText = await response.text();
         throw new Error(
-          `Failed to create contact: server returned ${response.status} (expected 201 or 204) - ${errorText}`,
+          `Failed to create contact: server returned ${response.status} (expected 201 or 204) - ${errorText}`
         );
       }
 
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Contact created successfully: ${args.fullName}\n  UID: ${contactUid}`,
           },
         ],
@@ -847,7 +813,7 @@ export const createContactTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error creating contact: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -861,95 +827,62 @@ export const createContactTool = {
  * Update an existing contact by UID.
  */
 export const updateContactTool = {
-  name: "update_contact",
+  name: 'update_contact',
   description:
     "Update an existing contact's fields by UID. Uses CardDAV ETag-based optimistic concurrency. Only provided fields are changed.",
   inputSchema: z.object({
-    uid: z.string().describe("The UID of the contact to update"),
+    uid: z.string().describe('The UID of the contact to update'),
     addressBookName: z
       .string()
-      .default("contacts")
+      .default('contacts')
       .describe("The address book name (default: 'contacts')"),
-    fullName: z.string().optional().describe("New full display name"),
-    firstName: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("New first name, or null to clear"),
-    lastName: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("New last name, or null to clear"),
+    fullName: z.string().optional().describe('New full display name'),
+    firstName: z.string().nullable().optional().describe('New first name, or null to clear'),
+    lastName: z.string().nullable().optional().describe('New last name, or null to clear'),
     emails: z
       .array(
         z.object({
-          value: z.string().describe("Email address"),
-          type: z
-            .enum(["HOME", "WORK", "OTHER"])
-            .optional()
-            .describe("Email type"),
-        }),
+          value: z.string().describe('Email address'),
+          type: z.enum(['HOME', 'WORK', 'OTHER']).optional().describe('Email type'),
+        })
       )
       .optional()
-      .describe("Replace all emails with these"),
+      .describe('Replace all emails with these'),
     phones: z
       .array(
         z.object({
-          value: z.string().describe("Phone number"),
+          value: z.string().describe('Phone number'),
           type: z
-            .enum(["HOME", "WORK", "CELL", "FAX", "PAGER", "OTHER"])
+            .enum(['HOME', 'WORK', 'CELL', 'FAX', 'PAGER', 'OTHER'])
             .optional()
-            .describe("Phone type"),
-        }),
+            .describe('Phone type'),
+        })
       )
       .optional()
-      .describe("Replace all phone numbers with these"),
+      .describe('Replace all phone numbers with these'),
     addresses: z
       .array(
         z.object({
-          street: z.string().optional().describe("Street address"),
-          city: z.string().optional().describe("City"),
-          region: z.string().optional().describe("State or province"),
-          postalCode: z.string().optional().describe("Postal/ZIP code"),
-          country: z.string().optional().describe("Country"),
-          type: z
-            .enum(["HOME", "WORK", "OTHER"])
-            .optional()
-            .describe("Address type"),
-        }),
+          street: z.string().optional().describe('Street address'),
+          city: z.string().optional().describe('City'),
+          region: z.string().optional().describe('State or province'),
+          postalCode: z.string().optional().describe('Postal/ZIP code'),
+          country: z.string().optional().describe('Country'),
+          type: z.enum(['HOME', 'WORK', 'OTHER']).optional().describe('Address type'),
+        })
       )
       .optional()
-      .describe("Replace all addresses with these"),
-    org: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("New organization, or null to remove"),
-    title: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("New job title, or null to remove"),
-    note: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("New notes, or null to remove"),
+      .describe('Replace all addresses with these'),
+    org: z.string().nullable().optional().describe('New organization, or null to remove'),
+    title: z.string().nullable().optional().describe('New job title, or null to remove'),
+    note: z.string().nullable().optional().describe('New notes, or null to remove'),
     birthday: z
       .string()
       .nullable()
       .optional()
-      .describe("New birthday (YYYY-MM-DD or YYYYMMDD), or null to remove"),
-    url: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("New website URL, or null to remove"),
-    categories: z
-      .array(z.string())
-      .optional()
-      .describe("Replace all groups/categories with these"),
+      .describe('New birthday (YYYY-MM-DD or YYYYMMDD), or null to remove'),
+    url: z.string().nullable().optional().describe('New website URL, or null to remove'),
+    categories: z.array(z.string()).optional().describe('Replace all groups/categories with these'),
   }),
   handler: async (args: {
     uid: string;
@@ -976,123 +909,108 @@ export const updateContactTool = {
   }) => {
     try {
       const config = getNextcloudConfig();
-      const { href, etag, vcardData } = await resolveContactByUid(
-        args.addressBookName,
-        args.uid,
-      );
+      const { href, etag, vcardData } = await resolveContactByUid(args.addressBookName, args.uid);
 
       let modified = unfoldVCardLines(vcardData);
 
       // Update FN
       if (args.fullName !== undefined) {
-        modified = setVCardProperty(
-          modified,
-          "FN",
-          escapeVCardValue(args.fullName),
-        );
+        modified = setVCardProperty(modified, 'FN', escapeVCardValue(args.fullName));
       }
 
       // Update N (structured name)
       if (args.firstName !== undefined || args.lastName !== undefined) {
         // Parse existing N property
-        const nMatch = modified.match(/^N(;[^:]*)?:(.*)/mi);
-        const existingParts = nMatch ? nMatch[2].split(";") : ["", "", "", "", ""];
+        const nMatch = modified.match(/^N(;[^:]*)?:(.*)/im);
+        const existingParts = nMatch ? nMatch[2].split(';') : ['', '', '', '', ''];
 
         if (args.lastName !== undefined) {
-          existingParts[0] = args.lastName ? escapeVCardValue(args.lastName) : "";
+          existingParts[0] = args.lastName ? escapeVCardValue(args.lastName) : '';
         }
         if (args.firstName !== undefined) {
-          existingParts[1] = args.firstName ? escapeVCardValue(args.firstName) : "";
+          existingParts[1] = args.firstName ? escapeVCardValue(args.firstName) : '';
         }
 
-        modified = setVCardProperty(
-          modified,
-          "N",
-          existingParts.slice(0, 5).join(";"),
-        );
+        modified = setVCardProperty(modified, 'N', existingParts.slice(0, 5).join(';'));
       }
 
       // Update simple properties
       if (args.org !== undefined) {
-        modified = setVCardProperty(
-          modified,
-          "ORG",
-          args.org ? escapeVCardValue(args.org) : null,
-        );
+        modified = setVCardProperty(modified, 'ORG', args.org ? escapeVCardValue(args.org) : null);
       }
       if (args.title !== undefined) {
         modified = setVCardProperty(
           modified,
-          "TITLE",
-          args.title ? escapeVCardValue(args.title) : null,
+          'TITLE',
+          args.title ? escapeVCardValue(args.title) : null
         );
       }
       if (args.note !== undefined) {
         modified = setVCardProperty(
           modified,
-          "NOTE",
-          args.note ? escapeVCardValue(args.note) : null,
+          'NOTE',
+          args.note ? escapeVCardValue(args.note) : null
         );
       }
       if (args.birthday !== undefined) {
-        modified = setVCardProperty(modified, "BDAY", args.birthday);
+        modified = setVCardProperty(modified, 'BDAY', args.birthday);
       }
       if (args.url !== undefined) {
-        modified = setVCardProperty(modified, "URL", args.url);
+        modified = setVCardProperty(modified, 'URL', args.url);
       }
 
       // Update multi-valued properties (replace all)
       if (args.emails !== undefined) {
-        modified = removeAllVCardProperty(modified, "EMAIL");
+        modified = removeAllVCardProperty(modified, 'EMAIL');
         for (const email of args.emails) {
-          const typeParam = email.type ? `;TYPE=${email.type}` : "";
+          const typeParam = email.type ? `;TYPE=${email.type}` : '';
           const line = `EMAIL${typeParam}:${email.value}`;
           modified = modified.replace(/END:VCARD/i, `${line}\r\nEND:VCARD`);
         }
       }
 
       if (args.phones !== undefined) {
-        modified = removeAllVCardProperty(modified, "TEL");
+        modified = removeAllVCardProperty(modified, 'TEL');
         for (const phone of args.phones) {
-          const typeParam = phone.type ? `;TYPE=${phone.type}` : "";
+          const typeParam = phone.type ? `;TYPE=${phone.type}` : '';
           const line = `TEL${typeParam}:${phone.value}`;
           modified = modified.replace(/END:VCARD/i, `${line}\r\nEND:VCARD`);
         }
       }
 
       if (args.addresses !== undefined) {
-        modified = removeAllVCardProperty(modified, "ADR");
+        modified = removeAllVCardProperty(modified, 'ADR');
         for (const addr of args.addresses) {
-          const typeParam = addr.type ? `;TYPE=${addr.type}` : "";
-          const street = addr.street ? escapeVCardValue(addr.street) : "";
-          const city = addr.city ? escapeVCardValue(addr.city) : "";
-          const region = addr.region ? escapeVCardValue(addr.region) : "";
-          const postalCode = addr.postalCode ? escapeVCardValue(addr.postalCode) : "";
-          const country = addr.country ? escapeVCardValue(addr.country) : "";
+          const typeParam = addr.type ? `;TYPE=${addr.type}` : '';
+          const street = addr.street ? escapeVCardValue(addr.street) : '';
+          const city = addr.city ? escapeVCardValue(addr.city) : '';
+          const region = addr.region ? escapeVCardValue(addr.region) : '';
+          const postalCode = addr.postalCode ? escapeVCardValue(addr.postalCode) : '';
+          const country = addr.country ? escapeVCardValue(addr.country) : '';
           const line = `ADR${typeParam}:;;${street};${city};${region};${postalCode};${country}`;
           modified = modified.replace(/END:VCARD/i, `${line}\r\nEND:VCARD`);
         }
       }
 
       if (args.categories !== undefined) {
-        modified = removeAllVCardProperty(modified, "CATEGORIES");
+        modified = removeAllVCardProperty(modified, 'CATEGORIES');
         if (args.categories.length > 0) {
-          const line = `CATEGORIES:${args.categories.map(escapeVCardValue).join(",")}`;
+          const line = `CATEGORIES:${args.categories.map(escapeVCardValue).join(',')}`;
           modified = modified.replace(/END:VCARD/i, `${line}\r\nEND:VCARD`);
         }
       }
 
       // Update REV timestamp
-      const now = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-      modified = setVCardProperty(modified, "REV", now);
+      const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+      modified = setVCardProperty(modified, 'REV', now);
 
       const putUrl = `${config.url}${href}`;
       const putResponse = await fetchCalDAV(putUrl, {
-        method: "PUT",
+        method: 'PUT',
         body: modified,
         headers: {
-          "Content-Type": "text/vcard; charset=utf-8",
-          "If-Match": `"${etag}"`,
+          'Content-Type': 'text/vcard; charset=utf-8',
+          'If-Match': `"${etag}"`,
         },
       });
 
@@ -1100,26 +1018,22 @@ export const updateContactTool = {
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `Contact updated successfully (UID: ${args.uid})`,
             },
           ],
         };
       } else if (putResponse.status === 412) {
-        throw new Error(
-          "Contact was modified by another client (ETag mismatch). Please retry.",
-        );
+        throw new Error('Contact was modified by another client (ETag mismatch). Please retry.');
       } else {
         const errorText = await putResponse.text();
-        throw new Error(
-          `Failed to update contact: ${putResponse.status} - ${errorText}`,
-        );
+        throw new Error(`Failed to update contact: ${putResponse.status} - ${errorText}`);
       }
     } catch (error) {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error updating contact: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -1133,29 +1047,26 @@ export const updateContactTool = {
  * Delete a contact by UID.
  */
 export const deleteContactTool = {
-  name: "delete_contact",
+  name: 'delete_contact',
   description:
-    "Delete a contact from a Nextcloud address book by UID. This action is irreversible.",
+    'Delete a contact from a Nextcloud address book by UID. This action is irreversible.',
   inputSchema: z.object({
-    uid: z.string().describe("The UID of the contact to delete"),
+    uid: z.string().describe('The UID of the contact to delete'),
     addressBookName: z
       .string()
-      .default("contacts")
+      .default('contacts')
       .describe("The address book name (default: 'contacts')"),
   }),
   handler: async (args: { uid: string; addressBookName: string }) => {
     try {
       const config = getNextcloudConfig();
-      const { href, etag } = await resolveContactByUid(
-        args.addressBookName,
-        args.uid,
-      );
+      const { href, etag } = await resolveContactByUid(args.addressBookName, args.uid);
 
       const deleteUrl = `${config.url}${href}`;
       const response = await fetchCalDAV(deleteUrl, {
-        method: "DELETE",
+        method: 'DELETE',
         headers: {
-          "If-Match": `"${etag}"`,
+          'If-Match': `"${etag}"`,
         },
       });
 
@@ -1163,26 +1074,22 @@ export const deleteContactTool = {
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `Contact deleted successfully (UID: ${args.uid})`,
             },
           ],
         };
       } else if (response.status === 412) {
-        throw new Error(
-          "Contact was modified by another client (ETag mismatch). Please retry.",
-        );
+        throw new Error('Contact was modified by another client (ETag mismatch). Please retry.');
       } else {
         const errorText = await response.text();
-        throw new Error(
-          `Failed to delete contact: ${response.status} - ${errorText}`,
-        );
+        throw new Error(`Failed to delete contact: ${response.status} - ${errorText}`);
       }
     } catch (error) {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error deleting contact: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],

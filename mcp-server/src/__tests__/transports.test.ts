@@ -11,12 +11,20 @@ vi.mock('../server.js', () => ({
 // Mock the MCP SDK transports (must be constructable — no arrow functions)
 const mockStdioTransport = {};
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => {
-  return { StdioServerTransport: vi.fn(function () { return mockStdioTransport; }) };
+  return {
+    StdioServerTransport: vi.fn(function () {
+      return mockStdioTransport;
+    }),
+  };
 });
 
 const mockHttpTransport = { handleRequest: vi.fn() };
 vi.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => {
-  return { StreamableHTTPServerTransport: vi.fn(function () { return mockHttpTransport; }) };
+  return {
+    StreamableHTTPServerTransport: vi.fn(function () {
+      return mockHttpTransport;
+    }),
+  };
 });
 
 const mockListen = vi.fn((_port: number, _host: string, cb: () => void) => cb());

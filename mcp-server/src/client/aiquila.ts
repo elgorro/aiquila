@@ -1,4 +1,4 @@
-import { getNextcloudConfig } from "../tools/types.js";
+import { getNextcloudConfig } from '../tools/types.js';
 
 /**
  * Custom error for HTTP API failures, preserving the status code.
@@ -10,7 +10,7 @@ export class ApiError extends Error {
 
   constructor(statusCode: number, statusText: string, responseBody: string) {
     super(`AIquila API error: ${statusCode} ${statusText}`);
-    this.name = "ApiError";
+    this.name = 'ApiError';
     this.statusCode = statusCode;
     this.statusText = statusText;
     this.responseBody = responseBody;
@@ -24,11 +24,11 @@ export function formatOccError(error: unknown): string {
   if (error instanceof ApiError) {
     switch (error.statusCode) {
       case 401:
-        return "Authentication failed. Check that NEXTCLOUD_USER and NEXTCLOUD_PASSWORD are correct.";
+        return 'Authentication failed. Check that NEXTCLOUD_USER and NEXTCLOUD_PASSWORD are correct.';
       case 403:
-        return "Permission denied. OCC commands require admin rights. Ensure the Nextcloud user is an admin.";
+        return 'Permission denied. OCC commands require admin rights. Ensure the Nextcloud user is an admin.';
       case 404:
-        return "OCC endpoint not found. Ensure the AIquila app is installed and enabled.";
+        return 'OCC endpoint not found. Ensure the AIquila app is installed and enabled.';
       default:
         return `Request failed (HTTP ${error.statusCode} ${error.statusText}).`;
     }
@@ -62,9 +62,7 @@ export async function fetchAiquilaAPI<T = unknown>(
   } = {}
 ): Promise<T> {
   const config = getNextcloudConfig();
-  const auth = Buffer.from(`${config.user}:${config.password}`).toString(
-    "base64"
-  );
+  const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
 
   let url = `${config.url}/index.php/apps/aiquila/api${endpoint}`;
   if (options.queryParams) {
@@ -74,18 +72,18 @@ export async function fetchAiquilaAPI<T = unknown>(
 
   const headers: Record<string, string> = {
     Authorization: `Basic ${auth}`,
-    "OCS-APIRequest": "true",
-    Accept: "application/json",
+    'OCS-APIRequest': 'true',
+    Accept: 'application/json',
   };
 
   let body: string | undefined;
   if (options.body) {
     body = JSON.stringify(options.body);
-    headers["Content-Type"] = "application/json";
+    headers['Content-Type'] = 'application/json';
   }
 
   const response = await fetch(url, {
-    method: options.method || "GET",
+    method: options.method || 'GET',
     headers,
     body,
   });
@@ -111,8 +109,8 @@ export async function executeOCC(
     body.timeout = timeout;
   }
 
-  return fetchAiquilaAPI<OccExecutionResult>("/occ", {
-    method: "POST",
+  return fetchAiquilaAPI<OccExecutionResult>('/occ', {
+    method: 'POST',
     body,
   });
 }

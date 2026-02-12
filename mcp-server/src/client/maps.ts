@@ -1,4 +1,4 @@
-import { getNextcloudConfig } from "../tools/types.js";
+import { getNextcloudConfig } from '../tools/types.js';
 
 /**
  * Nextcloud Maps API client.
@@ -27,12 +27,12 @@ function buildUrl(
         for (const v of value) {
           parts.push(`${encodeURIComponent(key)}[]=${encodeURIComponent(v)}`);
         }
-      } else if (value !== undefined && value !== "") {
+      } else if (value !== undefined && value !== '') {
         parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
       }
     }
     if (parts.length > 0) {
-      url += `?${parts.join("&")}`;
+      url += `?${parts.join('&')}`;
     }
   }
   return url;
@@ -41,11 +41,11 @@ function buildUrl(
 function buildHeaders(auth: string, hasBody: boolean): Record<string, string> {
   const headers: Record<string, string> = {
     Authorization: `Basic ${auth}`,
-    "OCS-APIRequest": "true",
-    Accept: "application/json",
+    'OCS-APIRequest': 'true',
+    Accept: 'application/json',
   };
   if (hasBody) {
-    headers["Content-Type"] = "application/json";
+    headers['Content-Type'] = 'application/json';
   }
   return headers;
 }
@@ -60,18 +60,18 @@ export async function fetchMapsExternalAPI<T = unknown>(
   options: FetchOptions = {}
 ): Promise<T> {
   const config = getNextcloudConfig();
-  const auth = Buffer.from(`${config.user}:${config.password}`).toString("base64");
+  const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
   const url = buildUrl(`${config.url}/apps/maps/api/1.0`, endpoint, options.queryParams);
   const body = options.body ? JSON.stringify(options.body) : undefined;
 
   const response = await fetch(url, {
-    method: options.method || "GET",
+    method: options.method || 'GET',
     headers: buildHeaders(auth, !!options.body),
     body,
   });
 
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
+    const text = await response.text().catch(() => '');
     throw new Error(`Maps API ${response.status}: ${text || response.statusText}`);
   }
 
@@ -88,18 +88,18 @@ export async function fetchMapsAPI<T = unknown>(
   options: FetchOptions = {}
 ): Promise<T> {
   const config = getNextcloudConfig();
-  const auth = Buffer.from(`${config.user}:${config.password}`).toString("base64");
+  const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
   const url = buildUrl(`${config.url}/apps/maps`, endpoint, options.queryParams);
   const body = options.body ? JSON.stringify(options.body) : undefined;
 
   const response = await fetch(url, {
-    method: options.method || "GET",
+    method: options.method || 'GET',
     headers: buildHeaders(auth, !!options.body),
     body,
   });
 
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
+    const text = await response.text().catch(() => '');
     throw new Error(`Maps API ${response.status}: ${text || response.statusText}`);
   }
 

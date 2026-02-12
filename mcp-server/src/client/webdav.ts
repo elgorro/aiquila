@@ -1,4 +1,4 @@
-import { createClient, WebDAVClient } from "webdav";
+import { createClient, WebDAVClient } from 'webdav';
 
 const NEXTCLOUD_URL = process.env.NEXTCLOUD_URL;
 const NEXTCLOUD_USER = process.env.NEXTCLOUD_USER;
@@ -13,7 +13,7 @@ let webdavClient: WebDAVClient | null = null;
 export function getWebDAVClient(): WebDAVClient {
   if (!NEXTCLOUD_URL || !NEXTCLOUD_USER || !NEXTCLOUD_PASSWORD) {
     throw new Error(
-      "NEXTCLOUD_URL, NEXTCLOUD_USER, and NEXTCLOUD_PASSWORD environment variables must be set"
+      'NEXTCLOUD_URL, NEXTCLOUD_USER, and NEXTCLOUD_PASSWORD environment variables must be set'
     );
   }
 

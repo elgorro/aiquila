@@ -62,10 +62,14 @@ export function createServer(): McpServer {
 
   for (const toolSet of allToolSets) {
     for (const tool of toolSet) {
-      server.registerTool(tool.name, {
-        description: tool.description,
-        inputSchema: tool.inputSchema as any,
-      }, tool.handler as any);
+      server.registerTool(
+        tool.name,
+        {
+          description: tool.description,
+          inputSchema: tool.inputSchema as any,
+        },
+        tool.handler as any
+      );
     }
   }
 

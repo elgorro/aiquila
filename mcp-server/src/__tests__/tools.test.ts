@@ -53,7 +53,8 @@ vi.mock('../client/maps.js', () => ({
 const mockExecuteOCC = vi.fn();
 
 vi.mock('../client/aiquila.js', async () => {
-  const actual = await vi.importActual<typeof import('../client/aiquila.js')>('../client/aiquila.js');
+  const actual =
+    await vi.importActual<typeof import('../client/aiquila.js')>('../client/aiquila.js');
   return {
     ...actual,
     executeOCC: (...args: unknown[]) => mockExecuteOCC(...args),
@@ -156,7 +157,7 @@ SUMMARY:${title}`;
       expect(mockClient.putFileContents).toHaveBeenCalledWith(
         '/Recipes/pasta-carbonara/recipe.json',
         expect.stringContaining('"name": "Pasta Carbonara"'),
-        { overwrite: true },
+        { overwrite: true }
       );
       expect(result.content[0].text).toContain('created successfully');
       expect(result.content[0].text).toContain('pasta-carbonara');
@@ -284,10 +285,9 @@ describe('OCS-based Tools', () => {
       const { listAppsTool } = await import('../tools/system/apps.js');
       await listAppsTool.handler({ filter: 'disabled' });
 
-      expect(mockFetchOCS).toHaveBeenCalledWith(
-        '/ocs/v2.php/cloud/apps',
-        { queryParams: { filter: 'disabled' } }
-      );
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/cloud/apps', {
+        queryParams: { filter: 'disabled' },
+      });
     });
 
     it('should handle errors', async () => {
@@ -331,10 +331,7 @@ describe('OCS-based Tools', () => {
       const result = await enableAppTool.handler({ appId: 'tasks' });
 
       expect(result.content[0].text).toContain('enabled successfully');
-      expect(mockFetchOCS).toHaveBeenCalledWith(
-        '/ocs/v2.php/cloud/apps/tasks',
-        { method: 'POST' }
-      );
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/cloud/apps/tasks', { method: 'POST' });
     });
   });
 
@@ -351,10 +348,9 @@ describe('OCS-based Tools', () => {
       const result = await disableAppTool.handler({ appId: 'tasks' });
 
       expect(result.content[0].text).toContain('disabled successfully');
-      expect(mockFetchOCS).toHaveBeenCalledWith(
-        '/ocs/v2.php/cloud/apps/tasks',
-        { method: 'DELETE' }
-      );
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/cloud/apps/tasks', {
+        method: 'DELETE',
+      });
     });
   });
 
@@ -386,10 +382,9 @@ describe('OCS-based Tools', () => {
       const { listUsersTool } = await import('../tools/apps/users.js');
       await listUsersTool.handler({ search: 'ali', limit: 10, offset: 0 });
 
-      expect(mockFetchOCS).toHaveBeenCalledWith(
-        '/ocs/v2.php/cloud/users',
-        { queryParams: { search: 'ali', limit: '10', offset: '0' } }
-      );
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/cloud/users', {
+        queryParams: { search: 'ali', limit: '10', offset: '0' },
+      });
     });
   });
 
@@ -439,10 +434,9 @@ describe('OCS-based Tools', () => {
       const result = await enableUserTool.handler({ userId: 'alice' });
 
       expect(result.content[0].text).toContain('enabled successfully');
-      expect(mockFetchOCS).toHaveBeenCalledWith(
-        '/ocs/v2.php/cloud/users/alice/enable',
-        { method: 'PUT' }
-      );
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/cloud/users/alice/enable', {
+        method: 'PUT',
+      });
     });
   });
 
@@ -459,10 +453,9 @@ describe('OCS-based Tools', () => {
       const result = await disableUserTool.handler({ userId: 'alice' });
 
       expect(result.content[0].text).toContain('disabled');
-      expect(mockFetchOCS).toHaveBeenCalledWith(
-        '/ocs/v2.php/cloud/users/alice/disable',
-        { method: 'PUT' }
-      );
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/cloud/users/alice/disable', {
+        method: 'PUT',
+      });
     });
   });
 
@@ -516,10 +509,10 @@ describe('OCS-based Tools', () => {
 
       expect(result.content[0].text).toContain('added');
       expect(result.content[0].text).toContain('marketing');
-      expect(mockFetchOCS).toHaveBeenCalledWith(
-        '/ocs/v2.php/cloud/users/alice/groups',
-        { method: 'POST', body: { groupid: 'marketing' } }
-      );
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/cloud/users/alice/groups', {
+        method: 'POST',
+        body: { groupid: 'marketing' },
+      });
     });
   });
 
@@ -533,14 +526,17 @@ describe('OCS-based Tools', () => {
       });
 
       const { removeUserFromGroupTool } = await import('../tools/apps/groups.js');
-      const result = await removeUserFromGroupTool.handler({ userId: 'alice', groupId: 'marketing' });
+      const result = await removeUserFromGroupTool.handler({
+        userId: 'alice',
+        groupId: 'marketing',
+      });
 
       expect(result.content[0].text).toContain('removed');
       expect(result.content[0].text).toContain('marketing');
-      expect(mockFetchOCS).toHaveBeenCalledWith(
-        '/ocs/v2.php/cloud/users/alice/groups',
-        { method: 'DELETE', body: { groupid: 'marketing' } }
-      );
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/cloud/users/alice/groups', {
+        method: 'DELETE',
+        body: { groupid: 'marketing' },
+      });
     });
   });
 
@@ -764,7 +760,11 @@ END:VCALENDAR</c:calendar-data>
     it('should handle ETag conflict (412)', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(resolveResponse) })
-        .mockResolvedValueOnce({ ok: false, status: 412, text: () => Promise.resolve('Precondition Failed') });
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 412,
+          text: () => Promise.resolve('Precondition Failed'),
+        });
 
       const { updateTaskTool } = await import('../tools/apps/tasks.js');
       const result = await updateTaskTool.handler({
@@ -986,14 +986,28 @@ END:VCALENDAR</c:calendar-data>
   describe('list_recipes', () => {
     const sampleRecipeJson = (name: string, category: string, keywords: string) =>
       JSON.stringify({
-        id: '123', name, description: '', url: '', image: '',
-        prepTime: 'PT30M', cookTime: 'PT1H', totalTime: 'PT1H30M',
-        recipeCategory: category, keywords, recipeYield: 4,
-        tool: [], recipeIngredient: [], recipeInstructions: [],
+        id: '123',
+        name,
+        description: '',
+        url: '',
+        image: '',
+        prepTime: 'PT30M',
+        cookTime: 'PT1H',
+        totalTime: 'PT1H30M',
+        recipeCategory: category,
+        keywords,
+        recipeYield: 4,
+        tool: [],
+        recipeIngredient: [],
+        recipeInstructions: [],
         nutrition: { '@type': 'NutritionInformation' },
-        '@context': 'http://schema.org', '@type': 'Recipe',
-        dateModified: '2024-12-01T00:00:00+0000', dateCreated: '2024-11-01T00:00:00+0000',
-        datePublished: null, printImage: true, imageUrl: '',
+        '@context': 'http://schema.org',
+        '@type': 'Recipe',
+        dateModified: '2024-12-01T00:00:00+0000',
+        dateCreated: '2024-11-01T00:00:00+0000',
+        datePublished: null,
+        printImage: true,
+        imageUrl: '',
       });
 
     it('should list recipe folders and parse recipe.json', async () => {
@@ -1101,15 +1115,28 @@ END:VCALENDAR</c:calendar-data>
   describe('get_recipe', () => {
     it('should return formatted recipe details', async () => {
       const recipeJson = JSON.stringify({
-        id: '123', name: 'Pasta Carbonara', description: 'Classic Italian',
-        url: '', image: '', prepTime: 'PT15M', cookTime: 'PT20M', totalTime: 'PT35M',
-        recipeCategory: 'Italian', keywords: 'pasta,quick',
-        recipeYield: 4, tool: ['Pot'], recipeIngredient: ['400g spaghetti', '200g pancetta'],
+        id: '123',
+        name: 'Pasta Carbonara',
+        description: 'Classic Italian',
+        url: '',
+        image: '',
+        prepTime: 'PT15M',
+        cookTime: 'PT20M',
+        totalTime: 'PT35M',
+        recipeCategory: 'Italian',
+        keywords: 'pasta,quick',
+        recipeYield: 4,
+        tool: ['Pot'],
+        recipeIngredient: ['400g spaghetti', '200g pancetta'],
         recipeInstructions: ['Cook pasta', 'Fry pancetta'],
         nutrition: { '@type': 'NutritionInformation', calories: '500 kJ' },
-        '@context': 'http://schema.org', '@type': 'Recipe',
-        dateModified: '2024-12-01T00:00:00+0000', dateCreated: '2024-11-01T00:00:00+0000',
-        datePublished: null, printImage: true, imageUrl: '',
+        '@context': 'http://schema.org',
+        '@type': 'Recipe',
+        dateModified: '2024-12-01T00:00:00+0000',
+        dateCreated: '2024-11-01T00:00:00+0000',
+        datePublished: null,
+        printImage: true,
+        imageUrl: '',
       });
       mockClient.getFileContents.mockResolvedValue(recipeJson);
 
@@ -1122,7 +1149,7 @@ END:VCALENDAR</c:calendar-data>
       expect(result.content[0].text).toContain('Italian');
       expect(mockClient.getFileContents).toHaveBeenCalledWith(
         '/Recipes/pasta-carbonara/recipe.json',
-        { format: 'text' },
+        { format: 'text' }
       );
     });
 
@@ -1140,15 +1167,28 @@ END:VCALENDAR</c:calendar-data>
   describe('update_recipe', () => {
     it('should merge provided fields into existing recipe', async () => {
       const existingJson = JSON.stringify({
-        id: '123', name: 'Pasta Carbonara', description: 'Classic',
-        url: '', image: '', prepTime: 'PT15M', cookTime: 'PT20M', totalTime: 'PT35M',
-        recipeCategory: 'Italian', keywords: 'pasta',
-        recipeYield: 4, tool: [], recipeIngredient: ['400g spaghetti'],
+        id: '123',
+        name: 'Pasta Carbonara',
+        description: 'Classic',
+        url: '',
+        image: '',
+        prepTime: 'PT15M',
+        cookTime: 'PT20M',
+        totalTime: 'PT35M',
+        recipeCategory: 'Italian',
+        keywords: 'pasta',
+        recipeYield: 4,
+        tool: [],
+        recipeIngredient: ['400g spaghetti'],
         recipeInstructions: ['Cook pasta'],
         nutrition: { '@type': 'NutritionInformation' },
-        '@context': 'http://schema.org', '@type': 'Recipe',
-        dateModified: '2024-12-01T00:00:00+0000', dateCreated: '2024-11-01T00:00:00+0000',
-        datePublished: null, printImage: true, imageUrl: '',
+        '@context': 'http://schema.org',
+        '@type': 'Recipe',
+        dateModified: '2024-12-01T00:00:00+0000',
+        dateCreated: '2024-11-01T00:00:00+0000',
+        datePublished: null,
+        printImage: true,
+        imageUrl: '',
       });
       mockClient.getFileContents.mockResolvedValue(existingJson);
       mockClient.putFileContents.mockResolvedValue(undefined);
@@ -1212,9 +1252,15 @@ END:VCALENDAR</c:calendar-data>
         { type: 'directory', basename: 'salad' },
       ]);
       mockClient.getFileContents
-        .mockResolvedValueOnce(JSON.stringify({ name: 'Pasta', recipeCategory: 'Italian', keywords: '', recipeYield: 0 }))
-        .mockResolvedValueOnce(JSON.stringify({ name: 'Curry', recipeCategory: 'Indian', keywords: '', recipeYield: 0 }))
-        .mockResolvedValueOnce(JSON.stringify({ name: 'Salad', recipeCategory: 'Italian', keywords: '', recipeYield: 0 }));
+        .mockResolvedValueOnce(
+          JSON.stringify({ name: 'Pasta', recipeCategory: 'Italian', keywords: '', recipeYield: 0 })
+        )
+        .mockResolvedValueOnce(
+          JSON.stringify({ name: 'Curry', recipeCategory: 'Indian', keywords: '', recipeYield: 0 })
+        )
+        .mockResolvedValueOnce(
+          JSON.stringify({ name: 'Salad', recipeCategory: 'Italian', keywords: '', recipeYield: 0 })
+        );
 
       const { listRecipeCategoriesTool } = await import('../tools/apps/cookbook.js');
       const result = await listRecipeCategoriesTool.handler();
@@ -1533,7 +1579,11 @@ END:VCALENDAR</c:calendar-data>
     it('should create a timed event', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
-        .mockResolvedValueOnce({ ok: true, status: 207, text: () => Promise.resolve(verifyResponse) });
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(verifyResponse),
+        });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
       const result = await createEventTool.handler({
@@ -1562,7 +1612,11 @@ END:VCALENDAR</c:calendar-data>
     it('should create an all-day event with default end', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
-        .mockResolvedValueOnce({ ok: true, status: 207, text: () => Promise.resolve(verifyResponse) });
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(verifyResponse),
+        });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
       const result = await createEventTool.handler({
@@ -1581,16 +1635,18 @@ END:VCALENDAR</c:calendar-data>
     it('should create event with attendees and alarm', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
-        .mockResolvedValueOnce({ ok: true, status: 207, text: () => Promise.resolve(verifyResponse) });
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(verifyResponse),
+        });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
       await createEventTool.handler({
         summary: 'Team sync',
         calendarName: 'personal',
         dtstart: '20240315T100000Z',
-        attendees: [
-          { email: 'bob@example.com', cn: 'Bob', role: 'REQ-PARTICIPANT' },
-        ],
+        attendees: [{ email: 'bob@example.com', cn: 'Bob', role: 'REQ-PARTICIPANT' }],
         alarm: 15,
       });
 
@@ -1607,7 +1663,11 @@ END:VCALENDAR</c:calendar-data>
     it('should create event with recurrence rule', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
-        .mockResolvedValueOnce({ ok: true, status: 207, text: () => Promise.resolve(verifyResponse) });
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(verifyResponse),
+        });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
       await createEventTool.handler({
@@ -1701,7 +1761,11 @@ END:VCALENDAR</c:calendar-data>
     it('should handle ETag conflict (412)', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(resolveResponse) })
-        .mockResolvedValueOnce({ ok: false, status: 412, text: () => Promise.resolve('Precondition Failed') });
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 412,
+          text: () => Promise.resolve('Precondition Failed'),
+        });
 
       const { updateEventTool } = await import('../tools/apps/calendar.js');
       const result = await updateEventTool.handler({
@@ -1773,7 +1837,10 @@ END:VCALENDAR</c:calendar-data>
       });
 
       const { deleteEventTool } = await import('../tools/apps/calendar.js');
-      const result = await deleteEventTool.handler({ uid: 'nonexistent', calendarName: 'personal' });
+      const result = await deleteEventTool.handler({
+        uid: 'nonexistent',
+        calendarName: 'personal',
+      });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('not found');
@@ -1782,7 +1849,11 @@ END:VCALENDAR</c:calendar-data>
     it('should handle ETag conflict', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(resolveResponse) })
-        .mockResolvedValueOnce({ ok: false, status: 412, text: () => Promise.resolve('Precondition Failed') });
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 412,
+          text: () => Promise.resolve('Precondition Failed'),
+        });
 
       const { deleteEventTool } = await import('../tools/apps/calendar.js');
       const result = await deleteEventTool.handler({ uid: 'event-1', calendarName: 'personal' });
@@ -2028,7 +2099,10 @@ END:VCARD</cr:address-data>
       });
 
       const { getContactTool } = await import('../tools/apps/contacts.js');
-      const result = await getContactTool.handler({ uid: 'contact-1', addressBookName: 'contacts' });
+      const result = await getContactTool.handler({
+        uid: 'contact-1',
+        addressBookName: 'contacts',
+      });
 
       expect(result.content[0].text).toContain('Name: John Doe');
       expect(result.content[0].text).toContain('Dr. John Doe Jr.');
@@ -2057,7 +2131,10 @@ END:VCARD</cr:address-data>
       });
 
       const { getContactTool } = await import('../tools/apps/contacts.js');
-      const result = await getContactTool.handler({ uid: 'nonexistent', addressBookName: 'contacts' });
+      const result = await getContactTool.handler({
+        uid: 'nonexistent',
+        addressBookName: 'contacts',
+      });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('not found');
@@ -2268,7 +2345,10 @@ END:VCARD</cr:address-data>
       });
 
       const { deleteContactTool } = await import('../tools/apps/contacts.js');
-      const result = await deleteContactTool.handler({ uid: 'contact-1', addressBookName: 'contacts' });
+      const result = await deleteContactTool.handler({
+        uid: 'contact-1',
+        addressBookName: 'contacts',
+      });
 
       expect(result.content[0].text).toContain('Contact deleted successfully');
 
@@ -2296,14 +2376,15 @@ describe('Mail Tools', () => {
     it('should return formatted account list', async () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve([
-          { id: 1, name: 'Personal', emailAddress: 'user@example.com' },
-          { id: 2, name: 'Work', emailAddress: 'user@work.com' },
-        ]),
+        json: () =>
+          Promise.resolve([
+            { id: 1, name: 'Personal', emailAddress: 'user@example.com' },
+            { id: 2, name: 'Work', emailAddress: 'user@work.com' },
+          ]),
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'list_mail_accounts')!;
+      const tool = mailTools.find((t) => t.name === 'list_mail_accounts')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('Personal');
@@ -2320,7 +2401,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'list_mail_accounts')!;
+      const tool = mailTools.find((t) => t.name === 'list_mail_accounts')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('No mail accounts configured');
@@ -2334,7 +2415,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'list_mail_accounts')!;
+      const tool = mailTools.find((t) => t.name === 'list_mail_accounts')!;
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);
@@ -2346,15 +2427,16 @@ describe('Mail Tools', () => {
     it('should return formatted mailbox list', async () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve([
-          { id: 10, accountId: 1, name: 'INBOX', unread: 5, total: 120, delimiter: '/' },
-          { id: 11, accountId: 1, name: 'Sent', unread: 0, total: 45, delimiter: '/' },
-          { id: 12, accountId: 1, name: 'Drafts', unread: 2, total: 3, delimiter: '/' },
-        ]),
+        json: () =>
+          Promise.resolve([
+            { id: 10, accountId: 1, name: 'INBOX', unread: 5, total: 120, delimiter: '/' },
+            { id: 11, accountId: 1, name: 'Sent', unread: 0, total: 45, delimiter: '/' },
+            { id: 12, accountId: 1, name: 'Drafts', unread: 2, total: 3, delimiter: '/' },
+          ]),
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'list_mailboxes')!;
+      const tool = mailTools.find((t) => t.name === 'list_mailboxes')!;
       const result = await tool.handler({ accountId: 1 });
 
       expect(result.content[0].text).toContain('INBOX');
@@ -2372,7 +2454,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'list_mailboxes')!;
+      const tool = mailTools.find((t) => t.name === 'list_mailboxes')!;
       const result = await tool.handler({ accountId: 999 });
 
       expect(result.isError).toBe(true);
@@ -2387,21 +2469,43 @@ describe('Mail Tools', () => {
           meta: { status: 'ok', statuscode: 200, message: 'OK' },
           data: [
             {
-              id: 100, uid: 1, mailboxId: 10, subject: 'Hello World',
+              id: 100,
+              uid: 1,
+              mailboxId: 10,
+              subject: 'Hello World',
               from: [{ label: 'Alice', email: 'alice@example.com' }],
               to: [{ label: 'Bob', email: 'bob@example.com' }],
               cc: [],
               dateInt: 1700000000,
-              flags: { seen: false, flagged: true, answered: false, deleted: false, draft: false, important: false, junk: false },
+              flags: {
+                seen: false,
+                flagged: true,
+                answered: false,
+                deleted: false,
+                draft: false,
+                important: false,
+                junk: false,
+              },
               hasAttachments: true,
             },
             {
-              id: 101, uid: 2, mailboxId: 10, subject: 'Meeting notes',
+              id: 101,
+              uid: 2,
+              mailboxId: 10,
+              subject: 'Meeting notes',
               from: [{ label: '', email: 'carol@example.com' }],
               to: [{ label: 'Bob', email: 'bob@example.com' }],
               cc: [],
               dateInt: 1700100000,
-              flags: { seen: true, flagged: false, answered: true, deleted: false, draft: false, important: false, junk: false },
+              flags: {
+                seen: true,
+                flagged: false,
+                answered: true,
+                deleted: false,
+                draft: false,
+                important: false,
+                junk: false,
+              },
               hasAttachments: false,
             },
           ],
@@ -2409,7 +2513,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'list_messages')!;
+      const tool = mailTools.find((t) => t.name === 'list_messages')!;
       const result = await tool.handler({ mailboxId: 10 });
 
       expect(result.content[0].text).toContain('Hello World');
@@ -2432,7 +2536,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'list_messages')!;
+      const tool = mailTools.find((t) => t.name === 'list_messages')!;
       const result = await tool.handler({ mailboxId: 10 });
 
       expect(result.content[0].text).toContain('No messages found');
@@ -2442,7 +2546,7 @@ describe('Mail Tools', () => {
       mockFetchOCS.mockRejectedValue(new Error('OCS API error: 404 Not Found'));
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'list_messages')!;
+      const tool = mailTools.find((t) => t.name === 'list_messages')!;
       const result = await tool.handler({ mailboxId: 999 });
 
       expect(result.isError).toBe(true);
@@ -2473,7 +2577,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'read_message')!;
+      const tool = mailTools.find((t) => t.name === 'read_message')!;
       const result = await tool.handler({ messageId: 100 });
 
       expect(result.content[0].text).toContain('Subject: Test Subject');
@@ -2491,7 +2595,7 @@ describe('Mail Tools', () => {
       mockFetchOCS.mockRejectedValue(new Error('Message not found'));
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'read_message')!;
+      const tool = mailTools.find((t) => t.name === 'read_message')!;
       const result = await tool.handler({ messageId: 999 });
 
       expect(result.isError).toBe(true);
@@ -2509,16 +2613,15 @@ describe('Mail Tools', () => {
         if (callCount === 1) {
           return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve([
-              { id: 1, name: 'Personal', emailAddress: 'me@example.com' },
-            ]),
+            json: () =>
+              Promise.resolve([{ id: 1, name: 'Personal', emailAddress: 'me@example.com' }]),
           });
         }
         return Promise.resolve({ ok: true, status: 200 });
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'send_message')!;
+      const tool = mailTools.find((t) => t.name === 'send_message')!;
       const result = await tool.handler({
         accountId: 1,
         to: ['alice@example.com'],
@@ -2545,7 +2648,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'send_message')!;
+      const tool = mailTools.find((t) => t.name === 'send_message')!;
       const result = await tool.handler({
         accountId: 999,
         to: ['alice@example.com'],
@@ -2563,7 +2666,7 @@ describe('Mail Tools', () => {
       mockFetchMailAPI.mockResolvedValue({ ok: true, status: 200 });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'delete_message')!;
+      const tool = mailTools.find((t) => t.name === 'delete_message')!;
       const result = await tool.handler({ messageId: 100 });
 
       expect(result.content[0].text).toContain('Message 100 deleted');
@@ -2578,7 +2681,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'delete_message')!;
+      const tool = mailTools.find((t) => t.name === 'delete_message')!;
       const result = await tool.handler({ messageId: 999 });
 
       expect(result.isError).toBe(true);
@@ -2591,7 +2694,7 @@ describe('Mail Tools', () => {
       mockFetchMailAPI.mockResolvedValue({ ok: true, status: 200 });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'move_message')!;
+      const tool = mailTools.find((t) => t.name === 'move_message')!;
       const result = await tool.handler({ messageId: 100, destMailboxId: 20 });
 
       expect(result.content[0].text).toContain('Message 100 moved to mailbox 20');
@@ -2609,7 +2712,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'move_message')!;
+      const tool = mailTools.find((t) => t.name === 'move_message')!;
       const result = await tool.handler({ messageId: 100, destMailboxId: 999 });
 
       expect(result.isError).toBe(true);
@@ -2622,7 +2725,7 @@ describe('Mail Tools', () => {
       mockFetchMailAPI.mockResolvedValue({ ok: true, status: 200 });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'set_message_flags')!;
+      const tool = mailTools.find((t) => t.name === 'set_message_flags')!;
       const result = await tool.handler({ messageId: 100, flags: { seen: true, flagged: true } });
 
       expect(result.content[0].text).toContain('Flags updated on message 100');
@@ -2642,7 +2745,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find(t => t.name === 'set_message_flags')!;
+      const tool = mailTools.find((t) => t.name === 'set_message_flags')!;
       const result = await tool.handler({ messageId: 100, flags: { seen: true } });
 
       expect(result.isError).toBe(true);
@@ -2667,22 +2770,38 @@ describe('Bookmarks Tools', () => {
         status: 'success',
         data: [
           {
-            id: 1, url: 'https://example.com', target: '', title: 'Example',
-            description: 'An example site', added: 1700000000, userId: 'testuser',
-            tags: ['tech', 'reference'], folders: [5], clickcount: 3, available: true,
+            id: 1,
+            url: 'https://example.com',
+            target: '',
+            title: 'Example',
+            description: 'An example site',
+            added: 1700000000,
+            userId: 'testuser',
+            tags: ['tech', 'reference'],
+            folders: [5],
+            clickcount: 3,
+            available: true,
             archivedFile: null,
           },
           {
-            id: 2, url: 'https://news.ycombinator.com', target: '', title: 'Hacker News',
-            description: '', added: 1700100000, userId: 'testuser',
-            tags: ['news'], folders: [5, 10], clickcount: 15, available: true,
+            id: 2,
+            url: 'https://news.ycombinator.com',
+            target: '',
+            title: 'Hacker News',
+            description: '',
+            added: 1700100000,
+            userId: 'testuser',
+            tags: ['news'],
+            folders: [5, 10],
+            clickcount: 15,
+            available: true,
             archivedFile: null,
           },
         ],
       });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'list_bookmarks')!;
+      const tool = bookmarksTools.find((t) => t.name === 'list_bookmarks')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('Example');
@@ -2696,7 +2815,7 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockResolvedValue({ status: 'success', data: [] });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'list_bookmarks')!;
+      const tool = bookmarksTools.find((t) => t.name === 'list_bookmarks')!;
       await tool.handler({ search: 'test', tags: ['tech'], folder: 5, limit: 10, sortby: 'title' });
 
       expect(mockFetchBookmarksAPI).toHaveBeenCalledWith('/bookmark', {
@@ -2714,17 +2833,19 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockResolvedValue({ status: 'success', data: [] });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'list_bookmarks')!;
+      const tool = bookmarksTools.find((t) => t.name === 'list_bookmarks')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('No bookmarks found');
     });
 
     it('should handle API errors', async () => {
-      mockFetchBookmarksAPI.mockRejectedValue(new Error('Bookmarks API 500: Internal Server Error'));
+      mockFetchBookmarksAPI.mockRejectedValue(
+        new Error('Bookmarks API 500: Internal Server Error')
+      );
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'list_bookmarks')!;
+      const tool = bookmarksTools.find((t) => t.name === 'list_bookmarks')!;
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);
@@ -2737,15 +2858,23 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockResolvedValue({
         status: 'success',
         item: {
-          id: 1, url: 'https://example.com', target: '', title: 'Example',
-          description: 'An example site', added: 1700000000, userId: 'testuser',
-          tags: ['tech'], folders: [5], clickcount: 3, available: true,
+          id: 1,
+          url: 'https://example.com',
+          target: '',
+          title: 'Example',
+          description: 'An example site',
+          added: 1700000000,
+          userId: 'testuser',
+          tags: ['tech'],
+          folders: [5],
+          clickcount: 3,
+          available: true,
           archivedFile: null,
         },
       });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'get_bookmark')!;
+      const tool = bookmarksTools.find((t) => t.name === 'get_bookmark')!;
       const result = await tool.handler({ id: 1 });
 
       expect(result.content[0].text).toContain('Example');
@@ -2758,7 +2887,7 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockRejectedValue(new Error('Bookmarks API 404: Not Found'));
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'get_bookmark')!;
+      const tool = bookmarksTools.find((t) => t.name === 'get_bookmark')!;
       const result = await tool.handler({ id: 9999 });
 
       expect(result.isError).toBe(true);
@@ -2771,15 +2900,23 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockResolvedValue({
         status: 'success',
         item: {
-          id: 42, url: 'https://new-site.com', target: '', title: 'New Site',
-          description: 'A new bookmark', added: 1700200000, userId: 'testuser',
-          tags: ['new'], folders: [5], clickcount: 0, available: true,
+          id: 42,
+          url: 'https://new-site.com',
+          target: '',
+          title: 'New Site',
+          description: 'A new bookmark',
+          added: 1700200000,
+          userId: 'testuser',
+          tags: ['new'],
+          folders: [5],
+          clickcount: 0,
+          available: true,
           archivedFile: null,
         },
       });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'create_bookmark')!;
+      const tool = bookmarksTools.find((t) => t.name === 'create_bookmark')!;
       const result = await tool.handler({
         url: 'https://new-site.com',
         title: 'New Site',
@@ -2806,7 +2943,7 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockRejectedValue(new Error('Bookmarks API 400: Invalid URL'));
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'create_bookmark')!;
+      const tool = bookmarksTools.find((t) => t.name === 'create_bookmark')!;
       const result = await tool.handler({ url: 'not-a-url' });
 
       expect(result.isError).toBe(true);
@@ -2819,15 +2956,23 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockResolvedValue({
         status: 'success',
         item: {
-          id: 1, url: 'https://example.com', target: '', title: 'Updated Title',
-          description: '', added: 1700000000, userId: 'testuser',
-          tags: ['updated'], folders: [5], clickcount: 3, available: true,
+          id: 1,
+          url: 'https://example.com',
+          target: '',
+          title: 'Updated Title',
+          description: '',
+          added: 1700000000,
+          userId: 'testuser',
+          tags: ['updated'],
+          folders: [5],
+          clickcount: 3,
+          available: true,
           archivedFile: null,
         },
       });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'update_bookmark')!;
+      const tool = bookmarksTools.find((t) => t.name === 'update_bookmark')!;
       const result = await tool.handler({ id: 1, title: 'Updated Title', tags: ['updated'] });
 
       expect(result.content[0].text).toContain('updated successfully');
@@ -2843,7 +2988,7 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockResolvedValue({ status: 'success' });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'delete_bookmark')!;
+      const tool = bookmarksTools.find((t) => t.name === 'delete_bookmark')!;
       const result = await tool.handler({ id: 1 });
 
       expect(result.content[0].text).toContain('deleted successfully');
@@ -2854,7 +2999,7 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockRejectedValue(new Error('Bookmarks API 404: Not Found'));
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'delete_bookmark')!;
+      const tool = bookmarksTools.find((t) => t.name === 'delete_bookmark')!;
       const result = await tool.handler({ id: 9999 });
 
       expect(result.isError).toBe(true);
@@ -2871,7 +3016,10 @@ describe('Bookmarks Tools', () => {
         data: [
           { id: 1, title: 'Tech', parent_folder: -1, userId: 'testuser', children: [] },
           {
-            id: 2, title: 'News', parent_folder: -1, userId: 'testuser',
+            id: 2,
+            title: 'News',
+            parent_folder: -1,
+            userId: 'testuser',
             children: [
               { id: 3, title: 'Daily', parent_folder: 2, userId: 'testuser', children: [] },
             ],
@@ -2880,7 +3028,7 @@ describe('Bookmarks Tools', () => {
       });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'list_bookmark_folders')!;
+      const tool = bookmarksTools.find((t) => t.name === 'list_bookmark_folders')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('Tech');
@@ -2893,7 +3041,7 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockResolvedValue({ status: 'success', data: [] });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'list_bookmark_folders')!;
+      const tool = bookmarksTools.find((t) => t.name === 'list_bookmark_folders')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('No bookmark folders found');
@@ -2907,15 +3055,24 @@ describe('Bookmarks Tools', () => {
         data: [
           { id: 3, title: 'Subfolder', parent_folder: 1, userId: 'testuser' },
           {
-            id: 10, url: 'https://example.com', target: '', title: 'Example',
-            description: '', added: 1700000000, userId: 'testuser',
-            tags: [], folders: [1], clickcount: 0, available: true, archivedFile: null,
+            id: 10,
+            url: 'https://example.com',
+            target: '',
+            title: 'Example',
+            description: '',
+            added: 1700000000,
+            userId: 'testuser',
+            tags: [],
+            folders: [1],
+            clickcount: 0,
+            available: true,
+            archivedFile: null,
           },
         ],
       });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'get_bookmark_folder_contents')!;
+      const tool = bookmarksTools.find((t) => t.name === 'get_bookmark_folder_contents')!;
       const result = await tool.handler({ id: 1 });
 
       expect(result.content[0].text).toContain('2 items');
@@ -2927,7 +3084,7 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockResolvedValue({ status: 'success', data: [] });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'get_bookmark_folder_contents')!;
+      const tool = bookmarksTools.find((t) => t.name === 'get_bookmark_folder_contents')!;
       const result = await tool.handler({ id: 1 });
 
       expect(result.content[0].text).toContain('Folder is empty');
@@ -2942,7 +3099,7 @@ describe('Bookmarks Tools', () => {
       });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'create_bookmark_folder')!;
+      const tool = bookmarksTools.find((t) => t.name === 'create_bookmark_folder')!;
       const result = await tool.handler({ title: 'New Folder' });
 
       expect(result.content[0].text).toContain('created successfully');
@@ -2960,7 +3117,7 @@ describe('Bookmarks Tools', () => {
       });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'create_bookmark_folder')!;
+      const tool = bookmarksTools.find((t) => t.name === 'create_bookmark_folder')!;
       await tool.handler({ title: 'Subfolder', parent_folder: 5 });
 
       expect(mockFetchBookmarksAPI).toHaveBeenCalledWith('/folder', {
@@ -2978,7 +3135,7 @@ describe('Bookmarks Tools', () => {
       });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'update_bookmark_folder')!;
+      const tool = bookmarksTools.find((t) => t.name === 'update_bookmark_folder')!;
       const result = await tool.handler({ id: 5, title: 'Renamed' });
 
       expect(result.content[0].text).toContain('updated successfully');
@@ -2994,7 +3151,7 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockResolvedValue({ status: 'success' });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'delete_bookmark_folder')!;
+      const tool = bookmarksTools.find((t) => t.name === 'delete_bookmark_folder')!;
       const result = await tool.handler({ id: 5 });
 
       expect(result.content[0].text).toContain('deleted successfully');
@@ -3012,7 +3169,7 @@ describe('Bookmarks Tools', () => {
       });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'list_bookmark_tags')!;
+      const tool = bookmarksTools.find((t) => t.name === 'list_bookmark_tags')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('4');
@@ -3026,7 +3183,7 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockResolvedValue({ status: 'success', data: [] });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'list_bookmark_tags')!;
+      const tool = bookmarksTools.find((t) => t.name === 'list_bookmark_tags')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('No bookmark tags found');
@@ -3038,7 +3195,7 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockResolvedValue({ status: 'success' });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'rename_bookmark_tag')!;
+      const tool = bookmarksTools.find((t) => t.name === 'rename_bookmark_tag')!;
       const result = await tool.handler({ old_name: 'oldtag', new_name: 'newtag' });
 
       expect(result.content[0].text).toContain('renamed');
@@ -3056,7 +3213,7 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockResolvedValue({ status: 'success' });
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'delete_bookmark_tag')!;
+      const tool = bookmarksTools.find((t) => t.name === 'delete_bookmark_tag')!;
       const result = await tool.handler({ name: 'oldtag' });
 
       expect(result.content[0].text).toContain('deleted successfully');
@@ -3067,7 +3224,7 @@ describe('Bookmarks Tools', () => {
       mockFetchBookmarksAPI.mockRejectedValue(new Error('Bookmarks API 404: Tag not found'));
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
-      const tool = bookmarksTools.find(t => t.name === 'delete_bookmark_tag')!;
+      const tool = bookmarksTools.find((t) => t.name === 'delete_bookmark_tag')!;
       const result = await tool.handler({ name: 'nonexistent' });
 
       expect(result.isError).toBe(true);
@@ -3090,17 +3247,31 @@ describe('Maps Tools', () => {
     it('should return formatted favorites list', async () => {
       mockFetchMapsExternalAPI.mockResolvedValue([
         {
-          id: 1, name: 'Home', lat: 52.52, lng: 13.405, category: 'Personal',
-          comment: 'My home', extensions: '', date_created: 1700000000, date_modified: 1700000000,
+          id: 1,
+          name: 'Home',
+          lat: 52.52,
+          lng: 13.405,
+          category: 'Personal',
+          comment: 'My home',
+          extensions: '',
+          date_created: 1700000000,
+          date_modified: 1700000000,
         },
         {
-          id: 2, name: 'Office', lat: 48.8566, lng: 2.3522, category: 'Work',
-          comment: '', extensions: '', date_created: 1700100000, date_modified: 1700100000,
+          id: 2,
+          name: 'Office',
+          lat: 48.8566,
+          lng: 2.3522,
+          category: 'Work',
+          comment: '',
+          extensions: '',
+          date_created: 1700100000,
+          date_modified: 1700100000,
         },
       ]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_favorites')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_favorites')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('Home');
@@ -3113,7 +3284,7 @@ describe('Maps Tools', () => {
       mockFetchMapsExternalAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_favorites')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_favorites')!;
       await tool.handler({ pruneBefore: 1700000000 });
 
       expect(mockFetchMapsExternalAPI).toHaveBeenCalledWith('/favorites', {
@@ -3125,7 +3296,7 @@ describe('Maps Tools', () => {
       mockFetchMapsExternalAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_favorites')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_favorites')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('No map favorites found');
@@ -3135,7 +3306,7 @@ describe('Maps Tools', () => {
       mockFetchMapsExternalAPI.mockRejectedValue(new Error('Maps API 500: Internal Server Error'));
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_favorites')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_favorites')!;
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);
@@ -3146,14 +3317,25 @@ describe('Maps Tools', () => {
   describe('create_map_favorite', () => {
     it('should create a favorite successfully', async () => {
       mockFetchMapsExternalAPI.mockResolvedValue({
-        id: 10, name: 'Cafe', lat: 52.52, lng: 13.405, category: 'Food',
-        comment: 'Great coffee', extensions: '', date_created: 1700200000, date_modified: 1700200000,
+        id: 10,
+        name: 'Cafe',
+        lat: 52.52,
+        lng: 13.405,
+        category: 'Food',
+        comment: 'Great coffee',
+        extensions: '',
+        date_created: 1700200000,
+        date_modified: 1700200000,
       });
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'create_map_favorite')!;
+      const tool = mapsTools.find((t) => t.name === 'create_map_favorite')!;
       const result = await tool.handler({
-        name: 'Cafe', lat: 52.52, lng: 13.405, category: 'Food', comment: 'Great coffee',
+        name: 'Cafe',
+        lat: 52.52,
+        lng: 13.405,
+        category: 'Food',
+        comment: 'Great coffee',
       });
 
       expect(result.content[0].text).toContain('Favorite created');
@@ -3168,7 +3350,7 @@ describe('Maps Tools', () => {
       mockFetchMapsExternalAPI.mockRejectedValue(new Error('Maps API 400: Bad Request'));
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'create_map_favorite')!;
+      const tool = mapsTools.find((t) => t.name === 'create_map_favorite')!;
       const result = await tool.handler({ lat: NaN, lng: NaN });
 
       expect(result.isError).toBe(true);
@@ -3179,12 +3361,19 @@ describe('Maps Tools', () => {
   describe('update_map_favorite', () => {
     it('should update a favorite successfully', async () => {
       mockFetchMapsExternalAPI.mockResolvedValue({
-        id: 1, name: 'Updated Name', lat: 52.52, lng: 13.405, category: 'Personal',
-        comment: '', extensions: '', date_created: 1700000000, date_modified: 1700300000,
+        id: 1,
+        name: 'Updated Name',
+        lat: 52.52,
+        lng: 13.405,
+        category: 'Personal',
+        comment: '',
+        extensions: '',
+        date_created: 1700000000,
+        date_modified: 1700300000,
       });
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'update_map_favorite')!;
+      const tool = mapsTools.find((t) => t.name === 'update_map_favorite')!;
       const result = await tool.handler({ id: 1, name: 'Updated Name' });
 
       expect(result.content[0].text).toContain('Favorite 1 updated');
@@ -3200,7 +3389,7 @@ describe('Maps Tools', () => {
       mockFetchMapsExternalAPI.mockResolvedValue('DELETED');
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'delete_map_favorite')!;
+      const tool = mapsTools.find((t) => t.name === 'delete_map_favorite')!;
       const result = await tool.handler({ id: 1 });
 
       expect(result.content[0].text).toContain('Favorite 1 deleted');
@@ -3211,7 +3400,7 @@ describe('Maps Tools', () => {
       mockFetchMapsExternalAPI.mockRejectedValue(new Error('Maps API 400: Not found'));
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'delete_map_favorite')!;
+      const tool = mapsTools.find((t) => t.name === 'delete_map_favorite')!;
       const result = await tool.handler({ id: 9999 });
 
       expect(result.isError).toBe(true);
@@ -3229,7 +3418,7 @@ describe('Maps Tools', () => {
       ]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_devices')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_devices')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('PhoneTrack/1.0');
@@ -3241,7 +3430,7 @@ describe('Maps Tools', () => {
       mockFetchMapsExternalAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_devices')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_devices')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('No map devices found');
@@ -3256,7 +3445,7 @@ describe('Maps Tools', () => {
       ]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'get_map_device_points')!;
+      const tool = mapsTools.find((t) => t.name === 'get_map_device_points')!;
       const result = await tool.handler({ id: 1 });
 
       expect(result.content[0].text).toContain('52.52, 13.405');
@@ -3268,7 +3457,7 @@ describe('Maps Tools', () => {
       mockFetchMapsExternalAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'get_map_device_points')!;
+      const tool = mapsTools.find((t) => t.name === 'get_map_device_points')!;
       await tool.handler({ id: 1, pruneBefore: 1700000000 });
 
       expect(mockFetchMapsExternalAPI).toHaveBeenCalledWith('/devices/1', {
@@ -3280,7 +3469,7 @@ describe('Maps Tools', () => {
       mockFetchMapsExternalAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'get_map_device_points')!;
+      const tool = mapsTools.find((t) => t.name === 'get_map_device_points')!;
       const result = await tool.handler({ id: 1 });
 
       expect(result.content[0].text).toContain('No points found');
@@ -3292,9 +3481,12 @@ describe('Maps Tools', () => {
       mockFetchMapsExternalAPI.mockResolvedValue({ deviceId: 1, pointId: 42 });
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'add_map_device_point')!;
+      const tool = mapsTools.find((t) => t.name === 'add_map_device_point')!;
       const result = await tool.handler({
-        lat: 52.52, lng: 13.405, user_agent: 'TestDevice', altitude: 35,
+        lat: 52.52,
+        lng: 13.405,
+        user_agent: 'TestDevice',
+        altitude: 35,
       });
 
       expect(result.content[0].text).toContain('device ID: 1');
@@ -3308,10 +3500,14 @@ describe('Maps Tools', () => {
 
   describe('update_map_device', () => {
     it('should update device color', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue({ id: 1, user_agent: 'TestDevice', color: '#0000ff' });
+      mockFetchMapsExternalAPI.mockResolvedValue({
+        id: 1,
+        user_agent: 'TestDevice',
+        color: '#0000ff',
+      });
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'update_map_device')!;
+      const tool = mapsTools.find((t) => t.name === 'update_map_device')!;
       const result = await tool.handler({ id: 1, color: '#0000ff' });
 
       expect(result.content[0].text).toContain('Device 1 updated');
@@ -3327,7 +3523,7 @@ describe('Maps Tools', () => {
       mockFetchMapsExternalAPI.mockResolvedValue('DELETED');
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'delete_map_device')!;
+      const tool = mapsTools.find((t) => t.name === 'delete_map_device')!;
       const result = await tool.handler({ id: 1 });
 
       expect(result.content[0].text).toContain('Device 1 deleted');
@@ -3338,7 +3534,7 @@ describe('Maps Tools', () => {
       mockFetchMapsExternalAPI.mockRejectedValue(new Error('Maps API 400: Not found'));
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'delete_map_device')!;
+      const tool = mapsTools.find((t) => t.name === 'delete_map_device')!;
       const result = await tool.handler({ id: 9999 });
 
       expect(result.isError).toBe(true);
@@ -3356,7 +3552,7 @@ describe('Maps Tools', () => {
       ]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_tracks')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_tracks')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('Track ID: 1');
@@ -3368,7 +3564,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_tracks')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_tracks')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('No tracks found');
@@ -3378,7 +3574,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_tracks')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_tracks')!;
       await tool.handler({ myMapId: 5 });
 
       expect(mockFetchMapsAPI).toHaveBeenCalledWith('/tracks', {
@@ -3395,7 +3591,7 @@ describe('Maps Tools', () => {
       });
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'get_map_track')!;
+      const tool = mapsTools.find((t) => t.name === 'get_map_track')!;
       const result = await tool.handler({ id: 1 });
 
       expect(result.content[0].text).toContain('Morning Run');
@@ -3409,7 +3605,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue('EDITED');
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'update_map_track')!;
+      const tool = mapsTools.find((t) => t.name === 'update_map_track')!;
       const result = await tool.handler({ id: 1, color: '#00ff00' });
 
       expect(result.content[0].text).toContain('Track 1 updated');
@@ -3429,7 +3625,7 @@ describe('Maps Tools', () => {
       ]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_photos')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_photos')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('File ID: 100');
@@ -3441,7 +3637,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_photos')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_photos')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('No geolocated photos found');
@@ -3455,7 +3651,7 @@ describe('Maps Tools', () => {
       ]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_photos_nonlocalized')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_photos_nonlocalized')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('File ID: 200');
@@ -3466,7 +3662,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_map_photos_nonlocalized')!;
+      const tool = mapsTools.find((t) => t.name === 'list_map_photos_nonlocalized')!;
       await tool.handler({ limit: 50, offset: 10, timezone: 'Europe/Berlin' });
 
       expect(mockFetchMapsAPI).toHaveBeenCalledWith('/photos/nonlocalized', {
@@ -3480,7 +3676,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue({});
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'place_map_photos')!;
+      const tool = mapsTools.find((t) => t.name === 'place_map_photos')!;
       const result = await tool.handler({
         paths: ['/Photos/a.jpg', '/Photos/b.jpg'],
         lats: [52.52, 48.85],
@@ -3490,7 +3686,11 @@ describe('Maps Tools', () => {
       expect(result.content[0].text).toContain('2 photo(s)');
       expect(mockFetchMapsAPI).toHaveBeenCalledWith('/photos', {
         method: 'POST',
-        body: { paths: ['/Photos/a.jpg', '/Photos/b.jpg'], lats: [52.52, 48.85], lngs: [13.405, 2.35] },
+        body: {
+          paths: ['/Photos/a.jpg', '/Photos/b.jpg'],
+          lats: [52.52, 48.85],
+          lngs: [13.405, 2.35],
+        },
       });
     });
   });
@@ -3500,7 +3700,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'reset_map_photo_coords')!;
+      const tool = mapsTools.find((t) => t.name === 'reset_map_photo_coords')!;
       const result = await tool.handler({ paths: ['/Photos/a.jpg'] });
 
       expect(result.content[0].text).toContain('1 photo(s)');
@@ -3521,7 +3721,7 @@ describe('Maps Tools', () => {
       ]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_maps')!;
+      const tool = mapsTools.find((t) => t.name === 'list_maps')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('Map ID: 1');
@@ -3534,7 +3734,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'list_maps')!;
+      const tool = mapsTools.find((t) => t.name === 'list_maps')!;
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('No custom maps found');
@@ -3546,7 +3746,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue({ id: 10, name: 'Vacation' });
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'create_map')!;
+      const tool = mapsTools.find((t) => t.name === 'create_map')!;
       const result = await tool.handler({ name: 'Vacation' });
 
       expect(result.content[0].text).toContain('Map created');
@@ -3561,7 +3761,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue({ id: 11, name: 'New Map' });
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'create_map')!;
+      const tool = mapsTools.find((t) => t.name === 'create_map')!;
       await tool.handler({});
 
       expect(mockFetchMapsAPI).toHaveBeenCalledWith('/maps', {
@@ -3576,7 +3776,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue({ id: 1, name: 'Renamed Trip' });
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'update_map')!;
+      const tool = mapsTools.find((t) => t.name === 'update_map')!;
       const result = await tool.handler({ id: 1, values: { newName: 'Renamed Trip' } });
 
       expect(result.content[0].text).toContain('Map 1 updated');
@@ -3592,7 +3792,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue({});
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'delete_map')!;
+      const tool = mapsTools.find((t) => t.name === 'delete_map')!;
       const result = await tool.handler({ id: 1 });
 
       expect(result.content[0].text).toContain('Map 1 deleted');
@@ -3603,7 +3803,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockRejectedValue(new Error('Maps API 404: Not found'));
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'delete_map')!;
+      const tool = mapsTools.find((t) => t.name === 'delete_map')!;
       const result = await tool.handler({ id: 9999 });
 
       expect(result.isError).toBe(true);
@@ -3618,11 +3818,14 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue({ id: 5, file_id: 200 });
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'export_map_route')!;
+      const tool = mapsTools.find((t) => t.name === 'export_map_route')!;
       const result = await tool.handler({
         name: 'Morning Walk',
         type: 'track',
-        coords: [{ lat: 52.52, lng: 13.405 }, { lat: 52.53, lng: 13.41 }],
+        coords: [
+          { lat: 52.52, lng: 13.405 },
+          { lat: 52.53, lng: 13.41 },
+        ],
       });
 
       expect(result.content[0].text).toContain('Morning Walk');
@@ -3632,7 +3835,10 @@ describe('Maps Tools', () => {
         body: {
           name: 'Morning Walk',
           type: 'track',
-          coords: [{ lat: 52.52, lng: 13.405 }, { lat: 52.53, lng: 13.41 }],
+          coords: [
+            { lat: 52.52, lng: 13.405 },
+            { lat: 52.53, lng: 13.41 },
+          ],
         },
       });
     });
@@ -3645,7 +3851,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue('/Maps/2024-01-01 favorites.gpx');
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'export_map_favorites')!;
+      const tool = mapsTools.find((t) => t.name === 'export_map_favorites')!;
       const result = await tool.handler({ categoryList: ['Restaurant', 'Home'] });
 
       expect(result.content[0].text).toContain('exported');
@@ -3662,7 +3868,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue({ imported: 5 });
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'import_map_favorites')!;
+      const tool = mapsTools.find((t) => t.name === 'import_map_favorites')!;
       const result = await tool.handler({ path: '/Maps/favorites.gpx' });
 
       expect(result.content[0].text).toContain('imported');
@@ -3677,7 +3883,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockRejectedValue(new Error('Maps API 400: Unsupported format'));
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'import_map_favorites')!;
+      const tool = mapsTools.find((t) => t.name === 'import_map_favorites')!;
       const result = await tool.handler({ path: '/Maps/bad.txt' });
 
       expect(result.isError).toBe(true);
@@ -3690,7 +3896,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue('/Maps/2024-01-01 devices.gpx');
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'export_map_devices')!;
+      const tool = mapsTools.find((t) => t.name === 'export_map_devices')!;
       const result = await tool.handler({ deviceIdList: [1, 2] });
 
       expect(result.content[0].text).toContain('exported');
@@ -3707,7 +3913,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockResolvedValue(42);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'import_map_devices')!;
+      const tool = mapsTools.find((t) => t.name === 'import_map_devices')!;
       const result = await tool.handler({ path: '/Maps/track.gpx' });
 
       expect(result.content[0].text).toContain('42 device point(s)');
@@ -3721,7 +3927,7 @@ describe('Maps Tools', () => {
       mockFetchMapsAPI.mockRejectedValue(new Error('Maps API 400: File not found'));
 
       const { mapsTools } = await import('../tools/apps/maps.js');
-      const tool = mapsTools.find(t => t.name === 'import_map_devices')!;
+      const tool = mapsTools.find((t) => t.name === 'import_map_devices')!;
       const result = await tool.handler({ path: '/Maps/missing.gpx' });
 
       expect(result.isError).toBe(true);

@@ -79,7 +79,7 @@ describe('Tag Tools', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/remote.php/dav/files/testuser/Photos/test.png'),
-        expect.any(Object),
+        expect.any(Object)
       );
     });
 
@@ -228,7 +228,7 @@ describe('Tag Tools', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/remote.php/dav/systemtags-relations/files/42/7'),
-        expect.objectContaining({ method: 'PUT' }),
+        expect.objectContaining({ method: 'PUT' })
       );
     });
 
@@ -302,7 +302,7 @@ describe('Tag Tools', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/remote.php/dav/systemtags-relations/files/42/7'),
-        expect.objectContaining({ method: 'DELETE' }),
+        expect.objectContaining({ method: 'DELETE' })
       );
     });
 

@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { fetchCalDAV } from "../../client/caldav.js";
-import { getNextcloudConfig } from "../types.js";
+import { z } from 'zod';
+import { fetchCalDAV } from '../../client/caldav.js';
+import { getNextcloudConfig } from '../types.js';
 
 /**
  * File Tag Tools for Nextcloud
@@ -12,18 +12,15 @@ import { getNextcloudConfig } from "../types.js";
  * Get personal tags for a file
  */
 export const getFileTagsTool = {
-  name: "get_file_tags",
-  description:
-    "Get the personal tags assigned to a file or folder in Nextcloud",
+  name: 'get_file_tags',
+  description: 'Get the personal tags assigned to a file or folder in Nextcloud',
   inputSchema: z.object({
-    path: z
-      .string()
-      .describe("The file or folder path in Nextcloud (e.g., '/Photos/test.png')"),
+    path: z.string().describe("The file or folder path in Nextcloud (e.g., '/Photos/test.png')"),
   }),
   handler: async (args: { path: string }) => {
     try {
       const config = getNextcloudConfig();
-      const url = `${config.url}/remote.php/dav/files/${config.user}/${args.path.replace(/^\//, "")}`;
+      const url = `${config.url}/remote.php/dav/files/${config.user}/${args.path.replace(/^\//, '')}`;
 
       const body = `<?xml version="1.0"?>
 <d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
@@ -33,9 +30,9 @@ export const getFileTagsTool = {
 </d:propfind>`;
 
       const response = await fetchCalDAV(url, {
-        method: "PROPFIND",
+        method: 'PROPFIND',
         body,
-        headers: { Depth: "0" },
+        headers: { Depth: '0' },
       });
 
       const text = await response.text();
@@ -44,7 +41,7 @@ export const getFileTagsTool = {
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `Error getting tags: ${response.status} ${response.statusText}`,
             },
           ],
@@ -54,17 +51,15 @@ export const getFileTagsTool = {
 
       // Parse <oc:tag> elements from response
       const tagMatches = text.match(/<oc:tag[^>]*>([^<]*)<\/oc:tag>/g) || [];
-      const tags = tagMatches.map((m) =>
-        m.replace(/<\/?oc:tag[^>]*>/g, "").trim()
-      );
+      const tags = tagMatches.map((m) => m.replace(/<\/?oc:tag[^>]*>/g, '').trim());
 
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text:
               tags.length > 0
-                ? `Tags for ${args.path}: ${tags.join(", ")}`
+                ? `Tags for ${args.path}: ${tags.join(', ')}`
                 : `No tags found for ${args.path}`,
           },
         ],
@@ -73,7 +68,7 @@ export const getFileTagsTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error getting file tags: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -87,13 +82,11 @@ export const getFileTagsTool = {
  * Set personal tags on a file (replaces all existing personal tags)
  */
 export const setFileTagsTool = {
-  name: "set_file_tags",
+  name: 'set_file_tags',
   description:
-    "Set personal tags on a file or folder in Nextcloud. Replaces all existing personal tags. Use an empty array to clear all tags.",
+    'Set personal tags on a file or folder in Nextcloud. Replaces all existing personal tags. Use an empty array to clear all tags.',
   inputSchema: z.object({
-    path: z
-      .string()
-      .describe("The file or folder path in Nextcloud (e.g., '/Photos/test.png')"),
+    path: z.string().describe("The file or folder path in Nextcloud (e.g., '/Photos/test.png')"),
     tags: z
       .array(z.string())
       .describe("Array of tag names to set (e.g., ['Wallpapers', 'Nature'])"),
@@ -101,12 +94,12 @@ export const setFileTagsTool = {
   handler: async (args: { path: string; tags: string[] }) => {
     try {
       const config = getNextcloudConfig();
-      const url = `${config.url}/remote.php/dav/files/${config.user}/${args.path.replace(/^\//, "")}`;
+      const url = `${config.url}/remote.php/dav/files/${config.user}/${args.path.replace(/^\//, '')}`;
 
       const tagElements =
         args.tags.length > 0
-          ? args.tags.map((t) => `<oc:tag>${t}</oc:tag>`).join("\n                ")
-          : "";
+          ? args.tags.map((t) => `<oc:tag>${t}</oc:tag>`).join('\n                ')
+          : '';
 
       const body = `<?xml version="1.0"?>
 <d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
@@ -120,7 +113,7 @@ export const setFileTagsTool = {
 </d:propertyupdate>`;
 
       const response = await fetchCalDAV(url, {
-        method: "PROPPATCH",
+        method: 'PROPPATCH',
         body,
       });
 
@@ -129,7 +122,7 @@ export const setFileTagsTool = {
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `Error setting tags: ${response.status} ${response.statusText} - ${text}`,
             },
           ],
@@ -140,10 +133,10 @@ export const setFileTagsTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text:
               args.tags.length > 0
-                ? `Tags set on ${args.path}: ${args.tags.join(", ")}`
+                ? `Tags set on ${args.path}: ${args.tags.join(', ')}`
                 : `All tags cleared from ${args.path}`,
           },
         ],
@@ -152,7 +145,7 @@ export const setFileTagsTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error setting file tags: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -166,12 +159,12 @@ export const setFileTagsTool = {
  * Assign a system tag to a file
  */
 export const assignSystemTagTool = {
-  name: "assign_system_tag",
+  name: 'assign_system_tag',
   description:
-    "Assign a system tag to a file by file ID and tag ID. Use get_file_info to obtain the file ID.",
+    'Assign a system tag to a file by file ID and tag ID. Use get_file_info to obtain the file ID.',
   inputSchema: z.object({
-    fileId: z.number().describe("The Nextcloud file ID"),
-    tagId: z.number().describe("The system tag ID to assign"),
+    fileId: z.number().describe('The Nextcloud file ID'),
+    tagId: z.number().describe('The system tag ID to assign'),
   }),
   handler: async (args: { fileId: number; tagId: number }) => {
     try {
@@ -179,9 +172,9 @@ export const assignSystemTagTool = {
       const url = `${config.url}/remote.php/dav/systemtags-relations/files/${args.fileId}/${args.tagId}`;
 
       const response = await fetchCalDAV(url, {
-        method: "PUT",
+        method: 'PUT',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
       });
 
@@ -190,7 +183,7 @@ export const assignSystemTagTool = {
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `Error assigning system tag: ${response.status} ${response.statusText} - ${text}`,
             },
           ],
@@ -201,7 +194,7 @@ export const assignSystemTagTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `System tag ${args.tagId} assigned to file ${args.fileId}`,
           },
         ],
@@ -210,7 +203,7 @@ export const assignSystemTagTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error assigning system tag: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -224,12 +217,11 @@ export const assignSystemTagTool = {
  * Remove a system tag from a file
  */
 export const removeSystemTagTool = {
-  name: "remove_system_tag",
-  description:
-    "Remove a system tag from a file by file ID and tag ID",
+  name: 'remove_system_tag',
+  description: 'Remove a system tag from a file by file ID and tag ID',
   inputSchema: z.object({
-    fileId: z.number().describe("The Nextcloud file ID"),
-    tagId: z.number().describe("The system tag ID to remove"),
+    fileId: z.number().describe('The Nextcloud file ID'),
+    tagId: z.number().describe('The system tag ID to remove'),
   }),
   handler: async (args: { fileId: number; tagId: number }) => {
     try {
@@ -237,9 +229,9 @@ export const removeSystemTagTool = {
       const url = `${config.url}/remote.php/dav/systemtags-relations/files/${args.fileId}/${args.tagId}`;
 
       const response = await fetchCalDAV(url, {
-        method: "DELETE",
+        method: 'DELETE',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
       });
 
@@ -248,7 +240,7 @@ export const removeSystemTagTool = {
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `Error removing system tag: ${response.status} ${response.statusText} - ${text}`,
             },
           ],
@@ -259,7 +251,7 @@ export const removeSystemTagTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `System tag ${args.tagId} removed from file ${args.fileId}`,
           },
         ],
@@ -268,7 +260,7 @@ export const removeSystemTagTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error removing system tag: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -282,9 +274,9 @@ export const removeSystemTagTool = {
  * List all available system tags
  */
 export const listSystemTagsTool = {
-  name: "list_system_tags",
+  name: 'list_system_tags',
   description:
-    "List all available system tags in Nextcloud with their IDs, names, and properties. Use this to find tag IDs before assigning them to files.",
+    'List all available system tags in Nextcloud with their IDs, names, and properties. Use this to find tag IDs before assigning them to files.',
   inputSchema: z.object({}),
   handler: async () => {
     try {
@@ -303,9 +295,9 @@ export const listSystemTagsTool = {
 </d:propfind>`;
 
       const response = await fetchCalDAV(url, {
-        method: "PROPFIND",
+        method: 'PROPFIND',
         body,
-        headers: { Depth: "1" },
+        headers: { Depth: '1' },
       });
 
       const text = await response.text();
@@ -314,7 +306,7 @@ export const listSystemTagsTool = {
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `Error listing system tags: ${response.status} ${response.statusText}`,
             },
           ],
@@ -324,7 +316,13 @@ export const listSystemTagsTool = {
 
       // Parse each <d:response> block for tag properties
       const responses = text.split(/<d:response>/g).slice(1);
-      const tags: { id: string; name: string; userVisible: string; userAssignable: string; canAssign: string }[] = [];
+      const tags: {
+        id: string;
+        name: string;
+        userVisible: string;
+        userAssignable: string;
+        canAssign: string;
+      }[] = [];
 
       for (const resp of responses) {
         const id = resp.match(/<oc:id>([^<]*)<\/oc:id>/)?.[1];
@@ -337,30 +335,29 @@ export const listSystemTagsTool = {
           tags.push({
             id,
             name,
-            userVisible: userVisible || "true",
-            userAssignable: userAssignable || "true",
-            canAssign: canAssign || "true",
+            userVisible: userVisible || 'true',
+            userAssignable: userAssignable || 'true',
+            canAssign: canAssign || 'true',
           });
         }
       }
 
       if (tags.length === 0) {
         return {
-          content: [
-            { type: "text" as const, text: "No system tags found." },
-          ],
+          content: [{ type: 'text' as const, text: 'No system tags found.' }],
         };
       }
 
       const lines = tags.map(
-        (t) => `- ID: ${t.id}, Name: "${t.name}", Visible: ${t.userVisible}, Assignable: ${t.userAssignable}, CanAssign: ${t.canAssign}`
+        (t) =>
+          `- ID: ${t.id}, Name: "${t.name}", Visible: ${t.userVisible}, Assignable: ${t.userAssignable}, CanAssign: ${t.canAssign}`
       );
 
       return {
         content: [
           {
-            type: "text" as const,
-            text: `System tags (${tags.length}):\n${lines.join("\n")}`,
+            type: 'text' as const,
+            text: `System tags (${tags.length}):\n${lines.join('\n')}`,
           },
         ],
       };
@@ -368,7 +365,7 @@ export const listSystemTagsTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error listing system tags: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -382,19 +379,18 @@ export const listSystemTagsTool = {
  * Create a new system tag
  */
 export const createSystemTagTool = {
-  name: "create_system_tag",
-  description:
-    "Create a new system tag in Nextcloud. Returns the created tag info.",
+  name: 'create_system_tag',
+  description: 'Create a new system tag in Nextcloud. Returns the created tag info.',
   inputSchema: z.object({
-    name: z.string().describe("The name for the new system tag"),
+    name: z.string().describe('The name for the new system tag'),
     userVisible: z
       .boolean()
       .default(true)
-      .describe("Whether the tag is visible to users (default: true)"),
+      .describe('Whether the tag is visible to users (default: true)'),
     userAssignable: z
       .boolean()
       .default(true)
-      .describe("Whether users can assign this tag (default: true)"),
+      .describe('Whether users can assign this tag (default: true)'),
   }),
   handler: async (args: { name: string; userVisible: boolean; userAssignable: boolean }) => {
     try {
@@ -402,7 +398,7 @@ export const createSystemTagTool = {
       const url = `${config.url}/remote.php/dav/systemtags/`;
 
       const response = await fetchCalDAV(url, {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({
           userVisible: args.userVisible,
           userAssignable: args.userAssignable,
@@ -410,7 +406,7 @@ export const createSystemTagTool = {
           name: args.name,
         }),
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
       });
 
@@ -419,7 +415,7 @@ export const createSystemTagTool = {
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `Error creating system tag: ${response.status} ${response.statusText} - ${text}`,
             },
           ],
@@ -428,13 +424,13 @@ export const createSystemTagTool = {
       }
 
       // The new tag ID is in the Content-Location header
-      const location = response.headers.get("Content-Location") || "";
-      const tagId = location.split("/").filter(Boolean).pop() || "unknown";
+      const location = response.headers.get('Content-Location') || '';
+      const tagId = location.split('/').filter(Boolean).pop() || 'unknown';
 
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `System tag created: "${args.name}" (ID: ${tagId})`,
           },
         ],
@@ -443,7 +439,7 @@ export const createSystemTagTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error creating system tag: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],

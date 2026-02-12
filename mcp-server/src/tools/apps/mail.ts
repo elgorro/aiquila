@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { fetchMailAPI } from "../../client/mail.js";
-import { fetchOCS } from "../../client/ocs.js";
+import { z } from 'zod';
+import { fetchMailAPI } from '../../client/mail.js';
+import { fetchOCS } from '../../client/ocs.js';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -51,69 +51,72 @@ interface MailMessageSummary {
 function stripHtml(html: string): string {
   let text = html;
   // Remove style and script blocks
-  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
-  text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+  text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
   // Convert line-break tags to newlines
-  text = text.replace(/<br\s*\/?>/gi, "\n");
-  text = text.replace(/<\/p>/gi, "\n\n");
-  text = text.replace(/<\/div>/gi, "\n");
-  text = text.replace(/<\/li>/gi, "\n");
-  text = text.replace(/<li[^>]*>/gi, "- ");
+  text = text.replace(/<br\s*\/?>/gi, '\n');
+  text = text.replace(/<\/p>/gi, '\n\n');
+  text = text.replace(/<\/div>/gi, '\n');
+  text = text.replace(/<\/li>/gi, '\n');
+  text = text.replace(/<li[^>]*>/gi, '- ');
   // Strip remaining tags
-  text = text.replace(/<[^>]+>/g, "");
+  text = text.replace(/<[^>]+>/g, '');
   // Decode HTML entities
-  text = text.replace(/&amp;/g, "&");
-  text = text.replace(/&lt;/g, "<");
-  text = text.replace(/&gt;/g, ">");
+  text = text.replace(/&amp;/g, '&');
+  text = text.replace(/&lt;/g, '<');
+  text = text.replace(/&gt;/g, '>');
   text = text.replace(/&quot;/g, '"');
   text = text.replace(/&#39;/g, "'");
-  text = text.replace(/&nbsp;/g, " ");
+  text = text.replace(/&nbsp;/g, ' ');
   // Collapse multiple blank lines
-  text = text.replace(/\n{3,}/g, "\n\n");
+  text = text.replace(/\n{3,}/g, '\n\n');
   return text.trim();
 }
 
 function formatDate(dateInt: number): string {
   const d = new Date(dateInt * 1000);
-  const pad = (n: number) => String(n).padStart(2, "0");
+  const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function formatRecipients(recipients: MailRecipient[]): string {
-  if (!recipients || recipients.length === 0) return "";
+  if (!recipients || recipients.length === 0) return '';
   return recipients
     .map((r) => (r.label && r.label !== r.email ? `${r.label} <${r.email}>` : r.email))
-    .join(", ");
+    .join(', ');
 }
 
 // ── Tools ────────────────────────────────────────────────────────────
 
 const listMailAccountsTool = {
-  name: "list_mail_accounts",
+  name: 'list_mail_accounts',
   description:
-    "List all configured email accounts in Nextcloud Mail. Returns account IDs, names, and email addresses.",
+    'List all configured email accounts in Nextcloud Mail. Returns account IDs, names, and email addresses.',
   inputSchema: z.object({}),
   handler: async () => {
     try {
-      const response = await fetchMailAPI("/accounts");
+      const response = await fetchMailAPI('/accounts');
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${await response.text()}`);
       }
       const accounts = (await response.json()) as MailAccount[];
 
       if (accounts.length === 0) {
-        return { content: [{ type: "text" as const, text: "No mail accounts configured." }] };
+        return { content: [{ type: 'text' as const, text: 'No mail accounts configured.' }] };
       }
 
-      const lines = accounts.map(
-        (a) => `• ${a.name} <${a.emailAddress}> (ID: ${a.id})`
-      );
+      const lines = accounts.map((a) => `• ${a.name} <${a.emailAddress}> (ID: ${a.id})`);
       return {
-        content: [{ type: "text" as const, text: `Mail accounts:\n${lines.join("\n")}` }],
+        content: [{ type: 'text' as const, text: `Mail accounts:\n${lines.join('\n')}` }],
       };
     } catch (error) {
       return {
-        content: [{ type: "text" as const, text: `Error listing mail accounts: ${error instanceof Error ? error.message : String(error)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error listing mail accounts: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -121,11 +124,11 @@ const listMailAccountsTool = {
 };
 
 const listMailboxesTool = {
-  name: "list_mailboxes",
+  name: 'list_mailboxes',
   description:
-    "List all mailboxes (folders) for a Nextcloud Mail account. Returns mailbox names, IDs, and unread counts.",
+    'List all mailboxes (folders) for a Nextcloud Mail account. Returns mailbox names, IDs, and unread counts.',
   inputSchema: z.object({
-    accountId: z.number().describe("The mail account ID (from list_mail_accounts)"),
+    accountId: z.number().describe('The mail account ID (from list_mail_accounts)'),
   }),
   handler: async (args: { accountId: number }) => {
     try {
@@ -136,19 +139,24 @@ const listMailboxesTool = {
       const mailboxes = (await response.json()) as Mailbox[];
 
       if (mailboxes.length === 0) {
-        return { content: [{ type: "text" as const, text: "No mailboxes found." }] };
+        return { content: [{ type: 'text' as const, text: 'No mailboxes found.' }] };
       }
 
       const lines = mailboxes.map((m) => {
-        const unread = m.unread > 0 ? ` (${m.unread} unread)` : "";
+        const unread = m.unread > 0 ? ` (${m.unread} unread)` : '';
         return `• ${m.name}${unread} — ID: ${m.id}`;
       });
       return {
-        content: [{ type: "text" as const, text: `Mailboxes:\n${lines.join("\n")}` }],
+        content: [{ type: 'text' as const, text: `Mailboxes:\n${lines.join('\n')}` }],
       };
     } catch (error) {
       return {
-        content: [{ type: "text" as const, text: `Error listing mailboxes: ${error instanceof Error ? error.message : String(error)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error listing mailboxes: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -156,21 +164,34 @@ const listMailboxesTool = {
 };
 
 const listMessagesTool = {
-  name: "list_messages",
+  name: 'list_messages',
   description:
-    "List email messages in a Nextcloud Mail mailbox. Supports pagination via cursor. Returns subject, sender, date, and message IDs.",
+    'List email messages in a Nextcloud Mail mailbox. Supports pagination via cursor. Returns subject, sender, date, and message IDs.',
   inputSchema: z.object({
-    mailboxId: z.number().describe("The mailbox ID (from list_mailboxes)"),
-    limit: z.number().min(1).max(100).optional().describe("Number of messages to return (default: 20)"),
-    cursor: z.number().optional().describe("Cursor for pagination (message ID to start after)"),
-    filter: z.enum(["all", "unread", "flagged"]).optional().describe("Filter messages (default: all)"),
+    mailboxId: z.number().describe('The mailbox ID (from list_mailboxes)'),
+    limit: z
+      .number()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe('Number of messages to return (default: 20)'),
+    cursor: z.number().optional().describe('Cursor for pagination (message ID to start after)'),
+    filter: z
+      .enum(['all', 'unread', 'flagged'])
+      .optional()
+      .describe('Filter messages (default: all)'),
   }),
-  handler: async (args: { mailboxId: number; limit?: number; cursor?: number; filter?: string }) => {
+  handler: async (args: {
+    mailboxId: number;
+    limit?: number;
+    cursor?: number;
+    filter?: string;
+  }) => {
     try {
       const queryParams: Record<string, string> = {};
       if (args.limit) queryParams.limit = String(args.limit);
       if (args.cursor) queryParams.cursor = String(args.cursor);
-      if (args.filter && args.filter !== "all") queryParams.filter = args.filter;
+      if (args.filter && args.filter !== 'all') queryParams.filter = args.filter;
 
       const response = await fetchOCS<MailMessageSummary[]>(
         `/ocs/v2.php/apps/mail/api/v1/mailboxes/${args.mailboxId}/messages`,
@@ -179,30 +200,35 @@ const listMessagesTool = {
 
       const messages = response.ocs.data;
       if (!messages || messages.length === 0) {
-        return { content: [{ type: "text" as const, text: "No messages found." }] };
+        return { content: [{ type: 'text' as const, text: 'No messages found.' }] };
       }
 
       const lines = messages.map((msg) => {
         const flags: string[] = [];
-        if (!msg.flags.seen) flags.push("UNREAD");
-        if (msg.flags.flagged) flags.push("starred");
-        if (msg.flags.answered) flags.push("replied");
-        if (msg.hasAttachments) flags.push("attachment");
-        const flagStr = flags.length > 0 ? ` [${flags.join(", ")}]` : "";
+        if (!msg.flags.seen) flags.push('UNREAD');
+        if (msg.flags.flagged) flags.push('starred');
+        if (msg.flags.answered) flags.push('replied');
+        if (msg.hasAttachments) flags.push('attachment');
+        const flagStr = flags.length > 0 ? ` [${flags.join(', ')}]` : '';
         const from = formatRecipients(msg.from);
         return `• ${msg.subject}${flagStr}\n  From: ${from} | ${formatDate(msg.dateInt)} | ID: ${msg.id}`;
       });
 
-      let text = `Messages (${messages.length}):\n${lines.join("\n")}`;
+      let text = `Messages (${messages.length}):\n${lines.join('\n')}`;
       if (messages.length >= (args.limit || 20)) {
         const lastId = messages[messages.length - 1].id;
         text += `\n\nMore messages available. Use cursor: ${lastId} to load next page.`;
       }
 
-      return { content: [{ type: "text" as const, text }] };
+      return { content: [{ type: 'text' as const, text }] };
     } catch (error) {
       return {
-        content: [{ type: "text" as const, text: `Error listing messages: ${error instanceof Error ? error.message : String(error)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error listing messages: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -210,11 +236,11 @@ const listMessagesTool = {
 };
 
 const readMessageTool = {
-  name: "read_message",
+  name: 'read_message',
   description:
-    "Read the full content of an email message by ID. Returns headers, body text, and attachment list.",
+    'Read the full content of an email message by ID. Returns headers, body text, and attachment list.',
   inputSchema: z.object({
-    messageId: z.number().describe("The message ID (from list_messages)"),
+    messageId: z.number().describe('The message ID (from list_messages)'),
   }),
   handler: async (args: { messageId: number }) => {
     try {
@@ -226,10 +252,10 @@ const readMessageTool = {
 
       // Fetch body via Mail REST API
       const bodyResponse = await fetchMailAPI(`/messages/${args.messageId}/body`);
-      let bodyText = "";
+      let bodyText = '';
       if (bodyResponse.ok) {
         const bodyData = (await bodyResponse.json()) as Record<string, unknown>;
-        const rawBody = (bodyData.body as string) || (bodyData.data as string) || "";
+        const rawBody = (bodyData.body as string) || (bodyData.data as string) || '';
         bodyText = stripHtml(rawBody);
       }
 
@@ -237,17 +263,17 @@ const readMessageTool = {
       const from = formatRecipients(meta.from as MailRecipient[]);
       const to = formatRecipients(meta.to as MailRecipient[]);
       const cc = formatRecipients((meta.cc as MailRecipient[]) || []);
-      const date = meta.dateInt ? formatDate(meta.dateInt as number) : "Unknown";
-      const subject = (meta.subject as string) || "(No subject)";
+      const date = meta.dateInt ? formatDate(meta.dateInt as number) : 'Unknown';
+      const subject = (meta.subject as string) || '(No subject)';
 
       let text = `Subject: ${subject}\nFrom: ${from}\nTo: ${to}`;
       if (cc) text += `\nCc: ${cc}`;
       text += `\nDate: ${date}`;
-      text += `\n${"─".repeat(60)}\n${bodyText}`;
+      text += `\n${'─'.repeat(60)}\n${bodyText}`;
 
       const attachments = meta.attachments as Array<{ fileName: string; size: number }> | undefined;
       if (attachments && attachments.length > 0) {
-        text += `\n${"─".repeat(60)}\nAttachments:`;
+        text += `\n${'─'.repeat(60)}\nAttachments:`;
         for (const att of attachments) {
           text += `\n  • ${att.fileName} (${att.size} bytes)`;
         }
@@ -255,10 +281,15 @@ const readMessageTool = {
 
       text += `\n\nMessage ID: ${args.messageId}`;
 
-      return { content: [{ type: "text" as const, text }] };
+      return { content: [{ type: 'text' as const, text }] };
     } catch (error) {
       return {
-        content: [{ type: "text" as const, text: `Error reading message: ${error instanceof Error ? error.message : String(error)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error reading message: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -266,17 +297,17 @@ const readMessageTool = {
 };
 
 const sendMessageTool = {
-  name: "send_message",
+  name: 'send_message',
   description:
-    "Send an email message through Nextcloud Mail. Requires an account ID and recipient addresses.",
+    'Send an email message through Nextcloud Mail. Requires an account ID and recipient addresses.',
   inputSchema: z.object({
-    accountId: z.number().describe("The mail account ID to send from (from list_mail_accounts)"),
-    to: z.array(z.string()).describe("Recipient email addresses"),
-    subject: z.string().describe("Email subject line"),
-    body: z.string().describe("Email body content (plain text)"),
-    cc: z.array(z.string()).optional().describe("CC email addresses"),
-    bcc: z.array(z.string()).optional().describe("BCC email addresses"),
-    isHtml: z.boolean().optional().describe("Whether the body is HTML (default: false)"),
+    accountId: z.number().describe('The mail account ID to send from (from list_mail_accounts)'),
+    to: z.array(z.string()).describe('Recipient email addresses'),
+    subject: z.string().describe('Email subject line'),
+    body: z.string().describe('Email body content (plain text)'),
+    cc: z.array(z.string()).optional().describe('CC email addresses'),
+    bcc: z.array(z.string()).optional().describe('BCC email addresses'),
+    isHtml: z.boolean().optional().describe('Whether the body is HTML (default: false)'),
   }),
   handler: async (args: {
     accountId: number;
@@ -289,7 +320,7 @@ const sendMessageTool = {
   }) => {
     try {
       // Get account info to find the from email
-      const accountResponse = await fetchMailAPI("/accounts");
+      const accountResponse = await fetchMailAPI('/accounts');
       if (!accountResponse.ok) {
         throw new Error(`Failed to fetch accounts: ${accountResponse.status}`);
       }
@@ -303,8 +334,8 @@ const sendMessageTool = {
       const ccRecipients = args.cc?.map((email) => ({ label: email, email })) || [];
       const bccRecipients = args.bcc?.map((email) => ({ label: email, email })) || [];
 
-      const response = await fetchMailAPI("/messages/send", {
-        method: "POST",
+      const response = await fetchMailAPI('/messages/send', {
+        method: 'POST',
         body: {
           accountId: args.accountId,
           fromEmail: account.emailAddress,
@@ -323,11 +354,18 @@ const sendMessageTool = {
       }
 
       return {
-        content: [{ type: "text" as const, text: `Email sent successfully to ${args.to.join(", ")}` }],
+        content: [
+          { type: 'text' as const, text: `Email sent successfully to ${args.to.join(', ')}` },
+        ],
       };
     } catch (error) {
       return {
-        content: [{ type: "text" as const, text: `Error sending message: ${error instanceof Error ? error.message : String(error)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error sending message: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -335,15 +373,15 @@ const sendMessageTool = {
 };
 
 const deleteMessageTool = {
-  name: "delete_message",
-  description: "Delete an email message by ID. This typically moves it to trash.",
+  name: 'delete_message',
+  description: 'Delete an email message by ID. This typically moves it to trash.',
   inputSchema: z.object({
-    messageId: z.number().describe("The message ID to delete"),
+    messageId: z.number().describe('The message ID to delete'),
   }),
   handler: async (args: { messageId: number }) => {
     try {
       const response = await fetchMailAPI(`/messages/${args.messageId}`, {
-        method: "DELETE",
+        method: 'DELETE',
       });
 
       if (!response.ok) {
@@ -351,11 +389,16 @@ const deleteMessageTool = {
       }
 
       return {
-        content: [{ type: "text" as const, text: `Message ${args.messageId} deleted.` }],
+        content: [{ type: 'text' as const, text: `Message ${args.messageId} deleted.` }],
       };
     } catch (error) {
       return {
-        content: [{ type: "text" as const, text: `Error deleting message: ${error instanceof Error ? error.message : String(error)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error deleting message: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -363,16 +406,16 @@ const deleteMessageTool = {
 };
 
 const moveMessageTool = {
-  name: "move_message",
-  description: "Move an email message to a different mailbox/folder.",
+  name: 'move_message',
+  description: 'Move an email message to a different mailbox/folder.',
   inputSchema: z.object({
-    messageId: z.number().describe("The message ID to move"),
-    destMailboxId: z.number().describe("The destination mailbox ID (from list_mailboxes)"),
+    messageId: z.number().describe('The message ID to move'),
+    destMailboxId: z.number().describe('The destination mailbox ID (from list_mailboxes)'),
   }),
   handler: async (args: { messageId: number; destMailboxId: number }) => {
     try {
       const response = await fetchMailAPI(`/messages/${args.messageId}/move`, {
-        method: "POST",
+        method: 'POST',
         body: { destFolderId: args.destMailboxId },
       });
 
@@ -381,11 +424,21 @@ const moveMessageTool = {
       }
 
       return {
-        content: [{ type: "text" as const, text: `Message ${args.messageId} moved to mailbox ${args.destMailboxId}.` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Message ${args.messageId} moved to mailbox ${args.destMailboxId}.`,
+          },
+        ],
       };
     } catch (error) {
       return {
-        content: [{ type: "text" as const, text: `Error moving message: ${error instanceof Error ? error.message : String(error)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error moving message: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -393,22 +446,24 @@ const moveMessageTool = {
 };
 
 const setMessageFlagsTool = {
-  name: "set_message_flags",
+  name: 'set_message_flags',
   description:
-    "Set flags on an email message (mark as read/unread, star/unstar, mark as important or junk).",
+    'Set flags on an email message (mark as read/unread, star/unstar, mark as important or junk).',
   inputSchema: z.object({
-    messageId: z.number().describe("The message ID"),
-    flags: z.object({
-      seen: z.boolean().optional().describe("Mark as read (true) or unread (false)"),
-      flagged: z.boolean().optional().describe("Star (true) or unstar (false)"),
-      important: z.boolean().optional().describe("Mark as important (true) or not (false)"),
-      junk: z.boolean().optional().describe("Mark as junk/spam (true) or not (false)"),
-    }).describe("Flags to set on the message"),
+    messageId: z.number().describe('The message ID'),
+    flags: z
+      .object({
+        seen: z.boolean().optional().describe('Mark as read (true) or unread (false)'),
+        flagged: z.boolean().optional().describe('Star (true) or unstar (false)'),
+        important: z.boolean().optional().describe('Mark as important (true) or not (false)'),
+        junk: z.boolean().optional().describe('Mark as junk/spam (true) or not (false)'),
+      })
+      .describe('Flags to set on the message'),
   }),
   handler: async (args: { messageId: number; flags: Record<string, boolean | undefined> }) => {
     try {
       const response = await fetchMailAPI(`/messages/${args.messageId}/flags`, {
-        method: "PUT",
+        method: 'PUT',
         body: args.flags,
       });
 
@@ -419,14 +474,21 @@ const setMessageFlagsTool = {
       const changes = Object.entries(args.flags)
         .filter(([, v]) => v !== undefined)
         .map(([k, v]) => `${k}=${v}`)
-        .join(", ");
+        .join(', ');
 
       return {
-        content: [{ type: "text" as const, text: `Flags updated on message ${args.messageId}: ${changes}` }],
+        content: [
+          { type: 'text' as const, text: `Flags updated on message ${args.messageId}: ${changes}` },
+        ],
       };
     } catch (error) {
       return {
-        content: [{ type: "text" as const, text: `Error setting flags: ${error instanceof Error ? error.message : String(error)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error setting flags: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }

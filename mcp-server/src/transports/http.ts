@@ -24,6 +24,8 @@ export async function startHttp(): Promise<void> {
   await mcpServer.connect(transport);
 
   app.listen(port, host, () => {
-    console.error(`AIquila MCP server running (http transport) at http://${host}:${port}${MCP_PATH}`);
+    console.error(
+      `AIquila MCP server running (http transport) at http://${host}:${port}${MCP_PATH}`
+    );
   });
 }

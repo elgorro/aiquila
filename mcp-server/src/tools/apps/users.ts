@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { fetchOCS } from "../../client/ocs.js";
+import { z } from 'zod';
+import { fetchOCS } from '../../client/ocs.js';
 
 /**
  * Nextcloud User Management Tools
@@ -24,25 +24,28 @@ export const listUsersTool = {
       if (args.limit !== undefined) queryParams.limit = String(args.limit);
       if (args.offset !== undefined) queryParams.offset = String(args.offset);
 
-      const result = await fetchOCS<{ users: string[] }>(
-        "/ocs/v2.php/cloud/users",
-        { queryParams }
-      );
+      const result = await fetchOCS<{ users: string[] }>('/ocs/v2.php/cloud/users', {
+        queryParams,
+      });
 
       const users = result.ocs.data.users;
 
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Users (${users.length}):\n${users.join('\n')}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Users (${users.length}):\n${users.join('\n')}`,
+          },
+        ],
       };
     } catch (error) {
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Error listing users: ${error instanceof Error ? error.message : String(error)}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error listing users: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -65,17 +68,21 @@ export const getUserInfoTool = {
       );
 
       return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify(result.ocs.data, null, 2),
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify(result.ocs.data, null, 2),
+          },
+        ],
       };
     } catch (error) {
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Error getting user info for "${args.userId}": ${error instanceof Error ? error.message : String(error)}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error getting user info for "${args.userId}": ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -93,23 +100,26 @@ export const enableUserTool = {
   }),
   handler: async (args: { userId: string }) => {
     try {
-      await fetchOCS(
-        `/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/enable`,
-        { method: 'PUT' }
-      );
+      await fetchOCS(`/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/enable`, {
+        method: 'PUT',
+      });
 
       return {
-        content: [{
-          type: 'text' as const,
-          text: `User "${args.userId}" has been enabled successfully.`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `User "${args.userId}" has been enabled successfully.`,
+          },
+        ],
       };
     } catch (error) {
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Error enabling user "${args.userId}": ${error instanceof Error ? error.message : String(error)}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error enabling user "${args.userId}": ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -127,23 +137,26 @@ export const disableUserTool = {
   }),
   handler: async (args: { userId: string }) => {
     try {
-      await fetchOCS(
-        `/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/disable`,
-        { method: 'PUT' }
-      );
+      await fetchOCS(`/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/disable`, {
+        method: 'PUT',
+      });
 
       return {
-        content: [{
-          type: 'text' as const,
-          text: `User "${args.userId}" has been disabled. The account data is preserved and can be re-enabled.`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `User "${args.userId}" has been disabled. The account data is preserved and can be re-enabled.`,
+          },
+        ],
       };
     } catch (error) {
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Error disabling user "${args.userId}": ${error instanceof Error ? error.message : String(error)}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error disabling user "${args.userId}": ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -153,9 +166,4 @@ export const disableUserTool = {
 /**
  * Export all User Management tools
  */
-export const usersTools = [
-  listUsersTool,
-  getUserInfoTool,
-  enableUserTool,
-  disableUserTool,
-];
+export const usersTools = [listUsersTool, getUserInfoTool, enableUserTool, disableUserTool];
