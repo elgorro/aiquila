@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 /**
  * Shared type definitions for MCP tools
@@ -23,16 +23,16 @@ export const PathSchema = z.object({
 });
 
 export const FilePathSchema = z.object({
-  path: z.string().describe("The file path in Nextcloud"),
+  path: z.string().describe('The file path in Nextcloud'),
 });
 
 export const FolderPathSchema = z.object({
-  path: z.string().describe("The folder path to create in Nextcloud"),
+  path: z.string().describe('The folder path to create in Nextcloud'),
 });
 
 export const FileContentSchema = z.object({
-  path: z.string().describe("The file path in Nextcloud"),
-  content: z.string().describe("The content to write to the file"),
+  path: z.string().describe('The file path in Nextcloud'),
+  content: z.string().describe('The content to write to the file'),
 });
 
 /**
@@ -54,10 +54,10 @@ export function getNextcloudConfig(): NextcloudConfig {
 
   if (!url || !user || !password) {
     throw new Error(
-      "NEXTCLOUD_URL, NEXTCLOUD_USER, and NEXTCLOUD_PASSWORD environment variables must be set"
+      'NEXTCLOUD_URL, NEXTCLOUD_USER, and NEXTCLOUD_PASSWORD environment variables must be set'
     );
   }
 
   // Strip trailing slashes to prevent double-slash URLs in CalDAV paths
-  return { url: url.replace(/\/+$/, ""), user, password };
+  return { url: url.replace(/\/+$/, ''), user, password };
 }

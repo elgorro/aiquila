@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { fetchCalDAV } from "../../client/caldav.js";
-import { getNextcloudConfig } from "../types.js";
+import { z } from 'zod';
+import { fetchCalDAV } from '../../client/caldav.js';
+import { getNextcloudConfig } from '../types.js';
 
 /**
  * Nextcloud Tasks App Tools
@@ -50,7 +50,7 @@ interface ParsedTask {
  */
 function nsTagContent(localName: string): RegExp {
   return new RegExp(
-    `<(?:[a-zA-Z][a-zA-Z0-9]*:)?${localName}[^>]*>([\\s\\S]*?)</(?:[a-zA-Z][a-zA-Z0-9]*:)?${localName}>`,
+    `<(?:[a-zA-Z][a-zA-Z0-9]*:)?${localName}[^>]*>([\\s\\S]*?)</(?:[a-zA-Z][a-zA-Z0-9]*:)?${localName}>`
   );
 }
 
@@ -63,7 +63,7 @@ function nsTagContent(localName: string): RegExp {
  * Folded lines have CRLF followed by a single space or tab.
  */
 function unfoldICalLines(text: string): string {
-  return text.replace(/\r?\n[ \t]/g, "");
+  return text.replace(/\r?\n[ \t]/g, '');
 }
 
 /**
@@ -71,10 +71,10 @@ function unfoldICalLines(text: string): string {
  */
 function escapeICalValue(value: string): string {
   return value
-    .replace(/\\/g, "\\\\")
-    .replace(/;/g, "\\;")
-    .replace(/,/g, "\\,")
-    .replace(/\n/g, "\\n");
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\n/g, '\\n');
 }
 
 /**
@@ -86,9 +86,7 @@ function formatICalDate(icalDate: string): string {
   if (icalDate.length === 8) {
     return `${icalDate.slice(0, 4)}-${icalDate.slice(4, 6)}-${icalDate.slice(6, 8)}`;
   }
-  const match = icalDate.match(
-    /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/,
-  );
+  const match = icalDate.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/);
   if (match) {
     const [, y, m, d, hh, mm] = match;
     return `${y}-${m}-${d} ${hh}:${mm}`;
@@ -100,7 +98,7 @@ function formatICalDate(icalDate: string): string {
  * Generate an iCalendar UTC timestamp for "now".
  */
 function icalNow(): string {
-  return new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+  return new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 }
 
 /**
@@ -109,14 +107,10 @@ function icalNow(): string {
  * - property exists -> replace its value
  * - property absent -> insert before END:VTODO
  */
-function setICalProperty(
-  icalData: string,
-  propName: string,
-  value: string | null,
-): string {
-  const regex = new RegExp(`^${propName}(;[^:]*)?:.*$`, "m");
+function setICalProperty(icalData: string, propName: string, value: string | null): string {
+  const regex = new RegExp(`^${propName}(;[^:]*)?:.*$`, 'm');
   if (value === null) {
-    return icalData.replace(regex, "").replace(/(\r?\n){2,}/g, "\r\n");
+    return icalData.replace(regex, '').replace(/(\r?\n){2,}/g, '\r\n');
   }
   if (regex.test(icalData)) {
     return icalData.replace(regex, `${propName}:${value}`);
@@ -127,19 +121,12 @@ function setICalProperty(
 /**
  * Replace, add, or remove a date property, using VALUE=DATE for date-only values.
  */
-function setICalDateProperty(
-  icalData: string,
-  propName: string,
-  value: string | null,
-): string {
-  const regex = new RegExp(`^${propName}(;[^:]*)?:.*$`, "m");
+function setICalDateProperty(icalData: string, propName: string, value: string | null): string {
+  const regex = new RegExp(`^${propName}(;[^:]*)?:.*$`, 'm');
   if (value === null) {
-    return icalData.replace(regex, "").replace(/(\r?\n){2,}/g, "\r\n");
+    return icalData.replace(regex, '').replace(/(\r?\n){2,}/g, '\r\n');
   }
-  const formatted =
-    value.length === 8
-      ? `${propName};VALUE=DATE:${value}`
-      : `${propName}:${value}`;
+  const formatted = value.length === 8 ? `${propName};VALUE=DATE:${value}` : `${propName}:${value}`;
   if (regex.test(icalData)) {
     return icalData.replace(regex, formatted);
   }
@@ -157,19 +144,13 @@ function setICalDateProperty(
 function parseVTodos(responseXml: string): ParsedTask[] {
   const tasks: ParsedTask[] = [];
 
-  const responseBlocks = responseXml.match(
-    /<d:response>[\s\S]*?<\/d:response>/g,
-  );
+  const responseBlocks = responseXml.match(/<d:response>[\s\S]*?<\/d:response>/g);
   if (!responseBlocks) return tasks;
 
   for (const responseBlock of responseBlocks) {
     const hrefMatch = responseBlock.match(/<d:href>([^<]+)<\/d:href>/);
-    const etagMatch = responseBlock.match(
-      /<d:getetag>"?([^"<]+)"?<\/d:getetag>/,
-    );
-    const calDataMatch = responseBlock.match(
-      nsTagContent("calendar-data"),
-    );
+    const etagMatch = responseBlock.match(/<d:getetag>"?([^"<]+)"?<\/d:getetag>/);
+    const calDataMatch = responseBlock.match(nsTagContent('calendar-data'));
     if (!calDataMatch) continue;
 
     const icalData = calDataMatch[1];
@@ -181,9 +162,9 @@ function parseVTodos(responseXml: string): ParsedTask[] {
       const lines = unfolded.split(/\r?\n/);
 
       const task: ParsedTask = {
-        uid: "",
-        summary: "",
-        status: "NEEDS-ACTION",
+        uid: '',
+        summary: '',
+        status: 'NEEDS-ACTION',
         percentComplete: 0,
         priority: 0,
         categories: [],
@@ -201,72 +182,72 @@ function parseVTodos(responseXml: string): ParsedTask[] {
         const [, name, params, value] = propMatch;
 
         switch (name) {
-          case "UID":
+          case 'UID':
             task.uid = value;
             break;
-          case "SUMMARY":
+          case 'SUMMARY':
             task.summary = value;
             break;
-          case "STATUS":
+          case 'STATUS':
             task.status = value;
             break;
-          case "PRIORITY":
+          case 'PRIORITY':
             task.priority = parseInt(value, 10) || 0;
             break;
-          case "PERCENT-COMPLETE":
+          case 'PERCENT-COMPLETE':
             task.percentComplete = parseInt(value, 10) || 0;
             break;
-          case "DESCRIPTION":
+          case 'DESCRIPTION':
             task.description = value;
             break;
-          case "DUE":
+          case 'DUE':
             task.due = value;
             break;
-          case "DTSTART":
+          case 'DTSTART':
             task.dtstart = value;
             break;
-          case "COMPLETED":
+          case 'COMPLETED':
             task.completed = value;
             break;
-          case "CREATED":
+          case 'CREATED':
             task.created = value;
             break;
-          case "LAST-MODIFIED":
+          case 'LAST-MODIFIED':
             task.lastModified = value;
             break;
-          case "LOCATION":
+          case 'LOCATION':
             task.location = value;
             break;
-          case "URL":
+          case 'URL':
             task.url = value;
             break;
-          case "CLASS":
+          case 'CLASS':
             task.classification = value;
             break;
-          case "CATEGORIES":
+          case 'CATEGORIES':
             task.categories.push(
               ...value
-                .split(",")
+                .split(',')
                 .map((c) => c.trim())
-                .filter(Boolean),
+                .filter(Boolean)
             );
             break;
-          case "RELATED-TO":
-            if (!params || params.includes("RELTYPE=PARENT")) {
+          case 'RELATED-TO':
+            if (!params || params.includes('RELTYPE=PARENT')) {
               task.relatedTo = value;
             }
             break;
-          case "X-PINNED":
-            task.pinned = value.toLowerCase() === "true";
+          case 'X-PINNED':
+            task.pinned = value.toLowerCase() === 'true';
             break;
-          case "X-APPLE-SORT-ORDER":
+          case 'X-APPLE-SORT-ORDER':
             task.sortOrder = parseInt(value, 10);
             break;
-          case "X-OC-HIDESUBTASKS":
-            task.hideSubtasks = value === "1";
+          case 'X-OC-HIDESUBTASKS':
+            task.hideSubtasks = value === '1';
             break;
-          case "X-OC-HIDECOMPLETEDSUBTASKS":
-            task.hideCompletedSubtasks = value === "1";
+          case 'X-OC-HIDECOMPLETEDSUBTASKS':
+            task.hideCompletedSubtasks = value === '1';
             break;
         }
       }
@@ -288,12 +269,11 @@ function parseVTodos(responseXml: string): ParsedTask[] {
  * Format a parsed task for human-readable display.
  */
 function formatTask(task: ParsedTask): string {
-  const checkbox = task.status === "COMPLETED" ? "[x]" : "[ ]";
+  const checkbox = task.status === 'COMPLETED' ? '[x]' : '[ ]';
   let line = `${checkbox} ${task.summary}`;
 
   if (task.priority > 0) {
-    const label =
-      task.priority <= 4 ? "High" : task.priority === 5 ? "Medium" : "Low";
+    const label = task.priority <= 4 ? 'High' : task.priority === 5 ? 'Medium' : 'Low';
     line += ` (Priority: ${task.priority}/${label})`;
   }
 
@@ -304,16 +284,14 @@ function formatTask(task: ParsedTask): string {
   const dateParts: string[] = [];
   if (task.dtstart) dateParts.push(`Start: ${formatICalDate(task.dtstart)}`);
   if (task.due) dateParts.push(`Due: ${formatICalDate(task.due)}`);
-  if (task.completed)
-    dateParts.push(`Completed: ${formatICalDate(task.completed)}`);
-  if (dateParts.length > 0) line += ` | ${dateParts.join(" | ")}`;
+  if (task.completed) dateParts.push(`Completed: ${formatICalDate(task.completed)}`);
+  if (dateParts.length > 0) line += ` | ${dateParts.join(' | ')}`;
 
   if (task.location) line += `\n    Location: ${task.location}`;
-  if (task.categories.length > 0)
-    line += `\n    Tags: ${task.categories.join(", ")}`;
+  if (task.categories.length > 0) line += `\n    Tags: ${task.categories.join(', ')}`;
   if (task.relatedTo) line += `\n    Parent: ${task.relatedTo}`;
   if (task.description) line += `\n    ${task.description}`;
-  if (task.classification && task.classification !== "PUBLIC")
+  if (task.classification && task.classification !== 'PUBLIC')
     line += `\n    Class: ${task.classification}`;
 
   line += `\n    UID: ${task.uid}`;
@@ -330,7 +308,7 @@ function formatTask(task: ParsedTask): string {
  */
 async function resolveTaskByUid(
   calendarName: string,
-  uid: string,
+  uid: string
 ): Promise<{ href: string; etag: string; icalData: string }> {
   const config = getNextcloudConfig();
   const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/${calendarName}/`;
@@ -353,32 +331,26 @@ async function resolveTaskByUid(
 </c:calendar-query>`;
 
   const response = await fetchCalDAV(calDavUrl, {
-    method: "REPORT",
+    method: 'REPORT',
     body: reportBody,
-    headers: { Depth: "1" },
+    headers: { Depth: '1' },
   });
 
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
-      `CalDAV REPORT failed for calendar "${calendarName}": ${response.status} - ${errorText}`,
+      `CalDAV REPORT failed for calendar "${calendarName}": ${response.status} - ${errorText}`
     );
   }
 
   const responseText = await response.text();
 
   const hrefMatch = responseText.match(/<d:href>([^<]+)<\/d:href>/);
-  const etagMatch = responseText.match(
-    /<d:getetag>"?([^"<]+)"?<\/d:getetag>/,
-  );
-  const calDataMatch = responseText.match(
-    nsTagContent("calendar-data"),
-  );
+  const etagMatch = responseText.match(/<d:getetag>"?([^"<]+)"?<\/d:getetag>/);
+  const calDataMatch = responseText.match(nsTagContent('calendar-data'));
 
   if (!hrefMatch || !etagMatch || !calDataMatch) {
-    throw new Error(
-      `Task with UID "${uid}" not found in calendar "${calendarName}"`,
-    );
+    throw new Error(`Task with UID "${uid}" not found in calendar "${calendarName}"`);
   }
 
   return {
@@ -396,8 +368,8 @@ async function resolveTaskByUid(
  * List all task lists in Nextcloud Tasks
  */
 export const listTaskListsTool = {
-  name: "list_task_lists",
-  description: "List all task lists in Nextcloud Tasks",
+  name: 'list_task_lists',
+  description: 'List all task lists in Nextcloud Tasks',
   inputSchema: z.object({}),
   handler: async () => {
     const config = getNextcloudConfig();
@@ -414,10 +386,10 @@ export const listTaskListsTool = {
 </d:propfind>`;
 
     const response = await fetchCalDAV(calDavUrl, {
-      method: "PROPFIND",
+      method: 'PROPFIND',
       body: propfindBody,
       headers: {
-        Depth: "1",
+        Depth: '1',
       },
     });
 
@@ -425,7 +397,7 @@ export const listTaskListsTool = {
     return {
       content: [
         {
-          type: "text",
+          type: 'text',
           text: responseText,
         },
       ],
@@ -437,18 +409,18 @@ export const listTaskListsTool = {
  * List tasks from a Nextcloud Tasks calendar
  */
 export const listTasksTool = {
-  name: "list_tasks",
+  name: 'list_tasks',
   description:
-    "List tasks from a Nextcloud Tasks calendar. Returns task details including status, priority, dates, tags, and UIDs.",
+    'List tasks from a Nextcloud Tasks calendar. Returns task details including status, priority, dates, tags, and UIDs.',
   inputSchema: z.object({
     calendarName: z
       .string()
-      .default("tasks")
+      .default('tasks')
       .describe("The calendar/task list name (default: 'tasks')"),
     status: z
-      .enum(["NEEDS-ACTION", "COMPLETED", "IN-PROCESS", "CANCELLED"])
+      .enum(['NEEDS-ACTION', 'COMPLETED', 'IN-PROCESS', 'CANCELLED'])
       .optional()
-      .describe("Filter tasks by status"),
+      .describe('Filter tasks by status'),
   }),
   handler: async (args: { calendarName: string; status?: string }) => {
     try {
@@ -469,17 +441,17 @@ export const listTasksTool = {
 </c:calendar-query>`;
 
       const response = await fetchCalDAV(calDavUrl, {
-        method: "REPORT",
+        method: 'REPORT',
         body: reportBody,
         headers: {
-          Depth: "1",
+          Depth: '1',
         },
       });
 
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(
-          `CalDAV REPORT failed for calendar "${args.calendarName}": ${response.status} - ${errorText}`,
+          `CalDAV REPORT failed for calendar "${args.calendarName}": ${response.status} - ${errorText}`
         );
       }
 
@@ -494,18 +466,18 @@ export const listTasksTool = {
         return {
           content: [
             {
-              type: "text" as const,
-              text: `No tasks found in "${args.calendarName}"${args.status ? ` with status ${args.status}` : ""}.`,
+              type: 'text' as const,
+              text: `No tasks found in "${args.calendarName}"${args.status ? ` with status ${args.status}` : ''}.`,
             },
           ],
         };
       }
 
-      const formatted = tasks.map(formatTask).join("\n\n");
+      const formatted = tasks.map(formatTask).join('\n\n');
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Tasks in "${args.calendarName}" (${tasks.length} found):\n\n${formatted}`,
           },
         ],
@@ -514,7 +486,7 @@ export const listTasksTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error listing tasks: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -528,57 +500,43 @@ export const listTasksTool = {
  * Create a new task in Nextcloud Tasks
  */
 export const createTaskTool = {
-  name: "create_task",
+  name: 'create_task',
   description:
-    "Create a new task in Nextcloud Tasks with optional due date, start date, tags, location, and subtask relationships.",
+    'Create a new task in Nextcloud Tasks with optional due date, start date, tags, location, and subtask relationships.',
   inputSchema: z.object({
-    summary: z.string().describe("The task summary/title"),
-    calendarName: z
-      .string()
-      .default("tasks")
-      .describe("The calendar name (default: 'tasks')"),
-    description: z
-      .string()
-      .optional()
-      .describe("Detailed description of the task"),
+    summary: z.string().describe('The task summary/title'),
+    calendarName: z.string().default('tasks').describe("The calendar name (default: 'tasks')"),
+    description: z.string().optional().describe('Detailed description of the task'),
     priority: z
       .number()
       .min(0)
       .max(9)
       .optional()
-      .describe(
-        "Task priority (0=undefined, 1=highest, 5=medium, 9=lowest)",
-      ),
+      .describe('Task priority (0=undefined, 1=highest, 5=medium, 9=lowest)'),
     due: z
       .string()
       .optional()
       .describe(
-        "Due date in YYYYMMDD or YYYYMMDDTHHmmssZ format (e.g. '20240315' or '20240315T140000Z')",
+        "Due date in YYYYMMDD or YYYYMMDDTHHmmssZ format (e.g. '20240315' or '20240315T140000Z')"
       ),
-    dtstart: z
-      .string()
-      .optional()
-      .describe("Start date in YYYYMMDD or YYYYMMDDTHHmmssZ format"),
-    location: z.string().optional().describe("Location string"),
+    dtstart: z.string().optional().describe('Start date in YYYYMMDD or YYYYMMDDTHHmmssZ format'),
+    location: z.string().optional().describe('Location string'),
     categories: z
       .array(z.string())
       .optional()
       .describe("Tags/categories (e.g. ['work', 'urgent'])"),
-    relatedTo: z
-      .string()
-      .optional()
-      .describe("Parent task UID (creates a subtask relationship)"),
+    relatedTo: z.string().optional().describe('Parent task UID (creates a subtask relationship)'),
     percentComplete: z
       .number()
       .min(0)
       .max(100)
       .optional()
-      .describe("Completion percentage (0-100)"),
+      .describe('Completion percentage (0-100)'),
     classification: z
-      .enum(["PUBLIC", "PRIVATE", "CONFIDENTIAL"])
+      .enum(['PUBLIC', 'PRIVATE', 'CONFIDENTIAL'])
       .optional()
-      .describe("Task visibility classification"),
-    url: z.string().optional().describe("Custom URL reference"),
+      .describe('Task visibility classification'),
+    url: z.string().optional().describe('Custom URL reference'),
   }),
   handler: async (args: {
     summary: string;
@@ -608,10 +566,7 @@ export const createTaskTool = {
       vtodo += `\r\nPRIORITY:${args.priority}`;
     }
     if (args.due) {
-      vtodo +=
-        args.due.length === 8
-          ? `\r\nDUE;VALUE=DATE:${args.due}`
-          : `\r\nDUE:${args.due}`;
+      vtodo += args.due.length === 8 ? `\r\nDUE;VALUE=DATE:${args.due}` : `\r\nDUE:${args.due}`;
     }
     if (args.dtstart) {
       vtodo +=
@@ -623,7 +578,7 @@ export const createTaskTool = {
       vtodo += `\r\nLOCATION:${escapeICalValue(args.location)}`;
     }
     if (args.categories && args.categories.length > 0) {
-      vtodo += `\r\nCATEGORIES:${args.categories.map(escapeICalValue).join(",")}`;
+      vtodo += `\r\nCATEGORIES:${args.categories.map(escapeICalValue).join(',')}`;
     }
     if (args.relatedTo) {
       vtodo += `\r\nRELATED-TO;RELTYPE=PARENT:${args.relatedTo}`;
@@ -641,11 +596,11 @@ export const createTaskTool = {
     vtodo += `\r\nEND:VTODO\r\nEND:VCALENDAR`;
 
     const response = await fetchCalDAV(calDavUrl, {
-      method: "PUT",
+      method: 'PUT',
       body: vtodo,
       headers: {
-        "Content-Type": "text/calendar; charset=utf-8",
-        "If-None-Match": "*",
+        'Content-Type': 'text/calendar; charset=utf-8',
+        'If-None-Match': '*',
       },
     });
 
@@ -653,14 +608,14 @@ export const createTaskTool = {
     if (response.status !== 201 && response.status !== 204) {
       const errorText = await response.text();
       throw new Error(
-        `Failed to create task: server returned ${response.status} (expected 201 or 204) - ${errorText}`,
+        `Failed to create task: server returned ${response.status} (expected 201 or 204) - ${errorText}`
       );
     }
 
     return {
       content: [
         {
-          type: "text" as const,
+          type: 'text' as const,
           text: `Task created successfully: ${args.summary} (UID: ${taskUid})`,
         },
       ],
@@ -672,69 +627,44 @@ export const createTaskTool = {
  * Update an existing task's fields by UID
  */
 export const updateTaskTool = {
-  name: "update_task",
+  name: 'update_task',
   description:
     "Update an existing task's fields by UID. Uses CalDAV ETag-based optimistic concurrency.",
   inputSchema: z.object({
-    uid: z.string().describe("The UID of the task to update"),
-    calendarName: z
-      .string()
-      .default("tasks")
-      .describe("The calendar name (default: 'tasks')"),
-    summary: z.string().optional().describe("New task title"),
-    description: z.string().optional().describe("New description"),
+    uid: z.string().describe('The UID of the task to update'),
+    calendarName: z.string().default('tasks').describe("The calendar name (default: 'tasks')"),
+    summary: z.string().optional().describe('New task title'),
+    description: z.string().optional().describe('New description'),
     priority: z
       .number()
       .min(0)
       .max(9)
       .optional()
-      .describe("New priority (0-9, 0 removes priority)"),
+      .describe('New priority (0-9, 0 removes priority)'),
     due: z
       .string()
       .nullable()
       .optional()
-      .describe(
-        "New due date (YYYYMMDD or YYYYMMDDTHHmmssZ), or null to remove",
-      ),
-    dtstart: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("New start date, or null to remove"),
+      .describe('New due date (YYYYMMDD or YYYYMMDDTHHmmssZ), or null to remove'),
+    dtstart: z.string().nullable().optional().describe('New start date, or null to remove'),
     status: z
-      .enum(["NEEDS-ACTION", "IN-PROCESS", "COMPLETED", "CANCELLED"])
+      .enum(['NEEDS-ACTION', 'IN-PROCESS', 'COMPLETED', 'CANCELLED'])
       .optional()
-      .describe("New status"),
-    location: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("New location, or null to remove"),
-    categories: z
-      .array(z.string())
-      .optional()
-      .describe("Replace all tags with these"),
+      .describe('New status'),
+    location: z.string().nullable().optional().describe('New location, or null to remove'),
+    categories: z.array(z.string()).optional().describe('Replace all tags with these'),
     relatedTo: z
       .string()
       .nullable()
       .optional()
-      .describe("New parent UID, or null to remove parent"),
-    percentComplete: z
-      .number()
-      .min(0)
-      .max(100)
-      .optional()
-      .describe("New completion percentage"),
+      .describe('New parent UID, or null to remove parent'),
+    percentComplete: z.number().min(0).max(100).optional().describe('New completion percentage'),
     classification: z
-      .enum(["PUBLIC", "PRIVATE", "CONFIDENTIAL"])
+      .enum(['PUBLIC', 'PRIVATE', 'CONFIDENTIAL'])
       .optional()
-      .describe("New classification"),
-    url: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("New URL, or null to remove"),
-    pinned: z.boolean().optional().describe("Pin or unpin the task"),
+      .describe('New classification'),
+    url: z.string().nullable().optional().describe('New URL, or null to remove'),
+    pinned: z.boolean().optional().describe('Pin or unpin the task'),
   }),
   handler: async (args: {
     uid: string;
@@ -755,111 +685,89 @@ export const updateTaskTool = {
   }) => {
     try {
       const config = getNextcloudConfig();
-      const { href, etag, icalData } = await resolveTaskByUid(
-        args.calendarName,
-        args.uid,
-      );
+      const { href, etag, icalData } = await resolveTaskByUid(args.calendarName, args.uid);
 
       let modified = unfoldICalLines(icalData);
 
       // Apply updates for provided fields
       if (args.summary !== undefined) {
-        modified = setICalProperty(
-          modified,
-          "SUMMARY",
-          escapeICalValue(args.summary),
-        );
+        modified = setICalProperty(modified, 'SUMMARY', escapeICalValue(args.summary));
       }
       if (args.description !== undefined) {
-        modified = setICalProperty(
-          modified,
-          "DESCRIPTION",
-          escapeICalValue(args.description),
-        );
+        modified = setICalProperty(modified, 'DESCRIPTION', escapeICalValue(args.description));
       }
       if (args.priority !== undefined) {
         modified = setICalProperty(
           modified,
-          "PRIORITY",
-          args.priority === 0 ? null : String(args.priority),
+          'PRIORITY',
+          args.priority === 0 ? null : String(args.priority)
         );
       }
       if (args.due !== undefined) {
-        modified = setICalDateProperty(modified, "DUE", args.due);
+        modified = setICalDateProperty(modified, 'DUE', args.due);
       }
       if (args.dtstart !== undefined) {
-        modified = setICalDateProperty(modified, "DTSTART", args.dtstart);
+        modified = setICalDateProperty(modified, 'DTSTART', args.dtstart);
       }
       if (args.status !== undefined) {
-        modified = setICalProperty(modified, "STATUS", args.status);
+        modified = setICalProperty(modified, 'STATUS', args.status);
       }
       if (args.location !== undefined) {
         modified = setICalProperty(
           modified,
-          "LOCATION",
-          args.location ? escapeICalValue(args.location) : null,
+          'LOCATION',
+          args.location ? escapeICalValue(args.location) : null
         );
       }
       if (args.percentComplete !== undefined) {
-        modified = setICalProperty(
-          modified,
-          "PERCENT-COMPLETE",
-          String(args.percentComplete),
-        );
+        modified = setICalProperty(modified, 'PERCENT-COMPLETE', String(args.percentComplete));
       }
       if (args.classification !== undefined) {
-        modified = setICalProperty(modified, "CLASS", args.classification);
+        modified = setICalProperty(modified, 'CLASS', args.classification);
       }
       if (args.url !== undefined) {
-        modified = setICalProperty(modified, "URL", args.url);
+        modified = setICalProperty(modified, 'URL', args.url);
       }
       if (args.pinned !== undefined) {
-        modified = setICalProperty(
-          modified,
-          "X-PINNED",
-          args.pinned ? "true" : null,
-        );
+        modified = setICalProperty(modified, 'X-PINNED', args.pinned ? 'true' : null);
       }
       if (args.relatedTo !== undefined) {
         // RELATED-TO needs special handling for RELTYPE param
         const relRegex = /^RELATED-TO(;[^:]*)?:.*$/m;
         if (args.relatedTo === null) {
-          modified = modified.replace(relRegex, "").replace(/(\r?\n){2,}/g, "\r\n");
+          modified = modified.replace(relRegex, '').replace(/(\r?\n){2,}/g, '\r\n');
         } else if (relRegex.test(modified)) {
-          modified = modified.replace(
-            relRegex,
-            `RELATED-TO;RELTYPE=PARENT:${args.relatedTo}`,
-          );
+          modified = modified.replace(relRegex, `RELATED-TO;RELTYPE=PARENT:${args.relatedTo}`);
         } else {
           modified = modified.replace(
             /END:VTODO/,
-            `RELATED-TO;RELTYPE=PARENT:${args.relatedTo}\r\nEND:VTODO`,
+            `RELATED-TO;RELTYPE=PARENT:${args.relatedTo}\r\nEND:VTODO`
           );
         }
       }
       if (args.categories !== undefined) {
         // Remove all existing CATEGORIES, then add new
-        modified = modified.replace(/^CATEGORIES(;[^:]*)?:.*\r?\n?/gm, "");
+        modified = modified.replace(/^CATEGORIES(;[^:]*)?:.*\r?\n?/gm, '');
         if (args.categories.length > 0) {
           modified = modified.replace(
             /END:VTODO/,
-            `CATEGORIES:${args.categories.map(escapeICalValue).join(",")}\r\nEND:VTODO`,
+            `CATEGORIES:${args.categories.map(escapeICalValue).join(',')}\r\nEND:VTODO`
           );
         }
       }
 
       // Always update timestamps
       const now = icalNow();
-      modified = setICalProperty(modified, "LAST-MODIFIED", now);
-      modified = setICalProperty(modified, "DTSTAMP", now);
+      modified = setICalProperty(modified, 'LAST-MODIFIED', now);
+      modified = setICalProperty(modified, 'DTSTAMP', now);
 
       const putUrl = `${config.url}${href}`;
       const putResponse = await fetchCalDAV(putUrl, {
-        method: "PUT",
+        method: 'PUT',
         body: modified,
         headers: {
-          "Content-Type": "text/calendar; charset=utf-8",
-          "If-Match": `"${etag}"`,
+          'Content-Type': 'text/calendar; charset=utf-8',
+          'If-Match': `"${etag}"`,
         },
       });
 
@@ -867,26 +775,22 @@ export const updateTaskTool = {
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `Task updated successfully (UID: ${args.uid})`,
             },
           ],
         };
       } else if (putResponse.status === 412) {
-        throw new Error(
-          "Task was modified by another client (ETag mismatch). Please retry.",
-        );
+        throw new Error('Task was modified by another client (ETag mismatch). Please retry.');
       } else {
         const errorText = await putResponse.text();
-        throw new Error(
-          `Failed to update task: ${putResponse.status} - ${errorText}`,
-        );
+        throw new Error(`Failed to update task: ${putResponse.status} - ${errorText}`);
       }
     } catch (error) {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error updating task: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -900,29 +804,22 @@ export const updateTaskTool = {
  * Delete a task from Nextcloud Tasks by UID
  */
 export const deleteTaskTool = {
-  name: "delete_task",
-  description:
-    "Delete a task from Nextcloud Tasks by UID. This action is irreversible.",
+  name: 'delete_task',
+  description: 'Delete a task from Nextcloud Tasks by UID. This action is irreversible.',
   inputSchema: z.object({
-    uid: z.string().describe("The UID of the task to delete"),
-    calendarName: z
-      .string()
-      .default("tasks")
-      .describe("The calendar name (default: 'tasks')"),
+    uid: z.string().describe('The UID of the task to delete'),
+    calendarName: z.string().default('tasks').describe("The calendar name (default: 'tasks')"),
   }),
   handler: async (args: { uid: string; calendarName: string }) => {
     try {
       const config = getNextcloudConfig();
-      const { href, etag } = await resolveTaskByUid(
-        args.calendarName,
-        args.uid,
-      );
+      const { href, etag } = await resolveTaskByUid(args.calendarName, args.uid);
 
       const deleteUrl = `${config.url}${href}`;
       const response = await fetchCalDAV(deleteUrl, {
-        method: "DELETE",
+        method: 'DELETE',
         headers: {
-          "If-Match": `"${etag}"`,
+          'If-Match': `"${etag}"`,
         },
       });
 
@@ -930,26 +827,22 @@ export const deleteTaskTool = {
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `Task deleted successfully (UID: ${args.uid})`,
             },
           ],
         };
       } else if (response.status === 412) {
-        throw new Error(
-          "Task was modified by another client (ETag mismatch). Please retry.",
-        );
+        throw new Error('Task was modified by another client (ETag mismatch). Please retry.');
       } else {
         const errorText = await response.text();
-        throw new Error(
-          `Failed to delete task: ${response.status} - ${errorText}`,
-        );
+        throw new Error(`Failed to delete task: ${response.status} - ${errorText}`);
       }
     } catch (error) {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error deleting task: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -963,83 +856,69 @@ export const deleteTaskTool = {
  * Mark a task as completed or reopen it
  */
 export const completeTaskTool = {
-  name: "complete_task",
+  name: 'complete_task',
   description:
-    "Mark a task as completed or reopen it. Sets STATUS, PERCENT-COMPLETE, and COMPLETED date atomically.",
+    'Mark a task as completed or reopen it. Sets STATUS, PERCENT-COMPLETE, and COMPLETED date atomically.',
   inputSchema: z.object({
-    uid: z.string().describe("The UID of the task"),
-    calendarName: z
-      .string()
-      .default("tasks")
-      .describe("The calendar name (default: 'tasks')"),
+    uid: z.string().describe('The UID of the task'),
+    calendarName: z.string().default('tasks').describe("The calendar name (default: 'tasks')"),
     completed: z
       .boolean()
       .default(true)
-      .describe("true = mark completed, false = reopen (default: true)"),
+      .describe('true = mark completed, false = reopen (default: true)'),
   }),
-  handler: async (args: {
-    uid: string;
-    calendarName: string;
-    completed: boolean;
-  }) => {
+  handler: async (args: { uid: string; calendarName: string; completed: boolean }) => {
     try {
       const config = getNextcloudConfig();
-      const { href, etag, icalData } = await resolveTaskByUid(
-        args.calendarName,
-        args.uid,
-      );
+      const { href, etag, icalData } = await resolveTaskByUid(args.calendarName, args.uid);
 
       let modified = unfoldICalLines(icalData);
       const now = icalNow();
 
       if (args.completed) {
-        modified = setICalProperty(modified, "STATUS", "COMPLETED");
-        modified = setICalProperty(modified, "PERCENT-COMPLETE", "100");
-        modified = setICalProperty(modified, "COMPLETED", now);
+        modified = setICalProperty(modified, 'STATUS', 'COMPLETED');
+        modified = setICalProperty(modified, 'PERCENT-COMPLETE', '100');
+        modified = setICalProperty(modified, 'COMPLETED', now);
       } else {
-        modified = setICalProperty(modified, "STATUS", "NEEDS-ACTION");
-        modified = setICalProperty(modified, "PERCENT-COMPLETE", "0");
-        modified = setICalProperty(modified, "COMPLETED", null);
+        modified = setICalProperty(modified, 'STATUS', 'NEEDS-ACTION');
+        modified = setICalProperty(modified, 'PERCENT-COMPLETE', '0');
+        modified = setICalProperty(modified, 'COMPLETED', null);
       }
 
-      modified = setICalProperty(modified, "LAST-MODIFIED", now);
-      modified = setICalProperty(modified, "DTSTAMP", now);
+      modified = setICalProperty(modified, 'LAST-MODIFIED', now);
+      modified = setICalProperty(modified, 'DTSTAMP', now);
 
       const putUrl = `${config.url}${href}`;
       const putResponse = await fetchCalDAV(putUrl, {
-        method: "PUT",
+        method: 'PUT',
         body: modified,
         headers: {
-          "Content-Type": "text/calendar; charset=utf-8",
-          "If-Match": `"${etag}"`,
+          'Content-Type': 'text/calendar; charset=utf-8',
+          'If-Match': `"${etag}"`,
         },
       });
 
       if (putResponse.ok) {
-        const action = args.completed ? "completed" : "reopened";
+        const action = args.completed ? 'completed' : 'reopened';
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `Task ${action} successfully (UID: ${args.uid})`,
             },
           ],
         };
       } else if (putResponse.status === 412) {
-        throw new Error(
-          "Task was modified by another client (ETag mismatch). Please retry.",
-        );
+        throw new Error('Task was modified by another client (ETag mismatch). Please retry.');
       } else {
         const errorText = await putResponse.text();
-        throw new Error(
-          `Failed to complete task: ${putResponse.status} - ${errorText}`,
-        );
+        throw new Error(`Failed to complete task: ${putResponse.status} - ${errorText}`);
       }
     } catch (error) {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error completing task: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],

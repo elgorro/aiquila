@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { fetchOCS } from "../../client/ocs.js";
+import { z } from 'zod';
+import { fetchOCS } from '../../client/ocs.js';
 
 /**
  * Nextcloud Group Management Tools
@@ -24,25 +24,28 @@ export const listGroupsTool = {
       if (args.limit !== undefined) queryParams.limit = String(args.limit);
       if (args.offset !== undefined) queryParams.offset = String(args.offset);
 
-      const result = await fetchOCS<{ groups: string[] }>(
-        "/ocs/v2.php/cloud/groups",
-        { queryParams }
-      );
+      const result = await fetchOCS<{ groups: string[] }>('/ocs/v2.php/cloud/groups', {
+        queryParams,
+      });
 
       const groups = result.ocs.data.groups;
 
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Groups (${groups.length}):\n${groups.join('\n')}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Groups (${groups.length}):\n${groups.join('\n')}`,
+          },
+        ],
       };
     } catch (error) {
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Error listing groups: ${error instanceof Error ? error.message : String(error)}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error listing groups: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -67,17 +70,21 @@ export const getGroupInfoTool = {
       const users = result.ocs.data.users;
 
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Group "${args.groupId}" members (${users.length}):\n${users.join('\n')}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Group "${args.groupId}" members (${users.length}):\n${users.join('\n')}`,
+          },
+        ],
       };
     } catch (error) {
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Error getting group info for "${args.groupId}": ${error instanceof Error ? error.message : String(error)}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error getting group info for "${args.groupId}": ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -96,26 +103,27 @@ export const addUserToGroupTool = {
   }),
   handler: async (args: { userId: string; groupId: string }) => {
     try {
-      await fetchOCS(
-        `/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/groups`,
-        {
-          method: 'POST',
-          body: { groupid: args.groupId },
-        }
-      );
+      await fetchOCS(`/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/groups`, {
+        method: 'POST',
+        body: { groupid: args.groupId },
+      });
 
       return {
-        content: [{
-          type: 'text' as const,
-          text: `User "${args.userId}" has been added to group "${args.groupId}".`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `User "${args.userId}" has been added to group "${args.groupId}".`,
+          },
+        ],
       };
     } catch (error) {
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Error adding user "${args.userId}" to group "${args.groupId}": ${error instanceof Error ? error.message : String(error)}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error adding user "${args.userId}" to group "${args.groupId}": ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }
@@ -134,26 +142,27 @@ export const removeUserFromGroupTool = {
   }),
   handler: async (args: { userId: string; groupId: string }) => {
     try {
-      await fetchOCS(
-        `/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/groups`,
-        {
-          method: 'DELETE',
-          body: { groupid: args.groupId },
-        }
-      );
+      await fetchOCS(`/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/groups`, {
+        method: 'DELETE',
+        body: { groupid: args.groupId },
+      });
 
       return {
-        content: [{
-          type: 'text' as const,
-          text: `User "${args.userId}" has been removed from group "${args.groupId}".`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `User "${args.userId}" has been removed from group "${args.groupId}".`,
+          },
+        ],
       };
     } catch (error) {
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Error removing user "${args.userId}" from group "${args.groupId}": ${error instanceof Error ? error.message : String(error)}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error removing user "${args.userId}" from group "${args.groupId}": ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }

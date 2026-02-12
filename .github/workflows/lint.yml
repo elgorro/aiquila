@@ -3,7 +3,7 @@ name: Lint
 on:
   pull_request:
     branches: [main]
-  paths:
+    paths:
       - 'mcp-server/**'
       - '!mcp-server/**/*.md'
       - '!mcp-server/**/tests/**'
@@ -22,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: mcp-server/package-lock.json
 

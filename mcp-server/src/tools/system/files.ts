@@ -1,7 +1,7 @@
-import { z } from "zod";
-import { getWebDAVClient } from "../../client/webdav.js";
-import { fetchAiquilaAPI } from "../../client/aiquila.js";
-import { PathSchema, FilePathSchema, FileContentSchema, FolderPathSchema } from "../types.js";
+import { z } from 'zod';
+import { getWebDAVClient } from '../../client/webdav.js';
+import { fetchAiquilaAPI } from '../../client/aiquila.js';
+import { PathSchema, FilePathSchema, FileContentSchema, FolderPathSchema } from '../types.js';
 
 /**
  * File System Tools for Nextcloud
@@ -12,13 +12,10 @@ import { PathSchema, FilePathSchema, FileContentSchema, FolderPathSchema } from 
  * List files and folders in a Nextcloud directory
  */
 export const listFilesTool = {
-  name: "list_files",
-  description: "List files and folders in a Nextcloud directory",
+  name: 'list_files',
+  description: 'List files and folders in a Nextcloud directory',
   inputSchema: z.object({
-    path: z
-      .string()
-      .default("/")
-      .describe("The directory path to list (default: '/')"),
+    path: z.string().default('/').describe("The directory path to list (default: '/')"),
   }),
   handler: async (args: { path: string }) => {
     const client = getWebDAVClient();
@@ -26,7 +23,7 @@ export const listFilesTool = {
     return {
       content: [
         {
-          type: "text",
+          type: 'text',
           text: JSON.stringify(items, null, 2),
         },
       ],
@@ -38,18 +35,18 @@ export const listFilesTool = {
  * Read the contents of a file from Nextcloud
  */
 export const readFileTool = {
-  name: "read_file",
-  description: "Read the contents of a file from Nextcloud",
+  name: 'read_file',
+  description: 'Read the contents of a file from Nextcloud',
   inputSchema: FilePathSchema,
   handler: async (args: { path: string }) => {
     const client = getWebDAVClient();
     const content = await client.getFileContents(args.path, {
-      format: "text",
+      format: 'text',
     });
     return {
       content: [
         {
-          type: "text",
+          type: 'text',
           text: content as string,
         },
       ],
@@ -61,8 +58,8 @@ export const readFileTool = {
  * Create or update a file in Nextcloud
  */
 export const writeFileTool = {
-  name: "write_file",
-  description: "Create or update a file in Nextcloud",
+  name: 'write_file',
+  description: 'Create or update a file in Nextcloud',
   inputSchema: FileContentSchema,
   handler: async (args: { path: string; content: string }) => {
     const client = getWebDAVClient();
@@ -72,7 +69,7 @@ export const writeFileTool = {
     return {
       content: [
         {
-          type: "text",
+          type: 'text',
           text: `File written successfully to ${args.path}`,
         },
       ],
@@ -84,8 +81,8 @@ export const writeFileTool = {
  * Create a folder in Nextcloud
  */
 export const createFolderTool = {
-  name: "create_folder",
-  description: "Create a folder in Nextcloud",
+  name: 'create_folder',
+  description: 'Create a folder in Nextcloud',
   inputSchema: FolderPathSchema,
   handler: async (args: { path: string }) => {
     const client = getWebDAVClient();
@@ -93,7 +90,7 @@ export const createFolderTool = {
     return {
       content: [
         {
-          type: "text",
+          type: 'text',
           text: `Folder created successfully at ${args.path}`,
         },
       ],
@@ -105,8 +102,8 @@ export const createFolderTool = {
  * Delete a file or folder from Nextcloud
  */
 export const deleteTool = {
-  name: "delete",
-  description: "Delete a file or folder from Nextcloud",
+  name: 'delete',
+  description: 'Delete a file or folder from Nextcloud',
   inputSchema: PathSchema,
   handler: async (args: { path: string }) => {
     const client = getWebDAVClient();
@@ -114,7 +111,7 @@ export const deleteTool = {
     return {
       content: [
         {
-          type: "text",
+          type: 'text',
           text: `Deleted successfully: ${args.path}`,
         },
       ],
@@ -126,32 +123,27 @@ export const deleteTool = {
  * Get detailed file metadata via AIquila REST API
  */
 export const getFileInfoTool = {
-  name: "get_file_info",
+  name: 'get_file_info',
   description:
-    "Get detailed file metadata from Nextcloud (name, size, mime type, modified date, permissions, etc.)",
+    'Get detailed file metadata from Nextcloud (name, size, mime type, modified date, permissions, etc.)',
   inputSchema: z.object({
     path: z
       .string()
-      .describe(
-        "The file or folder path in Nextcloud (e.g., '/Documents/report.pdf')"
-      ),
+      .describe("The file or folder path in Nextcloud (e.g., '/Documents/report.pdf')"),
   }),
   handler: async (args: { path: string }) => {
     try {
-      const info = await fetchAiquilaAPI<Record<string, unknown>>(
-        "/files/info",
-        { queryParams: { path: args.path } }
-      );
+      const info = await fetchAiquilaAPI<Record<string, unknown>>('/files/info', {
+        queryParams: { path: args.path },
+      });
       return {
-        content: [
-          { type: "text" as const, text: JSON.stringify(info, null, 2) },
-        ],
+        content: [{ type: 'text' as const, text: JSON.stringify(info, null, 2) }],
       };
     } catch (error) {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error getting file info: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -165,19 +157,15 @@ export const getFileInfoTool = {
  * Search for files by name pattern and/or mime type
  */
 export const searchFilesTool = {
-  name: "search_files",
-  description: "Search for files in Nextcloud by name pattern and/or mime type",
+  name: 'search_files',
+  description: 'Search for files in Nextcloud by name pattern and/or mime type',
   inputSchema: z.object({
-    query: z.string().describe("Search query (file name pattern)"),
+    query: z.string().describe('Search query (file name pattern)'),
     mime: z
       .string()
       .optional()
       .describe("Filter by mime type prefix (e.g., 'image/', 'text/plain')"),
-    path: z
-      .string()
-      .optional()
-      .default("/")
-      .describe("Base directory to search in"),
+    path: z.string().optional().default('/').describe('Base directory to search in'),
   }),
   handler: async (args: { query: string; mime?: string; path?: string }) => {
     try {
@@ -185,20 +173,17 @@ export const searchFilesTool = {
       if (args.mime) queryParams.mime = args.mime;
       if (args.path) queryParams.path = args.path;
 
-      const results = await fetchAiquilaAPI<Record<string, unknown>>(
-        "/files/search",
-        { queryParams }
-      );
+      const results = await fetchAiquilaAPI<Record<string, unknown>>('/files/search', {
+        queryParams,
+      });
       return {
-        content: [
-          { type: "text" as const, text: JSON.stringify(results, null, 2) },
-        ],
+        content: [{ type: 'text' as const, text: JSON.stringify(results, null, 2) }],
       };
     } catch (error) {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error searching files: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -212,11 +197,11 @@ export const searchFilesTool = {
  * Read file content with proper encoding (text or base64 for binary/images)
  */
 export const getFileContentTool = {
-  name: "get_file_content",
+  name: 'get_file_content',
   description:
-    "Read file content from Nextcloud with mime type info. Returns text for text files, base64 for binary files (images, PDFs, etc.). Images are returned as MCP image content for Claude vision.",
+    'Read file content from Nextcloud with mime type info. Returns text for text files, base64 for binary files (images, PDFs, etc.). Images are returned as MCP image content for Claude vision.',
   inputSchema: z.object({
-    path: z.string().describe("The file path in Nextcloud"),
+    path: z.string().describe('The file path in Nextcloud'),
   }),
   handler: async (args: { path: string }) => {
     try {
@@ -226,13 +211,13 @@ export const getFileContentTool = {
         size: number;
         encoding: string;
         content: string;
-      }>("/files/content", { queryParams: { path: args.path } });
+      }>('/files/content', { queryParams: { path: args.path } });
 
-      if (result.encoding === "text") {
+      if (result.encoding === 'text') {
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `File: ${result.name} (${result.mimeType}, ${result.size} bytes)\n\n${result.content}`,
             },
           ],
@@ -240,15 +225,15 @@ export const getFileContentTool = {
       }
 
       // For images, return as MCP image content type for Claude vision
-      if (result.mimeType.startsWith("image/")) {
+      if (result.mimeType.startsWith('image/')) {
         return {
           content: [
             {
-              type: "text" as const,
+              type: 'text' as const,
               text: `File: ${result.name} (${result.mimeType}, ${result.size} bytes)`,
             },
             {
-              type: "image" as const,
+              type: 'image' as const,
               data: result.content,
               mimeType: result.mimeType,
             },
@@ -260,7 +245,7 @@ export const getFileContentTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `File: ${result.name} (${result.mimeType}, ${result.size} bytes)\nEncoding: base64\n\n${result.content}`,
           },
         ],
@@ -269,7 +254,7 @@ export const getFileContentTool = {
       return {
         content: [
           {
-            type: "text" as const,
+            type: 'text' as const,
             text: `Error reading file: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],

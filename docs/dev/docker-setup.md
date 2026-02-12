@@ -6,14 +6,17 @@ Complete guide for setting up and using the AIquila Docker development environme
 
 The Docker environment provides a complete, isolated development setup with:
 
+- **Caddy 2** - Reverse proxy with automatic HTTPS (self-signed certs for dev)
 - **PostgreSQL 16** - Production-grade database
 - **Nextcloud 32** - Test instance for development
 - **Redis 7** - Caching and performance
-- **MCP Server** - Development container with hot reload
+- **MCP Server** - Development container with hot reload (HTTP transport on port 3339)
 - **MailHog** - Email testing and debugging
 - **Adminer** - Database management UI
 
 **Note:** This setup requires manual configuration after first start. The AIquila app needs to be installed after Nextcloud initializes.
+
+> **Looking for standalone mode?** If you already have a Nextcloud instance and only need the MCP server, see [Standalone Docker Setup](../mcp/standalone-docker.md).
 
 ## Quick Start
 
@@ -123,11 +126,14 @@ See [SDK-MIGRATION.md](../nextcloud-app/SDK-MIGRATION.md) for more details.
 
 Once all services are running and configured:
 
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| **Nextcloud** | http://localhost:8080 | Set during installation |
-| **MailHog UI** | http://localhost:8025 | (no auth) |
-| **Adminer** | http://localhost:8081 | See below |
+| Service | HTTPS (via Caddy) | Direct HTTP | Credentials |
+|---------|-------------------|-------------|-------------|
+| **Nextcloud** | https://localhost | http://localhost:8080 | Set during installation |
+| **MCP Server** | https://localhost:3340/mcp | http://localhost:3339/mcp | (no auth) |
+| **MailHog UI** | - | http://localhost:8025 | (no auth) |
+| **Adminer** | - | http://localhost:8081 | See below |
+
+Caddy uses self-signed certificates in development. Your browser will show a certificate warning on first visit — this is expected.
 
 **Adminer credentials:**
 - System: `PostgreSQL`
@@ -137,7 +143,11 @@ Once all services are running and configured:
 - Database: `nextcloud`
 
 **MCP Server:**
-- Runs in container, accessible at `http://nextcloud:80` from within Docker network
+- Runs with Streamable HTTP transport (SSE-capable) on port 3339
+- HTTPS via Caddy: `https://localhost:3340/mcp`
+- Direct HTTP: `http://localhost:3339/mcp`
+- Within Docker network: `http://aiquila-mcp:3339/mcp`
+- Connects to Nextcloud internally at `http://nextcloud`
 - Logs: `make logs-mcp`
 
 ## Development Workflow
@@ -346,7 +356,7 @@ docker exec aiquila-nextcloud php occ config:list | grep redis
 
 ### Port Conflicts
 
-If ports 8080, 8025, or 8081 are already in use, edit `docker/docker-compose.yml`:
+If ports 443, 3339, 8080, 8025, or 8081 are already in use, edit `docker/docker-compose.yml`:
 
 ```yaml
 services:
@@ -361,19 +371,32 @@ services:
 
 ## Testing MCP Server Integration
 
-The MCP server container can communicate with Nextcloud:
+The MCP server runs with Streamable HTTP transport in Docker, exposing an MCP endpoint on port 3339.
 
 ```bash
 # Check MCP server logs
 make logs-mcp
 
-# The server connects to http://nextcloud internally
-# Using credentials: testuser / testpass123
+# Test the MCP endpoint is responding (from host)
+curl -X POST http://localhost:3339/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
 
-# Test file operations
+# Test Nextcloud connectivity from inside MCP container
 make shell-mcp
 curl -u testuser:testpass123 http://nextcloud/remote.php/dav/files/testuser/
 ```
+
+### Transport Modes
+
+The MCP server supports two transport modes, controlled by the `MCP_TRANSPORT` environment variable:
+
+| Mode | Value | Use Case |
+|------|-------|----------|
+| **stdio** (default) | `MCP_TRANSPORT=stdio` | Claude Desktop, local MCP clients |
+| **HTTP** | `MCP_TRANSPORT=http` | Docker, network deployment, remote clients |
+
+In Docker, `MCP_TRANSPORT=http` is set automatically in `docker-compose.yml`. For local development outside Docker, stdio is the default (no env var needed).
 
 ## Troubleshooting
 
@@ -609,29 +632,33 @@ For production:
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Docker Host                       │
-│                                                     │
-│  ┌──────────────┐    ┌──────────────┐             │
-│  │  Nextcloud   │────│  PostgreSQL  │             │
-│  │   :8080      │    │              │             │
-│  │              │    └──────────────┘             │
-│  │  + AIquila   │                                  │
-│  │    app       │    ┌──────────────┐             │
-│  │  (mounted)   │────│    Redis     │             │
-│  └──────────────┘    │              │             │
-│         │            └──────────────┘             │
-│         │                                          │
-│         │            ┌──────────────┐             │
-│         └────────────│   MailHog    │             │
-│                      │   :8025      │             │
-│  ┌──────────────┐    └──────────────┘             │
-│  │  MCP Server  │                                  │
-│  │              │    ┌──────────────┐             │
-│  │  (mounted)   │────│   Adminer    │             │
-│  └──────────────┘    │   :8081      │             │
-│                      └──────────────┘             │
-└─────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│                      Docker Host                           │
+│                                                           │
+│  ┌────────────────┐                                       │
+│  │  Caddy (HTTPS) │                                       │
+│  │  :443  :3340   │                                       │
+│  └───┬────────┬───┘                                       │
+│      │        │                                           │
+│      │        └──────────────┐                            │
+│      ▼                       ▼                            │
+│  ┌──────────────┐    ┌──────────────┐                     │
+│  │  Nextcloud   │    │  MCP Server  │                     │
+│  │  :8080 (http)│    │  :3339 (http)│                     │
+│  │  + AIquila   │    │  (HTTP/SSE)  │                     │
+│  │  (mounted)   │    │  (mounted)   │                     │
+│  └──────┬───────┘    └──────┬───────┘                     │
+│         │                   │ http://nextcloud             │
+│         │                   │                              │
+│  ┌──────┴───────┐    ┌─────┴────────┐                     │
+│  │  PostgreSQL  │    │    Redis     │                     │
+│  └──────────────┘    └──────────────┘                     │
+│                                                           │
+│  ┌──────────────┐    ┌──────────────┐                     │
+│  │   MailHog    │    │   Adminer    │                     │
+│  │   :8025      │    │   :8081      │                     │
+│  └──────────────┘    └──────────────┘                     │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ## Makefile Command Reference

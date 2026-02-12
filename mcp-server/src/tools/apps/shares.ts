@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { fetchOCS } from "../../client/ocs.js";
+import { z } from 'zod';
+import { fetchOCS } from '../../client/ocs.js';
 
 /**
  * Nextcloud Share Management Tools
@@ -39,7 +39,10 @@ export const listSharesTool = {
   inputSchema: z.object({
     path: z.string().optional().describe('Filter shares for a specific file/folder path'),
     reshares: z.boolean().optional().describe('Include reshares (default: false)'),
-    subfiles: z.boolean().optional().describe('Show shares for all files in a folder (requires path)'),
+    subfiles: z
+      .boolean()
+      .optional()
+      .describe('Show shares for all files in a folder (requires path)'),
   }),
   handler: async (args: { path?: string; reshares?: boolean; subfiles?: boolean }) => {
     try {
@@ -48,19 +51,20 @@ export const listSharesTool = {
       if (args.reshares) queryParams.reshares = 'true';
       if (args.subfiles) queryParams.subfiles = 'true';
 
-      const result = await fetchOCS<ShareEntry[]>(
-        "/ocs/v2.php/apps/files_sharing/api/v1/shares",
-        { queryParams }
-      );
+      const result = await fetchOCS<ShareEntry[]>('/ocs/v2.php/apps/files_sharing/api/v1/shares', {
+        queryParams,
+      });
 
       const shares = result.ocs.data;
 
       if (shares.length === 0) {
         return {
-          content: [{
-            type: 'text' as const,
-            text: 'No shares found.',
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: 'No shares found.',
+            },
+          ],
         };
       }
 
@@ -72,17 +76,21 @@ export const listSharesTool = {
       });
 
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Shares (${shares.length}):\n${formatted.join('\n')}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Shares (${shares.length}):\n${formatted.join('\n')}`,
+          },
+        ],
       };
     } catch (error) {
       return {
-        content: [{
-          type: 'text' as const,
-          text: `Error listing shares: ${error instanceof Error ? error.message : String(error)}`,
-        }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error listing shares: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }

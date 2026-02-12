@@ -34,7 +34,7 @@ $CONFIG = array(
    * Security - Development Only!
    */
   'trusted_proxies' => array('172.16.0.0/12', '10.0.0.0/8'),
-  'overwriteprotocol' => 'http', // For Docker development
+  'overwriteprotocol' => 'https', // Caddy reverse proxy handles TLS
 
   /**
    * Allow app installation from custom_apps
