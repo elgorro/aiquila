@@ -43,7 +43,7 @@ interface Recipe {
 }
 
 function slugify(name: string): string {
-  let slug = name
+  const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9\u00C0-\u024F-]/g, "-")
     .replace(/-+/g, "-")
@@ -571,7 +571,7 @@ export const updateRecipeTool = {
       const recipe = JSON.parse(json as string) as Recipe;
 
       // Merge provided fields
-      const { folderName: _, ...updates } = args;
+      const { folderName: _folderName, ...updates } = args;
       for (const [key, value] of Object.entries(updates)) {
         if (value !== undefined) {
           if (key === "nutrition") {
