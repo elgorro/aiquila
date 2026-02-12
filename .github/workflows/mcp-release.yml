@@ -60,7 +60,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install dependencies
         working-directory: mcp-server
@@ -135,7 +135,7 @@ jobs:
             ```
 
             ### Requirements
-            - Node.js 20 or higher
+            - Node.js 24 or higher
 
             ---
             *This release was automatically created by GitHub Actions*

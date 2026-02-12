@@ -4,7 +4,7 @@ This guide will walk you through setting up the AIquila MCP Server to connect Cl
 
 ## Prerequisites
 
-- **Node.js** 18 or higher
+- **Node.js** 24 or higher (LTS)
 - **Nextcloud** instance with WebDAV access
 - **Nextcloud credentials** (URL, username, password)
 - **Claude Desktop** or another MCP-compatible client
@@ -149,12 +149,7 @@ In Claude Desktop, you can check which tools are available by asking:
 What Nextcloud tools are available?
 ```
 
-You should see 12 tools:
-- 5 file system tools
-- 2 Tasks tools
-- 1 Cookbook tool
-- 1 Notes tool
-- 3 AIquila internal tools
+You should see 70+ tools across categories including file operations, calendar, tasks, contacts, mail, bookmarks, maps, cookbook, notes, tags, user/group management, and more.
 
 ## Troubleshooting
 
@@ -218,13 +213,57 @@ node --version
 
 **Solution**: This is expected. AIquila configuration tools provide instructions for running OCC commands manually. See [AIquila Tools documentation](tools/apps/aiquila.md).
 
+## Docker Setup (HTTP Transport)
+
+For running the MCP server in Docker with HTTP/SSE transport, see the [Docker Setup Guide](../dev/docker-setup.md).
+
+The Docker environment automatically configures the MCP server with:
+- `MCP_TRANSPORT=http` - Streamable HTTP transport (supports SSE)
+- `MCP_PORT=3339` - MCP endpoint
+- Caddy reverse proxy for HTTPS with self-signed certificates
+- Nextcloud connectivity via internal Docker network
+
+Quick start:
+```bash
+cd docker
+cp .env.example .env
+make up
+```
+
+The MCP server will be available at:
+- **HTTPS**: `https://localhost:3340/mcp` (via Caddy, self-signed cert)
+- **HTTP**: `http://localhost:3339/mcp` (direct)
+
+## Standalone Docker (External Nextcloud)
+
+If you already have a Nextcloud instance and just want to run the MCP server in Docker:
+
+```bash
+cd docker/standalone
+cp .env.example .env
+nano .env    # Set NEXTCLOUD_URL, NEXTCLOUD_USER, NEXTCLOUD_PASSWORD
+make up
+```
+
+The MCP server will be available at:
+- **HTTPS**: `https://localhost:3340/mcp` (self-signed cert)
+- **HTTP**: `http://localhost:3339/mcp`
+
+See [Standalone Docker Setup](standalone-docker.md) for full documentation.
+
 ## Development Mode
 
 For active development with hot reload:
 
 ```bash
 cd mcp-server
+
+# stdio mode (default) - for Claude Desktop
 npm run dev
+
+# HTTP mode - for network/Docker-style access
+MCP_TRANSPORT=http npm run dev
+# Server starts at http://localhost:3339/mcp
 ```
 
 This uses `tsx` to watch for file changes and automatically restart the server.

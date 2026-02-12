@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { executeOCC } from "../../client/aiquila.js";
+import { executeOCC, formatOccError } from "../../client/aiquila.js";
 
 /**
  * Nextcloud OCC Command Execution Tools
@@ -75,7 +75,7 @@ export const runOccTool = {
         content: [
           {
             type: "text" as const,
-            text: `Error executing OCC command: ${error instanceof Error ? error.message : String(error)}`,
+            text: `Error executing OCC command: ${formatOccError(error)}`,
           },
         ],
         isError: true,

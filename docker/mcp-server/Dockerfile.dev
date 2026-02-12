@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:24-alpine
 
 # Install development dependencies
 RUN apk add --no-cache \
@@ -18,6 +18,8 @@ COPY . .
 
 # Expose debug port for Node.js debugging
 EXPOSE 9229
+# Expose MCP HTTP transport port
+EXPOSE 3339
 
 # Default command (can be overridden in docker-compose)
 CMD ["npm", "run", "dev"]

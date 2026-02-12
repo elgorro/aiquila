@@ -30,27 +30,52 @@
 *Target: v0.2.0*
 
 ### MCP Server
-- [ ] SSE Support
-- [ ] Photo tagging via Claude Vision API
-- [x] Calendar event creation
-- [x] Native Cookbook app API integration
+
+**Transport & Architecture**
+- [x] SSE / Streamable HTTP transport (Docker-ready)
+- [x] Server factory refactoring (per-connection server instances)
+- [x] Centralized versioning (single source of truth in package.json)
+
+**App Integrations**
+- [x] Calendar events (full CRUD with recurrence, attendees, alarms)
+- [x] Tasks (full CRUD with subtasks, priorities, categories)
+- [x] Contacts (full CRUD via CardDAV with structured fields)
+- [x] Mail (accounts, mailboxes, messages, send, flags)
+- [x] Bookmarks (CRUD bookmarks, folders, tags)
+- [x] Maps (favorites, devices, tracks, photos, custom maps, import/export)
+- [x] Cookbook (native API integration with schema.org recipes)
+- [x] Notes (markdown-based with search)
+
+**System & Administration**
+- [x] System API integration (status, setup checks)
+- [x] App management (list, enable/disable apps)
+- [x] User & group management (list, enable/disable, group membership)
+- [x] File sharing audit (list shares with type/permissions)
+- [x] Security checks (core & app integrity verification)
+- [x] OCC command execution (arbitrary Nextcloud CLI commands)
+- [x] AIquila self-configuration tools (show/configure/test)
+
+**Files & Search**
 - [x] Search files by content
-- [x] List/complete tasks
-- [x] Mail integration
-- [x] System API integration
-- [x] Contacts integration
+- [x] Photo tagging via Claude Vision API (get_file_content + tag tools)
+- [x] File tagging (personal + system tags)
+
+**Testing**
+- [x] Dedicated test suites (server, tags, transports)
 
 ### Nextcloud App
+- [x] Streaming responses
 - [ ] Conversation history storage
 - [ ] Token usage tracking
-- [x] Streaming responses
-- [ ] Fileaccess in chat window
+- [ ] File access in chat window
+- [ ] MCP/API access
 
 ### Infrastructure
-- [ ] Docker dev environment for improved testing capabilities
-- [ ] Docker for MCP-Server
+- [x] Docker dev environment for improved testing capabilities
+- [x] Docker for MCP Server (HTTP transport on port 3339)
+- [ ] Docker Github Release
+- [ ] OpenApi support
 - [ ] Update docs
-
 
 ---
 
@@ -58,10 +83,32 @@
 *Target: v0.3.0*
 
 ### MCP Server
-- [ ] Bulk file operations
-- [ ] Nextcloud Talk integration
-- [ ] Deck (kanban) integration
 
+**Core**
+- [ ] Bulk file operations
+
+**Collaboration**
+- [ ] Talk integration (chat, calls, conversations)
+- [ ] Deck integration (kanban boards, cards, stacks)
+- [ ] Circles integration (user groups/teams)
+- [ ] Polls integration
+- [ ] Forms integration
+
+**Content & Media**
+- [ ] Text integration (collaborative documents)
+- [ ] News integration (RSS feeds)
+- [ ] Photos tools (albums, metadata)
+- [ ] Recognize integration (AI-based image classification)
+- [ ] Files Zip (archive creation/extraction)
+
+**Administration**
+- [ ] Activity feed integration
+- [ ] Announcements integration
+- [ ] Registration management
+- [ ] Terms of Service management
+- [ ] File recommendations
+- [ ] Social sharing
+- [ ] Passman integration (password management)
 
 ### Nextcloud App
 - [ ] Multi-turn conversations with file context
@@ -71,19 +118,18 @@
 
 ---
 
-## Phase 4: Other providers
+## Phase 4: Alternative Providers
 *Target: v0.4.0*
 
 ### MCP Server
-- [ ] Mistral-API integration
-- [ ] Coworker implemantation
-
-
+- [ ] Mistral API integration
+- [ ] Coworker implementation (agent-driven automation)
 
 ### Nextcloud App
-- [ ] Mistral-API
-- [ ] UI for switching model
+- [ ] Mistral API support
+- [ ] UI for switching model provider
 - [ ] Coworker (repeated/scheduled jobs)
+
 ---
 
 ## Final Phase: Polish & Distribution
@@ -109,9 +155,9 @@
 - [ ] Automated dependency updates (Dependabot/Renovate)
 
 ### Distribution
+- [x] Docker images for MCP server
 - [ ] npm package publishing for MCP server
 - [ ] Homebrew formula for easy installation
-- [ ] Docker images for MCP server
 
 ---
 

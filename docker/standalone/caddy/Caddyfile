@@ -1,0 +1,10 @@
+{
+	# Development: use self-signed certs by default
+	# Production: remove this block to enable automatic Let's Encrypt
+	local_certs
+}
+
+# MCP Server (HTTPS on port 3340)
+https://localhost:3340 {
+	reverse_proxy mcp-server:3339
+}

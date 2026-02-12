@@ -576,12 +576,11 @@ export const updateRecipeTool = {
         if (value !== undefined) {
           if (key === "nutrition") {
             recipe.nutrition = {
-              "@type": "NutritionInformation",
               ...recipe.nutrition,
-              ...value,
+              ...(value as Partial<RecipeNutrition>),
             };
           } else {
-            (recipe as Record<string, unknown>)[key] = value;
+            (recipe as unknown as Record<string, unknown>)[key] = value;
           }
         }
       }

@@ -1,4 +1,4 @@
-.PHONY: help up down restart logs logs-nc logs-mcp status shell-nc shell-mcp shell-db build clean reset test-nc test-mcp install-test install-test-clean
+.PHONY: help up down restart logs logs-nc logs-mcp status shell-nc shell-mcp shell-db build clean reset test-nc test-mcp install-test install-test-clean standalone-up standalone-down standalone-logs standalone-test
 
 # Default target
 help:
@@ -23,10 +23,21 @@ help:
 	@echo "  make install-test - Start installation test environment (port 8090)"
 	@echo "  make install-test-clean - Clean up installation test"
 	@echo ""
-	@echo "Quick access URLs:"
-	@echo "  Nextcloud:  http://localhost:8080"
-	@echo "  MailHog:    http://localhost:8025"
-	@echo "  Adminer:    http://localhost:8081"
+	@echo "Quick access URLs (HTTPS via Caddy):"
+	@echo "  Nextcloud:    https://localhost"
+	@echo "  MCP Server:   https://localhost:3340/mcp"
+	@echo "  MailHog:      http://localhost:8025"
+	@echo "  Adminer:      http://localhost:8081"
+	@echo ""
+	@echo "Direct HTTP (no TLS):"
+	@echo "  Nextcloud:    http://localhost:8080"
+	@echo "  MCP Server:   http://localhost:3339/mcp"
+	@echo ""
+	@echo "Standalone MCP Server (external Nextcloud):"
+	@echo "  make standalone-up     - Start MCP server only (standalone mode)"
+	@echo "  make standalone-down   - Stop standalone MCP server"
+	@echo "  make standalone-logs   - View standalone MCP server logs"
+	@echo "  make standalone-test   - Test standalone MCP connectivity"
 
 # Start all services
 up:
@@ -34,10 +45,11 @@ up:
 	docker-compose up -d
 	@echo "✅ All services started!"
 	@echo ""
-	@echo "Access points:"
-	@echo "  Nextcloud:  http://localhost:8080"
-	@echo "  MailHog:    http://localhost:8025"
-	@echo "  Adminer:    http://localhost:8081"
+	@echo "Access points (HTTPS via Caddy):"
+	@echo "  Nextcloud:    https://localhost"
+	@echo "  MCP Server:   https://localhost:3340/mcp"
+	@echo "  MailHog:      http://localhost:8025"
+	@echo "  Adminer:      http://localhost:8081"
 
 # Stop all services
 down:
@@ -121,3 +133,16 @@ install-test:
 
 install-test-clean:
 	$(MAKE) -C installation clean
+
+# Standalone MCP server (connects to external Nextcloud)
+standalone-up:
+	$(MAKE) -C standalone up
+
+standalone-down:
+	$(MAKE) -C standalone down
+
+standalone-logs:
+	$(MAKE) -C standalone logs-follow
+
+standalone-test:
+	$(MAKE) -C standalone test

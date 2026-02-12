@@ -1,0 +1,62 @@
+# AIquila MCP Server - Standalone Mode
+# Runs the MCP server only, connecting to an external Nextcloud instance.
+# No local database, Nextcloud, or other services needed.
+#
+# Usage:
+#   cp .env.example .env
+#   # Edit .env with your Nextcloud URL and credentials
+#   make up
+
+services:
+  # MCP Server (Development)
+  mcp-server:
+    build:
+      context: ../../mcp-server
+      dockerfile: ../docker/mcp-server/Dockerfile.dev
+    container_name: aiquila-standalone-mcp
+    restart: unless-stopped
+    environment:
+      NEXTCLOUD_URL: ${NEXTCLOUD_URL:?Set NEXTCLOUD_URL in .env}
+      NEXTCLOUD_USER: ${NEXTCLOUD_USER:?Set NEXTCLOUD_USER in .env}
+      NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:?Set NEXTCLOUD_PASSWORD in .env}
+      NODE_ENV: development
+      MCP_TRANSPORT: http
+      MCP_PORT: "3339"
+    volumes:
+      # Mount source for live development
+      - ../../mcp-server:/app
+      # Prevent node_modules from being overwritten
+      - /app/node_modules
+    working_dir: /app
+    command: npm run dev
+    ports:
+      - "3339:3339"
+    networks:
+      - aiquila-standalone-network
+
+  # Caddy Reverse Proxy (HTTPS)
+  caddy:
+    image: caddy:2-alpine
+    container_name: aiquila-standalone-caddy
+    restart: unless-stopped
+    depends_on:
+      - mcp-server
+    ports:
+      - "3340:3340"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - standalone_caddy_data:/data
+      - standalone_caddy_config:/config
+    networks:
+      - aiquila-standalone-network
+
+volumes:
+  standalone_caddy_data:
+    name: aiquila_standalone_caddy_data
+  standalone_caddy_config:
+    name: aiquila_standalone_caddy_config
+
+networks:
+  aiquila-standalone-network:
+    name: aiquila-standalone-network
+    driver: bridge

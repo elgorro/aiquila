@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { executeOCC } from "../../client/aiquila.js";
+import { executeOCC, formatOccError } from "../../client/aiquila.js";
 
 /**
  * Nextcloud Security & Integrity Tools
@@ -42,7 +42,7 @@ export const checkCoreIntegrityTool = {
       return {
         content: [{
           type: 'text' as const,
-          text: `Error checking core integrity: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Error checking core integrity: ${formatOccError(error)}`,
         }],
         isError: true,
       };
@@ -88,7 +88,7 @@ export const checkAppIntegrityTool = {
       return {
         content: [{
           type: 'text' as const,
-          text: `Error checking app integrity for "${args.appId}": ${error instanceof Error ? error.message : String(error)}`,
+          text: `Error checking app integrity for "${args.appId}": ${formatOccError(error)}`,
         }],
         isError: true,
       };

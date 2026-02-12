@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { fetchOCS, fetchStatus } from "../../client/ocs.js";
-import { executeOCC } from "../../client/aiquila.js";
+import { executeOCC, formatOccError } from "../../client/aiquila.js";
 
 /**
  * Nextcloud System Status Tools
@@ -80,7 +80,7 @@ export const setupChecksTool = {
       return {
         content: [{
           type: 'text' as const,
-          text: `Error running setup checks: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Error running setup checks: ${formatOccError(error)}`,
         }],
         isError: true,
       };
