@@ -56,3 +56,18 @@ if (!interface_exists('OCP\Http\Client\IResponse')) {
     }
     class_alias('OCP_Http_Client_IResponse', 'OCP\Http\Client\IResponse');
 }
+
+if (!interface_exists('Psr\Log\LoggerInterface')) {
+    interface Psr_Log_LoggerInterface {
+        public function emergency(string|\Stringable $message, array $context = []): void;
+        public function alert(string|\Stringable $message, array $context = []): void;
+        public function critical(string|\Stringable $message, array $context = []): void;
+        public function error(string|\Stringable $message, array $context = []): void;
+        public function warning(string|\Stringable $message, array $context = []): void;
+        public function notice(string|\Stringable $message, array $context = []): void;
+        public function info(string|\Stringable $message, array $context = []): void;
+        public function debug(string|\Stringable $message, array $context = []): void;
+        public function log(mixed $level, string|\Stringable $message, array $context = []): void;
+    }
+    class_alias('Psr_Log_LoggerInterface', 'Psr\Log\LoggerInterface');
+}
