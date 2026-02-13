@@ -2,6 +2,7 @@
 
 namespace OCA\AIquila\Settings;
 
+use OCA\AIquila\Service\ClaudeModels;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
 use OCP\Settings\ISettings;
@@ -15,7 +16,7 @@ class AdminSettings implements ISettings {
 
     public function getForm(): TemplateResponse {
         $apiKey = $this->config->getAppValue('aiquila', 'api_key', '');
-        $model = $this->config->getAppValue('aiquila', 'model', 'claude-sonnet-4-20250514');
+        $model = $this->config->getAppValue('aiquila', 'model', ClaudeModels::DEFAULT_MODEL);
         $maxTokens = $this->config->getAppValue('aiquila', 'max_tokens', '4096');
         $apiTimeout = $this->config->getAppValue('aiquila', 'api_timeout', '30');
 
@@ -25,6 +26,8 @@ class AdminSettings implements ISettings {
             'model' => $model,
             'max_tokens' => $maxTokens,
             'api_timeout' => $apiTimeout,
+            'available_models' => ClaudeModels::getAllModels(),
+            'default_model' => ClaudeModels::DEFAULT_MODEL,
         ], '');
     }
 

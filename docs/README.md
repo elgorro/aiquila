@@ -20,7 +20,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - 📚 **[MCP Development](mcp/development/)** - Extend the MCP server
 
 ### Development
-- 🐳 **[Docker Setup](dev/docker-setup.md)** - Development environment
+- 🐳 **[Docker Setup](dev/docker-setup.md)** - Development environment (run from `docker/installation/`)
 - 💻 **[Development Guide](dev/development.md)** - Contributing and development workflow
 - ✅ **[Best Practices](dev/best-practices.md)** - Code quality and standards
 - 🚀 **[CI/CD](dev/ci-cd.md)** - Continuous integration and deployment
@@ -76,7 +76,7 @@ docs/
 
 ### For Developers
 
-1. Set up your environment with [Docker Setup](dev/docker-setup.md)
+1. Set up your environment: `cd docker/installation && make build-tarball && make up`
 2. Read the [Development Guide](dev/development.md)
 3. Follow [Best Practices](dev/best-practices.md)
 4. Review [Internal API](internal-api.md) for integration
@@ -88,23 +88,7 @@ docs/
 2. Check [AIquila App Setup](installation/aiquila-setup.md) for installation
 3. See [Connectivity Guide](connectivity.md) for network configuration
 
-## Contributing to Documentation
-
-Found an error or want to improve the docs?
-
-1. Fork the repository
-2. Make your changes
-3. Submit a pull request
-
-Or open an issue at [GitHub Issues](https://github.com/elgorro/aiquila/issues).
-
 ## Resources
 
 - 📦 [GitHub Repository](https://github.com/elgorro/aiquila)
 - 🐛 [Report Issues](https://github.com/elgorro/aiquila/issues)
-- 💬 [Discussions](https://github.com/elgorro/aiquila/discussions)
-
-## License
-
-Documentation is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-Code is licensed under AGPL-3.0 (see main repository).

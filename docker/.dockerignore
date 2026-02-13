@@ -4,6 +4,5 @@
 # Allow specific files
 !docker-compose.yml
 !.env.example
-!nextcloud/
 !mcp-server/
 !Makefile

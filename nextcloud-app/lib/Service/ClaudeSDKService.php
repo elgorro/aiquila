@@ -17,9 +17,6 @@ class ClaudeSDKService {
     private LoggerInterface $logger;
     private string $appName = 'aiquila';
 
-    // Default configuration values
-    private const DEFAULT_API_MODEL = 'claude-sonnet-4-5-20250929';
-    private const DEFAULT_MAX_TOKENS = 4096;
     private const DEFAULT_MAX_RETRIES = 2;
 
     public function __construct(IConfig $config, LoggerInterface $logger) {
@@ -54,14 +51,32 @@ class ClaudeSDKService {
      * Get configured model
      */
     public function getModel(): string {
-        return $this->config->getAppValue($this->appName, 'model', self::DEFAULT_API_MODEL);
+        return $this->config->getAppValue($this->appName, 'model', ClaudeModels::DEFAULT_MODEL);
     }
 
     /**
-     * Get configured max tokens
+     * Get configured max tokens, clamped to the model's output ceiling
      */
     public function getMaxTokens(): int {
-        return (int)$this->config->getAppValue($this->appName, 'max_tokens', (string)self::DEFAULT_MAX_TOKENS);
+        $stored = (int)$this->config->getAppValue($this->appName, 'max_tokens', (string)ClaudeModels::DEFAULT_MAX_TOKENS);
+        return min($stored, ClaudeModels::getMaxTokenCeiling($this->getModel()));
+    }
+
+    /**
+     * Build the base request payload for a messages->create() call.
+     * Merges model-specific params (thinking, effort, …) so individual
+     * calling methods remain model-agnostic.
+     */
+    private function buildRequestParams(array $messages): array {
+        $model = $this->getModel();
+        return array_merge(
+            [
+                'model'      => $model,
+                'max_tokens' => $this->getMaxTokens(),
+                'messages'   => $messages,
+            ],
+            ClaudeModels::getModelParams($model)
+        );
     }
 
     /**
@@ -94,11 +109,7 @@ class ClaudeSDKService {
             ]);
 
             // Make request using SDK
-            $response = $client->messages->create([
-                'model' => $this->getModel(),
-                'max_tokens' => $this->getMaxTokens(),
-                'messages' => $messages,
-            ]);
+            $response = $client->messages->create($this->buildRequestParams($messages));
 
             // Extract text from response
             $responseText = '';
@@ -204,29 +215,26 @@ class ClaudeSDKService {
         try {
             $client = $this->getClient($userId);
 
-            $response = $client->messages->create([
-                'model' => $this->getModel(),
-                'max_tokens' => $this->getMaxTokens(),
-                'messages' => [
-                    [
-                        'role' => 'user',
-                        'content' => [
-                            [
-                                'type' => 'image',
-                                'source' => [
-                                    'type' => 'base64',
-                                    'media_type' => $mimeType,
-                                    'data' => $base64Image,
-                                ],
+            $messages = [
+                [
+                    'role' => 'user',
+                    'content' => [
+                        [
+                            'type' => 'image',
+                            'source' => [
+                                'type' => 'base64',
+                                'media_type' => $mimeType,
+                                'data' => $base64Image,
                             ],
-                            [
-                                'type' => 'text',
-                                'text' => $prompt,
-                            ],
+                        ],
+                        [
+                            'type' => 'text',
+                            'text' => $prompt,
                         ],
                     ],
                 ],
-            ]);
+            ];
+            $response = $client->messages->create($this->buildRequestParams($messages));
 
             $responseText = '';
             foreach ($response->content as $content) {
@@ -291,11 +299,7 @@ class ClaudeSDKService {
         ]);
 
         try {
-            $stream = $client->messages->createStreamed([
-                'model' => $this->getModel(),
-                'max_tokens' => $this->getMaxTokens(),
-                'messages' => $messages,
-            ]);
+            $stream = $client->messages->createStreamed($this->buildRequestParams($messages));
 
             foreach ($stream as $event) {
                 if ($event->type === 'content_block_delta' && isset($event->delta->text)) {

@@ -7,10 +7,10 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCP\ICache;
 use OCP\ICacheFactory;
-use OCA\AIquila\Service\ClaudeService;
+use OCA\AIquila\Service\ClaudeSDKService;
 
 class ChatController extends Controller {
-    private ClaudeService $claudeService;
+    private ClaudeSDKService $claudeService;
     private ?string $userId;
     private ICache $cache;
 
@@ -22,7 +22,7 @@ class ChatController extends Controller {
     public function __construct(
         string $appName,
         IRequest $request,
-        ClaudeService $claudeService,
+        ClaudeSDKService $claudeService,
         ?string $userId,
         ICacheFactory $cacheFactory
     ) {
