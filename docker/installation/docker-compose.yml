@@ -84,7 +84,7 @@ services:
   mcp-server:
     build:
       context: ../../mcp-server
-      dockerfile: ../../docker/mcp-server/Dockerfile.dev
+      dockerfile: ../docker/mcp-server/Dockerfile.dev
     container_name: aiquila-mcp
     restart: unless-stopped
     depends_on:

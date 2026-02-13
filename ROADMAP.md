@@ -65,6 +65,7 @@
 
 ### Nextcloud App
 - [x] Streaming responses
+- [x] added Opus 4.6 optional
 - [ ] Conversation history storage
 - [ ] Token usage tracking
 - [ ] File access in chat window
@@ -73,7 +74,7 @@
 ### Infrastructure
 - [x] Docker dev environment for improved testing capabilities
 - [x] Docker for MCP Server (HTTP transport on port 3339)
-- [ ] Docker Github Release
+- [x] Docker Github Release
 - [ ] OpenApi support
 - [ ] Update docs
 
