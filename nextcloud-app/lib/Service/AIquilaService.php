@@ -15,7 +15,6 @@ use Psr\Log\LoggerInterface;
  * for use by other Nextcloud apps, background jobs, and workflows.
  */
 class AIquilaService implements IAIquila {
-    private ClaudeService $claudeService;
     private ClaudeSDKService $claudeSDKService;
     private FileService $fileService;
     private IConfig $config;
@@ -24,14 +23,12 @@ class AIquilaService implements IAIquila {
     private string $appName = 'aiquila';
 
     public function __construct(
-        ClaudeService $claudeService,
         ClaudeSDKService $claudeSDKService,
         FileService $fileService,
         IConfig $config,
         INotificationManager $notificationManager,
         LoggerInterface $logger
     ) {
-        $this->claudeService = $claudeService;
         $this->claudeSDKService = $claudeSDKService;
         $this->fileService = $fileService;
         $this->config = $config;
@@ -55,7 +52,7 @@ class AIquilaService implements IAIquila {
         ]);
 
         try {
-            $result = $this->claudeService->ask($prompt, $context, $userId);
+            $result = $this->claudeSDKService->ask($prompt, $context, $userId);
 
             if (isset($result['error'])) {
                 $this->logger->error('AIquila: Claude API error', ['error' => $result['error']]);
@@ -84,7 +81,7 @@ class AIquilaService implements IAIquila {
         ]);
 
         try {
-            return $this->claudeService->summarize($content, $userId);
+            return $this->claudeSDKService->summarize($content, $userId);
         } catch (\Exception $e) {
             $this->logger->error('AIquila: Exception in summarize()', ['exception' => $e->getMessage()]);
             return ['error' => 'Internal error: ' . $e->getMessage()];
@@ -121,7 +118,7 @@ class AIquilaService implements IAIquila {
             // Text and other files: pass content as context
             $context = "File: {$fileData['name']} ({$mimeType}, {$fileData['size']} bytes)\n\n"
                      . $fileData['content'];
-            return $this->claudeService->ask($prompt, $context, $userId);
+            return $this->claudeSDKService->ask($prompt, $context, $userId);
 
         } catch (NotFoundException $e) {
             return ['error' => 'File not found: ' . $filePath];
@@ -138,7 +135,7 @@ class AIquilaService implements IAIquila {
      * @return bool True if API key is configured
      */
     public function isConfigured(?string $userId = null): bool {
-        $apiKey = $this->claudeService->getApiKey($userId);
+        $apiKey = $this->claudeSDKService->getApiKey($userId);
         return !empty($apiKey);
     }
 
@@ -148,7 +145,7 @@ class AIquilaService implements IAIquila {
      * @return array Configuration details
      */
     public function getStatus(): array {
-        $config = $this->claudeService->getConfiguration();
+        $config = $this->claudeSDKService->getConfiguration();
 
         return [
             'configured' => !empty($config['api_key']),

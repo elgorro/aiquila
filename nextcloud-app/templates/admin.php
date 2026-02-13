@@ -29,17 +29,15 @@ style('aiquila', 'admin');
             <input type="text"
                    id="aiquila-model"
                    name="model"
-                   value="<?php echo $_['model']; ?>"
-                   placeholder="claude-sonnet-4-5-20250929"
+                   value="<?php echo htmlspecialchars($_['model']); ?>"
+                   placeholder="<?php echo htmlspecialchars($_['default_model']); ?>"
                    list="model-suggestions">
             <datalist id="model-suggestions">
-                <option value="claude-sonnet-4-5-20250929">
-                <option value="claude-haiku-4-5-20251001">
-                <option value="claude-opus-4-5-20251101">
-                <option value="claude-sonnet-4-20250514">
-                <option value="claude-opus-4-20250514">
+                <?php foreach ($_['available_models'] as $m): ?>
+                    <option value="<?php echo htmlspecialchars($m); ?>">
+                <?php endforeach; ?>
             </datalist>
-            <p class="hint">Default: claude-sonnet-4-5-20250929 (Claude Sonnet 4.5, latest recommended model)</p>
+            <p class="hint">Default: <?php echo htmlspecialchars($_['default_model']); ?> (Claude Sonnet 4.5, recommended). claude-opus-4-6 supports adaptive thinking and 128K output tokens.</p>
         </div>
 
         <div class="form-group">

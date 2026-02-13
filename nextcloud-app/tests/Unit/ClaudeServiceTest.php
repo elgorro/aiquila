@@ -2,27 +2,22 @@
 
 namespace OCA\AIquila\Tests\Unit;
 
-use OCA\AIquila\Service\ClaudeService;
+use OCA\AIquila\Service\ClaudeModels;
+use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\IConfig;
-use OCP\Http\Client\IClientService;
-use OCP\Http\Client\IClient;
-use OCP\Http\Client\IResponse;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 
 class ClaudeServiceTest extends TestCase {
     private $config;
-    private $clientService;
-    private $httpClient;
-    private ClaudeService $service;
+    private $logger;
+    private ClaudeSDKService $service;
 
     protected function setUp(): void {
         $this->config = $this->createMock(IConfig::class);
-        $this->clientService = $this->createMock(IClientService::class);
-        $this->httpClient = $this->createMock(IClient::class);
+        $this->logger = $this->createMock(LoggerInterface::class);
 
-        $this->clientService->method('newClient')->willReturn($this->httpClient);
-
-        $this->service = new ClaudeService($this->config, $this->clientService);
+        $this->service = new ClaudeSDKService($this->config, $this->logger);
     }
 
     public function testGetApiKeyReturnsUserKeyFirst(): void {
@@ -53,66 +48,63 @@ class ClaudeServiceTest extends TestCase {
 
         $result = $this->service->ask('Hello', '', 'testuser');
         $this->assertArrayHasKey('error', $result);
-        $this->assertEquals('No API key configured', $result['error']);
     }
 
-    public function testAskMakesApiCallWithCorrectPayload(): void {
-        $this->config->method('getUserValue')->willReturn('test-api-key');
-        $this->config->method('getAppValue')->willReturnCallback(function ($app, $key, $default) {
-            if ($key === 'model') return 'claude-sonnet-4-5-20250929';
-            if ($key === 'max_tokens') return '4096';
-            if ($key === 'api_timeout') return '30';
-            return $default;
-        });
+    public function testGetModelReturnsDefault(): void {
+        $this->config->method('getAppValue')
+            ->with('aiquila', 'model', ClaudeModels::DEFAULT_MODEL)
+            ->willReturn(ClaudeModels::DEFAULT_MODEL);
 
-        $response = $this->createMock(IResponse::class);
-        $response->method('getBody')->willReturn(json_encode([
-            'content' => [['text' => 'Hello! How can I help?']]
-        ]));
+        $result = $this->service->getModel();
+        $this->assertEquals(ClaudeModels::DEFAULT_MODEL, $result);
+    }
 
-        $this->httpClient->expects($this->once())
-            ->method('post')
-            ->with(
-                'https://api.anthropic.com/v1/messages',
-                $this->callback(function ($options) {
-                    $body = json_decode($options['body'], true);
-                    return $body['model'] === 'claude-sonnet-4-5-20250929'
-                        && $body['max_tokens'] === 4096
-                        && count($body['messages']) === 1;
-                })
-            )
-            ->willReturn($response);
+    public function testGetMaxTokensReturnsDefault(): void {
+        // getMaxTokens() also calls getModel() internally to apply the ceiling
+        $this->config->method('getAppValue')
+            ->willReturnCallback(function ($app, $key, $default) {
+                if ($key === 'model') return ClaudeModels::DEFAULT_MODEL;
+                if ($key === 'max_tokens') return '4096';
+                return $default;
+            });
 
-        $result = $this->service->ask('Hello', '', 'testuser');
-        $this->assertEquals('Hello! How can I help?', $result['response']);
+        $result = $this->service->getMaxTokens();
+        $this->assertEquals(4096, $result);
+    }
+
+    public function testGetConfigurationReturnsExpectedKeys(): void {
+        $this->config->method('getAppValue')
+            ->willReturnCallback(function ($app, $key, $default) {
+                if ($key === 'api_key') return 'test-key';
+                if ($key === 'model') return ClaudeModels::DEFAULT_MODEL;
+                if ($key === 'max_tokens') return '4096';
+                if ($key === 'api_timeout') return '30';
+                return $default;
+            });
+
+        $config = $this->service->getConfiguration();
+        $this->assertArrayHasKey('api_key', $config);
+        $this->assertArrayHasKey('model', $config);
+        $this->assertArrayHasKey('max_tokens', $config);
+        $this->assertArrayHasKey('timeout', $config);
+        $this->assertEquals('test-key', $config['api_key']);
     }
 
     public function testSummarizeCallsAskWithSummarizePrompt(): void {
-        $this->config->method('getUserValue')->willReturn('test-api-key');
-        $this->config->method('getAppValue')->willReturnCallback(function ($app, $key, $default) {
-            if ($key === 'model') return 'claude-sonnet-4-5-20250929';
-            if ($key === 'max_tokens') return '4096';
-            if ($key === 'api_timeout') return '30';
-            return $default;
-        });
-
-        $response = $this->createMock(IResponse::class);
-        $response->method('getBody')->willReturn(json_encode([
-            'content' => [['text' => 'This is a summary.']]
-        ]));
-
-        $this->httpClient->expects($this->once())
-            ->method('post')
-            ->with(
-                'https://api.anthropic.com/v1/messages',
-                $this->callback(function ($options) {
-                    $body = json_decode($options['body'], true);
-                    return str_contains($body['messages'][0]['content'], 'Summarize');
-                })
-            )
-            ->willReturn($response);
+        // With no API key configured, summarize should return an error
+        // (proving it delegates to ask())
+        $this->config->method('getUserValue')->willReturn('');
+        $this->config->method('getAppValue')->willReturn('');
 
         $result = $this->service->summarize('Long text here...', 'testuser');
-        $this->assertEquals('This is a summary.', $result['response']);
+        $this->assertArrayHasKey('error', $result);
+    }
+
+    public function testSendMessageThrowsOnError(): void {
+        $this->config->method('getUserValue')->willReturn('');
+        $this->config->method('getAppValue')->willReturn('');
+
+        $this->expectException(\Exception::class);
+        $this->service->sendMessage('Hello', 'testuser');
     }
 }

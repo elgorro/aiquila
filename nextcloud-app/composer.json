@@ -8,7 +8,8 @@
         "anthropic-ai/sdk": "^0.4.0"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.0"
+        "phpunit/phpunit": "^10.0",
+        "psr/log": "^3.0"
     },
     "autoload": {
         "psr-4": {
@@ -17,5 +18,10 @@
     },
     "scripts": {
         "test": "phpunit"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
     }
 }

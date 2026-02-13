@@ -8,27 +8,18 @@
 #   make up
 
 services:
-  # MCP Server (Development)
+  # MCP Server (Production image from GHCR)
   mcp-server:
-    build:
-      context: ../../mcp-server
-      dockerfile: ../docker/mcp-server/Dockerfile.dev
+    image: ghcr.io/elgorro/aiquila-mcp:latest
     container_name: aiquila-standalone-mcp
     restart: unless-stopped
     environment:
       NEXTCLOUD_URL: ${NEXTCLOUD_URL:?Set NEXTCLOUD_URL in .env}
       NEXTCLOUD_USER: ${NEXTCLOUD_USER:?Set NEXTCLOUD_USER in .env}
       NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:?Set NEXTCLOUD_PASSWORD in .env}
-      NODE_ENV: development
+      NODE_ENV: production
       MCP_TRANSPORT: http
       MCP_PORT: "3339"
-    volumes:
-      # Mount source for live development
-      - ../../mcp-server:/app
-      # Prevent node_modules from being overwritten
-      - /app/node_modules
-    working_dir: /app
-    command: npm run dev
     ports:
       - "3339:3339"
     networks:

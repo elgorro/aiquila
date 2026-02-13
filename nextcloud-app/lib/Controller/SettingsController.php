@@ -2,7 +2,8 @@
 
 namespace OCA\AIquila\Controller;
 
-use OCA\AIquila\Service\ClaudeService;
+use OCA\AIquila\Service\ClaudeModels;
+use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
@@ -11,7 +12,7 @@ use OCP\IConfig;
 class SettingsController extends Controller {
     private IConfig $config;
     private ?string $userId;
-    private ClaudeService $claudeService;
+    private ClaudeSDKService $claudeService;
     protected $appName = 'aiquila';
 
     public function __construct(
@@ -19,7 +20,7 @@ class SettingsController extends Controller {
         IRequest $request,
         IConfig $config,
         ?string $userId,
-        ClaudeService $claudeService
+        ClaudeSDKService $claudeService
     ) {
         parent::__construct($appName, $request);
         $this->config = $config;
@@ -95,7 +96,7 @@ class SettingsController extends Controller {
 
         // Use provided values or fall back to saved config
         $testApiKey = !empty($apiKey) ? $apiKey : $this->config->getAppValue($this->appName, 'api_key', '');
-        $testModel = !empty($model) ? $model : $this->config->getAppValue($this->appName, 'model', 'claude-sonnet-4-5-20250929');
+        $testModel = !empty($model) ? $model : $this->config->getAppValue($this->appName, 'model', ClaudeModels::DEFAULT_MODEL);
         $testMaxTokens = !empty($maxTokens) ? (int)$maxTokens : (int)$this->config->getAppValue($this->appName, 'max_tokens', '4096');
         $testTimeout = !empty($timeout) ? (int)$timeout : (int)$this->config->getAppValue($this->appName, 'api_timeout', '30');
 

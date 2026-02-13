@@ -18,8 +18,8 @@ class TestSDKCommand extends Base {
 
     protected function configure(): void {
         $this
-            ->setName('aiquila:test-sdk')
-            ->setDescription('Test AIquila SDK integration (Anthropic PHP SDK)')
+            ->setName('aiquila:test')
+            ->setDescription('Test AIquila Claude integration (Anthropic PHP SDK)')
             ->addOption(
                 'prompt',
                 'p',

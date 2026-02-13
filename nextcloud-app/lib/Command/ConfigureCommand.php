@@ -3,6 +3,7 @@
 namespace OCA\AIquila\Command;
 
 use OC\Core\Command\Base;
+use OCA\AIquila\Service\ClaudeModels;
 use OCP\IConfig;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -31,7 +32,7 @@ class ConfigureCommand extends Base {
                 'model',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Set Claude model (e.g., claude-sonnet-4-20250514)'
+                'Set Claude model (e.g., claude-opus-4-6, claude-sonnet-4-5-20250929)'
             )
             ->addOption(
                 'max-tokens',
@@ -123,7 +124,7 @@ class ConfigureCommand extends Base {
 
     private function showConfiguration(OutputInterface $output): int {
         $apiKey = $this->config->getAppValue(self::APP_NAME, 'api_key', '');
-        $model = $this->config->getAppValue(self::APP_NAME, 'model', 'claude-sonnet-4-20250514');
+        $model = $this->config->getAppValue(self::APP_NAME, 'model', ClaudeModels::DEFAULT_MODEL);
         $maxTokens = $this->config->getAppValue(self::APP_NAME, 'max_tokens', '4096');
         $timeout = $this->config->getAppValue(self::APP_NAME, 'api_timeout', '30');
 

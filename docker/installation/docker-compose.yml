@@ -2,45 +2,45 @@ services:
   # PostgreSQL Database
   db:
     image: postgres:16-alpine
-    container_name: aiquila-install-db
+    container_name: aiquila-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-nextcloud}
       POSTGRES_USER: ${POSTGRES_USER:-nextcloud}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nextcloud_install_test}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nextcloud_secure_password}
     volumes:
-      - install_postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nextcloud}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - aiquila-install-network
+      - aiquila-network
 
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: aiquila-install-redis
+    container_name: aiquila-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
-      - install_redis_data:/data
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
     networks:
-      - aiquila-install-network
+      - aiquila-network
 
   # Nextcloud with AIquila installed from tarball
   nextcloud:
     build:
       context: .
       dockerfile: Dockerfile
-    image: aiquila-install-nextcloud:latest
-    container_name: aiquila-install-nextcloud
+    image: aiquila-nextcloud:latest
+    container_name: aiquila-nextcloud
     restart: unless-stopped
     depends_on:
       db:
@@ -52,7 +52,7 @@ services:
       POSTGRES_HOST: db
       POSTGRES_DB: ${POSTGRES_DB:-nextcloud}
       POSTGRES_USER: ${POSTGRES_USER:-nextcloud}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nextcloud_install_test}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nextcloud_secure_password}
 
       # Redis
       REDIS_HOST: redis
@@ -60,28 +60,111 @@ services:
       # Nextcloud Admin
       NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER:-admin}
       NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD:-admin123}
-      NEXTCLOUD_TRUSTED_DOMAINS: ${NEXTCLOUD_TRUSTED_DOMAINS:-localhost:8090}
+      NEXTCLOUD_TRUSTED_DOMAINS: ${NEXTCLOUD_TRUSTED_DOMAINS:-localhost localhost:8080}
+
+      # SMTP (MailHog)
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SMTP_AUTHTYPE: PLAIN
+      MAIL_FROM_ADDRESS: noreply
+      MAIL_DOMAIN: aiquila.local
 
       # AIquila setup
-      AIQUILA_TEST_USER: ${AIQUILA_TEST_USER:-testuser}
-      AIQUILA_TEST_PASSWORD: ${AIQUILA_TEST_PASSWORD:-testpass123}
+      AIQUILA_TEST_USER: ${NEXTCLOUD_TEST_USER:-testuser}
+      AIQUILA_TEST_PASSWORD: ${NEXTCLOUD_TEST_PASSWORD:-testpass123}
       AIQUILA_CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
     volumes:
-      - install_nextcloud_data:/var/www/html
+      - nextcloud_data:/var/www/html
     ports:
-      - "8090:80"
+      - "8080:80"
     networks:
-      - aiquila-install-network
+      - aiquila-network
+
+  # MCP Server (Development)
+  mcp-server:
+    build:
+      context: ../../mcp-server
+      dockerfile: ../docker/mcp-server/Dockerfile.dev
+    container_name: aiquila-mcp
+    restart: unless-stopped
+    depends_on:
+      - nextcloud
+    environment:
+      NEXTCLOUD_URL: http://nextcloud
+      NEXTCLOUD_USER: ${NEXTCLOUD_TEST_USER:-testuser}
+      NEXTCLOUD_PASSWORD: ${NEXTCLOUD_TEST_PASSWORD:-testpass123}
+      NODE_ENV: development
+      MCP_TRANSPORT: http
+      MCP_PORT: "3339"
+    volumes:
+      # Mount source for live development
+      - ../../mcp-server:/app
+      # Prevent node_modules from being overwritten
+      - /app/node_modules
+    working_dir: /app
+    command: npm run dev
+    ports:
+      - "3339:3339"
+    networks:
+      - aiquila-network
+
+  # Caddy Reverse Proxy (HTTPS)
+  caddy:
+    image: caddy:2-alpine
+    container_name: aiquila-caddy
+    restart: unless-stopped
+    depends_on:
+      - nextcloud
+      - mcp-server
+    ports:
+      - "443:443"
+      - "3340:3340"
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - aiquila-network
+
+  # MailHog (Email Testing)
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: aiquila-mailhog
+    restart: unless-stopped
+    ports:
+      - "8025:8025"  # Web UI
+      - "1025:1025"  # SMTP
+    networks:
+      - aiquila-network
+
+  # Adminer (Database UI)
+  adminer:
+    image: adminer:latest
+    container_name: aiquila-adminer
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+      ADMINER_DESIGN: pepa-linha
+    ports:
+      - "8081:8080"
+    networks:
+      - aiquila-network
 
 volumes:
-  install_postgres_data:
-    name: aiquila_install_postgres_data
-  install_redis_data:
-    name: aiquila_install_redis_data
-  install_nextcloud_data:
-    name: aiquila_install_nextcloud_data
+  postgres_data:
+    name: aiquila_postgres_data
+  redis_data:
+    name: aiquila_redis_data
+  nextcloud_data:
+    name: aiquila_nextcloud_data
+  caddy_data:
+    name: aiquila_caddy_data
+  caddy_config:
+    name: aiquila_caddy_config
 
 networks:
-  aiquila-install-network:
-    name: aiquila-install-network
+  aiquila-network:
+    name: aiquila-network
     driver: bridge
