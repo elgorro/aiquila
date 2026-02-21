@@ -44,13 +44,9 @@ export async function startHttp(): Promise<void> {
     app.post('/auth/login', loginHandler(provider));
 
     // Protect /mcp with Bearer token auth
-    app.all(
-      MCP_PATH,
-      requireBearerAuth({ verifier: provider }),
-      async (req: any, res: any) => {
-        await transport.handleRequest(req, res, req.body);
-      }
-    );
+    app.all(MCP_PATH, requireBearerAuth({ verifier: provider }), async (req: any, res: any) => {
+      await transport.handleRequest(req, res, req.body);
+    });
   } else {
     app.all(MCP_PATH, async (req: any, res: any) => {
       await transport.handleRequest(req, res, req.body);

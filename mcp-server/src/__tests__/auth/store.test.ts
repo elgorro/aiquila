@@ -73,14 +73,24 @@ describe('CodeStore', () => {
 
   it('deletes a code so it cannot be retrieved again', () => {
     const code = store.store({
-      pkceChallenge: 'ch', clientId: 'c', scopes: [], redirectUri: 'https://r.com', userId: 'u',
+      pkceChallenge: 'ch',
+      clientId: 'c',
+      scopes: [],
+      redirectUri: 'https://r.com',
+      userId: 'u',
     });
     store.delete(code);
     expect(store.get(code)).toBeUndefined();
   });
 
   it('stores each code with a unique ID', () => {
-    const params = { pkceChallenge: 'ch', clientId: 'c', scopes: [], redirectUri: 'https://r.com', userId: 'u' };
+    const params = {
+      pkceChallenge: 'ch',
+      clientId: 'c',
+      scopes: [],
+      redirectUri: 'https://r.com',
+      userId: 'u',
+    };
     const a = store.store(params);
     const b = store.store(params);
     expect(a).not.toBe(b);

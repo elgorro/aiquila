@@ -1,5 +1,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { OAuthServerProvider, AuthorizationParams } from '@modelcontextprotocol/sdk/server/auth/provider.js';
+import type {
+  OAuthServerProvider,
+  AuthorizationParams,
+} from '@modelcontextprotocol/sdk/server/auth/provider.js';
 import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/server/auth/clients.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type {
@@ -19,11 +22,7 @@ function base64urlStr(s: string): string {
   return base64url(Buffer.from(s, 'utf8'));
 }
 
-function signJwt(
-  payload: Record<string, unknown>,
-  secret: string,
-  expiresInSecs: number
-): string {
+function signJwt(payload: Record<string, unknown>, secret: string, expiresInSecs: number): string {
   const now = Math.floor(Date.now() / 1000);
   const claims = { ...payload, iat: now, exp: now + expiresInSecs };
   const header = base64urlStr(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
@@ -128,16 +127,19 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     params: AuthorizationParams,
     res: any
   ): Promise<void> {
-    res.status(200).type('html').send(
-      renderLoginForm({
-        clientName: client.client_name,
-        clientId: client.client_id,
-        redirectUri: params.redirectUri,
-        state: params.state,
-        codeChallenge: params.codeChallenge,
-        scope: params.scopes?.join(' '),
-      })
-    );
+    res
+      .status(200)
+      .type('html')
+      .send(
+        renderLoginForm({
+          clientName: client.client_name,
+          clientId: client.client_id,
+          redirectUri: params.redirectUri,
+          state: params.state,
+          codeChallenge: params.codeChallenge,
+          scope: params.scopes?.join(' '),
+        })
+      );
   }
 
   async challengeForAuthorizationCode(

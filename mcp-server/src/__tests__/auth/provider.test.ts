@@ -14,7 +14,11 @@ const CLIENT = {
 
 describe('renderLoginForm', () => {
   it('renders a POST form targeting /auth/login', () => {
-    const html = renderLoginForm({ clientId: 'c1', redirectUri: 'https://r.com', codeChallenge: 'cc' });
+    const html = renderLoginForm({
+      clientId: 'c1',
+      redirectUri: 'https://r.com',
+      codeChallenge: 'cc',
+    });
     expect(html).toContain('method="POST"');
     expect(html).toContain('action="/auth/login"');
   });
@@ -35,23 +39,43 @@ describe('renderLoginForm', () => {
   });
 
   it('includes client name in the page when provided', () => {
-    const html = renderLoginForm({ clientId: 'c1', redirectUri: 'https://r.com', codeChallenge: 'cc', clientName: 'My App' });
+    const html = renderLoginForm({
+      clientId: 'c1',
+      redirectUri: 'https://r.com',
+      codeChallenge: 'cc',
+      clientName: 'My App',
+    });
     expect(html).toContain('My App');
   });
 
   it('includes error message when provided', () => {
-    const html = renderLoginForm({ clientId: 'c1', redirectUri: 'https://r.com', codeChallenge: 'cc', error: 'Bad credentials' });
+    const html = renderLoginForm({
+      clientId: 'c1',
+      redirectUri: 'https://r.com',
+      codeChallenge: 'cc',
+      error: 'Bad credentials',
+    });
     expect(html).toContain('Bad credentials');
   });
 
   it('HTML-escapes special characters in clientName', () => {
-    const html = renderLoginForm({ clientId: 'c1', redirectUri: 'https://r.com', codeChallenge: 'cc', clientName: '<script>xss</script>' });
+    const html = renderLoginForm({
+      clientId: 'c1',
+      redirectUri: 'https://r.com',
+      codeChallenge: 'cc',
+      clientName: '<script>xss</script>',
+    });
     expect(html).not.toContain('<script>xss</script>');
     expect(html).toContain('&lt;script&gt;');
   });
 
   it('HTML-escapes special characters in error', () => {
-    const html = renderLoginForm({ clientId: 'c1', redirectUri: 'https://r.com', codeChallenge: 'cc', error: '<b>error</b>' });
+    const html = renderLoginForm({
+      clientId: 'c1',
+      redirectUri: 'https://r.com',
+      codeChallenge: 'cc',
+      error: '<b>error</b>',
+    });
     expect(html).not.toContain('<b>error</b>');
     expect(html).toContain('&lt;b&gt;');
   });
@@ -94,16 +118,32 @@ describe('NextcloudOAuthProvider', () => {
 
   describe('authorize', () => {
     it('sends a 200 HTML login form response', async () => {
-      const res = { status: vi.fn().mockReturnThis(), type: vi.fn().mockReturnThis(), send: vi.fn() };
-      await provider.authorize(CLIENT, { codeChallenge: 'ch', redirectUri: 'https://r.com', state: 'st', scopes: ['read'] }, res as any);
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        type: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      };
+      await provider.authorize(
+        CLIENT,
+        { codeChallenge: 'ch', redirectUri: 'https://r.com', state: 'st', scopes: ['read'] },
+        res as any
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.type).toHaveBeenCalledWith('html');
       expect(res.send).toHaveBeenCalledWith(expect.stringContaining('action="/auth/login"'));
     });
 
     it('includes client name in the rendered form', async () => {
-      const res = { status: vi.fn().mockReturnThis(), type: vi.fn().mockReturnThis(), send: vi.fn() };
-      await provider.authorize(CLIENT, { codeChallenge: 'ch', redirectUri: 'https://r.com' }, res as any);
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        type: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      };
+      await provider.authorize(
+        CLIENT,
+        { codeChallenge: 'ch', redirectUri: 'https://r.com' },
+        res as any
+      );
       expect(res.send).toHaveBeenCalledWith(expect.stringContaining('Test App'));
     });
   });
@@ -129,7 +169,11 @@ describe('NextcloudOAuthProvider', () => {
 
     it('throws when client_id does not match', async () => {
       const code = provider.issueAuthCode({
-        pkceChallenge: 'ch', clientId: 'other-client', scopes: [], redirectUri: 'https://r.com', userId: 'u',
+        pkceChallenge: 'ch',
+        clientId: 'other-client',
+        scopes: [],
+        redirectUri: 'https://r.com',
+        userId: 'u',
       });
       await expect(provider.challengeForAuthorizationCode(CLIENT, code)).rejects.toThrow();
     });
@@ -140,7 +184,11 @@ describe('NextcloudOAuthProvider', () => {
   describe('exchangeAuthorizationCode', () => {
     it('returns a valid access token and refresh token', async () => {
       const code = provider.issueAuthCode({
-        pkceChallenge: 'ch', clientId: CLIENT.client_id, scopes: ['read'], redirectUri: 'https://r.com', userId: 'alice',
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: ['read'],
+        redirectUri: 'https://r.com',
+        userId: 'alice',
       });
       const tokens = await provider.exchangeAuthorizationCode(CLIENT, code);
       expect(tokens.access_token).toBeDefined();
@@ -152,7 +200,11 @@ describe('NextcloudOAuthProvider', () => {
 
     it('includes correct scopes in the token', async () => {
       const code = provider.issueAuthCode({
-        pkceChallenge: 'ch', clientId: CLIENT.client_id, scopes: ['read', 'write'], redirectUri: 'https://r.com', userId: 'alice',
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: ['read', 'write'],
+        redirectUri: 'https://r.com',
+        userId: 'alice',
       });
       const { access_token } = await provider.exchangeAuthorizationCode(CLIENT, code);
       const info = await provider.verifyAccessToken(access_token);
@@ -161,7 +213,11 @@ describe('NextcloudOAuthProvider', () => {
 
     it('invalidates the code after use (prevents double-spend)', async () => {
       const code = provider.issueAuthCode({
-        pkceChallenge: 'ch', clientId: CLIENT.client_id, scopes: [], redirectUri: 'https://r.com', userId: 'u',
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: [],
+        redirectUri: 'https://r.com',
+        userId: 'u',
       });
       await provider.exchangeAuthorizationCode(CLIENT, code);
       await expect(provider.exchangeAuthorizationCode(CLIENT, code)).rejects.toThrow();
@@ -173,7 +229,11 @@ describe('NextcloudOAuthProvider', () => {
 
     it('throws when redirect_uri does not match', async () => {
       const code = provider.issueAuthCode({
-        pkceChallenge: 'ch', clientId: CLIENT.client_id, scopes: [], redirectUri: 'https://r.com', userId: 'u',
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: [],
+        redirectUri: 'https://r.com',
+        userId: 'u',
       });
       await expect(
         provider.exchangeAuthorizationCode(CLIENT, code, undefined, 'https://attacker.com')
@@ -182,7 +242,11 @@ describe('NextcloudOAuthProvider', () => {
 
     it('throws when client_id does not match', async () => {
       const code = provider.issueAuthCode({
-        pkceChallenge: 'ch', clientId: 'other-client', scopes: [], redirectUri: 'https://r.com', userId: 'u',
+        pkceChallenge: 'ch',
+        clientId: 'other-client',
+        scopes: [],
+        redirectUri: 'https://r.com',
+        userId: 'u',
       });
       await expect(provider.exchangeAuthorizationCode(CLIENT, code)).rejects.toThrow();
     });
@@ -193,7 +257,11 @@ describe('NextcloudOAuthProvider', () => {
   describe('verifyAccessToken', () => {
     async function issueToken(userId = 'alice', scopes = ['read']): Promise<string> {
       const code = provider.issueAuthCode({
-        pkceChallenge: 'ch', clientId: CLIENT.client_id, scopes, redirectUri: 'https://r.com', userId,
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes,
+        redirectUri: 'https://r.com',
+        userId,
       });
       const { access_token } = await provider.exchangeAuthorizationCode(CLIENT, code);
       return access_token;
@@ -236,7 +304,11 @@ describe('NextcloudOAuthProvider', () => {
   describe('exchangeRefreshToken', () => {
     async function issueRefreshToken(): Promise<string> {
       const code = provider.issueAuthCode({
-        pkceChallenge: 'ch', clientId: CLIENT.client_id, scopes: ['read'], redirectUri: 'https://r.com', userId: 'alice',
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: ['read'],
+        redirectUri: 'https://r.com',
+        userId: 'alice',
       });
       const { refresh_token } = await provider.exchangeAuthorizationCode(CLIENT, code);
       return refresh_token!;
@@ -266,7 +338,11 @@ describe('NextcloudOAuthProvider', () => {
 
     it('restricts scopes when requested scopes are a subset', async () => {
       const code = provider.issueAuthCode({
-        pkceChallenge: 'ch', clientId: CLIENT.client_id, scopes: ['read', 'write'], redirectUri: 'https://r.com', userId: 'u',
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: ['read', 'write'],
+        redirectUri: 'https://r.com',
+        userId: 'u',
       });
       const { refresh_token } = await provider.exchangeAuthorizationCode(CLIENT, code);
       const tokens = await provider.exchangeRefreshToken(CLIENT, refresh_token!, ['read']);
@@ -289,7 +365,11 @@ describe('NextcloudOAuthProvider', () => {
   describe('revokeToken', () => {
     it('revokes a refresh token so it cannot be used again', async () => {
       const code = provider.issueAuthCode({
-        pkceChallenge: 'ch', clientId: CLIENT.client_id, scopes: [], redirectUri: 'https://r.com', userId: 'u',
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: [],
+        redirectUri: 'https://r.com',
+        userId: 'u',
       });
       const { refresh_token } = await provider.exchangeAuthorizationCode(CLIENT, code);
       await provider.revokeToken(CLIENT, { token: refresh_token! });

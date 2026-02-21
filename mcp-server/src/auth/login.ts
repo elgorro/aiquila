@@ -12,9 +12,19 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
     }
 
     if (!username || !password || !client_id || !redirect_uri || !code_challenge) {
-      res.status(400).type('html').send(
-        renderLoginForm({ clientId: client_id ?? '', redirectUri: redirect_uri ?? '', codeChallenge: code_challenge ?? '', state, scope, error: 'Missing required parameters' })
-      );
+      res
+        .status(400)
+        .type('html')
+        .send(
+          renderLoginForm({
+            clientId: client_id ?? '',
+            redirectUri: redirect_uri ?? '',
+            codeChallenge: code_challenge ?? '',
+            state,
+            scope,
+            error: 'Missing required parameters',
+          })
+        );
       return;
     }
 
@@ -28,9 +38,19 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       });
 
       if (!ncResp.ok) {
-        res.status(200).type('html').send(
-          renderLoginForm({ clientId: client_id, redirectUri: redirect_uri, codeChallenge: code_challenge, state, scope, error: 'Invalid Nextcloud credentials' })
-        );
+        res
+          .status(200)
+          .type('html')
+          .send(
+            renderLoginForm({
+              clientId: client_id,
+              redirectUri: redirect_uri,
+              codeChallenge: code_challenge,
+              state,
+              scope,
+              error: 'Invalid Nextcloud credentials',
+            })
+          );
         return;
       }
 
@@ -49,9 +69,19 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       if (state) redirectUrl.searchParams.set('state', state);
       res.redirect(redirectUrl.toString());
     } catch {
-      res.status(200).type('html').send(
-        renderLoginForm({ clientId: client_id, redirectUri: redirect_uri, codeChallenge: code_challenge, state, scope, error: 'Authentication failed. Please try again.' })
-      );
+      res
+        .status(200)
+        .type('html')
+        .send(
+          renderLoginForm({
+            clientId: client_id,
+            redirectUri: redirect_uri,
+            codeChallenge: code_challenge,
+            state,
+            scope,
+            error: 'Authentication failed. Please try again.',
+          })
+        );
     }
   };
 }

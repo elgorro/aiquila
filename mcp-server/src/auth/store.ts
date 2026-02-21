@@ -19,7 +19,7 @@ interface RefreshEntry {
   expiresAt: number;
 }
 
-const CODE_TTL_MS = 5 * 60 * 1000;          // 5 minutes
+const CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const REFRESH_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export class ClientsStore implements OAuthRegisteredClientsStore {

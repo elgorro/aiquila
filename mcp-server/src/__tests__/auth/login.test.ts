@@ -137,7 +137,10 @@ describe('loginHandler', () => {
   it('handles scope string correctly — splits into array and stores', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
-    await loginHandler(provider)({ body: { ...BASE_BODY, scope: 'read write' } } as any, res as any);
+    await loginHandler(provider)(
+      { body: { ...BASE_BODY, scope: 'read write' } } as any,
+      res as any
+    );
     const url = (res.redirect as any).mock.calls[0][0] as string;
     const code = new URL(url).searchParams.get('code')!;
     const fakeClient = { client_id: 'c1', redirect_uris: [] as any[] } as any;
