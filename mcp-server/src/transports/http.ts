@@ -18,7 +18,7 @@ export async function startHttp(): Promise<void> {
   });
 
   app.all(MCP_PATH, async (req: any, res: any) => {
-    await transport.handleRequest(req, res);
+    await transport.handleRequest(req, res, req.body);
   });
 
   await mcpServer.connect(transport);
