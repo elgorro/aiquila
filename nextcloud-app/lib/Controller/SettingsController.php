@@ -32,9 +32,16 @@ class SettingsController extends Controller {
      * @NoAdminRequired
      */
     public function get(): JSONResponse {
-        $userKey = $this->config->getUserValue($this->userId, $this->appName, 'api_key', '');
+        $userKey   = $this->config->getUserValue($this->userId, $this->appName, 'api_key', '');
+        $userModel = $this->config->getUserValue($this->userId, $this->appName, 'model',   '');
+
+        $liveModels      = $this->claudeService->listModels($this->userId);
+        $availableModels = $liveModels ?? ClaudeModels::getAllModels();
+
         return new JSONResponse([
-            'hasUserKey' => !empty($userKey),
+            'hasUserKey'      => !empty($userKey),
+            'userModel'       => $userModel,
+            'availableModels' => $availableModels,
         ]);
     }
 
@@ -43,7 +50,16 @@ class SettingsController extends Controller {
      */
     public function save(): JSONResponse {
         $apiKey = $this->request->getParam('api_key', '');
+        $model  = $this->request->getParam('model', '');
+
         $this->config->setUserValue($this->userId, $this->appName, 'api_key', $apiKey);
+
+        if ($model !== '') {
+            $this->config->setUserValue($this->userId, $this->appName, 'model', $model);
+        } else {
+            $this->config->deleteUserValue($this->userId, $this->appName, 'model');
+        }
+
         return new JSONResponse(['status' => 'ok']);
     }
 

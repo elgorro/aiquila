@@ -86,6 +86,59 @@ class ChatController extends Controller {
 
     /**
      * @NoAdminRequired
+     * POST /api/chat
+     * Body: {messages: [...], system?: string, options?: {temperature?, top_p?, top_k?, stop_sequences?}}
+     */
+    public function chat(): JSONResponse {
+        if (!$this->checkRateLimit()) {
+            return new JSONResponse([
+                'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
+            ], 429);
+        }
+
+        $messagesRaw = $this->request->getParam('messages');
+        if (empty($messagesRaw)) {
+            return new JSONResponse(['error' => 'No messages provided'], 400);
+        }
+
+        // Accept JSON-encoded string or already-decoded array
+        if (is_string($messagesRaw)) {
+            $messages = json_decode($messagesRaw, true);
+            if (!is_array($messages)) {
+                return new JSONResponse(['error' => 'Invalid messages format'], 400);
+            }
+        } else {
+            $messages = $messagesRaw;
+        }
+
+        if (empty($messages)) {
+            return new JSONResponse(['error' => 'Messages array is empty'], 400);
+        }
+
+        // Validate total content size
+        $totalLength = 0;
+        foreach ($messages as $msg) {
+            $content = $msg['content'] ?? '';
+            $totalLength += is_string($content) ? strlen($content) : strlen(json_encode($content));
+        }
+        if ($totalLength > self::MAX_CONTENT_LENGTH) {
+            return new JSONResponse([
+                'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
+            ], 413);
+        }
+
+        $system  = $this->request->getParam('system', null) ?: null;
+        $options = $this->request->getParam('options', []) ?: [];
+        if (is_string($options)) {
+            $options = json_decode($options, true) ?? [];
+        }
+
+        $result = $this->claudeService->chat($messages, $system, $this->userId, $options);
+        return new JSONResponse($result);
+    }
+
+    /**
+     * @NoAdminRequired
      */
     public function summarize(): JSONResponse {
         // Check rate limit

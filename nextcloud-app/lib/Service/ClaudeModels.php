@@ -96,7 +96,7 @@ class ClaudeModels {
         $params = [];
 
         if (self::supportsThinking($model)) {
-            $params['thinking'] = ['type' => 'adaptive'];
+            $params['thinking'] = ['type' => 'adaptive', 'budget_tokens' => 8000];
         }
 
         if (self::supportsEffort($model)) {
