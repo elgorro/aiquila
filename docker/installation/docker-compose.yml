@@ -71,7 +71,7 @@ services:
 
       # AIquila setup
       AIQUILA_TEST_USER: ${NEXTCLOUD_TEST_USER:-testuser}
-      AIQUILA_TEST_PASSWORD: ${NEXTCLOUD_TEST_PASSWORD:-testpass123}
+      AIQUILA_TEST_PASSWORD: ${NEXTCLOUD_TEST_PASSWORD:-AIquila2026!dev}
       AIQUILA_CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
     volumes:
       - nextcloud_data:/var/www/html
@@ -92,7 +92,7 @@ services:
     environment:
       NEXTCLOUD_URL: http://nextcloud
       NEXTCLOUD_USER: ${NEXTCLOUD_TEST_USER:-testuser}
-      NEXTCLOUD_PASSWORD: ${NEXTCLOUD_TEST_PASSWORD:-testpass123}
+      NEXTCLOUD_PASSWORD: ${NEXTCLOUD_TEST_PASSWORD:-AIquila2026!dev}
       NODE_ENV: development
       MCP_TRANSPORT: http
       MCP_PORT: "3339"

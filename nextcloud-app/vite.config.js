@@ -7,16 +7,22 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
 	build: {
 		outDir: 'js',
-		emptyOutDir: false, // Don't delete existing files in js/
+		emptyOutDir: false,
 		rollupOptions: {
 			input: {
 				'aiquila-main': path.resolve(__dirname, 'src/main.js'),
 			},
 			output: {
-				format: 'es',
-				entryFileNames: '[name].js', // Use .js instead of .mjs
+				format: 'iife',
+				entryFileNames: '[name].js',
 				chunkFileNames: '[name]-[hash].js',
+				// Externalize globals provided by Nextcloud so they are
+				// not bundled and don't conflict with the host page.
+				globals: {
+					jquery: 'jQuery',
+				},
 			},
+			external: ['jquery'],
 		},
 	},
 	resolve: {

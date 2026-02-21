@@ -89,18 +89,16 @@ class ClaudeModels {
      *
      * Returns [] for models that need no special handling, so callers can
      * always use array_merge() unconditionally.
-     *
-     * @param string $effort 'high' | 'medium' | 'low' (Opus 4.6 only)
      */
-    public static function getModelParams(string $model, string $effort = 'high'): array {
+    public static function getModelParams(string $model): array {
         $params = [];
 
         if (self::supportsThinking($model)) {
-            $params['thinking'] = ['type' => 'adaptive'];
+            $params['thinking'] = ['type' => 'adaptive', 'budget_tokens' => 8000];
         }
 
         if (self::supportsEffort($model)) {
-            $params['effort'] = $effort;
+            $params['effort'] = 'high';
         }
 
         return $params;

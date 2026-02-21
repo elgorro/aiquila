@@ -40,15 +40,18 @@ docker run --rm \
     bash -c '
         set -euo pipefail
 
-        echo "--- Installing PHP + Composer ---"
-        apt-get update -qq && apt-get install -y -qq php-cli php-mbstring php-xml php-curl unzip > /dev/null 2>&1
+        echo "--- Installing PHP 8.4 + Composer ---"
+        apt-get update -qq && apt-get install -y -qq apt-transport-https ca-certificates curl lsb-release gnupg > /dev/null 2>&1
+        curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg
+        echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php.list
+        apt-get update -qq && apt-get install -y -qq php8.4-cli php8.4-mbstring php8.4-xml php8.4-curl unzip > /dev/null 2>&1
         curl -sS https://getcomposer.org/installer | php -- --quiet --install-dir=/usr/local/bin --filename=composer
         export COMPOSER_ALLOW_SUPERUSER=1
         echo "PHP $(php -v | head -1 | cut -d" " -f2) + Composer installed."
 
         echo ""
         echo "--- [1/4] Installing PHP dependencies ---"
-        composer install --no-dev --optimize-autoloader --quiet
+        composer update --no-dev --optimize-autoloader --quiet
 
         echo "--- [2/4] Installing Node dependencies ---"
         npm ci --silent

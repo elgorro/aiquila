@@ -2,6 +2,7 @@
 
 namespace OCA\AIquila\Settings;
 
+use OCA\AIquila\Service\ClaudeModels;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
 use OCP\Settings\ISettings;
@@ -16,10 +17,13 @@ class UserSettings implements ISettings {
     }
 
     public function getForm(): TemplateResponse {
-        $apiKey = $this->config->getUserValue($this->userId, 'aiquila', 'api_key', '');
+        $apiKey   = $this->config->getUserValue($this->userId, 'aiquila', 'api_key', '');
+        $userModel = $this->config->getUserValue($this->userId, 'aiquila', 'model', '');
         return new TemplateResponse('aiquila', 'user', [
-            'api_key' => $apiKey ? '********' : '',
-            'has_key' => !empty($apiKey),
+            'api_key'          => $apiKey ? '********' : '',
+            'has_key'          => !empty($apiKey),
+            'user_model'       => $userModel,
+            'available_models' => ClaudeModels::getAllModels(),
         ], '');
     }
 

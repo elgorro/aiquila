@@ -69,6 +69,20 @@ For Claude Desktop connecting to the dockerized MCP server:
 }
 ```
 
+### Claude.ai (OAuth required)
+
+Claude.ai requires OAuth 2.0 authentication before it will connect to a remote MCP server. AIquila includes a built-in OAuth provider — enable it by setting three extra variables in `.env`:
+
+```env
+MCP_AUTH_ENABLED=true
+MCP_AUTH_SECRET=<run: openssl rand -hex 32>
+MCP_AUTH_ISSUER=https://mcp.example.com   # your public HTTPS URL
+```
+
+Then restart and add `https://mcp.example.com/mcp` in Claude.ai under **Settings → Integrations → Add MCP Server**.
+
+See the **[OAuth 2.0 Setup Guide](oauth.md)** for the full walkthrough, including HTTPS requirements, token lifetimes, and troubleshooting.
+
 ## Available Commands
 
 Run from `docker/standalone/`:

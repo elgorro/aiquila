@@ -9,6 +9,7 @@ The Model Context Protocol (MCP) is an open standard developed by Anthropic that
 ## Quick Links
 
 - **[Setup Guide](setup.md)** - Installation and configuration
+- **[OAuth 2.0 for Claude.ai](oauth.md)** - Connect Claude.ai with OAuth authentication
 - **[Tools Reference](#tools-reference)** - Available tools and their usage
 - **[Development](development/)** - Guides for extending the server
 

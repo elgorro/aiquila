@@ -13,6 +13,17 @@ style('aiquila', 'user');
     </p>
 
     <form id="aiquila-user-form">
+        <label for="aiquila-user-model">Model preference</label>
+        <select id="aiquila-user-model" name="model">
+            <option value="">(admin default)</option>
+            <?php foreach ($_['available_models'] as $modelId): ?>
+            <option value="<?php echo htmlspecialchars($modelId); ?>"
+                <?php echo ($_['user_model'] === $modelId) ? 'selected' : ''; ?>>
+                <?php echo htmlspecialchars($modelId); ?>
+            </option>
+            <?php endforeach; ?>
+        </select>
+
         <label for="aiquila-user-api-key">Personal Claude API Key</label>
         <input type="password"
                id="aiquila-user-api-key"

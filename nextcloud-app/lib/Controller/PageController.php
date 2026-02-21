@@ -42,8 +42,8 @@ class PageController extends Controller {
         $config = $this->claudeService->getConfiguration();
 
         $this->initialState->provideInitialState('config', [
-            'model' => $config['model'],
-            'max_tokens' => $config['max_tokens'],
+            'model'       => $this->claudeService->getModel($this->userId),
+            'max_tokens'  => $config['max_tokens'],
             'has_api_key' => !empty($config['api_key']),
         ]);
 
