@@ -48,6 +48,10 @@ class ClaudeModels {
         self::OPUS_4_6 => true,
     ];
 
+    private const SUPPORTS_EFFORT = [
+        self::OPUS_4_6 => true,
+    ];
+
     // ── Public API ─────────────────────────────────────────────────────────
 
     /**
@@ -60,6 +64,10 @@ class ClaudeModels {
 
     public static function supportsThinking(string $model): bool {
         return self::SUPPORTS_THINKING[$model] ?? false;
+    }
+
+    public static function supportsEffort(string $model): bool {
+        return self::SUPPORTS_EFFORT[$model] ?? false;
     }
 
     /**
@@ -87,6 +95,10 @@ class ClaudeModels {
 
         if (self::supportsThinking($model)) {
             $params['thinking'] = ['type' => 'adaptive', 'budget_tokens' => 8000];
+        }
+
+        if (self::supportsEffort($model)) {
+            $params['effort'] = 'high';
         }
 
         return $params;

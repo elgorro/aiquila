@@ -18,6 +18,11 @@
             "OCA\\AIquila\\": "lib/"
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "OCA\\AIquila\\Tests\\": "tests/"
+        }
+    },
     "scripts": {
         "test": "phpunit"
     },

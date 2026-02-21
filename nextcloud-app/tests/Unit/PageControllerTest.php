@@ -110,7 +110,7 @@ class PageControllerTest extends TestCase {
                 'max_tokens' => 4096,
                 'timeout'    => 30,
             ]);
-        $this->initialState->method('provideInitialState')->willReturn(null);
+        $this->initialState->method('provideInitialState')->willReturnCallback(function() {});
 
         $response = $this->ctrl->index();
 

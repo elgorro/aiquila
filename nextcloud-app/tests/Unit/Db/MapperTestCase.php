@@ -42,8 +42,8 @@ abstract class MapperTestCase extends TestCase {
 
         $this->qb->method('expr')->willReturn($this->expr);
         $this->qb->method('func')->willReturn($this->func);
-        // Return the first argument as a stand-in for the placeholder string
-        $this->qb->method('createNamedParameter')->willReturnArgument(0);
+        // Return the first argument cast to string as a stand-in for the placeholder
+        $this->qb->method('createNamedParameter')->willReturnCallback(fn($v) => (string) $v);
 
         $this->expr->method('eq')->willReturn('1=1');
         $this->expr->method('lte')->willReturn('1<=1');

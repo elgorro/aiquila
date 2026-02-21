@@ -12,6 +12,7 @@ use Anthropic\Core\Exceptions\InternalServerException;
 use Anthropic\Core\Exceptions\PermissionDeniedException;
 use Anthropic\Core\Exceptions\RateLimitException;
 use Anthropic\Messages\Message;
+use Anthropic\Messages\Usage;
 use Anthropic\Models\ModelInfo;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
@@ -67,6 +68,13 @@ class TestableClaudeSDKService extends ClaudeSDKService {
             throw $this->streamException;
         }
         return new class implements BaseStream {
+            public function __construct(
+                \Anthropic\Core\Conversion\Contracts\Converter|\Anthropic\Core\Conversion\Contracts\ConverterSource|string $convert = '',
+                ?\Psr\Http\Message\RequestInterface $request = null,
+                ?\Psr\Http\Message\ResponseInterface $response = null,
+                mixed $parsedBody = null,
+            ) {}
+            public function close(): void {}
             public function getIterator(): \Traversable { return new \ArrayIterator([]); }
         };
     }
@@ -102,16 +110,13 @@ class TestableClaudeSDKService extends ClaudeSDKService {
             $contentItems[] = $textObj;
         }
 
-        foreach (['content' => $contentItems, 'stop_reason' => 'end_turn'] as $prop => $val) {
+        foreach (['content' => $contentItems, 'stopReason' => 'end_turn'] as $prop => $val) {
             $p = $ref->getProperty($prop);
             $p->setAccessible(true);
             $p->setValue($stub, $val);
         }
-        $usage = new \stdClass();
-        $usage->input_tokens  = 10;
-        $usage->output_tokens = 20;
+        $usage = Usage::with(null, null, null, 10, 20, null, null);
         $p = $ref->getProperty('usage');
-        $p->setAccessible(true);
         $p->setValue($stub, $usage);
         return $stub;
     }

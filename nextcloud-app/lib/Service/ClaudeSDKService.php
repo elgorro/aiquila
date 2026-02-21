@@ -286,10 +286,10 @@ class ClaudeSDKService {
             $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId, $options));
 
             $this->logger->info('AIquila SDK: Successful response', [
-                'stop_reason' => $response->stop_reason ?? 'unknown',
+                'stop_reason' => $response->stopReason ?? 'unknown',
                 'usage' => [
-                    'input_tokens' => $response->usage->input_tokens ?? 0,
-                    'output_tokens' => $response->usage->output_tokens ?? 0,
+                    'input_tokens' => $response->usage->inputTokens ?? 0,
+                    'output_tokens' => $response->usage->outputTokens ?? 0,
                 ]
             ]);
 
@@ -333,18 +333,18 @@ class ClaudeSDKService {
             $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId, $options));
 
             $this->logger->info('AIquila SDK: chat() response', [
-                'stop_reason' => $response->stop_reason ?? 'unknown',
+                'stop_reason' => $response->stopReason ?? 'unknown',
                 'usage' => [
-                    'input_tokens'  => $response->usage->input_tokens ?? 0,
-                    'output_tokens' => $response->usage->output_tokens ?? 0,
+                    'input_tokens'  => $response->usage->inputTokens ?? 0,
+                    'output_tokens' => $response->usage->outputTokens ?? 0,
                 ],
             ]);
 
             return [
                 'response' => $this->extractText($response),
                 'usage' => [
-                    'input_tokens'  => $response->usage->input_tokens ?? 0,
-                    'output_tokens' => $response->usage->output_tokens ?? 0,
+                    'input_tokens'  => $response->usage->inputTokens ?? 0,
+                    'output_tokens' => $response->usage->outputTokens ?? 0,
                 ],
             ];
 
@@ -423,11 +423,11 @@ class ClaudeSDKService {
             $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId));
 
             $this->logger->info('AIquila SDK: Document analysis response', [
-                'stop_reason' => $response->stop_reason ?? 'unknown',
+                'stop_reason' => $response->stopReason ?? 'unknown',
                 'media_type'  => $mediaType,
                 'usage' => [
-                    'input_tokens'  => $response->usage->input_tokens ?? 0,
-                    'output_tokens' => $response->usage->output_tokens ?? 0,
+                    'input_tokens'  => $response->usage->inputTokens ?? 0,
+                    'output_tokens' => $response->usage->outputTokens ?? 0,
                 ],
             ]);
 
@@ -547,10 +547,10 @@ class ClaudeSDKService {
             $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId));
 
             $this->logger->info('AIquila SDK: Image analysis response', [
-                'stop_reason' => $response->stop_reason ?? 'unknown',
+                'stop_reason' => $response->stopReason ?? 'unknown',
                 'usage' => [
-                    'input_tokens' => $response->usage->input_tokens ?? 0,
-                    'output_tokens' => $response->usage->output_tokens ?? 0,
+                    'input_tokens' => $response->usage->inputTokens ?? 0,
+                    'output_tokens' => $response->usage->outputTokens ?? 0,
                 ]
             ]);
 

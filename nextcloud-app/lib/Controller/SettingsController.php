@@ -13,7 +13,6 @@ class SettingsController extends Controller {
     private IConfig $config;
     private ?string $userId;
     private ClaudeSDKService $claudeService;
-    protected $appName = 'aiquila';
 
     public function __construct(
         string $appName,
