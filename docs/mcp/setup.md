@@ -251,6 +251,10 @@ The MCP server will be available at:
 
 See [Standalone Docker Setup](standalone-docker.md) for full documentation.
 
+### Connecting Claude.ai
+
+Claude.ai requires OAuth 2.0 to connect to remote MCP servers. AIquila ships with a built-in OAuth provider — no external service needed. See the **[OAuth 2.0 Setup Guide](oauth.md)** for setup instructions.
+
 ## Development Mode
 
 For active development with hot reload:
