@@ -48,10 +48,6 @@ class ClaudeModels {
         self::OPUS_4_6 => true,
     ];
 
-    private const SUPPORTS_EFFORT = [
-        self::OPUS_4_6 => true,
-    ];
-
     // ── Public API ─────────────────────────────────────────────────────────
 
     /**
@@ -64,10 +60,6 @@ class ClaudeModels {
 
     public static function supportsThinking(string $model): bool {
         return self::SUPPORTS_THINKING[$model] ?? false;
-    }
-
-    public static function supportsEffort(string $model): bool {
-        return self::SUPPORTS_EFFORT[$model] ?? false;
     }
 
     /**
@@ -89,18 +81,12 @@ class ClaudeModels {
      *
      * Returns [] for models that need no special handling, so callers can
      * always use array_merge() unconditionally.
-     *
-     * @param string $effort 'high' | 'medium' | 'low' (Opus 4.6 only)
      */
-    public static function getModelParams(string $model, string $effort = 'high'): array {
+    public static function getModelParams(string $model): array {
         $params = [];
 
         if (self::supportsThinking($model)) {
             $params['thinking'] = ['type' => 'adaptive', 'budget_tokens' => 8000];
-        }
-
-        if (self::supportsEffort($model)) {
-            $params['effort'] = $effort;
         }
 
         return $params;

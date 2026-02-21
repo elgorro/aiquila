@@ -197,9 +197,9 @@ class Version0001Date20260218000000 extends SimpleMigrationStep {
         $table->addColumn('content', Types::TEXT, [
             'notnull' => true,
         ]);
-        $table->addColumn('is_active', Types::BOOLEAN, [
+        $table->addColumn('is_active', Types::SMALLINT, [
             'notnull' => true,
-            'default' => true,
+            'default' => 1,
         ]);
         $table->addColumn('created_at', Types::BIGINT, [
             'notnull' => true,
@@ -266,9 +266,9 @@ class Version0001Date20260218000000 extends SimpleMigrationStep {
             'notnull' => false,
             'length' => 4000,
         ]);
-        $table->addColumn('is_active', Types::BOOLEAN, [
+        $table->addColumn('is_active', Types::SMALLINT, [
             'notnull' => true,
-            'default' => true,
+            'default' => 1,
         ]);
         $table->addColumn('last_run_at', Types::BIGINT, [
             'notnull' => false,

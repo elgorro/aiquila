@@ -165,7 +165,7 @@ class SettingsController extends Controller {
                 'message' => $result['response']
             ]);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             // Restore original configuration
             foreach ($originalConfig as $key => $value) {
                 if (!empty($value)) {

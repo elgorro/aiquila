@@ -27,8 +27,6 @@ class ClaudeSDKService {
     private LoggerInterface $logger;
     private string $appName = 'aiquila';
 
-    private const DEFAULT_MAX_RETRIES = 2;
-
     public function __construct(IConfig $config, LoggerInterface $logger) {
         $this->config = $config;
         $this->logger = $logger;
@@ -43,7 +41,7 @@ class ClaudeSDKService {
             throw new \RuntimeException('No API key configured');
         }
 
-        return new Client(apiKey: $apiKey, maxRetries: self::DEFAULT_MAX_RETRIES);
+        return new Client(apiKey: $apiKey);
     }
 
     /**
@@ -127,14 +125,34 @@ class ClaudeSDKService {
      * Dispatch a non-streaming create call. Overridable for testing.
      */
     protected function callCreate(Client $client, array $params): Message {
-        return $client->messages->create($params);
+        return $client->messages->create(
+            maxTokens: $params['max_tokens'],
+            messages: $params['messages'],
+            model: $params['model'],
+            system: $params['system'] ?? null,
+            thinking: $params['thinking'] ?? null,
+            temperature: $params['temperature'] ?? null,
+            topP: $params['top_p'] ?? null,
+            topK: $params['top_k'] ?? null,
+            stopSequences: $params['stop_sequences'] ?? null,
+        );
     }
 
     /**
      * Dispatch a streaming create call. Overridable for testing.
      */
     protected function callCreateStream(Client $client, array $params): BaseStream {
-        return $client->messages->createStream($params);
+        return $client->messages->createStream(
+            maxTokens: $params['max_tokens'],
+            messages: $params['messages'],
+            model: $params['model'],
+            system: $params['system'] ?? null,
+            thinking: $params['thinking'] ?? null,
+            temperature: $params['temperature'] ?? null,
+            topP: $params['top_p'] ?? null,
+            topK: $params['top_k'] ?? null,
+            stopSequences: $params['stop_sequences'] ?? null,
+        );
     }
 
     /**
@@ -142,14 +160,14 @@ class ClaudeSDKService {
      * @return list<ModelInfo>
      */
     protected function callListModels(Client $client, array $params): array {
-        return $client->models->list($params)->getItems();
+        return $client->models->list(limit: $params['limit'] ?? 1000)->getItems();
     }
 
     /**
      * Dispatch models->retrieve(). Overridable for testing.
      */
     protected function callRetrieveModel(Client $client, string $modelId): ModelInfo {
-        return $client->models->retrieve($modelId, []);
+        return $client->models->retrieve($modelId);
     }
 
     /**
@@ -161,7 +179,7 @@ class ClaudeSDKService {
             $client = $this->getClient($userId);
             $items  = $this->callListModels($client, ['limit' => 1000]);
             return array_map(fn(ModelInfo $m) => $m->id, $items);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->logger->warning('AIquila SDK: Could not list models', [
                 'error' => $e->getMessage(),
             ]);
@@ -177,8 +195,8 @@ class ClaudeSDKService {
         try {
             $client = $this->getClient($userId);
             $info   = $this->callRetrieveModel($client, $modelId);
-            return ['id' => $info->id, 'display_name' => $info->display_name];
-        } catch (\Exception $e) {
+            return ['id' => $info->id, 'display_name' => $info->displayName];
+        } catch (\Throwable $e) {
             $this->logger->warning('AIquila SDK: Could not retrieve model', [
                 'model' => $modelId,
                 'error' => $e->getMessage(),
@@ -204,7 +222,7 @@ class ClaudeSDKService {
      * Shared exception handler for non-streaming calls.
      * Returns ['error' => string].
      */
-    private function handleException(\Exception $e, string $context = ''): array {
+    private function handleException(\Throwable $e, string $context = ''): array {
         $prefix = $context ? "AIquila SDK: $context" : 'AIquila SDK';
         if ($e instanceof AuthenticationException) {
             $this->logger->error("$prefix: Authentication error", ['error' => $e->getMessage()]);
@@ -277,7 +295,7 @@ class ClaudeSDKService {
 
             return ['response' => $this->extractText($response)];
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return $this->handleException($e, 'ask');
         }
     }
@@ -330,7 +348,7 @@ class ClaudeSDKService {
                 ],
             ];
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return $this->handleException($e, 'chat');
         }
     }
@@ -415,7 +433,7 @@ class ClaudeSDKService {
 
             return ['response' => $this->extractText($response)];
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return $this->handleException($e, 'askWithDocument');
         }
     }
@@ -538,7 +556,7 @@ class ClaudeSDKService {
 
             return ['response' => $this->extractText($response)];
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return $this->handleException($e, 'Image analysis');
         }
     }

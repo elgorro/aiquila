@@ -51,7 +51,7 @@ docker run --rm \
 
         echo ""
         echo "--- [1/4] Installing PHP dependencies ---"
-        composer install --no-dev --optimize-autoloader --quiet
+        composer update --no-dev --optimize-autoloader --quiet
 
         echo "--- [2/4] Installing Node dependencies ---"
         npm ci --silent
