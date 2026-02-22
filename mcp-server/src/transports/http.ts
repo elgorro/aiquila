@@ -18,6 +18,23 @@ export async function startHttp(): Promise<void> {
 
   const app = createMcpExpressApp({ host });
 
+  // When running behind a reverse proxy (e.g. Traefik, nginx, Caddy), the proxy
+  // adds X-Forwarded-For headers. Without trust proxy being set, express-rate-limit
+  // throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR. Set MCP_TRUST_PROXY to configure this:
+  //   MCP_TRUST_PROXY=1      → trust one hop (recommended for a single reverse proxy)
+  //   MCP_TRUST_PROXY=true   → trust all proxies
+  //   MCP_TRUST_PROXY=false  → disabled (default)
+  const trustProxy = process.env.MCP_TRUST_PROXY;
+  if (trustProxy && trustProxy !== 'false') {
+    if (trustProxy === 'true') {
+      app.set('trust proxy', true);
+    } else if (/^\d+$/.test(trustProxy)) {
+      app.set('trust proxy', Number(trustProxy));
+    } else {
+      app.set('trust proxy', trustProxy);
+    }
+  }
+
   const mcpServer = createServer();
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),

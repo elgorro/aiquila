@@ -58,6 +58,8 @@ Claude.ai requires a valid (non-self-signed) TLS certificate. Options:
 - **Cloudflare Tunnel** — Route traffic through Cloudflare without opening firewall ports.
 - **Any reverse proxy** — Nginx, Traefik, etc. — as long as the upstream URL matches `MCP_AUTH_ISSUER`.
 
+> **Reverse proxy users:** If you run the MCP server behind Traefik, nginx, or any other proxy, also set `MCP_TRUST_PROXY=1` in your `.env`. Without it the built-in rate limiter will throw `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` when the proxy adds forwarding headers. See [Reverse proxy troubleshooting](standalone-docker.md#reverse-proxy-traefik-nginx--err_erl_unexpected_x_forwarded_for).
+
 ### 4. Restart the MCP server
 
 ```bash

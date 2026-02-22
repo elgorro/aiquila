@@ -23,6 +23,7 @@ services:
       MCP_AUTH_ENABLED: ${MCP_AUTH_ENABLED:-false}
       MCP_AUTH_SECRET: ${MCP_AUTH_SECRET:-}
       MCP_AUTH_ISSUER: ${MCP_AUTH_ISSUER:-}
+      MCP_TRUST_PROXY: ${MCP_TRUST_PROXY:-}
     ports:
       - "3339:3339"
     networks:

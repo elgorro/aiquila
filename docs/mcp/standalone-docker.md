@@ -36,6 +36,7 @@ Edit `.env` with your Nextcloud connection details:
 | `NEXTCLOUD_URL` | Full URL of your Nextcloud instance | `https://cloud.example.com` |
 | `NEXTCLOUD_USER` | Nextcloud username | `admin` |
 | `NEXTCLOUD_PASSWORD` | Password or app password | `xxxxx-xxxxx-xxxxx` |
+| `MCP_TRUST_PROXY` | Hop count or `true` when behind a reverse proxy (see [Reverse proxy](#reverse-proxy-traefik-nginx)) | `1` |
 
 ### Security: Use App Passwords
 
@@ -164,6 +165,28 @@ If 3339 or 3340 are in use, edit `docker-compose.yml` to change the host ports (
 ```yaml
 ports:
   - "4339:3339"  # Change 3339 to any free port
+```
+
+### Reverse proxy (Traefik, nginx, …) — `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`
+
+When the MCP server sits behind a reverse proxy, the proxy adds an `X-Forwarded-For` header. The built-in rate limiter throws `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` if Express doesn't know to trust that header.
+
+Fix: set `MCP_TRUST_PROXY=1` in your `.env` (or however many proxy hops sit in front of the container):
+
+```env
+MCP_TRUST_PROXY=1
+```
+
+| Value | Meaning |
+|-------|---------|
+| `1` | Trust one hop — use this when a single reverse proxy (Traefik, nginx, Caddy) sits in front of the MCP server |
+| `2`, `3`, … | Trust N hops — use when multiple proxies are stacked |
+| `true` | Trust all proxies — only safe on private/trusted networks |
+
+Restart after adding the variable:
+
+```bash
+make restart
 ```
 
 ### DNS resolution issues
