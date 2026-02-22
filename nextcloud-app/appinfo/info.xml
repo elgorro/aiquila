@@ -28,7 +28,7 @@
 
 Built with [Claude](https://www.anthropic.com/claude) by [Anthropic](https://www.anthropic.com). Made possible by the [Nextcloud](https://nextcloud.com) platform and its open-source community. Thank you.
     ]]></description>
-    <version>0.1.16</version>
+    <version>0.1.17</version>
     <licence>AGPL-3.0-or-later</licence>
     <author mail="aiquila@mailbox.org">elgorro</author>
     <documentation>
@@ -45,6 +45,7 @@ Built with [Claude](https://www.anthropic.com/claude) by [Anthropic](https://www
     <repository>https://github.com/elgorro/aiquila</repository>
     <donation>https://liberapay.com/elgorro/donate</donation>
     <dependencies>
+        <php min-version="8.4"/>
         <nextcloud min-version="31" max-version="33"/>
     </dependencies>
     <settings>
