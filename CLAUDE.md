@@ -16,8 +16,13 @@ All MCP server commands run from `mcp-server/`:
 npm run build      # compile TypeScript → dist/
 npm run dev        # hot reload via tsx (stdio transport by default)
 npm test           # vitest unit tests
-npm run lint       # eslint
+npm run lint       # eslint (warnings ok, errors fail CI)
+npm run format     # prettier --write src/  (auto-fix formatting)
+npx prettier --check src/   # check only — run before committing
 ```
+
+**CI requires both `npm run lint` and `npx prettier --check src/` to pass.**
+Always run `npm run format` after editing TypeScript files.
 
 HTTP transport locally:
 ```bash
@@ -98,3 +103,14 @@ cd docker/standalone
 ```
 
 Reads credentials from `docker/standalone/.env`. The script restarts the MCP container first to ensure clean session state.
+
+### Functional tool test
+
+`docker/standalone/scripts/test-tools.sh` authenticates via OAuth PKCE (no restart) and exercises core MCP tools end-to-end: `system_status`, `list_files`, `create_folder`, `write_file`, `read_file`, `search_files`, `get_file_info`, `delete`. Cleans up after itself.
+
+```bash
+cd docker/standalone
+make test-tools        # default: http://localhost:3339
+```
+
+Requires a running standalone stack (`make up`) and auth enabled in `.env`.

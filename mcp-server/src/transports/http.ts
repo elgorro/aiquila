@@ -55,7 +55,9 @@ export async function startHttp(): Promise<void> {
     }
 
     if (!registrationEnabled && !hasStaticClient) {
-      logger.warn('No clients configured. Set MCP_CLIENT_ID + MCP_CLIENT_SECRET or MCP_REGISTRATION_ENABLED=true');
+      logger.warn(
+        'No clients configured. Set MCP_CLIENT_ID + MCP_CLIENT_SECRET or MCP_REGISTRATION_ENABLED=true'
+      );
     }
 
     const provider = new NextcloudOAuthProvider();
@@ -64,9 +66,10 @@ export async function startHttp(): Promise<void> {
     if (registrationEnabled && registrationToken) {
       app.use('/register', (req: any, res: any, next: any) => {
         if (req.headers['authorization'] !== `Bearer ${registrationToken}`) {
-          res
-            .status(401)
-            .json({ error: 'unauthorized_client', error_description: 'Valid registration token required' });
+          res.status(401).json({
+            error: 'unauthorized_client',
+            error_description: 'Valid registration token required',
+          });
           return;
         }
         next();
