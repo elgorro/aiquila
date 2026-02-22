@@ -8,13 +8,14 @@ The MCP Server is a TypeScript-based implementation of the Model Context Protoco
 
 ## Technology Stack
 
-- **Runtime**: Node.js 18+
+- **Runtime**: Node.js 24+
 - **Language**: TypeScript 5.8+ (strict mode)
 - **Protocol**: Model Context Protocol (MCP) via `@modelcontextprotocol/sdk`
-- **Transport**: stdio (JSON-RPC)
+- **Transport**: stdio (JSON-RPC) or Streamable HTTP
 - **Dependencies**:
-  - `webdav` ^5.8.0 - WebDAV client
-  - `zod` ^3.25.76 - Schema validation
+  - `pino` ^9.x - Structured JSON logging
+  - `webdav` ^5.x - WebDAV client
+  - `zod` ^3.x - Schema validation
 - **Dev Tools**:
   - `vitest` - Testing framework
   - `tsx` - TypeScript execution with hot reload
@@ -26,6 +27,7 @@ The MCP Server is a TypeScript-based implementation of the Model Context Protoco
 mcp-server/
 ├── src/
 │   ├── index.ts                 # Main server & registration
+│   ├── logger.ts                # Shared pino logger instance
 │   ├── client/                  # Infrastructure layer
 │   │   ├── webdav.ts           # WebDAV singleton client
 │   │   └── caldav.ts           # CalDAV helper functions
@@ -352,8 +354,8 @@ try {
 
 #### 3. Main Function Level
 ```typescript
-main().catch((error) => {
-  console.error('Fatal error:', error);
+main().catch((err) => {
+  logger.fatal({ err }, 'Fatal error');
   process.exit(1);
 });
 ```
@@ -452,21 +454,33 @@ npm run build  # Compile TS to JS in dist/
 
 ### Logging
 
-**Current**: Minimal logging to stderr
+Structured JSON logging via [pino](https://getpino.io/), writing to stderr (safe for stdio transport).
+
 ```typescript
-console.error('AIquila MCP server running');
+// src/logger.ts
+import pino from 'pino';
+export const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' }, process.stderr);
 ```
 
-**Future**: Structured logging
-- Request/response logging
-- Performance metrics
-- Error tracking
+Control verbosity with the `LOG_LEVEL` environment variable:
+
+| Level | Use case |
+|-------|----------|
+| `debug` / `trace` | Development, deep tracing |
+| `info` | Default — startup, login, token events |
+| `warn` | Auth failures, misconfiguration |
+| `error` / `fatal` | Unexpected exceptions, fatal config errors |
+
+Example output:
+```json
+{"level":30,"time":1700000000000,"msg":"[auth] Login successful","user":"alice","client":"claude-desktop"}
+```
 
 ### Debugging
 
 **Methods**:
-1. Claude Desktop logs: `~/.local/share/Claude/logs/`
-2. Add `console.error()` in handlers
+1. `LOG_LEVEL=debug npm run dev` — verbose structured output
+2. Claude Desktop logs: `~/.local/share/Claude/logs/`
 3. Use debugger with tsx
 4. Test tools in isolation
 
@@ -480,7 +494,6 @@ console.error('AIquila MCP server running');
 4. **Batch Operations** - Multiple operations in one call
 5. **Metrics** - Track usage and performance
 6. **Direct OCC Execution** - Execute OCC commands via API
-7. **WebSocket Transport** - Alternative to stdio
 
 ### Extension Points
 

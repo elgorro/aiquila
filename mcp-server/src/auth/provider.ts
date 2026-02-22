@@ -11,6 +11,7 @@ import type {
   OAuthTokenRevocationRequest,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { ClientsStore, CodeStore, RefreshStore } from './store.js';
+import { logger } from '../logger.js';
 
 // --- JWT helpers (HMAC-SHA256 via node:crypto — no extra deps) ---
 
@@ -114,7 +115,7 @@ export function renderLoginForm(opts: {
 // --- OAuth Provider ---
 
 export class NextcloudOAuthProvider implements OAuthServerProvider {
-  private readonly _clientsStore = new ClientsStore();
+  private readonly _clientsStore = ClientsStore.fromEnv();
   private readonly codeStore = new CodeStore();
   private readonly refreshStore = new RefreshStore();
 
@@ -162,9 +163,11 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
   ): Promise<OAuthTokens> {
     const entry = this.codeStore.get(authorizationCode);
     if (!entry || entry.clientId !== client.client_id) {
+      logger.warn({ client: client.client_id }, '[token] Auth code exchange failed: invalid or expired code');
       throw new Error('Invalid authorization code');
     }
     if (redirectUri && entry.redirectUri !== redirectUri) {
+      logger.warn({ client: client.client_id }, '[token] Auth code exchange failed: redirect_uri mismatch');
       throw new Error('Redirect URI mismatch');
     }
     this.codeStore.delete(authorizationCode);
@@ -180,6 +183,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
       scopes: entry.scopes,
     });
 
+    logger.info({ user: entry.userId, client: client.client_id, scopes: entry.scopes }, '[token] Access token issued');
     return {
       access_token: accessToken,
       token_type: 'bearer',
@@ -197,6 +201,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
   ): Promise<OAuthTokens> {
     const entry = this.refreshStore.get(refreshToken);
     if (!entry || entry.clientId !== client.client_id) {
+      logger.warn({ client: client.client_id }, '[token] Refresh token exchange failed: invalid or expired token');
       throw new Error('Invalid refresh token');
     }
     const effectiveScopes = scopes ?? entry.scopes;
@@ -213,6 +218,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
       scopes: effectiveScopes,
     });
 
+    logger.info({ user: entry.userId, client: client.client_id }, '[token] Token refreshed');
     return {
       access_token: accessToken,
       token_type: 'bearer',
@@ -225,6 +231,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
   async verifyAccessToken(token: string): Promise<AuthInfo> {
     const claims = verifyJwt(token, this.getSecret());
     if (!claims) {
+      logger.warn('[auth] Access token verification failed: invalid or expired token');
       throw new Error('Invalid or expired access token');
     }
     return {

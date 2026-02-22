@@ -160,12 +160,14 @@ composer test
 ### MCP Server
 
 ```bash
-# Run with debug output
-DEBUG=* npm run dev
+# Run with verbose structured logging
+LOG_LEVEL=debug npm run dev
 
 # Check Claude Desktop logs
 tail -f ~/.config/claude/logs/mcp.log  # Linux
 ```
+
+Logs are emitted as JSON to stderr. Set `LOG_LEVEL` to `trace` for maximum verbosity or `warn` to suppress startup noise in production.
 
 ### Nextcloud App
 

@@ -36,6 +36,14 @@
 - [x] Server factory refactoring (per-connection server instances)
 - [x] Centralized versioning (single source of truth in package.json)
 
+**Auth**
+- [x] Built-in OAuth 2.0 provider (auth codes, JWT access/refresh tokens, PKCE)
+- [x] Claude.ai remote MCP integration (`MCP_AUTH_ENABLED`)
+- [x] Dynamic and static client registration
+
+**Observability**
+- [x] Structured JSON logging (pino, `LOG_LEVEL`)
+
 **App Integrations**
 - [x] Calendar events (full CRUD with recurrence, attendees, alarms)
 - [x] Tasks (full CRUD with subtasks, priorities, categories)
@@ -65,7 +73,7 @@
 
 ### Nextcloud App
 - [x] Streaming responses
-- [x] added Opus 4.6 optional
+- [x] Opus 4.6 model support
 - [ ] Conversation history storage
 - [ ] Token usage tracking
 - [ ] File access in chat window
@@ -75,8 +83,8 @@
 - [x] Docker dev environment for improved testing capabilities
 - [x] Docker for MCP Server (HTTP transport on port 3339)
 - [x] Docker Github Release
-- [ ] OpenApi support
-- [ ] Update docs
+- [x] Update docs
+- [ ] OpenAPI support
 
 ---
 
@@ -136,10 +144,9 @@
 ## Final Phase: Polish & Distribution
 *Target: v1.0.0*
 
-- [ ] Nextcloud App Store submission
+- [ ] Nextcloud App Store official listing (reviewed & approved)
 - [ ] npm package for MCP server
 - [ ] Performance optimization
-- [ ] Comprehensive error handling
 - [ ] Internationalization (i18n)
 - [ ] User documentation portal
 

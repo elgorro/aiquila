@@ -1,6 +1,6 @@
 {
   "name": "aiquila-mcp",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "description": "AIquila - MCP server for Nextcloud integration with Claude AI",
   "type": "module",
   "main": "dist/index.js",
@@ -25,6 +25,7 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "pino": "^9.0.0",
     "typescript": "^5.8.3",
     "webdav": "^5.8.0",
     "zod": "^3.25.76"

@@ -1,5 +1,6 @@
 import { startStdio } from './transports/stdio.js';
 import { startHttp } from './transports/http.js';
+import { logger } from './logger.js';
 
 /**
  * AIquila MCP Server
@@ -20,12 +21,12 @@ async function main() {
       await startHttp();
       break;
     default:
-      console.error(`Unknown MCP_TRANSPORT: "${transport}". Use "stdio" or "http".`);
+      logger.error({ transport }, 'Unknown MCP_TRANSPORT. Use "stdio" or "http".');
       process.exit(1);
   }
 }
 
 main().catch((err) => {
-  console.error('Fatal error:', err);
+  logger.fatal({ err }, 'Fatal error');
   process.exit(1);
 });

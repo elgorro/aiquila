@@ -37,6 +37,7 @@ Edit `.env` with your Nextcloud connection details:
 | `NEXTCLOUD_USER` | Nextcloud username | `admin` |
 | `NEXTCLOUD_PASSWORD` | Password or app password | `xxxxx-xxxxx-xxxxx` |
 | `MCP_TRUST_PROXY` | Hop count or `true` when behind a reverse proxy (see [Reverse proxy](#reverse-proxy-traefik-nginx)) | `1` |
+| `LOG_LEVEL` | Log verbosity: `trace`, `debug`, `info`, `warn`, `error`, `fatal` (default: `info`) | `warn` |
 
 ### Security: Use App Passwords
 

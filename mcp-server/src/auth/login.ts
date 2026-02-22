@@ -1,4 +1,5 @@
 import { NextcloudOAuthProvider, renderLoginForm } from './provider.js';
+import { logger } from '../logger.js';
 
 export function loginHandler(provider: NextcloudOAuthProvider) {
   return async (req: any, res: any): Promise<void> => {
@@ -28,6 +29,8 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       return;
     }
 
+    logger.info({ user: username, client: client_id, nc: ncUrl }, '[auth] Login attempt');
+
     try {
       const credentials = Buffer.from(`${username}:${password}`).toString('base64');
       const ncResp = await fetch(`${ncUrl}/ocs/v2.php/cloud/user`, {
@@ -38,6 +41,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       });
 
       if (!ncResp.ok) {
+        logger.warn({ user: username, status: ncResp.status }, '[auth] Login failed');
         res
           .status(200)
           .type('html')
@@ -64,11 +68,14 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
         state: state || undefined,
       });
 
+      logger.info({ user: username, client: client_id }, '[auth] Login successful');
+
       const redirectUrl = new URL(redirect_uri);
       redirectUrl.searchParams.set('code', code);
       if (state) redirectUrl.searchParams.set('state', state);
       res.redirect(redirectUrl.toString());
-    } catch {
+    } catch (err) {
+      logger.error({ user: username, err }, '[auth] Login error');
       res
         .status(200)
         .type('html')

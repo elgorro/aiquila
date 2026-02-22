@@ -37,6 +37,10 @@ The MCP server requires three environment variables to connect to your Nextcloud
 - `NEXTCLOUD_USER` - Your Nextcloud username
 - `NEXTCLOUD_PASSWORD` - Your Nextcloud password or app-specific password
 
+Optional:
+
+- `LOG_LEVEL` - Log verbosity sent to stderr: `trace`, `debug`, `info` (default), `warn`, `error`, `fatal`
+
 ### Setting Up Environment Variables
 
 #### Option 1: Using .env file (Recommended for development)

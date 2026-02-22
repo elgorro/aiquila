@@ -99,18 +99,14 @@ describe('NextcloudOAuthProvider', () => {
   // ---- clientsStore ----
 
   describe('clientsStore', () => {
-    it('exposes an OAuthRegisteredClientsStore', () => {
+    it('exposes an OAuthRegisteredClientsStore with getClient', () => {
       expect(provider.clientsStore).toBeDefined();
       expect(typeof provider.clientsStore.getClient).toBe('function');
-      expect(typeof provider.clientsStore.registerClient).toBe('function');
     });
 
-    it('registers and retrieves clients', () => {
-      const client = provider.clientsStore.registerClient!({
-        redirect_uris: [new URL('https://example.com/cb')],
-      }) as any;
-      expect(client.client_id).toBeDefined();
-      expect(provider.clientsStore.getClient(client.client_id)).toEqual(client);
+    it('registerClient is undefined by default (no env vars set)', () => {
+      // Dynamic registration is disabled unless MCP_REGISTRATION_ENABLED=true
+      expect(provider.clientsStore.registerClient).toBeUndefined();
     });
   });
 
