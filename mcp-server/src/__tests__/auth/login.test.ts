@@ -122,6 +122,16 @@ describe('loginHandler', () => {
     expect(opts.headers['OCS-APIRequest']).toBe('true');
   });
 
+  it('strips trailing slash from NEXTCLOUD_URL to avoid double-slash in path', async () => {
+    process.env.NEXTCLOUD_URL = 'https://cloud.example.com/';
+    (global.fetch as any).mockResolvedValueOnce({ ok: true });
+    const res = makeRes();
+    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    const [url] = (global.fetch as any).mock.calls[0];
+    expect(url).not.toContain('//ocs');
+    expect(url).toContain('/ocs/v2.php/cloud/user');
+  });
+
   it('issued code is verifiable via the provider', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();

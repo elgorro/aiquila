@@ -5,7 +5,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
     const body = req.body as Record<string, string>;
     const { username, password, client_id, redirect_uri, state, code_challenge, scope } = body;
 
-    const ncUrl = process.env.NEXTCLOUD_URL;
+    const ncUrl = process.env.NEXTCLOUD_URL?.replace(/\/+$/, '');
     if (!ncUrl) {
       res.status(500).send('Server configuration error: NEXTCLOUD_URL not set');
       return;
