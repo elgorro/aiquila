@@ -1,4 +1,4 @@
-.PHONY: help up down restart logs logs-follow status shell build clean test test-oauth
+.PHONY: help up down restart logs logs-follow status shell build clean test test-oauth test-tools
 
 COMPOSE := docker compose
 
@@ -26,6 +26,7 @@ help:
 	@echo "  make clean        - Stop and remove containers and volumes"
 	@echo "  make test         - Test MCP server connectivity"
 	@echo "  make test-oauth   - Full OAuth PKCE flow test (auth enabled)"
+	@echo "  make test-tools   - Functional tool test (file CRUD, search, status)"
 	@echo ""
 	@echo "Access points:"
 	@echo "  HTTPS: https://localhost:3340/mcp (self-signed cert)"
@@ -91,6 +92,10 @@ clean:
 # Full OAuth PKCE flow test (requires MCP_AUTH_ENABLED=true)
 test-oauth:
 	@bash scripts/test-oauth.sh
+
+# Functional tool test: file CRUD, search, system status (requires MCP_AUTH_ENABLED=true)
+test-tools:
+	@bash scripts/test-tools.sh
 
 # Test MCP server connectivity
 test:
