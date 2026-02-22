@@ -41,6 +41,10 @@ export async function startHttp(): Promise<void> {
     sessionIdGenerator: () => randomUUID(),
   });
 
+  const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
+  const hasStaticClient = !!(process.env.MCP_CLIENT_ID && process.env.MCP_CLIENT_SECRET);
+  const registrationToken = process.env.MCP_REGISTRATION_TOKEN;
+
   if (authEnabled) {
     const issuerUrl = process.env.MCP_AUTH_ISSUER;
     if (!issuerUrl) {
@@ -50,9 +54,6 @@ export async function startHttp(): Promise<void> {
       throw new Error('MCP_AUTH_SECRET must be set when MCP_AUTH_ENABLED=true');
     }
 
-    const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
-    const hasStaticClient = !!(process.env.MCP_CLIENT_ID && process.env.MCP_CLIENT_SECRET);
-    const registrationToken = process.env.MCP_REGISTRATION_TOKEN;
     if (!registrationEnabled && !hasStaticClient) {
       logger.warn('No clients configured. Set MCP_CLIENT_ID + MCP_CLIENT_SECRET or MCP_REGISTRATION_ENABLED=true');
     }
