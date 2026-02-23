@@ -6,6 +6,7 @@ const mockServer = { connect: mockConnect };
 
 vi.mock('../server.js', () => ({
   createServer: vi.fn(() => mockServer),
+  SERVER_VERSION: '0.0.0-test',
 }));
 
 // Mock the MCP SDK transports (must be constructable — no arrow functions)
