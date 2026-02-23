@@ -4,10 +4,11 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
-import { createServer } from '../server.js';
+import { createServer, SERVER_VERSION } from '../server.js';
 import { NextcloudOAuthProvider } from '../auth/provider.js';
 import { loginHandler } from '../auth/login.js';
 import { logger } from '../logger.js';
+import { fetchStatus } from '../client/ocs.js';
 
 const DEFAULT_PORT = 3339;
 const MCP_PATH = '/mcp';
@@ -17,7 +18,26 @@ export async function startHttp(): Promise<void> {
   const host = process.env.MCP_HOST || '0.0.0.0';
   const authEnabled = process.env.MCP_AUTH_ENABLED === 'true';
 
-  const app = createMcpExpressApp({ host });
+  // When auth is enabled, derive allowedHosts from the public issuer URL.
+  // This suppresses the MCP SDK's "binding to 0.0.0.0 without DNS rebinding
+  // protection" console.warn (which breaks structured-log parsers like jq) and
+  // adds an extra layer of host-header validation in front of the bearer-auth
+  // middleware.  Local access (localhost / 127.0.0.1) is always included so
+  // test scripts and Docker health-checks keep working.
+  let allowedHosts: string[] | undefined;
+  if (authEnabled) {
+    const issuerStr = process.env.MCP_AUTH_ISSUER;
+    if (issuerStr) {
+      try {
+        const issuerHostname = new URL(issuerStr).hostname;
+        allowedHosts = [...new Set([issuerHostname, 'localhost', '127.0.0.1'])];
+      } catch {
+        // Malformed issuer URL — the validation below will throw a clear error.
+      }
+    }
+  }
+
+  const app = createMcpExpressApp({ host, allowedHosts });
 
   // When running behind a reverse proxy (e.g. Traefik, nginx, Caddy), the proxy
   // adds X-Forwarded-For headers. Without trust proxy being set, express-rate-limit
@@ -77,6 +97,13 @@ export async function startHttp(): Promise<void> {
     }
 
     // OAuth discovery + token endpoints (/.well-known/*, /oauth/*)
+    const oauthPaths = ['/.well-known', '/register', '/authorize', '/token'];
+    for (const p of oauthPaths) {
+      app.use(p, (req: any, _res: any, next: any) => {
+        logger.debug({ method: req.method, path: req.path }, '[oauth] Request');
+        next();
+      });
+    }
     app.use(mcpAuthRouter({ provider, issuerUrl: new URL(issuerUrl) }));
 
     // Parse URL-encoded form submissions from the login page
@@ -86,9 +113,25 @@ export async function startHttp(): Promise<void> {
     app.post('/auth/login', loginHandler(provider));
 
     // Protect /mcp with Bearer token auth
-    app.all(MCP_PATH, requireBearerAuth({ verifier: provider }), async (req: any, res: any) => {
-      await transport.handleRequest(req, res, req.body);
-    });
+    app.all(
+      MCP_PATH,
+      (req: any, res: any, next: any) => {
+        res.on('finish', () => {
+          if (res.statusCode === 401 || res.statusCode === 403) {
+            logger.warn(
+              { status: res.statusCode, rpcMethod: req.body?.method },
+              '[mcp] Request rejected'
+            );
+          }
+        });
+        next();
+      },
+      requireBearerAuth({ verifier: provider }),
+      async (req: any, res: any) => {
+        logger.debug({ method: req.method, rpcMethod: req.body?.method }, '[mcp] Request received');
+        await transport.handleRequest(req, res, req.body);
+      }
+    );
   } else {
     app.all(MCP_PATH, async (req: any, res: any) => {
       await transport.handleRequest(req, res, req.body);
@@ -98,7 +141,10 @@ export async function startHttp(): Promise<void> {
   await mcpServer.connect(transport);
 
   app.listen(port, host, () => {
-    logger.info({ host, port, path: MCP_PATH }, 'AIquila MCP server running (http transport)');
+    logger.info(
+      { version: SERVER_VERSION, host, port, path: MCP_PATH },
+      'AIquila MCP server running (http transport)'
+    );
     if (authEnabled) {
       const tp = process.env.MCP_TRUST_PROXY;
       logger.info({ issuer: process.env.MCP_AUTH_ISSUER }, 'OAuth 2.0 authentication enabled');
@@ -114,5 +160,23 @@ export async function startHttp(): Promise<void> {
       }
     }
     logger.info('View logs: docker compose logs -f   or   make logs-follow');
+    void (async () => {
+      try {
+        const t0 = Date.now();
+        await fetchStatus();
+        logger.info(
+          { nc: process.env.NEXTCLOUD_URL, ms: Date.now() - t0 },
+          '[startup] Nextcloud reachable'
+        );
+      } catch (err) {
+        logger.warn(
+          {
+            nc: process.env.NEXTCLOUD_URL,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          '[startup] Nextcloud unreachable'
+        );
+      }
+    })();
   });
 }

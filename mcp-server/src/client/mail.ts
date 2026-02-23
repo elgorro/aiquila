@@ -1,4 +1,5 @@
 import { getNextcloudConfig } from '../tools/types.js';
+import { logger } from '../logger.js';
 
 /**
  * Make an authenticated request to the Nextcloud Mail app REST API.
@@ -35,9 +36,15 @@ export async function fetchMailAPI(
     headers['Content-Type'] = 'application/json';
   }
 
-  return fetch(url, {
+  const t0 = Date.now();
+  const response = await fetch(url, {
     method: options.method || 'GET',
     headers,
     body,
   });
+  logger.trace(
+    { method: options.method || 'GET', url, status: response.status, ms: Date.now() - t0 },
+    '[nc] HTTP'
+  );
+  return response;
 }

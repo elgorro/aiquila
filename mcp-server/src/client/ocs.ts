@@ -1,4 +1,5 @@
 import { getNextcloudConfig } from '../tools/types.js';
+import { logger } from '../logger.js';
 
 /**
  * OCS API response envelope
@@ -56,11 +57,16 @@ export async function fetchOCS<T = unknown>(
     headers['Content-Type'] = 'application/x-www-form-urlencoded';
   }
 
+  const t0 = Date.now();
   const response = await fetch(url, {
     method: options.method || 'GET',
     headers,
     body,
   });
+  logger.trace(
+    { method: options.method || 'GET', url, status: response.status, ms: Date.now() - t0 },
+    '[nc] HTTP'
+  );
 
   if (!response.ok) {
     const text = await response.text();
@@ -83,11 +89,17 @@ export async function fetchStatus(): Promise<Record<string, unknown>> {
   const config = getNextcloudConfig();
   const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
 
-  const response = await fetch(`${config.url}/status.php`, {
+  const statusUrl = `${config.url}/status.php`;
+  const t0 = Date.now();
+  const response = await fetch(statusUrl, {
     headers: {
       Authorization: `Basic ${auth}`,
     },
   });
+  logger.trace(
+    { method: 'GET', url: statusUrl, status: response.status, ms: Date.now() - t0 },
+    '[nc] HTTP'
+  );
 
   if (!response.ok) {
     throw new Error(`Status check failed: ${response.status} ${response.statusText}`);

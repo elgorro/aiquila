@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { logger } from './logger.js';
 
 // Import system tools
 import { fileSystemTools } from './tools/system/files.js';
@@ -25,7 +26,7 @@ import { mapsTools } from './tools/apps/maps.js';
 
 const SERVER_NAME = 'aiquila';
 const _require = createRequire(import.meta.url);
-const { version: SERVER_VERSION } = _require('../package.json');
+export const SERVER_VERSION: string = _require('../package.json').version;
 
 const allToolSets = [
   fileSystemTools,
@@ -62,13 +63,26 @@ export function createServer(): McpServer {
 
   for (const toolSet of allToolSets) {
     for (const tool of toolSet) {
+      const name = tool.name;
       server.registerTool(
-        tool.name,
+        name,
         {
           description: tool.description,
           inputSchema: tool.inputSchema as any,
         },
-        tool.handler as any
+        async (...args: unknown[]) => {
+          const start = Date.now();
+          logger.debug({ tool: name }, '[tool] Called');
+          const result = await (tool.handler as (...a: unknown[]) => Promise<any>)(...args);
+          const ms = Date.now() - start;
+          if (result?.isError) {
+            const errorText = result.content?.[0]?.text ?? 'unknown error';
+            logger.warn({ tool: name, error: errorText, ms }, '[tool] Error response');
+          } else {
+            logger.debug({ tool: name, ms }, '[tool] Completed');
+          }
+          return result;
+        }
       );
     }
   }
