@@ -54,6 +54,11 @@ vi.mock('@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js', () => 
   requireBearerAuth: vi.fn(() => mockBearerMiddleware),
 }));
 
+// Mock ocs fetchStatus to prevent real network calls during startup probe
+vi.mock('../client/ocs.js', () => ({
+  fetchStatus: vi.fn().mockResolvedValue({ version: '28.0.0' }),
+}));
+
 // Mock the auth provider and login handler
 const mockProviderInstance = {};
 vi.mock('../auth/provider.js', () => ({
@@ -198,7 +203,12 @@ describe('http transport with auth enabled', () => {
   it('mounts /mcp with bearer middleware and handler', async () => {
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
-    expect(mockAll).toHaveBeenCalledWith('/mcp', mockBearerMiddleware, expect.any(Function));
+    expect(mockAll).toHaveBeenCalledWith(
+      '/mcp',
+      expect.any(Function),
+      mockBearerMiddleware,
+      expect.any(Function)
+    );
   });
 
   it('still connects the MCP server to the transport', async () => {

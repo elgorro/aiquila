@@ -1,3 +1,5 @@
+import { logger } from '../logger.js';
+
 /**
  * Fetch data from CalDAV endpoint using basic authentication
  */
@@ -23,6 +25,7 @@ export async function fetchCalDAV(
   // Normalize URL: collapse double slashes (but not in protocol://)
   const normalizedUrl = url.replace(/([^:])\/\/+/g, '$1/');
 
+  const t0 = Date.now();
   const response = await fetch(normalizedUrl, {
     method,
     headers: {
@@ -33,6 +36,10 @@ export async function fetchCalDAV(
     body: options.body,
     redirect: 'manual',
   });
+  logger.trace(
+    { method, url: normalizedUrl, status: response.status, ms: Date.now() - t0 },
+    '[nc] HTTP'
+  );
 
   // Handle redirects manually to preserve method and body
   if (response.status >= 300 && response.status < 400) {

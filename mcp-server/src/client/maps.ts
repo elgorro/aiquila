@@ -1,4 +1,5 @@
 import { getNextcloudConfig } from '../tools/types.js';
+import { logger } from '../logger.js';
 
 /**
  * Nextcloud Maps API client.
@@ -64,11 +65,16 @@ export async function fetchMapsExternalAPI<T = unknown>(
   const url = buildUrl(`${config.url}/apps/maps/api/1.0`, endpoint, options.queryParams);
   const body = options.body ? JSON.stringify(options.body) : undefined;
 
+  const t0 = Date.now();
   const response = await fetch(url, {
     method: options.method || 'GET',
     headers: buildHeaders(auth, !!options.body),
     body,
   });
+  logger.trace(
+    { method: options.method || 'GET', url, status: response.status, ms: Date.now() - t0 },
+    '[nc] HTTP'
+  );
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');
@@ -92,11 +98,16 @@ export async function fetchMapsAPI<T = unknown>(
   const url = buildUrl(`${config.url}/apps/maps`, endpoint, options.queryParams);
   const body = options.body ? JSON.stringify(options.body) : undefined;
 
+  const t0 = Date.now();
   const response = await fetch(url, {
     method: options.method || 'GET',
     headers: buildHeaders(auth, !!options.body),
     body,
   });
+  logger.trace(
+    { method: options.method || 'GET', url, status: response.status, ms: Date.now() - t0 },
+    '[nc] HTTP'
+  );
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');

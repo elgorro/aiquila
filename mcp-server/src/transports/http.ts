@@ -8,6 +8,7 @@ import { createServer, SERVER_VERSION } from '../server.js';
 import { NextcloudOAuthProvider } from '../auth/provider.js';
 import { loginHandler } from '../auth/login.js';
 import { logger } from '../logger.js';
+import { fetchStatus } from '../client/ocs.js';
 
 const DEFAULT_PORT = 3339;
 const MCP_PATH = '/mcp';
@@ -96,6 +97,13 @@ export async function startHttp(): Promise<void> {
     }
 
     // OAuth discovery + token endpoints (/.well-known/*, /oauth/*)
+    const oauthPaths = ['/.well-known', '/register', '/authorize', '/token'];
+    for (const p of oauthPaths) {
+      app.use(p, (req: any, _res: any, next: any) => {
+        logger.debug({ method: req.method, path: req.path }, '[oauth] Request');
+        next();
+      });
+    }
     app.use(mcpAuthRouter({ provider, issuerUrl: new URL(issuerUrl) }));
 
     // Parse URL-encoded form submissions from the login page
@@ -105,10 +113,25 @@ export async function startHttp(): Promise<void> {
     app.post('/auth/login', loginHandler(provider));
 
     // Protect /mcp with Bearer token auth
-    app.all(MCP_PATH, requireBearerAuth({ verifier: provider }), async (req: any, res: any) => {
-      logger.debug({ method: req.method }, '[mcp] Request received');
-      await transport.handleRequest(req, res, req.body);
-    });
+    app.all(
+      MCP_PATH,
+      (req: any, res: any, next: any) => {
+        res.on('finish', () => {
+          if (res.statusCode === 401 || res.statusCode === 403) {
+            logger.warn(
+              { status: res.statusCode, rpcMethod: req.body?.method },
+              '[mcp] Request rejected'
+            );
+          }
+        });
+        next();
+      },
+      requireBearerAuth({ verifier: provider }),
+      async (req: any, res: any) => {
+        logger.debug({ method: req.method, rpcMethod: req.body?.method }, '[mcp] Request received');
+        await transport.handleRequest(req, res, req.body);
+      }
+    );
   } else {
     app.all(MCP_PATH, async (req: any, res: any) => {
       await transport.handleRequest(req, res, req.body);
@@ -137,5 +160,23 @@ export async function startHttp(): Promise<void> {
       }
     }
     logger.info('View logs: docker compose logs -f   or   make logs-follow');
+    void (async () => {
+      try {
+        const t0 = Date.now();
+        await fetchStatus();
+        logger.info(
+          { nc: process.env.NEXTCLOUD_URL, ms: Date.now() - t0 },
+          '[startup] Nextcloud reachable'
+        );
+      } catch (err) {
+        logger.warn(
+          {
+            nc: process.env.NEXTCLOUD_URL,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          '[startup] Nextcloud unreachable'
+        );
+      }
+    })();
   });
 }

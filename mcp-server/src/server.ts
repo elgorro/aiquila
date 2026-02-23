@@ -71,11 +71,15 @@ export function createServer(): McpServer {
           inputSchema: tool.inputSchema as any,
         },
         async (...args: unknown[]) => {
+          const start = Date.now();
           logger.debug({ tool: name }, '[tool] Called');
           const result = await (tool.handler as (...a: unknown[]) => Promise<any>)(...args);
+          const ms = Date.now() - start;
           if (result?.isError) {
             const errorText = result.content?.[0]?.text ?? 'unknown error';
-            logger.warn({ tool: name, error: errorText }, '[tool] Error response');
+            logger.warn({ tool: name, error: errorText, ms }, '[tool] Error response');
+          } else {
+            logger.debug({ tool: name, ms }, '[tool] Completed');
           }
           return result;
         }
