@@ -4,9 +4,11 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"time"
 
@@ -167,6 +169,44 @@ func RunCommand(client *xssh.Client, cmd string) (string, error) {
 		return string(out), fmt.Errorf("run %q: %w (output: %s)", cmd, err, string(out))
 	}
 	return string(out), nil
+}
+
+// StreamCommand runs a command on the remote host, piping its output directly
+// to os.Stdout/Stderr in real time. Ctrl+C (SIGINT) is forwarded to the remote
+// process so it exits cleanly; exit status 130 (killed by SIGINT) is treated as
+// a clean exit.
+func StreamCommand(client *xssh.Client, cmd string) error {
+	sess, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("new SSH session: %w", err)
+	}
+	defer sess.Close()
+
+	sess.Stdout = os.Stdout
+	sess.Stderr = os.Stderr
+
+	if err := sess.Start(cmd); err != nil {
+		return fmt.Errorf("start %q: %w", cmd, err)
+	}
+
+	// Forward Ctrl+C to the remote process so docker compose logs exits cleanly.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	go func() {
+		if _, ok := <-sigCh; ok {
+			_ = sess.Signal(xssh.SIGINT)
+		}
+	}()
+
+	err = sess.Wait()
+	signal.Stop(sigCh)
+	close(sigCh) // unblocks the goroutine if no signal arrived
+
+	var exitErr *xssh.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitStatus() == 130 {
+		return nil // user pressed Ctrl+C intentionally
+	}
+	return err
 }
 
 // WaitCloudInit polls until the cloud-init boot-finished sentinel file exists.

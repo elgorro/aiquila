@@ -21,6 +21,7 @@ type Options struct {
 	Location   string
 	SSHKeyName string
 	UserData   string
+	Labels     map[string]string
 }
 
 // Create provisions a new Hetzner server and waits until it is running.
@@ -55,6 +56,7 @@ func Create(ctx context.Context, client *hcloud.Client, opts Options) (*hcloud.S
 		Image:      image,
 		Location:   location,
 		UserData:   opts.UserData,
+		Labels:     opts.Labels,
 	}
 
 	if opts.SSHKeyName != "" {

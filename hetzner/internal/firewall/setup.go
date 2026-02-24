@@ -8,10 +8,10 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
-// Setup creates a Hetzner firewall that allows inbound TCP 22/80/443 and attaches
-// it to the given server. It is idempotent: if a firewall with the same name
-// already exists, it is reused.
-func Setup(ctx context.Context, client *hcloud.Client, name string, server *hcloud.Server) (*hcloud.Firewall, error) {
+// Setup creates a Hetzner firewall that allows inbound TCP 22/80/443, UDP 443
+// (HTTP/3 / QUIC), and attaches it to the given server. It is idempotent: if a
+// firewall with the same name already exists, it is reused.
+func Setup(ctx context.Context, client *hcloud.Client, name string, server *hcloud.Server, labels map[string]string) (*hcloud.Firewall, error) {
 	existing, _, err := client.Firewall.GetByName(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("look up firewall %q: %w", name, err)
@@ -28,11 +28,13 @@ func Setup(ctx context.Context, client *hcloud.Client, name string, server *hclo
 		tcpRule(22, "SSH"),
 		tcpRule(80, "HTTP"),
 		tcpRule(443, "HTTPS"),
+		udpRule(443, "HTTPS/QUIC"),
 	}
 
 	result, _, err := client.Firewall.Create(ctx, hcloud.FirewallCreateOpts{
-		Name:  name,
-		Rules: rules,
+		Name:   name,
+		Rules:  rules,
+		Labels: labels,
 		ApplyTo: []hcloud.FirewallResource{
 			{
 				Type:   hcloud.FirewallResourceTypeServer,
@@ -45,6 +47,17 @@ func Setup(ctx context.Context, client *hcloud.Client, name string, server *hclo
 	}
 	fmt.Printf("  Created firewall %q (id=%d)\n", name, result.Firewall.ID)
 	return result.Firewall, nil
+}
+
+func udpRule(port int, description string) hcloud.FirewallRule {
+	p := fmt.Sprintf("%d", port)
+	return hcloud.FirewallRule{
+		Direction:   hcloud.FirewallRuleDirectionIn,
+		Protocol:    hcloud.FirewallRuleProtocolUDP,
+		Port:        &p,
+		SourceIPs:   []net.IPNet{{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)}, {IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)}},
+		Description: hcloud.Ptr(description),
+	}
 }
 
 func tcpRule(port int, description string) hcloud.FirewallRule {
