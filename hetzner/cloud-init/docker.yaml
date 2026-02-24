@@ -1,0 +1,38 @@
+#cloud-config
+# AIquila — cloud-init: install Docker CE + compose plugin, enable service.
+# Supports: Fedora (dnf), Arch (pacman), Ubuntu/Debian (apt-get).
+# A sentinel file is written at the end so aiquila-hetzner can detect completion.
+
+package_update: true
+
+runcmd:
+  - |
+    set -e
+    if command -v dnf >/dev/null 2>&1; then
+      # Fedora
+      dnf -y install dnf-plugins-core
+      dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+      dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    elif command -v pacman >/dev/null 2>&1; then
+      # Arch Linux
+      pacman -Sy --noconfirm docker docker-compose
+    elif command -v apt-get >/dev/null 2>&1; then
+      # Ubuntu / Debian
+      apt-get install -y ca-certificates curl
+      install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+      chmod a+r /etc/apt/keyrings/docker.asc
+      . /etc/os-release
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
+        > /etc/apt/sources.list.d/docker.list
+      apt-get update -y
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    else
+      echo "Unsupported distro — install Docker manually" >&2
+      exit 1
+    fi
+  - systemctl enable --now docker
+  - mkdir -p /opt/aiquila
+  # cloud-init writes its own boot-finished sentinel; this is a belt-and-suspenders
+  # marker that aiquila-hetzner polls via: test -f /var/lib/cloud/instance/boot-finished

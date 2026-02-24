@@ -1,0 +1,162 @@
+# AIquila MCP Server — Hetzner Production
+# Traefik v3 reverse proxy + CrowdSec security + optional monitoring
+#
+# Usage:
+#   cp .env.example .env  &&  edit with your credentials
+#   docker compose up -d
+#   # With monitoring:
+#   docker compose --profile monitoring up -d
+
+services:
+  mcp:
+    image: ghcr.io/elgorro/aiquila-mcp:latest
+    container_name: aiquila-mcp
+    restart: unless-stopped
+    environment:
+      NEXTCLOUD_URL: ${NEXTCLOUD_URL:?Set NEXTCLOUD_URL in .env}
+      NEXTCLOUD_USER: ${NEXTCLOUD_USER:?Set NEXTCLOUD_USER in .env}
+      NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:?Set NEXTCLOUD_PASSWORD in .env}
+      NODE_ENV: production
+      MCP_TRANSPORT: http
+      MCP_PORT: "3339"
+      MCP_AUTH_ENABLED: ${MCP_AUTH_ENABLED:-true}
+      MCP_AUTH_SECRET: ${MCP_AUTH_SECRET:?Set MCP_AUTH_SECRET in .env}
+      MCP_AUTH_ISSUER: ${MCP_AUTH_ISSUER:?Set MCP_AUTH_ISSUER in .env}
+      MCP_CLIENT_ID: ${MCP_CLIENT_ID:-aiquila-claude}
+      MCP_CLIENT_SECRET: ${MCP_CLIENT_SECRET:?Set MCP_CLIENT_SECRET in .env}
+      MCP_REGISTRATION_ENABLED: ${MCP_REGISTRATION_ENABLED:-true}
+      MCP_REGISTRATION_TOKEN: ${MCP_REGISTRATION_TOKEN:-}
+      MCP_TRUST_PROXY: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mcp.rule=Host(`${MCP_DOMAIN}`)"
+      - "traefik.http.routers.mcp.entrypoints=websecure"
+      - "traefik.http.routers.mcp.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.mcp.middlewares=crowdsec@docker"
+      - "traefik.http.services.mcp.loadbalancer.server.port=3339"
+      # CrowdSec bouncer middleware — defined once, referenced by all routers
+      - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapikey=${CROWDSEC_BOUNCER_KEY}"
+      - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapihost=http://crowdsec:8080"
+    networks:
+      - aiquila-net
+
+  traefik:
+    image: traefik:v3
+    container_name: aiquila-traefik
+    restart: unless-stopped
+    depends_on:
+      - mcp
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_certs:/certs
+      - logs:/logs
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    networks:
+      - aiquila-net
+
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: aiquila-crowdsec
+    restart: unless-stopped
+    environment:
+      COLLECTIONS: crowdsecurity/traefik
+      BOUNCER_KEY_traefik: ${CROWDSEC_BOUNCER_KEY:?Set CROWDSEC_BOUNCER_KEY in .env}
+    volumes:
+      - crowdsec_db:/var/lib/crowdsec/data
+      - ./crowdsec:/etc/crowdsec/acquis.d:ro
+      - logs:/logs:ro
+    networks:
+      - aiquila-net
+
+  # ── monitoring profile ─────────────────────────────────────────────────────
+  # Start with: docker compose --profile monitoring up -d
+
+  node-exporter:
+    profiles: [monitoring]
+    image: prom/node-exporter:latest
+    container_name: aiquila-node-exporter
+    restart: unless-stopped
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - aiquila-net
+
+  cadvisor:
+    profiles: [monitoring]
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: aiquila-cadvisor
+    restart: unless-stopped
+    command:
+      - '--housekeeping_interval=30s'
+      - '--docker_only=true'
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    networks:
+      - aiquila-net
+
+  prometheus:
+    profiles: [monitoring]
+    image: prom/prometheus:latest
+    container_name: aiquila-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - aiquila-net
+
+  grafana:
+    profiles: [monitoring]
+    image: grafana/grafana-oss:latest
+    container_name: aiquila-grafana
+    restart: unless-stopped
+    environment:
+      GF_SERVER_ROOT_URL: "https://${MCP_DOMAIN}/grafana"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD in .env}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`${MCP_DOMAIN}`) && PathPrefix(`/grafana`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - aiquila-net
+
+volumes:
+  traefik_certs:
+    name: aiquila_traefik_certs
+  crowdsec_db:
+    name: aiquila_crowdsec_db
+  logs:
+    name: aiquila_logs
+  prometheus_data:
+    name: aiquila_prometheus_data
+  grafana_data:
+    name: aiquila_grafana_data
+
+networks:
+  aiquila-net:
+    name: aiquila-hetzner-net
+    driver: bridge
