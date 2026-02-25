@@ -6,6 +6,7 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/elgorro/aiquila/hetzner/internal/dns"
 	hcloudclient "github.com/elgorro/aiquila/hetzner/internal/hcloud"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/spf13/cobra"
@@ -31,8 +32,10 @@ var (
 	restartHard  bool
 
 	// delete flags
-	deleteName  string
-	deleteToken string
+	deleteName     string
+	deleteToken    string
+	deleteDNSZone  string
+	deleteDNSToken string
 )
 
 // ── list ──────────────────────────────────────────────────────────────────────
@@ -268,6 +271,8 @@ and the Cloud Volume (<name>-vol) if present. Equivalent to 'destroy'.`,
 	}
 	cmd.Flags().StringVar(&deleteName, "name", "", "Server name to delete (required)")
 	cmd.Flags().StringVar(&deleteToken, "token", "", "Hetzner API token (default: $HCLOUD_TOKEN)")
+	cmd.Flags().StringVar(&deleteDNSZone, "dns-zone", "", "Hetzner DNS zone — deletes <name>.<zone> A/AAAA records")
+	cmd.Flags().StringVar(&deleteDNSToken, "dns-token", "", "Hetzner DNS API token (default: $HETZNER_DNS_TOKEN or $HCLOUD_TOKEN)")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
@@ -278,15 +283,29 @@ func runDelete(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	appLog.Info("start", "deleting server", "name", deleteName)
 	fmt.Printf("==> Deleting %q and associated resources\n", deleteName)
-	return cleanupServer(ctx, client, deleteName)
+	return cleanupServer(ctx, client, deleteName, deleteDNSZone, deleteDNSToken)
 }
 
 // cleanupServer deletes the server plus all resources created by 'create':
 // firewall (<name>-fw), SSH key (<name>-key), and Cloud Volume (<name>-vol).
 // Resources are deleted in the safest order: server first (auto-detaches the
 // volume), then firewall, SSH key, and finally the volume.
-func cleanupServer(ctx context.Context, client *hcloud.Client, name string) error {
+// If dnsZone is non-empty, DNS A/AAAA records for <name>.<dnsZone> are deleted first.
+func cleanupServer(ctx context.Context, client *hcloud.Client, name, dnsZone, dnsToken string) error {
+	// 0. DNS records (before server deletion so zone lookup doesn't depend on server)
+	if dnsZone != "" {
+		fmt.Println("── DNS")
+		tok, err := dns.ResolveToken(dnsToken, globalProfile)
+		if err != nil {
+			return err
+		}
+		if err := dns.DeleteRecords(ctx, tok, dnsZone, name); err != nil {
+			return err
+		}
+	}
+
 	// 1. Server
 	srv, _, err := client.Server.GetByName(ctx, name)
 	if err != nil {

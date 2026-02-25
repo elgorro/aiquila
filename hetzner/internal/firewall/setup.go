@@ -11,7 +11,10 @@ import (
 // Setup creates a Hetzner firewall that allows inbound TCP 22/80/443, UDP 443
 // (HTTP/3 / QUIC), and attaches it to the given server. It is idempotent: if a
 // firewall with the same name already exists, it is reused.
-func Setup(ctx context.Context, client *hcloud.Client, name string, server *hcloud.Server, labels map[string]string) (*hcloud.Firewall, error) {
+//
+// sshCIDR restricts SSH access to the given CIDR (e.g. "203.0.113.0/24").
+// Pass "" to allow SSH from anywhere (0.0.0.0/0 and ::/0).
+func Setup(ctx context.Context, client *hcloud.Client, name string, server *hcloud.Server, labels map[string]string, sshCIDR string) (*hcloud.Firewall, error) {
 	existing, _, err := client.Firewall.GetByName(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("look up firewall %q: %w", name, err)
@@ -24,8 +27,13 @@ func Setup(ctx context.Context, client *hcloud.Client, name string, server *hclo
 		return existing, nil
 	}
 
+	sshSources, err := parseSSHSources(sshCIDR)
+	if err != nil {
+		return nil, err
+	}
+
 	rules := []hcloud.FirewallRule{
-		tcpRule(22, "SSH"),
+		tcpRuleWithSources(22, "SSH", sshSources),
 		tcpRule(80, "HTTP"),
 		tcpRule(443, "HTTPS"),
 		udpRule(443, "HTTPS/QUIC"),
@@ -61,14 +69,35 @@ func udpRule(port int, description string) hcloud.FirewallRule {
 }
 
 func tcpRule(port int, description string) hcloud.FirewallRule {
+	return tcpRuleWithSources(port, description, []net.IPNet{
+		{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)},
+		{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)},
+	})
+}
+
+func tcpRuleWithSources(port int, description string, sources []net.IPNet) hcloud.FirewallRule {
 	p := fmt.Sprintf("%d", port)
 	return hcloud.FirewallRule{
 		Direction:   hcloud.FirewallRuleDirectionIn,
 		Protocol:    hcloud.FirewallRuleProtocolTCP,
 		Port:        &p,
-		SourceIPs:   []net.IPNet{{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)}, {IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)}},
+		SourceIPs:   sources,
 		Description: hcloud.Ptr(description),
 	}
+}
+
+func parseSSHSources(sshCIDR string) ([]net.IPNet, error) {
+	if sshCIDR == "" {
+		return []net.IPNet{
+			{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)},
+			{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)},
+		}, nil
+	}
+	_, ipNet, err := net.ParseCIDR(sshCIDR)
+	if err != nil {
+		return nil, fmt.Errorf("invalid --ssh-allow-cidr %q: %w", sshCIDR, err)
+	}
+	return []net.IPNet{*ipNet}, nil
 }
 
 func attach(ctx context.Context, client *hcloud.Client, fw *hcloud.Firewall, server *hcloud.Server) error {
