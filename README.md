@@ -11,6 +11,7 @@ AIquila connects your Nextcloud instance with Claude AI in two ways:
 
 - **MCP Server** — lets Claude (Desktop/Mobile) manage your Nextcloud files, tasks, notes, and recipes via chat or voice
 - **Nextcloud App** — adds Claude AI actions directly inside Nextcloud (summarize, analyze, generate content)
+- **Hetzner Deployment** — provisions a production-ready AIquila server on Hetzner Cloud with a single command (Traefik, CrowdSec, optional monitoring)
 
 ## Quick Start
 
@@ -34,12 +35,13 @@ Use the [standalone Docker setup](docker/standalone/) to connect the MCP server 
 - [Installation Guide](docs/installation.md)
 - [Docker Dev Setup](docs/dev/docker-setup.md)
 - [MCP Server](docs/mcp/README.md)
+- [Hetzner Deployment](docs/hetzner/README.md)
 - [Connectivity & Troubleshooting](docs/connectivity.md)
 - [Full Docs](docs/README.md)
 
 ## Acknowledgements
 
-[Nextcloud](https://nextcloud.com) · [Claude](https://anthropic.com) · [MCP](https://modelcontextprotocol.io) · [TypeScript](https://www.typescriptlang.org) · [JavaScript](https://developer.mozilla.org/en-US/docs/Web/JavaScript) · [PHP](https://www.php.net) · [Vue](https://vuejs.org) · [Node.js](https://nodejs.org) · [npm](https://www.npmjs.com) · [Vite](https://vitejs.dev) · [Docker](https://www.docker.com) · [Caddy](https://caddyserver.com) · [PostgreSQL](https://www.postgresql.org) · [Redis](https://redis.io) · [MailHog](https://github.com/mailhog/MailHog) · [Adminer](https://www.adminer.org) · [Git](https://git-scm.com) · [GitHub](https://github.com) · [Markdown](https://commonmark.org) · [SVG](https://www.w3.org/Graphics/SVG/) · [Make](https://www.gnu.org/software/make/) · [Bash](https://www.gnu.org/software/bash/) · [tar](https://www.gnu.org/software/tar/)
+[Nextcloud](https://nextcloud.com) · [Claude](https://anthropic.com) · [MCP](https://modelcontextprotocol.io) · [TypeScript](https://www.typescriptlang.org) · [JavaScript](https://developer.mozilla.org/en-US/docs/Web/JavaScript) · [PHP](https://www.php.net) · [Vue](https://vuejs.org) · [Node.js](https://nodejs.org) · [npm](https://www.npmjs.com) · [Vite](https://vitejs.dev) · [Docker](https://www.docker.com) · [Caddy](https://caddyserver.com) · [PostgreSQL](https://www.postgresql.org) · [Redis](https://redis.io) · [MailHog](https://github.com/mailhog/MailHog) · [Adminer](https://www.adminer.org) · [Git](https://git-scm.com) · [GitHub](https://github.com) · [Markdown](https://commonmark.org) · [SVG](https://www.w3.org/Graphics/SVG/) · [Make](https://www.gnu.org/software/make/) · [Bash](https://www.gnu.org/software/bash/) · [tar](https://www.gnu.org/software/tar/) · [Go](https://go.dev) · [Hetzner](https://www.hetzner.com) · [Traefik](https://traefik.io) · [CrowdSec](https://www.crowdsec.net)
 
 ## License
 

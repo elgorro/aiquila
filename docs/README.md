@@ -19,6 +19,9 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - 🛠️ **[MCP Tools Reference](mcp/README.md#tools-reference)** - Available tools and usage
 - 📚 **[MCP Development](mcp/development/)** - Extend the MCP server
 
+### Hetzner / Self-hosting
+- 🚀 **[Hetzner Deployment](hetzner/README.md)** — Provision AIquila on Hetzner Cloud
+
 ### Development
 - 🐳 **[Docker Setup](dev/docker-setup.md)** - Development environment (run from `docker/installation/`)
 - 💻 **[Development Guide](dev/development.md)** - Contributing and development workflow
@@ -51,6 +54,9 @@ docs/
 │       ├── architecture.md      # MCP architecture overview
 │       ├── adding-tools.md      # How to add new tools
 │       └── adding-apps.md       # How to add new apps
+│
+├── hetzner/                    # Hetzner Cloud deployment
+│   └── README.md               # Full CLI reference
 │
 ├── dev/                        # Development documentation
 │   ├── docker-setup.md         # Docker development environment
