@@ -10,6 +10,7 @@ import (
 
 	templates "github.com/elgorro/aiquila/hetzner/docker"
 	"github.com/elgorro/aiquila/hetzner/internal/config"
+	"github.com/elgorro/aiquila/hetzner/internal/dns"
 	"github.com/elgorro/aiquila/hetzner/internal/firewall"
 	hcloudclient "github.com/elgorro/aiquila/hetzner/internal/hcloud"
 	profilepkg "github.com/elgorro/aiquila/hetzner/internal/profile"
@@ -24,6 +25,10 @@ import (
 var (
 	// global flags
 	globalProfile string
+	logFilePath   string
+
+	// package-level NDJSON logger (initialised by PersistentPreRunE)
+	appLog *jsonLogger
 
 	// create flags
 	createName       string
@@ -41,11 +46,20 @@ var (
 	createVolumeSize int
 	createLUKS       bool
 	createDryRun     bool
-	createLabels     []string
+	createLabels        []string
+	createDNSZone       string
+	createDNSToken      string
+	createSSHAllowCIDR  string
+	createNetworkName   string
+	createSwap          string
+	createConfig        string
+	createPackages      []string
 
 	// destroy flags
-	destroyName  string
-	destroyToken string
+	destroyName     string
+	destroyToken    string
+	destroyDNSZone  string
+	destroyDNSToken string
 )
 
 func main() {
@@ -59,6 +73,17 @@ uploads a production docker-compose stack (Traefik + CrowdSec), and starts the s
 	}
 
 	rootCmd.PersistentFlags().StringVar(&globalProfile, "profile", "", "Named configuration profile to use (see 'profile' subcommand)")
+	rootCmd.PersistentFlags().StringVar(&logFilePath, "log-file", "aiquila-hetzner.log.json", "NDJSON audit log path (empty string to disable)")
+
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		var err error
+		appLog, err = openLog(logFilePath, cmd.Name())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: cannot open log file: %v\n", err)
+			appLog, _ = openLog("", cmd.Name()) // fall back to no-op
+		}
+		return nil
+	}
 
 	rootCmd.AddCommand(buildCreateCmd())
 	rootCmd.AddCommand(buildDestroyCmd())
@@ -70,8 +95,18 @@ uploads a production docker-compose stack (Traefik + CrowdSec), and starts the s
 	rootCmd.AddCommand(buildDeployCmd())
 	rootCmd.AddCommand(buildLogsCmd())
 	rootCmd.AddCommand(buildProfileCmd())
+	rootCmd.AddCommand(buildDNSCmd())
+	rootCmd.AddCommand(buildFirewallCmd())
+	rootCmd.AddCommand(buildNetworkCmd())
+	rootCmd.AddCommand(buildSnapshotCmd())
+	rootCmd.AddCommand(buildRebuildCmd())
 
-	if err := rootCmd.Execute(); err != nil {
+	runErr := rootCmd.Execute()
+	if appLog != nil {
+		appLog.Done(runErr)
+		appLog.Close()
+	}
+	if runErr != nil {
 		os.Exit(1)
 	}
 }
@@ -101,6 +136,13 @@ func buildCreateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&createLUKS, "luks", false, "[EXPERIMENTAL] LUKS-encrypt the Cloud Volume (requires --volume-size)")
 	cmd.Flags().BoolVar(&createDryRun, "dry-run", false, "Print what would be created without making any API calls")
 	cmd.Flags().StringArrayVar(&createLabels, "label", nil, "Resource label key=value (repeatable, applied to server/firewall/key/volume)")
+	cmd.Flags().StringVar(&createDNSZone, "dns-zone", "", "Hetzner DNS zone (e.g. example.com) — creates <name>.<zone> A record after server IP is known")
+	cmd.Flags().StringVar(&createDNSToken, "dns-token", "", "Hetzner DNS API token (default: $HETZNER_DNS_TOKEN or $HCLOUD_TOKEN)")
+	cmd.Flags().StringVar(&createSSHAllowCIDR, "ssh-allow-cidr", "", "Restrict SSH (port 22) to this CIDR instead of 0.0.0.0/0 (e.g. 203.0.113.0/24)")
+	cmd.Flags().StringVar(&createNetworkName, "network", "", "Attach server to this private network (must exist; create with 'network create')")
+	cmd.Flags().StringVar(&createSwap, "swap", "", "Create a swap file of this size (e.g. 1G, 2G) — useful for cpx11/cx22 instances")
+	cmd.Flags().StringVar(&createConfig, "config", "", "Path to YAML or JSON deployment config file")
+	cmd.Flags().StringArrayVar(&createPackages, "package", nil, "Extra package to install via cloud-init (repeatable; distro-native pkg manager)")
 
 	return cmd
 }
@@ -138,6 +180,51 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		}
 	}
 
+	// ── 1c. Config file fallbacks ──────────────────────────────────────────
+	var fileCfg DeployConfig
+	if createConfig != "" {
+		fc, err := loadDeployConfig(createConfig)
+		if err != nil {
+			return err
+		}
+		fileCfg = *fc
+	}
+	if createName == "" {
+		createName = fileCfg.Name
+	}
+	if createDomain == "" {
+		createDomain = fileCfg.Domain
+	}
+	if createNCURL == "" {
+		createNCURL = fileCfg.NCURL
+	}
+	if createNCUser == "" {
+		createNCUser = fileCfg.NCUser
+	}
+	if createNCPassword == "" {
+		createNCPassword = fileCfg.NCPassword
+	}
+	if createAcmeEmail == "" {
+		createAcmeEmail = fileCfg.AcmeEmail
+	}
+	if createSSHKey == "" {
+		createSSHKey = fileCfg.SSHKey
+	}
+	if createToken == "" {
+		createToken = fileCfg.Token
+	}
+	if fileCfg.Monitoring {
+		createMonitoring = true
+	}
+
+	// Packages: config file takes priority over CLI --package flags.
+	var packages []string
+	if len(fileCfg.Packages) > 0 {
+		packages = fileCfg.Packages
+	} else {
+		packages = createPackages
+	}
+
 	// ── 2. Validate flags ──────────────────────────────────────────────────
 	var missing []string
 	if createDomain == "" {
@@ -173,11 +260,14 @@ func runCreate(_ *cobra.Command, _ []string) error {
 
 	// ── 4. Dry-run — print plan and exit ───────────────────────────────────
 	if createDryRun {
-		return printDryRun()
+		return printDryRun(createSwap, packages)
 	}
 
 	ctx := context.Background()
 	fmt.Println("==> aiquila-hetzner create")
+	appLog.Info("start", "creating server",
+		"name", createName, "type", createType,
+		"location", createLocation, "domain", createDomain)
 
 	// ── 5. SSH key ─────────────────────────────────────────────────────────
 	fmt.Println("\n── SSH key")
@@ -213,6 +303,21 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// ── 7b. Look up private network (if requested) ─────────────────────────
+	var createNetworks []*hcloud.Network
+	if createNetworkName != "" {
+		fmt.Println("\n── Private network")
+		net, _, err := client.Network.GetByName(ctx, createNetworkName)
+		if err != nil {
+			return fmt.Errorf("look up network %q: %w", createNetworkName, err)
+		}
+		if net == nil {
+			return fmt.Errorf("network %q not found — create it first with 'network create'", createNetworkName)
+		}
+		fmt.Printf("  Found network %q (id=%d)\n", net.Name, net.ID)
+		createNetworks = []*hcloud.Network{net}
+	}
+
 	// ── 8. Create server with cloud-init userData ──────────────────────────
 	fmt.Println("\n── Creating server")
 	srv, err := server.Create(ctx, client, server.Options{
@@ -221,21 +326,44 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		Image:      createImage,
 		Location:   createLocation,
 		SSHKeyName: hcloudKeyName,
-		UserData:   cloudInitYAML(),
+		UserData:   cloudInitYAML(createSwap, packages),
 		Labels:     labels,
+		Networks:   createNetworks,
 	})
 	if err != nil {
 		return err
 	}
 	serverIP := srv.PublicNet.IPv4.IP.String()
+	appLog.Info("server", "server created", "server", createName, "ip", serverIP)
 
-	// ── 9. Create firewall + attach to server ──────────────────────────────
+	// ── 9. DNS record (before Traefik starts requesting certs) ────────────
+	if createDNSZone != "" {
+		fmt.Println("\n── DNS")
+		dnsToken, err := dns.ResolveToken(createDNSToken, globalProfile)
+		if err != nil {
+			return err
+		}
+		if err := dns.EnsureRecord(ctx, dnsToken, createDNSZone, createName, serverIP, "A"); err != nil {
+			return err
+		}
+		ipv6 := srv.PublicNet.IPv6.IP
+		if ipv6 != nil && !ipv6.IsUnspecified() {
+			// Use the first host address of the /64 prefix (/64 → ::1 suffix).
+			ipv6Host := ipv6.Mask(srv.PublicNet.IPv6.Network.Mask)
+			ipv6Host[len(ipv6Host)-1] = 1
+			if err := dns.EnsureRecord(ctx, dnsToken, createDNSZone, createName, ipv6Host.String(), "AAAA"); err != nil {
+				return err
+			}
+		}
+	}
+
+	// ── 10. Create firewall + attach to server ────────────────────────────
 	fmt.Println("\n── Firewall")
-	if _, err := firewall.Setup(ctx, client, createName+"-fw", srv, labels); err != nil {
+	if _, err := firewall.Setup(ctx, client, createName+"-fw", srv, labels, createSSHAllowCIDR); err != nil {
 		return err
 	}
 
-	// ── 10. Create + attach Hetzner Cloud Volume (if requested) ───────────
+	// ── 11. Create + attach Hetzner Cloud Volume (if requested) ───────────
 	var volumeDevicePath string
 	if createVolumeSize > 0 {
 		fmt.Println("\n── Cloud Volume")
@@ -252,6 +380,8 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	defer sshClient.Close()
+
+	appLog.Info("ssh", "SSH connected", "ip", serverIP)
 
 	// ── 12. Wait for cloud-init to finish ──────────────────────────────────
 	fmt.Println("\n── Waiting for cloud-init / Docker install")
@@ -307,6 +437,8 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		fmt.Printf("  Uploaded %s\n", f.path)
 	}
 
+	appLog.Info("upload", "files uploaded", "count", len(uploads))
+
 	// ── 16. Start services ─────────────────────────────────────────────────
 	fmt.Println("\n── Starting Docker services")
 	composeCmd := "cd /opt/aiquila && docker compose up -d 2>&1"
@@ -326,24 +458,40 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		grafanaLine = fmt.Sprintf("  Grafana:    https://%s/grafana\n", createDomain)
 	}
 
+	privateLine := ""
+	if createNetworkName != "" {
+		for _, pn := range srv.PrivateNet {
+			if pn.Network.Name == createNetworkName {
+				privateLine = fmt.Sprintf("  Private IP: %s  (network: %s)\n", pn.IP, createNetworkName)
+				break
+			}
+		}
+	}
+
+	dnsNote := fmt.Sprintf("Note: DNS must point to %s before HTTPS is available.", serverIP)
+	if createDNSZone != "" {
+		dnsNote = fmt.Sprintf("Note: DNS A record created (%s.%s → %s).\n      Allow a few minutes for propagation before HTTPS is available.", createName, createDNSZone, serverIP)
+	}
+
 	fmt.Printf(`
 ╔══════════════════════════════════════╗
 ║    AIquila deployment complete       ║
 ╠══════════════════════════════════════╣
   Server IP:  %s
-  SSH:        ssh -i %s root@%s
+%s  SSH:        ssh -i %s root@%s
   AIquila:    https://%s
   MCP URL:    https://%s/mcp
 %s╚══════════════════════════════════════╝
 
-Note: DNS must point to %s before HTTPS is available.
+%s
 `,
 		serverIP,
+		privateLine,
 		privKeyPath, serverIP,
 		createDomain,
 		createDomain,
 		grafanaLine,
-		serverIP,
+		dnsNote,
 	)
 	return nil
 }
@@ -359,6 +507,8 @@ func buildDestroyCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&destroyName, "name", "", "Server name to destroy (required)")
 	cmd.Flags().StringVar(&destroyToken, "token", "", "Hetzner API token (default: $HCLOUD_TOKEN)")
+	cmd.Flags().StringVar(&destroyDNSZone, "dns-zone", "", "Hetzner DNS zone — deletes <name>.<zone> A/AAAA records")
+	cmd.Flags().StringVar(&destroyDNSToken, "dns-token", "", "Hetzner DNS API token (default: $HETZNER_DNS_TOKEN or $HCLOUD_TOKEN)")
 	_ = cmd.MarkFlagRequired("name")
 
 	return cmd
@@ -370,13 +520,14 @@ func runDestroy(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	appLog.Info("start", "destroying server", "name", destroyName)
 	fmt.Printf("==> Destroying %q and associated resources\n", destroyName)
-	return cleanupServer(ctx, client, destroyName)
+	return cleanupServer(ctx, client, destroyName, destroyDNSZone, destroyDNSToken)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-func printDryRun() error {
+func printDryRun(swapSize string, packages []string) error {
 	home, _ := os.UserHomeDir()
 	keyDesc := "generate Ed25519 → " + home + "/.ssh/aiquila_ed25519"
 	if createSSHKey != "" {
@@ -430,6 +581,10 @@ func printDryRun() error {
 		monDesc,
 		composeCmd,
 	)
+
+	fmt.Println("==> Cloud-init user-data")
+	fmt.Println("---")
+	fmt.Print(cloudInitYAML(swapSize, packages))
 	return nil
 }
 
@@ -493,11 +648,33 @@ func parseLabels(pairs []string) (map[string]string, error) {
 }
 
 // cloudInitYAML returns the cloud-init user-data for Docker installation.
-func cloudInitYAML() string {
+// swapSize, if non-empty (e.g. "2G"), creates and enables a swap file at /swapfile.
+// packages, if non-empty, are installed via cloud-init's native package module.
+func cloudInitYAML(swapSize string, packages []string) string {
+	swapStep := ""
+	if swapSize != "" {
+		swapStep = fmt.Sprintf(`  - |
+    fallocate -l %s /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+`, swapSize)
+	}
+
+	pkgBlock := ""
+	if len(packages) > 0 {
+		lines := "packages:\n"
+		for _, p := range packages {
+			lines += fmt.Sprintf("  - %s\n", p)
+		}
+		pkgBlock = lines + "\n"
+	}
+
 	return `#cloud-config
 package_update: true
 
-runcmd:
+` + pkgBlock + `runcmd:
   - |
     set -e
     . /etc/os-release
@@ -530,5 +707,5 @@ runcmd:
     fi
   - systemctl enable --now docker
   - mkdir -p /opt/aiquila
-`
+` + swapStep
 }
