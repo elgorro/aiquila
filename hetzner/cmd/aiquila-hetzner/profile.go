@@ -13,6 +13,7 @@ import (
 var (
 	profileAddName     string
 	profileAddToken    string
+	profileAddDNSToken string
 	profileAddNCURL    string
 	profileAddNCUser   string
 	profileAddNCPass   string
@@ -54,7 +55,8 @@ func buildProfileAddCmd() *cobra.Command {
 		RunE:  runProfileAdd,
 	}
 	cmd.Flags().StringVar(&profileAddName, "name", "", "Profile name (required)")
-	cmd.Flags().StringVar(&profileAddToken, "token", "", "Hetzner API token for this profile")
+	cmd.Flags().StringVar(&profileAddToken, "token", "", "Hetzner Cloud API token for this profile")
+	cmd.Flags().StringVar(&profileAddDNSToken, "dns-token", "", "Hetzner DNS API token (if different from --token)")
 	cmd.Flags().StringVar(&profileAddNCURL, "nc-url", "", "Nextcloud URL")
 	cmd.Flags().StringVar(&profileAddNCUser, "nc-user", "", "Nextcloud username")
 	cmd.Flags().StringVar(&profileAddNCPass, "nc-password", "", "Nextcloud app password")
@@ -77,6 +79,9 @@ func runProfileAdd(_ *cobra.Command, _ []string) error {
 	// Merge: only overwrite fields that were explicitly set.
 	if profileAddToken != "" {
 		existing.Token = profileAddToken
+	}
+	if profileAddDNSToken != "" {
+		existing.DNSToken = profileAddDNSToken
 	}
 	if profileAddNCURL != "" {
 		existing.NextcloudURL = profileAddNCURL
@@ -185,11 +190,12 @@ func runProfileShow(_ *cobra.Command, _ []string) error {
 		current = " (current)"
 	}
 	fmt.Printf("Profile: %s%s\n\n", name, current)
-	fmt.Printf("  token:             %s\n", profilepkg.MaskSecret(p.Token))
-	fmt.Printf("  nextcloud_url:     %s\n", orNotSet(p.NextcloudURL))
-	fmt.Printf("  nextcloud_user:    %s\n", orNotSet(p.NextcloudUser))
-	fmt.Printf("  nextcloud_password:%s\n", profilepkg.MaskSecret(p.NextcloudPassword))
-	fmt.Printf("  acme_email:        %s\n", orNotSet(p.AcmeEmail))
+	fmt.Printf("  token:              %s\n", profilepkg.MaskSecret(p.Token))
+	fmt.Printf("  dns_token:          %s\n", profilepkg.MaskSecret(p.DNSToken))
+	fmt.Printf("  nextcloud_url:      %s\n", orNotSet(p.NextcloudURL))
+	fmt.Printf("  nextcloud_user:     %s\n", orNotSet(p.NextcloudUser))
+	fmt.Printf("  nextcloud_password: %s\n", profilepkg.MaskSecret(p.NextcloudPassword))
+	fmt.Printf("  acme_email:         %s\n", orNotSet(p.AcmeEmail))
 	return nil
 }
 

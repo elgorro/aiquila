@@ -14,6 +14,7 @@ import (
 // Profile is a named set of connection defaults.
 type Profile struct {
 	Token             string `json:"token,omitempty"`
+	DNSToken          string `json:"dns_token,omitempty"`
 	NextcloudURL      string `json:"nextcloud_url,omitempty"`
 	NextcloudUser     string `json:"nextcloud_user,omitempty"`
 	NextcloudPassword string `json:"nextcloud_password,omitempty"`

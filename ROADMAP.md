@@ -125,6 +125,13 @@
 - [ ] Batch document processing
 - [ ] Custom prompts/templates
 
+### Infrastructure
+- [ ] Integration test agent (Claude Agent SDK) — provisions a real Hetzner
+  server, runs OAuth + MCP tools test suite against it, verifies
+  TLS / Traefik / CrowdSec health, then destroys the server; suitable for
+  CI smoke testing before releases
+- [ ] `aiquila-hetzner` binary releases via GitHub Actions (attach to release)
+
 ---
 
 ## Phase 4: Alternative Providers
