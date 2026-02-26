@@ -10,6 +10,9 @@ Your job:
 3. Wait for HTTPS: poll curl -sf https://TEST_DOMAIN/.well-known/oauth-authorization-server up to 5 minutes
 4. Run OAuth test: cd /workspace && bash docker/standalone/scripts/test-oauth.sh https://TEST_DOMAIN
 5. Run tools test: cd /workspace && bash docker/standalone/scripts/test-tools.sh https://TEST_DOMAIN
+5.5. Run MCP-Connector test: cd /workspace/mcp-server/scripts && npm install --silent && MCP_URL=https://TEST_DOMAIN tsx test-mcp-connector.ts
+     This validates the full MCP-Connector path: OAuth PKCE → access_token → Messages API beta (mcp-client-2025-11-20) → Claude calls AIquila tools.
+     ANTHROPIC_API_KEY is available in the environment. NEXTCLOUD_USER and NEXTCLOUD_PASSWORD are also available.
 6. Verify Traefik TLS: curl -sI https://TEST_DOMAIN/mcp → HTTP 4xx with valid TLS
 7. Verify CrowdSec: ssh into server, docker ps | grep crowdsec → confirm Up
 8. Destroy: /tmp/aiquila-hetzner destroy --name <server-name> --dns-zone DNS_ZONE
