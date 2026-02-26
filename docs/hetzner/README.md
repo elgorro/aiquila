@@ -514,6 +514,13 @@ the first label of `--domain` (e.g. `mcp` from `mcp.example.com`).
 
 ---
 
+## Integration testing
+
+An automated integration test suite runs against a real Hetzner server using the
+Claude Agent SDK. See [docs/hetzner/integration-test.md](integration-test.md).
+
+---
+
 ## Audit log
 
 Every command run is appended as a JSON object to the log file:
