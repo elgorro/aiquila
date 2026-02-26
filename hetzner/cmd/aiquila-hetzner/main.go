@@ -22,6 +22,8 @@ import (
 	xssh "golang.org/x/crypto/ssh"
 )
 
+var version = "dev"
+
 var (
 	// global flags
 	globalProfile string
@@ -64,8 +66,9 @@ var (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "aiquila-hetzner",
-		Short: "Provision AIquila on Hetzner Cloud",
+		Use:     "aiquila-hetzner",
+		Short:   "Provision AIquila on Hetzner Cloud",
+		Version: version,
 		Long: `aiquila-hetzner — single-command provisioner for AIquila MCP Server on Hetzner Cloud.
 
 Creates a server, configures a firewall (22/80/443), installs Docker via cloud-init,

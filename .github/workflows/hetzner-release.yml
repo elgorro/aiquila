@@ -1,0 +1,125 @@
+name: Hetzner CLI Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'hetzner/**'
+      - '!hetzner/**/*.md'
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version-changed: ${{ steps.check.outputs.changed }}
+      version: ${{ steps.check.outputs.version }}
+      previous-version: ${{ steps.check.outputs.previous }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if version changed
+        id: check
+        run: |
+          CURRENT=$(cat hetzner/VERSION)
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+
+          PREVIOUS=$(git show HEAD~1:hetzner/VERSION 2>/dev/null || echo "0.0.0")
+          echo "previous=$PREVIOUS" >> $GITHUB_OUTPUT
+
+          if [ "$CURRENT" != "$PREVIOUS" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Version changed from $PREVIOUS to $CURRENT"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Version unchanged: $CURRENT"
+          fi
+
+  release:
+    needs: check-version
+    if: needs.check-version.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: hetzner/go.mod
+
+      - name: Build Linux binaries
+        run: |
+          VERSION=$(cat hetzner/VERSION)
+          mkdir -p dist
+          cd hetzner
+          GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=${VERSION}" \
+            -o ../dist/aiquila-hetzner-linux-amd64 ./cmd/aiquila-hetzner
+          GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=${VERSION}" \
+            -o ../dist/aiquila-hetzner-linux-arm64 ./cmd/aiquila-hetzner
+
+      - name: Create Git tag
+        run: |
+          VERSION=$(cat hetzner/VERSION)
+          TAG_NAME="hetzner-v${VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "${TAG_NAME}" -m "aiquila-hetzner Release ${VERSION}"
+          git push origin "${TAG_NAME}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: hetzner-v${{ needs.check-version.outputs.version }}
+          name: aiquila-hetzner v${{ needs.check-version.outputs.version }}
+          body: |
+            ## aiquila-hetzner v${{ needs.check-version.outputs.version }}
+
+            **Previous version:** ${{ needs.check-version.outputs.previous-version }}
+
+            Single-command provisioner for AIquila MCP Server on Hetzner Cloud.
+
+            ### Installation
+
+            ```bash
+            # Linux amd64
+            curl -fsSL https://github.com/${{ github.repository }}/releases/download/hetzner-v${{ needs.check-version.outputs.version }}/aiquila-hetzner-linux-amd64 \
+              -o aiquila-hetzner
+            chmod +x aiquila-hetzner
+            sudo mv aiquila-hetzner /usr/local/bin/
+
+            # Linux arm64
+            curl -fsSL https://github.com/${{ github.repository }}/releases/download/hetzner-v${{ needs.check-version.outputs.version }}/aiquila-hetzner-linux-arm64 \
+              -o aiquila-hetzner
+            chmod +x aiquila-hetzner
+            sudo mv aiquila-hetzner /usr/local/bin/
+            ```
+
+            ### Verify
+
+            ```bash
+            aiquila-hetzner --version
+            ```
+
+            ### Requirements
+            - `HCLOUD_TOKEN` environment variable (Hetzner Cloud API token)
+            - Nextcloud instance with app password
+
+            ---
+            *This release was automatically created by GitHub Actions*
+          files: |
+            dist/aiquila-hetzner-linux-amd64
+            dist/aiquila-hetzner-linux-arm64
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
