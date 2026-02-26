@@ -1,4 +1,4 @@
-.PHONY: help up down restart logs logs-follow status shell build clean test test-oauth test-tools
+.PHONY: help up down restart logs logs-follow status shell build clean test test-oauth test-tools test-mcp-connector
 
 COMPOSE := docker compose
 
@@ -27,6 +27,7 @@ help:
 	@echo "  make test         - Test MCP server connectivity"
 	@echo "  make test-oauth   - Full OAuth PKCE flow test (auth enabled)"
 	@echo "  make test-tools   - Functional tool test (file CRUD, search, status)"
+	@echo "  make test-mcp-connector - MCP-Connector integration test (Messages API beta)"
 	@echo ""
 	@echo "Access points:"
 	@echo "  HTTPS: https://localhost:3340/mcp (self-signed cert)"
@@ -96,6 +97,13 @@ test-oauth:
 # Functional tool test: file CRUD, search, system status (requires MCP_AUTH_ENABLED=true)
 test-tools:
 	@bash scripts/test-tools.sh
+
+# MCP-Connector integration test: OAuth PKCE → Messages API beta → Claude calls AIquila tools
+# Requires: MCP_AUTH_ENABLED=true, ANTHROPIC_API_KEY, NEXTCLOUD_USER, NEXTCLOUD_PASSWORD in .env
+test-mcp-connector:
+	@set -a; . ./.env; set +a; \
+	cd ../../mcp-server/scripts && npm install --silent && \
+	MCP_URL=http://localhost:3339 tsx test-mcp-connector.ts
 
 # Test MCP server connectivity
 test:

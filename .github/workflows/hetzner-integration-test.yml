@@ -1,0 +1,63 @@
+name: Hetzner Integration Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_domain:
+        description: 'FQDN for test server (e.g. inttest.example.com)'
+        required: true
+      dns_zone:
+        description: 'Hetzner DNS zone (e.g. example.com)'
+        required: true
+      server_type:
+        description: 'Hetzner server type'
+        required: false
+        default: 'cpx11'
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    env:
+      HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+      HETZNER_DNS_TOKEN: ${{ secrets.HETZNER_DNS_TOKEN }}
+      NEXTCLOUD_URL: ${{ secrets.NEXTCLOUD_URL }}
+      NEXTCLOUD_USER: ${{ secrets.NEXTCLOUD_USER }}
+      NEXTCLOUD_PASSWORD: ${{ secrets.NEXTCLOUD_PASSWORD }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      TEST_DOMAIN: ${{ inputs.test_domain }}
+      DNS_ZONE: ${{ inputs.dns_zone }}
+      SERVER_TYPE: ${{ inputs.server_type }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: hetzner/go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install script dependencies
+        working-directory: hetzner/scripts
+        run: npm install
+
+      - name: Run integration test agent
+        working-directory: hetzner/scripts
+        run: npx tsx integration-test.ts
+
+      - name: Safety-net destroy (always runs)
+        if: always()
+        run: |
+          # Build the binary (may already exist from agent's work)
+          cd hetzner && go build -o /tmp/aiquila-hetzner ./cmd/aiquila-hetzner || true
+          # Best-effort destroy using the test domain prefix as server name pattern.
+          # The agent names servers aiquila-inttest-<timestamp>; this step catches
+          # any server the agent failed to destroy.
+          /tmp/aiquila-hetzner list 2>/dev/null | grep "aiquila-inttest-" | awk '{print $1}' | while read -r name; do
+            echo "Safety-net: destroying $name"
+            /tmp/aiquila-hetzner destroy --name "$name" --dns-zone "$DNS_ZONE" || true
+          done
