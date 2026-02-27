@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, type HookCallback } from "@anthropic-ai/claude-agent-sdk";
 
 const testConfig = {
   oauth: process.env.RUN_OAUTH_TEST !== "false",
@@ -188,6 +188,16 @@ function maskNewIPs(text: string): void {
   }
 }
 
+const logAndMaskCommand: HookCallback = async (input) => {
+  const cmd =
+    (((input as any).tool_input as Record<string, unknown>)
+      ?.command as string) ?? "";
+  maskNewIPs(cmd);
+  const firstLine = cmd.split("\n")[0].trim();
+  process.stderr.write(`\n[${new Date().toISOString()}] $ ${firstLine}\n`);
+  return {};
+};
+
 let exitCode = 1; // pessimistic default
 
 for await (const message of query({
@@ -196,14 +206,24 @@ for await (const message of query({
     allowedTools: ["Bash"],
     permissionMode: "bypassPermissions",
     cwd: "/workspace",
+    maxTurns: 200,
     systemPrompt: { type: "preset", preset: "claude_code" },
+    hooks: {
+      PreToolUse: [{ hooks: [logAndMaskCommand] }],
+    },
   },
 })) {
-  if (message.type === "assistant") {
+  if (message.type === "system" && (message as any).subtype === "init") {
+    process.stderr.write(`[session] ${(message as any).session_id}\n`);
+  } else if (message.type === "assistant") {
     for (const block of message.message.content) {
       if (block.type === "text") {
         maskNewIPs(block.text);
         process.stderr.write(block.text);
+      } else if (block.type === "tool_use") {
+        const cmd =
+          ((block.input as Record<string, unknown>)?.command as string) ?? "";
+        maskNewIPs(cmd);
       }
     }
   } else if (message.type === "result") {
