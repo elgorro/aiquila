@@ -1,4 +1,4 @@
-import { query } from "@anthropic-ai/claude-code-sdk";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 
 const testConfig = {
   oauth: process.env.RUN_OAUTH_TEST !== "false",
@@ -186,6 +186,7 @@ for await (const message of query({
     allowedTools: ["Bash"],
     permissionMode: "bypassPermissions",
     cwd: "/workspace",
+    systemPrompt: { type: "preset", preset: "claude_code" },
   },
 })) {
   if (message.type === "assistant") {

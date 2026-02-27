@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@anthropic-ai/claude-code-sdk": "latest"
+    "@anthropic-ai/claude-agent-sdk": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
