@@ -207,6 +207,7 @@ for await (const message of query({
     permissionMode: "bypassPermissions",
     cwd: "/workspace",
     maxTurns: 200,
+    executable: process.execPath,
     systemPrompt: { type: "preset", preset: "claude_code" },
     hooks: {
       PreToolUse: [{ hooks: [logAndMaskCommand] }],

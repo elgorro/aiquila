@@ -92,9 +92,7 @@ jobs:
 
       - name: Run integration test agent
         working-directory: hetzner/scripts
-        run: |
-          export PATH="$(dirname "$(which node)"):$PATH"
-          npx tsx integration-test.ts
+        run: npx tsx integration-test.ts
 
       - name: Safety-net destroy (always runs)
         if: always()
