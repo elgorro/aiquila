@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
 const testConfig = {
@@ -8,6 +9,11 @@ const testConfig = {
   connector: process.env.RUN_CONNECTOR_TEST === "true",
   infra: process.env.RUN_INFRA_TEST !== "false",
 };
+
+const ts = Math.floor(Date.now() / 1000);
+const ncName = `nc-inttest-${ts}`;
+const mcpName = `mcp-inttest-${ts}`;
+const ncAdminPass = randomBytes(16).toString("hex");
 
 function step(enabled: boolean, instruction: string, label: string): string {
   return enabled ? instruction : `SKIP — ${label}. Mark as SKIP in summary.`;
@@ -39,7 +45,7 @@ const STEP_10_TEXT = `Run MCP protocol conformance check:
         - .result.tools is a non-empty array
         - array contains tools named: system_status, list_files, create_folder, write_file, read_file, delete`;
 
-const STEP_11_TEXT = `Verify AIquila Nextcloud app REST endpoints with basic auth (admin:<nc-admin-password>):
+const STEP_11_TEXT = `Verify AIquila Nextcloud app REST endpoints with basic auth (admin:NC_PASS_VALUE):
 
    a) GET https://NC_DOMAIN/apps/aiquila/api/settings
       Assert: HTTP 200 with JSON body (app endpoints accessible)
@@ -73,22 +79,20 @@ Your job:
 1. Build aiquila-hetzner:
    cd /workspace/hetzner && go build -o /tmp/aiquila-hetzner ./cmd/aiquila-hetzner
 
-2. Choose a shared timestamp suffix:
-   TS=$(date +%s)
-   NC_NAME="nc-inttest-${TS}"
-   MCP_NAME="mcp-inttest-${TS}"
+2. Use these pre-generated values (already set):
+   NC_NAME=NC_NAME_VALUE
+   MCP_NAME=MCP_NAME_VALUE
+   NC_ADMIN_PASS=NC_PASS_VALUE
 
 3. Provision the Nextcloud server (NC_SERVER_TYPE, default cpx21):
    /tmp/aiquila-hetzner create \\
      --stack nextcloud \\
      --nc-domain NC_DOMAIN \\
      --nc-admin-user admin \\
-     --nc-admin-password <generate a strong random password> \\
-     --name "${NC_NAME}" \\
+     --nc-admin-password NC_PASS_VALUE \\
+     --name "NC_NAME_VALUE" \\
      --type NC_SERVER_TYPE \\
      --dns-zone DNS_ZONE
-
-   Save the NC admin password used — you'll need it to configure the MCP server.
 
 4. While NC is provisioning (or after), provision the MCP server (MCP_SERVER_TYPE, default cpx11):
    /tmp/aiquila-hetzner create \\
@@ -96,8 +100,8 @@ Your job:
      --mcp-domain MCP_DOMAIN \\
      --nc-url https://NC_DOMAIN \\
      --nc-user admin \\
-     --nc-password <nc-admin-password-from-step-3> \\
-     --name "${MCP_NAME}" \\
+     --nc-password NC_PASS_VALUE \\
+     --name "MCP_NAME_VALUE" \\
      --type MCP_SERVER_TYPE \\
      --dns-zone DNS_ZONE
 
@@ -108,7 +112,7 @@ Your job:
    Poll https://NC_DOMAIN/status.php up to 5 minutes until {"installed":true}
 
 6. Verify AIquila app installed on Nextcloud:
-   curl -sf -u admin:<nc-admin-password> \\
+   curl -sf -u admin:NC_PASS_VALUE \\
      https://NC_DOMAIN/ocs/v2.php/cloud/apps/aiquila \\
      -H "OCS-APIRequest: true" | grep -q '"aiquila"'
    → must return HTTP 200 with app data
@@ -129,8 +133,8 @@ Your job:
 STEP_13_14
 
 15. Destroy both servers (ALWAYS run this, even if tests fail):
-    /tmp/aiquila-hetzner destroy --name "${NC_NAME}" --dns-zone DNS_ZONE
-    /tmp/aiquila-hetzner destroy --name "${MCP_NAME}" --dns-zone DNS_ZONE
+    /tmp/aiquila-hetzner destroy --name "NC_NAME_VALUE" --dns-zone DNS_ZONE
+    /tmp/aiquila-hetzner destroy --name "MCP_NAME_VALUE" --dns-zone DNS_ZONE
 
 CRITICAL: Always destroy both servers at the end, even if tests fail.
 Report PASS/FAIL/SKIP for each step and a final summary.
@@ -163,7 +167,13 @@ const prompt = PROMPT.replace(
   .replaceAll("MCP_DOMAIN", process.env.MCP_DOMAIN ?? "")
   .replaceAll("DNS_ZONE", process.env.DNS_ZONE ?? "")
   .replaceAll("NC_SERVER_TYPE", process.env.NC_SERVER_TYPE ?? "cpx21")
-  .replaceAll("MCP_SERVER_TYPE", process.env.MCP_SERVER_TYPE ?? "cpx11");
+  .replaceAll("MCP_SERVER_TYPE", process.env.MCP_SERVER_TYPE ?? "cpx11")
+  .replaceAll("TS_VALUE", String(ts))
+  .replaceAll("NC_NAME_VALUE", ncName)
+  .replaceAll("MCP_NAME_VALUE", mcpName)
+  .replaceAll("NC_PASS_VALUE", ncAdminPass);
+
+process.stdout.write(`::add-mask::${ncAdminPass}\n`);
 
 const seenIPs = new Set<string>();
 const IPv4_RE = /\b(\d{1,3}\.){3}\d{1,3}\b/g;
