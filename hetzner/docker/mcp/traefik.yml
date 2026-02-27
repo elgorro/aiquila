@@ -26,7 +26,7 @@ certificatesResolvers:
 providers:
   docker:
     exposedByDefault: false
-    network: aiquila-hetzner-net
+    network: aiq-net
 
 log:
   level: INFO

@@ -1,6 +1,6 @@
 FROM nextcloud:33-apache
 
-# Upgrade PHP to 8.4 (required by symfony/http-client ^8.0)
+# Upgrade PHP to 8.4 (required by symfony/http-client ^8.0 in AIquila)
 #
 # nextcloud:33-apache ships source-compiled PHP 8.3 — NC33 recommends PHP 8.4.
 # Debian Trixie packages PHP 8.4 in its main repo, but the base image pins all
@@ -20,26 +20,11 @@ RUN rm /etc/apt/preferences.d/no-debian-php \
     # Redirect the CLI php binary (occ uses /usr/local/bin/php)
     && ln -sf /usr/bin/php8.4 /usr/local/bin/php \
     # Carry over Nextcloud's custom PHP settings to the PHP 8.4 conf.d.
-    # ${PHP_MEMORY_LIMIT} etc. are expanded at runtime from container env vars
-    # (PHP natively supports ${VAR} substitution in ini files).
     && cp /usr/local/etc/php/conf.d/nextcloud.ini /etc/php/8.4/apache2/conf.d/nextcloud.ini \
     && cp /usr/local/etc/php/conf.d/nextcloud.ini /etc/php/8.4/cli/conf.d/nextcloud.ini \
     && cp /usr/local/etc/php/conf.d/opcache-recommended.ini /etc/php/8.4/apache2/conf.d/opcache-recommended.ini \
     && cp /usr/local/etc/php/conf.d/opcache-recommended.ini /etc/php/8.4/cli/conf.d/opcache-recommended.ini \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the pre-built tarball into a staging area
-COPY aiquila.tar.gz /tmp/aiquila.tar.gz
-
-# Copy custom Nextcloud configuration (Redis, apps_paths)
-COPY custom.config.php /usr/src/nextcloud/config/custom.config.php
-
-# Register the AIquila installation as a Nextcloud post-installation hook.
-# The hook runs after Nextcloud initialises (but before Apache starts serving),
-# so occ commands work without needing to poll for a live web server.
-RUN mkdir -p /docker-entrypoint-hooks.d/post-installation
-COPY aiquila-install-hook.sh /docker-entrypoint-hooks.d/post-installation/aiquila-install.sh
-RUN chmod +x /docker-entrypoint-hooks.d/post-installation/aiquila-install.sh
-
-# Use the default Nextcloud entrypoint — it handles PHP ini env-var substitution,
-# Redis, DB auto-configuration, and hook execution automatically.
+# AIquila is installed at provisioning time via OCC (not baked into the image),
+# so the tarball is downloaded and extracted on the server after first boot.

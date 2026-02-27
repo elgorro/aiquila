@@ -1,0 +1,46 @@
+# Traefik v3 — AIquila Full stack static configuration
+# Handles both NC_DOMAIN and MCP_DOMAIN with shared Let's Encrypt resolver.
+# ACME_EMAIL is read from the traefik container's environment (set in docker-compose.yml).
+
+api:
+  dashboard: false
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "${ACME_EMAIL}"
+      storage: /certs/acme.json
+      httpChallenge:
+        entryPoint: web
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: aiq-net
+
+log:
+  level: INFO
+  filePath: /logs/traefik.log
+  format: json
+
+accessLog:
+  filePath: /logs/access.log
+  format: json
+  bufferingSize: 100
+
+experimental:
+  plugins:
+    crowdsec-bouncer-traefik-plugin:
+      moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+      version: v1.3.5

@@ -1,4 +1,4 @@
-# AIquila MCP Server — Hetzner Production
+# AIquila MCP Server — Hetzner Production (MCP-only stack)
 # Traefik v3 reverse proxy + CrowdSec security + optional monitoring
 #
 # Usage:
@@ -10,7 +10,7 @@
 services:
   mcp:
     image: ghcr.io/elgorro/aiquila-mcp:latest
-    container_name: aiquila-mcp
+    container_name: aiq-mcp
     restart: unless-stopped
     environment:
       NEXTCLOUD_URL: ${NEXTCLOUD_URL:?Set NEXTCLOUD_URL in .env}
@@ -39,11 +39,11 @@ services:
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapikey=${CROWDSEC_BOUNCER_KEY}"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapihost=http://crowdsec:8080"
     networks:
-      - aiquila-net
+      - aiq-net
 
   traefik:
     image: traefik:v3
-    container_name: aiquila-traefik
+    container_name: aiq-traefik
     restart: unless-stopped
     depends_on:
       - mcp
@@ -58,11 +58,11 @@ services:
     environment:
       ACME_EMAIL: ${ACME_EMAIL:-}
     networks:
-      - aiquila-net
+      - aiq-net
 
   crowdsec:
     image: crowdsecurity/crowdsec:latest
-    container_name: aiquila-crowdsec
+    container_name: aiq-crowdsec
     restart: unless-stopped
     environment:
       COLLECTIONS: crowdsecurity/traefik
@@ -72,7 +72,7 @@ services:
       - ./crowdsec:/etc/crowdsec/acquis.d:ro
       - logs:/logs:ro
     networks:
-      - aiquila-net
+      - aiq-net
 
   # ── monitoring profile ─────────────────────────────────────────────────────
   # Start with: docker compose --profile monitoring up -d
@@ -80,7 +80,7 @@ services:
   node-exporter:
     profiles: [monitoring]
     image: prom/node-exporter:latest
-    container_name: aiquila-node-exporter
+    container_name: aiq-node-exporter
     restart: unless-stopped
     command:
       - '--path.procfs=/host/proc'
@@ -91,12 +91,12 @@ services:
       - /sys:/host/sys:ro
       - /:/rootfs:ro
     networks:
-      - aiquila-net
+      - aiq-net
 
   cadvisor:
     profiles: [monitoring]
     image: gcr.io/cadvisor/cadvisor:latest
-    container_name: aiquila-cadvisor
+    container_name: aiq-cadvisor
     restart: unless-stopped
     command:
       - '--housekeeping_interval=30s'
@@ -111,23 +111,23 @@ services:
     devices:
       - /dev/kmsg
     networks:
-      - aiquila-net
+      - aiq-net
 
   prometheus:
     profiles: [monitoring]
     image: prom/prometheus:latest
-    container_name: aiquila-prometheus
+    container_name: aiq-prometheus
     restart: unless-stopped
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     networks:
-      - aiquila-net
+      - aiq-net
 
   grafana:
     profiles: [monitoring]
     image: grafana/grafana-oss:latest
-    container_name: aiquila-grafana
+    container_name: aiq-grafana
     restart: unless-stopped
     environment:
       GF_SERVER_ROOT_URL: "https://${MCP_DOMAIN}/grafana"
@@ -142,21 +142,21 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
     networks:
-      - aiquila-net
+      - aiq-net
 
 volumes:
   traefik_certs:
-    name: aiquila_traefik_certs
+    name: aiq-mcp_traefik_certs
   crowdsec_db:
-    name: aiquila_crowdsec_db
+    name: aiq-mcp_crowdsec_db
   logs:
-    name: aiquila_logs
+    name: aiq-mcp_logs
   prometheus_data:
-    name: aiquila_prometheus_data
+    name: aiq-mcp_prometheus_data
   grafana_data:
-    name: aiquila_grafana_data
+    name: aiq-mcp_grafana_data
 
 networks:
-  aiquila-net:
-    name: aiquila-hetzner-net
+  aiq-net:
+    name: aiq-net
     driver: bridge
