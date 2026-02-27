@@ -199,14 +199,14 @@ func runRebuild(cmd *cobra.Command, _ []string) error {
 	defer uploader.Close()
 
 	uploads := []struct{ path, content string }{
-		{"/opt/aiquila/docker-compose.yml", templates.DockerCompose},
-		{"/opt/aiquila/traefik.yml", templates.Traefik},
-		{"/opt/aiquila/crowdsec/acquis.yml", templates.CrowdSecAcquis},
+		{"/opt/aiquila/docker-compose.yml", templates.MCPDockerCompose},
+		{"/opt/aiquila/traefik.yml", templates.MCPTraefik},
+		{"/opt/aiquila/crowdsec/acquis.yml", templates.MCPCrowdSecAcquis},
 		{"/opt/aiquila/.env", env.Render()},
 	}
 	if monitoring {
 		uploads = append(uploads, struct{ path, content string }{
-			"/opt/aiquila/monitoring/prometheus.yml", templates.Prometheus,
+			"/opt/aiquila/monitoring/prometheus.yml", templates.MCPPrometheus,
 		})
 	}
 

@@ -3,14 +3,21 @@ name: Hetzner Integration Test
 on:
   workflow_dispatch:
     inputs:
-      test_domain:
-        description: 'FQDN for test server (e.g. inttest.example.com)'
+      nc_domain:
+        description: 'FQDN for Nextcloud test server (e.g. nc-inttest.example.com)'
+        required: true
+      mcp_domain:
+        description: 'FQDN for MCP test server (e.g. mcp-inttest.example.com)'
         required: true
       dns_zone:
         description: 'Hetzner DNS zone (e.g. example.com)'
         required: true
-      server_type:
-        description: 'Hetzner server type'
+      nc_server_type:
+        description: 'Hetzner server type for Nextcloud server'
+        required: false
+        default: 'cpx21'
+      mcp_server_type:
+        description: 'Hetzner server type for MCP server'
         required: false
         default: 'cpx11'
 
@@ -20,13 +27,12 @@ jobs:
     env:
       HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
       HETZNER_DNS_TOKEN: ${{ secrets.HETZNER_DNS_TOKEN }}
-      NEXTCLOUD_URL: ${{ secrets.NEXTCLOUD_URL }}
-      NEXTCLOUD_USER: ${{ secrets.NEXTCLOUD_USER }}
-      NEXTCLOUD_PASSWORD: ${{ secrets.NEXTCLOUD_PASSWORD }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      TEST_DOMAIN: ${{ inputs.test_domain }}
+      NC_DOMAIN: ${{ inputs.nc_domain }}
+      MCP_DOMAIN: ${{ inputs.mcp_domain }}
       DNS_ZONE: ${{ inputs.dns_zone }}
-      SERVER_TYPE: ${{ inputs.server_type }}
+      NC_SERVER_TYPE: ${{ inputs.nc_server_type }}
+      MCP_SERVER_TYPE: ${{ inputs.mcp_server_type }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -54,10 +60,9 @@ jobs:
         run: |
           # Build the binary (may already exist from agent's work)
           cd hetzner && go build -o /tmp/aiquila-hetzner ./cmd/aiquila-hetzner || true
-          # Best-effort destroy using the test domain prefix as server name pattern.
-          # The agent names servers aiquila-inttest-<timestamp>; this step catches
-          # any server the agent failed to destroy.
-          /tmp/aiquila-hetzner list 2>/dev/null | grep "aiquila-inttest-" | awk '{print $1}' | while read -r name; do
+          # Best-effort destroy of any nc-inttest-* or mcp-inttest-* servers
+          # that the agent may have failed to clean up.
+          /tmp/aiquila-hetzner list 2>/dev/null | grep -E "nc-inttest-|mcp-inttest-" | awk '{print $1}' | while read -r name; do
             echo "Safety-net: destroying $name"
             /tmp/aiquila-hetzner destroy --name "$name" --dns-zone "$DNS_ZONE" || true
           done

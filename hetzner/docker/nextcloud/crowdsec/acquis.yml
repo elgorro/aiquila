@@ -1,0 +1,5 @@
+# CrowdSec acquisition — reads Traefik JSON access log
+filenames:
+  - /logs/access.log
+labels:
+  type: traefik

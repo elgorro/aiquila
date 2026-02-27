@@ -1,0 +1,131 @@
+# AIquila Nextcloud — Hetzner Production (Nextcloud-only stack)
+# Nextcloud 33 + PostgreSQL + Redis + Traefik v3 + CrowdSec
+#
+# AIquila app is installed via OCC at provisioning time (not baked into image).
+#
+# Usage:
+#   cp .env.example .env  &&  edit with your credentials
+#   docker compose build
+#   docker compose up -d
+#   # Poll /status.php until {"installed":true} (~3-5 min first boot)
+
+services:
+  nc:
+    build: .
+    image: aiq-nc:local
+    container_name: aiq-nc
+    restart: unless-stopped
+    depends_on:
+      nc-db:
+        condition: service_healthy
+      nc-redis:
+        condition: service_started
+    environment:
+      POSTGRES_HOST: nc-db
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      REDIS_HOST: nc-redis
+      NEXTCLOUD_ADMIN_USER: ${NC_ADMIN_USER:?Set NC_ADMIN_USER in .env}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NC_ADMIN_PASSWORD:?Set NC_ADMIN_PASSWORD in .env}
+      NEXTCLOUD_TRUSTED_DOMAINS: ${NC_DOMAIN:?Set NC_DOMAIN in .env}
+      NEXTCLOUD_TRUSTED_PROXIES: 172.16.0.0/12
+      OVERWRITEHOST: ${NC_DOMAIN}
+      OVERWRITEPROTOCOL: https
+      OVERWRITECLIURL: https://${NC_DOMAIN}
+      # NC33 built-in metrics app — token for /metrics?token= endpoint
+      NC_METRICS_TOKEN: ${NC_METRICS_TOKEN:-}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nc.rule=Host(`${NC_DOMAIN}`)"
+      - "traefik.http.routers.nc.entrypoints=websecure"
+      - "traefik.http.routers.nc.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.nc.middlewares=crowdsec@docker,nc-headers@docker"
+      - "traefik.http.services.nc.loadbalancer.server.port=80"
+      # Security / Nextcloud-recommended headers
+      - "traefik.http.middlewares.nc-headers.headers.stsSeconds=15552000"
+      - "traefik.http.middlewares.nc-headers.headers.stsIncludeSubdomains=true"
+      # CrowdSec bouncer middleware
+      - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapikey=${CROWDSEC_BOUNCER_KEY}"
+      - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapihost=http://crowdsec:8080"
+    volumes:
+      - nc_data:/var/www/html
+    networks:
+      - aiq-net
+
+  nc-db:
+    image: postgres:16
+    container_name: aiq-nc-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - nc_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nextcloud"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aiq-net
+
+  nc-redis:
+    image: redis:7-alpine
+    container_name: aiq-nc-redis
+    restart: unless-stopped
+    volumes:
+      - nc_redis_data:/data
+    networks:
+      - aiq-net
+
+  traefik:
+    image: traefik:v3
+    container_name: aiq-traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_certs:/certs
+      - logs:/logs
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    networks:
+      - aiq-net
+
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: aiq-crowdsec
+    restart: unless-stopped
+    environment:
+      COLLECTIONS: crowdsecurity/traefik
+      BOUNCER_KEY_traefik: ${CROWDSEC_BOUNCER_KEY:?Set CROWDSEC_BOUNCER_KEY in .env}
+    volumes:
+      - crowdsec_db:/var/lib/crowdsec/data
+      - ./crowdsec:/etc/crowdsec/acquis.d:ro
+      - logs:/logs:ro
+    networks:
+      - aiq-net
+
+volumes:
+  nc_data:
+    name: aiq-nc_data
+  nc_db_data:
+    name: aiq-nc_db_data
+  nc_redis_data:
+    name: aiq-nc_redis_data
+  traefik_certs:
+    name: aiq-nc_traefik_certs
+  crowdsec_db:
+    name: aiq-nc_crowdsec_db
+  logs:
+    name: aiq-nc_logs
+
+networks:
+  aiq-net:
+    name: aiq-net
+    driver: bridge

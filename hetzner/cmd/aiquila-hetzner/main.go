@@ -34,14 +34,20 @@ var (
 
 	// create flags
 	createName       string
+	createStack      string
 	createType       string
 	createImage      string
 	createLocation   string
 	createSSHKey     string
-	createDomain     string
+	createMCPDomain  string
+	createNCDomain   string
 	createNCURL      string
 	createNCUser     string
 	createNCPassword string
+	// NC self-hosted flags (--stack nextcloud / full)
+	createNCAdminUser     string
+	createNCAdminPassword string
+	createNCAppVersion    string
 	createToken      string
 	createAcmeEmail  string
 	createMonitoring bool
@@ -124,17 +130,24 @@ func buildCreateCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&createName, "name", "", "Server name (default: aiquila-<random>)")
+	cmd.Flags().StringVar(&createStack, "stack", "mcp", "Stack to deploy: mcp (MCP-only, external NC), nextcloud (NC-only), full (NC+MCP on one server)")
 	cmd.Flags().StringVar(&createType, "type", "cpx21", "Server type (cpx11/cpx21/cpx31/cx22/cx32/ccx13/ccx23)")
 	cmd.Flags().StringVar(&createImage, "image", "fedora-41", "OS image — any Hetzner official image\n\t\t\t\t(ubuntu-24.04, ubuntu-22.04, ubuntu-20.04,\n\t\t\t\t debian-12, debian-11,\n\t\t\t\t fedora-41, fedora-40,\n\t\t\t\t centos-stream-9, rocky-9, almalinux-9,\n\t\t\t\t opensuse-leap-15.6, arch)")
 	cmd.Flags().StringVar(&createLocation, "location", "nbg1", "Datacenter location (nbg1/fsn1/hel1/ash/hil/sin)")
 	cmd.Flags().StringVar(&createSSHKey, "ssh-key", "", "Path to existing SSH public key (omit to generate Ed25519 pair)")
-	cmd.Flags().StringVar(&createDomain, "domain", "", "FQDN for HTTPS + MCP_AUTH_ISSUER (required)")
-	cmd.Flags().StringVar(&createNCURL, "nc-url", "", "Nextcloud URL (or $NEXTCLOUD_URL)")
-	cmd.Flags().StringVar(&createNCUser, "nc-user", "", "Nextcloud username (or $NEXTCLOUD_USER)")
-	cmd.Flags().StringVar(&createNCPassword, "nc-password", "", "Nextcloud app password (or $NEXTCLOUD_PASSWORD)")
+	cmd.Flags().StringVar(&createMCPDomain, "mcp-domain", "", "FQDN for the MCP server (required for --stack mcp/full)")
+	cmd.Flags().StringVar(&createNCDomain, "nc-domain", "", "FQDN for the Nextcloud server (required for --stack nextcloud/full)")
+	// External NC flags (--stack mcp)
+	cmd.Flags().StringVar(&createNCURL, "nc-url", "", "Nextcloud URL (--stack mcp; or $NEXTCLOUD_URL)")
+	cmd.Flags().StringVar(&createNCUser, "nc-user", "", "Nextcloud username (--stack mcp; or $NEXTCLOUD_USER)")
+	cmd.Flags().StringVar(&createNCPassword, "nc-password", "", "Nextcloud app password (--stack mcp; or $NEXTCLOUD_PASSWORD)")
+	// Self-hosted NC flags (--stack nextcloud/full)
+	cmd.Flags().StringVar(&createNCAdminUser, "nc-admin-user", "admin", "Nextcloud admin username (--stack nextcloud/full)")
+	cmd.Flags().StringVar(&createNCAdminPassword, "nc-admin-password", "", "Nextcloud admin password (--stack nextcloud/full)")
+	cmd.Flags().StringVar(&createNCAppVersion, "nc-app-version", "latest", "AIquila app version to install (--stack nextcloud/full; e.g. v1.2.3 or 'latest')")
 	cmd.Flags().StringVar(&createToken, "token", "", "Hetzner API token (default: $HCLOUD_TOKEN)")
 	cmd.Flags().StringVar(&createAcmeEmail, "acme-email", "", "Email for Let's Encrypt cert expiry notices (optional)")
-	cmd.Flags().BoolVar(&createMonitoring, "monitoring", false, "Start monitoring profile (Prometheus + Grafana)")
+	cmd.Flags().BoolVar(&createMonitoring, "monitoring", false, "Start monitoring profile (Prometheus + Grafana; --stack mcp only)")
 	cmd.Flags().IntVar(&createVolumeSize, "volume-size", 0, "Create Hetzner Cloud Volume (GB) and mount at /opt/aiquila")
 	cmd.Flags().BoolVar(&createLUKS, "luks", false, "[EXPERIMENTAL] LUKS-encrypt the Cloud Volume (requires --volume-size)")
 	cmd.Flags().BoolVar(&createDryRun, "dry-run", false, "Print what would be created without making any API calls")
@@ -151,7 +164,7 @@ func buildCreateCmd() *cobra.Command {
 }
 
 func runCreate(_ *cobra.Command, _ []string) error {
-	// ── 1. Env var fallbacks for credentials ───────────────────────────────
+	// ── 1. Env var fallbacks for MCP external-NC credentials ───────────────
 	if createNCURL == "" {
 		createNCURL = os.Getenv("NEXTCLOUD_URL")
 	}
@@ -162,7 +175,7 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		createNCPassword = os.Getenv("NEXTCLOUD_PASSWORD")
 	}
 
-	// ── 1b. Profile credential fallback ────────────────────────────────────
+	// ── 2b. Profile credential fallback ────────────────────────────────────
 	{
 		cfg, err := profilepkg.Load()
 		if err == nil {
@@ -183,7 +196,7 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// ── 1c. Config file fallbacks ──────────────────────────────────────────
+	// ── 2c. Config file fallbacks ──────────────────────────────────────────
 	var fileCfg DeployConfig
 	if createConfig != "" {
 		fc, err := loadDeployConfig(createConfig)
@@ -195,8 +208,8 @@ func runCreate(_ *cobra.Command, _ []string) error {
 	if createName == "" {
 		createName = fileCfg.Name
 	}
-	if createDomain == "" {
-		createDomain = fileCfg.Domain
+	if createMCPDomain == "" {
+		createMCPDomain = fileCfg.Domain
 	}
 	if createNCURL == "" {
 		createNCURL = fileCfg.NCURL
@@ -228,19 +241,41 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		packages = createPackages
 	}
 
-	// ── 2. Validate flags ──────────────────────────────────────────────────
+	// ── 3. Validate flags per stack ────────────────────────────────────────
 	var missing []string
-	if createDomain == "" {
-		missing = append(missing, "--domain")
-	}
-	if createNCURL == "" {
-		missing = append(missing, "--nc-url / $NEXTCLOUD_URL")
-	}
-	if createNCUser == "" {
-		missing = append(missing, "--nc-user / $NEXTCLOUD_USER")
-	}
-	if createNCPassword == "" {
-		missing = append(missing, "--nc-password / $NEXTCLOUD_PASSWORD")
+	switch createStack {
+	case "mcp":
+		if createMCPDomain == "" {
+			missing = append(missing, "--mcp-domain")
+		}
+		if createNCURL == "" {
+			missing = append(missing, "--nc-url / $NEXTCLOUD_URL")
+		}
+		if createNCUser == "" {
+			missing = append(missing, "--nc-user / $NEXTCLOUD_USER")
+		}
+		if createNCPassword == "" {
+			missing = append(missing, "--nc-password / $NEXTCLOUD_PASSWORD")
+		}
+	case "nextcloud":
+		if createNCDomain == "" {
+			missing = append(missing, "--nc-domain")
+		}
+		if createNCAdminPassword == "" {
+			missing = append(missing, "--nc-admin-password")
+		}
+	case "full":
+		if createMCPDomain == "" {
+			missing = append(missing, "--mcp-domain")
+		}
+		if createNCDomain == "" {
+			missing = append(missing, "--nc-domain")
+		}
+		if createNCAdminPassword == "" {
+			missing = append(missing, "--nc-admin-password")
+		}
+	default:
+		return fmt.Errorf("unknown --stack %q: must be mcp, nextcloud, or full", createStack)
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("required values missing: %s", strings.Join(missing, ", "))
@@ -255,24 +290,24 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		createName = "aiquila-" + randomSuffix(6)
 	}
 
-	// ── 3. Parse labels ────────────────────────────────────────────────────
+	// ── 4. Parse labels ────────────────────────────────────────────────────
 	labels, err := parseLabels(createLabels)
 	if err != nil {
 		return err
 	}
 
-	// ── 4. Dry-run — print plan and exit ───────────────────────────────────
+	// ── 5. Dry-run — print plan and exit ───────────────────────────────────
 	if createDryRun {
 		return printDryRun(createSwap, packages)
 	}
 
 	ctx := context.Background()
-	fmt.Println("==> aiquila-hetzner create")
+	fmt.Printf("==> aiquila-hetzner create (stack=%s)\n", createStack)
 	appLog.Info("start", "creating server",
 		"name", createName, "type", createType,
-		"location", createLocation, "domain", createDomain)
+		"location", createLocation, "stack", createStack)
 
-	// ── 5. SSH key ─────────────────────────────────────────────────────────
+	// ── 6. SSH key ─────────────────────────────────────────────────────────
 	fmt.Println("\n── SSH key")
 	var privKeyPath, pubKeyContent string
 
@@ -293,20 +328,20 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		pubKeyContent = kp.PublicKey
 	}
 
-	// ── 6. Init hcloud client ──────────────────────────────────────────────
+	// ── 7. Init hcloud client ──────────────────────────────────────────────
 	fmt.Println("\n── Hetzner Cloud API")
 	client, err := hcloudclient.NewClient(createToken, globalProfile)
 	if err != nil {
 		return err
 	}
 
-	// ── 7. Upload SSH public key to Hetzner (idempotent) ──────────────────
+	// ── 8. Upload SSH public key to Hetzner (idempotent) ──────────────────
 	hcloudKeyName, err := ensureSSHKey(ctx, client, createName, pubKeyContent, labels)
 	if err != nil {
 		return err
 	}
 
-	// ── 7b. Look up private network (if requested) ─────────────────────────
+	// ── 8b. Look up private network (if requested) ─────────────────────────
 	var createNetworks []*hcloud.Network
 	if createNetworkName != "" {
 		fmt.Println("\n── Private network")
@@ -321,7 +356,7 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		createNetworks = []*hcloud.Network{net}
 	}
 
-	// ── 8. Create server with cloud-init userData ──────────────────────────
+	// ── 9. Create server with cloud-init userData ──────────────────────────
 	fmt.Println("\n── Creating server")
 	srv, err := server.Create(ctx, client, server.Options{
 		Name:       createName,
@@ -339,7 +374,7 @@ func runCreate(_ *cobra.Command, _ []string) error {
 	serverIP := srv.PublicNet.IPv4.IP.String()
 	appLog.Info("server", "server created", "server", createName, "ip", serverIP)
 
-	// ── 9. DNS record (before Traefik starts requesting certs) ────────────
+	// ── 10. DNS record (before Traefik starts requesting certs) ───────────
 	if createDNSZone != "" {
 		fmt.Println("\n── DNS")
 		dnsToken, err := dns.ResolveToken(createDNSToken, globalProfile)
@@ -360,13 +395,13 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// ── 10. Create firewall + attach to server ────────────────────────────
+	// ── 11. Create firewall + attach to server ─────────────────────────────
 	fmt.Println("\n── Firewall")
 	if _, err := firewall.Setup(ctx, client, createName+"-fw", srv, labels, createSSHAllowCIDR); err != nil {
 		return err
 	}
 
-	// ── 11. Create + attach Hetzner Cloud Volume (if requested) ───────────
+	// ── 12. Create + attach Hetzner Cloud Volume (if requested) ────────────
 	var volumeDevicePath string
 	if createVolumeSize > 0 {
 		fmt.Println("\n── Cloud Volume")
@@ -376,7 +411,7 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// ── 11. Wait for SSH ───────────────────────────────────────────────────
+	// ── 13. Wait for SSH ────────────────────────────────────────────────────
 	fmt.Println("\n── Waiting for SSH")
 	sshClient, err := provision.WaitAndDial(serverIP, privKeyPath)
 	if err != nil {
@@ -386,13 +421,13 @@ func runCreate(_ *cobra.Command, _ []string) error {
 
 	appLog.Info("ssh", "SSH connected", "ip", serverIP)
 
-	// ── 12. Wait for cloud-init to finish ──────────────────────────────────
+	// ── 14. Wait for cloud-init to finish ───────────────────────────────────
 	fmt.Println("\n── Waiting for cloud-init / Docker install")
 	if err := provision.WaitCloudInit(sshClient); err != nil {
 		return err
 	}
 
-	// ── 13. Format + mount volume (if requested) ───────────────────────────
+	// ── 15. Format + mount volume (if requested) ────────────────────────────
 	if createVolumeSize > 0 {
 		fmt.Println("\n── Mounting volume")
 		if createLUKS {
@@ -406,14 +441,26 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// ── 14. Generate .env ──────────────────────────────────────────────────
+	// ── 16. Stack-specific provisioning ─────────────────────────────────────
+	switch createStack {
+	case "mcp":
+		return provisionMCPStack(sshClient, srv, serverIP, privKeyPath)
+	case "nextcloud":
+		return provisionNCStack(sshClient, srv, serverIP, privKeyPath)
+	case "full":
+		return provisionFullStack(sshClient, srv, serverIP, privKeyPath)
+	}
+	return nil
+}
+
+// provisionMCPStack uploads MCP stack files and starts services (external Nextcloud).
+func provisionMCPStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, privKeyPath string) error {
 	fmt.Println("\n── Generating configuration")
-	env, err := config.Generate(createNCURL, createNCUser, createNCPassword, createDomain, createAcmeEmail)
+	env, err := config.Generate(createNCURL, createNCUser, createNCPassword, createMCPDomain, createAcmeEmail)
 	if err != nil {
 		return err
 	}
 
-	// ── 15. Upload files via SFTP ──────────────────────────────────────────
 	fmt.Println("\n── Uploading files to /opt/aiquila")
 	uploader, err := provision.NewUploader(sshClient)
 	if err != nil {
@@ -422,14 +469,14 @@ func runCreate(_ *cobra.Command, _ []string) error {
 	defer uploader.Close()
 
 	uploads := []struct{ path, content string }{
-		{"/opt/aiquila/docker-compose.yml", templates.DockerCompose},
-		{"/opt/aiquila/traefik.yml", templates.Traefik},
-		{"/opt/aiquila/crowdsec/acquis.yml", templates.CrowdSecAcquis},
+		{"/opt/aiquila/docker-compose.yml", templates.MCPDockerCompose},
+		{"/opt/aiquila/traefik.yml", templates.MCPTraefik},
+		{"/opt/aiquila/crowdsec/acquis.yml", templates.MCPCrowdSecAcquis},
 		{"/opt/aiquila/.env", env.Render()},
 	}
 	if createMonitoring {
 		uploads = append(uploads, struct{ path, content string }{
-			"/opt/aiquila/monitoring/prometheus.yml", templates.Prometheus,
+			"/opt/aiquila/monitoring/prometheus.yml", templates.MCPPrometheus,
 		})
 	}
 
@@ -439,10 +486,8 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		}
 		fmt.Printf("  Uploaded %s\n", f.path)
 	}
-
 	appLog.Info("upload", "files uploaded", "count", len(uploads))
 
-	// ── 16. Start services ─────────────────────────────────────────────────
 	fmt.Println("\n── Starting Docker services")
 	composeCmd := "cd /opt/aiquila && docker compose up -d 2>&1"
 	if createMonitoring {
@@ -455,10 +500,213 @@ func runCreate(_ *cobra.Command, _ []string) error {
 	}
 	fmt.Print(out)
 
-	// ── 17. Summary ────────────────────────────────────────────────────────
+	return printMCPSummary(srv, serverIP, privKeyPath)
+}
+
+// provisionNCStack uploads NC stack files, builds the image, waits for Nextcloud,
+// then installs the AIquila app via OCC.
+func provisionNCStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, privKeyPath string) error {
+	fmt.Println("\n── Generating configuration")
+	ncEnv, err := config.GenerateNC(createNCDomain, createNCAdminUser, createNCAdminPassword, createAcmeEmail)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("\n── Uploading files to /opt/aiquila")
+	uploader, err := provision.NewUploader(sshClient)
+	if err != nil {
+		return err
+	}
+	defer uploader.Close()
+
+	uploads := []struct{ path, content string }{
+		{"/opt/aiquila/docker-compose.yml", templates.NCDockerCompose},
+		{"/opt/aiquila/Dockerfile", templates.NCDockerfile},
+		{"/opt/aiquila/traefik.yml", templates.NCTraefik},
+		{"/opt/aiquila/crowdsec/acquis.yml", templates.NCCrowdSecAcquis},
+		{"/opt/aiquila/.env", ncEnv.Render()},
+	}
+	for _, f := range uploads {
+		if err := uploader.WriteFile(f.path, f.content); err != nil {
+			return fmt.Errorf("upload %s: %w", f.path, err)
+		}
+		fmt.Printf("  Uploaded %s\n", f.path)
+	}
+	appLog.Info("upload", "files uploaded", "count", len(uploads))
+
+	fmt.Println("\n── Building Nextcloud image (PHP 8.4 upgrade, ~2 min)")
+	out, err := provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose build 2>&1")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, out)
+		return fmt.Errorf("docker compose build: %w", err)
+	}
+	fmt.Print(out)
+
+	fmt.Println("\n── Starting Docker services")
+	out, err = provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose up -d 2>&1")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, out)
+		return fmt.Errorf("docker compose up: %w", err)
+	}
+	fmt.Print(out)
+
+	fmt.Println("\n── Waiting for Nextcloud first-run initialisation (~3-5 min)")
+	waitCmd := `timeout 600 bash -c 'until curl -sf http://localhost/status.php 2>/dev/null | grep -q "\"installed\":true"; do echo -n "."; sleep 10; done; echo " done."'`
+	out, err = provision.RunCommand(sshClient, waitCmd)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, out)
+		return fmt.Errorf("wait for Nextcloud: %w", err)
+	}
+	fmt.Print(out)
+
+	if err := installAiquilaApp(sshClient, createNCAppVersion); err != nil {
+		return err
+	}
+
+	return printNCSummary(srv, serverIP, privKeyPath)
+}
+
+// provisionFullStack uploads full stack files, builds the NC image, waits for
+// Nextcloud, installs AIquila via OCC, then starts all services.
+func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, privKeyPath string) error {
+	fmt.Println("\n── Generating configuration")
+	// For the full stack, MCP connects to NC over the internal Docker network.
+	// We generate a placeholder MCP password; the real app password is created
+	// via OCC after NC is up and written back to the .env automatically.
+	fullEnv, err := config.GenerateFull(
+		createNCDomain, createMCPDomain,
+		createNCAdminUser, createNCAdminPassword,
+		createNCAdminUser, "", // NC_MCP_USER/PASSWORD: updated after OCC
+		createAcmeEmail,
+	)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("\n── Uploading files to /opt/aiquila")
+	uploader, err := provision.NewUploader(sshClient)
+	if err != nil {
+		return err
+	}
+	defer uploader.Close()
+
+	uploads := []struct{ path, content string }{
+		{"/opt/aiquila/docker-compose.yml", templates.FullDockerCompose},
+		{"/opt/aiquila/Dockerfile", templates.FullDockerfile},
+		{"/opt/aiquila/traefik.yml", templates.FullTraefik},
+		{"/opt/aiquila/crowdsec/acquis.yml", templates.FullCrowdSecAcquis},
+		{"/opt/aiquila/.env", fullEnv.Render()},
+	}
+	for _, f := range uploads {
+		if err := uploader.WriteFile(f.path, f.content); err != nil {
+			return fmt.Errorf("upload %s: %w", f.path, err)
+		}
+		fmt.Printf("  Uploaded %s\n", f.path)
+	}
+	appLog.Info("upload", "files uploaded", "count", len(uploads))
+
+	fmt.Println("\n── Building Nextcloud image (PHP 8.4 upgrade, ~2 min)")
+	out, err := provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose build 2>&1")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, out)
+		return fmt.Errorf("docker compose build: %w", err)
+	}
+	fmt.Print(out)
+
+	fmt.Println("\n── Starting NC services (Nextcloud + DB + Redis + Traefik + CrowdSec)")
+	// Start NC services first; MCP will start after app password is generated.
+	out, err = provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose up -d nc nc-db nc-redis traefik crowdsec 2>&1")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, out)
+		return fmt.Errorf("docker compose up (NC): %w", err)
+	}
+	fmt.Print(out)
+
+	fmt.Println("\n── Waiting for Nextcloud first-run initialisation (~3-5 min)")
+	waitCmd := `timeout 600 bash -c 'until curl -sf http://localhost/status.php 2>/dev/null | grep -q "\"installed\":true"; do echo -n "."; sleep 10; done; echo " done."'`
+	out, err = provision.RunCommand(sshClient, waitCmd)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, out)
+		return fmt.Errorf("wait for Nextcloud: %w", err)
+	}
+	fmt.Print(out)
+
+	if err := installAiquilaApp(sshClient, createNCAppVersion); err != nil {
+		return err
+	}
+
+	// Generate an app password for the MCP user and patch the .env
+	fmt.Printf("\n── Creating Nextcloud app password for MCP user %q\n", createNCAdminUser)
+	appPassCmd := fmt.Sprintf(
+		`docker compose -f /opt/aiquila/docker-compose.yml exec -T nc php occ user:add-app-password %s 2>/dev/null | tail -1`,
+		createNCAdminUser,
+	)
+	appPass, err := provision.RunCommand(sshClient, appPassCmd)
+	if err != nil {
+		return fmt.Errorf("generate app password: %w", err)
+	}
+	appPass = strings.TrimSpace(appPass)
+	if appPass == "" {
+		return fmt.Errorf("OCC returned empty app password — check NC logs")
+	}
+	fmt.Println("  App password generated.")
+
+	// Patch NC_MCP_PASSWORD in the .env on the server
+	patchCmd := fmt.Sprintf(
+		`sed -i 's|^NC_MCP_PASSWORD=.*|NC_MCP_PASSWORD=%s|' /opt/aiquila/.env`,
+		appPass,
+	)
+	if _, err := provision.RunCommand(sshClient, patchCmd); err != nil {
+		return fmt.Errorf("patch .env with app password: %w", err)
+	}
+
+	fmt.Println("\n── Starting MCP service")
+	out, err = provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose up -d mcp 2>&1")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, out)
+		return fmt.Errorf("docker compose up (MCP): %w", err)
+	}
+	fmt.Print(out)
+
+	return printFullSummary(srv, serverIP, privKeyPath)
+}
+
+// installAiquilaApp downloads and installs the AIquila Nextcloud app via OCC.
+// version should be "latest" or a specific tag like "v1.2.3".
+func installAiquilaApp(sshClient *xssh.Client, version string) error {
+	fmt.Printf("\n── Installing AIquila app (version=%s)\n", version)
+
+	var tarURL string
+	if version == "latest" {
+		tarURL = "https://github.com/elgorro/aiquila/releases/latest/download/aiquila.tar.gz"
+	} else {
+		tarURL = fmt.Sprintf("https://github.com/elgorro/aiquila/releases/download/%s/aiquila.tar.gz", version)
+	}
+
+	installCmd := fmt.Sprintf(`
+set -e
+curl -sLo /tmp/aiquila.tar.gz %s
+docker compose -f /opt/aiquila/docker-compose.yml exec -T nc bash -c \
+  'mkdir -p /var/www/html/custom_apps && \
+   tar -xzf /tmp/aiquila.tar.gz -C /var/www/html/custom_apps/ && \
+   php occ app:enable aiquila && \
+   php occ app:enable metrics'
+echo "AIquila app enabled."
+`, tarURL)
+
+	out, err := provision.RunCommand(sshClient, installCmd)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, out)
+		return fmt.Errorf("install AIquila app: %w", err)
+	}
+	fmt.Print(out)
+	return nil
+}
+
+func printMCPSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 	grafanaLine := ""
 	if createMonitoring {
-		grafanaLine = fmt.Sprintf("  Grafana:    https://%s/grafana\n", createDomain)
+		grafanaLine = fmt.Sprintf("  Grafana:    https://%s/grafana\n", createMCPDomain)
 	}
 
 	privateLine := ""
@@ -478,11 +726,10 @@ func runCreate(_ *cobra.Command, _ []string) error {
 
 	fmt.Printf(`
 ╔══════════════════════════════════════╗
-║    AIquila deployment complete       ║
+║    AIquila MCP deployment complete   ║
 ╠══════════════════════════════════════╣
   Server IP:  %s
 %s  SSH:        ssh -i %s root@%s
-  AIquila:    https://%s
   MCP URL:    https://%s/mcp
 %s╚══════════════════════════════════════╝
 
@@ -491,9 +738,85 @@ func runCreate(_ *cobra.Command, _ []string) error {
 		serverIP,
 		privateLine,
 		privKeyPath, serverIP,
-		createDomain,
-		createDomain,
+		createMCPDomain,
 		grafanaLine,
+		dnsNote,
+	)
+	return nil
+}
+
+func printNCSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
+	privateLine := ""
+	if createNetworkName != "" {
+		for _, pn := range srv.PrivateNet {
+			if pn.Network.Name == createNetworkName {
+				privateLine = fmt.Sprintf("  Private IP: %s  (network: %s)\n", pn.IP, createNetworkName)
+				break
+			}
+		}
+	}
+
+	dnsNote := fmt.Sprintf("Note: DNS must point to %s before HTTPS is available.", serverIP)
+	if createDNSZone != "" {
+		dnsNote = fmt.Sprintf("Note: DNS A record created (%s.%s → %s).\n      Allow a few minutes for propagation before HTTPS is available.", createName, createDNSZone, serverIP)
+	}
+
+	fmt.Printf(`
+╔══════════════════════════════════════╗
+║  AIquila Nextcloud deployment done   ║
+╠══════════════════════════════════════╣
+  Server IP:  %s
+%s  SSH:        ssh -i %s root@%s
+  Nextcloud:  https://%s
+  AIquila:    installed via OCC
+╚══════════════════════════════════════╝
+
+%s
+`,
+		serverIP,
+		privateLine,
+		privKeyPath, serverIP,
+		createNCDomain,
+		dnsNote,
+	)
+	return nil
+}
+
+func printFullSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
+	privateLine := ""
+	if createNetworkName != "" {
+		for _, pn := range srv.PrivateNet {
+			if pn.Network.Name == createNetworkName {
+				privateLine = fmt.Sprintf("  Private IP: %s  (network: %s)\n", pn.IP, createNetworkName)
+				break
+			}
+		}
+	}
+
+	dnsNote := fmt.Sprintf("Note: DNS must point to %s and %s before HTTPS is available.", serverIP, serverIP)
+	if createDNSZone != "" {
+		dnsNote = fmt.Sprintf("Note: DNS A records created (%s.%s, %s.%s → %s).\n      Allow a few minutes for propagation before HTTPS is available.",
+			createName, createDNSZone, createName, createDNSZone, serverIP)
+	}
+
+	fmt.Printf(`
+╔══════════════════════════════════════╗
+║   AIquila Full deployment complete   ║
+╠══════════════════════════════════════╣
+  Server IP:  %s
+%s  SSH:        ssh -i %s root@%s
+  Nextcloud:  https://%s
+  MCP URL:    https://%s/mcp
+  AIquila:    installed via OCC
+╚══════════════════════════════════════╝
+
+%s
+`,
+		serverIP,
+		privateLine,
+		privKeyPath, serverIP,
+		createNCDomain,
+		createMCPDomain,
 		dnsNote,
 	)
 	return nil
@@ -561,12 +884,13 @@ func printDryRun(swapSize string, packages []string) error {
 	fmt.Printf(`
 ==> Dry run — no changes will be made
 
+  Stack:     %s
   Server:    %s (%s, %s, %s)
   Firewall:  %s-fw  (TCP 22/80/443, UDP 443)
   SSH key:   %s-key  (%s)
   Volume:    %s
-  Domain:    %s
-  Issuer:    https://%s
+  MCP Domain: %s
+  NC Domain:  %s
   ACME:      %s
   Monitoring: %s
 
@@ -574,12 +898,13 @@ func printDryRun(swapSize string, packages []string) error {
 
   Note: DNS must resolve to the server IP before HTTPS is available.
 `,
+		createStack,
 		createName, createType, createImage, createLocation,
 		createName,
 		createName, keyDesc,
 		volumeDesc,
-		createDomain,
-		createDomain,
+		createMCPDomain,
+		createNCDomain,
 		acme,
 		monDesc,
 		composeCmd,

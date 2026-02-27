@@ -3,35 +3,92 @@ import { query } from "@anthropic-ai/claude-code-sdk";
 const PROMPT = `
 You are an integration test agent for AIquila on Hetzner Cloud.
 
+Environment variables available:
+  HCLOUD_TOKEN, HETZNER_DNS_TOKEN, ANTHROPIC_API_KEY
+  NC_DOMAIN, MCP_DOMAIN, DNS_ZONE
+  NC_SERVER_TYPE (default: cpx21), MCP_SERVER_TYPE (default: cpx11)
+  SSH_KEY_PATH (optional)
+
 Your job:
-1. Build aiquila-hetzner: cd /workspace/hetzner && go build -o /tmp/aiquila-hetzner ./cmd/aiquila-hetzner
-2. Provision a test server:
-   /tmp/aiquila-hetzner create --domain TEST_DOMAIN --nc-url NEXTCLOUD_URL --nc-user NEXTCLOUD_USER --nc-password NEXTCLOUD_PASSWORD --name aiquila-inttest-$(date +%s) --type SERVER_TYPE --dns-zone DNS_ZONE
-3. Wait for HTTPS: poll curl -sf https://TEST_DOMAIN/.well-known/oauth-authorization-server up to 5 minutes
-4. Run OAuth test: cd /workspace && bash docker/standalone/scripts/test-oauth.sh https://TEST_DOMAIN
-5. Run tools test: cd /workspace && bash docker/standalone/scripts/test-tools.sh https://TEST_DOMAIN
-5.5. Run MCP-Connector test: cd /workspace/mcp-server/scripts && npm install --silent && MCP_URL=https://TEST_DOMAIN tsx test-mcp-connector.ts
-     This validates the full MCP-Connector path: OAuth PKCE → access_token → Messages API beta (mcp-client-2025-11-20) → Claude calls AIquila tools.
-     ANTHROPIC_API_KEY is available in the environment. NEXTCLOUD_USER and NEXTCLOUD_PASSWORD are also available.
-6. Verify Traefik TLS: curl -sI https://TEST_DOMAIN/mcp → HTTP 4xx with valid TLS
-7. Verify CrowdSec: ssh into server, docker ps | grep crowdsec → confirm Up
-8. Destroy: /tmp/aiquila-hetzner destroy --name <server-name> --dns-zone DNS_ZONE
 
-CRITICAL: Always destroy at the end, even if tests fail.
+1. Build aiquila-hetzner:
+   cd /workspace/hetzner && go build -o /tmp/aiquila-hetzner ./cmd/aiquila-hetzner
+
+2. Choose a shared timestamp suffix:
+   TS=$(date +%s)
+   NC_NAME="nc-inttest-${TS}"
+   MCP_NAME="mcp-inttest-${TS}"
+
+3. Provision the Nextcloud server (NC_SERVER_TYPE, default cpx21):
+   /tmp/aiquila-hetzner create \\
+     --stack nextcloud \\
+     --nc-domain NC_DOMAIN \\
+     --nc-admin-user admin \\
+     --nc-admin-password <generate a strong random password> \\
+     --name "${NC_NAME}" \\
+     --type NC_SERVER_TYPE \\
+     --dns-zone DNS_ZONE
+
+   Save the NC admin password used — you'll need it to configure the MCP server.
+
+4. While NC is provisioning (or after), provision the MCP server (MCP_SERVER_TYPE, default cpx11):
+   /tmp/aiquila-hetzner create \\
+     --stack mcp \\
+     --mcp-domain MCP_DOMAIN \\
+     --nc-url https://NC_DOMAIN \\
+     --nc-user admin \\
+     --nc-password <nc-admin-password-from-step-3> \\
+     --name "${MCP_NAME}" \\
+     --type MCP_SERVER_TYPE \\
+     --dns-zone DNS_ZONE
+
+   Note: The NC server creates an app password via OCC; use the Nextcloud admin password
+   as the --nc-password if no separate app password was generated.
+
+5. Wait for Nextcloud ready:
+   Poll https://NC_DOMAIN/status.php up to 5 minutes until {"installed":true}
+
+6. Verify AIquila app installed on Nextcloud:
+   curl -sf -u admin:<nc-admin-password> \\
+     https://NC_DOMAIN/ocs/v2.php/cloud/apps/aiquila \\
+     -H "OCS-APIRequest: true" | grep -q '"aiquila"'
+   → must return HTTP 200 with app data
+
+7. Wait for MCP ready:
+   Poll https://MCP_DOMAIN/.well-known/oauth-authorization-server up to 5 minutes
+
+8. Run OAuth test:
+   cd /workspace && bash docker/standalone/scripts/test-oauth.sh https://MCP_DOMAIN
+
+9. Run tools test:
+   cd /workspace && bash docker/standalone/scripts/test-tools.sh https://MCP_DOMAIN
+
+10. Run MCP-Connector test:
+    cd /workspace/mcp-server/scripts && npm install --silent
+    MCP_URL=https://MCP_DOMAIN tsx test-mcp-connector.ts
+    (ANTHROPIC_API_KEY is available in the environment)
+
+11. Verify Traefik TLS on MCP:
+    curl -sI https://MCP_DOMAIN/mcp → HTTP 4xx with valid TLS (no cert error)
+
+12. Verify CrowdSec running on MCP server:
+    SSH into MCP server and run: docker ps | grep aiq-crowdsec → confirm Up
+
+13. Destroy both servers (ALWAYS run this, even if tests fail):
+    /tmp/aiquila-hetzner destroy --name "${NC_NAME}" --dns-zone DNS_ZONE
+    /tmp/aiquila-hetzner destroy --name "${MCP_NAME}" --dns-zone DNS_ZONE
+
+CRITICAL: Always destroy both servers at the end, even if tests fail.
 Report PASS/FAIL for each step and a final summary.
-
-Env vars available: HCLOUD_TOKEN, HETZNER_DNS_TOKEN, NEXTCLOUD_URL, NEXTCLOUD_USER, NEXTCLOUD_PASSWORD, TEST_DOMAIN, DNS_ZONE, SERVER_TYPE, SSH_KEY_PATH
 `;
 
-// Substitute env vars into the prompt at runtime to avoid issues with
-// template literals expanding process.env references at module load time.
+// Substitute env vars into the prompt at runtime.
 const prompt = PROMPT
-  .replaceAll("TEST_DOMAIN", process.env.TEST_DOMAIN ?? "")
-  .replaceAll("NEXTCLOUD_URL", process.env.NEXTCLOUD_URL ?? "")
-  .replaceAll("NEXTCLOUD_USER", process.env.NEXTCLOUD_USER ?? "")
-  .replaceAll("NEXTCLOUD_PASSWORD", process.env.NEXTCLOUD_PASSWORD ?? "")
+  .replaceAll("NC_DOMAIN", process.env.NC_DOMAIN ?? "")
+  .replaceAll("MCP_DOMAIN", process.env.MCP_DOMAIN ?? "")
   .replaceAll("DNS_ZONE", process.env.DNS_ZONE ?? "")
-  .replaceAll("SERVER_TYPE", process.env.SERVER_TYPE ?? "cpx11");
+  .replaceAll("NC_SERVER_TYPE", process.env.NC_SERVER_TYPE ?? "cpx21")
+  .replaceAll("MCP_SERVER_TYPE", process.env.MCP_SERVER_TYPE ?? "cpx11");
 
 let exitCode = 1; // pessimistic default
 
