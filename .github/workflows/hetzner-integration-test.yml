@@ -90,6 +90,9 @@ jobs:
         working-directory: hetzner/scripts
         run: npm install
 
+      - name: Create /workspace symlink
+        run: sudo ln -s "$GITHUB_WORKSPACE" /workspace
+
       - name: Run integration test agent
         working-directory: hetzner/scripts
         run: npx tsx integration-test.ts
