@@ -83,13 +83,18 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: Install script dependencies
         working-directory: hetzner/scripts
         run: npm install
 
       - name: Run integration test agent
         working-directory: hetzner/scripts
-        run: npx tsx integration-test.ts
+        run: |
+          export PATH="$(dirname "$(which node)"):$PATH"
+          npx tsx integration-test.ts
 
       - name: Safety-net destroy (always runs)
         if: always()
