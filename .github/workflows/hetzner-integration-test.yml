@@ -20,6 +20,30 @@ on:
         description: 'Hetzner server type for MCP server'
         required: false
         default: 'cpx11'
+      run_oauth_test:
+        description: 'Run OAuth PKCE flow test'
+        type: boolean
+        default: true
+      run_tools_test:
+        description: 'Run MCP tools functional test'
+        type: boolean
+        default: true
+      run_mcp_protocol_test:
+        description: 'Run MCP protocol conformance check'
+        type: boolean
+        default: true
+      run_nc_app_test:
+        description: 'Run Nextcloud AIquila app API check'
+        type: boolean
+        default: true
+      run_connector_test:
+        description: 'Run MCP-Connector test (uses Anthropic API)'
+        type: boolean
+        default: false
+      run_infra_test:
+        description: 'Run infrastructure checks (TLS, CrowdSec)'
+        type: boolean
+        default: true
 
 jobs:
   integration-test:
@@ -33,9 +57,21 @@ jobs:
       DNS_ZONE: ${{ inputs.dns_zone }}
       NC_SERVER_TYPE: ${{ inputs.nc_server_type }}
       MCP_SERVER_TYPE: ${{ inputs.mcp_server_type }}
+      RUN_OAUTH_TEST: ${{ inputs.run_oauth_test }}
+      RUN_TOOLS_TEST: ${{ inputs.run_tools_test }}
+      RUN_MCP_PROTOCOL_TEST: ${{ inputs.run_mcp_protocol_test }}
+      RUN_NC_APP_TEST: ${{ inputs.run_nc_app_test }}
+      RUN_CONNECTOR_TEST: ${{ inputs.run_connector_test }}
+      RUN_INFRA_TEST: ${{ inputs.run_infra_test }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Mask sensitive inputs
+        run: |
+          echo "::add-mask::${{ inputs.nc_domain }}"
+          echo "::add-mask::${{ inputs.mcp_domain }}"
+          echo "::add-mask::${{ inputs.dns_zone }}"
 
       - name: Set up Go
         uses: actions/setup-go@v5

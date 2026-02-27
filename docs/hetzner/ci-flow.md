@@ -33,12 +33,14 @@ a named reviewer before secrets are exposed.
 | AIquila OCC install | ~1 min | tarball download + `occ app:enable` |
 | Poll NC ready (`/status.php`) | 0–5 min | Usually done during MCP provision |
 | Poll MCP ready (`/.well-known`) | 0–2 min | |
-| OAuth test | ~1 min | Full PKCE flow |
-| Tools test | ~2 min | 8 tool operations |
-| MCP-Connector test | ~2 min | Claude API round-trip |
-| TLS + CrowdSec verification | ~1 min | |
+| OAuth test _(group: oauth)_ | ~1 min | Full PKCE flow |
+| Tools test _(group: tools)_ | ~2 min | 8 tool operations |
+| MCP protocol conformance _(group: mcp_protocol)_ | ~1 min | Raw JSON-RPC assertions on `initialize` + `tools/list` |
+| NC app API check _(group: nc_app)_ | <1 min | REST endpoint smoke test |
+| MCP-Connector test _(group: connector, off by default)_ | ~2 min | Anthropic API round-trip |
+| TLS + CrowdSec _(group: infra)_ | ~1 min | |
 | Destroy both servers | ~2 min | Always runs (cleanup step) |
-| **Total** | **~25 min** | NC + MCP provision can be parallelised |
+| **Total** | **~27 min** | NC + MCP provision can be parallelised |
 
 > **Parallelism opportunity:** NC and MCP servers can be provisioned concurrently since they are
 > independent. The integration-test script currently provisions them sequentially; a future
@@ -52,11 +54,13 @@ a named reviewer before secrets are exposed.
 |--------|----------|
 | `HCLOUD_TOKEN` | Server provisioning and destroy |
 | `HETZNER_DNS_TOKEN` | DNS A/AAAA record creation |
-| `ANTHROPIC_API_KEY` | MCP-Connector test (Claude API round-trip) |
+| `ANTHROPIC_API_KEY` | Drives the Claude agent; also used by the connector test if enabled |
 
 ---
 
 ### Inputs
+
+#### Infrastructure
 
 | Input | Default | Description |
 |-------|---------|-------------|
@@ -66,6 +70,17 @@ a named reviewer before secrets are exposed.
 | `nc_server_type` | `cpx21` | NC server — 4 vCPU, 8 GB RAM |
 | `mcp_server_type` | `cpx11` | MCP server — 2 vCPU, 2 GB RAM |
 
+#### Test group toggles (boolean)
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `run_oauth_test` | `true` | OAuth PKCE flow (step 8) |
+| `run_tools_test` | `true` | MCP tools functional test (step 9) |
+| `run_mcp_protocol_test` | `true` | MCP JSON-RPC conformance assertions (step 10) |
+| `run_nc_app_test` | `true` | NC AIquila app REST smoke test (step 11) |
+| `run_connector_test` | `false` | MCP-Connector round-trip — uses Anthropic API (step 12) |
+| `run_infra_test` | `true` | TLS certificate + CrowdSec checks (steps 13–14) |
+
 ---
 
 ### Cost per run
@@ -74,11 +89,13 @@ a named reviewer before secrets are exposed.
 |----------|------|-------------------|
 | Hetzner cpx21 (NC) | ~€0.004/h | < €0.003 |
 | Hetzner cpx11 (MCP) | ~€0.002/h | < €0.002 |
-| Anthropic API (MCP-Connector test) | ~$0.10–$0.50 | varies |
+| Anthropic API — Claude agent | ~$0.10–$0.50 | varies; dominates |
+| Anthropic API — connector test | ~$0.05–$0.20 | only when `run_connector_test=true` |
 | **Total** | | **< €0.01 infra; API costs dominate** |
 
-Infrastructure costs are essentially negligible. The Anthropic API call for the MCP-Connector
-test is the dominant cost (~$0.10–$0.50 per run depending on prompt complexity).
+Infrastructure costs are essentially negligible. The Anthropic API call that drives the Claude
+agent is the dominant cost (~$0.10–$0.50 per run). Enabling the connector test adds a further
+~$0.05–$0.20 for the Anthropic API round-trip.
 
 ---
 
