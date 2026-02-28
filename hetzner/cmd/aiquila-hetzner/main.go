@@ -55,6 +55,7 @@ var (
 	createVolumeSize int
 	createLUKS       bool
 	createDryRun     bool
+	createNoConfirm  bool
 	createLabels        []string
 	createDNSZone       string
 	createDNSToken      string
@@ -161,6 +162,8 @@ func buildCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&createSwap, "swap", "", "Create a swap file of this size (e.g. 1G, 2G) — useful for cpx11/cx22 instances")
 	cmd.Flags().StringVar(&createConfig, "config", "", "Path to YAML or JSON deployment config file")
 	cmd.Flags().StringArrayVar(&createPackages, "package", nil, "Extra package to install via cloud-init (repeatable; distro-native pkg manager)")
+	cmd.Flags().BoolVar(&createNoConfirm, "noconfirm", false,
+		"Skip interactive prompts; all warnings are still printed (useful for CI/CD)")
 
 	return cmd
 }
@@ -351,6 +354,11 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 		return printDryRun(createSwap, packages)
 	}
 
+	// ── 5b. Cost confirmation ───────────────────────────────────────────────
+	if err := confirmCost(createType, createLocation, createNoConfirm); err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 	fmt.Printf("==> aiquila-hetzner create (stack=%s)\n", createStack)
 	appLog.Info("start", "creating server",
@@ -424,81 +432,105 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	serverIP := srv.PublicNet.IPv4.IP.String()
 	appLog.Info("server", "server created", "server", createName, "ip", serverIP)
 
-	// ── 10. DNS record (before Traefik starts requesting certs) ───────────
-	if createDNSZone != "" {
-		fmt.Println("\n── DNS")
-		dnsToken, err := dns.ResolveToken(createDNSToken, globalProfile)
-		if err != nil {
+	// provisionedSrv is non-nil once the server exists; used for partial-failure handling.
+	provisionedSrv := srv
+
+	provisionErr := func() error {
+		// ── 10. DNS record (before Traefik starts requesting certs) ───────────
+		if createDNSZone != "" {
+			fmt.Println("\n── DNS")
+			dnsToken, err := dns.ResolveToken(createDNSToken, globalProfile)
+			if err != nil {
+				return err
+			}
+			if err := dns.EnsureRecord(ctx, dnsToken, createDNSZone, createName, serverIP, "A"); err != nil {
+				return err
+			}
+			ipv6 := srv.PublicNet.IPv6.IP
+			if ipv6 != nil && !ipv6.IsUnspecified() {
+				// Use the first host address of the /64 prefix (/64 → ::1 suffix).
+				ipv6Host := ipv6.Mask(srv.PublicNet.IPv6.Network.Mask)
+				ipv6Host[len(ipv6Host)-1] = 1
+				if err := dns.EnsureRecord(ctx, dnsToken, createDNSZone, createName, ipv6Host.String(), "AAAA"); err != nil {
+					return err
+				}
+			}
+		}
+
+		// ── 11. Create firewall + attach to server ─────────────────────────────
+		fmt.Println("\n── Firewall")
+		if _, err := firewall.Setup(ctx, client, createName+"-fw", srv, labels, createSSHAllowCIDR); err != nil {
 			return err
 		}
-		if err := dns.EnsureRecord(ctx, dnsToken, createDNSZone, createName, serverIP, "A"); err != nil {
-			return err
-		}
-		ipv6 := srv.PublicNet.IPv6.IP
-		if ipv6 != nil && !ipv6.IsUnspecified() {
-			// Use the first host address of the /64 prefix (/64 → ::1 suffix).
-			ipv6Host := ipv6.Mask(srv.PublicNet.IPv6.Network.Mask)
-			ipv6Host[len(ipv6Host)-1] = 1
-			if err := dns.EnsureRecord(ctx, dnsToken, createDNSZone, createName, ipv6Host.String(), "AAAA"); err != nil {
+
+		// ── 12. Create + attach Hetzner Cloud Volume (if requested) ────────────
+		var volumeDevicePath string
+		if createVolumeSize > 0 {
+			fmt.Println("\n── Cloud Volume")
+			var err error
+			_, volumeDevicePath, err = volume.Create(ctx, client, srv, createName+"-vol", createVolumeSize, labels)
+			if err != nil {
 				return err
 			}
 		}
-	}
 
-	// ── 11. Create firewall + attach to server ─────────────────────────────
-	fmt.Println("\n── Firewall")
-	if _, err := firewall.Setup(ctx, client, createName+"-fw", srv, labels, createSSHAllowCIDR); err != nil {
-		return err
-	}
-
-	// ── 12. Create + attach Hetzner Cloud Volume (if requested) ────────────
-	var volumeDevicePath string
-	if createVolumeSize > 0 {
-		fmt.Println("\n── Cloud Volume")
-		_, volumeDevicePath, err = volume.Create(ctx, client, srv, createName+"-vol", createVolumeSize, labels)
+		// ── 13. Wait for SSH ────────────────────────────────────────────────────
+		fmt.Println("\n── Waiting for SSH")
+		sshClient, err := provision.WaitAndDial(serverIP, privKeyPath)
 		if err != nil {
 			return err
 		}
-	}
+		defer sshClient.Close()
 
-	// ── 13. Wait for SSH ────────────────────────────────────────────────────
-	fmt.Println("\n── Waiting for SSH")
-	sshClient, err := provision.WaitAndDial(serverIP, privKeyPath)
-	if err != nil {
-		return err
-	}
-	defer sshClient.Close()
+		appLog.Info("ssh", "SSH connected", "ip", serverIP)
 
-	appLog.Info("ssh", "SSH connected", "ip", serverIP)
+		// ── 14. Wait for cloud-init to finish ───────────────────────────────────
+		fmt.Println("\n── Waiting for cloud-init / Docker install")
+		if err := provision.WaitCloudInit(sshClient); err != nil {
+			return err
+		}
 
-	// ── 14. Wait for cloud-init to finish ───────────────────────────────────
-	fmt.Println("\n── Waiting for cloud-init / Docker install")
-	if err := provision.WaitCloudInit(sshClient); err != nil {
-		return err
-	}
-
-	// ── 15. Format + mount volume (if requested) ────────────────────────────
-	if createVolumeSize > 0 {
-		fmt.Println("\n── Mounting volume")
-		if createLUKS {
-			if err := volume.SetupLUKS(sshClient, volumeDevicePath); err != nil {
-				return err
+		// ── 15. Format + mount volume (if requested) ────────────────────────────
+		if createVolumeSize > 0 {
+			fmt.Println("\n── Mounting volume")
+			if createLUKS {
+				if err := volume.SetupLUKS(sshClient, volumeDevicePath); err != nil {
+					return err
+				}
+			} else {
+				if err := volume.FormatAndMount(sshClient, volumeDevicePath); err != nil {
+					return err
+				}
 			}
+		}
+
+		// ── 16. Stack-specific provisioning ─────────────────────────────────────
+		switch createStack {
+		case "mcp":
+			return provisionMCPStack(sshClient, srv, serverIP, privKeyPath)
+		case "nextcloud":
+			return provisionNCStack(sshClient, srv, serverIP, privKeyPath)
+		case "full":
+			return provisionFullStack(sshClient, srv, serverIP, privKeyPath)
+		}
+		return nil
+	}()
+
+	if provisionErr != nil {
+		printPartialSummary(provisionedSrv, privKeyPath)
+		if createNoConfirm {
+			fmt.Println("\n  --noconfirm set — deleting partial deployment…")
+			_ = cleanupServer(ctx, client, createName, createDNSZone, createDNSToken)
 		} else {
-			if err := volume.FormatAndMount(sshClient, volumeDevicePath); err != nil {
-				return err
+			if !askKeepOrDelete() {
+				fmt.Println("\n── Deleting partial deployment")
+				_ = cleanupServer(ctx, client, createName, createDNSZone, createDNSToken)
+			} else {
+				fmt.Printf("\n  Keeping server.  To delete later:\n"+
+					"    aiquila-hetzner delete --name %s\n", createName)
 			}
 		}
-	}
-
-	// ── 16. Stack-specific provisioning ─────────────────────────────────────
-	switch createStack {
-	case "mcp":
-		return provisionMCPStack(sshClient, srv, serverIP, privKeyPath)
-	case "nextcloud":
-		return provisionNCStack(sshClient, srv, serverIP, privKeyPath)
-	case "full":
-		return provisionFullStack(sshClient, srv, serverIP, privKeyPath)
+		return provisionErr
 	}
 	return nil
 }
@@ -751,6 +783,52 @@ echo "AIquila app enabled."
 	}
 	fmt.Print(out)
 	return nil
+}
+
+// confirmCost prints a cost warning and, unless noConfirm is set, prompts the
+// user to confirm before the first billable API call.
+func confirmCost(serverType, location string, noConfirm bool) error {
+	fmt.Printf("\n⚠  This will create a Hetzner Cloud server (%s in %s) and incur costs.\n",
+		serverType, location)
+	if noConfirm {
+		fmt.Println("   --noconfirm set — proceeding automatically.")
+		return nil
+	}
+	fmt.Print("   Continue? [y/N]: ")
+	var answer string
+	fmt.Scanln(&answer)
+	if answer != "y" && answer != "Y" {
+		return fmt.Errorf("aborted by user")
+	}
+	return nil
+}
+
+// printPartialSummary prints a banner for a server that was created but whose
+// provisioning did not complete, so the user knows it is still running.
+func printPartialSummary(srv *hcloud.Server, privKeyPath string) {
+	ip := srv.PublicNet.IPv4.IP.String()
+	price := serverPriceStr(srv)
+	w := 44
+	fmt.Println()
+	fmt.Printf("╔%s╗\n", strings.Repeat("═", w))
+	fmt.Printf("║  %-*s║\n", w-2, "⚠  Partial deployment — server is live")
+	fmt.Printf("╠%s╣\n", strings.Repeat("═", w))
+	fmt.Printf("  Name:    %s\n", srv.Name)
+	fmt.Printf("  Server:  %s\n", ip)
+	fmt.Printf("  SSH:     ssh -i %s root@%s\n", privKeyPath, ip)
+	if price != "" {
+		fmt.Printf("  Cost:    %s  ← still accruing\n", price)
+	}
+	fmt.Printf("╚%s╝\n", strings.Repeat("═", w))
+}
+
+// askKeepOrDelete asks the user whether to keep or delete the partial server.
+// Returns true = keep, false = delete.
+func askKeepOrDelete() bool {
+	fmt.Print("\n  Keep this server? [y/N]: ")
+	var answer string
+	fmt.Scanln(&answer)
+	return answer == "y" || answer == "Y"
 }
 
 func printMCPSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
