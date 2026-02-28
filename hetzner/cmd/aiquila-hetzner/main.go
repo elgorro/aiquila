@@ -1116,11 +1116,13 @@ package_update: true
     set -e
     . /etc/os-release
     if command -v dnf >/dev/null 2>&1; then
-      dnf -y install dnf-plugins-core
-      # Fedora uses its own repo; CentOS/Rocky/AlmaLinux use the centos repo
+      # Fedora 42+ uses DNF5 which dropped the config-manager --add-repo syntax;
+      # download the .repo file directly instead (works on DNF4 and DNF5).
       if [ "$ID" = "fedora" ]; then
-        dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+        curl -fsSL https://download.docker.com/linux/fedora/docker-ce.repo \
+          -o /etc/yum.repos.d/docker-ce.repo
       else
+        dnf -y install dnf-plugins-core
         dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
       fi
       dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
