@@ -30,6 +30,26 @@ type DeployConfig struct {
 	SSHKey     string   `yaml:"ssh_key"     json:"ssh_key"`
 	Token      string   `yaml:"token"       json:"token"`
 	Packages   []string `yaml:"packages"    json:"packages"`
+	// Infrastructure
+	Stack      string `yaml:"stack"       json:"stack"`
+	Image      string `yaml:"image"       json:"image"`
+	Location   string `yaml:"location"    json:"location"`
+	Type       string `yaml:"type"        json:"type"`
+	Swap       string `yaml:"swap"        json:"swap"`
+	VolumeSize int    `yaml:"volume_size" json:"volume_size"`
+	LUKS       bool   `yaml:"luks"        json:"luks"`
+	Network    string `yaml:"network"     json:"network"`
+	Labels     []string `yaml:"labels"    json:"labels"`
+	// DNS
+	DNSZone  string `yaml:"dns_zone"  json:"dns_zone"`
+	DNSToken string `yaml:"dns_token" json:"dns_token"`
+	// SSH
+	SSHAllowCIDR string `yaml:"ssh_allow_cidr" json:"ssh_allow_cidr"`
+	// Nextcloud self-hosted (--stack nextcloud/full)
+	NCDomain         string `yaml:"nc_domain"          json:"nc_domain"`
+	NCAdminUser      string `yaml:"nc_admin_user"      json:"nc_admin_user"`
+	NCAdminPassword  string `yaml:"nc_admin_password"  json:"nc_admin_password"`
+	NCAppVersion     string `yaml:"nc_app_version"     json:"nc_app_version"`
 }
 
 var (
