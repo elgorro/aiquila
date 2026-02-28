@@ -1,0 +1,93 @@
+# AIquila MCP-only deployment
+# Stack: mcp — runs the MCP server; Nextcloud is hosted externally.
+#
+# Usage:
+#   aiquila-hetzner create --config deploy-mcp.yaml
+#
+# All commented fields are optional. Remove the '#' to activate them.
+
+# ── Stack ─────────────────────────────────────────────────────────────────────
+stack: mcp
+
+# ── Hetzner Cloud API token ───────────────────────────────────────────────────
+# Falls back to the HCLOUD_TOKEN environment variable when omitted.
+token: YOUR_HCLOUD_TOKEN
+
+# ── MCP server domain ─────────────────────────────────────────────────────────
+# Fully-qualified domain name that will be used for the MCP server.
+# A Let's Encrypt TLS certificate is issued automatically.
+domain: mcp.example.com
+
+# ── External Nextcloud connection ─────────────────────────────────────────────
+# The MCP server connects to an existing Nextcloud instance.
+nc_url: https://nextcloud.example.com
+nc_user: admin
+nc_password: YOUR_NEXTCLOUD_APP_PASSWORD
+
+# ── Server configuration ──────────────────────────────────────────────────────
+# name:     custom server name in Hetzner (default: auto-generated)
+# image:    OS image (default: fedora-43)
+# location: Hetzner datacenter (default: nbg1 — Nuremberg)
+#           Other options: fsn1 (Falkenstein), hel1 (Helsinki), ash (Ashburn),
+#           sin (Singapore)
+# type:     server type (default: cpx11 — 2 vCPU, 2 GB RAM)
+#           See: hcloud server-type list
+# swap:     swap file size, e.g. "2G" (default: no swap)
+#
+# name:     mcp-prod
+# image:    fedora-43
+# location: nbg1
+# type:     cpx11
+# swap:     2G
+
+# ── SSH key ───────────────────────────────────────────────────────────────────
+# Path to an existing SSH public key to authorise on the server.
+# Supports ~ expansion.  When omitted, a new ed25519 key pair is generated at
+# ~/.ssh/aiquila_ed25519 and the public half is uploaded automatically.
+#
+# ssh_key: ~/.ssh/id_ed25519.pub
+
+# ── Encrypted data volume ─────────────────────────────────────────────────────
+# Attach a separate Hetzner volume for Nextcloud / app data.
+# volume_size must be > 0 when luks: true.
+#
+# volume_size: 20   # GiB
+# luks: true        # encrypt the volume with LUKS (requires volume_size > 0)
+
+# ── TLS / ACME ────────────────────────────────────────────────────────────────
+# Email address for Let's Encrypt certificate notifications.
+# Required by the ACME ToS but otherwise optional.
+#
+# acme_email: ops@example.com
+
+# ── Monitoring (MCP stack only) ───────────────────────────────────────────────
+# Set to true to deploy Prometheus + Grafana alongside the MCP server.
+#
+# monitoring: false
+
+# ── Automatic DNS (Hetzner DNS API) ───────────────────────────────────────────
+# When set, an A record is created / updated automatically for `domain`.
+# Falls back to the HETZNER_DNS_TOKEN environment variable when dns_token is
+# omitted but dns_zone is present.
+#
+# dns_zone:  example.com
+# dns_token: YOUR_HETZNER_DNS_TOKEN
+
+# ── Firewall: SSH access restriction ─────────────────────────────────────────
+# Restrict SSH (port 22) to a specific CIDR range.  Default: unrestricted.
+#
+# ssh_allow_cidr: 203.0.113.0/24
+
+# ── Server labels ─────────────────────────────────────────────────────────────
+# Key=value labels attached to the Hetzner server resource.
+#
+# labels:
+#   - env=production
+#   - team=platform
+
+# ── Extra OS packages ─────────────────────────────────────────────────────────
+# Additional packages installed via cloud-init on first boot.
+#
+# packages:
+#   - htop
+#   - ncdu

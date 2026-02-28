@@ -1,0 +1,98 @@
+# AIquila Nextcloud-only deployment
+# Stack: nextcloud — self-hosted Nextcloud with the AIquila app pre-installed.
+# Use this when you want to run Nextcloud on Hetzner and connect an external
+# (or separately deployed) MCP server to it.
+#
+# Usage:
+#   aiquila-hetzner create --config deploy-nc.yaml
+#
+# All commented fields are optional. Remove the '#' to activate them.
+
+# ── Stack ─────────────────────────────────────────────────────────────────────
+stack: nextcloud
+
+# ── Hetzner Cloud API token ───────────────────────────────────────────────────
+# Falls back to the HCLOUD_TOKEN environment variable when omitted.
+token: YOUR_HCLOUD_TOKEN
+
+# ── Nextcloud domain ──────────────────────────────────────────────────────────
+# Fully-qualified domain name for the Nextcloud instance.
+# A Let's Encrypt TLS certificate is issued automatically.
+nc_domain: nextcloud.example.com
+
+# ── Nextcloud admin credentials ───────────────────────────────────────────────
+# The admin account is created during first-run setup.
+# nc_admin_user defaults to "admin" when omitted.
+nc_admin_password: CHANGE_ME_STRONG_PASSWORD
+# nc_admin_user: admin
+
+# ── AIquila app version ───────────────────────────────────────────────────────
+# Pin a specific release of the AIquila Nextcloud app.
+# Defaults to the latest published release when omitted.
+#
+# nc_app_version: 0.4.1
+
+# ── Server configuration ──────────────────────────────────────────────────────
+# name:     custom server name in Hetzner (default: auto-generated)
+# image:    OS image (default: fedora-43)
+# location: Hetzner datacenter (default: nbg1 — Nuremberg)
+#           Other options: fsn1 (Falkenstein), hel1 (Helsinki), ash (Ashburn),
+#           sin (Singapore)
+# type:     server type (default: cpx31 — 4 vCPU, 8 GB RAM)
+#           Nextcloud is memory-intensive; cpx31 is the recommended minimum.
+#           See: hcloud server-type list
+# swap:     swap file size, e.g. "2G" (default: no swap)
+#
+# name:     nc-prod
+# image:    fedora-43
+# location: nbg1
+# type:     cpx31
+# swap:     2G
+
+# ── SSH key ───────────────────────────────────────────────────────────────────
+# Path to an existing SSH public key to authorise on the server.
+# Supports ~ expansion.  When omitted, a new ed25519 key pair is generated at
+# ~/.ssh/aiquila_ed25519 and the public half is uploaded automatically.
+#
+# ssh_key: ~/.ssh/id_ed25519.pub
+
+# ── Encrypted data volume ─────────────────────────────────────────────────────
+# Strongly recommended for production: keeps Nextcloud data on a separate,
+# resizable volume and optionally encrypts it with LUKS.
+# volume_size must be > 0 when luks: true.
+#
+# volume_size: 50   # GiB — Nextcloud data directory lives here
+# luks: true        # encrypt the volume with LUKS (requires volume_size > 0)
+
+# ── TLS / ACME ────────────────────────────────────────────────────────────────
+# Email address for Let's Encrypt certificate notifications.
+# Required by the ACME ToS but otherwise optional.
+#
+# acme_email: ops@example.com
+
+# ── Automatic DNS (Hetzner DNS API) ───────────────────────────────────────────
+# When set, an A record is created / updated automatically for `nc_domain`.
+# Falls back to the HETZNER_DNS_TOKEN environment variable when dns_token is
+# omitted but dns_zone is present.
+#
+# dns_zone:  example.com
+# dns_token: YOUR_HETZNER_DNS_TOKEN
+
+# ── Firewall: SSH access restriction ─────────────────────────────────────────
+# Restrict SSH (port 22) to a specific CIDR range.  Default: unrestricted.
+#
+# ssh_allow_cidr: 203.0.113.0/24
+
+# ── Server labels ─────────────────────────────────────────────────────────────
+# Key=value labels attached to the Hetzner server resource.
+#
+# labels:
+#   - env=production
+#   - team=platform
+
+# ── Extra OS packages ─────────────────────────────────────────────────────────
+# Additional packages installed via cloud-init on first boot.
+#
+# packages:
+#   - htop
+#   - ncdu

@@ -1116,7 +1116,7 @@ package_update: true
     set -e
     . /etc/os-release
     if command -v dnf >/dev/null 2>&1; then
-      # Fedora 42+ uses DNF5 which dropped the config-manager --add-repo syntax;
+      # Fedora 41+ uses DNF5 which dropped the config-manager --add-repo syntax;
       # download the .repo file directly instead (works on DNF4 and DNF5).
       if [ "$ID" = "fedora" ]; then
         curl -fsSL https://download.docker.com/linux/fedora/docker-ce.repo \
