@@ -44,6 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -52,6 +53,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: hetzner/go.mod
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
 
       - name: Build Linux binaries
         run: |
@@ -62,6 +66,17 @@ jobs:
             -o ../dist/aiquila-hetzner-linux-amd64 ./cmd/aiquila-hetzner
           GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=${VERSION}" \
             -o ../dist/aiquila-hetzner-linux-arm64 ./cmd/aiquila-hetzner
+
+      - name: Generate checksums and sign artifacts
+        run: |
+          cd dist
+          sha256sum aiquila-hetzner-linux-amd64 aiquila-hetzner-linux-arm64 > checksums.txt
+          for f in aiquila-hetzner-linux-amd64 aiquila-hetzner-linux-arm64 checksums.txt; do
+            cosign sign-blob --yes \
+              --output-signature "${f}.sig" \
+              --output-certificate "${f}.pem" \
+              "${f}"
+          done
 
       - name: Create Git tag
         run: |
@@ -110,6 +125,23 @@ jobs:
             aiquila-hetzner --version
             ```
 
+            ### Verify integrity
+
+            **Checksum (simple):**
+            ```bash
+            sha256sum --check checksums.txt
+            ```
+
+            **Cosign (cryptographic, proves built by this repo's CI):**
+            ```bash
+            cosign verify-blob \
+              --certificate=aiquila-hetzner-linux-amd64.pem \
+              --signature=aiquila-hetzner-linux-amd64.sig \
+              --certificate-identity-regexp="https://github.com/${{ github.repository }}/.github/workflows/hetzner-release.yml" \
+              --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+              aiquila-hetzner-linux-amd64
+            ```
+
             ### Requirements
             - `HCLOUD_TOKEN` environment variable (Hetzner Cloud API token)
             - Nextcloud instance with app password
@@ -118,7 +150,14 @@ jobs:
             *This release was automatically created by GitHub Actions*
           files: |
             dist/aiquila-hetzner-linux-amd64
+            dist/aiquila-hetzner-linux-amd64.sig
+            dist/aiquila-hetzner-linux-amd64.pem
             dist/aiquila-hetzner-linux-arm64
+            dist/aiquila-hetzner-linux-arm64.sig
+            dist/aiquila-hetzner-linux-arm64.pem
+            dist/checksums.txt
+            dist/checksums.txt.sig
+            dist/checksums.txt.pem
           draft: false
           prerelease: false
         env:
