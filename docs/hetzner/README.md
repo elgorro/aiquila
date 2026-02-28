@@ -1,7 +1,7 @@
 # AIquila — Hetzner Deployment
 
 `aiquila-hetzner` is a single-binary CLI written in Go that provisions a
-production-ready AIquila MCP server on Hetzner Cloud with one command.
+production-ready AIquila stack on Hetzner Cloud with one command.
 
 ---
 
@@ -17,9 +17,21 @@ production-ready AIquila MCP server on Hetzner Cloud with one command.
 - Traefik reverse proxy with automatic TLS (Let's Encrypt)
 - CrowdSec intrusion prevention
 - `.env` generated from your credentials
-- Optional Prometheus + Grafana monitoring stack
+- Optional Prometheus + Grafana monitoring stack (MCP stack only)
 - Optional Hetzner DNS A/AAAA record creation
 - Optional private network attachment
+
+---
+
+## Stacks
+
+Three deployment configurations are supported via `--stack`:
+
+| Stack | Flag | Description |
+|-------|------|-------------|
+| `mcp` | `--stack mcp` | MCP server only; Nextcloud is hosted externally (default) |
+| `nextcloud` | `--stack nextcloud` | Nextcloud + AIquila app only |
+| `full` | `--stack full` | Nextcloud + MCP on a single server |
 
 ---
 
@@ -27,7 +39,8 @@ production-ready AIquila MCP server on Hetzner Cloud with one command.
 
 - Hetzner Cloud account + API token (`$HCLOUD_TOKEN`)
 - (Optional) Hetzner DNS token (`$HETZNER_DNS_TOKEN`) for DNS automation
-- Existing Nextcloud instance with an app-password
+- For `--stack mcp`: existing Nextcloud instance with an app password
+- For `--stack nextcloud` / `full`: domain name for the Nextcloud server
 - Domain that points to (or will be pointed to) the server IP
 - Go 1.22+ to build from source
 
@@ -48,14 +61,31 @@ sudo mv aiquila-hetzner /usr/local/bin/
 ```bash
 export HCLOUD_TOKEN=your_token
 
+# MCP-only (external Nextcloud):
 aiquila-hetzner create \
-  --domain mcp.example.com \
+  --mcp-domain mcp.example.com \
   --nc-url https://nextcloud.example.com \
   --nc-user admin \
   --nc-password your-app-password
+
+# Nextcloud-only:
+aiquila-hetzner create \
+  --stack nextcloud \
+  --nc-domain nc.example.com \
+  --nc-admin-password your-admin-password
+
+# Full stack (NC + MCP on one server):
+aiquila-hetzner create \
+  --stack full \
+  --mcp-domain mcp.example.com \
+  --nc-domain nc.example.com \
+  --nc-admin-password your-admin-password
 ```
 
 Use `--dry-run` to preview what would be created without making any API calls.
+
+The CLI prints a cost warning and asks for confirmation before the first
+billable API call. Use `--noconfirm` to skip the prompt in CI/CD pipelines.
 
 ---
 
@@ -74,7 +104,7 @@ aiquila-hetzner profile add --name myprofile \
   --acme-email me@example.com
 
 # Use it once
-aiquila-hetzner create --profile myprofile --domain mcp.example.com
+aiquila-hetzner create --profile myprofile --mcp-domain mcp.example.com
 
 # Set as default
 aiquila-hetzner profile use --name myprofile
@@ -100,43 +130,43 @@ aiquila-hetzner profile delete --name myprofile
 ## Config file (DeployConfig)
 
 Pass a YAML or JSON file with `--config` to avoid repeating flags. CLI flags
-override config file values.
-
-```yaml
-# deploy.yaml
-name: my-server
-domain: mcp.example.com
-nc_url: https://nextcloud.example.com/
-nc_user: admin
-nc_password: app_password_here
-acme_email: admin@example.com
-monitoring: true
-ssh_key: ~/.ssh/id_ed25519.pub
-token: hcloud_token_here
-packages:
-  - htop
-  - git
-```
+override config file values. Ready-to-use templates live in `hetzner/examples/`.
 
 ```bash
-aiquila-hetzner create --config deploy.yaml
-aiquila-hetzner rebuild --config deploy.yaml
+aiquila-hetzner create --config hetzner/examples/deploy-mcp.yaml
+aiquila-hetzner rebuild --config hetzner/examples/deploy-mcp.yaml
 ```
 
 **Field reference:**
 
-| Field | Type | CLI flag |
-|-------|------|----------|
-| `name` | string | `--name` |
-| `domain` | string | `--domain` |
-| `nc_url` | string | `--nc-url` |
-| `nc_user` | string | `--nc-user` |
-| `nc_password` | string | `--nc-password` |
-| `acme_email` | string | `--acme-email` |
-| `monitoring` | bool | `--monitoring` |
-| `ssh_key` | string | `--ssh-key` |
-| `token` | string | `--token` |
-| `packages` | []string | `--package` (repeatable) |
+| Field | Type | CLI flag | Notes |
+|-------|------|----------|-------|
+| `name` | string | `--name` | Default: `aiquila-<random>` |
+| `stack` | string | `--stack` | `mcp` (default) / `nextcloud` / `full` |
+| `domain` | string | `--mcp-domain` | FQDN for the MCP server |
+| `nc_domain` | string | `--nc-domain` | FQDN for Nextcloud (nextcloud/full stacks) |
+| `nc_url` | string | `--nc-url` | External NC URL (mcp stack) |
+| `nc_user` | string | `--nc-user` | External NC username (mcp stack) |
+| `nc_password` | string | `--nc-password` | External NC app password (mcp stack) |
+| `nc_admin_user` | string | `--nc-admin-user` | NC admin username (nextcloud/full; default: `admin`) |
+| `nc_admin_password` | string | `--nc-admin-password` | NC admin password (nextcloud/full) |
+| `nc_app_version` | string | `--nc-app-version` | AIquila app version (nextcloud/full; default: `latest`) |
+| `acme_email` | string | `--acme-email` | Let's Encrypt expiry notices |
+| `monitoring` | bool | `--monitoring` | Prometheus + Grafana (mcp stack only) |
+| `ssh_key` | string | `--ssh-key` | Path to existing SSH public key |
+| `token` | string | `--token` | Hetzner API token |
+| `type` | string | `--type` | Server type (default: `cpx21`) |
+| `image` | string | `--image` | OS image (default: `fedora-41`) |
+| `location` | string | `--location` | Datacenter (default: `nbg1`) |
+| `swap` | string | `--swap` | Swap file size, e.g. `2G` |
+| `volume_size` | int | `--volume-size` | Cloud Volume size in GB |
+| `luks` | bool | `--luks` | LUKS-encrypt the volume |
+| `network` | string | `--network` | Attach to an existing private network |
+| `labels` | []string | `--label` | Resource labels `key=value` (repeatable) |
+| `dns_zone` | string | `--dns-zone` | Hetzner DNS zone for auto-record creation |
+| `dns_token` | string | `--dns-token` | Hetzner DNS API token |
+| `ssh_allow_cidr` | string | `--ssh-allow-cidr` | Restrict SSH to this CIDR |
+| `packages` | []string | `--package` | Extra OS packages via cloud-init (repeatable) |
 
 ---
 
@@ -155,19 +185,42 @@ aiquila-hetzner rebuild --config deploy.yaml
 
 Provision a new AIquila server end-to-end.
 
-**Required:**
+**Stack selection:**
 
-| Flag | Description |
-|------|-------------|
-| `--domain` | FQDN for HTTPS and `MCP_AUTH_ISSUER` |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--stack` | `mcp` | `mcp` / `nextcloud` / `full` |
 
-**Nextcloud connection** (or env vars / profile):
+**Required — `--stack mcp`:**
 
 | Flag | Env var | Description |
 |------|---------|-------------|
-| `--nc-url` | `NEXTCLOUD_URL` | Nextcloud URL |
-| `--nc-user` | `NEXTCLOUD_USER` | Nextcloud username |
+| `--mcp-domain` | — | FQDN for the MCP server |
+| `--nc-url` | `NEXTCLOUD_URL` | External Nextcloud URL |
+| `--nc-user` | `NEXTCLOUD_USER` | External Nextcloud username |
 | `--nc-password` | `NEXTCLOUD_PASSWORD` | Nextcloud app password |
+
+**Required — `--stack nextcloud`:**
+
+| Flag | Description |
+|------|-------------|
+| `--nc-domain` | FQDN for the Nextcloud server |
+| `--nc-admin-password` | Nextcloud admin password |
+
+**Required — `--stack full`:**
+
+| Flag | Description |
+|------|-------------|
+| `--mcp-domain` | FQDN for the MCP server |
+| `--nc-domain` | FQDN for the Nextcloud server |
+| `--nc-admin-password` | Nextcloud admin password |
+
+**Nextcloud self-hosted options** (`--stack nextcloud` / `full`):
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--nc-admin-user` | `admin` | Nextcloud admin username |
+| `--nc-app-version` | `latest` | AIquila app version to install (e.g. `v1.2.3`) |
 
 **Server options:**
 
@@ -177,6 +230,8 @@ Provision a new AIquila server end-to-end.
 | `--type` | `cpx21` | Server type (`cpx11` / `cpx21` / `cpx31` / `cx22` / `cx32` / `ccx13` / `ccx23`) |
 | `--image` | `fedora-41` | OS image (`ubuntu` / `debian` / `fedora` / `centos` / `rocky` / `almalinux` / `opensuse-leap` / `arch`) |
 | `--location` | `nbg1` | Datacenter (`nbg1` / `fsn1` / `hel1` / `ash` / `hil` / `sin`) |
+
+Run `aiquila-hetzner options` to list all server types, locations, and images available in your account.
 
 **SSH key:**
 
@@ -205,13 +260,14 @@ Provision a new AIquila server end-to-end.
 
 | Flag | Description |
 |------|-------------|
-| `--monitoring` | Add Prometheus + Grafana (accessible at `/grafana`) |
+| `--monitoring` | Add Prometheus + Grafana (accessible at `/grafana`; mcp stack only) |
 | `--acme-email` | Email for Let's Encrypt expiry notices |
 | `--label` | Resource label `key=value` (repeatable; applied to server, firewall, key, volume) |
 | `--package` | Extra package to install via cloud-init (repeatable) |
 | `--config` | Path to YAML/JSON deployment config file |
 | `--token` | Hetzner API token (default: `$HCLOUD_TOKEN`) |
 | `--dry-run` | Print plan without making any API calls |
+| `--noconfirm` | Skip interactive cost/recovery prompts (CI/CD; warnings still printed) |
 
 ---
 
@@ -302,6 +358,24 @@ Power-manage a server.
 | `--token` | Hetzner API token |
 
 `start` also accepts the alias `boot`.
+
+---
+
+### `options`
+
+List all server types, locations, and system images available in your Hetzner
+account. Use this to find valid values for `--type`, `--location`, and `--image`.
+
+```bash
+aiquila-hetzner options
+```
+
+Output is three tables: **Server types** (name, cores, RAM, disk, arch),
+**Locations** (name, city, country), and **Images** (name, description).
+
+| Flag | Description |
+|------|-------------|
+| `--token` | Hetzner API token (default: `$HCLOUD_TOKEN`) |
 
 ---
 
@@ -407,10 +481,12 @@ aiquila-hetzner snapshot delete --id 12345678
 ### Cloud Volume + LUKS
 
 ```bash
-aiquila-hetzner create --domain mcp.example.com \
+aiquila-hetzner create --mcp-domain mcp.example.com \
+  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
   --volume-size 20   # plain ext4, mounted at /opt/aiquila
 
-aiquila-hetzner create --domain mcp.example.com \
+aiquila-hetzner create --mcp-domain mcp.example.com \
+  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
   --volume-size 20 --luks   # LUKS-encrypted (experimental)
 ```
 
@@ -424,7 +500,9 @@ The volume is auto-unlocked on reboot via `/etc/crypttab`.
 ### Monitoring
 
 ```bash
-aiquila-hetzner create --domain mcp.example.com --monitoring
+aiquila-hetzner create --mcp-domain mcp.example.com \
+  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
+  --monitoring
 ```
 
 Adds a Prometheus + Grafana stack. Grafana is available at
@@ -438,7 +516,8 @@ main stack and can be re-enabled via `rebuild --monitoring`.
 Install additional OS packages during cloud-init before Docker starts:
 
 ```bash
-aiquila-hetzner create --domain mcp.example.com \
+aiquila-hetzner create --mcp-domain mcp.example.com \
+  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
   --package htop --package bash-completion
 ```
 
@@ -452,7 +531,9 @@ distro-native package manager (`dnf`, `apt`, `pacman`, etc.).
 Useful for small instance types (`cpx11`, `cx22`) that have limited RAM:
 
 ```bash
-aiquila-hetzner create --domain mcp.example.com --swap 2G
+aiquila-hetzner create --mcp-domain mcp.example.com \
+  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
+  --swap 2G
 ```
 
 Creates `/swapfile` at the specified size and enables it on boot.
@@ -466,7 +547,9 @@ Creates `/swapfile` at the specified size and enables it on boot.
 aiquila-hetzner network create --name mynet --cidr 10.0.0.0/16
 
 # Attach during provisioning
-aiquila-hetzner create --domain mcp.example.com --network mynet
+aiquila-hetzner create --mcp-domain mcp.example.com \
+  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
+  --network mynet
 
 # Or attach to an existing server
 aiquila-hetzner network attach --server myserver --network mynet
@@ -479,7 +562,8 @@ aiquila-hetzner network attach --server myserver --network mynet
 Restrict SSH access to a known IP range:
 
 ```bash
-aiquila-hetzner create --domain mcp.example.com \
+aiquila-hetzner create --mcp-domain mcp.example.com \
+  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
   --ssh-allow-cidr 203.0.113.0/24
 ```
 
@@ -493,12 +577,38 @@ instead of the default `0.0.0.0/0`.
 Create A (and AAAA) records automatically after the server IP is assigned:
 
 ```bash
-aiquila-hetzner create --domain mcp.example.com \
+aiquila-hetzner create --mcp-domain mcp.example.com \
+  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
   --dns-zone example.com
 ```
 
 Requires `$HETZNER_DNS_TOKEN` or `--dns-token`. The record name is derived from
-the first label of `--domain` (e.g. `mcp` from `mcp.example.com`).
+the first label of `--mcp-domain` (e.g. `mcp` from `mcp.example.com`).
+
+---
+
+### Partial-deployment recovery
+
+If provisioning fails after the server is created (e.g. SSH timeout), the CLI
+prints a partial summary (name, IP, SSH command, and hourly cost) and asks
+whether to keep or delete the server.
+
+With `--noconfirm` the server is deleted automatically.
+
+```
+╔════════════════════════════════════════════╗
+║  ⚠  Partial deployment — server is live   ║
+╠════════════════════════════════════════════╣
+  Name:    aiquila-abc123
+  Server:  1.2.3.4
+  SSH:     ssh -i ~/.ssh/aiquila_ed25519 root@1.2.3.4
+  Cost:    €0.0149/hr  €9.99/mo (gross incl. VAT)  ← still accruing
+╚════════════════════════════════════════════╝
+
+  Keep this server? [y/N]:
+```
+
+To delete a kept server later: `aiquila-hetzner delete --name <name>`.
 
 ---
 

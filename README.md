@@ -41,7 +41,8 @@ Use the [standalone Docker setup](docker/standalone/) to connect the MCP server 
 
 ## Acknowledgements
 
-[Nextcloud](https://nextcloud.com) · [Claude](https://anthropic.com) · [MCP](https://modelcontextprotocol.io) · [TypeScript](https://www.typescriptlang.org) · [JavaScript](https://developer.mozilla.org/en-US/docs/Web/JavaScript) · [PHP](https://www.php.net) · [Vue](https://vuejs.org) · [Node.js](https://nodejs.org) · [npm](https://www.npmjs.com) · [Vite](https://vitejs.dev) · [Docker](https://www.docker.com) · [Caddy](https://caddyserver.com) · [PostgreSQL](https://www.postgresql.org) · [Redis](https://redis.io) · [MailHog](https://github.com/mailhog/MailHog) · [Adminer](https://www.adminer.org) · [Git](https://git-scm.com) · [GitHub](https://github.com) · [Markdown](https://commonmark.org) · [SVG](https://www.w3.org/Graphics/SVG/) · [Make](https://www.gnu.org/software/make/) · [Bash](https://www.gnu.org/software/bash/) · [tar](https://www.gnu.org/software/tar/) · [Go](https://go.dev) · [Hetzner](https://www.hetzner.com) · [Traefik](https://traefik.io) · [CrowdSec](https://www.crowdsec.net)
+See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for the full list of open-source projects and
+services that AIquila is built on.
 
 ## License
 
