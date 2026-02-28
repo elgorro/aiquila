@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -768,6 +769,11 @@ func printMCPSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		}
 	}
 
+	priceLine := ""
+	if p := serverPriceStr(srv); p != "" {
+		priceLine = fmt.Sprintf("  Cost:       %s\n", p)
+	}
+
 	dnsNote := fmt.Sprintf("Note: DNS must point to %s before HTTPS is available.", serverIP)
 	if createDNSZone != "" {
 		dnsNote = fmt.Sprintf("Note: DNS A record created (%s.%s → %s).\n      Allow a few minutes for propagation before HTTPS is available.", createName, createDNSZone, serverIP)
@@ -780,7 +786,7 @@ func printMCPSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
   Server IP:  %s
 %s  SSH:        ssh -i %s root@%s
   MCP URL:    https://%s/mcp
-%s╚══════════════════════════════════════╝
+%s%s╚══════════════════════════════════════╝
 
 %s
 `,
@@ -789,6 +795,7 @@ func printMCPSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		privKeyPath, serverIP,
 		createMCPDomain,
 		grafanaLine,
+		priceLine,
 		dnsNote,
 	)
 	return nil
@@ -805,6 +812,11 @@ func printNCSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		}
 	}
 
+	priceLine := ""
+	if p := serverPriceStr(srv); p != "" {
+		priceLine = fmt.Sprintf("  Cost:       %s\n", p)
+	}
+
 	dnsNote := fmt.Sprintf("Note: DNS must point to %s before HTTPS is available.", serverIP)
 	if createDNSZone != "" {
 		dnsNote = fmt.Sprintf("Note: DNS A record created (%s.%s → %s).\n      Allow a few minutes for propagation before HTTPS is available.", createName, createDNSZone, serverIP)
@@ -818,7 +830,7 @@ func printNCSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 %s  SSH:        ssh -i %s root@%s
   Nextcloud:  https://%s
   AIquila:    installed via OCC
-╚══════════════════════════════════════╝
+%s╚══════════════════════════════════════╝
 
 %s
 `,
@@ -826,6 +838,7 @@ func printNCSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		privateLine,
 		privKeyPath, serverIP,
 		createNCDomain,
+		priceLine,
 		dnsNote,
 	)
 	return nil
@@ -840,6 +853,11 @@ func printFullSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 				break
 			}
 		}
+	}
+
+	priceLine := ""
+	if p := serverPriceStr(srv); p != "" {
+		priceLine = fmt.Sprintf("  Cost:       %s\n", p)
 	}
 
 	dnsNote := fmt.Sprintf("Note: DNS must point to %s and %s before HTTPS is available.", serverIP, serverIP)
@@ -857,7 +875,7 @@ func printFullSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
   Nextcloud:  https://%s
   MCP URL:    https://%s/mcp
   AIquila:    installed via OCC
-╚══════════════════════════════════════╝
+%s╚══════════════════════════════════════╝
 
 %s
 `,
@@ -866,9 +884,42 @@ func printFullSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		privKeyPath, serverIP,
 		createNCDomain,
 		createMCPDomain,
+		priceLine,
 		dnsNote,
 	)
 	return nil
+}
+
+// serverPriceStr returns a formatted "€X.XXXX/hr  €X.XX/mo" string for the
+// server type at its actual location, or an empty string if unavailable.
+func serverPriceStr(srv *hcloud.Server) string {
+	if srv.ServerType == nil || srv.Datacenter == nil || srv.Datacenter.Location == nil {
+		return ""
+	}
+	locName := srv.Datacenter.Location.Name
+	for _, p := range srv.ServerType.Pricings {
+		if p.Location != nil && p.Location.Name == locName {
+			hourly, err1 := strconv.ParseFloat(p.Hourly.Gross, 64)
+			monthly, err2 := strconv.ParseFloat(p.Monthly.Gross, 64)
+			if err1 != nil || err2 != nil {
+				return ""
+			}
+			sym := currencySymbol(p.Hourly.Currency)
+			return fmt.Sprintf("%s%.4f/hr  %s%.2f/mo (gross incl. VAT)", sym, hourly, sym, monthly)
+		}
+	}
+	return ""
+}
+
+func currencySymbol(code string) string {
+	switch code {
+	case "EUR":
+		return "€"
+	case "USD":
+		return "$"
+	default:
+		return code + " "
+	}
 }
 
 // ── destroy ───────────────────────────────────────────────────────────────────
