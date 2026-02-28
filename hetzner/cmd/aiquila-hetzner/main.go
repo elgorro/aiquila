@@ -109,6 +109,7 @@ uploads a production docker-compose stack (Traefik + CrowdSec), and starts the s
 	rootCmd.AddCommand(buildNetworkCmd())
 	rootCmd.AddCommand(buildSnapshotCmd())
 	rootCmd.AddCommand(buildRebuildCmd())
+	rootCmd.AddCommand(buildOptionsCmd())
 
 	runErr := rootCmd.Execute()
 	if appLog != nil {
@@ -163,7 +164,7 @@ func buildCreateCmd() *cobra.Command {
 	return cmd
 }
 
-func runCreate(_ *cobra.Command, _ []string) error {
+func runCreate(cmd *cobra.Command, _ []string) error {
 	// ── 1. Env var fallbacks for MCP external-NC credentials ───────────────
 	if createNCURL == "" {
 		createNCURL = os.Getenv("NEXTCLOUD_URL")
@@ -231,6 +232,54 @@ func runCreate(_ *cobra.Command, _ []string) error {
 	}
 	if fileCfg.Monitoring {
 		createMonitoring = true
+	}
+	if !cmd.Flags().Changed("stack") && fileCfg.Stack != "" {
+		createStack = fileCfg.Stack
+	}
+	if !cmd.Flags().Changed("image") && fileCfg.Image != "" {
+		createImage = fileCfg.Image
+	}
+	if !cmd.Flags().Changed("location") && fileCfg.Location != "" {
+		createLocation = fileCfg.Location
+	}
+	if !cmd.Flags().Changed("type") && fileCfg.Type != "" {
+		createType = fileCfg.Type
+	}
+	if createSwap == "" && fileCfg.Swap != "" {
+		createSwap = fileCfg.Swap
+	}
+	if createVolumeSize == 0 && fileCfg.VolumeSize != 0 {
+		createVolumeSize = fileCfg.VolumeSize
+	}
+	if !createLUKS && fileCfg.LUKS {
+		createLUKS = true
+	}
+	if createNetworkName == "" && fileCfg.Network != "" {
+		createNetworkName = fileCfg.Network
+	}
+	if len(createLabels) == 0 && len(fileCfg.Labels) > 0 {
+		createLabels = fileCfg.Labels
+	}
+	if createDNSZone == "" && fileCfg.DNSZone != "" {
+		createDNSZone = fileCfg.DNSZone
+	}
+	if createDNSToken == "" && fileCfg.DNSToken != "" {
+		createDNSToken = fileCfg.DNSToken
+	}
+	if createSSHAllowCIDR == "" && fileCfg.SSHAllowCIDR != "" {
+		createSSHAllowCIDR = fileCfg.SSHAllowCIDR
+	}
+	if createNCDomain == "" && fileCfg.NCDomain != "" {
+		createNCDomain = fileCfg.NCDomain
+	}
+	if !cmd.Flags().Changed("nc-admin-user") && fileCfg.NCAdminUser != "" {
+		createNCAdminUser = fileCfg.NCAdminUser
+	}
+	if createNCAdminPassword == "" && fileCfg.NCAdminPassword != "" {
+		createNCAdminPassword = fileCfg.NCAdminPassword
+	}
+	if !cmd.Flags().Changed("nc-app-version") && fileCfg.NCAppVersion != "" {
+		createNCAppVersion = fileCfg.NCAppVersion
 	}
 
 	// Packages: config file takes priority over CLI --package flags.
@@ -946,6 +995,8 @@ func ensureSSHKey(ctx context.Context, client *hcloud.Client, serverName, pubKey
 		return "", fmt.Errorf("parse public key: %w", err)
 	}
 	fp := xssh.FingerprintSHA256(pk)
+	// Hetzner stores fingerprints in MD5 colon-hex format (e.g. aa:bb:cc:...)
+	fpMD5 := xssh.FingerprintLegacyMD5(pk)
 
 	key, _, err := client.SSHKey.Create(ctx, hcloud.SSHKeyCreateOpts{
 		Name:      keyName,
@@ -953,7 +1004,14 @@ func ensureSSHKey(ctx context.Context, client *hcloud.Client, serverName, pubKey
 		Labels:    labels,
 	})
 	if err != nil {
-		return "", fmt.Errorf("upload SSH key to Hetzner: %w", err)
+		// Hetzner rejects duplicate fingerprints even under a different name.
+		// Fall back to finding the existing key by MD5 fingerprint and reuse it.
+		existing2, _, err2 := client.SSHKey.GetByFingerprint(ctx, fpMD5)
+		if err2 != nil || existing2 == nil {
+			return "", fmt.Errorf("upload SSH key to Hetzner: %w", err)
+		}
+		fmt.Printf("  Reusing existing Hetzner SSH key %q (id=%d, fingerprint=%s)\n", existing2.Name, existing2.ID, fp)
+		return existing2.Name, nil
 	}
 	fmt.Printf("  Uploaded SSH key %q (id=%d, fingerprint=%s)\n", keyName, key.ID, fp)
 	return keyName, nil
