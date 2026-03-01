@@ -82,6 +82,10 @@ func Generate(ncURL, ncUser, ncPassword, domain, acmeEmail string) (*Env, error)
 		return nil, fmt.Errorf("generate grafana password: %w", err)
 	}
 
+	if !strings.HasPrefix(ncURL, "http://") && !strings.HasPrefix(ncURL, "https://") {
+		ncURL = "https://" + ncURL
+	}
+
 	return &Env{
 		NextcloudURL:        ncURL,
 		NextcloudUser:       ncUser,
@@ -121,6 +125,7 @@ func (e *Env) Render() string {
 	b.WriteString(fmt.Sprintf("MCP_AUTH_ISSUER=%s\n", e.AuthIssuer))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_ID=%s\n", e.ClientID))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_SECRET=%s\n", e.ClientSecret))
+	b.WriteString("MCP_CLIENT_REDIRECT_URIS=https://claude.ai/api/mcp/auth_callback\n")
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_ENABLED=%v\n", e.RegistrationEnabled))
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_TOKEN=%s\n", e.RegistrationToken))
 	b.WriteString("MCP_TRUST_PROXY=true\n")
@@ -278,6 +283,7 @@ func (e *FullEnv) Render() string {
 	b.WriteString(fmt.Sprintf("MCP_AUTH_ISSUER=%s\n", e.AuthIssuer))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_ID=%s\n", e.ClientID))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_SECRET=%s\n", e.ClientSecret))
+	b.WriteString("MCP_CLIENT_REDIRECT_URIS=https://claude.ai/api/mcp/auth_callback\n")
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_ENABLED=%v\n", e.RegistrationEnabled))
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_TOKEN=%s\n", e.RegistrationToken))
 	b.WriteString("MCP_TRUST_PROXY=true\n")

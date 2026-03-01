@@ -59,5 +59,10 @@ export function getNextcloudConfig(): NextcloudConfig {
   }
 
   // Strip trailing slashes to prevent double-slash URLs in CalDAV paths
-  return { url: url.replace(/\/+$/, ''), user, password };
+  let normalizedUrl = url.replace(/\/+$/, '');
+  // Prepend https:// if no scheme is present (bare domain)
+  if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+    normalizedUrl = 'https://' + normalizedUrl;
+  }
+  return { url: normalizedUrl, user, password };
 }
