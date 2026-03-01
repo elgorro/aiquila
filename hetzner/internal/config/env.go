@@ -82,6 +82,10 @@ func Generate(ncURL, ncUser, ncPassword, domain, acmeEmail string) (*Env, error)
 		return nil, fmt.Errorf("generate grafana password: %w", err)
 	}
 
+	if !strings.HasPrefix(ncURL, "http://") && !strings.HasPrefix(ncURL, "https://") {
+		ncURL = "https://" + ncURL
+	}
+
 	return &Env{
 		NextcloudURL:        ncURL,
 		NextcloudUser:       ncUser,
