@@ -31,7 +31,6 @@ help:
 	@echo ""
 	@echo "Access points:"
 	@echo "  HTTPS: https://localhost:3340/mcp (self-signed cert)"
-	@echo "  HTTP:  http://localhost:3339/mcp"
 
 # Start services
 up:
@@ -48,7 +47,6 @@ up:
 	@echo ""
 	@echo "Access points:"
 	@echo "  HTTPS: https://localhost:3340/mcp"
-	@echo "  HTTP:  http://localhost:3339/mcp"
 
 # Stop services
 down:
@@ -103,18 +101,18 @@ test-tools:
 test-mcp-connector:
 	@set -a; . ./.env; set +a; \
 	cd ../../mcp-server/scripts && npm install --silent && \
-	MCP_URL=http://localhost:3339 tsx test-mcp-connector.ts
+	NODE_TLS_REJECT_UNAUTHORIZED=0 MCP_URL=https://localhost:3340 tsx test-mcp-connector.ts
 
 # Test MCP server connectivity
 test:
 	@echo "🧪 Testing MCP server..."
 	@echo ""
-	@echo "--- MCP endpoint (HTTP) ---"
-	@curl -sf -X POST http://localhost:3339/mcp \
+	@echo "--- MCP endpoint (HTTPS via Caddy) ---"
+	@curl -sfk -X POST https://localhost:3340/mcp \
 		-H "Content-Type: application/json" \
 		-d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}' \
 		| head -c 200 && echo "" \
-		|| echo "❌ FAIL: MCP server not responding on port 3339"
+		|| echo "❌ FAIL: MCP server not responding on https://localhost:3340"
 	@echo ""
 	@echo "--- Nextcloud connectivity (from container) ---"
 	@$(COMPOSE) exec mcp-server sh -c 'curl -sf -o /dev/null -w "HTTP %{http_code}" -u "$$NEXTCLOUD_USER:$$NEXTCLOUD_PASSWORD" "$$NEXTCLOUD_URL/status.php"' \
