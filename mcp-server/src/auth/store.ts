@@ -82,7 +82,7 @@ export class ClientsStore implements OAuthRegisteredClientsStore {
         client_id_issued_at: Math.floor(Date.now() / 1000),
         client_secret_expires_at: 0, // 0 = never expires (SDK skips check when falsy)
         redirect_uris: redirectUris,
-        token_endpoint_auth_method: 'client_secret_post',
+        token_endpoint_auth_method: 'none',
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
         client_name: 'Pre-seeded client',

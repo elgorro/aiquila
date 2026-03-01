@@ -126,7 +126,7 @@ describe('ClientsStore.fromEnv()', () => {
     expect(client?.client_id).toBe('env-client-id');
     expect(client?.client_secret).toBe('env-client-secret');
     expect(client?.client_secret_expires_at).toBe(0);
-    expect(client?.token_endpoint_auth_method).toBe('client_secret_post');
+    expect(client?.token_endpoint_auth_method).toBe('none');
   });
 
   it('enables registerClient when MCP_REGISTRATION_ENABLED=true', () => {
