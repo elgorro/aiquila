@@ -83,6 +83,10 @@ export function renderLoginForm(opts: {
     .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,.12); padding: 2rem; width: 100%; max-width: 360px; }
     h1 { font-size: 1.3rem; margin: 0 0 .25rem; }
     p.sub { color: #555; font-size: .9rem; margin: 0 0 1.5rem; }
+    .consent-banner { background: #eef6fc; border: 1px solid #b3d7f0; border-radius: 4px; padding: .75rem 1rem; margin-bottom: 1.25rem; font-size: .85rem; color: #333; line-height: 1.6; }
+    .consent-banner strong { color: #0082c9; }
+    .consent-banner .detail { display: block; margin-top: .25rem; }
+    .consent-banner code { background: #d6ecf9; border-radius: 3px; padding: 0 .3em; font-size: .85em; word-break: break-all; }
     label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .25rem; }
     input[type=text], input[type=password] { width: 100%; box-sizing: border-box; padding: .55rem .75rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; }
     button { width: 100%; padding: .65rem; background: #0082c9; color: #fff; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
@@ -93,7 +97,11 @@ export function renderLoginForm(opts: {
 <body>
   <div class="card">
     <h1>Sign in with Nextcloud</h1>
-    <p class="sub">${opts.clientName ? escapeHtml(opts.clientName) + ' is requesting access.' : 'An application is requesting access.'}</p>
+    <div class="consent-banner">
+      <strong>${opts.clientName ? escapeHtml(opts.clientName) : 'An application'}</strong> is requesting access to your Nextcloud account.
+      ${opts.scope ? `<span class="detail">Scopes: <code>${escapeHtml(opts.scope)}</code></span>` : ''}
+      <span class="detail">Redirecting to: <code>${escapeHtml(opts.redirectUri)}</code></span>
+    </div>
     ${opts.error ? `<div class="error">${escapeHtml(opts.error)}</div>` : ''}
     <form method="POST" action="/auth/login">
       <input type="hidden" name="client_id" value="${escapeHtml(opts.clientId)}">
@@ -129,6 +137,11 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     res: any
   ): Promise<void> {
     res
+      .set('X-Frame-Options', 'DENY')
+      .set(
+        'Content-Security-Policy',
+        "frame-ancestors 'none'; default-src 'self'; style-src 'unsafe-inline'"
+      )
       .status(200)
       .type('html')
       .send(

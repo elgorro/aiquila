@@ -115,6 +115,7 @@ describe('NextcloudOAuthProvider', () => {
   describe('authorize', () => {
     it('sends a 200 HTML login form response', async () => {
       const res = {
+        set: vi.fn().mockReturnThis(),
         status: vi.fn().mockReturnThis(),
         type: vi.fn().mockReturnThis(),
         send: vi.fn(),
@@ -124,6 +125,11 @@ describe('NextcloudOAuthProvider', () => {
         { codeChallenge: 'ch', redirectUri: 'https://r.com', state: 'st', scopes: ['read'] },
         res as any
       );
+      expect(res.set).toHaveBeenCalledWith('X-Frame-Options', 'DENY');
+      expect(res.set).toHaveBeenCalledWith(
+        'Content-Security-Policy',
+        "frame-ancestors 'none'; default-src 'self'; style-src 'unsafe-inline'"
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.type).toHaveBeenCalledWith('html');
       expect(res.send).toHaveBeenCalledWith(expect.stringContaining('action="/auth/login"'));
@@ -131,6 +137,7 @@ describe('NextcloudOAuthProvider', () => {
 
     it('includes client name in the rendered form', async () => {
       const res = {
+        set: vi.fn().mockReturnThis(),
         status: vi.fn().mockReturnThis(),
         type: vi.fn().mockReturnThis(),
         send: vi.fn(),
