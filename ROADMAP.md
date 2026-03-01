@@ -152,7 +152,8 @@
 *Target: v1.0.0*
 
 - [ ] Nextcloud App Store official listing (reviewed & approved)
-- [ ] npm package for MCP server
+- [x] npm package for MCP server (`aiquila-mcp` on npmjs.com)
+- [x] MCP Server Registry listing (`io.github.elgorro/aiquila-mcp`)
 - [ ] Performance optimization
 - [ ] Internationalization (i18n)
 - [ ] User documentation portal
@@ -171,7 +172,9 @@
 
 ### Distribution
 - [x] Docker images for MCP server
-- [ ] npm package publishing for MCP server
+- [x] npm package publishing for MCP server
+- [ ] Automated npm publish pipeline (on release tag, push `aiquila-mcp` to npmjs.com)
+- [ ] Automated MCP registry publish pipeline (on release tag, run `mcp-publisher publish`)
 - [ ] Homebrew formula for easy installation
 
 ---
