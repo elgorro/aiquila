@@ -68,12 +68,20 @@ export class ClientsStore implements OAuthRegisteredClientsStore {
     const secret = process.env.MCP_CLIENT_SECRET;
 
     if (id && secret) {
+      const rawUris = process.env.MCP_CLIENT_REDIRECT_URIS;
+      const redirectUris = rawUris
+        ? rawUris
+            .split(',')
+            .map((u) => u.trim())
+            .filter(Boolean)
+        : ['https://claude.ai/api/mcp/auth_callback'];
+
       preseeded.push({
         client_id: id,
         client_secret: secret,
         client_id_issued_at: Math.floor(Date.now() / 1000),
         client_secret_expires_at: 0, // 0 = never expires (SDK skips check when falsy)
-        redirect_uris: [],
+        redirect_uris: redirectUris,
         token_endpoint_auth_method: 'client_secret_post',
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],

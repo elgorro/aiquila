@@ -26,6 +26,7 @@ services:
       MCP_CLIENT_SECRET: ${MCP_CLIENT_SECRET:?Set MCP_CLIENT_SECRET in .env}
       MCP_REGISTRATION_ENABLED: ${MCP_REGISTRATION_ENABLED:-true}
       MCP_REGISTRATION_TOKEN: ${MCP_REGISTRATION_TOKEN:-}
+      MCP_CLIENT_REDIRECT_URIS: ${MCP_CLIENT_REDIRECT_URIS:-https://claude.ai/api/mcp/auth_callback}
       MCP_TRUST_PROXY: "true"
       LOG_LEVEL: ${LOG_LEVEL:-info}
     labels:
