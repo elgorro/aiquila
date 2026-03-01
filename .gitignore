@@ -43,3 +43,7 @@ nextcloud-app/build/
 *.tmp
 *.bak
 .claude/
+
+# npm publish artifacts
+*.tgz
+.mcpregistry_*

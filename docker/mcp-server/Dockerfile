@@ -8,6 +8,7 @@ RUN npm run build
 
 # Stage 2: Production image
 FROM node:24-alpine AS runner
+LABEL io.modelcontextprotocol.server.name="io.github.elgorro/aiquila-mcp"
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
