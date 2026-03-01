@@ -27,7 +27,7 @@ services:
       MCP_REGISTRATION_ENABLED: ${MCP_REGISTRATION_ENABLED:-true}
       MCP_REGISTRATION_TOKEN: ${MCP_REGISTRATION_TOKEN:-}
       MCP_CLIENT_REDIRECT_URIS: ${MCP_CLIENT_REDIRECT_URIS:-https://claude.ai/api/mcp/auth_callback}
-      MCP_TRUST_PROXY: "true"
+      MCP_TRUST_PROXY: "1"
       LOG_LEVEL: ${LOG_LEVEL:-info}
     labels:
       - "traefik.enable=true"
@@ -38,7 +38,8 @@ services:
       - "traefik.http.services.mcp.loadbalancer.server.port=3339"
       # CrowdSec bouncer middleware — defined once, referenced by all routers
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapikey=${CROWDSEC_BOUNCER_KEY}"
-      - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapihost=http://crowdsec:8080"
+      - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapischeme=http"
+      - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapihost=crowdsec:8080"
     networks:
       - aiq-net
 
