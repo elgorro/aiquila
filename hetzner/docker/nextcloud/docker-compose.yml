@@ -94,7 +94,7 @@ services:
       - traefik_certs:/certs
       - logs:/logs
     environment:
-      ACME_EMAIL: ${ACME_EMAIL:-}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
     networks:
       - aiq-net
 

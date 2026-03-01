@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import https from 'node:https';
 import express from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
@@ -12,6 +13,83 @@ import { fetchStatus } from '../client/ocs.js';
 
 const DEFAULT_PORT = 3339;
 const MCP_PATH = '/mcp';
+
+// TLS error codes that indicate a self-signed or untrusted certificate.
+// Network errors (ECONNREFUSED, ETIMEDOUT) are not included — they mean the
+// proxy is not yet reachable, which is transient and should not fail fast.
+const TLS_CERT_ERROR_CODES = new Set([
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'CERT_HAS_EXPIRED',
+  'CERT_NOT_YET_VALID',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+]);
+
+async function checkIssuerTls(issuerUrl: string): Promise<void> {
+  return new Promise((resolve) => {
+    let url: URL;
+    try {
+      url = new URL(issuerUrl);
+    } catch {
+      logger.error({ issuer: issuerUrl }, '[startup] MCP_AUTH_ISSUER is not a valid URL');
+      if (process.env.MCP_TLS_STRICT === 'true') process.exit(1);
+      resolve();
+      return;
+    }
+
+    if (url.protocol !== 'https:') {
+      logger.error(
+        { issuer: issuerUrl },
+        '[startup] MCP_AUTH_ISSUER must use https:// — plain http exposes OAuth tokens'
+      );
+      if (process.env.MCP_TLS_STRICT === 'true') process.exit(1);
+      resolve();
+      return;
+    }
+
+    const req = https.request(
+      {
+        hostname: url.hostname,
+        port: parseInt(url.port || '443', 10),
+        path: '/',
+        method: 'HEAD',
+        rejectUnauthorized: true,
+      },
+      () => {
+        logger.info({ issuer: issuerUrl }, '[startup] TLS certificate valid and trusted');
+        resolve();
+      }
+    );
+
+    req.on('error', (err: NodeJS.ErrnoException) => {
+      const code = err.code ?? '';
+      if (TLS_CERT_ERROR_CODES.has(code)) {
+        const strict = process.env.MCP_TLS_STRICT === 'true';
+        const msg = `[startup] TLS certificate rejected (${code}) — install a CA-signed cert`;
+        if (strict) {
+          logger.fatal({ issuer: issuerUrl, code }, msg);
+          process.exit(1);
+        } else {
+          logger.error(
+            { issuer: issuerUrl, code },
+            msg + '. Set MCP_TLS_STRICT=true to make this a hard failure.'
+          );
+        }
+      } else {
+        // Transient network error — proxy may not be ready yet; do not fail
+        logger.warn(
+          { issuer: issuerUrl, code: err.code },
+          '[startup] TLS check skipped — could not reach issuer (proxy not ready?)'
+        );
+      }
+      resolve();
+    });
+
+    req.end();
+  });
+}
 
 export async function startHttp(): Promise<void> {
   const port = parseInt(process.env.MCP_PORT || String(DEFAULT_PORT), 10);
@@ -161,6 +239,11 @@ export async function startHttp(): Promise<void> {
     }
     logger.info('View logs: docker compose logs -f   or   make logs-follow');
     void (async () => {
+      // TLS certificate check (only when auth is enabled and issuer is configured)
+      if (authEnabled) {
+        await checkIssuerTls(process.env.MCP_AUTH_ISSUER!);
+      }
+      // Nextcloud reachability probe
       try {
         const t0 = Date.now();
         await fetchStatus();
