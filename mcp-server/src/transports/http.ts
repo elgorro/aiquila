@@ -64,7 +64,7 @@ export async function startHttp(): Promise<void> {
   });
 
   const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
-  const hasStaticClient = !!(process.env.MCP_CLIENT_ID && process.env.MCP_CLIENT_SECRET);
+  const hasStaticClient = !!process.env.MCP_CLIENT_ID;
   const registrationToken = process.env.MCP_REGISTRATION_TOKEN;
 
   if (authEnabled) {
@@ -77,9 +77,7 @@ export async function startHttp(): Promise<void> {
     }
 
     if (!registrationEnabled && !hasStaticClient) {
-      logger.warn(
-        'No clients configured. Set MCP_CLIENT_ID + MCP_CLIENT_SECRET or MCP_REGISTRATION_ENABLED=true'
-      );
+      logger.warn('No clients configured. Set MCP_CLIENT_ID or MCP_REGISTRATION_ENABLED=true');
     }
 
     const provider = new NextcloudOAuthProvider();

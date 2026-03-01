@@ -59,15 +59,18 @@ export class ClientsStore implements OAuthRegisteredClientsStore {
 
   /**
    * Creates a ClientsStore configured from environment variables:
-   *   MCP_CLIENT_ID + MCP_CLIENT_SECRET  → pre-seeded static client (for Claude Desktop)
+   *   MCP_CLIENT_ID  → pre-seeded static public PKCE client (for Claude.ai / Claude Desktop)
    *   MCP_REGISTRATION_ENABLED=true      → enable dynamic POST /register
+   *
+   * Note: no client_secret is stored — the SDK's clientAuth middleware requires the caller
+   * to send client_secret whenever client.client_secret is set, which public OAuth clients
+   * (e.g. Claude.ai) never do. Security is enforced via PKCE instead.
    */
   static fromEnv(): ClientsStore {
     const preseeded: OAuthClientInformationFull[] = [];
     const id = process.env.MCP_CLIENT_ID;
-    const secret = process.env.MCP_CLIENT_SECRET;
 
-    if (id && secret) {
+    if (id) {
       const rawUris = process.env.MCP_CLIENT_REDIRECT_URIS;
       const redirectUris = rawUris
         ? rawUris
@@ -78,9 +81,7 @@ export class ClientsStore implements OAuthRegisteredClientsStore {
 
       preseeded.push({
         client_id: id,
-        client_secret: secret,
         client_id_issued_at: Math.floor(Date.now() / 1000),
-        client_secret_expires_at: 0, // 0 = never expires (SDK skips check when falsy)
         redirect_uris: redirectUris,
         token_endpoint_auth_method: 'none',
         grant_types: ['authorization_code', 'refresh_token'],

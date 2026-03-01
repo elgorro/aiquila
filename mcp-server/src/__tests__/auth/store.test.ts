@@ -117,15 +117,13 @@ describe('ClientsStore.fromEnv()', () => {
     expect(store.getClient('anything')).toBeUndefined();
   });
 
-  it('pre-seeds a client when MCP_CLIENT_ID and MCP_CLIENT_SECRET are set', () => {
+  it('pre-seeds a public PKCE client when MCP_CLIENT_ID is set', () => {
     process.env.MCP_CLIENT_ID = 'env-client-id';
-    process.env.MCP_CLIENT_SECRET = 'env-client-secret';
     const store = ClientsStore.fromEnv();
     const client = store.getClient('env-client-id');
     expect(client).toBeDefined();
     expect(client?.client_id).toBe('env-client-id');
-    expect(client?.client_secret).toBe('env-client-secret');
-    expect(client?.client_secret_expires_at).toBe(0);
+    expect(client?.client_secret).toBeUndefined();
     expect(client?.token_endpoint_auth_method).toBe('none');
   });
 
@@ -141,10 +139,10 @@ describe('ClientsStore.fromEnv()', () => {
     expect(store.registerClient).toBeUndefined();
   });
 
-  it('does not pre-seed if only MCP_CLIENT_ID is set (secret missing)', () => {
+  it('pre-seeds client with MCP_CLIENT_ID alone (no secret needed)', () => {
     process.env.MCP_CLIENT_ID = 'only-id';
     const store = ClientsStore.fromEnv();
-    expect(store.getClient('only-id')).toBeUndefined();
+    expect(store.getClient('only-id')).toBeDefined();
   });
 });
 
