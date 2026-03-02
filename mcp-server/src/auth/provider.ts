@@ -125,7 +125,7 @@ export function renderLoginForm(opts: {
 export class NextcloudOAuthProvider implements OAuthServerProvider {
   private readonly _clientsStore = ClientsStore.fromEnv();
   private readonly codeStore = new CodeStore();
-  private readonly refreshStore = new RefreshStore();
+  private readonly refreshStore = RefreshStore.fromEnv();
 
   get clientsStore(): OAuthRegisteredClientsStore {
     return this._clientsStore;
