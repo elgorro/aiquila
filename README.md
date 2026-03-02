@@ -5,45 +5,27 @@ Nextcloud + Claude AI Integration
 [![Nextcloud App Release](https://github.com/elgorro/aiquila/actions/workflows/nc-release.yml/badge.svg?branch=main)](https://github.com/elgorro/aiquila/actions/workflows/nc-release.yml)
 [![MCP Server Release](https://github.com/elgorro/aiquila/actions/workflows/mcp-release.yml/badge.svg?branch=main)](https://github.com/elgorro/aiquila/actions/workflows/mcp-release.yml)
 
-## Overview
+## What is AIquila?
 
-AIquila connects your Nextcloud instance with Claude AI in two ways:
+AIquila bridges your self-hosted Nextcloud instance with Claude AI. Instead of keeping your files, notes, tasks, and recipes locked inside Nextcloud — or copying them manually into a chat window — AIquila lets Claude read and write your Nextcloud data directly. You stay in control of your data on your own server; Claude gains the context it needs to actually help.
 
-- **MCP Server** — lets Claude (Desktop/Mobile) manage your Nextcloud files, tasks, notes, and recipes via chat or voice
-- **Nextcloud App** — adds Claude AI actions directly inside Nextcloud (summarize, analyze, generate content)
-- **Hetzner Deployment** — provisions a production-ready AIquila server on Hetzner Cloud with a single command (Traefik, CrowdSec, optional monitoring)
+## How it works
 
-## Quick Start
+AIquila has three components that can be used independently or together:
 
-### Docker (Recommended)
+**MCP Server** — A [Model Context Protocol](https://modelcontextprotocol.io) server that gives Claude (Desktop or Mobile) secure access to your Nextcloud. Through natural conversation, Claude can browse and manage files, read and create notes, handle tasks and bookmarks, and query recipes — all stored in your Nextcloud.
 
-```bash
-cd docker/installation
-cp .env.example .env   # add your CLAUDE_API_KEY
-make build-tarball     # build the app package
-make up                # start all services
-```
+**Nextcloud App** — A native Nextcloud application that surfaces Claude AI actions directly inside the Nextcloud UI. Summarize a document, analyze a spreadsheet, or generate content without leaving your Nextcloud.
 
-Access: http://localhost:8080 · MailHog: http://localhost:8025 · MCP: http://localhost:3339
+**Hetzner Deployment** — A single-command provisioning tool (`aiquila-hetzner`) that stands up a production-ready AIquila server on Hetzner Cloud, complete with Traefik reverse proxy, CrowdSec intrusion prevention, TLS, and optional monitoring.
 
-### MCP Server Only
+## Getting Started
 
-Use the [standalone Docker setup](docker/standalone/) to connect the MCP server to an existing Nextcloud instance.
-
-## Documentation
-
-- [Installation Guide](docs/installation.md)
-- [Docker Dev Setup](docs/dev/docker-setup.md)
-- [MCP Server](docs/mcp/README.md)
-- [Hetzner Deployment](docs/hetzner/README.md)
-- [Connectivity & Troubleshooting](docs/connectivity.md)
-- [Full Docs](docs/README.md)
-
-## Acknowledgements
-
-See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for the full list of open-source projects and
-services that AIquila is built on.
+- [Installation Guide](docs/installation.md) — set up AIquila for the first time
+- [Full Documentation](docs/README.md) — architecture, configuration, and advanced topics
 
 ## License
 
 AGPL-3.0 (Nextcloud App) / MIT (MCP Server)
+
+See [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md) for the open-source projects and services AIquila is built on.
