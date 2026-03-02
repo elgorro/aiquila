@@ -43,7 +43,11 @@ services:
     depends_on:
       - mcp-server
     ports:
-      - "3340:3340"
+      - "3340:443"  # Dev: access via https://localhost:3340
+      # Production: change to "80:80" + "443:443" (and remove local_certs from Caddyfile)
+    environment:
+      MCP_DOMAIN: ${MCP_DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - standalone_caddy_data:/data

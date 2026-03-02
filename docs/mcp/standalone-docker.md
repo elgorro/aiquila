@@ -52,7 +52,7 @@ For better security, create a Nextcloud app password:
 
 | Protocol | URL | Notes |
 |----------|-----|-------|
-| HTTPS | `https://localhost:3340/mcp` | Self-signed cert (Caddy) |
+| HTTPS | `https://localhost:3340/mcp` | Self-signed (dev only — not usable with Claude.ai) |
 | HTTP | `http://localhost:3339/mcp` | Direct, no TLS |
 
 ## MCP Client Configuration
@@ -72,6 +72,19 @@ For Claude Desktop connecting to the dockerized MCP server:
 ```
 
 ### Claude.ai (OAuth required)
+
+> **⚠ Claude.ai requires a CA-trusted certificate — self-signed certs will not work.**
+> The default setup serves `localhost:3340` with a self-signed cert. Claude.ai and Claude
+> mobile silently reject self-signed connections. For Claude.ai you need a public domain
+> with a Let's Encrypt (or other CA-signed) certificate.
+>
+> **Production quick-start (Let's Encrypt via Caddy):**
+> 1. Point a domain at this server's IP (e.g. `mcp.example.com`)
+> 2. Set `MCP_DOMAIN=mcp.example.com` and `ACME_EMAIL=you@example.com` in `.env`
+> 3. In `caddy/Caddyfile` — delete the `local_certs` block
+> 4. In `docker-compose.yml` — change caddy ports to `"80:80"` and `"443:443"`
+> 5. Set `MCP_AUTH_ISSUER=https://mcp.example.com` in `.env`
+> 6. `make restart`
 
 Claude.ai requires OAuth 2.0 authentication before it will connect to a remote MCP server. AIquila includes a built-in OAuth provider — enable it by setting three extra variables in `.env`:
 
