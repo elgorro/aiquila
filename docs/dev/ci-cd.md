@@ -8,7 +8,7 @@ AIquila uses GitHub Actions for continuous integration and deployment.
 |----------|---------|---------|
 | `test.yml` | Push/PR to main | Run tests |
 | `lint.yml` | Push/PR to main | Code quality checks |
-| `mcp-release.yml` | Version change in `mcp-server/` | Auto-release MCP server |
+| `mcp-release.yml` | Version change in `mcp-server/` | Auto-release MCP server (GitHub Release + Docker + npm + MCP Registry) |
 | `nc-release.yml` | Version change in `nextcloud-app/` | Auto-release & publish NC app |
 
 ## Test Workflow (`test.yml`)
@@ -22,7 +22,7 @@ Runs on every push and pull request to `main`.
 - Builds the project
 
 **Nextcloud App:**
-- Sets up PHP 8.2
+- Sets up PHP 8.4
 - Installs Composer dependencies
 - Runs PHPUnit tests
 
@@ -55,6 +55,10 @@ AIquila uses automated release workflows that trigger when you bump the version 
 3. Creates tag `mcp-vX.X.X`
 4. Packages: `dist/`, `package.json`, `README.md`
 5. Creates GitHub release with `aiquila-mcp-vX.X.X.tar.gz`
+6. In parallel (after release):
+   - Pushes Docker image to GHCR (`ghcr.io/elgorro/aiquila-mcp`)
+   - Publishes npm package (`aiquila-mcp` on npmjs.com)
+   - Publishes to MCP Registry (`io.github.elgorro/aiquila-mcp`)
 
 **How to release:**
 ```bash
@@ -110,6 +114,26 @@ git push origin main
 #    Click on the workflow run
 #    Click "Review deployments" and approve "nextcloud-appstore"
 ```
+
+### Secrets
+
+#### For MCP Server Publishing (One-time setup — no secrets required)
+
+Both the npm publish and MCP Registry publish jobs authenticate via **GitHub OIDC** — no
+long-lived tokens to store or rotate.
+
+**npm Trusted Publisher (one-time setup on npmjs.com)**
+- Go to: [npmjs.com](https://www.npmjs.com) → sign in → package `aiquila-mcp` → Settings →
+  Trusted Publishers → Add a publisher
+- Provider: **GitHub Actions**
+- Repository: `elgorro/aiquila`
+- Workflow filename: `mcp-release.yml`
+- Environment: *(leave blank)*
+
+Once configured, the `npm-publish` job authenticates via GitHub OIDC automatically.
+No token to rotate or store.
+
+The MCP Registry publish step also uses **GitHub OIDC** (`id-token: write` permission) — no extra secret needed.
 
 ### Setup Required GitHub Secrets
 
@@ -194,8 +218,8 @@ Before pushing:
 
 ### Tests Failing in CI
 
-- Check Node.js version matches (20.x)
-- Check PHP version matches (8.2)
+- Check Node.js version matches (24)
+- Check PHP version matches (8.4)
 - Run tests locally to reproduce
 
 ### Lint Errors
@@ -217,6 +241,22 @@ npm run lint:fix && npm run format
 - Check workflow runs in Actions tab
 - Ensure changes are in the correct directory path
 - Workflow ignores changes to `*.md` files and `tests/` directories
+
+### npm Publish Fails
+
+- Verify the **Trusted Publisher** is configured on npmjs.com for the `aiquila-mcp` package
+  (see "For MCP Server Publishing" under Secrets above)
+- If the job reports a 401 or "no authentication" error, confirm `permissions: id-token: write`
+  is present in the `npm-publish` job and the Trusted Publisher entry matches the repository
+  and workflow filename exactly
+- Check that the version being published doesn't already exist on npmjs.com (re-publishing the same version fails)
+- Run `npm pack` locally in `mcp-server/` to confirm the package builds cleanly before pushing
+
+### MCP Registry Publish Fails
+
+- The job uses GitHub OIDC (`id-token: write`) — no extra secret required, but the repository must be in the `io.github.elgorro` namespace for the OIDC claim to match
+- If `mcp-publisher login github-oidc` fails, check that the job's `permissions` block includes `id-token: write`
+- If `mcp-publisher publish` reports a version conflict, confirm `server.json` version update step ran successfully in the workflow logs
 
 ### App Store Publishing Fails
 

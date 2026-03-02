@@ -173,8 +173,8 @@
 ### Distribution
 - [x] Docker images for MCP server
 - [x] npm package publishing for MCP server
-- [ ] Automated npm publish pipeline (on release tag, push `aiquila-mcp` to npmjs.com)
-- [ ] Automated MCP registry publish pipeline (on release tag, run `mcp-publisher publish`)
+- [x] Automated npm publish pipeline (on release tag, push `aiquila-mcp` to npmjs.com)
+- [x] Automated MCP registry publish pipeline (on release tag, run `mcp-publisher publish`)
 - [ ] Homebrew formula for easy installation
 
 ---
