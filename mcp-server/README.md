@@ -1,35 +1,10 @@
 # AIquila MCP Server
 
-MCP (Model Context Protocol) server that connects Claude to your Nextcloud instance.
+MCP (Model Context Protocol) server that gives Claude full access to your Nextcloud instance — files, calendar, tasks, contacts, mail, maps, bookmarks, notes, and more. 113 tools across 18 categories.
 
-## Features
+## Quick Start
 
-- **File Management**: List, read, write, delete files and folders (5 tools)
-- **Tasks**: Create and manage tasks in Nextcloud Tasks app (2 tools)
-- **Notes**: Create notes in Notes folder (1 tool)
-- **Recipes**: Add recipes to Cookbook (1 tool)
-- **AIquila Config**: Configure and test AIquila settings (3 tools)
-
-**Total: 12 tools**
-
-## Quick Links
-
-- 📚 **[Complete Documentation](../docs/mcp/README.md)** - Full MCP server documentation
-- ⚙️ **[Setup Guide](../docs/mcp/setup.md)** - Detailed installation instructions
-- 🛠️ **[Tools Reference](../docs/mcp/README.md#tools-reference)** - All available tools
-- 📖 **[Development Guides](../docs/mcp/development/)** - Extend the server
-
-## Quick Setup
-
-### 1. Install dependencies
-
-```bash
-cd mcp-server
-npm install
-npm run build
-```
-
-### 2. Configure Claude Desktop
+### Claude Desktop (stdio)
 
 Add to `~/.config/claude/claude_desktop_config.json`:
 
@@ -37,8 +12,8 @@ Add to `~/.config/claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "aiquila": {
-      "command": "node",
-      "args": ["/path/to/aiquila/mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "aiquila-mcp"],
       "env": {
         "NEXTCLOUD_URL": "https://your-nextcloud.example.com",
         "NEXTCLOUD_USER": "your-username",
@@ -49,96 +24,63 @@ Add to `~/.config/claude/claude_desktop_config.json`:
 }
 ```
 
-**Note**: Use an App Password from Nextcloud (Settings → Security → Devices & sessions).
+Generate an App Password in Nextcloud: **Settings → Security → Devices & sessions**.
 
-### 3. Restart Claude Desktop
+### Docker / Claude.ai (HTTP transport)
 
-The tools will be available in Claude conversations.
+See the [Docker setup guide](https://github.com/elgorro/aiquila/blob/main/docs/mcp/setup.md#docker--claudeai-http-transport) for running AIquila as an HTTP server with OAuth for Claude.ai.
 
-## Available Tools
+## What It Can Do
 
-| Tool | Description |
-|------|-------------|
-| `list_files` | List files in a directory |
-| `read_file` | Read file contents |
-| `write_file` | Create/update a file |
-| `create_folder` | Create a folder |
-| `delete` | Delete file/folder |
-| `list_task_lists` | List task lists |
-| `create_task` | Create a task |
-| `create_note` | Create a note |
-| `add_recipe` | Add a recipe |
-| `aiquila_show_config` | Show AIquila configuration (API key, model, tokens, timeout) |
-| `aiquila_configure` | Configure AIquila settings |
-| `aiquila_test` | Test AIquila Claude API integration |
+| Category | Tools |
+|----------|------:|
+| Files | 8 |
+| Status & Diagnostics | 2 |
+| App Management | 4 |
+| Tags | 6 |
+| Security | 2 |
+| Shares | 1 |
+| OCC Command | 1 |
+| Tasks | 6 |
+| Calendar | 6 |
+| Notes | 3 |
+| Contacts | 6 |
+| Cookbook | 6 |
+| Bookmarks | 13 |
+| Mail | 8 |
+| Maps | 24 |
+| Users | 4 |
+| Groups | 4 |
+| AIquila | 3 |
+| **Total** | **113** |
 
-## Example Usage (in Claude)
+## Configuration
 
-- "Create a task to buy groceries in my personal list"
-- "Save a note about today's meeting"
-- "Add a recipe for pasta carbonara"
-- "List files in my Documents folder"
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `NEXTCLOUD_URL` | Yes | trailing slash stripped automatically |
+| `NEXTCLOUD_USER` | Yes | |
+| `NEXTCLOUD_PASSWORD` | Yes | use an App Password |
+| `MCP_TRANSPORT` | No | `stdio` (default) or `http` |
+| `MCP_AUTH_ENABLED` | No | `true` to enable OAuth for Claude.ai |
+| `MCP_AUTH_SECRET` | If auth | `openssl rand -hex 32` |
+| `MCP_AUTH_ISSUER` | If auth | public HTTPS URL of this server |
+| `LOG_LEVEL` | No | `trace`/`debug`/`info`/`warn`/`error`/`fatal` |
+
+## Requirements
+
+- Node.js 24+
+- A Nextcloud instance with an App Password
+
+Optional Nextcloud apps unlock additional tool categories: Tasks, Calendar, Contacts, Notes, Cookbook, Bookmarks, Mail, Maps.
 
 ## Documentation
 
-For complete documentation, see:
-
-- **[MCP Server Documentation](../docs/mcp/README.md)** - Overview and tools reference
-- **[Setup Guide](../docs/mcp/setup.md)** - Detailed configuration
-- **[System Tools](../docs/mcp/tools/system-tools.md)** - File operations
-- **[App Tools](../docs/mcp/tools/apps/)** - Tasks, Cookbook, Notes, AIquila
-- **[Architecture](../docs/mcp/development/architecture.md)** - Design and internals
-- **[Adding Tools](../docs/mcp/development/adding-tools.md)** - Extend existing apps
-- **[Adding Apps](../docs/mcp/development/adding-apps.md)** - Add new Nextcloud apps
-
-## Development
-
-```bash
-# Hot reload development
-npm run dev
-
-# Run tests
-npm test
-
-# Build for production
-npm run build
-
-# Lint code
-npm run lint
-
-# Format code
-npm run format
-```
-
-See [MCP Server Architecture](../docs/dev/mcp-server-architecture.md) for technical details.
-
-## Architecture
-
-The server uses a modular architecture:
-
-```
-src/
-├── index.ts              # Main server & registration
-├── client/               # Infrastructure (WebDAV, CalDAV)
-│   ├── webdav.ts
-│   └── caldav.ts
-└── tools/                # Tool implementations
-    ├── types.ts          # Shared types
-    ├── system/           # System tools (files)
-    └── apps/             # App tools (tasks, cookbook, notes, aiquila)
-```
-
-For more details, see [Architecture Documentation](../docs/mcp/development/architecture.md).
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Read the [Development Guide](../docs/dev/development.md)
-2. Follow [Best Practices](../docs/dev/best-practices.md)
-3. Add tests for new features
-4. Update documentation
+- [Setup Guide](https://github.com/elgorro/aiquila/blob/main/docs/mcp/setup.md) — detailed installation and configuration
+- [Tools Reference](https://github.com/elgorro/aiquila/blob/main/docs/mcp/README.md) — all 113 tools documented
+- [Architecture](https://github.com/elgorro/aiquila/blob/main/docs/dev/mcp-server-architecture.md) — design and internals
+- [Full Documentation](https://github.com/elgorro/aiquila/blob/main/docs/) — complete docs index
 
 ## License
 
-Part of the AIquila project. See main repository for license information.
+MIT — part of the [AIquila project](https://github.com/elgorro/aiquila).

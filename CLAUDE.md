@@ -3,7 +3,7 @@
 ## Project Overview
 
 Monorepo with two independently versioned components:
-- **`mcp-server/`** — TypeScript/Node.js MCP server (npm, versioned in `package.json`)
+- **`mcp-server/`** — TypeScript/Node.js MCP server (npm package: `aiquila-mcp`, admin account: `aiquila` on npmjs.com; versioned in `package.json`)
 - **`nextcloud-app/`** — PHP 8.4 Nextcloud app (Composer, versioned in `appinfo/info.xml`)
 
 Docs live in `docs/`. Docker environments in `docker/` (dev: `installation/`, prod: `standalone/`).
