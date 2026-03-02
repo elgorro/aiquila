@@ -41,6 +41,8 @@ services:
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapikey=${CROWDSEC_BOUNCER_KEY}"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapischeme=http"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapihost=crowdsec:8080"
+    volumes:
+      - mcp_state:/app/state
     networks:
       - aiq-net
 
@@ -148,6 +150,8 @@ services:
       - aiq-net
 
 volumes:
+  mcp_state:
+    name: aiq-mcp_state
   traefik_certs:
     name: aiq-mcp_traefik_certs
   crowdsec_db:

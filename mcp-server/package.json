@@ -1,6 +1,6 @@
 {
   "name": "aiquila-mcp",
-  "version": "0.1.31",
+  "version": "0.1.32",
   "description": "AIquila - MCP server for Nextcloud integration with Claude AI",
   "type": "module",
   "main": "dist/index.js",
@@ -23,6 +23,10 @@
   ],
   "author": "sirgorro",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/elgorro/aiquila.git"
+  },
   "mcpName": "io.github.elgorro/aiquila-mcp",
   "files": [
     "dist/"

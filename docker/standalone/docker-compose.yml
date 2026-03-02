@@ -30,6 +30,8 @@ services:
       MCP_CLIENT_REDIRECT_URIS: ${MCP_CLIENT_REDIRECT_URIS:-https://claude.ai/api/mcp/auth_callback}
       MCP_TRUST_PROXY: ${MCP_TRUST_PROXY:-}
       MCP_TLS_STRICT: ${MCP_TLS_STRICT:-}
+    volumes:
+      - standalone_mcp_state:/app/state
     networks:
       - aiquila-standalone-network
 
@@ -50,6 +52,8 @@ services:
       - aiquila-standalone-network
 
 volumes:
+  standalone_mcp_state:
+    name: aiquila_standalone_mcp_state
   standalone_caddy_data:
     name: aiquila_standalone_caddy_data
   standalone_caddy_config:

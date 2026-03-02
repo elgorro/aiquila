@@ -106,6 +106,8 @@ services:
       MCP_CLIENT_REDIRECT_URIS: ${MCP_CLIENT_REDIRECT_URIS:-https://claude.ai/api/mcp/auth_callback}
       MCP_TRUST_PROXY: "1"
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - mcp_state:/app/state
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.mcp.rule=Host(`${MCP_DOMAIN}`)"
@@ -148,6 +150,8 @@ services:
       - aiq-net
 
 volumes:
+  mcp_state:
+    name: aiq-full_mcp_state
   nc_data:
     name: aiq-full_nc_data
   nc_db_data:

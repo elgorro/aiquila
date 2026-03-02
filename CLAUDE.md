@@ -79,6 +79,7 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_AUTH_ENABLED` | No | `true` to enable OAuth for Claude.ai |
 | `MCP_AUTH_SECRET` | If auth | `openssl rand -hex 32` |
 | `MCP_AUTH_ISSUER` | If auth | public HTTPS URL of this server |
+| `MCP_AUTH_STATE_DIR` | No | Directory for persisted OAuth state (default `/app/state`) |
 | `LOG_LEVEL` | No | `trace`/`debug`/`info`/`warn`/`error`/`fatal` |
 
 ## Tests
