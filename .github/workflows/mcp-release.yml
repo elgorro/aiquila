@@ -175,7 +175,7 @@ jobs:
 
   mcp-registry-publish:
     name: Publish to MCP Registry
-    needs: [check-version, release, npm-publish]
+    needs: [check-version, release, npm-publish, docker-publish]
     runs-on: ubuntu-latest
     permissions:
       contents: read
