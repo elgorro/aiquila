@@ -203,12 +203,16 @@ jobs:
           "
         env:
           VERSION: ${{ needs.check-version.outputs.version }}
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | sudo tar xz -C /usr/local/bin mcp-publisher
       - name: Authenticate with MCP Registry (GitHub OIDC)
         working-directory: mcp-server
-        run: npx mcp-publisher login github-oidc
+        run: mcp-publisher login github-oidc
       - name: Publish to MCP Registry
         working-directory: mcp-server
-        run: npx mcp-publisher publish
+        run: mcp-publisher publish
 
   docker-publish:
     name: Publish Docker Image (AIquila-MCP)
