@@ -67,14 +67,18 @@ async function checkIssuerTls(issuerUrl: string): Promise<void> {
       const code = err.code ?? '';
       if (TLS_CERT_ERROR_CODES.has(code)) {
         const strict = process.env.MCP_TLS_STRICT === 'true';
-        const msg = `[startup] TLS certificate rejected (${code}) — install a CA-signed cert`;
+        const msg =
+          `[startup] TLS certificate rejected (${code}). ` +
+          `Claude.ai and Claude mobile require a CA-trusted certificate — self-signed certs ` +
+          `will cause Claude to refuse the connection. Use Let's Encrypt (via Traefik or Caddy ` +
+          `with a real domain) or mount a CA-signed cert.`;
         if (strict) {
           logger.fatal({ issuer: issuerUrl, code }, msg);
           process.exit(1);
         } else {
           logger.error(
             { issuer: issuerUrl, code },
-            msg + '. Set MCP_TLS_STRICT=true to make this a hard failure.'
+            msg + ' Set MCP_TLS_STRICT=true to make this a hard failure.'
           );
         }
       } else {

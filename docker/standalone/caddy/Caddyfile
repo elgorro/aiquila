@@ -1,10 +1,12 @@
 {
-	# Development: use self-signed certs by default
-	# Production: remove this block to enable automatic Let's Encrypt
+	# Dev default: self-signed cert for localhost testing.
+	# Production (Claude.ai): remove this block — Caddy will use Let's Encrypt automatically.
 	local_certs
 }
 
-# MCP Server (HTTPS on port 3340)
-https://localhost:3340 {
+# Set MCP_DOMAIN in .env for a real domain + Let's Encrypt (see docs).
+# Caddy listens on its default HTTPS port (443) inside the container;
+# Docker maps it to host port 3340 in dev, or 443 in production.
+{$MCP_DOMAIN:localhost} {
 	reverse_proxy mcp-server:3339
 }
