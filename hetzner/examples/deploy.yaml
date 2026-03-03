@@ -100,6 +100,17 @@ nc_admin_password: CHANGE_ME_STRONG_PASSWORD
 # ── Extra OS packages ─────────────────────────────────────────────────────────
 # Additional packages installed via cloud-init on first boot.
 #
-# packages:
-#   - htop
-#   - ncdu
+#packages:
+#  - htop          # process monitor
+#  - ncdu          # disk usage analyzer
+#  - nano          # text editor
+#  - git           # pulling configs/repos
+#  - curl          # API calls, debugging
+#  - rsync         # file transfers, backups
+#  - fail2ban      # brute force protection
+#  - bind-utils    # dig/nslookup for DNS debugging
+#  - cifs-utils    # mount Hetzner Storage Box via SMB
+#  - cryptsetup    # LUKS volume encryption
+#  - tmux          # persistent terminal sessions over SSH
+#  - lsof          # debug open ports/files
+#  - unzip         # extract zip archives
