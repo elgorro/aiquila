@@ -15,7 +15,7 @@ const (
 // Mount installs cifs-utils, writes a credentials file, mounts the storage
 // box share via CIFS, and appends a persistent fstab entry.
 func Mount(sshClient *xssh.Client, host, login, password string) error {
-	shareUNC := fmt.Sprintf("//%s/%s", host, login)
+	shareUNC := fmt.Sprintf("//%s/backup", host)
 	mountOpts := fmt.Sprintf(
 		"credentials=%s,uid=0,gid=0,file_mode=0755,dir_mode=0755,vers=3.0",
 		credFile,

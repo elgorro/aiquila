@@ -51,8 +51,8 @@ nc_admin_password: CHANGE_ME_STRONG_PASSWORD
 #
 # name:     aiquila-prod
 # image:    fedora-43
-# location: nbg1
-# type:     cpx31
+# location: fsn1
+# type:     cx33
 # swap:     2G
 
 # ── SSH key ───────────────────────────────────────────────────────────────────
@@ -96,6 +96,19 @@ nc_admin_password: CHANGE_ME_STRONG_PASSWORD
 # labels:
 #   - env=production
 #   - team=platform
+
+# ── Hetzner Storage Box ───────────────────────────────────────────────────────
+# Mount a Hetzner Storage Box at /mnt/storagebox via CIFS.
+# Requires Hetzner Robot API credentials (robot_user / robot_password).
+# Data persists on the storage box across server deletions.
+#
+# storage_box: 1234567          # Storage Box ID (Hetzner Robot panel → Storage Boxes)
+# robot_user: robot_XXXXXXXX   # Robot API username (env: $HETZNER_ROBOT_USER)
+# robot_password: YOUR_ROBOT_PASSWORD  # Robot API password (env: $HETZNER_ROBOT_PASSWORD)
+#
+# Optional overrides:
+# storage_box_password: custom-cifs-password  # default: auto-generated; env: $HETZNER_STORAGE_BOX_PASSWORD
+# storage_box_ssh_key: ~/.ssh/aiquila-storagebox.pub  # SSH public key to add; omit to auto-generate ed25519 pair
 
 # ── Extra OS packages ─────────────────────────────────────────────────────────
 # Additional packages installed via cloud-init on first boot.
