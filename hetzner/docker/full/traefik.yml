@@ -1,6 +1,6 @@
 # Traefik v3 — AIquila Full stack static configuration
 # Handles both NC_DOMAIN and MCP_DOMAIN with shared Let's Encrypt resolver.
-# ACME_EMAIL is read from the traefik container's environment (set in docker-compose.yml).
+# ${ACME_EMAIL} is substituted by the aiquila-hetzner CLI at provisioning time.
 
 api:
   dashboard: false
@@ -28,6 +28,7 @@ providers:
   docker:
     exposedByDefault: false
     network: aiq-net
+    endpoint: "tcp://socket-proxy:2375"
 
 log:
   level: INFO

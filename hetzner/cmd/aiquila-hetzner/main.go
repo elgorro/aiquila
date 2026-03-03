@@ -614,7 +614,7 @@ func provisionMCPStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pri
 
 	uploads := []struct{ path, content string }{
 		{"/opt/aiquila/docker-compose.yml", templates.MCPDockerCompose},
-		{"/opt/aiquila/traefik.yml", templates.MCPTraefik},
+		{"/opt/aiquila/traefik.yml", strings.ReplaceAll(templates.MCPTraefik, "${ACME_EMAIL}", env.AcmeEmail)},
 		{"/opt/aiquila/crowdsec/acquis.yml", templates.MCPCrowdSecAcquis},
 		{"/opt/aiquila/.env", env.Render()},
 	}
@@ -656,6 +656,11 @@ func provisionNCStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, priv
 		return err
 	}
 
+	// Ensure the nc_data bind-mount target exists (populated by Storage Box if mounted).
+	if _, err := provision.RunCommand(sshClient, "mkdir -p /mnt/storagebox/nextcloud"); err != nil {
+		return fmt.Errorf("create nc_data dir: %w", err)
+	}
+
 	fmt.Println("\n── Uploading files to /opt/aiquila")
 	uploader, err := provision.NewUploader(sshClient)
 	if err != nil {
@@ -666,7 +671,7 @@ func provisionNCStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, priv
 	uploads := []struct{ path, content string }{
 		{"/opt/aiquila/docker-compose.yml", templates.NCDockerCompose},
 		{"/opt/aiquila/Dockerfile", templates.NCDockerfile},
-		{"/opt/aiquila/traefik.yml", templates.NCTraefik},
+		{"/opt/aiquila/traefik.yml", strings.ReplaceAll(templates.NCTraefik, "${ACME_EMAIL}", ncEnv.AcmeEmail)},
 		{"/opt/aiquila/crowdsec/acquis.yml", templates.NCCrowdSecAcquis},
 		{"/opt/aiquila/.env", ncEnv.Render()},
 	}
@@ -727,6 +732,11 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 		return err
 	}
 
+	// Ensure the nc_data bind-mount target exists (populated by Storage Box if mounted).
+	if _, err := provision.RunCommand(sshClient, "mkdir -p /mnt/storagebox/nextcloud"); err != nil {
+		return fmt.Errorf("create nc_data dir: %w", err)
+	}
+
 	fmt.Println("\n── Uploading files to /opt/aiquila")
 	uploader, err := provision.NewUploader(sshClient)
 	if err != nil {
@@ -737,7 +747,7 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 	uploads := []struct{ path, content string }{
 		{"/opt/aiquila/docker-compose.yml", templates.FullDockerCompose},
 		{"/opt/aiquila/Dockerfile", templates.FullDockerfile},
-		{"/opt/aiquila/traefik.yml", templates.FullTraefik},
+		{"/opt/aiquila/traefik.yml", strings.ReplaceAll(templates.FullTraefik, "${ACME_EMAIL}", fullEnv.AcmeEmail)},
 		{"/opt/aiquila/crowdsec/acquis.yml", templates.FullCrowdSecAcquis},
 		{"/opt/aiquila/.env", fullEnv.Render()},
 	}

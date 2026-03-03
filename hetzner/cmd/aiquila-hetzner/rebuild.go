@@ -223,7 +223,7 @@ func runRebuild(cmd *cobra.Command, _ []string) error {
 
 	uploads := []struct{ path, content string }{
 		{"/opt/aiquila/docker-compose.yml", templates.MCPDockerCompose},
-		{"/opt/aiquila/traefik.yml", templates.MCPTraefik},
+		{"/opt/aiquila/traefik.yml", strings.ReplaceAll(templates.MCPTraefik, "${ACME_EMAIL}", env.AcmeEmail)},
 		{"/opt/aiquila/crowdsec/acquis.yml", templates.MCPCrowdSecAcquis},
 		{"/opt/aiquila/.env", env.Render()},
 	}
