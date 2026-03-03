@@ -186,7 +186,13 @@ export async function startHttp(): Promise<void> {
         next();
       });
     }
-    app.use(mcpAuthRouter({ provider, issuerUrl: new URL(issuerUrl) }));
+    app.use(
+      mcpAuthRouter({
+        provider,
+        issuerUrl: new URL(issuerUrl),
+        resourceServerUrl: new URL(MCP_PATH, issuerUrl),
+      })
+    );
 
     // Parse URL-encoded form submissions from the login page
     app.use(express.urlencoded({ extended: false }));
