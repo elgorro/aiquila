@@ -122,8 +122,8 @@ services:
     environment:
       # MCP talks to Nextcloud over the internal Docker network — no HTTPS needed
       NEXTCLOUD_URL: http://nc
-      NEXTCLOUD_USER: ${NC_MCP_USER:?Set NC_MCP_USER in .env}
-      NEXTCLOUD_PASSWORD: ${NC_MCP_PASSWORD:?Set NC_MCP_PASSWORD in .env}
+      NEXTCLOUD_USER: ${NC_MCP_USER}
+      NEXTCLOUD_PASSWORD: ${NC_MCP_PASSWORD}
       NODE_ENV: production
       MCP_TRANSPORT: http
       MCP_PORT: "3339"
@@ -137,6 +137,7 @@ services:
       MCP_CLIENT_REDIRECT_URIS: ${MCP_CLIENT_REDIRECT_URIS:-https://claude.ai/api/mcp/auth_callback}
       MCP_TRUST_PROXY: "1"
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      MCP_TLS_STRICT: ${MCP_TLS_STRICT:-true}
     volumes:
       - mcp_state:/app/state
     labels:
