@@ -45,6 +45,10 @@ services:
       - mcp_state:/app/state
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 512m
     logging:
       driver: "json-file"
       options:
@@ -63,6 +67,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+        reservations:
+          memory: 32m
     logging:
       driver: "json-file"
       options:
@@ -85,6 +95,12 @@ services:
       - logs:/logs
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 128m
     logging:
       driver: "json-file"
       options:
@@ -104,6 +120,12 @@ services:
       - logs:/logs:ro
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 256m
     logging:
       driver: "json-file"
       options:
@@ -128,6 +150,12 @@ services:
       - /:/rootfs:ro
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+        reservations:
+          memory: 64m
     logging:
       driver: "json-file"
       options:
@@ -153,6 +181,12 @@ services:
       - /dev/kmsg
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 128m
     logging:
       driver: "json-file"
       options:
@@ -169,6 +203,12 @@ services:
       - prometheus_data:/prometheus
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 256m
     logging:
       driver: "json-file"
       options:
@@ -194,6 +234,12 @@ services:
       - grafana_data:/var/lib/grafana
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 128m
     logging:
       driver: "json-file"
       options:
@@ -206,7 +252,11 @@ volumes:
   traefik_certs:
     name: aiq-mcp_traefik_certs
   crowdsec_db:
-    name: aiq-mcp_crowdsec_db
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/crowdsec
   logs:
     name: aiq-mcp_logs
   prometheus_data:

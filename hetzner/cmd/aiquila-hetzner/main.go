@@ -605,6 +605,11 @@ func provisionMCPStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pri
 		return err
 	}
 
+	// CrowdSec always on local SSD — never goes to storage box.
+	if _, err := provision.RunCommand(sshClient, "mkdir -p /opt/crowdsec"); err != nil {
+		return fmt.Errorf("prepare data dirs: %w", err)
+	}
+
 	fmt.Println("\n── Uploading files to /opt/aiquila")
 	uploader, err := provision.NewUploader(sshClient)
 	if err != nil {
@@ -656,9 +661,21 @@ func provisionNCStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, priv
 		return err
 	}
 
-	// Ensure the nc_data bind-mount target exists (populated by Storage Box if mounted).
-	if _, err := provision.RunCommand(sshClient, "mkdir -p /mnt/storagebox/nextcloud"); err != nil {
-		return fmt.Errorf("create nc_data dir: %w", err)
+	// CrowdSec always on local SSD.
+	if _, err := provision.RunCommand(sshClient, "mkdir -p /opt/crowdsec"); err != nil {
+		return fmt.Errorf("prepare crowdsec dir: %w", err)
+	}
+	// nc_data: symlink to storage box if present, otherwise local.
+	if createStorageBox > 0 {
+		cmds := "mkdir -p /mnt/storagebox/nextcloud /opt/aiquila/data && " +
+			"ln -sf /mnt/storagebox/nextcloud /opt/aiquila/data/nc"
+		if _, err := provision.RunCommand(sshClient, cmds); err != nil {
+			return fmt.Errorf("prepare nc data dir: %w", err)
+		}
+	} else {
+		if _, err := provision.RunCommand(sshClient, "mkdir -p /opt/aiquila/data/nc"); err != nil {
+			return fmt.Errorf("prepare nc data dir: %w", err)
+		}
 	}
 
 	fmt.Println("\n── Uploading files to /opt/aiquila")
@@ -732,9 +749,21 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 		return err
 	}
 
-	// Ensure the nc_data bind-mount target exists (populated by Storage Box if mounted).
-	if _, err := provision.RunCommand(sshClient, "mkdir -p /mnt/storagebox/nextcloud"); err != nil {
-		return fmt.Errorf("create nc_data dir: %w", err)
+	// CrowdSec always on local SSD.
+	if _, err := provision.RunCommand(sshClient, "mkdir -p /opt/crowdsec"); err != nil {
+		return fmt.Errorf("prepare crowdsec dir: %w", err)
+	}
+	// nc_data: symlink to storage box if present, otherwise local.
+	if createStorageBox > 0 {
+		cmds := "mkdir -p /mnt/storagebox/nextcloud /opt/aiquila/data && " +
+			"ln -sf /mnt/storagebox/nextcloud /opt/aiquila/data/nc"
+		if _, err := provision.RunCommand(sshClient, cmds); err != nil {
+			return fmt.Errorf("prepare nc data dir: %w", err)
+		}
+	} else {
+		if _, err := provision.RunCommand(sshClient, "mkdir -p /opt/aiquila/data/nc"); err != nil {
+			return fmt.Errorf("prepare nc data dir: %w", err)
+		}
 	}
 
 	fmt.Println("\n── Uploading files to /opt/aiquila")

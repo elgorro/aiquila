@@ -53,6 +53,10 @@ services:
       - nc_data:/var/www/html
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 1g
     logging:
       driver: "json-file"
       options:
@@ -76,6 +80,12 @@ services:
       retries: 5
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 256m
     logging:
       driver: "json-file"
       options:
@@ -90,6 +100,12 @@ services:
       - nc_redis_data:/data
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 128m
     logging:
       driver: "json-file"
       options:
@@ -108,6 +124,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+        reservations:
+          memory: 32m
     logging:
       driver: "json-file"
       options:
@@ -129,6 +151,12 @@ services:
       - logs:/logs
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 128m
     logging:
       driver: "json-file"
       options:
@@ -148,6 +176,12 @@ services:
       - logs:/logs:ro
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 256m
     logging:
       driver: "json-file"
       options:
@@ -160,7 +194,7 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: /mnt/storagebox/nextcloud
+      device: /opt/aiquila/data/nc
   nc_db_data:
     name: aiq-nc_db_data
   nc_redis_data:
@@ -168,7 +202,11 @@ volumes:
   traefik_certs:
     name: aiq-nc_traefik_certs
   crowdsec_db:
-    name: aiq-nc_crowdsec_db
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/crowdsec
   logs:
     name: aiq-nc_logs
 
