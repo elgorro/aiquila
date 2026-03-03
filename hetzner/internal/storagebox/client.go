@@ -1,13 +1,18 @@
 package storagebox
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"golang.org/x/crypto/ssh"
 )
 
 const robotBaseURL = "https://robot-ws.your-server.de"
@@ -18,6 +23,7 @@ type StorageBox struct {
 	Login    string `json:"login"`
 	Server   string `json:"server"`
 	Samba    bool   `json:"samba"`
+	SSH      bool   `json:"ssh"`
 	Product  string `json:"product"`
 	Location string `json:"location"`
 }
@@ -98,4 +104,43 @@ func (c *RobotClient) EnableSamba(id int) error {
 func (c *RobotClient) SetPassword(id int, pw string) error {
 	_, err := c.do("POST", fmt.Sprintf("/storagebox/%d/password", id), url.Values{"password": {pw}})
 	return err
+}
+
+// EnableSSH enables SSH/SFTP access for the storage box.
+func (c *RobotClient) EnableSSH(id int) error {
+	_, err := c.do("POST", fmt.Sprintf("/storagebox/%d", id), url.Values{"ssh": {"true"}})
+	return err
+}
+
+// AddSSHKey uploads an SSH public key to the storage box.
+// name is a human-readable label; data is the raw OpenSSH public key string.
+func (c *RobotClient) AddSSHKey(id int, name, data string) error {
+	_, err := c.do("POST", fmt.Sprintf("/storagebox/%d/sshkey", id),
+		url.Values{"name": {name}, "data": {data}})
+	return err
+}
+
+// GenerateSSHKeyPair generates an ed25519 key pair.
+// Returns (publicKeyAuthorizedKeysFormat, privateKeyPEMBytes, error).
+func GenerateSSHKeyPair() ([]byte, []byte, error) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("generate ed25519 key: %w", err)
+	}
+
+	// Marshal private key to OpenSSH PEM format.
+	privPEM, err := ssh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal private key: %w", err)
+	}
+	privBytes := pem.EncodeToMemory(privPEM)
+
+	// Marshal public key to authorized_keys format.
+	sshPub, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal public key: %w", err)
+	}
+	pubBytes := ssh.MarshalAuthorizedKey(sshPub)
+
+	return pubBytes, privBytes, nil
 }

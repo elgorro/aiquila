@@ -55,9 +55,11 @@ var (
 	createMonitoring bool
 	createVolumeSize int
 	createLUKS       bool
-	createStorageBox     int
-	createRobotUser      string
-	createRobotPassword  string
+	createStorageBox         int
+	createRobotUser          string
+	createRobotPassword      string
+	createStorageBoxPassword string
+	createStorageBoxSSHKey   string
 	createDryRun     bool
 	createNoConfirm  bool
 	createLabels        []string
@@ -163,6 +165,10 @@ func buildCreateCmd() *cobra.Command {
 		"Hetzner Robot API username (default: $HETZNER_ROBOT_USER)")
 	cmd.Flags().StringVar(&createRobotPassword, "robot-password", "",
 		"Hetzner Robot API password (default: $HETZNER_ROBOT_PASSWORD)")
+	cmd.Flags().StringVar(&createStorageBoxPassword, "storage-box-password", "",
+		"CIFS password for the storage box (default: auto-generate; env: $HETZNER_STORAGE_BOX_PASSWORD)")
+	cmd.Flags().StringVar(&createStorageBoxSSHKey, "storage-box-ssh-key", "",
+		"Path to SSH public key file to add to the storage box (auto-generate ed25519 key pair if omitted)")
 	cmd.Flags().BoolVar(&createDryRun, "dry-run", false, "Print what would be created without making any API calls")
 	cmd.Flags().StringArrayVar(&createLabels, "label", nil, "Resource label key=value (repeatable, applied to server/firewall/key/volume)")
 	cmd.Flags().StringVar(&createDNSZone, "dns-zone", "", "Hetzner DNS zone (e.g. example.com) — creates <name>.<zone> A record after server IP is known")
@@ -277,6 +283,12 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	if createRobotPassword == "" {
 		createRobotPassword = fileCfg.RobotPassword
 	}
+	if createStorageBoxPassword == "" {
+		createStorageBoxPassword = fileCfg.StorageBoxPassword
+	}
+	if createStorageBoxSSHKey == "" {
+		createStorageBoxSSHKey = fileCfg.StorageBoxSSHKey
+	}
 	if createNetworkName == "" && fileCfg.Network != "" {
 		createNetworkName = fileCfg.Network
 	}
@@ -318,6 +330,9 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	}
 	if createRobotPassword == "" {
 		createRobotPassword = os.Getenv("HETZNER_ROBOT_PASSWORD")
+	}
+	if createStorageBoxPassword == "" {
+		createStorageBoxPassword = os.Getenv("HETZNER_STORAGE_BOX_PASSWORD")
 	}
 
 	// ── 3. Validate flags per stack ────────────────────────────────────────
@@ -520,12 +535,53 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 					return fmt.Errorf("enable samba: %w", err)
 				}
 			}
-			sbPassword = generatePassword(24)
+			if createStorageBoxPassword != "" {
+				sbPassword = createStorageBoxPassword
+			} else {
+				sbPassword = generatePassword(24)
+			}
 			if err := robotClient.SetPassword(box.ID, sbPassword); err != nil {
 				return fmt.Errorf("set storage box password: %w", err)
 			}
 			storageBoxLogin = box.Login
 			storageBoxHost = box.Server
+
+			// Resolve SSH public key: use provided file, or auto-generate ed25519 pair.
+			var sshPubKey string
+			if createStorageBoxSSHKey != "" {
+				keyData, err := os.ReadFile(createStorageBoxSSHKey)
+				if err != nil {
+					return fmt.Errorf("read SSH public key %s: %w", createStorageBoxSSHKey, err)
+				}
+				sshPubKey = strings.TrimSpace(string(keyData))
+			} else {
+				pub, priv, err := storagebox.GenerateSSHKeyPair()
+				if err != nil {
+					return fmt.Errorf("generate SSH key pair: %w", err)
+				}
+				privPath := fmt.Sprintf("storagebox-%d", createStorageBox)
+				pubPath := privPath + ".pub"
+				if err := os.WriteFile(privPath, priv, 0600); err != nil {
+					return fmt.Errorf("write private key: %w", err)
+				}
+				if err := os.WriteFile(pubPath, pub, 0644); err != nil {
+					return fmt.Errorf("write public key: %w", err)
+				}
+				fmt.Printf("  Generated SSH key pair: %s (private), %s (public)\n", privPath, pubPath)
+				fmt.Printf("  Connect: ssh -p23 -i %s %s@%s\n", privPath, storageBoxLogin, storageBoxHost)
+				sshPubKey = strings.TrimSpace(string(pub))
+			}
+
+			if !box.SSH {
+				fmt.Println("  Enabling SSH access...")
+				if err := robotClient.EnableSSH(box.ID); err != nil {
+					return fmt.Errorf("enable SSH on storage box: %w", err)
+				}
+			}
+			fmt.Println("  Adding SSH public key...")
+			if err := robotClient.AddSSHKey(box.ID, "aiquila", sshPubKey); err != nil {
+				return fmt.Errorf("add SSH key to storage box: %w", err)
+			}
 		}
 
 		// ── 13. Wait for SSH ────────────────────────────────────────────────────
