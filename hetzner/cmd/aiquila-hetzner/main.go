@@ -17,6 +17,7 @@ import (
 	profilepkg "github.com/elgorro/aiquila/hetzner/internal/profile"
 	"github.com/elgorro/aiquila/hetzner/internal/provision"
 	"github.com/elgorro/aiquila/hetzner/internal/server"
+	"github.com/elgorro/aiquila/hetzner/internal/storagebox"
 	"github.com/elgorro/aiquila/hetzner/internal/volume"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/spf13/cobra"
@@ -54,6 +55,11 @@ var (
 	createMonitoring bool
 	createVolumeSize int
 	createLUKS       bool
+	createStorageBox         int
+	createRobotUser          string
+	createRobotPassword      string
+	createStorageBoxPassword string
+	createStorageBoxSSHKey   string
 	createDryRun     bool
 	createNoConfirm  bool
 	createLabels        []string
@@ -153,6 +159,16 @@ func buildCreateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&createMonitoring, "monitoring", false, "Start monitoring profile (Prometheus + Grafana; --stack mcp only)")
 	cmd.Flags().IntVar(&createVolumeSize, "volume-size", 0, "Create Hetzner Cloud Volume (GB) and mount at /opt/aiquila")
 	cmd.Flags().BoolVar(&createLUKS, "luks", false, "[EXPERIMENTAL] LUKS-encrypt the Cloud Volume (requires --volume-size)")
+	cmd.Flags().IntVar(&createStorageBox, "storage-box", 0,
+		"Hetzner Storage Box ID — mount at /mnt/storagebox via CIFS (requires --robot-user/--robot-password)")
+	cmd.Flags().StringVar(&createRobotUser, "robot-user", "",
+		"Hetzner Robot API username (default: $HETZNER_ROBOT_USER)")
+	cmd.Flags().StringVar(&createRobotPassword, "robot-password", "",
+		"Hetzner Robot API password (default: $HETZNER_ROBOT_PASSWORD)")
+	cmd.Flags().StringVar(&createStorageBoxPassword, "storage-box-password", "",
+		"CIFS password for the storage box (default: auto-generate; env: $HETZNER_STORAGE_BOX_PASSWORD)")
+	cmd.Flags().StringVar(&createStorageBoxSSHKey, "storage-box-ssh-key", "",
+		"Path to SSH public key file to add to the storage box (auto-generate ed25519 key pair if omitted)")
 	cmd.Flags().BoolVar(&createDryRun, "dry-run", false, "Print what would be created without making any API calls")
 	cmd.Flags().StringArrayVar(&createLabels, "label", nil, "Resource label key=value (repeatable, applied to server/firewall/key/volume)")
 	cmd.Flags().StringVar(&createDNSZone, "dns-zone", "", "Hetzner DNS zone (e.g. example.com) — creates <name>.<zone> A record after server IP is known")
@@ -258,6 +274,21 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	if !createLUKS && fileCfg.LUKS {
 		createLUKS = true
 	}
+	if createStorageBox == 0 && fileCfg.StorageBox != 0 {
+		createStorageBox = fileCfg.StorageBox
+	}
+	if createRobotUser == "" {
+		createRobotUser = fileCfg.RobotUser
+	}
+	if createRobotPassword == "" {
+		createRobotPassword = fileCfg.RobotPassword
+	}
+	if createStorageBoxPassword == "" {
+		createStorageBoxPassword = fileCfg.StorageBoxPassword
+	}
+	if createStorageBoxSSHKey == "" {
+		createStorageBoxSSHKey = fileCfg.StorageBoxSSHKey
+	}
 	if createNetworkName == "" && fileCfg.Network != "" {
 		createNetworkName = fileCfg.Network
 	}
@@ -292,6 +323,16 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 		packages = fileCfg.Packages
 	} else {
 		packages = createPackages
+	}
+
+	if createRobotUser == "" {
+		createRobotUser = os.Getenv("HETZNER_ROBOT_USER")
+	}
+	if createRobotPassword == "" {
+		createRobotPassword = os.Getenv("HETZNER_ROBOT_PASSWORD")
+	}
+	if createStorageBoxPassword == "" {
+		createStorageBoxPassword = os.Getenv("HETZNER_STORAGE_BOX_PASSWORD")
 	}
 
 	// ── 3. Validate flags per stack ────────────────────────────────────────
@@ -337,6 +378,10 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	if createLUKS && createVolumeSize == 0 {
 		fmt.Fprintln(os.Stderr, "WARNING: --luks requires --volume-size; ignoring --luks")
 		createLUKS = false
+	}
+
+	if createStorageBox > 0 && (createRobotUser == "" || createRobotPassword == "") {
+		return fmt.Errorf("--storage-box requires --robot-user and --robot-password (or $HETZNER_ROBOT_USER/$HETZNER_ROBOT_PASSWORD)")
 	}
 
 	if createName == "" {
@@ -474,6 +519,71 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 			}
 		}
 
+		// ── 12b. Storage Box ─────────────────────────────────────────────────────
+		var storageBoxLogin, storageBoxHost, sbPassword string
+		if createStorageBox > 0 {
+			fmt.Println("\n── Storage Box")
+			robotClient := storagebox.NewClient(createRobotUser, createRobotPassword)
+			box, err := robotClient.GetStorageBox(createStorageBox)
+			if err != nil {
+				return fmt.Errorf("get storage box %d: %w", createStorageBox, err)
+			}
+			fmt.Printf("  Storage Box #%d: %s (%s, %s)\n", box.ID, box.Product, box.Location, box.Server)
+			if !box.Samba {
+				fmt.Println("  Enabling Samba/CIFS access...")
+				if err := robotClient.EnableSamba(box.ID); err != nil {
+					return fmt.Errorf("enable samba: %w", err)
+				}
+			}
+			if createStorageBoxPassword != "" {
+				sbPassword = createStorageBoxPassword
+			} else {
+				sbPassword = generatePassword(24)
+			}
+			if err := robotClient.SetPassword(box.ID, sbPassword); err != nil {
+				return fmt.Errorf("set storage box password: %w", err)
+			}
+			storageBoxLogin = box.Login
+			storageBoxHost = box.Server
+
+			// Resolve SSH public key: use provided file, or auto-generate ed25519 pair.
+			var sshPubKey string
+			if createStorageBoxSSHKey != "" {
+				keyData, err := os.ReadFile(createStorageBoxSSHKey)
+				if err != nil {
+					return fmt.Errorf("read SSH public key %s: %w", createStorageBoxSSHKey, err)
+				}
+				sshPubKey = strings.TrimSpace(string(keyData))
+			} else {
+				pub, priv, err := storagebox.GenerateSSHKeyPair()
+				if err != nil {
+					return fmt.Errorf("generate SSH key pair: %w", err)
+				}
+				privPath := fmt.Sprintf("storagebox-%d", createStorageBox)
+				pubPath := privPath + ".pub"
+				if err := os.WriteFile(privPath, priv, 0600); err != nil {
+					return fmt.Errorf("write private key: %w", err)
+				}
+				if err := os.WriteFile(pubPath, pub, 0644); err != nil {
+					return fmt.Errorf("write public key: %w", err)
+				}
+				fmt.Printf("  Generated SSH key pair: %s (private), %s (public)\n", privPath, pubPath)
+				fmt.Printf("  Connect: ssh -p23 -i %s %s@%s\n", privPath, storageBoxLogin, storageBoxHost)
+				sshPubKey = strings.TrimSpace(string(pub))
+			}
+
+			if !box.SSH {
+				fmt.Println("  Enabling SSH access...")
+				if err := robotClient.EnableSSH(box.ID); err != nil {
+					return fmt.Errorf("enable SSH on storage box: %w", err)
+				}
+			}
+			fmt.Println("  Adding SSH public key...")
+			if err := robotClient.AddSSHKey(box.ID, "aiquila", sshPubKey); err != nil {
+				return fmt.Errorf("add SSH key to storage box: %w", err)
+			}
+		}
+
 		// ── 13. Wait for SSH ────────────────────────────────────────────────────
 		fmt.Println("\n── Waiting for SSH")
 		sshClient, err := provision.WaitAndDial(serverIP, privKeyPath)
@@ -501,6 +611,14 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 				if err := volume.FormatAndMount(sshClient, volumeDevicePath); err != nil {
 					return err
 				}
+			}
+		}
+
+		// ── 15b. Mount Storage Box ───────────────────────────────────────────────
+		if createStorageBox > 0 {
+			fmt.Println("\n── Mounting Storage Box")
+			if err := storagebox.Mount(sshClient, storageBoxHost, storageBoxLogin, sbPassword); err != nil {
+				return err
 			}
 		}
 
@@ -543,6 +661,11 @@ func provisionMCPStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pri
 		return err
 	}
 
+	// CrowdSec always on local SSD — never goes to storage box.
+	if _, err := provision.RunCommand(sshClient, "mkdir -p /opt/crowdsec"); err != nil {
+		return fmt.Errorf("prepare data dirs: %w", err)
+	}
+
 	fmt.Println("\n── Uploading files to /opt/aiquila")
 	uploader, err := provision.NewUploader(sshClient)
 	if err != nil {
@@ -552,7 +675,7 @@ func provisionMCPStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pri
 
 	uploads := []struct{ path, content string }{
 		{"/opt/aiquila/docker-compose.yml", templates.MCPDockerCompose},
-		{"/opt/aiquila/traefik.yml", templates.MCPTraefik},
+		{"/opt/aiquila/traefik.yml", strings.ReplaceAll(templates.MCPTraefik, "${ACME_EMAIL}", env.AcmeEmail)},
 		{"/opt/aiquila/crowdsec/acquis.yml", templates.MCPCrowdSecAcquis},
 		{"/opt/aiquila/.env", env.Render()},
 	}
@@ -594,6 +717,23 @@ func provisionNCStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, priv
 		return err
 	}
 
+	// CrowdSec always on local SSD.
+	if _, err := provision.RunCommand(sshClient, "mkdir -p /opt/crowdsec"); err != nil {
+		return fmt.Errorf("prepare crowdsec dir: %w", err)
+	}
+	// nc_data: symlink to storage box if present, otherwise local.
+	if createStorageBox > 0 {
+		cmds := "mkdir -p /mnt/storagebox/nextcloud /opt/aiquila/data && " +
+			"ln -sf /mnt/storagebox/nextcloud /opt/aiquila/data/nc"
+		if _, err := provision.RunCommand(sshClient, cmds); err != nil {
+			return fmt.Errorf("prepare nc data dir: %w", err)
+		}
+	} else {
+		if _, err := provision.RunCommand(sshClient, "mkdir -p /opt/aiquila/data/nc"); err != nil {
+			return fmt.Errorf("prepare nc data dir: %w", err)
+		}
+	}
+
 	fmt.Println("\n── Uploading files to /opt/aiquila")
 	uploader, err := provision.NewUploader(sshClient)
 	if err != nil {
@@ -604,7 +744,7 @@ func provisionNCStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, priv
 	uploads := []struct{ path, content string }{
 		{"/opt/aiquila/docker-compose.yml", templates.NCDockerCompose},
 		{"/opt/aiquila/Dockerfile", templates.NCDockerfile},
-		{"/opt/aiquila/traefik.yml", templates.NCTraefik},
+		{"/opt/aiquila/traefik.yml", strings.ReplaceAll(templates.NCTraefik, "${ACME_EMAIL}", ncEnv.AcmeEmail)},
 		{"/opt/aiquila/crowdsec/acquis.yml", templates.NCCrowdSecAcquis},
 		{"/opt/aiquila/.env", ncEnv.Render()},
 	}
@@ -665,6 +805,23 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 		return err
 	}
 
+	// CrowdSec always on local SSD.
+	if _, err := provision.RunCommand(sshClient, "mkdir -p /opt/crowdsec"); err != nil {
+		return fmt.Errorf("prepare crowdsec dir: %w", err)
+	}
+	// nc_data: symlink to storage box if present, otherwise local.
+	if createStorageBox > 0 {
+		cmds := "mkdir -p /mnt/storagebox/nextcloud /opt/aiquila/data && " +
+			"ln -sf /mnt/storagebox/nextcloud /opt/aiquila/data/nc"
+		if _, err := provision.RunCommand(sshClient, cmds); err != nil {
+			return fmt.Errorf("prepare nc data dir: %w", err)
+		}
+	} else {
+		if _, err := provision.RunCommand(sshClient, "mkdir -p /opt/aiquila/data/nc"); err != nil {
+			return fmt.Errorf("prepare nc data dir: %w", err)
+		}
+	}
+
 	fmt.Println("\n── Uploading files to /opt/aiquila")
 	uploader, err := provision.NewUploader(sshClient)
 	if err != nil {
@@ -675,7 +832,7 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 	uploads := []struct{ path, content string }{
 		{"/opt/aiquila/docker-compose.yml", templates.FullDockerCompose},
 		{"/opt/aiquila/Dockerfile", templates.FullDockerfile},
-		{"/opt/aiquila/traefik.yml", templates.FullTraefik},
+		{"/opt/aiquila/traefik.yml", strings.ReplaceAll(templates.FullTraefik, "${ACME_EMAIL}", fullEnv.AcmeEmail)},
 		{"/opt/aiquila/crowdsec/acquis.yml", templates.FullCrowdSecAcquis},
 		{"/opt/aiquila/.env", fullEnv.Render()},
 	}
@@ -837,6 +994,11 @@ func printMCPSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		grafanaLine = fmt.Sprintf("  Grafana:    https://%s/grafana\n", createMCPDomain)
 	}
 
+	storageBoxLine := ""
+	if createStorageBox > 0 {
+		storageBoxLine = fmt.Sprintf("  Storage Box: #%d — /mnt/storagebox (persists across server deletions)\n", createStorageBox)
+	}
+
 	privateLine := ""
 	if createNetworkName != "" {
 		for _, pn := range srv.PrivateNet {
@@ -864,7 +1026,7 @@ func printMCPSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
   Server IP:  %s
 %s  SSH:        ssh -i %s root@%s
   MCP URL:    https://%s/mcp
-%s%s╚══════════════════════════════════════╝
+%s%s%s╚══════════════════════════════════════╝
 
 %s
 `,
@@ -873,6 +1035,7 @@ func printMCPSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		privKeyPath, serverIP,
 		createMCPDomain,
 		grafanaLine,
+		storageBoxLine,
 		priceLine,
 		dnsNote,
 	)
@@ -880,6 +1043,11 @@ func printMCPSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 }
 
 func printNCSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
+	storageBoxLine := ""
+	if createStorageBox > 0 {
+		storageBoxLine = fmt.Sprintf("  Storage Box: #%d — /mnt/storagebox (persists across server deletions)\n", createStorageBox)
+	}
+
 	privateLine := ""
 	if createNetworkName != "" {
 		for _, pn := range srv.PrivateNet {
@@ -908,7 +1076,7 @@ func printNCSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 %s  SSH:        ssh -i %s root@%s
   Nextcloud:  https://%s
   AIquila:    installed via OCC
-%s╚══════════════════════════════════════╝
+%s%s╚══════════════════════════════════════╝
 
 %s
 `,
@@ -916,6 +1084,7 @@ func printNCSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		privateLine,
 		privKeyPath, serverIP,
 		createNCDomain,
+		storageBoxLine,
 		priceLine,
 		dnsNote,
 	)
@@ -923,6 +1092,11 @@ func printNCSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 }
 
 func printFullSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
+	storageBoxLine := ""
+	if createStorageBox > 0 {
+		storageBoxLine = fmt.Sprintf("  Storage Box: #%d — /mnt/storagebox (persists across server deletions)\n", createStorageBox)
+	}
+
 	privateLine := ""
 	if createNetworkName != "" {
 		for _, pn := range srv.PrivateNet {
@@ -953,7 +1127,7 @@ func printFullSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
   Nextcloud:  https://%s
   MCP URL:    https://%s/mcp
   AIquila:    installed via OCC
-%s╚══════════════════════════════════════╝
+%s%s╚══════════════════════════════════════╝
 
 %s
 `,
@@ -962,6 +1136,7 @@ func printFullSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		privKeyPath, serverIP,
 		createNCDomain,
 		createMCPDomain,
+		storageBoxLine,
 		priceLine,
 		dnsNote,
 	)
@@ -1097,6 +1272,17 @@ func printDryRun(swapSize string, packages []string) error {
 func randomSuffix(n int) string {
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
 	r := rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec // non-security randomness
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = chars[r.Intn(len(chars))]
+	}
+	return string(b)
+}
+
+// generatePassword returns a random alphanumeric password of length n.
+func generatePassword(n int) string {
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	r := rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec
 	b := make([]byte, n)
 	for i := range b {
 		b[i] = chars[r.Intn(len(chars))]

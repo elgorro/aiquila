@@ -38,6 +38,11 @@ type DeployConfig struct {
 	Swap       string `yaml:"swap"        json:"swap"`
 	VolumeSize int    `yaml:"volume_size" json:"volume_size"`
 	LUKS       bool   `yaml:"luks"        json:"luks"`
+	StorageBox         int    `yaml:"storage_box"          json:"storage_box"`
+	RobotUser          string `yaml:"robot_user"           json:"robot_user"`
+	RobotPassword      string `yaml:"robot_password"       json:"robot_password"`
+	StorageBoxPassword string `yaml:"storage_box_password" json:"storage_box_password"`
+	StorageBoxSSHKey   string `yaml:"storage_box_ssh_key"  json:"storage_box_ssh_key"`
 	Network    string `yaml:"network"     json:"network"`
 	Labels     []string `yaml:"labels"    json:"labels"`
 	// DNS
@@ -220,7 +225,7 @@ func runRebuild(cmd *cobra.Command, _ []string) error {
 
 	uploads := []struct{ path, content string }{
 		{"/opt/aiquila/docker-compose.yml", templates.MCPDockerCompose},
-		{"/opt/aiquila/traefik.yml", templates.MCPTraefik},
+		{"/opt/aiquila/traefik.yml", strings.ReplaceAll(templates.MCPTraefik, "${ACME_EMAIL}", env.AcmeEmail)},
 		{"/opt/aiquila/crowdsec/acquis.yml", templates.MCPCrowdSecAcquis},
 		{"/opt/aiquila/.env", env.Render()},
 	}

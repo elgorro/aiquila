@@ -53,6 +53,15 @@ services:
       - nc_data:/var/www/html
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   nc-db:
     image: postgres:16
@@ -71,6 +80,17 @@ services:
       retries: 5
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 256m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   nc-redis:
     image: redis:7-alpine
@@ -80,23 +100,68 @@ services:
       - nc_redis_data:/data
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 128m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3
+    container_name: aiq-socket-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      NETWORKS: 1
+      SERVICES: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+        reservations:
+          memory: 32m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   traefik:
     image: traefik:v3
     container_name: aiq-traefik
     restart: unless-stopped
+    depends_on:
+      - socket-proxy
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./traefik.yml:/etc/traefik/traefik.yml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik_certs:/certs
       - logs:/logs
-    environment:
-      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 128m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   crowdsec:
     image: crowdsecurity/crowdsec:latest
@@ -111,10 +176,25 @@ services:
       - logs:/logs:ro
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 256m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   nc_data:
-    name: aiq-nc_data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/aiquila/data/nc
   nc_db_data:
     name: aiq-nc_db_data
   nc_redis_data:
@@ -122,7 +202,11 @@ volumes:
   traefik_certs:
     name: aiq-nc_traefik_certs
   crowdsec_db:
-    name: aiq-nc_crowdsec_db
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/crowdsec
   logs:
     name: aiq-nc_logs
 

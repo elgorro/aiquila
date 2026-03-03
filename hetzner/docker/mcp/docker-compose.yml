@@ -45,6 +45,39 @@ services:
       - mcp_state:/app/state
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3
+    container_name: aiq-socket-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      NETWORKS: 1
+      SERVICES: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+        reservations:
+          memory: 32m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   traefik:
     image: traefik:v3
@@ -52,18 +85,27 @@ services:
     restart: unless-stopped
     depends_on:
       - mcp
+      - socket-proxy
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./traefik.yml:/etc/traefik/traefik.yml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik_certs:/certs
       - logs:/logs
-    environment:
-      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 128m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   crowdsec:
     image: crowdsecurity/crowdsec:latest
@@ -78,6 +120,17 @@ services:
       - logs:/logs:ro
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 256m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ── monitoring profile ─────────────────────────────────────────────────────
   # Start with: docker compose --profile monitoring up -d
@@ -97,6 +150,17 @@ services:
       - /:/rootfs:ro
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+        reservations:
+          memory: 64m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   cadvisor:
     profiles: [monitoring]
@@ -117,6 +181,17 @@ services:
       - /dev/kmsg
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 128m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   prometheus:
     profiles: [monitoring]
@@ -128,6 +203,17 @@ services:
       - prometheus_data:/prometheus
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 256m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   grafana:
     profiles: [monitoring]
@@ -148,6 +234,17 @@ services:
       - grafana_data:/var/lib/grafana
     networks:
       - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 128m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   mcp_state:
@@ -155,7 +252,11 @@ volumes:
   traefik_certs:
     name: aiq-mcp_traefik_certs
   crowdsec_db:
-    name: aiq-mcp_crowdsec_db
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/crowdsec
   logs:
     name: aiq-mcp_logs
   prometheus_data:
