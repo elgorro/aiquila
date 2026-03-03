@@ -38,6 +38,9 @@ type DeployConfig struct {
 	Swap       string `yaml:"swap"        json:"swap"`
 	VolumeSize int    `yaml:"volume_size" json:"volume_size"`
 	LUKS       bool   `yaml:"luks"        json:"luks"`
+	StorageBox      int    `yaml:"storage_box"      json:"storage_box"`
+	RobotUser       string `yaml:"robot_user"        json:"robot_user"`
+	RobotPassword   string `yaml:"robot_password"    json:"robot_password"`
 	Network    string `yaml:"network"     json:"network"`
 	Labels     []string `yaml:"labels"    json:"labels"`
 	// DNS
