@@ -345,17 +345,20 @@ async function resolveTaskByUid(
 
   const responseText = await response.text();
 
-  const hrefMatch = responseText.match(/<d:href>([^<]+)<\/d:href>/);
-  const etagMatch = responseText.match(/<d:getetag>"?([^"<]+)"?<\/d:getetag>/);
+  const hrefMatch = responseText.match(nsTagContent('href'));
+  const etagMatch = responseText.match(nsTagContent('getetag'));
   const calDataMatch = responseText.match(nsTagContent('calendar-data'));
 
   if (!hrefMatch || !etagMatch || !calDataMatch) {
     throw new Error(`Task with UID "${uid}" not found in calendar "${calendarName}"`);
   }
 
+  const rawEtag = etagMatch[1].trim();
+  const etag = rawEtag.startsWith('"') ? rawEtag : `"${rawEtag}"`;
+
   return {
-    href: hrefMatch[1],
-    etag: etagMatch[1],
+    href: hrefMatch[1].trim(),
+    etag,
     icalData: calDataMatch[1],
   };
 }
@@ -767,7 +770,7 @@ export const updateTaskTool = {
         body: modified,
         headers: {
           'Content-Type': 'text/calendar; charset=utf-8',
-          'If-Match': `"${etag}"`,
+          'If-Match': etag,
         },
       });
 
@@ -819,7 +822,7 @@ export const deleteTaskTool = {
       const response = await fetchCalDAV(deleteUrl, {
         method: 'DELETE',
         headers: {
-          'If-Match': `"${etag}"`,
+          'If-Match': etag,
         },
       });
 
