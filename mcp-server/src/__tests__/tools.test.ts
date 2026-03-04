@@ -1558,6 +1558,19 @@ END:VCALENDAR</c:calendar-data>
   });
 
   describe('create_event', () => {
+    // PROPFIND response confirming the calendar supports VEVENT (new pre-flight check)
+    const propfindVeventOk = {
+      ok: true,
+      status: 207,
+      text: () =>
+        Promise.resolve(
+          '<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">' +
+            '<d:response><d:propstat><d:prop>' +
+            '<c:supported-calendar-component-set><c:comp name="VEVENT"/></c:supported-calendar-component-set>' +
+            '</d:prop></d:propstat></d:response></d:multistatus>'
+        ),
+    };
+
     // Mock REPORT response for post-creation verification
     const verifyResponse = `<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
   <d:response>
@@ -1578,6 +1591,7 @@ END:VCALENDAR</c:calendar-data>
 
     it('should create a timed event', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
         .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
         .mockResolvedValueOnce({
           ok: true,
@@ -1599,7 +1613,7 @@ END:VCALENDAR</c:calendar-data>
       expect(result.content[0].text).toContain('Lunch meeting');
       expect(result.content[0].text).toContain('UID:');
 
-      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
       expect(putCall[1].method).toBe('PUT');
       expect(putCall[1].body).toContain('BEGIN:VEVENT');
       expect(putCall[1].body).toContain('SUMMARY:Lunch meeting');
@@ -1611,6 +1625,7 @@ END:VCALENDAR</c:calendar-data>
 
     it('should create an all-day event with default end', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
         .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
         .mockResolvedValueOnce({
           ok: true,
@@ -1627,13 +1642,14 @@ END:VCALENDAR</c:calendar-data>
 
       expect(result.content[0].text).toContain('created successfully');
 
-      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
       expect(putCall[1].body).toContain('DTSTART;VALUE=DATE:20240401');
       expect(putCall[1].body).toContain('DTEND;VALUE=DATE:20240402');
     });
 
     it('should create event with attendees and alarm', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
         .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
         .mockResolvedValueOnce({
           ok: true,
@@ -1650,7 +1666,7 @@ END:VCALENDAR</c:calendar-data>
         alarm: 15,
       });
 
-      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
       expect(putCall[1].body).toContain('ATTENDEE');
       expect(putCall[1].body).toContain('CN=Bob');
       expect(putCall[1].body).toContain('mailto:bob@example.com');
@@ -1662,6 +1678,7 @@ END:VCALENDAR</c:calendar-data>
 
     it('should create event with recurrence rule', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
         .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
         .mockResolvedValueOnce({
           ok: true,
@@ -1677,7 +1694,7 @@ END:VCALENDAR</c:calendar-data>
         rrule: 'FREQ=WEEKLY;BYDAY=MO,WE,FR',
       });
 
-      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
       expect(putCall[1].body).toContain('RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR');
     });
 

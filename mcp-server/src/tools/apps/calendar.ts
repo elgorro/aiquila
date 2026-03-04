@@ -465,6 +465,45 @@ function formatCalendar(cal: ParsedCalendar): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * Assert that a calendar supports VEVENT. Throws a descriptive error if not,
+ * so create_event fails early with a useful message instead of a 403 from the server.
+ */
+async function assertCalendarSupportsEvents(
+  calendarUrl: string,
+  calendarName: string
+): Promise<void> {
+  const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:prop>
+    <c:supported-calendar-component-set />
+  </d:prop>
+</d:propfind>`;
+
+  const response = await fetchCalDAV(calendarUrl, {
+    method: 'PROPFIND',
+    body: propfindBody,
+    headers: { Depth: '0' },
+  });
+
+  if (!response.ok) return; // Can't check — let the server reject if needed
+
+  const text = await response.text();
+  const compSet = text.match(nsTagContent('supported-calendar-component-set'));
+  const components = compSet ? compSet[1] : '';
+
+  if (!components.includes('VEVENT')) {
+    const supported: string[] = [];
+    if (components.includes('VTODO')) supported.push('tasks');
+    if (components.includes('VJOURNAL')) supported.push('journals');
+    throw new Error(
+      `Calendar "${calendarName}" does not support events` +
+        (supported.length > 0 ? ` (it only supports: ${supported.join(', ')})` : '') +
+        `. Use list_calendars to find an event-capable calendar.`
+    );
+  }
+}
+
+/**
  * Resolve an event's CalDAV href, ETag, and full iCal data by UID.
  */
 async function resolveEventByUid(
@@ -851,7 +890,11 @@ export const createEventTool = {
     try {
       const config = getNextcloudConfig();
       const eventUid = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
-      const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/${args.calendarName}/${eventUid}.ics`;
+      const calendarBaseUrl = `${config.url}/remote.php/dav/calendars/${config.user}/${args.calendarName}/`;
+      const calDavUrl = `${calendarBaseUrl}${eventUid}.ics`;
+
+      // Validate the calendar supports VEVENT before building and sending the iCal payload
+      await assertCalendarSupportsEvents(calendarBaseUrl, args.calendarName);
       const now = icalNow();
       const isAllDay = args.dtstart.length === 8;
 
