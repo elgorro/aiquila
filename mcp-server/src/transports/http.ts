@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import https from 'node:https';
 import express from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -142,7 +141,7 @@ export async function startHttp(): Promise<void> {
 
   const mcpServer = createServer();
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
+    sessionIdGenerator: undefined, // stateless: no session IDs, works with distributed clients (Claude.ai)
   });
 
   const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
