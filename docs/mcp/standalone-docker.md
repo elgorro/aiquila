@@ -78,13 +78,41 @@ For Claude Desktop connecting to the dockerized MCP server:
 > mobile silently reject self-signed connections. For Claude.ai you need a public domain
 > with a Let's Encrypt (or other CA-signed) certificate.
 >
-> **Production quick-start (Let's Encrypt via Caddy):**
+> #### Option A: Caddy (automatic Let's Encrypt)
 > 1. Point a domain at this server's IP (e.g. `mcp.example.com`)
 > 2. Set `MCP_DOMAIN=mcp.example.com` and `ACME_EMAIL=you@example.com` in `.env`
 > 3. In `caddy/Caddyfile` — delete the `local_certs` block
 > 4. In `docker-compose.yml` — change caddy ports to `"80:80"` and `"443:443"`
 > 5. Set `MCP_AUTH_ISSUER=https://mcp.example.com` in `.env`
 > 6. `make restart`
+>
+> #### Option B: nginx + certbot
+>
+> For deployments where nginx is preferred over Caddy. There is a chicken-and-egg
+> problem on first run: nginx can't start without a certificate, but certbot needs
+> port 80 free. Bootstrap the cert first with certbot standalone, then start the stack:
+>
+> ```bash
+> # 1. Issue the initial cert (nginx not running yet)
+> docker run --rm -p 80:80 \
+>   -v $(pwd)/letsencrypt:/etc/letsencrypt \
+>   certbot/certbot certonly \
+>   --standalone -d your.domain.com \
+>   --email you@email.com --agree-tos --non-interactive
+>
+> # 2. Start the stack (nginx can now find the cert)
+> docker compose up -d
+> ```
+>
+> Renewal is handled by the certbot container's renewal loop (runs every 12 hours).
+>
+> For SSE streaming to work correctly, your nginx config must disable buffering:
+>
+> ```nginx
+> proxy_buffering    off;
+> proxy_cache        off;
+> proxy_read_timeout 3600s;
+> ```
 
 Claude.ai requires OAuth 2.0 authentication before it will connect to a remote MCP server. AIquila includes a built-in OAuth provider — enable it by setting three extra variables in `.env`:
 
@@ -115,6 +143,7 @@ Run from `docker/standalone/`:
 | `make build` | Rebuild container |
 | `make clean` | Stop and remove everything |
 | `make test` | Test connectivity |
+| `make test-oauth` | Full PKCE OAuth flow test (defaults to `https://localhost:3340`) |
 
 Or from `docker/`:
 

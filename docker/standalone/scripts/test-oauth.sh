@@ -2,15 +2,15 @@
 # Full OAuth 2.0 PKCE flow test for AIquila MCP server.
 # Reads credentials from .env in the same directory.
 # Usage: ./test-oauth.sh [base-url]
-#   base-url defaults to http://localhost:3339 (direct, no TLS)
+#   base-url defaults to https://localhost:3340 (via Caddy, self-signed cert)
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 STANDALONE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ── Config ────────────────────────────────────────────────────────────────────
-BASE="${1:-http://localhost:3339}"
-CURL="curl -s"          # add -k here if using https://localhost:3340
+BASE="${1:-https://localhost:3340}"
+CURL="curl -sk"         # -k: skip TLS verification for local self-signed cert
 
 # Load .env from standalone dir
 if [ ! -f "$STANDALONE_DIR/.env" ]; then
@@ -26,12 +26,12 @@ REDIRECT_URI="https://localhost/callback"  # dummy — we just capture the redir
 
 sep() { echo ""; echo "──────────────────────────────────────────"; echo "  $*"; echo "──────────────────────────────────────────"; }
 
-# ── Step 0: Reset MCP session (server holds state in memory) ──────────────────
-sep "Step 0 — Restart MCP container for clean session state"
+# ── Step 0: Restart MCP container ─────────────────────────────────────────────
+sep "Step 0 — Restart MCP container for clean state"
 docker compose -f "$STANDALONE_DIR/docker-compose.yml" restart mcp-server
 echo -n "Waiting for MCP server to be ready..."
 for i in $(seq 1 20); do
-  if curl -sf "$BASE/.well-known/oauth-authorization-server" >/dev/null 2>&1; then
+  if curl -skf "$BASE/.well-known/oauth-authorization-server" >/dev/null 2>&1; then
     echo " ready."
     break
   fi

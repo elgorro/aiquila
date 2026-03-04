@@ -4,537 +4,358 @@ Technical architecture overview of the AIquila MCP Server for developers working
 
 ## Overview
 
-The MCP Server is a TypeScript-based implementation of the Model Context Protocol that provides Claude Desktop with tools to interact with Nextcloud. It follows a modular architecture pattern with clear separation of concerns.
+The MCP server is a TypeScript/Node.js implementation of the [Model Context Protocol](https://modelcontextprotocol.io/) that exposes Nextcloud as a set of AI tools. It supports two deployment modes:
+
+- **stdio** — Claude Desktop (local, single-process)
+- **HTTP** — Claude.ai and other network clients (Docker, self-hosted)
 
 ## Technology Stack
 
 - **Runtime**: Node.js 24+
 - **Language**: TypeScript 5.8+ (strict mode)
-- **Protocol**: Model Context Protocol (MCP) via `@modelcontextprotocol/sdk`
-- **Transport**: stdio (JSON-RPC) or Streamable HTTP
+- **Protocol**: Model Context Protocol via [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) ^1.x
+- **Transport**: `StdioServerTransport` or `StreamableHTTPServerTransport`
+- **HTTP framework**: Express 5 (via MCP SDK's `createMcpExpressApp`)
+- **Auth**: OAuth 2.1 + PKCE, HS256 JWT via `node:crypto` (no external JWT library)
 - **Dependencies**:
-  - `pino` ^9.x - Structured JSON logging
-  - `webdav` ^5.x - WebDAV client
-  - `zod` ^3.x - Schema validation
-- **Dev Tools**:
-  - `vitest` - Testing framework
-  - `tsx` - TypeScript execution with hot reload
-  - `eslint` + `prettier` - Code quality
+  - `pino` ^9.x — structured JSON logging to stderr
+  - `webdav` ^5.x — WebDAV client
+  - `zod` ^3.x — schema validation
+- **Dev Tools**: `vitest`, `tsx`, `eslint`, `prettier`
 
 ## Project Structure
 
 ```
-mcp-server/
-├── src/
-│   ├── index.ts                 # Main server & registration
-│   ├── logger.ts                # Shared pino logger instance
-│   ├── client/                  # Infrastructure layer
-│   │   ├── webdav.ts           # WebDAV singleton client
-│   │   └── caldav.ts           # CalDAV helper functions
-│   └── tools/                   # Business logic layer
-│       ├── types.ts             # Shared types & schemas
-│       ├── system/              # System-level tools
-│       │   └── files.ts         # 5 file operation tools
-│       └── apps/                # App-specific tools
-│           ├── tasks.ts         # 2 Tasks tools (CalDAV)
-│           ├── cookbook.ts      # 1 Cookbook tool (WebDAV)
-│           ├── notes.ts         # 1 Notes tool (WebDAV)
-│           └── aiquila.ts       # 3 AIquila internal tools
-├── dist/                        # Compiled JS output
-├── src/__tests__/               # Vitest test files
-├── package.json
-├── tsconfig.json
-└── README.md
+mcp-server/src/
+├── index.ts             # Transport selector ($MCP_TRANSPORT)
+├── server.ts            # McpServer factory + tool registration
+├── logger.ts            # pino → stderr
+├── transports/
+│   ├── stdio.ts         # StdioServerTransport (Claude Desktop)
+│   └── http.ts          # Express app + StreamableHTTPServerTransport + auth middleware
+├── auth/
+│   ├── provider.ts      # NextcloudOAuthProvider — JWT sign/verify, code issuance
+│   ├── store.ts         # ClientsStore, CodeStore, RefreshStore (disk-persisted)
+│   └── login.ts         # POST /auth/login — Nextcloud credential validation
+├── client/
+│   ├── webdav.ts        # WebDAV singleton
+│   ├── caldav.ts        # CalDAV helper (authenticated fetch)
+│   ├── ocs.ts           # OCS API (Nextcloud REST)
+│   ├── aiquila.ts       # AIquila app client
+│   ├── bookmarks.ts     # Bookmarks client
+│   ├── mail.ts          # Mail client
+│   └── maps.ts          # Maps client
+├── tools/
+│   ├── types.ts         # ToolResponse, NextcloudConfig, shared Zod schemas
+│   ├── system/          # files, status, apps, occ, security, tags
+│   └── apps/            # tasks, calendar, notes, mail, contacts, bookmarks,
+│                        #   cookbook, maps, shares, groups, users, aiquila
+└── __tests__/           # vitest unit + integration tests
 ```
 
-## Architecture Layers
+## Transport Layer
 
-### 1. Transport Layer (index.ts)
+Transport is selected at startup via the `MCP_TRANSPORT` environment variable (`stdio` by default).
 
-**Responsibility**: MCP protocol handling and tool registration.
+### stdio (`StdioServerTransport`) — Claude Desktop
 
-**Components**:
-- `McpServer` instance creation
-- `StdioServerTransport` for stdio communication
-- Tool registration via `registerTools()`
-- Request routing to tool handlers
+A single long-lived `McpServer` instance is created at startup and connected to `StdioServerTransport`. JSON-RPC messages flow over stdin/stdout.
 
-**Code Flow**:
-```typescript
-main()
-  → registerTools()
-    → server.registerTool() × 12 tools
-  → server.connect(transport)
-  → listens for JSON-RPC requests
+```
+Claude Desktop
+     │
+     │  JSON-RPC over stdin/stdout
+     ▼
+StdioServerTransport
+     │
+     ▼
+McpServer (single instance, lifetime = process)
+     │
+     ▼
+Tool handlers → Nextcloud APIs
 ```
 
-**Key Methods**:
-- `registerTools()` - Iterates through all tool modules and registers each tool
-- `main()` - Initializes server and connects transport
-- Error handling wrapper for tool execution
+### HTTP (`StreamableHTTPServerTransport`) — Claude.ai / network clients
 
-### 2. Client Layer (client/)
-
-**Responsibility**: Manage external service connections.
-
-#### WebDAV Client (webdav.ts)
-
-**Pattern**: Singleton
-
-**Purpose**: Provide a single, reusable WebDAV client instance for file operations.
-
-**Implementation**:
-```typescript
-let webdavClient: WebDAVClient | null = null;
-
-export function getWebDAVClient(): WebDAVClient {
-  if (!webdavClient) {
-    webdavClient = createClient(`${url}/remote.php/dav/files/${user}`, {
-      username, password
-    });
-  }
-  return webdavClient;
-}
-```
-
-**Why Singleton?**
-- Connection pooling
-- Avoid multiple authentication flows
-- Shared state across tool invocations
-
-**Used By**: files.ts, cookbook.ts, notes.ts
-
-#### CalDAV Client (caldav.ts)
-
-**Pattern**: Functional helper
-
-**Purpose**: Provide authenticated HTTP fetch for CalDAV operations.
-
-**Implementation**:
-```typescript
-export async function fetchCalDAV(url: string, options: {...}) {
-  return fetch(url, {
-    headers: {
-      Authorization: `Basic ${auth}`,
-      'Content-Type': 'application/xml; charset=utf-8',
-      ...
-    },
-    ...options
-  });
-}
-```
-
-**Used By**: tasks.ts
-
-### 3. Business Logic Layer (tools/)
-
-**Responsibility**: Implement tool functionality.
-
-#### Tool Structure Pattern
-
-Every tool follows this structure:
+**Per-request stateless**: a new `McpServer` + `StreamableHTTPServerTransport` is created for every incoming HTTP request, then torn down when the response closes.
 
 ```typescript
-export const toolName = {
-  name: string,              // Unique identifier
-  description: string,       // User-facing description
-  inputSchema: ZodObject,    // Zod schema for parameters
-  handler: AsyncFunction,    // Implementation logic
+const handleMcpRequest = async (req, res) => {
+  const mcpServer = createServer();
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  await mcpServer.connect(transport);
+  res.on('close', () => { transport.close(); mcpServer.close(); });
+  await transport.handleRequest(req, res, req.body);
 };
 ```
 
-**Handler Signature**:
+Key points:
+- `sessionIdGenerator: undefined` — disables session tracking; no client affinity required
+- Required for Claude.ai, which connects from multiple backend IPs
+- `SSEServerTransport` (MCP protocol version 2024-11-05) was deprecated in May 2025 — AIquila does not use it
+
+```
+Claude.ai (multiple IPs)
+     │
+     │  HTTPS (via Traefik/Caddy)
+     ▼
+Express app  ──── Bearer auth check (when MCP_AUTH_ENABLED=true)
+     │
+     ▼  per request:
+┌─────────────────────────────┐
+│  new McpServer              │
+│  new StreamableHTTP         │  ← torn down on response close
+│       Transport             │
+└─────────────────────────────┘
+     │
+     ▼
+Tool handlers → Nextcloud APIs
+```
+
+## Auth Layer
+
+When `MCP_AUTH_ENABLED=true`, the server runs a built-in OAuth 2.1 + PKCE authorization server. Auth is transparent to tool handlers — they always see an already-authenticated context.
+
+### OAuth Flow
+
+```
+1. Claude.ai  →  GET /.well-known/oauth-authorization-server
+                 (discovery: endpoints, capabilities)
+
+2. Claude.ai  →  POST /register  (if MCP_REGISTRATION_ENABLED=true)
+                 (dynamic client registration)
+
+3. Claude.ai  →  GET /authorize?response_type=code&code_challenge=...
+                 (PKCE auth code request)
+
+4. Server     →  200 HTML login form (POST /auth/login)
+
+5. User       →  POST /auth/login  {username, password, code_challenge, ...}
+
+6. Server     →  validates credentials against OCS API
+                 /ocs/v2.php/cloud/user
+
+7. Server     →  302 redirect to client redirect_uri?code=<uuid>
+
+8. Claude.ai  →  POST /token  {code, code_verifier}
+                 (PKCE token exchange)
+
+9. Server     →  {access_token: <HS256 JWT, 1h>, refresh_token: <UUID, 24h>}
+
+10. Claude.ai  →  POST /mcp  Authorization: Bearer <access_token>
+                  (every MCP request verified via requireBearerAuth middleware)
+```
+
+### Token Details
+
+| Token | Format | TTL | Storage |
+|-------|--------|-----|---------|
+| Authorization code | UUID | 5 min | In-memory (`CodeStore`) |
+| Access token | HS256 JWT (node:crypto) | 1 hour | Stateless (verified by signature) |
+| Refresh token | UUID | 24 hours | Disk-persisted (`RefreshStore`) |
+
+### Auth Storage
+
+Token state is persisted to `MCP_AUTH_STATE_DIR` (default `/app/state`):
+
+- `clients.json` — dynamically registered OAuth clients (`ClientsStore`)
+- `refresh-tokens.json` — active refresh tokens (`RefreshStore`)
+
+Authorization codes are in-memory only (5-min TTL, lost on restart by design).
+
+### Client Configuration
+
+Two options for OAuth clients:
+
+**Static pre-seeded client** (for Claude.ai):
+```
+MCP_CLIENT_ID=<uuid>
+MCP_CLIENT_REDIRECT_URIS=https://claude.ai/api/mcp/auth_callback  # default
+```
+
+**Dynamic registration** (for any client):
+```
+MCP_REGISTRATION_ENABLED=true
+MCP_REGISTRATION_TOKEN=<secret>  # optional: gates POST /register with Bearer token
+```
+
+## Environment Variables
+
+### Core
+
+| Variable | Required | Default | Notes |
+|----------|----------|---------|-------|
+| `NEXTCLOUD_URL` | Yes | — | Trailing slash stripped automatically |
+| `NEXTCLOUD_USER` | Yes | — | |
+| `NEXTCLOUD_PASSWORD` | Yes | — | Use an app password |
+| `MCP_TRANSPORT` | No | `stdio` | `stdio` or `http` |
+| `LOG_LEVEL` | No | `info` | `trace` / `debug` / `info` / `warn` / `error` / `fatal` |
+
+### HTTP Transport
+
+| Variable | Required | Default | Notes |
+|----------|----------|---------|-------|
+| `MCP_PORT` | No | `3339` | Listening port |
+| `MCP_HOST` | No | `0.0.0.0` | Bind address |
+| `MCP_TRUST_PROXY` | No | `false` | Set to `1` when behind a single reverse proxy |
+| `MCP_TLS_STRICT` | No | `false` | Set `true` to fail fast on TLS cert errors |
+
+### Auth (`MCP_AUTH_ENABLED=true`)
+
+| Variable | Required | Default | Notes |
+|----------|----------|---------|-------|
+| `MCP_AUTH_ENABLED` | No | `false` | Enable OAuth 2.1 provider |
+| `MCP_AUTH_SECRET` | If auth | — | `openssl rand -hex 32` — signs JWT access tokens |
+| `MCP_AUTH_ISSUER` | If auth | — | Public HTTPS URL of this server |
+| `MCP_AUTH_STATE_DIR` | No | `/app/state` | Directory for persisted OAuth state |
+| `MCP_REGISTRATION_ENABLED` | No | `false` | Enable dynamic client registration |
+| `MCP_REGISTRATION_TOKEN` | No | — | Bearer token to gate `POST /register` |
+| `MCP_CLIENT_ID` | No | — | Pre-seeded static client ID |
+| `MCP_CLIENT_REDIRECT_URIS` | No | `https://claude.ai/api/mcp/auth_callback` | Comma-separated redirect URIs for static client |
+
+## Architecture Layers
+
+### 1. Entry Point (`index.ts`)
+
+Reads `MCP_TRANSPORT` and delegates to `startStdio()` or `startHttp()`. No business logic here.
+
+### 2. Server Factory (`server.ts`)
+
+`createServer()` instantiates an `McpServer` and registers all tool modules via `registerTools()`. Called once at startup (stdio) or once per request (HTTP).
+
+### 3. Client Layer (`client/`)
+
+Infrastructure adapters for each Nextcloud API surface:
+
+| File | Pattern | Used by |
+|------|---------|---------|
+| `webdav.ts` | Singleton | files, notes, cookbook |
+| `caldav.ts` | Functional helper | tasks, calendar |
+| `ocs.ts` | Functional helper | auth/login, system tools |
+| `mail.ts`, `maps.ts`, etc. | Functional helpers | app tools |
+
+The WebDAV client is a singleton to reuse connections across tool calls. CalDAV and OCS helpers are stateless functions.
+
+### 4. Tool Layer (`tools/`)
+
+Each tool module exports an array of tool definitions. Tools call client layer functions; they do not manage connections directly.
+
 ```typescript
-handler: async (args: SchemaType) => {
-  return {
-    content: [{ type: 'text', text: string }],
-    isError?: boolean
-  };
-}
+export const myTool = {
+  name: 'tool_name',
+  description: 'What it does',
+  inputSchema: z.object({ ... }),
+  handler: async (args) => {
+    // call client layer
+    return { content: [{ type: 'text', text: '...' }] };
+  },
+};
 ```
 
-#### Module Pattern
+### 5. Auth Layer (`auth/`)
 
-Each module exports an array of tools:
+Implements `OAuthServerProvider` from the MCP SDK. The provider is instantiated once and shared for the lifetime of the HTTP process. Individual stores (`ClientsStore`, `CodeStore`, `RefreshStore`) manage state independently.
 
-```typescript
-// tools/apps/tasks.ts
-export const tasksTools = [
-  listTaskListsTool,
-  createTaskTool,
-];
+## Data Flow Examples
 
-// Imported in index.ts
-import { tasksTools } from './tools/apps/tasks.js';
-```
-
-**Benefits**:
-- Easy to add/remove tools
-- Clear module boundaries
-- Simple registration loop
-
-### 4. Type Safety Layer (tools/types.ts)
-
-**Responsibility**: Shared type definitions and utilities.
-
-**Contents**:
-- `ToolResponse` interface
-- Common Zod schemas (`PathSchema`, `FileContentSchema`, etc.)
-- `NextcloudConfig` interface
-- `getNextcloudConfig()` helper
-
-**Why Separate?**
-- DRY principle - reuse common types
-- Single source of truth
-- Type consistency across modules
-
-## Data Flow
-
-### Request Flow
+### stdio (Claude Desktop)
 
 ```
-1. Claude Desktop sends request
-   ↓ (stdio - JSON-RPC)
-2. McpServer receives via StdioServerTransport
-   ↓
-3. Server finds tool by name
-   ↓
-4. Zod validates parameters
-   ↓
-5. Tool handler executes
-   ├→ Gets client (WebDAV/CalDAV)
-   ├→ Performs operation on Nextcloud
-   └→ Returns formatted response
-   ↓
-6. Server wraps response in MCP format
-   ↓ (stdio - JSON-RPC)
-7. Claude Desktop receives and displays
+User message → Claude → tools/call JSON-RPC
+  → stdin → StdioServerTransport → McpServer
+  → tool handler → Nextcloud API
+  → response → McpServer → StdioServerTransport → stdout
+  → Claude → user
 ```
 
-### Example: create_note Flow
+### HTTP + OAuth (Claude.ai)
 
 ```
-User: "Create a note called 'Ideas' with content 'Project brainstorm'"
-  ↓
-Claude determines: use "create_note" tool
-  ↓
-JSON-RPC request: {
-  method: "tools/call",
-  params: {
-    name: "create_note",
-    arguments: {
-      title: "Ideas",
-      content: "Project brainstorm"
-    }
-  }
-}
-  ↓
-MCP Server: routes to createNoteTool.handler()
-  ↓
-Handler:
-  1. getWebDAVClient()
-  2. noteContent = `# Ideas\n\nProject brainstorm`
-  3. client.putFileContents('/Notes/Ideas.md', noteContent)
-  ↓
-Response: {
-  content: [{
-    type: "text",
-    text: "Note 'Ideas' created successfully at /Notes/Ideas.md"
-  }]
-}
-  ↓
-Claude: "I've created a note called 'Ideas' with your brainstorm content."
+Claude.ai → HTTPS → Express router
+  → requireBearerAuth (verify HS256 JWT)
+  → per-request McpServer + StreamableHTTPServerTransport
+  → tool handler → Nextcloud API
+  → response → transport → HTTP response
+  → (server + transport torn down on connection close)
 ```
 
-## Design Patterns
+## Error Handling
 
-### 1. Singleton Pattern (WebDAV Client)
+Three levels:
 
-**Use Case**: Manage single shared resource.
+1. **Tool handler** — catches domain errors (WebDAV 404, auth failure, etc.) and returns `{ isError: true }` to Claude
+2. **Server** — catches unexpected exceptions from tool handlers
+3. **Main** — catches fatal startup errors (`process.exit(1)`)
 
-**Implementation**: Lazy initialization with null check.
-
-**Benefits**:
-- Resource efficiency
-- Consistent state
-- Easy to test with reset function
-
-### 2. Factory Pattern (Tool Creation)
-
-**Use Case**: Create tool objects with consistent structure.
-
-**Implementation**: Each tool module exports a factory array.
-
-**Benefits**:
-- Uniform tool interface
-- Easy to register
-- Type-safe
-
-### 3. Dependency Injection
-
-**Use Case**: Tools don't create their own clients.
-
-**Implementation**: Tools call `getWebDAVClient()` or `fetchCalDAV()`.
-
-**Benefits**:
-- Testability (can mock clients)
-- Loose coupling
-- Flexible configuration
-
-### 4. Strategy Pattern (Tool Handlers)
-
-**Use Case**: Different implementations for different tools.
-
-**Implementation**: Each tool has its own handler function.
-
-**Benefits**:
-- Encapsulation
-- Easy to modify
-- Clear responsibilities
-
-## Configuration Management
-
-### Environment Variables
-
-Required variables validated at runtime:
-```typescript
-NEXTCLOUD_URL       // e.g., https://cloud.example.com
-NEXTCLOUD_USER      // Nextcloud username
-NEXTCLOUD_PASSWORD  // App password or user password
-```
-
-### Validation Strategy
-
-**Early Failure**: Validate on first client access, not at startup.
-
-**Why?**
-- Allow server to start without immediate Nextcloud connection
-- Fail only when tools are actually used
-- Clear error messages to user
-
-**Implementation**:
-```typescript
-export function getWebDAVClient(): WebDAVClient {
-  if (!NEXTCLOUD_URL || !NEXTCLOUD_USER || !NEXTCLOUD_PASSWORD) {
-    throw new Error('Missing required environment variables');
-  }
-  // ... create client
-}
-```
-
-## Error Handling Strategy
-
-### Three Levels of Error Handling
-
-#### 1. Tool Handler Level
-```typescript
-handler: async (args) => {
-  try {
-    // operation
-  } catch (error) {
-    return {
-      content: [{ type: 'text', text: `Error: ${error.message}` }],
-      isError: true
-    };
-  }
-}
-```
-
-#### 2. Server Level
-```typescript
-try {
-  return await tool.handler(args);
-} catch (error) {
-  return {
-    content: [{ type: 'text', text: `Error: ${error.message}` }],
-    isError: true
-  };
-}
-```
-
-#### 3. Main Function Level
-```typescript
-main().catch((err) => {
-  logger.fatal({ err }, 'Fatal error');
-  process.exit(1);
-});
-```
-
-### Error Types
-
-1. **Configuration Errors** - Missing env vars
-2. **Authentication Errors** - Invalid credentials
-3. **Network Errors** - Connection failures
-4. **Not Found Errors** - Resource doesn't exist
-5. **Validation Errors** - Invalid parameters (caught by Zod)
-
-## Testing Strategy
-
-### Unit Tests
-
-Test tools in isolation:
-- Mock WebDAV/CalDAV clients
-- Test parameter validation
-- Test error handling
-
-### Integration Tests
-
-Test with real Nextcloud instance:
-- Requires test environment
-- Test full data flow
-- Validate API interactions
-
-### Test File Organization
-
-```
-src/__tests__/
-├── system/
-│   └── files.test.ts
-└── apps/
-    ├── tasks.test.ts
-    ├── cookbook.test.ts
-    └── notes.test.ts
-```
-
-## Build & Deploy
-
-### Development
-
-```bash
-npm run dev    # Hot reload with tsx
-```
-
-### Production Build
-
-```bash
-npm run build  # Compile TS to JS in dist/
-```
-
-### Deployment
-
-- Copy `dist/` to production
-- Set environment variables
-- Configure Claude Desktop config
-- Restart Claude Desktop
-
-## Performance Considerations
-
-### Connection Reuse
-- WebDAV singleton prevents multiple connections
-- HTTP keep-alive in fetch operations
-
-### Async Operations
-- All I/O is async
-- Non-blocking server
-- Concurrent request handling
-
-### Memory Management
-- Clients released when not in use
-- No long-term caching (yet)
-- Minimal state retention
+All errors are logged via pino before being surfaced.
 
 ## Security
 
-### Credential Handling
-- Environment variables only
-- No hardcoded credentials
-- No logging of sensitive data
+- **Credentials** — environment variables only; never logged
+- **Input validation** — Zod schemas on all tool inputs; prevents injection via type enforcement
+- **OAuth/JWT** — PKCE enforced; access tokens are short-lived (1h); token signatures verified with `timingSafeEqual`
+- **HTTPS** — enforced by the reverse proxy (Traefik/Caddy); the MCP container itself serves plain HTTP internally
+- **Rate limiting** — Express handles concurrent requests; further rate limiting can be added at the proxy layer
+- **DNS rebinding** — `allowedHosts` derived from `MCP_AUTH_ISSUER` hostname; `localhost`/`127.0.0.1` always allowed for health checks
 
-### Input Validation
-- Zod schemas validate all inputs
-- Type checking prevents injection
-- Path validation prevents traversal
+## Logging
 
-### Transport Security
-- stdio transport (local only)
-- HTTPS for Nextcloud connections
-- Basic Auth over TLS
-
-## Monitoring & Debugging
-
-### Logging
-
-Structured JSON logging via [pino](https://getpino.io/), writing to stderr (safe for stdio transport).
+Structured JSON via [pino](https://getpino.io/), always to **stderr** (stdout is reserved for the MCP protocol in stdio mode).
 
 ```typescript
 // src/logger.ts
-import pino from 'pino';
 export const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' }, process.stderr);
 ```
 
-Control verbosity with the `LOG_LEVEL` environment variable:
-
 | Level | Use case |
 |-------|----------|
-| `debug` / `trace` | Development, deep tracing |
+| `trace` / `debug` | Development, deep tracing |
 | `info` | Default — startup, login, token events |
 | `warn` | Auth failures, misconfiguration |
 | `error` / `fatal` | Unexpected exceptions, fatal config errors |
 
 Example output:
 ```json
-{"level":30,"time":1700000000000,"msg":"[auth] Login successful","user":"alice","client":"claude-desktop"}
+{"level":30,"time":1700000000000,"msg":"[token] Access token issued","user":"alice","client":"claude-desktop"}
 ```
 
-### Debugging
+## Testing
 
-**Methods**:
-1. `LOG_LEVEL=debug npm run dev` — verbose structured output
-2. Claude Desktop logs: `~/.local/share/Claude/logs/`
-3. Use debugger with tsx
-4. Test tools in isolation
+```bash
+cd mcp-server && npm test   # vitest unit tests
+```
 
-## Future Improvements
+Tests live in `src/__tests__/`. Coverage includes:
+- Auth provider (token sign/verify, code exchange, refresh rotation)
+- Auth stores (persistence, TTL expiry)
+- Transport setup (stdio + HTTP)
+- Tool handlers (mocked clients)
 
-### Planned Enhancements
+End-to-end tests are in `docker/standalone/scripts/`:
+- `test-oauth.sh` — full PKCE flow against a live server
+- `test-tools.sh` — exercises core MCP tools against real Nextcloud
 
-1. **Caching Layer** - Cache frequently accessed data
-2. **Rate Limiting** - Protect Nextcloud from overload
-3. **Retry Logic** - Handle transient failures
-4. **Batch Operations** - Multiple operations in one call
-5. **Metrics** - Track usage and performance
-6. **Direct OCC Execution** - Execute OCC commands via API
+## Build & Deployment
 
-### Extension Points
+### Development
 
-1. **New Clients** - Add support for new protocols
-2. **Middleware** - Add logging, auth, caching layers
-3. **Custom Tools** - User-defined tools
-4. **Alternative Transports** - HTTP, WebSocket
+```bash
+npm run dev                       # hot reload via tsx (stdio)
+MCP_TRANSPORT=http npm run dev    # HTTP on :3339
+```
 
-## Development Workflow
+### Production
 
-### Adding a New Tool
+```bash
+npm run build   # TypeScript → dist/
+```
 
-1. Identify appropriate module
-2. Add tool definition
-3. Export in module array
-4. Build and test
-5. Document
-
-### Adding a New App
-
-1. Create new module file
-2. Import in index.ts
-3. Register in registerTools()
-4. Create documentation
-5. Build and test
-
-### Code Review Checklist
-
-- [ ] Tool follows standard pattern
-- [ ] Parameters have descriptions
-- [ ] Error handling is present
-- [ ] Types are correct
-- [ ] Documentation is complete
-- [ ] Tests are written
-- [ ] Build succeeds
-- [ ] Manual testing passes
+Docker is the standard production deployment. See `docker/standalone/` (HTTP + OAuth, external Nextcloud) or `hetzner/docker/` for cloud provisioning.
 
 ## References
 
-- [MCP SDK Documentation](https://github.com/anthropics/mcp-sdk)
+- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
+- [Model Context Protocol spec](https://modelcontextprotocol.io/)
 - [WebDAV RFC 4918](https://tools.ietf.org/html/rfc4918)
 - [CalDAV RFC 4791](https://tools.ietf.org/html/rfc4791)
-- [TypeScript Handbook](https://www.typescriptlang.org/docs/handbook/)
 - [Zod Documentation](https://zod.dev/)

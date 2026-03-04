@@ -50,17 +50,28 @@ MCP_AUTH_ISSUER=https://mcp.example.com
 
 `MCP_AUTH_ISSUER` must exactly match the public URL Claude.ai uses to reach your server. It appears in the OAuth metadata that Claude.ai fetches, so any mismatch will break the flow.
 
-### 3. Ensure your server is reachable over HTTPS
+### 3. Enable dynamic client registration
+
+Claude.ai self-registers as an OAuth client on first connect. Enable it:
+
+```env
+MCP_REGISTRATION_ENABLED=true
+```
+
+Without this, Claude.ai cannot register itself and the OAuth flow will fail at the first step.
+
+### 4. Ensure your server is reachable over HTTPS
 
 Claude.ai requires a valid (non-self-signed) TLS certificate. Options:
 
 - **Caddy with a real domain** — Point a domain at your server's IP, update the Caddyfile to use your domain instead of `local_certs`, and Caddy will obtain a Let's Encrypt certificate automatically.
+- **nginx + certbot** — See [nginx + Let's Encrypt](standalone-docker.md#option-b-nginx--certbot) in the standalone Docker guide.
 - **Cloudflare Tunnel** — Route traffic through Cloudflare without opening firewall ports.
 - **Any reverse proxy** — Nginx, Traefik, etc. — as long as the upstream URL matches `MCP_AUTH_ISSUER`.
 
 > **Reverse proxy users:** If you run the MCP server behind Traefik, nginx, or any other proxy, also set `MCP_TRUST_PROXY=1` in your `.env`. Without it the built-in rate limiter will throw `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` when the proxy adds forwarding headers. See [Reverse proxy troubleshooting](standalone-docker.md#reverse-proxy-traefik-nginx--err_erl_unexpected_x_forwarded_for).
 
-### 4. Restart the MCP server
+### 5. Restart the MCP server
 
 ```bash
 cd docker/standalone
@@ -73,7 +84,7 @@ Confirm auth is active in the logs:
 OAuth 2.0 authentication enabled (issuer: https://mcp.example.com)
 ```
 
-### 5. Verify the OAuth metadata endpoint
+### 6. Verify the OAuth metadata endpoint
 
 ```bash
 curl https://mcp.example.com/.well-known/oauth-authorization-server
@@ -93,7 +104,7 @@ You should receive a JSON document similar to:
 }
 ```
 
-### 6. Confirm unauthenticated requests are rejected
+### 7. Confirm unauthenticated requests are rejected
 
 ```bash
 curl -i https://mcp.example.com/mcp
@@ -101,7 +112,7 @@ curl -i https://mcp.example.com/mcp
 
 You should get `401 Unauthorized`. Without a valid Bearer token, all `/mcp` requests are blocked.
 
-### 7. Add the server to Claude.ai
+### 8. Add the server to Claude.ai
 
 In Claude.ai, go to **Settings** → **Integrations** → **Add MCP Server** and enter:
 
@@ -156,4 +167,6 @@ Set the missing variable in `.env` and restart.
 
 ### Claude.ai reconnects frequently
 
-This is usually caused by the container restarting (which clears in-memory tokens). Check `make logs` for crash/restart cycles and resolve the underlying issue.
+Claude.ai uses multiple backend worker IPs. In AIquila < 0.1.36, the stateful session model rejected connections from workers that didn't share session state, causing `400 Bad Request` on reconnects. Upgrade to **0.1.36+**, which uses per-request stateless transport — each request is handled independently with no session affinity required.
+
+If you're already on 0.1.36+ and still see frequent reconnects, the container may be restarting and clearing in-memory tokens. Check `make logs` for crash/restart cycles.
