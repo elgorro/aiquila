@@ -883,7 +883,7 @@ END:VCALENDAR</c:calendar-data>
       expect(putCall[1].body).toContain('STATUS:COMPLETED');
       expect(putCall[1].body).toContain('PERCENT-COMPLETE:100');
       expect(putCall[1].body).toContain('COMPLETED:');
-      expect(putCall[1].headers['If-Match']).toBe('"etag-comp"');
+      expect(putCall[1].headers['If-Match']).toBe('""etag-comp""');
     });
 
     it('should reopen a completed task', async () => {
@@ -1793,6 +1793,42 @@ END:VCALENDAR</c:calendar-data>
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('ETag mismatch');
+    });
+
+    it('should extract ETag correctly when server uses non-d: namespace prefix', async () => {
+      const resolveResponseUpperNs = `<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:response>
+    <D:href>/remote.php/dav/calendars/admin/personal/event-1.ics</D:href>
+    <D:propstat><D:prop>
+      <D:getetag>"etag-upper-ns"</D:getetag>
+      <C:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-1
+SUMMARY:Old title
+DTSTART:20240315T090000Z
+DTEND:20240315T100000Z
+END:VEVENT
+END:VCALENDAR</C:calendar-data>
+    </D:prop></D:propstat>
+  </D:response>
+</D:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(resolveResponseUpperNs) })
+        .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+
+      const { updateEventTool } = await import('../tools/apps/calendar.js');
+      const result = await updateEventTool.handler({
+        uid: 'event-1',
+        calendarName: 'personal',
+        summary: 'Updated title',
+      });
+
+      expect(result.content[0].text).toContain('updated successfully');
+
+      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
+      expect(putCall[1].headers['If-Match']).toBe('"etag-upper-ns"');
     });
 
     it('should handle event not found', async () => {
