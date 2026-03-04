@@ -107,6 +107,12 @@ describe('http transport', () => {
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
 
+    // Transport is created per-request; invoke the registered handler to trigger connect
+    const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
+    const handler = mcpCall?.[1] as (req: unknown, res: unknown) => Promise<void>;
+    expect(handler).toBeDefined();
+    await handler({ body: {} }, { on: vi.fn() });
+
     expect(mockConnect).toHaveBeenCalledWith(mockHttpTransport);
   });
 
@@ -214,6 +220,13 @@ describe('http transport with auth enabled', () => {
   it('still connects the MCP server to the transport', async () => {
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
+
+    // Transport is created per-request; invoke the last handler on /mcp to trigger connect
+    const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
+    const handler = mcpCall?.[mcpCall.length - 1] as (req: unknown, res: unknown) => Promise<void>;
+    expect(handler).toBeDefined();
+    await handler({ body: {} }, { on: vi.fn() });
+
     expect(mockConnect).toHaveBeenCalledWith(mockHttpTransport);
   });
 });
