@@ -4,14 +4,14 @@
 # Nextcloud tools: system_status, list_files, create_folder, write_file,
 # read_file, search_files, get_file_info, delete.  Cleans up after itself.
 # Usage: ./test-tools.sh [base-url]
-#   base-url defaults to http://localhost:3339 (direct, no TLS)
+#   base-url defaults to https://localhost:3340 (via Caddy, self-signed TLS)
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 STANDALONE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-BASE="${1:-http://localhost:3339}"
-CURL="curl -s"
+BASE="${1:-https://localhost:3340}"
+CURL="curl -sk"         # -k: skip TLS verification for local self-signed cert
 
 if [ ! -f "$STANDALONE_DIR/.env" ]; then
   echo "ERROR: .env not found in $STANDALONE_DIR — run: cp .env.example .env" >&2
@@ -138,15 +138,15 @@ INIT_RESP=$($CURL -D - -X POST "$BASE/mcp" \
   -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"tool-test","version":"1.0"}}}')
-SESSION_ID=$(echo "$INIT_RESP" | grep -i '^mcp-session-id:' | tr -d '\r' | sed 's/[Mm]cp-[Ss]ession-[Ii]d: //')
-echo "session   : $SESSION_ID"
+SESSION_ID=$(echo "$INIT_RESP" | grep -i '^mcp-session-id:' | tr -d '\r' | sed 's/[Mm]cp-[Ss]ession-[Ii]d: //') || SESSION_ID=""
+echo "session   : ${SESSION_ID:-(none — stateless)}"
 
 MCP_HEADERS=(
   -H "Content-Type: application/json"
   -H "Accept: application/json, text/event-stream"
   -H "Authorization: Bearer $ACCESS_TOKEN"
-  -H "Mcp-Session-Id: $SESSION_ID"
 )
+[ -n "$SESSION_ID" ] && MCP_HEADERS+=(-H "Mcp-Session-Id: $SESSION_ID")
 
 mcp_tool() {
   local id="$1" name="$2" args="$3"
