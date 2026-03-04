@@ -139,10 +139,20 @@ export async function startHttp(): Promise<void> {
     }
   }
 
-  const mcpServer = createServer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // stateless: no session IDs, works with distributed clients (Claude.ai)
-  });
+  // Stateless mode: create a new transport + server per request so each MCP
+  // call is handled independently. This is required by the SDK for stateless
+  // operation and allows distributed clients (like Claude.ai) to connect from
+  // multiple IPs without needing a shared session.
+  const handleMcpRequest = async (req: any, res: any) => {
+    const mcpServer = createServer();
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    await mcpServer.connect(transport);
+    res.on('close', () => {
+      void transport.close();
+      void mcpServer.close();
+    });
+    await transport.handleRequest(req, res, req.body);
+  };
 
   const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
   const hasStaticClient = !!process.env.MCP_CLIENT_ID;
@@ -216,16 +226,14 @@ export async function startHttp(): Promise<void> {
       requireBearerAuth({ verifier: provider }),
       async (req: any, res: any) => {
         logger.debug({ method: req.method, rpcMethod: req.body?.method }, '[mcp] Request received');
-        await transport.handleRequest(req, res, req.body);
+        await handleMcpRequest(req, res);
       }
     );
   } else {
     app.all(MCP_PATH, async (req: any, res: any) => {
-      await transport.handleRequest(req, res, req.body);
+      await handleMcpRequest(req, res);
     });
   }
-
-  await mcpServer.connect(transport);
 
   app.listen(port, host, () => {
     logger.info(
