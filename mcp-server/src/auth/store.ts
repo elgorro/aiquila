@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/server/auth/clients.js';
@@ -51,10 +51,17 @@ function loadJson<T>(filePath: string): T | null {
 }
 
 function saveJson(filePath: string, data: unknown): void {
+  const tmp = filePath + '.tmp';
   try {
-    writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+    renameSync(tmp, filePath);
   } catch (err) {
     logger.warn({ file: filePath, err }, '[state] Failed to save state file');
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // ignore cleanup failure
+    }
   }
 }
 

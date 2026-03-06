@@ -257,6 +257,8 @@ describe('RefreshStore', () => {
 const mockReadFileSync = vi.mocked(fs.readFileSync);
 const mockWriteFileSync = vi.mocked(fs.writeFileSync);
 const mockMkdirSync = vi.mocked(fs.mkdirSync);
+const mockRenameSync = vi.mocked(fs.renameSync);
+const mockUnlinkSync = vi.mocked(fs.unlinkSync);
 
 function setupFsMocks() {
   vi.resetAllMocks();
@@ -267,8 +269,9 @@ function setupFsMocks() {
     err.code = 'ENOENT';
     throw err;
   });
-  // Default: writeFileSync succeeds (returns undefined)
+  // Default: writeFileSync and renameSync succeed
   mockWriteFileSync.mockReturnValue(undefined);
+  mockRenameSync.mockReturnValue(undefined);
 }
 
 // ---- ClientsStore — persistence ----
@@ -351,7 +354,8 @@ describe('ClientsStore — persistence', () => {
       client_name: 'Test App',
     });
 
-    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile, expect.any(String), 'utf8');
+    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile + '.tmp', expect.any(String), 'utf8');
+    expect(mockRenameSync).toHaveBeenCalledWith(stateFile + '.tmp', stateFile);
 
     const written = JSON.parse(
       (mockWriteFileSync.mock.calls[0] as [string, string, string])[1]
@@ -373,9 +377,13 @@ describe('ClientsStore — persistence', () => {
     store.registerClient!({ redirect_uris: [new URL('https://example.com/cb')] });
 
     expect(mockWriteFileSync).toHaveBeenCalledWith(
-      `${TEST_STATE_DIR}/clients.json`,
+      `${TEST_STATE_DIR}/clients.json.tmp`,
       expect.any(String),
       'utf8'
+    );
+    expect(mockRenameSync).toHaveBeenCalledWith(
+      `${TEST_STATE_DIR}/clients.json.tmp`,
+      `${TEST_STATE_DIR}/clients.json`
     );
   });
 });
@@ -431,7 +439,8 @@ describe('RefreshStore — persistence', () => {
 
     store.store({ userId: 'alice', clientId: 'c1', scopes: ['read'] });
 
-    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile, expect.any(String), 'utf8');
+    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile + '.tmp', expect.any(String), 'utf8');
+    expect(mockRenameSync).toHaveBeenCalledWith(stateFile + '.tmp', stateFile);
   });
 
   it('writes file after delete() — deleted token absent from written content', () => {
@@ -440,10 +449,12 @@ describe('RefreshStore — persistence', () => {
 
     const token = store.store({ userId: 'alice', clientId: 'c1', scopes: ['read'] });
     mockWriteFileSync.mockClear();
+    mockRenameSync.mockClear();
 
     store.delete(token);
 
-    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile, expect.any(String), 'utf8');
+    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile + '.tmp', expect.any(String), 'utf8');
+    expect(mockRenameSync).toHaveBeenCalledWith(stateFile + '.tmp', stateFile);
 
     const written = JSON.parse(
       (mockWriteFileSync.mock.calls[0] as [string, string, string])[1]
@@ -458,13 +469,15 @@ describe('RefreshStore — persistence', () => {
 
     const token = store.store({ userId: 'alice', clientId: 'c1', scopes: ['read'] });
     mockWriteFileSync.mockClear();
+    mockRenameSync.mockClear();
 
     // Advance time past 24h TTL
     vi.advanceTimersByTime(25 * 60 * 60 * 1000);
 
     const result = store.get(token);
     expect(result).toBeUndefined();
-    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile, expect.any(String), 'utf8');
+    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile + '.tmp', expect.any(String), 'utf8');
+    expect(mockRenameSync).toHaveBeenCalledWith(stateFile + '.tmp', stateFile);
   });
 
   it('does NOT write file when stateFile is not set', () => {
@@ -487,14 +500,34 @@ describe('RefreshStore — persistence', () => {
     );
   });
 
+  it('renameSync throws — logger.warn called, unlinkSync called for cleanup', () => {
+    const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
+    mockRenameSync.mockImplementation(() => {
+      throw new Error('cross-device link');
+    });
+    mockUnlinkSync.mockReturnValue(undefined);
+
+    const store = new RefreshStore(stateFile);
+    expect(() => store.store({ userId: 'alice', clientId: 'c1', scopes: [] })).not.toThrow();
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      expect.objectContaining({ file: stateFile }),
+      expect.stringContaining('[state]')
+    );
+    expect(mockUnlinkSync).toHaveBeenCalledWith(stateFile + '.tmp');
+  });
+
   it('fromEnv() wires up the state file', () => {
     const store = RefreshStore.fromEnv();
     store.store({ userId: 'alice', clientId: 'c1', scopes: [] });
 
     expect(mockWriteFileSync).toHaveBeenCalledWith(
-      `${TEST_STATE_DIR}/refresh-tokens.json`,
+      `${TEST_STATE_DIR}/refresh-tokens.json.tmp`,
       expect.any(String),
       'utf8'
+    );
+    expect(mockRenameSync).toHaveBeenCalledWith(
+      `${TEST_STATE_DIR}/refresh-tokens.json.tmp`,
+      `${TEST_STATE_DIR}/refresh-tokens.json`
     );
   });
 });
