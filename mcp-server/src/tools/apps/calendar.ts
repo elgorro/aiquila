@@ -118,6 +118,11 @@ function icalNow(): string {
 function toICalDateTime(dateStr: string): string {
   // Already in iCal format
   if (/^\d{8}(T\d{6}Z?)?$/.test(dateStr)) {
+    if (dateStr.length === 8) {
+      // Parse as local-midnight date, then convert to UTC for CalDAV time-range
+      const d = new Date(+dateStr.slice(0, 4), +dateStr.slice(4, 6) - 1, +dateStr.slice(6, 8));
+      return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    }
     return dateStr;
   }
   // ISO format -> iCal UTC

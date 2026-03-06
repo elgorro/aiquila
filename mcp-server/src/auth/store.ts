@@ -45,6 +45,11 @@ function loadJson<T>(filePath: string): T | null {
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
       logger.warn({ file: filePath, err }, '[state] Failed to load state file — starting fresh');
+      try {
+        unlinkSync(filePath);
+      } catch {
+        /* ignore */
+      }
     }
     return null;
   }
