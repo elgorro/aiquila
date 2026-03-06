@@ -197,7 +197,7 @@ describe('NextcloudOAuthProvider', () => {
       expect(tokens.access_token).toBeDefined();
       expect(tokens.refresh_token).toBeDefined();
       expect(tokens.token_type).toBe('bearer');
-      expect(tokens.expires_in).toBe(3600);
+      expect(tokens.expires_in).toBe(86400);
       expect(tokens.scope).toBe('read');
     });
 
@@ -323,7 +323,7 @@ describe('NextcloudOAuthProvider', () => {
       expect(tokens.access_token).toBeDefined();
       expect(tokens.refresh_token).toBeDefined();
       expect(tokens.token_type).toBe('bearer');
-      expect(tokens.expires_in).toBe(3600);
+      expect(tokens.expires_in).toBe(86400);
     });
 
     it('rotates the refresh token (old token is invalidated)', async () => {

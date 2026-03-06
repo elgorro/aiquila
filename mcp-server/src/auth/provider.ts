@@ -120,6 +120,12 @@ export function renderLoginForm(opts: {
 </html>`;
 }
 
+// Access tokens are valid for 24 hours. Claude.ai does not automatically use
+// refresh tokens when an access token expires — it shows an auth error and
+// blocks all subsequent calls until the user manually reconnects. A 24-hour
+// lifetime matches the refresh-token TTL and prevents mid-conversation failures.
+const ACCESS_TOKEN_TTL_SECS = 24 * 60 * 60;
+
 // --- OAuth Provider ---
 
 export class NextcloudOAuthProvider implements OAuthServerProvider {
@@ -194,7 +200,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     const accessToken = signJwt(
       { sub: entry.userId, client_id: entry.clientId, scopes: entry.scopes },
       this.getSecret(),
-      3600
+      ACCESS_TOKEN_TTL_SECS
     );
     const refreshToken = this.refreshStore.store({
       userId: entry.userId,
@@ -209,7 +215,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     return {
       access_token: accessToken,
       token_type: 'bearer',
-      expires_in: 3600,
+      expires_in: ACCESS_TOKEN_TTL_SECS,
       refresh_token: refreshToken,
       scope: entry.scopes.join(' '),
     };
@@ -235,7 +241,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     const accessToken = signJwt(
       { sub: entry.userId, client_id: entry.clientId, scopes: effectiveScopes },
       this.getSecret(),
-      3600
+      ACCESS_TOKEN_TTL_SECS
     );
     const newRefresh = this.refreshStore.store({
       userId: entry.userId,
@@ -247,7 +253,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     return {
       access_token: accessToken,
       token_type: 'bearer',
-      expires_in: 3600,
+      expires_in: ACCESS_TOKEN_TTL_SECS,
       refresh_token: newRefresh,
       scope: effectiveScopes.join(' '),
     };
