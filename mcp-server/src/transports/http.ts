@@ -99,6 +99,16 @@ export async function startHttp(): Promise<void> {
   const host = process.env.MCP_HOST || '0.0.0.0';
   const authEnabled = process.env.MCP_AUTH_ENABLED === 'true';
 
+  if (!authEnabled) {
+    if (process.env.MCP_ALLOW_UNAUTHENTICATED !== 'true') {
+      throw new Error(
+        'HTTP transport requires MCP_AUTH_ENABLED=true. ' +
+          'Set MCP_ALLOW_UNAUTHENTICATED=true to override (development only).'
+      );
+    }
+    logger.warn('[startup] Running in UNAUTHENTICATED mode — do not use in production');
+  }
+
   // When auth is enabled, derive allowedHosts from the public issuer URL.
   // This suppresses the MCP SDK's "binding to 0.0.0.0 without DNS rebinding
   // protection" console.warn (which breaks structured-log parsers like jq) and
@@ -207,7 +217,28 @@ export async function startHttp(): Promise<void> {
     app.use(express.urlencoded({ extended: false }));
 
     // Nextcloud credential validation → auth code issuance
-    app.post('/auth/login', loginHandler(provider));
+    const loginRateLimit = (() => {
+      const attempts = new Map<string, { count: number; resetAt: number }>();
+      const MAX = 10,
+        WINDOW_MS = 15 * 60 * 1000;
+      return (req: any, res: any, next: any) => {
+        const ip = req.ip ?? 'unknown';
+        const now = Date.now();
+        const entry = attempts.get(ip);
+        if (!entry || now > entry.resetAt) {
+          attempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
+          return next();
+        }
+        entry.count++;
+        if (entry.count > MAX) {
+          logger.warn({ ip }, '[auth] Login rate limit exceeded');
+          res.status(429).json({ error: 'too_many_requests' });
+          return;
+        }
+        next();
+      };
+    })();
+    app.post('/auth/login', loginRateLimit, loginHandler(provider));
 
     // Protect /mcp with Bearer token auth
     app.all(

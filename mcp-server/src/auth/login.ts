@@ -29,6 +29,40 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       return;
     }
 
+    const client = await provider.clientsStore.getClient(client_id);
+    if (!client) {
+      res
+        .status(400)
+        .type('html')
+        .send(
+          renderLoginForm({
+            clientId: client_id,
+            redirectUri: redirect_uri,
+            codeChallenge: code_challenge,
+            state,
+            scope,
+            error: 'Unknown client',
+          })
+        );
+      return;
+    }
+    if (!client.redirect_uris.map(String).includes(redirect_uri)) {
+      res
+        .status(400)
+        .type('html')
+        .send(
+          renderLoginForm({
+            clientId: client_id,
+            redirectUri: '',
+            codeChallenge: code_challenge,
+            state,
+            scope,
+            error: 'Invalid redirect URI',
+          })
+        );
+      return;
+    }
+
     logger.info({ user: username, client: client_id, nc: ncUrl }, '[auth] Login attempt');
 
     try {

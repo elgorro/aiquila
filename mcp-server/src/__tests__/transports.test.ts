@@ -95,7 +95,7 @@ describe('http transport', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = { ...savedEnv };
+    process.env = { ...savedEnv, MCP_ALLOW_UNAUTHENTICATED: 'true' };
     delete process.env.MCP_AUTH_ENABLED;
   });
 
@@ -203,7 +203,7 @@ describe('http transport with auth enabled', () => {
   it('registers POST /auth/login handler', async () => {
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
-    expect(mockPost).toHaveBeenCalledWith('/auth/login', mockLoginHandlerFn);
+    expect(mockPost).toHaveBeenCalledWith('/auth/login', expect.any(Function), mockLoginHandlerFn);
   });
 
   it('mounts /mcp with bearer middleware and handler', async () => {
