@@ -10,6 +10,7 @@ import type {
   OAuthTokens,
   OAuthTokenRevocationRequest,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { InvalidGrantError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { ClientsStore, CodeStore, RefreshStore } from './store.js';
 import { logger } from '../logger.js';
 
@@ -120,6 +121,9 @@ export function renderLoginForm(opts: {
 </html>`;
 }
 
+// Access tokens are valid for 1 hour; refresh tokens handle longer sessions.
+const ACCESS_TOKEN_TTL_SECS = 60 * 60;
+
 // --- OAuth Provider ---
 
 export class NextcloudOAuthProvider implements OAuthServerProvider {
@@ -162,7 +166,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
   ): Promise<string> {
     const entry = this.codeStore.get(authorizationCode);
     if (!entry || entry.clientId !== client.client_id) {
-      throw new Error('Invalid authorization code');
+      throw new InvalidGrantError('Invalid authorization code');
     }
     return entry.pkceChallenge;
   }
@@ -180,21 +184,21 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
         { client: client.client_id },
         '[token] Auth code exchange failed: invalid or expired code'
       );
-      throw new Error('Invalid authorization code');
+      throw new InvalidGrantError('Invalid authorization code');
     }
     if (redirectUri && entry.redirectUri !== redirectUri) {
       logger.warn(
         { client: client.client_id },
         '[token] Auth code exchange failed: redirect_uri mismatch'
       );
-      throw new Error('Redirect URI mismatch');
+      throw new InvalidGrantError('Redirect URI mismatch');
     }
     this.codeStore.delete(authorizationCode);
 
     const accessToken = signJwt(
       { sub: entry.userId, client_id: entry.clientId, scopes: entry.scopes },
       this.getSecret(),
-      3600
+      ACCESS_TOKEN_TTL_SECS
     );
     const refreshToken = this.refreshStore.store({
       userId: entry.userId,
@@ -209,7 +213,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     return {
       access_token: accessToken,
       token_type: 'bearer',
-      expires_in: 3600,
+      expires_in: ACCESS_TOKEN_TTL_SECS,
       refresh_token: refreshToken,
       scope: entry.scopes.join(' '),
     };
@@ -227,7 +231,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
         { client: client.client_id },
         '[token] Refresh token exchange failed: invalid or expired token'
       );
-      throw new Error('Invalid refresh token');
+      throw new InvalidGrantError('Invalid refresh token');
     }
     const effectiveScopes = scopes ?? entry.scopes;
     this.refreshStore.delete(refreshToken);
@@ -235,7 +239,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     const accessToken = signJwt(
       { sub: entry.userId, client_id: entry.clientId, scopes: effectiveScopes },
       this.getSecret(),
-      3600
+      ACCESS_TOKEN_TTL_SECS
     );
     const newRefresh = this.refreshStore.store({
       userId: entry.userId,
@@ -247,7 +251,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     return {
       access_token: accessToken,
       token_type: 'bearer',
-      expires_in: 3600,
+      expires_in: ACCESS_TOKEN_TTL_SECS,
       refresh_token: newRefresh,
       scope: effectiveScopes.join(' '),
     };

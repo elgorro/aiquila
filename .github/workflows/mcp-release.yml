@@ -188,21 +188,9 @@ jobs:
       - name: Install dependencies
         working-directory: mcp-server
         run: npm ci
-      - name: Update server.json version
+      - name: Sync server.json version from package.json
         working-directory: mcp-server
-        run: |
-          node -e "
-            const fs = require('fs');
-            const s = JSON.parse(fs.readFileSync('server.json', 'utf8'));
-            s.version = process.env.VERSION;
-            s.packages.forEach(p => {
-              if (p.registryType === 'npm') p.version = process.env.VERSION;
-              if (p.registryType === 'oci') p.identifier = p.identifier.replace(/:[^:]+$/, ':' + process.env.VERSION);
-            });
-            fs.writeFileSync('server.json', JSON.stringify(s, null, 2) + '\n');
-          "
-        env:
-          VERSION: ${{ needs.check-version.outputs.version }}
+        run: node scripts/sync-server-json.mjs
       - name: Install mcp-publisher
         run: |
           curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \

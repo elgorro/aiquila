@@ -255,7 +255,7 @@ describe('RefreshStore', () => {
 // ---- Persistence helpers setup ----
 
 const mockReadFileSync = vi.mocked(fs.readFileSync);
-const mockWriteFile = vi.mocked(fs.writeFile);
+const mockWriteFileSync = vi.mocked(fs.writeFileSync);
 const mockMkdirSync = vi.mocked(fs.mkdirSync);
 
 function setupFsMocks() {
@@ -267,10 +267,8 @@ function setupFsMocks() {
     err.code = 'ENOENT';
     throw err;
   });
-  // Default: writeFile succeeds (calls cb with null)
-  mockWriteFile.mockImplementation((_path: unknown, _data: unknown, _enc: unknown, cb: unknown) => {
-    (cb as (err: null) => void)(null);
-  });
+  // Default: writeFileSync succeeds (returns undefined)
+  mockWriteFileSync.mockReturnValue(undefined);
 }
 
 // ---- ClientsStore — persistence ----
@@ -301,11 +299,11 @@ describe('ClientsStore — persistence', () => {
     expect(store.getClient('persisted-id')).toMatchObject({ client_id: 'persisted-id' });
   });
 
-  it('is silent on ENOENT — no warning logged, no writeFile called', () => {
+  it('is silent on ENOENT — no warning logged, no writeFileSync called', () => {
     // readFileSync already throws ENOENT by default in setupFsMocks
     const store = new ClientsStore({ stateFile: `${TEST_STATE_DIR}/clients.json` });
     expect(store.getClient('anything')).toBeUndefined();
-    expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
   it('warns and starts fresh on corrupt JSON', () => {
@@ -353,15 +351,10 @@ describe('ClientsStore — persistence', () => {
       client_name: 'Test App',
     });
 
-    expect(mockWriteFile).toHaveBeenCalledWith(
-      stateFile,
-      expect.any(String),
-      'utf8',
-      expect.any(Function)
-    );
+    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile, expect.any(String), 'utf8');
 
     const written = JSON.parse(
-      (mockWriteFile.mock.calls[0] as [string, string, string, () => void])[1]
+      (mockWriteFileSync.mock.calls[0] as [string, string, string])[1]
     ) as unknown[];
     expect(written).toHaveLength(1);
     expect((written[0] as { client_id: string }).client_id).toBe(client.client_id);
@@ -370,7 +363,7 @@ describe('ClientsStore — persistence', () => {
   it('does NOT write file when stateFile is not set', () => {
     const store = new ClientsStore({ enableDynamicRegistration: true });
     store.registerClient!({ redirect_uris: [new URL('https://example.com/cb')] });
-    expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
   it('fromEnv() sets stateFile when MCP_REGISTRATION_ENABLED=true', () => {
@@ -379,11 +372,10 @@ describe('ClientsStore — persistence', () => {
     const store = ClientsStore.fromEnv();
     store.registerClient!({ redirect_uris: [new URL('https://example.com/cb')] });
 
-    expect(mockWriteFile).toHaveBeenCalledWith(
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
       `${TEST_STATE_DIR}/clients.json`,
       expect.any(String),
-      'utf8',
-      expect.any(Function)
+      'utf8'
     );
   });
 });
@@ -439,12 +431,7 @@ describe('RefreshStore — persistence', () => {
 
     store.store({ userId: 'alice', clientId: 'c1', scopes: ['read'] });
 
-    expect(mockWriteFile).toHaveBeenCalledWith(
-      stateFile,
-      expect.any(String),
-      'utf8',
-      expect.any(Function)
-    );
+    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile, expect.any(String), 'utf8');
   });
 
   it('writes file after delete() — deleted token absent from written content', () => {
@@ -452,19 +439,14 @@ describe('RefreshStore — persistence', () => {
     const store = new RefreshStore(stateFile);
 
     const token = store.store({ userId: 'alice', clientId: 'c1', scopes: ['read'] });
-    vi.mocked(mockWriteFile).mockClear();
+    mockWriteFileSync.mockClear();
 
     store.delete(token);
 
-    expect(mockWriteFile).toHaveBeenCalledWith(
-      stateFile,
-      expect.any(String),
-      'utf8',
-      expect.any(Function)
-    );
+    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile, expect.any(String), 'utf8');
 
     const written = JSON.parse(
-      (mockWriteFile.mock.calls[0] as [string, string, string, () => void])[1]
+      (mockWriteFileSync.mock.calls[0] as [string, string, string])[1]
     ) as Record<string, unknown>;
     expect(written[token]).toBeUndefined();
   });
@@ -475,34 +457,27 @@ describe('RefreshStore — persistence', () => {
     const store = new RefreshStore(stateFile);
 
     const token = store.store({ userId: 'alice', clientId: 'c1', scopes: ['read'] });
-    vi.mocked(mockWriteFile).mockClear();
+    mockWriteFileSync.mockClear();
 
     // Advance time past 24h TTL
     vi.advanceTimersByTime(25 * 60 * 60 * 1000);
 
     const result = store.get(token);
     expect(result).toBeUndefined();
-    expect(mockWriteFile).toHaveBeenCalledWith(
-      stateFile,
-      expect.any(String),
-      'utf8',
-      expect.any(Function)
-    );
+    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile, expect.any(String), 'utf8');
   });
 
   it('does NOT write file when stateFile is not set', () => {
     const store = new RefreshStore(); // no stateFile
     store.store({ userId: 'alice', clientId: 'c1', scopes: ['read'] });
-    expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
-  it('handles writeFile error gracefully — logger.warn called, no throw', () => {
+  it('handles writeFileSync error gracefully — logger.warn called, no throw', () => {
     const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
-    mockWriteFile.mockImplementation(
-      (_path: unknown, _data: unknown, _enc: unknown, cb: unknown) => {
-        (cb as (err: Error) => void)(new Error('disk full'));
-      }
-    );
+    mockWriteFileSync.mockImplementation(() => {
+      throw new Error('disk full');
+    });
 
     const store = new RefreshStore(stateFile);
     expect(() => store.store({ userId: 'alice', clientId: 'c1', scopes: [] })).not.toThrow();
@@ -516,11 +491,10 @@ describe('RefreshStore — persistence', () => {
     const store = RefreshStore.fromEnv();
     store.store({ userId: 'alice', clientId: 'c1', scopes: [] });
 
-    expect(mockWriteFile).toHaveBeenCalledWith(
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
       `${TEST_STATE_DIR}/refresh-tokens.json`,
       expect.any(String),
-      'utf8',
-      expect.any(Function)
+      'utf8'
     );
   });
 });

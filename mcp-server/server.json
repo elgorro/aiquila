@@ -7,13 +7,13 @@
     "url": "https://github.com/elgorro/aiquila.git",
     "source": "github"
   },
-  "version": "0.1.39",
+  "version": "0.1.40",
   "websiteUrl": "https://github.com/elgorro/aiquila",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "aiquila-mcp",
-      "version": "0.1.39",
+      "version": "0.1.40",
       "runtimeHint": "npx",
       "transport": { "type": "stdio" },
       "environmentVariables": [
@@ -39,7 +39,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.1.39",
+      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.1.40",
       "runtimeHint": "docker",
       "transport": { "type": "stdio" },
       "environmentVariables": [

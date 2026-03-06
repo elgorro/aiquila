@@ -1,11 +1,11 @@
 {
   "name": "aiquila-mcp",
-  "version": "0.1.39",
+  "version": "0.1.40",
   "description": "AIquila - MCP server for Nextcloud integration with Claude AI",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc --noCheck || tsc",
+    "build": "node scripts/sync-server-json.mjs && (tsc --noCheck || tsc)",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
@@ -35,7 +35,7 @@
     "@modelcontextprotocol/sdk": "^1.27.1",
     "pino": "^9.0.0",
     "typescript": "^5.8.3",
-    "webdav": "^5.8.0",
+    "webdav": "^5.9.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -48,6 +48,6 @@
     "vitest": "^4.0.18"
   },
   "overrides": {
-    "fast-xml-parser": "^5.3.4"
+    "fast-xml-parser": "^5.3.8"
   }
 }
