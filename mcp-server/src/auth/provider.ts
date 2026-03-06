@@ -10,6 +10,7 @@ import type {
   OAuthTokens,
   OAuthTokenRevocationRequest,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { InvalidGrantError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { ClientsStore, CodeStore, RefreshStore } from './store.js';
 import { logger } from '../logger.js';
 
@@ -120,11 +121,8 @@ export function renderLoginForm(opts: {
 </html>`;
 }
 
-// Access tokens are valid for 24 hours. Claude.ai does not automatically use
-// refresh tokens when an access token expires — it shows an auth error and
-// blocks all subsequent calls until the user manually reconnects. A 24-hour
-// lifetime matches the refresh-token TTL and prevents mid-conversation failures.
-const ACCESS_TOKEN_TTL_SECS = 24 * 60 * 60;
+// Access tokens are valid for 1 hour; refresh tokens handle longer sessions.
+const ACCESS_TOKEN_TTL_SECS = 60 * 60;
 
 // --- OAuth Provider ---
 
@@ -168,7 +166,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
   ): Promise<string> {
     const entry = this.codeStore.get(authorizationCode);
     if (!entry || entry.clientId !== client.client_id) {
-      throw new Error('Invalid authorization code');
+      throw new InvalidGrantError('Invalid authorization code');
     }
     return entry.pkceChallenge;
   }
@@ -186,14 +184,14 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
         { client: client.client_id },
         '[token] Auth code exchange failed: invalid or expired code'
       );
-      throw new Error('Invalid authorization code');
+      throw new InvalidGrantError('Invalid authorization code');
     }
     if (redirectUri && entry.redirectUri !== redirectUri) {
       logger.warn(
         { client: client.client_id },
         '[token] Auth code exchange failed: redirect_uri mismatch'
       );
-      throw new Error('Redirect URI mismatch');
+      throw new InvalidGrantError('Redirect URI mismatch');
     }
     this.codeStore.delete(authorizationCode);
 
@@ -233,7 +231,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
         { client: client.client_id },
         '[token] Refresh token exchange failed: invalid or expired token'
       );
-      throw new Error('Invalid refresh token');
+      throw new InvalidGrantError('Invalid refresh token');
     }
     const effectiveScopes = scopes ?? entry.scopes;
     this.refreshStore.delete(refreshToken);
