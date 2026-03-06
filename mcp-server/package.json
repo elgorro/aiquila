@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc --noCheck || tsc",
+    "build": "node scripts/sync-server-json.mjs && (tsc --noCheck || tsc)",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
