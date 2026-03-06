@@ -33,6 +33,9 @@ describe('loginHandler', () => {
       ...savedEnv,
       NEXTCLOUD_URL: 'https://cloud.example.com',
       MCP_AUTH_SECRET: 'test-secret-at-least-32-chars-long!!',
+      MCP_AUTH_ISSUER: 'https://test.example.com',
+      MCP_CLIENT_ID: 'c1',
+      MCP_CLIENT_REDIRECT_URIS: 'https://example.com/callback',
     };
     provider = new NextcloudOAuthProvider();
     vi.clearAllMocks();

@@ -88,7 +88,11 @@ describe('NextcloudOAuthProvider', () => {
   const savedEnv = process.env;
 
   beforeEach(() => {
-    process.env = { ...savedEnv, MCP_AUTH_SECRET: TEST_SECRET };
+    process.env = {
+      ...savedEnv,
+      MCP_AUTH_SECRET: TEST_SECRET,
+      MCP_AUTH_ISSUER: 'https://test.example.com',
+    };
     provider = new NextcloudOAuthProvider();
   });
 
@@ -299,6 +303,27 @@ describe('NextcloudOAuthProvider', () => {
       const token = await issueToken();
       process.env.MCP_AUTH_SECRET = 'completely-different-secret-value!!';
       await expect(provider.verifyAccessToken(token)).rejects.toThrow();
+    });
+
+    it('embeds iss and aud claims in the issued token', async () => {
+      const token = await issueToken();
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+      expect(payload.iss).toBe('https://test.example.com');
+      expect(payload.aud).toBe('https://test.example.com/mcp');
+    });
+
+    it('throws when verified against a different issuer', async () => {
+      const token = await issueToken();
+      process.env.MCP_AUTH_ISSUER = 'https://other.example.com';
+      await expect(provider.verifyAccessToken(token)).rejects.toThrow(
+        'Invalid or expired access token'
+      );
+    });
+
+    it('embeds correct aud claim (resource server URL)', async () => {
+      const token = await issueToken();
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+      expect(payload.aud).toBe('https://test.example.com/mcp');
     });
   });
 

@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import type {
   OAuthServerProvider,
   AuthorizationParams,
@@ -14,40 +14,35 @@ import { InvalidGrantError } from '@modelcontextprotocol/sdk/server/auth/errors.
 import { ClientsStore, CodeStore, RefreshStore } from './store.js';
 import { logger } from '../logger.js';
 
-// --- JWT helpers (HMAC-SHA256 via node:crypto — no extra deps) ---
+// --- JWT helpers (HMAC-SHA256 via jose) ---
 
-function base64url(buf: Buffer): string {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-function base64urlStr(s: string): string {
-  return base64url(Buffer.from(s, 'utf8'));
-}
-
-function signJwt(payload: Record<string, unknown>, secret: string, expiresInSecs: number): string {
+async function signJwt(
+  payload: Record<string, unknown>,
+  secret: string,
+  expiresInSecs: number
+): Promise<string> {
+  const key = new TextEncoder().encode(secret);
   const now = Math.floor(Date.now() / 1000);
-  const claims = { ...payload, iat: now, exp: now + expiresInSecs };
-  const header = base64urlStr(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const body = base64urlStr(JSON.stringify(claims));
-  const signing = `${header}.${body}`;
-  const sig = base64url(createHmac('sha256', secret).update(signing).digest());
-  return `${signing}.${sig}`;
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt(now)
+    .setExpirationTime(now + expiresInSecs)
+    .sign(key);
 }
 
-function verifyJwt(token: string, secret: string): Record<string, unknown> | null {
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  const [header, body, sig] = parts;
-  const expected = base64url(createHmac('sha256', secret).update(`${header}.${body}`).digest());
-  const sigBuf = Buffer.from(sig);
-  const expBuf = Buffer.from(expected);
-  // HMAC-SHA256 base64url is always 43 chars — same length guaranteed
-  if (sigBuf.length !== expBuf.length) return null;
-  if (!timingSafeEqual(sigBuf, expBuf)) return null;
+async function verifyJwt(
+  token: string,
+  secret: string,
+  opts?: { issuer?: string; audience?: string }
+): Promise<JWTPayload | null> {
   try {
-    const claims = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
-    if (typeof claims.exp === 'number' && Date.now() / 1000 > claims.exp) return null;
-    return claims as Record<string, unknown>;
+    const key = new TextEncoder().encode(secret);
+    const { payload } = await jwtVerify(token, key, {
+      algorithms: ['HS256'],
+      ...(opts?.issuer && { issuer: opts.issuer }),
+      ...(opts?.audience && { audience: opts.audience }),
+    });
+    return payload;
   } catch {
     return null;
   }
@@ -195,8 +190,14 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     }
     this.codeStore.delete(authorizationCode);
 
-    const accessToken = signJwt(
-      { sub: entry.userId, client_id: entry.clientId, scopes: entry.scopes },
+    const accessToken = await signJwt(
+      {
+        sub: entry.userId,
+        client_id: entry.clientId,
+        scopes: entry.scopes,
+        iss: this.getIssuer(),
+        aud: this.getResourceUrl(),
+      },
       this.getSecret(),
       ACCESS_TOKEN_TTL_SECS
     );
@@ -236,8 +237,14 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     const effectiveScopes = scopes ?? entry.scopes;
     this.refreshStore.delete(refreshToken);
 
-    const accessToken = signJwt(
-      { sub: entry.userId, client_id: entry.clientId, scopes: effectiveScopes },
+    const accessToken = await signJwt(
+      {
+        sub: entry.userId,
+        client_id: entry.clientId,
+        scopes: effectiveScopes,
+        iss: this.getIssuer(),
+        aud: this.getResourceUrl(),
+      },
       this.getSecret(),
       ACCESS_TOKEN_TTL_SECS
     );
@@ -258,7 +265,12 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
   }
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
-    const claims = verifyJwt(token, this.getSecret());
+    const issuer = process.env.MCP_AUTH_ISSUER;
+    const claims = await verifyJwt(
+      token,
+      this.getSecret(),
+      issuer ? { issuer, audience: new URL('/mcp', issuer).toString() } : undefined
+    );
     if (!claims) {
       logger.warn('[auth] Access token verification failed: invalid or expired token');
       throw new Error('Invalid or expired access token');
@@ -294,5 +306,15 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     const secret = process.env.MCP_AUTH_SECRET;
     if (!secret) throw new Error('MCP_AUTH_SECRET is not set');
     return secret;
+  }
+
+  private getIssuer(): string {
+    const issuer = process.env.MCP_AUTH_ISSUER;
+    if (!issuer) throw new Error('MCP_AUTH_ISSUER is not set');
+    return issuer;
+  }
+
+  private getResourceUrl(): string {
+    return new URL('/mcp', this.getIssuer()).toString();
   }
 }
