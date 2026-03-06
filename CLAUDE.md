@@ -80,6 +80,7 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_AUTH_SECRET` | If auth | `openssl rand -hex 32` |
 | `MCP_AUTH_ISSUER` | If auth | public HTTPS URL of this server |
 | `MCP_AUTH_STATE_DIR` | No | Directory for persisted OAuth state (default `/app/state`) |
+| `MCP_LOCALE` | No | BCP 47 locale tag for `localTime` in `get_local_time` (e.g. `sv-SE`); defaults to system locale |
 | `LOG_LEVEL` | No | `trace`/`debug`/`info`/`warn`/`error`/`fatal` |
 
 ## Tests

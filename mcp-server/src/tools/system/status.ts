@@ -124,7 +124,7 @@ export const getLocalTimeTool = {
           type: 'text' as const,
           text: JSON.stringify(
             {
-              localTime: now.toLocaleString('sv-SE', { timeZone: tz }), // "2026-03-06 14:32:00"
+              localTime: now.toLocaleString(process.env.MCP_LOCALE, { timeZone: tz }),
               utcTime: now.toISOString(),
               timezone: tz, // e.g. "Europe/Berlin"
               utcOffset, // e.g. "+01:00"
