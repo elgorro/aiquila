@@ -490,6 +490,11 @@ async function assertCalendarSupportsEvents(
     headers: { Depth: '0' },
   });
 
+  if (response.status === 404) {
+    throw new Error(
+      `Calendar "${calendarName}" not found. Use list_calendars to find available calendar names.`
+    );
+  }
   if (!response.ok) return; // Can't check — let the server reject if needed
 
   const text = await response.text();
@@ -651,8 +656,7 @@ export const listEventsTool = {
   inputSchema: z.object({
     calendarName: z
       .string()
-      .default('personal')
-      .describe("The calendar name (default: 'personal')"),
+      .describe('The calendar name. Use list_calendars to find available calendar names.'),
     from: z
       .string()
       .optional()
@@ -770,8 +774,7 @@ export const getEventTool = {
     uid: z.string().describe('The UID of the event'),
     calendarName: z
       .string()
-      .default('personal')
-      .describe("The calendar name (default: 'personal')"),
+      .describe('The calendar name. Use list_calendars to find available calendar names.'),
   }),
   handler: async (args: { uid: string; calendarName: string }) => {
     try {
@@ -826,8 +829,7 @@ export const createEventTool = {
     summary: z.string().describe('The event title'),
     calendarName: z
       .string()
-      .default('personal')
-      .describe("The calendar name (default: 'personal')"),
+      .describe('The calendar name. Use list_calendars to find available calendar names.'),
     dtstart: z
       .string()
       .describe('Start date/time in YYYYMMDD (all-day) or YYYYMMDDTHHmmssZ (timed) format'),
@@ -1053,8 +1055,7 @@ export const updateEventTool = {
     uid: z.string().describe('The UID of the event to update'),
     calendarName: z
       .string()
-      .default('personal')
-      .describe("The calendar name (default: 'personal')"),
+      .describe('The calendar name. Use list_calendars to find available calendar names.'),
     summary: z.string().optional().describe('New event title'),
     dtstart: z.string().optional().describe('New start date/time (YYYYMMDD or YYYYMMDDTHHmmssZ)'),
     dtend: z.string().nullable().optional().describe('New end date/time, or null to remove'),
@@ -1188,8 +1189,7 @@ export const deleteEventTool = {
     uid: z.string().describe('The UID of the event to delete'),
     calendarName: z
       .string()
-      .default('personal')
-      .describe("The calendar name (default: 'personal')"),
+      .describe('The calendar name. Use list_calendars to find available calendar names.'),
   }),
   handler: async (args: { uid: string; calendarName: string }) => {
     try {
