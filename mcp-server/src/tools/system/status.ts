@@ -99,6 +99,46 @@ export const setupChecksTool = {
 };
 
 /**
+ * Get the current local time and timezone of the MCP server
+ */
+export const getLocalTimeTool = {
+  name: 'get_local_time',
+  description:
+    'Get the current local time and timezone of the MCP server. ' +
+    'Call this to establish a time reference before creating or listing calendar events, ' +
+    'or to resolve scheduling ambiguities with the user.',
+  inputSchema: z.object({}),
+  handler: async () => {
+    const now = new Date();
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const offsetMin = now.getTimezoneOffset(); // positive = behind UTC, negative = ahead
+    const sign = offsetMin <= 0 ? '+' : '-';
+    const abs = Math.abs(offsetMin);
+    const h = String(Math.floor(abs / 60)).padStart(2, '0');
+    const m = String(abs % 60).padStart(2, '0');
+    const utcOffset = `${sign}${h}:${m}`;
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(
+            {
+              localTime: now.toLocaleString('sv-SE', { timeZone: tz }), // "2026-03-06 14:32:00"
+              utcTime: now.toISOString(),
+              timezone: tz, // e.g. "Europe/Berlin"
+              utcOffset, // e.g. "+01:00"
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  },
+};
+
+/**
  * Export all System Status tools
  */
-export const statusTools = [systemStatusTool, setupChecksTool];
+export const statusTools = [systemStatusTool, setupChecksTool, getLocalTimeTool];
