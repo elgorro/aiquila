@@ -18,16 +18,16 @@ services:
       NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD:?Set NEXTCLOUD_PASSWORD in .env}
       NODE_ENV: production
       MCP_TRANSPORT: http
-      MCP_PORT: "3339"
+      MCP_PORT: "${MCP_PORT:-3339}"
       MCP_AUTH_ENABLED: ${MCP_AUTH_ENABLED:-true}
       MCP_AUTH_SECRET: ${MCP_AUTH_SECRET:?Set MCP_AUTH_SECRET in .env}
       MCP_AUTH_ISSUER: ${MCP_AUTH_ISSUER:?Set MCP_AUTH_ISSUER in .env}
       MCP_CLIENT_ID: ${MCP_CLIENT_ID:-aiquila-claude}
       MCP_CLIENT_SECRET: ${MCP_CLIENT_SECRET:-}
-      MCP_REGISTRATION_ENABLED: ${MCP_REGISTRATION_ENABLED:-true}
+      MCP_REGISTRATION_ENABLED: ${MCP_REGISTRATION_ENABLED:-false}
       MCP_REGISTRATION_TOKEN: ${MCP_REGISTRATION_TOKEN:-}
       MCP_CLIENT_REDIRECT_URIS: ${MCP_CLIENT_REDIRECT_URIS:-https://claude.ai/api/mcp/auth_callback}
-      MCP_TRUST_PROXY: "1"
+      MCP_TRUST_PROXY: "1" # hardcoded: Traefik is always a single proxy hop
       LOG_LEVEL: ${LOG_LEVEL:-info}
       MCP_TLS_STRICT: ${MCP_TLS_STRICT:-true}
     labels:
@@ -36,11 +36,17 @@ services:
       - "traefik.http.routers.mcp.entrypoints=websecure"
       - "traefik.http.routers.mcp.tls.certresolver=letsencrypt"
       - "traefik.http.routers.mcp.middlewares=crowdsec@docker"
-      - "traefik.http.services.mcp.loadbalancer.server.port=3339"
+      - "traefik.http.services.mcp.loadbalancer.server.port=${MCP_PORT:-3339}"
       # CrowdSec bouncer middleware — defined once, referenced by all routers
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapikey=${CROWDSEC_BOUNCER_KEY}"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapischeme=http"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapihost=crowdsec:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:$${MCP_PORT:-3339}/.well-known/oauth-authorization-server"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     volumes:
       - mcp_state:/app/state
     networks:
@@ -62,7 +68,6 @@ services:
     environment:
       CONTAINERS: 1
       NETWORKS: 1
-      SERVICES: 1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -86,6 +91,7 @@ services:
     depends_on:
       - mcp
       - socket-proxy
+      - crowdsec
     ports:
       - "80:80"
       - "443:443"

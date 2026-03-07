@@ -119,7 +119,6 @@ services:
     environment:
       CONTAINERS: 1
       NETWORKS: 1
-      SERVICES: 1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -142,6 +141,7 @@ services:
     restart: unless-stopped
     depends_on:
       - socket-proxy
+      - crowdsec
     ports:
       - "80:80"
       - "443:443"
