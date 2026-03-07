@@ -883,7 +883,7 @@ END:VCALENDAR</c:calendar-data>
       expect(putCall[1].body).toContain('STATUS:COMPLETED');
       expect(putCall[1].body).toContain('PERCENT-COMPLETE:100');
       expect(putCall[1].body).toContain('COMPLETED:');
-      expect(putCall[1].headers['If-Match']).toBe('""etag-comp""');
+      expect(putCall[1].headers['If-Match']).toBe('"etag-comp"');
     });
 
     it('should reopen a completed task', async () => {

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { fetchCalDAV } from '../../client/caldav.js';
+import { decodeXmlEntities, fetchCalDAV } from '../../client/caldav.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -353,13 +353,13 @@ async function resolveTaskByUid(
     throw new Error(`Task with UID "${uid}" not found in calendar "${calendarName}"`);
   }
 
-  const rawEtag = etagMatch[1].trim();
+  const rawEtag = decodeXmlEntities(etagMatch[1].trim());
   const etag = rawEtag.startsWith('"') ? rawEtag : `"${rawEtag}"`;
 
   return {
     href: hrefMatch[1].trim(),
     etag,
-    icalData: calDataMatch[1],
+    icalData: decodeXmlEntities(calDataMatch[1]),
   };
 }
 
@@ -897,7 +897,7 @@ export const completeTaskTool = {
         body: modified,
         headers: {
           'Content-Type': 'text/calendar; charset=utf-8',
-          'If-Match': `"${etag}"`,
+          'If-Match': etag,
         },
       });
 

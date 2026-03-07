@@ -1,6 +1,19 @@
 import { logger } from '../logger.js';
 
 /**
+ * Decode XML character entities in text extracted via regex.
+ * Needed because we parse XML responses with regex instead of a DOM parser.
+ */
+export function decodeXmlEntities(text: string): string {
+  return text
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+/**
  * Fetch data from CalDAV endpoint using basic authentication
  */
 export async function fetchCalDAV(
