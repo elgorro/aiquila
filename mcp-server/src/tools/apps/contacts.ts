@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { fetchCalDAV } from '../../client/caldav.js';
+import { decodeXmlEntities, fetchCalDAV } from '../../client/caldav.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -419,8 +419,8 @@ async function resolveContactByUid(
 
   return {
     href: hrefMatch[1],
-    etag: etagMatch[1],
-    vcardData: cardDataMatch[1],
+    etag: decodeXmlEntities(etagMatch[1]),
+    vcardData: decodeXmlEntities(cardDataMatch[1]),
   };
 }
 
