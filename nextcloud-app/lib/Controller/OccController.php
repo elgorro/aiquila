@@ -51,6 +51,9 @@ class OccController extends Controller {
         // non-CLI binary, so we fall back to PATH lookup.
         $phpBinary = PHP_BINARY;
         if (empty($phpBinary) || !is_executable($phpBinary)) {
+            $this->logger->warning('PHP_BINARY is empty or non-executable, falling back to PATH lookup', [
+                'php_binary' => $phpBinary,
+            ]);
             $candidates = ['php', 'php8', 'php8.4', 'php8.3'];
             $phpBinary = '';
             foreach ($candidates as $candidate) {
@@ -64,6 +67,9 @@ class OccController extends Controller {
         }
 
         if (empty($phpBinary)) {
+            $this->logger->error('Cannot locate PHP CLI binary; OCC command aborted', [
+                'command' => $command,
+            ]);
             return new JSONResponse([
                 'success' => false,
                 'error' => 'Cannot locate PHP CLI binary',
