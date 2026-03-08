@@ -15,7 +15,7 @@ const MCP_PATH = '/mcp';
 
 // TLS error codes that indicate a self-signed or untrusted certificate.
 // Network errors (ECONNREFUSED, ETIMEDOUT) are not included — they mean the
-// proxy is not yet reachable, which is transient and should not fail fast.
+// proxy is not yet reachable, which is transient and should not log a warning.
 const TLS_CERT_ERROR_CODES = new Set([
   'DEPTH_ZERO_SELF_SIGNED_CERT',
   'SELF_SIGNED_CERT_IN_CHAIN',
@@ -26,32 +26,38 @@ const TLS_CERT_ERROR_CODES = new Set([
   'ERR_TLS_CERT_ALTNAME_INVALID',
 ]);
 
-const TLS_INITIAL_DELAY_MS = 30_000;
-const MAX_TLS_ATTEMPTS = 10;
-const TLS_RETRY_DELAY_MS = 15_000;
+/**
+ * Advisory TLS certificate check — purely informational, never crashes the server.
+ *
+ * Claude.ai and Claude mobile require a CA-trusted cert. If the issuer URL still
+ * has a self-signed or untrusted cert at startup this is logged as a warning so
+ * operators know to fix it, but the MCP server continues running normally.
+ *
+ * Rationale: crashing or health-check-failing on a bad cert creates a deadlock on
+ * fresh deployments — the container goes unhealthy → Traefik removes it from routing →
+ * the ACME HTTP-01 challenge can never complete → the cert is never issued → repeat.
+ */
+async function checkIssuerTls(issuerUrl: string): Promise<void> {
+  let url: URL;
+  try {
+    url = new URL(issuerUrl);
+  } catch {
+    logger.warn(
+      { issuer: issuerUrl },
+      '[startup] MCP_AUTH_ISSUER is not a valid URL — skipping TLS check'
+    );
+    return;
+  }
 
-async function attemptTlsCheck(issuerUrl: string): Promise<'ok' | 'skip' | 'retry'> {
+  if (url.protocol !== 'https:') {
+    logger.warn(
+      { issuer: issuerUrl },
+      '[startup] MCP_AUTH_ISSUER uses http:// — plain http exposes OAuth tokens; use https://'
+    );
+    return;
+  }
+
   return new Promise((resolve) => {
-    let url: URL;
-    try {
-      url = new URL(issuerUrl);
-    } catch {
-      logger.error({ issuer: issuerUrl }, '[startup] MCP_AUTH_ISSUER is not a valid URL');
-      if (process.env.MCP_TLS_STRICT === 'true') process.exit(1);
-      resolve('skip');
-      return;
-    }
-
-    if (url.protocol !== 'https:') {
-      logger.error(
-        { issuer: issuerUrl },
-        '[startup] MCP_AUTH_ISSUER must use https:// — plain http exposes OAuth tokens'
-      );
-      if (process.env.MCP_TLS_STRICT === 'true') process.exit(1);
-      resolve('skip');
-      return;
-    }
-
     const req = https.request(
       {
         hostname: url.hostname,
@@ -62,62 +68,32 @@ async function attemptTlsCheck(issuerUrl: string): Promise<'ok' | 'skip' | 'retr
       },
       () => {
         logger.info({ issuer: issuerUrl }, '[startup] TLS certificate valid and trusted');
-        resolve('ok');
+        resolve();
       }
     );
 
     req.on('error', (err: NodeJS.ErrnoException) => {
       const code = err.code ?? '';
       if (TLS_CERT_ERROR_CODES.has(code)) {
-        const strict = process.env.MCP_TLS_STRICT === 'true';
-        const msg =
-          `[startup] TLS certificate rejected (${code}). ` +
-          `Claude.ai and Claude mobile require a CA-trusted certificate — self-signed certs ` +
-          `will cause Claude to refuse the connection. Use Let's Encrypt (via Traefik or Caddy ` +
-          `with a real domain) or mount a CA-signed cert.`;
-        if (strict) {
-          logger.warn({ issuer: issuerUrl, code }, msg);
-          resolve('retry');
-        } else {
-          logger.error(
-            { issuer: issuerUrl, code },
-            msg + ' Set MCP_TLS_STRICT=true to make this a hard failure.'
-          );
-          resolve('skip');
-        }
-      } else {
-        // Transient network error — proxy may not be ready yet; do not fail
         logger.warn(
-          { issuer: issuerUrl, code: err.code },
-          '[startup] TLS check skipped — could not reach issuer (proxy not ready?)'
+          { issuer: issuerUrl, code },
+          `[startup] TLS certificate not yet trusted (${code}). ` +
+            `Claude.ai and Claude mobile require a CA-trusted certificate — self-signed certs ` +
+            `will cause Claude to refuse the connection. ` +
+            `Use Let's Encrypt (via Traefik or Caddy with a real domain) or mount a CA-signed cert. ` +
+            `The MCP server will keep running; re-deploy once the cert is valid.`
         );
-        resolve('skip');
+      } else {
+        logger.debug(
+          { issuer: issuerUrl, code: err.code },
+          '[startup] TLS check skipped — could not reach issuer (proxy not ready yet)'
+        );
       }
+      resolve();
     });
 
     req.end();
   });
-}
-
-async function checkIssuerTls(issuerUrl: string): Promise<void> {
-  for (let attempt = 1; attempt <= MAX_TLS_ATTEMPTS; attempt++) {
-    const result = await attemptTlsCheck(issuerUrl);
-    if (result !== 'retry') return;
-    if (attempt < MAX_TLS_ATTEMPTS) {
-      logger.warn(
-        { issuer: issuerUrl, attempt, maxAttempts: MAX_TLS_ATTEMPTS },
-        `[startup] TLS cert not yet trusted, retrying in ${TLS_RETRY_DELAY_MS / 1000}s ` +
-          `(${attempt}/${MAX_TLS_ATTEMPTS}) — waiting for Let's Encrypt cert`
-      );
-      await new Promise((resolve) => setTimeout(resolve, TLS_RETRY_DELAY_MS));
-    } else {
-      logger.fatal(
-        { issuer: issuerUrl },
-        '[startup] TLS certificate still rejected after all retries — giving up'
-      );
-      process.exit(1);
-    }
-  }
 }
 
 export async function startHttp(): Promise<void> {
@@ -319,16 +295,9 @@ export async function startHttp(): Promise<void> {
     }
     logger.info('View logs: docker compose logs -f   or   make logs-follow');
     void (async () => {
-      // TLS certificate check (only when auth is enabled and issuer is configured).
-      // Wait before the first check to give Traefik time to obtain a Let's Encrypt
-      // certificate — without this delay, the check sees Traefik's default
-      // self-signed cert and enters a retry loop that may never resolve.
+      // Advisory TLS check — logs a warning if the cert is self-signed or untrusted,
+      // but never crashes the server or delays startup.
       if (authEnabled) {
-        logger.info(
-          { delayMs: TLS_INITIAL_DELAY_MS },
-          `[startup] Waiting ${TLS_INITIAL_DELAY_MS / 1000}s before TLS check (Let's Encrypt grace period)`
-        );
-        await new Promise((resolve) => setTimeout(resolve, TLS_INITIAL_DELAY_MS));
         await checkIssuerTls(process.env.MCP_AUTH_ISSUER!);
       }
       // Nextcloud reachability probe
