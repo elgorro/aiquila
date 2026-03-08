@@ -354,6 +354,78 @@ describe('OCS-based Tools', () => {
     });
   });
 
+  describe('install_app', () => {
+    it('should install an app successfully', async () => {
+      mockExecuteOCC.mockResolvedValue({ success: true, stdout: 'tasks installed', stderr: '' });
+
+      const { installAppTool } = await import('../tools/system/apps.js');
+      const result = await installAppTool.handler({ appId: 'tasks' });
+
+      expect(result.content[0].text).toContain('tasks installed');
+      expect(result).not.toHaveProperty('isError');
+      expect(mockExecuteOCC).toHaveBeenCalledWith('app:install', ['tasks'], 300);
+    });
+
+    it('should pass --keep-disabled flag when requested', async () => {
+      mockExecuteOCC.mockResolvedValue({ success: true, stdout: 'tasks installed', stderr: '' });
+
+      const { installAppTool } = await import('../tools/system/apps.js');
+      await installAppTool.handler({ appId: 'tasks', keepDisabled: true });
+
+      expect(mockExecuteOCC).toHaveBeenCalledWith('app:install', ['tasks', '--keep-disabled'], 300);
+    });
+
+    it('should return error on failure', async () => {
+      mockExecuteOCC.mockResolvedValue({
+        success: false,
+        stdout: '',
+        stderr: 'App not found in App Store',
+      });
+
+      const { installAppTool } = await import('../tools/system/apps.js');
+      const result = await installAppTool.handler({ appId: 'nonexistent' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('App not found in App Store');
+    });
+  });
+
+  describe('uninstall_app', () => {
+    it('should remove an app successfully', async () => {
+      mockExecuteOCC.mockResolvedValue({ success: true, stdout: 'tasks removed', stderr: '' });
+
+      const { uninstallAppTool } = await import('../tools/system/apps.js');
+      const result = await uninstallAppTool.handler({ appId: 'tasks' });
+
+      expect(result.content[0].text).toContain('tasks removed');
+      expect(result).not.toHaveProperty('isError');
+      expect(mockExecuteOCC).toHaveBeenCalledWith('app:remove', ['tasks'], 120);
+    });
+
+    it('should pass --keep-data flag when requested', async () => {
+      mockExecuteOCC.mockResolvedValue({ success: true, stdout: 'tasks removed', stderr: '' });
+
+      const { uninstallAppTool } = await import('../tools/system/apps.js');
+      await uninstallAppTool.handler({ appId: 'tasks', keepData: true });
+
+      expect(mockExecuteOCC).toHaveBeenCalledWith('app:remove', ['tasks', '--keep-data'], 120);
+    });
+
+    it('should return error on failure', async () => {
+      mockExecuteOCC.mockResolvedValue({
+        success: false,
+        stdout: '',
+        stderr: 'App is not installed',
+      });
+
+      const { uninstallAppTool } = await import('../tools/system/apps.js');
+      const result = await uninstallAppTool.handler({ appId: 'tasks' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('App is not installed');
+    });
+  });
+
   describe('list_users', () => {
     it('should return list of users', async () => {
       mockFetchOCS.mockResolvedValue({

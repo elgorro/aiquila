@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { fetchOCS } from '../../client/ocs.js';
+import { executeOCC } from '../../client/aiquila.js';
 
 /**
  * Nextcloud App Management Tools
@@ -166,6 +167,57 @@ export const disableAppTool = {
 };
 
 /**
+ * Install a Nextcloud app from the App Store
+ */
+export const installAppTool = {
+  name: 'install_app',
+  description: 'Install a Nextcloud app from the App Store via occ app:install',
+  inputSchema: z.object({
+    appId: z.string().describe('App ID to install (e.g. "tasks", "calendar", "mail")'),
+    keepDisabled: z.boolean().optional().describe('Install but keep the app disabled'),
+  }),
+  handler: async (args: { appId: string; keepDisabled?: boolean }) => {
+    const occArgs = [args.appId];
+    if (args.keepDisabled) occArgs.push('--keep-disabled');
+    const result = await executeOCC('app:install', occArgs, 300);
+    if (!result.success) {
+      const errText = result.stderr || result.stdout || 'Unknown error';
+      return { content: [{ type: 'text' as const, text: errText }], isError: true };
+    }
+    return { content: [{ type: 'text' as const, text: result.stdout || 'App installed.' }] };
+  },
+};
+
+/**
+ * Remove a Nextcloud app via occ app:remove
+ */
+export const uninstallAppTool = {
+  name: 'uninstall_app',
+  description: 'Remove a Nextcloud app via occ app:remove',
+  inputSchema: z.object({
+    appId: z.string().describe('App ID to remove (e.g. "tasks")'),
+    keepData: z.boolean().optional().describe('Keep app data after removal'),
+  }),
+  handler: async (args: { appId: string; keepData?: boolean }) => {
+    const occArgs = [args.appId];
+    if (args.keepData) occArgs.push('--keep-data');
+    const result = await executeOCC('app:remove', occArgs, 120);
+    if (!result.success) {
+      const errText = result.stderr || result.stdout || 'Unknown error';
+      return { content: [{ type: 'text' as const, text: errText }], isError: true };
+    }
+    return { content: [{ type: 'text' as const, text: result.stdout || 'App removed.' }] };
+  },
+};
+
+/**
  * Export all App Management tools
  */
-export const appsTools = [listAppsTool, getAppInfoTool, enableAppTool, disableAppTool];
+export const appsTools = [
+  listAppsTool,
+  getAppInfoTool,
+  enableAppTool,
+  disableAppTool,
+  installAppTool,
+  uninstallAppTool,
+];
