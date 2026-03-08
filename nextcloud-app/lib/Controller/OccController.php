@@ -46,8 +46,38 @@ class OccController extends Controller {
 
         $timeout = max(1, min($timeout, self::MAX_TIMEOUT));
 
+        // Resolve a valid PHP CLI binary.
+        // In Apache/FPM environments PHP_BINARY may be empty or point to a
+        // non-CLI binary, so we fall back to PATH lookup.
+        $phpBinary = PHP_BINARY;
+        if (empty($phpBinary) || !is_executable($phpBinary)) {
+            $this->logger->warning('PHP_BINARY is empty or non-executable, falling back to PATH lookup', [
+                'php_binary' => $phpBinary,
+            ]);
+            $candidates = ['php', 'php8', 'php8.4', 'php8.3'];
+            $phpBinary = '';
+            foreach ($candidates as $candidate) {
+                $out = [];
+                exec('which ' . escapeshellarg($candidate) . ' 2>/dev/null', $out);
+                if (!empty($out[0]) && is_executable($out[0])) {
+                    $phpBinary = $out[0];
+                    break;
+                }
+            }
+        }
+
+        if (empty($phpBinary)) {
+            $this->logger->error('Cannot locate PHP CLI binary; OCC command aborted', [
+                'command' => $command,
+            ]);
+            return new JSONResponse([
+                'success' => false,
+                'error' => 'Cannot locate PHP CLI binary',
+            ], 500);
+        }
+
         // Build the shell command with proper escaping
-        $shellCmd = escapeshellarg(PHP_BINARY)
+        $shellCmd = escapeshellarg($phpBinary)
             . ' ' . escapeshellarg(\OC::$SERVERROOT . '/occ')
             . ' ' . escapeshellarg($command)
             . ' --no-ansi --no-interaction';
