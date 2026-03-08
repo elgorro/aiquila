@@ -929,7 +929,12 @@ docker compose -f /opt/aiquila/docker-compose.yml exec -T nc bash -c \
   'mkdir -p /var/www/html/custom_apps && \
    tar -xzf /tmp/aiquila.tar.gz -C /var/www/html/custom_apps/ && \
    php occ app:enable aiquila && \
-   php occ app:enable metrics'
+   php occ app:enable metrics && \
+   php occ config:system:set trusted_proxies 0 --value="172.16.0.0/12" && \
+   php occ config:system:set forwarded_for_headers 0 --value="HTTP_X_FORWARDED_FOR" && \
+   php occ config:system:set maintenance_window_start --type=integer --value=1 && \
+   php occ db:add-missing-indices && \
+   php occ maintenance:repair --include-expensive'
 echo "AIquila app enabled."
 `, tarURL)
 

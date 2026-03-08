@@ -172,6 +172,7 @@ services:
     environment:
       CONTAINERS: 1
       NETWORKS: 1
+      EVENTS: 1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -193,7 +194,6 @@ services:
     container_name: aiq-traefik
     restart: unless-stopped
     depends_on:
-      - mcp
       - socket-proxy
       - crowdsec
     ports:
