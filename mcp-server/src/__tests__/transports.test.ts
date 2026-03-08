@@ -32,7 +32,16 @@ const mockListen = vi.fn((_port: number, _host: string, cb: () => void) => cb())
 const mockAll = vi.fn();
 const mockUse = vi.fn();
 const mockPost = vi.fn();
-const mockExpressApp = { all: mockAll, listen: mockListen, use: mockUse, post: mockPost };
+const mockGet = vi.fn();
+const mockSet = vi.fn();
+const mockExpressApp = {
+  all: mockAll,
+  get: mockGet,
+  set: mockSet,
+  listen: mockListen,
+  use: mockUse,
+  post: mockPost,
+};
 vi.mock('@modelcontextprotocol/sdk/server/express.js', () => ({
   createMcpExpressApp: vi.fn(() => mockExpressApp),
 }));

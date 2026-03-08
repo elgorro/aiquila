@@ -26,7 +26,11 @@ const TLS_CERT_ERROR_CODES = new Set([
   'ERR_TLS_CERT_ALTNAME_INVALID',
 ]);
 
-async function checkIssuerTls(issuerUrl: string): Promise<void> {
+const TLS_INITIAL_DELAY_MS = 30_000;
+const MAX_TLS_ATTEMPTS = 10;
+const TLS_RETRY_DELAY_MS = 15_000;
+
+async function attemptTlsCheck(issuerUrl: string): Promise<'ok' | 'skip' | 'retry'> {
   return new Promise((resolve) => {
     let url: URL;
     try {
@@ -34,7 +38,7 @@ async function checkIssuerTls(issuerUrl: string): Promise<void> {
     } catch {
       logger.error({ issuer: issuerUrl }, '[startup] MCP_AUTH_ISSUER is not a valid URL');
       if (process.env.MCP_TLS_STRICT === 'true') process.exit(1);
-      resolve();
+      resolve('skip');
       return;
     }
 
@@ -44,7 +48,7 @@ async function checkIssuerTls(issuerUrl: string): Promise<void> {
         '[startup] MCP_AUTH_ISSUER must use https:// — plain http exposes OAuth tokens'
       );
       if (process.env.MCP_TLS_STRICT === 'true') process.exit(1);
-      resolve();
+      resolve('skip');
       return;
     }
 
@@ -58,7 +62,7 @@ async function checkIssuerTls(issuerUrl: string): Promise<void> {
       },
       () => {
         logger.info({ issuer: issuerUrl }, '[startup] TLS certificate valid and trusted');
-        resolve();
+        resolve('ok');
       }
     );
 
@@ -72,13 +76,14 @@ async function checkIssuerTls(issuerUrl: string): Promise<void> {
           `will cause Claude to refuse the connection. Use Let's Encrypt (via Traefik or Caddy ` +
           `with a real domain) or mount a CA-signed cert.`;
         if (strict) {
-          logger.fatal({ issuer: issuerUrl, code }, msg);
-          process.exit(1);
+          logger.warn({ issuer: issuerUrl, code }, msg);
+          resolve('retry');
         } else {
           logger.error(
             { issuer: issuerUrl, code },
             msg + ' Set MCP_TLS_STRICT=true to make this a hard failure.'
           );
+          resolve('skip');
         }
       } else {
         // Transient network error — proxy may not be ready yet; do not fail
@@ -86,12 +91,33 @@ async function checkIssuerTls(issuerUrl: string): Promise<void> {
           { issuer: issuerUrl, code: err.code },
           '[startup] TLS check skipped — could not reach issuer (proxy not ready?)'
         );
+        resolve('skip');
       }
-      resolve();
     });
 
     req.end();
   });
+}
+
+async function checkIssuerTls(issuerUrl: string): Promise<void> {
+  for (let attempt = 1; attempt <= MAX_TLS_ATTEMPTS; attempt++) {
+    const result = await attemptTlsCheck(issuerUrl);
+    if (result !== 'retry') return;
+    if (attempt < MAX_TLS_ATTEMPTS) {
+      logger.warn(
+        { issuer: issuerUrl, attempt, maxAttempts: MAX_TLS_ATTEMPTS },
+        `[startup] TLS cert not yet trusted, retrying in ${TLS_RETRY_DELAY_MS / 1000}s ` +
+          `(${attempt}/${MAX_TLS_ATTEMPTS}) — waiting for Let's Encrypt cert`
+      );
+      await new Promise((resolve) => setTimeout(resolve, TLS_RETRY_DELAY_MS));
+    } else {
+      logger.fatal(
+        { issuer: issuerUrl },
+        '[startup] TLS certificate still rejected after all retries — giving up'
+      );
+      process.exit(1);
+    }
+  }
 }
 
 export async function startHttp(): Promise<void> {
@@ -129,6 +155,12 @@ export async function startHttp(): Promise<void> {
   }
 
   const app = createMcpExpressApp({ host, allowedHosts });
+
+  // Simple health check — bypasses all auth middleware so Docker health checks
+  // work even before OAuth is fully configured or TLS is verified.
+  app.get('/health', (_req: any, res: any) => {
+    res.status(200).json({ status: 'ok' });
+  });
 
   // When running behind a reverse proxy (e.g. Traefik, nginx, Caddy), the proxy
   // adds X-Forwarded-For headers. Without trust proxy being set, express-rate-limit
@@ -287,8 +319,16 @@ export async function startHttp(): Promise<void> {
     }
     logger.info('View logs: docker compose logs -f   or   make logs-follow');
     void (async () => {
-      // TLS certificate check (only when auth is enabled and issuer is configured)
+      // TLS certificate check (only when auth is enabled and issuer is configured).
+      // Wait before the first check to give Traefik time to obtain a Let's Encrypt
+      // certificate — without this delay, the check sees Traefik's default
+      // self-signed cert and enters a retry loop that may never resolve.
       if (authEnabled) {
+        logger.info(
+          { delayMs: TLS_INITIAL_DELAY_MS },
+          `[startup] Waiting ${TLS_INITIAL_DELAY_MS / 1000}s before TLS check (Let's Encrypt grace period)`
+        );
+        await new Promise((resolve) => setTimeout(resolve, TLS_INITIAL_DELAY_MS));
         await checkIssuerTls(process.env.MCP_AUTH_ISSUER!);
       }
       // Nextcloud reachability probe
