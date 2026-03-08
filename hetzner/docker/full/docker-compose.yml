@@ -154,11 +154,11 @@ services:
         limits:
           memory: 512m
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:$${MCP_PORT:-3339}/.well-known/oauth-authorization-server"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:$${MCP_PORT:-3339}/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 30s
     logging:
       driver: "json-file"
       options:

@@ -42,11 +42,11 @@ services:
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapischeme=http"
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapihost=crowdsec:8080"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:$${MCP_PORT:-3339}/.well-known/oauth-authorization-server"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:$${MCP_PORT:-3339}/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 30s
     volumes:
       - mcp_state:/app/state
     networks:
@@ -68,6 +68,7 @@ services:
     environment:
       CONTAINERS: 1
       NETWORKS: 1
+      EVENTS: 1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -89,7 +90,6 @@ services:
     container_name: aiq-traefik
     restart: unless-stopped
     depends_on:
-      - mcp
       - socket-proxy
       - crowdsec
     ports:

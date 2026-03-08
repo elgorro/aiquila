@@ -26,7 +26,8 @@ const TLS_CERT_ERROR_CODES = new Set([
   'ERR_TLS_CERT_ALTNAME_INVALID',
 ]);
 
-const MAX_TLS_ATTEMPTS = 6;
+const TLS_INITIAL_DELAY_MS = 30_000;
+const MAX_TLS_ATTEMPTS = 10;
 const TLS_RETRY_DELAY_MS = 15_000;
 
 async function attemptTlsCheck(issuerUrl: string): Promise<'ok' | 'skip' | 'retry'> {
@@ -154,6 +155,12 @@ export async function startHttp(): Promise<void> {
   }
 
   const app = createMcpExpressApp({ host, allowedHosts });
+
+  // Simple health check — bypasses all auth middleware so Docker health checks
+  // work even before OAuth is fully configured or TLS is verified.
+  app.get('/health', (_req: any, res: any) => {
+    res.status(200).json({ status: 'ok' });
+  });
 
   // When running behind a reverse proxy (e.g. Traefik, nginx, Caddy), the proxy
   // adds X-Forwarded-For headers. Without trust proxy being set, express-rate-limit
@@ -312,8 +319,16 @@ export async function startHttp(): Promise<void> {
     }
     logger.info('View logs: docker compose logs -f   or   make logs-follow');
     void (async () => {
-      // TLS certificate check (only when auth is enabled and issuer is configured)
+      // TLS certificate check (only when auth is enabled and issuer is configured).
+      // Wait before the first check to give Traefik time to obtain a Let's Encrypt
+      // certificate — without this delay, the check sees Traefik's default
+      // self-signed cert and enters a retry loop that may never resolve.
       if (authEnabled) {
+        logger.info(
+          { delayMs: TLS_INITIAL_DELAY_MS },
+          `[startup] Waiting ${TLS_INITIAL_DELAY_MS / 1000}s before TLS check (Let's Encrypt grace period)`
+        );
+        await new Promise((resolve) => setTimeout(resolve, TLS_INITIAL_DELAY_MS));
         await checkIssuerTls(process.env.MCP_AUTH_ISSUER!);
       }
       // Nextcloud reachability probe

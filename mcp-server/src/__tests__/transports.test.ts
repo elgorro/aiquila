@@ -32,7 +32,16 @@ const mockListen = vi.fn((_port: number, _host: string, cb: () => void) => cb())
 const mockAll = vi.fn();
 const mockUse = vi.fn();
 const mockPost = vi.fn();
-const mockExpressApp = { all: mockAll, listen: mockListen, use: mockUse, post: mockPost };
+const mockGet = vi.fn();
+const mockSet = vi.fn();
+const mockExpressApp = {
+  all: mockAll,
+  get: mockGet,
+  set: mockSet,
+  listen: mockListen,
+  use: mockUse,
+  post: mockPost,
+};
 vi.mock('@modelcontextprotocol/sdk/server/express.js', () => ({
   createMcpExpressApp: vi.fn(() => mockExpressApp),
 }));
@@ -154,6 +163,23 @@ describe('http transport', () => {
     expect(mockPost).not.toHaveBeenCalled();
     // /mcp is mounted with only one handler (no bearer middleware)
     expect(mockAll).toHaveBeenCalledWith('/mcp', expect.any(Function));
+  });
+
+  it('registers GET /health endpoint', async () => {
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+    expect(mockGet).toHaveBeenCalledWith('/health', expect.any(Function));
+  });
+
+  it('/health handler returns 200 {"status":"ok"}', async () => {
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+    const healthCall = mockGet.mock.calls.find((c) => c[0] === '/health');
+    const handler = healthCall?.[1];
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    handler({}, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ status: 'ok' });
   });
 });
 
