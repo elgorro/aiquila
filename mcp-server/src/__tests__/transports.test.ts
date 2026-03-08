@@ -164,6 +164,23 @@ describe('http transport', () => {
     // /mcp is mounted with only one handler (no bearer middleware)
     expect(mockAll).toHaveBeenCalledWith('/mcp', expect.any(Function));
   });
+
+  it('registers GET /health endpoint', async () => {
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+    expect(mockGet).toHaveBeenCalledWith('/health', expect.any(Function));
+  });
+
+  it('/health handler returns 200 {"status":"ok"}', async () => {
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+    const healthCall = mockGet.mock.calls.find((c) => c[0] === '/health');
+    const handler = healthCall?.[1];
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    handler({}, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ status: 'ok' });
+  });
 });
 
 // ---- http transport (auth enabled) ----
