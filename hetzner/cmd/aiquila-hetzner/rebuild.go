@@ -54,7 +54,6 @@ type DeployConfig struct {
 	NCDomain         string `yaml:"nc_domain"          json:"nc_domain"`
 	NCAdminUser      string `yaml:"nc_admin_user"      json:"nc_admin_user"`
 	NCAdminPassword  string `yaml:"nc_admin_password"  json:"nc_admin_password"`
-	NCAppVersion     string `yaml:"nc_app_version"     json:"nc_app_version"`
 }
 
 var (

@@ -49,7 +49,6 @@ var (
 	// NC self-hosted flags (--stack nextcloud / full)
 	createNCAdminUser     string
 	createNCAdminPassword string
-	createNCAppVersion    string
 	createToken      string
 	createAcmeEmail  string
 	createMonitoring bool
@@ -153,7 +152,6 @@ func buildCreateCmd() *cobra.Command {
 	// Self-hosted NC flags (--stack nextcloud/full)
 	cmd.Flags().StringVar(&createNCAdminUser, "nc-admin-user", "admin", "Nextcloud admin username (--stack nextcloud/full)")
 	cmd.Flags().StringVar(&createNCAdminPassword, "nc-admin-password", "", "Nextcloud admin password (--stack nextcloud/full)")
-	cmd.Flags().StringVar(&createNCAppVersion, "nc-app-version", "latest", "AIquila app version to install (--stack nextcloud/full; e.g. v1.2.3 or 'latest')")
 	cmd.Flags().StringVar(&createToken, "token", "", "Hetzner API token (default: $HCLOUD_TOKEN)")
 	cmd.Flags().StringVar(&createAcmeEmail, "acme-email", "", "Email for Let's Encrypt cert expiry notices (optional)")
 	cmd.Flags().BoolVar(&createMonitoring, "monitoring", false, "Start monitoring profile (Prometheus + Grafana; --stack mcp only)")
@@ -312,9 +310,6 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	}
 	if createNCAdminPassword == "" && fileCfg.NCAdminPassword != "" {
 		createNCAdminPassword = fileCfg.NCAdminPassword
-	}
-	if !cmd.Flags().Changed("nc-app-version") && fileCfg.NCAppVersion != "" {
-		createNCAppVersion = fileCfg.NCAppVersion
 	}
 
 	// Packages: config file takes priority over CLI --package flags.
@@ -743,7 +738,6 @@ func provisionNCStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, priv
 
 	uploads := []struct{ path, content string }{
 		{"/opt/aiquila/docker-compose.yml", templates.NCDockerCompose},
-		{"/opt/aiquila/Dockerfile", templates.NCDockerfile},
 		{"/opt/aiquila/traefik.yml", strings.ReplaceAll(templates.NCTraefik, "${ACME_EMAIL}", ncEnv.AcmeEmail)},
 		{"/opt/aiquila/crowdsec/acquis.yml", templates.NCCrowdSecAcquis},
 		{"/opt/aiquila/.env", ncEnv.Render()},
@@ -756,16 +750,8 @@ func provisionNCStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, priv
 	}
 	appLog.Info("upload", "files uploaded", "count", len(uploads))
 
-	fmt.Println("\n── Building Nextcloud image (PHP 8.4 upgrade, ~2 min)")
-	out, err := provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose build 2>&1")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, out)
-		return fmt.Errorf("docker compose build: %w", err)
-	}
-	fmt.Print(out)
-
 	fmt.Println("\n── Starting Docker services")
-	out, err = provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose up -d 2>&1")
+	out, err := provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose up -d 2>&1")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, out)
 		return fmt.Errorf("docker compose up: %w", err)
@@ -781,7 +767,7 @@ func provisionNCStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, priv
 	}
 	fmt.Print(out)
 
-	if err := installAiquilaApp(sshClient, createNCAppVersion); err != nil {
+	if err := installAiquilaAppFromStore(sshClient); err != nil {
 		return err
 	}
 
@@ -899,43 +885,6 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 	fmt.Print(out)
 
 	return printFullSummary(srv, serverIP, privKeyPath)
-}
-
-// installAiquilaApp downloads and installs the AIquila Nextcloud app via OCC.
-// version should be "latest" or a specific tag like "v1.2.3".
-func installAiquilaApp(sshClient *xssh.Client, version string) error {
-	fmt.Printf("\n── Installing AIquila app (version=%s)\n", version)
-
-	var tarURL string
-	if version == "latest" {
-		tarURL = "https://github.com/elgorro/aiquila/releases/latest/download/aiquila.tar.gz"
-	} else {
-		tarURL = fmt.Sprintf("https://github.com/elgorro/aiquila/releases/download/%s/aiquila.tar.gz", version)
-	}
-
-	installCmd := fmt.Sprintf(`
-set -e
-curl -sLo /tmp/aiquila.tar.gz %s
-docker compose -f /opt/aiquila/docker-compose.yml exec -T nc bash -c \
-  'mkdir -p /var/www/html/custom_apps && \
-   tar -xzf /tmp/aiquila.tar.gz -C /var/www/html/custom_apps/ && \
-   php occ app:enable aiquila && \
-   php occ app:enable metrics && \
-   php occ config:system:set trusted_proxies 0 --value="172.16.0.0/12" && \
-   php occ config:system:set forwarded_for_headers 0 --value="HTTP_X_FORWARDED_FOR" && \
-   php occ config:system:set maintenance_window_start --type=integer --value=1 && \
-   php occ db:add-missing-indices && \
-   php occ maintenance:repair --include-expensive'
-echo "AIquila app enabled."
-`, tarURL)
-
-	out, err := provision.RunCommand(sshClient, installCmd)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, out)
-		return fmt.Errorf("install AIquila app: %w", err)
-	}
-	fmt.Print(out)
-	return nil
 }
 
 // installAiquilaAppFromStore installs the AIquila Nextcloud app from the app store via occ app:install.
