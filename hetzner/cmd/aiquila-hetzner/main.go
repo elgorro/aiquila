@@ -831,7 +831,6 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 
 	uploads := []struct{ path, content string }{
 		{"/opt/aiquila/docker-compose.yml", templates.FullDockerCompose},
-		{"/opt/aiquila/Dockerfile", templates.FullDockerfile},
 		{"/opt/aiquila/traefik.yml", strings.ReplaceAll(templates.FullTraefik, "${ACME_EMAIL}", fullEnv.AcmeEmail)},
 		{"/opt/aiquila/crowdsec/acquis.yml", templates.FullCrowdSecAcquis},
 		{"/opt/aiquila/.env", fullEnv.Render()},
@@ -844,17 +843,9 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 	}
 	appLog.Info("upload", "files uploaded", "count", len(uploads))
 
-	fmt.Println("\n── Building Nextcloud image (PHP 8.4 upgrade, ~2 min)")
-	out, err := provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose build 2>&1")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, out)
-		return fmt.Errorf("docker compose build: %w", err)
-	}
-	fmt.Print(out)
-
 	fmt.Println("\n── Starting NC services (Nextcloud + DB + Redis + Traefik + CrowdSec)")
 	// Start NC services first; MCP will start after app password is generated.
-	out, err = provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose up -d nc nc-db nc-redis traefik crowdsec 2>&1")
+	out, err := provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose up -d nc nc-db nc-redis traefik crowdsec 2>&1")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, out)
 		return fmt.Errorf("docker compose up (NC): %w", err)
@@ -870,7 +861,7 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 	}
 	fmt.Print(out)
 
-	if err := installAiquilaApp(sshClient, createNCAppVersion); err != nil {
+	if err := installAiquilaAppFromStore(sshClient); err != nil {
 		return err
 	}
 
@@ -944,6 +935,27 @@ echo "AIquila app enabled."
 		return fmt.Errorf("install AIquila app: %w", err)
 	}
 	fmt.Print(out)
+	return nil
+}
+
+// installAiquilaAppFromStore installs the AIquila Nextcloud app from the app store via occ app:install.
+func installAiquilaAppFromStore(sshClient *xssh.Client) error {
+	fmt.Println("\n── Installing AIquila app from Nextcloud app store")
+	installCmd := `docker compose -f /opt/aiquila/docker-compose.yml exec -T nc php occ app:install aiquila && \
+docker compose -f /opt/aiquila/docker-compose.yml exec -T nc bash -c '\
+php occ app:enable metrics && \
+php occ config:system:set trusted_proxies 0 --value="172.16.0.0/12" && \
+php occ config:system:set forwarded_for_headers 0 --value="HTTP_X_FORWARDED_FOR" && \
+php occ config:system:set maintenance_window_start --type=integer --value=1 && \
+php occ db:add-missing-indices && \
+php occ maintenance:repair --include-expensive'`
+	out, err := provision.RunCommand(sshClient, installCmd)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, out)
+		return fmt.Errorf("install AIquila app from store: %w", err)
+	}
+	fmt.Print(out)
+	fmt.Println("AIquila app installed from store.")
 	return nil
 }
 

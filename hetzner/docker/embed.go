@@ -57,11 +57,6 @@ var NCCrowdSecAcquis string
 //go:embed full/docker-compose.yml
 var FullDockerCompose string
 
-// FullDockerfile is the Dockerfile for the Nextcloud image in the full stack.
-//
-//go:embed full/Dockerfile
-var FullDockerfile string
-
 // FullTraefik is the traefik.yml static configuration template for the full stack.
 //
 //go:embed full/traefik.yml
