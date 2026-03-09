@@ -51,9 +51,15 @@ class OccController extends Controller {
         // non-CLI binary, so we fall back to PATH lookup.
         $phpBinary = PHP_BINARY;
         if (empty($phpBinary) || !is_executable($phpBinary)) {
-            $this->logger->warning('PHP_BINARY is empty or non-executable, falling back to PATH lookup', [
-                'php_binary' => $phpBinary,
-            ]);
+            $isApacheSapi = strpos(PHP_SAPI, 'apache') === 0;
+            if (empty($phpBinary) && $isApacheSapi) {
+                $this->logger->debug('PHP_BINARY is empty (Apache SAPI), falling back to PATH lookup');
+            } else {
+                $this->logger->warning('PHP_BINARY is empty or non-executable, falling back to PATH lookup', [
+                    'php_binary' => $phpBinary,
+                    'sapi' => PHP_SAPI,
+                ]);
+            }
             $candidates = ['php', 'php8', 'php8.4', 'php8.3'];
             $phpBinary = '';
             foreach ($candidates as $candidate) {
