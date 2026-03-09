@@ -6,14 +6,12 @@
 #
 # Usage:
 #   cp .env.example .env  &&  edit with your credentials
-#   docker compose build
 #   docker compose up -d
 #   # Poll NC_DOMAIN/status.php until {"installed":true} (~3-5 min first boot)
 
 services:
   nc:
-    build: .
-    image: aiq-nc:local
+    image: nextcloud:33-apache
     container_name: aiq-nc
     restart: unless-stopped
     depends_on:

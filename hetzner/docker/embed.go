@@ -35,11 +35,6 @@ var MCPPrometheus string
 //go:embed nextcloud/docker-compose.yml
 var NCDockerCompose string
 
-// NCDockerfile is the Dockerfile for the Nextcloud image (PHP 8.4 upgrade).
-//
-//go:embed nextcloud/Dockerfile
-var NCDockerfile string
-
 // NCTraefik is the traefik.yml static configuration template for the NC stack.
 //
 //go:embed nextcloud/traefik.yml
@@ -56,11 +51,6 @@ var NCCrowdSecAcquis string
 //
 //go:embed full/docker-compose.yml
 var FullDockerCompose string
-
-// FullDockerfile is the Dockerfile for the Nextcloud image in the full stack.
-//
-//go:embed full/Dockerfile
-var FullDockerfile string
 
 // FullTraefik is the traefik.yml static configuration template for the full stack.
 //

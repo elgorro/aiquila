@@ -126,6 +126,10 @@
 - [ ] Custom prompts/templates
 
 ### Infrastructure
+- [ ] Enhanced Hetzner full stack provisioning flow — eliminate manual
+  post-deploy steps (MCP user creation, app password patching, NC_MCP_USER/NC_MCP_PASSWORD
+  wiring) so `aiquila-hetzner create --stack full` produces a fully
+  operational stack end-to-end without intervention
 - [x] Integration test agent (Claude Agent SDK) — provisions a real Hetzner
   server, runs OAuth + MCP tools test suite against it, verifies
   TLS / Traefik / CrowdSec health, then destroys the server; suitable for
