@@ -18,7 +18,7 @@
   "author": "AIquila",
   "license": "AGPL-3.0",
   "devDependencies": {
-    "@nextcloud/vite-config": "^1.4.2",
+    "@nextcloud/vite-config": "^2.5.2",
     "vite": "^7.1.10"
   },
   "dependencies": {
