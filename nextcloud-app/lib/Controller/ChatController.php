@@ -8,9 +8,11 @@ use OCP\IRequest;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCA\AIquila\Service\ClaudeSDKService;
+use OCA\AIquila\Service\FileService;
 
 class ChatController extends Controller {
     private ClaudeSDKService $claudeService;
+    private FileService $fileService;
     private ?string $userId;
     private ICache $cache;
 
@@ -23,11 +25,13 @@ class ChatController extends Controller {
         string $appName,
         IRequest $request,
         ClaudeSDKService $claudeService,
+        FileService $fileService,
         ?string $userId,
         ICacheFactory $cacheFactory
     ) {
         parent::__construct($appName, $request);
         $this->claudeService = $claudeService;
+        $this->fileService = $fileService;
         $this->userId = $userId;
         $this->cache = $cacheFactory->createDistributed('aiquila_ratelimit');
     }
@@ -162,6 +166,73 @@ class ChatController extends Controller {
         }
 
         $result = $this->claudeService->summarize($content, $this->userId);
+        return new JSONResponse($result);
+    }
+
+    /**
+     * @NoAdminRequired
+     * POST /api/analyze-file
+     * Body: {filePath: string, prompt?: string}
+     *
+     * Analyze a file stored in Nextcloud with Claude.
+     * Images are sent as vision content; PDFs and text as document context.
+     */
+    public function analyzeFile(): JSONResponse {
+        if (!$this->checkRateLimit()) {
+            return new JSONResponse([
+                'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
+            ], 429);
+        }
+
+        $filePath = $this->request->getParam('filePath', '');
+        $prompt = $this->request->getParam('prompt', 'Analyze and describe this file.');
+
+        if (empty($filePath)) {
+            return new JSONResponse(['error' => 'No filePath provided'], 400);
+        }
+
+        if (!$this->validateContentLength($prompt)) {
+            return new JSONResponse([
+                'error' => 'Prompt too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
+            ], 413);
+        }
+
+        try {
+            $fileData = $this->fileService->getContent($filePath, $this->userId);
+        } catch (\OCP\Files\NotFoundException $e) {
+            return new JSONResponse(['error' => 'File not found: ' . $filePath], 404);
+        } catch (\InvalidArgumentException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], 400);
+        } catch (\RuntimeException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], 413);
+        } catch (\Exception $e) {
+            return new JSONResponse(['error' => 'Could not read file: ' . $e->getMessage()], 500);
+        }
+
+        $mimeType = $fileData['mimeType'];
+
+        if (str_starts_with($mimeType, 'image/')) {
+            $result = $this->claudeService->askWithImage(
+                $prompt,
+                $fileData['content'], // already base64
+                $mimeType,
+                $this->userId
+            );
+        } elseif ($mimeType === 'application/pdf') {
+            $rawBytes = base64_decode($fileData['content']);
+            $result = $this->claudeService->askWithDocument(
+                $prompt,
+                $rawBytes,
+                'application/pdf',
+                $fileData['name'] ?? basename($filePath),
+                $this->userId
+            );
+        } else {
+            $context = "File: {$fileData['name']} ({$mimeType}, {$fileData['size']} bytes)\n\n"
+                     . $fileData['content'];
+            $result = $this->claudeService->ask($prompt, $context, $this->userId);
+        }
+
         return new JSONResponse($result);
     }
 }
