@@ -265,6 +265,75 @@ export const getFileContentTool = {
 };
 
 /**
+ * Analyze an image stored in Nextcloud using Claude vision.
+ *
+ * Fetches the image via the AIquila API and returns it as an MCP image
+ * content block alongside the user's prompt so Claude can answer questions
+ * about it (OCR, visual Q&A, document analysis, etc.).
+ */
+export const analyzeImageTool = {
+  name: 'analyze_image',
+  description:
+    'Analyze an image stored in Nextcloud using Claude vision. Ask questions about image content, extract text (OCR), describe visuals, or analyse documents. The image is returned alongside your prompt for Claude to answer.',
+  inputSchema: z.object({
+    path: z.string().describe("The image file path in Nextcloud (e.g., '/Photos/receipt.jpg')"),
+    prompt: z
+      .string()
+      .describe(
+        'What to ask about the image (e.g., "What text is in this image?", "Describe what you see")'
+      ),
+  }),
+  handler: async (args: { path: string; prompt: string }) => {
+    try {
+      const result = await fetchAiquilaAPI<{
+        name: string;
+        mimeType: string;
+        size: number;
+        encoding: string;
+        content: string;
+      }>('/files/content', { queryParams: { path: args.path } });
+
+      if (!result.mimeType.startsWith('image/')) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error: ${args.path} is not an image file (mime type: ${result.mimeType}). Use get_file_content for non-image files.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Return the prompt as text + the image for Claude vision analysis
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `File: ${result.name} (${result.mimeType}, ${result.size} bytes)\n\n${args.prompt}`,
+          },
+          {
+            type: 'image' as const,
+            data: result.content,
+            mimeType: result.mimeType,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error fetching image: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+};
+
+/**
  * Export all file system tools
  */
 export const fileSystemTools = [
@@ -276,4 +345,5 @@ export const fileSystemTools = [
   getFileInfoTool,
   searchFilesTool,
   getFileContentTool,
+  analyzeImageTool,
 ];

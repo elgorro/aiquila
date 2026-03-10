@@ -29,8 +29,17 @@ class Application extends App implements IBootstrap {
             return $c->get(AIquilaService::class);
         });
 
-        // Register Claude Text Processing Provider for native Nextcloud Assistant integration
+        // Register Claude Text Processing Providers for native Nextcloud Assistant integration
         $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeProvider::class);
+        $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeSummaryProvider::class);
+        $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeHeadlineProvider::class);
+        $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeTopicsProvider::class);
+
+        // Register Claude Vision TaskProcessing Provider (NC 29+) for image-to-text tasks
+        // Wrapped in a check so the app degrades gracefully on older NC versions
+        if (interface_exists(\OCP\TaskProcessing\IProvider::class)) {
+            $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeImageToTextProvider::class);
+        }
     }
 
     public function boot(IBootContext $context): void {

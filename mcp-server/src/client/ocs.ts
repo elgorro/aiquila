@@ -22,7 +22,10 @@ export interface OcsResponse<T = unknown> {
  */
 interface OcsRequestOptions {
   method?: string;
+  /** URL-encoded form body (for legacy OCS endpoints) */
   body?: Record<string, string>;
+  /** JSON body (for newer TaskProcessing and text2image endpoints) */
+  jsonBody?: unknown;
   queryParams?: Record<string, string>;
 }
 
@@ -52,7 +55,10 @@ export async function fetchOCS<T = unknown>(
   };
 
   let body: string | undefined;
-  if (options.body) {
+  if (options.jsonBody !== undefined) {
+    body = JSON.stringify(options.jsonBody);
+    headers['Content-Type'] = 'application/json';
+  } else if (options.body) {
     body = new URLSearchParams(options.body).toString();
     headers['Content-Type'] = 'application/x-www-form-urlencoded';
   }
