@@ -19,7 +19,7 @@ registerFileAction(new FileAction({
 	</svg>`,
 
 	// Only show for readable files
-	enabled: (nodes) => {
+	enabled: ({ nodes }) => {
 		// Show for single files only (not directories)
 		if (nodes.length !== 1) return false
 		const node = nodes[0]
@@ -34,12 +34,13 @@ registerFileAction(new FileAction({
 	},
 
 	// Execute when the action is clicked
-	exec: async (node) => {
+	exec: async ({ nodes }) => {
+		const node = nodes[0]
 		try {
 			console.log('[AIquila] File action triggered for:', node.basename)
 
 			// Import and show the modal dialog
-			const { default: Vue } = await import('vue')
+			const { createApp } = await import('vue')
 			const { default: AskClaudeModal } = await import('./components/AskClaudeModal.vue')
 
 			// Create a modal container
@@ -49,7 +50,7 @@ registerFileAction(new FileAction({
 			document.body.appendChild(container)
 
 			// Create Vue app with the modal
-			const app = Vue.createApp(AskClaudeModal, {
+			const app = createApp(AskClaudeModal, {
 				file: node,
 				onClose: () => {
 					app.unmount()

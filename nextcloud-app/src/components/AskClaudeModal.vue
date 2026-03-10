@@ -1,5 +1,5 @@
 <template>
-	<NcModal :show="true"
+	<NcModal
 		:name="t('aiquila', 'Ask Claude about {filename}', { filename: file.basename })"
 		@close="onClose">
 		<div class="aiquila-modal-content">
@@ -14,7 +14,7 @@
 			</NcNoteCard>
 
 			<!-- Input field for question -->
-			<NcTextField :value.sync="prompt"
+			<NcTextField v-model="prompt"
 				:label="t('aiquila', 'What would you like to know?')"
 				:placeholder="t('aiquila', 'Ask a question about this file...')"
 				type="textarea"
@@ -62,11 +62,7 @@
 </template>
 
 <script>
-import NcModal from '@nextcloud/vue/dist/Components/NcModal.js'
-import NcTextField from '@nextcloud/vue/dist/Components/NcTextField.js'
-import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
-import NcNoteCard from '@nextcloud/vue/dist/Components/NcNoteCard.js'
-import NcLoadingIcon from '@nextcloud/vue/dist/Components/NcLoadingIcon.js'
+import { NcModal, NcTextField, NcButton, NcNoteCard, NcLoadingIcon } from '@nextcloud/vue'
 import FileDocumentIcon from 'vue-material-design-icons/FileDocument.vue'
 import CommentQuestionIcon from 'vue-material-design-icons/CommentQuestion.vue'
 
