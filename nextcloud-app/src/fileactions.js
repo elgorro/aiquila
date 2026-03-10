@@ -39,7 +39,7 @@ registerFileAction(new FileAction({
 			console.log('[AIquila] File action triggered for:', node.basename)
 
 			// Import and show the modal dialog
-			const { default: Vue } = await import('vue')
+			const { createApp } = await import('vue')
 			const { default: AskClaudeModal } = await import('./components/AskClaudeModal.vue')
 
 			// Create a modal container
@@ -49,7 +49,7 @@ registerFileAction(new FileAction({
 			document.body.appendChild(container)
 
 			// Create Vue app with the modal
-			const app = Vue.createApp(AskClaudeModal, {
+			const app = createApp(AskClaudeModal, {
 				file: node,
 				onClose: () => {
 					app.unmount()
