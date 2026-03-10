@@ -21,7 +21,7 @@ registerFileAction(new FileAction({
 	</svg>`,
 
 	// Only show for readable files
-	enabled: (nodes) => {
+	enabled: ({ nodes }) => {
 		if (nodes.length !== 1) return false
 		const node = nodes[0]
 		if (node.type !== 'file') return false
@@ -30,7 +30,8 @@ registerFileAction(new FileAction({
 	},
 
 	// Execute when clicked
-	exec: async (node) => {
+	exec: async ({ nodes }) => {
+		const node = nodes[0]
 		try {
 			console.log('[AIquila] File action triggered for:', node.basename)
 
