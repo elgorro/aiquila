@@ -25,7 +25,6 @@ class OccController extends Controller {
     /**
      * Execute an OCC command and return the output.
      *
-     * @NoAdminRequired
      * @NoCSRFRequired
      */
     public function execute(): JSONResponse {

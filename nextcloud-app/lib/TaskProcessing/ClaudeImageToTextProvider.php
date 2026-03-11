@@ -9,7 +9,6 @@ use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\IProvider;
 use OCP\TaskProcessing\ShapeDescriptor;
 use OCP\TaskProcessing\Task;
-use OCP\TaskProcessing\TaskTypes\ImageToText;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -44,7 +43,7 @@ class ClaudeImageToTextProvider implements IProvider {
     }
 
     public function getTaskTypeId(): string {
-        return ImageToText::ID;
+        return 'core:image2text';
     }
 
     public function getExpectedRuntime(): int {
