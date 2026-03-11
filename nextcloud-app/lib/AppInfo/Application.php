@@ -30,10 +30,13 @@ class Application extends App implements IBootstrap {
         });
 
         // Register Claude Text Processing Providers for native Nextcloud Assistant integration
-        $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeProvider::class);
-        $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeSummaryProvider::class);
-        $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeHeadlineProvider::class);
-        $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeTopicsProvider::class);
+        // Wrapped in a check so the app degrades gracefully on NC versions where this API was removed (NC33+)
+        if (interface_exists(\OCP\TextProcessing\IProvider::class)) {
+            $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeProvider::class);
+            $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeSummaryProvider::class);
+            $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeHeadlineProvider::class);
+            $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeTopicsProvider::class);
+        }
 
         // Register Claude Vision TaskProcessing Provider (NC 29+) for image-to-text tasks
         // Wrapped in a check so the app degrades gracefully on older NC versions
