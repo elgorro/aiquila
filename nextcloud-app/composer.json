@@ -11,7 +11,8 @@
         "nyholm/psr7": "^1.8"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.0"
+        "phpunit/phpunit": "^10.0",
+        "nextcloud/openapi-extractor": "^1.8"
     },
     "autoload": {
         "psr-4": {

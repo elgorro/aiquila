@@ -3,6 +3,8 @@
 namespace OCA\AIquila\Controller;
 
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCP\ICache;
@@ -59,25 +61,36 @@ class ChatController extends Controller {
     }
 
     /**
+     * Send a single-turn prompt to Claude
+     *
+     * @param string $prompt  The user's question or instruction
+     * @param string $context Optional context to provide alongside the prompt
+     *
+     * 200: Claude response with model info and token usage
+     * 400: No prompt was provided
+     * 413: Prompt or context exceeds the 5 MB content limit
+     * 429: Rate limit exceeded (10 requests per minute)
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
+     *
      * @NoAdminRequired
      */
-    public function ask(): JSONResponse {
-        // Check rate limit
+    #[NoAdminRequired]
+    #[OpenAPI]
+    public function ask(string $prompt = '', string $context = ''): JSONResponse {
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
             ], 429);
         }
 
-        $prompt = $this->request->getParam('prompt', '');
-        $context = $this->request->getParam('context', '');
-
         if (!$prompt) {
             return new JSONResponse(['error' => 'No prompt provided'], 400);
         }
 
-        // Validate content length
-        $totalLength = strlen($prompt) + strlen($context);
         if (!$this->validateContentLength($prompt . $context)) {
             return new JSONResponse([
                 'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
@@ -89,34 +102,35 @@ class ChatController extends Controller {
     }
 
     /**
+     * Send a multi-turn conversation to Claude
+     *
+     * @param list<array{role: string, content: string}> $messages Conversation messages
+     * @param string|null $system Optional system prompt
+     * @param array<string, mixed> $options Optional model parameters (temperature, top_p, top_k, stop_sequences)
+     *
+     * 200: Claude response with model info and token usage
+     * 400: Messages array is missing or empty
+     * 413: Combined message content exceeds the 5 MB content limit
+     * 429: Rate limit exceeded (10 requests per minute)
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
+     *
      * @NoAdminRequired
-     * POST /api/chat
-     * Body: {messages: [...], system?: string, options?: {temperature?, top_p?, top_k?, stop_sequences?}}
      */
-    public function chat(): JSONResponse {
+    #[NoAdminRequired]
+    #[OpenAPI]
+    public function chat(array $messages = [], ?string $system = null, array $options = []): JSONResponse {
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
             ], 429);
         }
 
-        $messagesRaw = $this->request->getParam('messages');
-        if (empty($messagesRaw)) {
-            return new JSONResponse(['error' => 'No messages provided'], 400);
-        }
-
-        // Accept JSON-encoded string or already-decoded array
-        if (is_string($messagesRaw)) {
-            $messages = json_decode($messagesRaw, true);
-            if (!is_array($messages)) {
-                return new JSONResponse(['error' => 'Invalid messages format'], 400);
-            }
-        } else {
-            $messages = $messagesRaw;
-        }
-
         if (empty($messages)) {
-            return new JSONResponse(['error' => 'Messages array is empty'], 400);
+            return new JSONResponse(['error' => 'No messages provided'], 400);
         }
 
         // Validate total content size
@@ -131,34 +145,40 @@ class ChatController extends Controller {
             ], 413);
         }
 
-        $system  = $this->request->getParam('system', null) ?: null;
-        $options = $this->request->getParam('options', []) ?: [];
-        if (is_string($options)) {
-            $options = json_decode($options, true) ?? [];
-        }
-
         $result = $this->claudeService->chat($messages, $system, $this->userId, $options);
         return new JSONResponse($result);
     }
 
     /**
+     * Summarize text content with Claude
+     *
+     * @param string $content The text content to summarize
+     *
+     * 200: Claude summary with model info and token usage
+     * 400: No content was provided
+     * 413: Content exceeds the 5 MB content limit
+     * 429: Rate limit exceeded (10 requests per minute)
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
+     *
      * @NoAdminRequired
      */
-    public function summarize(): JSONResponse {
-        // Check rate limit
+    #[NoAdminRequired]
+    #[OpenAPI]
+    public function summarize(string $content = ''): JSONResponse {
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
             ], 429);
         }
 
-        $content = $this->request->getParam('content', '');
-
         if (!$content) {
             return new JSONResponse(['error' => 'No content provided'], 400);
         }
 
-        // Validate content length
         if (!$this->validateContentLength($content)) {
             return new JSONResponse([
                 'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
@@ -170,22 +190,34 @@ class ChatController extends Controller {
     }
 
     /**
-     * @NoAdminRequired
-     * POST /api/analyze-file
-     * Body: {filePath: string, prompt?: string}
+     * Analyze a Nextcloud file with Claude (vision for images, document for PDFs, text for others)
      *
-     * Analyze a file stored in Nextcloud with Claude.
-     * Images are sent as vision content; PDFs and text as document context.
+     * @param string $filePath Path to the file within the user's Nextcloud storage
+     * @param string $prompt   Instruction or question about the file
+     *
+     * 200: Claude analysis with model info and token usage
+     * 400: No filePath provided or prompt is invalid
+     * 404: File not found at the given path
+     * 413: Prompt exceeds the 5 MB content limit
+     * 429: Rate limit exceeded (10 requests per minute)
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
+     *
+     * @NoAdminRequired
      */
-    public function analyzeFile(): JSONResponse {
+    #[NoAdminRequired]
+    #[OpenAPI]
+    public function analyzeFile(string $filePath = '', string $prompt = 'Analyze and describe this file.'): JSONResponse {
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
             ], 429);
         }
-
-        $filePath = $this->request->getParam('filePath', '');
-        $prompt = $this->request->getParam('prompt', 'Analyze and describe this file.');
 
         if (empty($filePath)) {
             return new JSONResponse(['error' => 'No filePath provided'], 400);

@@ -88,19 +88,13 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testSaveStoresApiKeyAndModel(): void {
-        $this->request->method('getParam')
-            ->willReturnMap([
-                ['api_key', '', 'my-api-key'],
-                ['model',   '', ClaudeModels::OPUS_4_6],
-            ]);
-
         $calls = [];
         $this->config->method('setUserValue')
             ->willReturnCallback(function (string $uid, string $app, string $key, string $val) use (&$calls): void {
                 $calls[] = [$uid, $app, $key, $val];
             });
 
-        $response = $this->ctrl->save();
+        $response = $this->ctrl->save('my-api-key', ClaudeModels::OPUS_4_6);
 
         $this->assertEquals(200, $response->getStatus());
         $this->assertEquals('ok', $response->getData()['status']);
@@ -109,12 +103,6 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testSaveWithEmptyModelDeletesUserValue(): void {
-        $this->request->method('getParam')
-            ->willReturnMap([
-                ['api_key', '', 'some-key'],
-                ['model',   '', ''],
-            ]);
-
         $this->config->expects($this->once())
             ->method('setUserValue')
             ->with('testuser', 'aiquila', 'api_key', 'some-key');
@@ -123,24 +111,18 @@ class SettingsControllerTest extends TestCase {
             ->method('deleteUserValue')
             ->with('testuser', 'aiquila', 'model');
 
-        $response = $this->ctrl->save();
+        $response = $this->ctrl->save('some-key', '');
         $this->assertEquals('ok', $response->getData()['status']);
     }
 
     public function testSaveWithEmptyApiKeyClearsKey(): void {
-        $this->request->method('getParam')
-            ->willReturnMap([
-                ['api_key', '', ''],
-                ['model',   '', ClaudeModels::SONNET_4_5],
-            ]);
-
         $calls = [];
         $this->config->method('setUserValue')
             ->willReturnCallback(function (string $uid, string $app, string $key, string $val) use (&$calls): void {
                 $calls[] = [$uid, $app, $key, $val];
             });
 
-        $this->ctrl->save();
+        $this->ctrl->save('', ClaudeModels::SONNET_4_5);
 
         $this->assertContains(['testuser', 'aiquila', 'api_key', ''], $calls);
     }

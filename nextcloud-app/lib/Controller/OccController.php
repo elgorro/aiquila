@@ -3,6 +3,8 @@
 namespace OCA\AIquila\Controller;
 
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use Psr\Log\LoggerInterface;
@@ -23,24 +25,26 @@ class OccController extends Controller {
     }
 
     /**
-     * Execute an OCC command and return the output.
+     * Execute an OCC command and return the output
+     *
+     * @param string       $command OCC command name (e.g. "maintenance:mode")
+     * @param list<string> $args    Additional command arguments
+     * @param int          $timeout Execution timeout in seconds (1-600, default: 120)
+     *
+     * 200: Command completed; see exitCode for success/failure
+     * 400: No command was provided
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{success: bool, stdout: string, stderr: string, exitCode: int}, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, error: string}, array{}>
      *
      * @NoCSRFRequired
      */
-    public function execute(): JSONResponse {
-        $command = $this->request->getParam('command', '');
-        $args = $this->request->getParam('args', []);
-        $timeout = (int) $this->request->getParam('timeout', self::DEFAULT_TIMEOUT);
-
+    #[NoCSRFRequired]
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function execute(string $command = '', array $args = [], int $timeout = 120): JSONResponse {
         if (empty($command)) {
-            return new JSONResponse([
-                'success' => false,
-                'error' => 'No command provided',
-            ], 400);
-        }
-
-        if (!is_array($args)) {
-            $args = [];
+            return new JSONResponse(['success' => false, 'error' => 'No command provided'], 400);
         }
 
         $timeout = max(1, min($timeout, self::MAX_TIMEOUT));
@@ -72,16 +76,10 @@ class OccController extends Controller {
         }
 
         if (empty($phpBinary)) {
-            $this->logger->error('Cannot locate PHP CLI binary; OCC command aborted', [
-                'command' => $command,
-            ]);
-            return new JSONResponse([
-                'success' => false,
-                'error' => 'Cannot locate PHP CLI binary',
-            ], 500);
+            $this->logger->error('Cannot locate PHP CLI binary; OCC command aborted', ['command' => $command]);
+            return new JSONResponse(['success' => false, 'error' => 'Cannot locate PHP CLI binary'], 500);
         }
 
-        // Build the shell command with proper escaping
         $shellCmd = escapeshellarg($phpBinary)
             . ' ' . escapeshellarg(\OC::$SERVERROOT . '/occ')
             . ' ' . escapeshellarg($command)
@@ -91,10 +89,7 @@ class OccController extends Controller {
             $shellCmd .= ' ' . escapeshellarg((string) $arg);
         }
 
-        $this->logger->info('OCC execution requested', [
-            'command' => $command,
-            'args' => $args,
-        ]);
+        $this->logger->info('OCC execution requested', ['command' => $command, 'args' => $args]);
 
         $descriptors = [
             0 => ['pipe', 'r'],
@@ -105,14 +100,10 @@ class OccController extends Controller {
         $process = proc_open($shellCmd, $descriptors, $pipes, \OC::$SERVERROOT);
 
         if (!is_resource($process)) {
-            return new JSONResponse([
-                'success' => false,
-                'error' => 'Failed to start process',
-            ], 500);
+            return new JSONResponse(['success' => false, 'error' => 'Failed to start process'], 500);
         }
 
         fclose($pipes[0]);
-
         stream_set_blocking($pipes[1], false);
         stream_set_blocking($pipes[2], false);
 
@@ -122,7 +113,6 @@ class OccController extends Controller {
 
         while (true) {
             $status = proc_get_status($process);
-
             $stdout .= stream_get_contents($pipes[1]);
             $stderr .= stream_get_contents($pipes[2]);
 
@@ -135,7 +125,6 @@ class OccController extends Controller {
                 fclose($pipes[1]);
                 fclose($pipes[2]);
                 proc_close($process);
-
                 return new JSONResponse([
                     'success' => false,
                     'error' => "Command timed out after {$timeout} seconds",
@@ -148,24 +137,18 @@ class OccController extends Controller {
             usleep(50000);
         }
 
-        // Read any remaining output
         $stdout .= stream_get_contents($pipes[1]);
         $stderr .= stream_get_contents($pipes[2]);
-
         fclose($pipes[1]);
         fclose($pipes[2]);
-
         $exitCode = proc_close($process);
 
-        $this->logger->info('OCC execution completed', [
-            'command' => $command,
-            'exitCode' => $exitCode,
-        ]);
+        $this->logger->info('OCC execution completed', ['command' => $command, 'exitCode' => $exitCode]);
 
         return new JSONResponse([
-            'success' => $exitCode === 0,
-            'stdout' => $stdout,
-            'stderr' => $stderr,
+            'success'  => $exitCode === 0,
+            'stdout'   => $stdout,
+            'stderr'   => $stderr,
             'exitCode' => $exitCode,
         ]);
     }
