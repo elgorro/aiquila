@@ -64,3 +64,13 @@ jobs:
 
       - name: Run tests
         run: composer test
+
+      - name: Generate OpenAPI spec
+        run: vendor/bin/generate-spec
+
+      - name: Check OpenAPI spec is up to date
+        run: |
+          git diff --exit-code openapi.json openapi-administration.json openapi-full.json || {
+            echo "::error::OpenAPI spec is out of date. Run 'make openapi' and commit the result."
+            exit 1
+          }

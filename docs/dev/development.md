@@ -103,16 +103,33 @@ sudo -u www-data php /path/to/nextcloud/occ app:enable aiquila
 ['name' => 'controller#action', 'url' => '/api/endpoint', 'verb' => 'POST'],
 ```
 
-2. Create or update controller in `lib/Controller/`:
+2. Create or update controller in `lib/Controller/`. Add an `#[OpenAPI]` attribute and
+   typed PHPDoc so the endpoint appears in the OpenAPI spec:
 ```php
+use OpenAPI\Attributes as OA;
+
 /**
- * @NoAdminRequired
+ * Short description
+ *
+ * @return JSONResponse<Http::STATUS_OK, array{result: string}, array{}>
+ *
+ * 200: Success
  */
+#[OA\OpenAPI]
+#[NoAdminRequired]
 public function action(): JSONResponse {
     // Implementation
     return new JSONResponse(['result' => 'data']);
 }
 ```
+
+3. Regenerate and commit the spec:
+```bash
+cd nextcloud-app && make openapi
+git add openapi.json openapi-administration.json openapi-full.json
+```
+
+See [`docs/dev/openapi.md`](openapi.md) for full annotation rules and CI details.
 
 ### Adding a file action
 
