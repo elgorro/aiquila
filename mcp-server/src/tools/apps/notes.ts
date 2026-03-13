@@ -1,152 +1,228 @@
 import { z } from 'zod';
-import { getWebDAVClient } from '../../client/webdav.js';
+import { fetchNotesAPI, type Note } from '../../client/notes.js';
+import { ApiError } from '../../client/aiquila.js';
 
 /**
  * Nextcloud Notes App Tools
- * Provides note management via markdown files
+ * Uses the Notes REST API v1 (/index.php/apps/notes/api/v1)
  */
 
-/**
- * Create a note in Nextcloud Notes
- */
-export const createNoteTool = {
-  name: 'create_note',
-  description: 'Create a note in Nextcloud Notes',
-  inputSchema: z.object({
-    title: z.string().describe('The title of the note'),
-    content: z.string().describe('The content of the note'),
-  }),
-  handler: async (args: { title: string; content: string }) => {
-    const client = getWebDAVClient();
+function formatNote(note: Note): string {
+  const date = new Date(note.modified * 1000).toISOString();
+  const flags = [note.favorite ? 'favorite' : null, note.readonly ? 'readonly' : null]
+    .filter(Boolean)
+    .join(', ');
+  const meta = [note.category ? `category: ${note.category}` : null, flags || null]
+    .filter(Boolean)
+    .join(' | ');
+  return `[${note.id}] ${note.title}${meta ? ` (${meta})` : ''} — modified: ${date}`;
+}
 
-    const noteContent = `# ${args.title}\n\n${args.content}\n`;
-    const notePath = `/Notes/${args.title}.md`;
+function handleError(
+  error: unknown,
+  context: string
+): { content: { type: 'text'; text: string }[]; isError: true } {
+  if (error instanceof ApiError) {
+    if (error.statusCode === 404) {
+      return { content: [{ type: 'text', text: `Note not found.` }], isError: true };
+    }
+    if (error.statusCode === 403) {
+      return { content: [{ type: 'text', text: `Note is read-only.` }], isError: true };
+    }
+    if (error.statusCode === 412) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Conflict: note was modified by someone else. Fetch the latest version and retry.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+  return {
+    content: [
+      {
+        type: 'text',
+        text: `${context}: ${error instanceof Error ? error.message : String(error)}`,
+      },
+    ],
+    isError: true,
+  };
+}
 
-    await client.putFileContents(notePath, noteContent, {
-      overwrite: true,
-    });
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Note "${args.title}" created successfully at ${notePath}`,
-        },
-      ],
-    };
-  },
-};
-
-/**
- * List all notes in Nextcloud Notes
- */
 export const listNotesTool = {
   name: 'list_notes',
   description:
-    'List all notes in Nextcloud Notes. Returns note titles, sizes, and modification dates.',
+    'List all notes in Nextcloud Notes. Returns id, title, category, favorite flag, and modification date.',
   inputSchema: z.object({
-    search: z.string().optional().describe('Optional search string to filter notes by title'),
+    category: z.string().optional().describe('Filter by category'),
+    search: z.string().optional().describe('Filter notes by title (client-side)'),
   }),
-  handler: async (args: { search?: string }) => {
+  handler: async (args: { category?: string; search?: string }) => {
     try {
-      const client = getWebDAVClient();
-      const items = await client.getDirectoryContents('/Notes/');
-      const files = (Array.isArray(items) ? items : []).filter(
-        (item: { type: string; basename: string }) =>
-          item.type === 'file' && item.basename.endsWith('.md')
-      );
+      const params: Record<string, string> = { exclude: 'content' };
+      if (args.category) params.category = args.category;
 
-      let notes = files.map((f: { basename: string; size: number; lastmod: string }) => ({
-        title: f.basename.replace(/\.md$/, ''),
-        size: f.size,
-        lastmod: f.lastmod,
-      }));
+      let notes = await fetchNotesAPI<Note[]>('/notes', { queryParams: params });
 
       if (args.search) {
-        const searchLower = args.search.toLowerCase();
-        notes = notes.filter((n: { title: string }) => n.title.toLowerCase().includes(searchLower));
+        const q = args.search.toLowerCase();
+        notes = notes.filter((n) => n.title.toLowerCase().includes(q));
       }
 
       if (notes.length === 0) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: args.search ? `No notes found matching "${args.search}".` : 'No notes found.',
-            },
-          ],
-        };
+        return { content: [{ type: 'text' as const, text: 'No notes found.' }] };
       }
 
-      const formatted = notes
-        .map((n: { title: string; size: number; lastmod: string }) => {
-          const sizeKB = (n.size / 1024).toFixed(1);
-          return `- ${n.title} (${sizeKB} KB, modified: ${n.lastmod})`;
-        })
-        .join('\n');
-
       return {
         content: [
           {
             type: 'text' as const,
-            text: `Notes (${notes.length} found):\n\n${formatted}`,
+            text: `Notes (${notes.length}):\n\n${notes.map(formatNote).join('\n')}`,
           },
         ],
       };
     } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `Error listing notes: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+      return handleError(error, 'Error listing notes');
     }
   },
 };
 
-/**
- * Read a specific note from Nextcloud Notes
- */
 export const getNoteTool = {
   name: 'get_note',
-  description: 'Read the content of a specific note from Nextcloud Notes',
+  description: 'Get the full content of a note by its ID.',
   inputSchema: z.object({
-    title: z.string().describe('The title of the note to read'),
+    id: z.number().int().describe('Note ID (from list_notes)'),
   }),
-  handler: async (args: { title: string }) => {
+  handler: async (args: { id: number }) => {
     try {
-      const client = getWebDAVClient();
-      const notePath = `/Notes/${args.title}.md`;
-      const content = await client.getFileContents(notePath, {
-        format: 'text',
-      });
-
+      const note = await fetchNotesAPI<Note>(`/notes/${args.id}`);
       return {
         content: [
           {
             type: 'text' as const,
-            text: content as string,
+            text: `# ${note.title}\n\n${note.content}`,
           },
         ],
       };
     } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `Error reading note "${args.title}": ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+      return handleError(error, 'Error getting note');
     }
   },
 };
 
-/**
- * Export all Notes app tools
- */
-export const notesTools = [listNotesTool, getNoteTool, createNoteTool];
+export const createNoteTool = {
+  name: 'create_note',
+  description: 'Create a new note in Nextcloud Notes.',
+  inputSchema: z.object({
+    title: z.string().describe('Title of the note'),
+    content: z.string().describe('Content of the note (Markdown)'),
+    category: z.string().optional().describe('Category (maps to a subfolder)'),
+    favorite: z.boolean().optional().describe('Mark as favorite'),
+  }),
+  handler: async (args: {
+    title: string;
+    content: string;
+    category?: string;
+    favorite?: boolean;
+  }) => {
+    try {
+      const note = await fetchNotesAPI<Note>('/notes', {
+        method: 'POST',
+        body: {
+          title: args.title,
+          content: args.content,
+          category: args.category ?? '',
+          favorite: args.favorite ?? false,
+        },
+      });
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Note created: ${formatNote(note)}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return handleError(error, 'Error creating note');
+    }
+  },
+};
+
+export const updateNoteTool = {
+  name: 'update_note',
+  description: 'Update an existing note. Provide only the fields you want to change.',
+  inputSchema: z.object({
+    id: z.number().int().describe('Note ID (from list_notes)'),
+    title: z.string().optional().describe('New title'),
+    content: z.string().optional().describe('New content (Markdown)'),
+    category: z.string().optional().describe('New category'),
+    favorite: z.boolean().optional().describe('Favorite flag'),
+  }),
+  handler: async (args: {
+    id: number;
+    title?: string;
+    content?: string;
+    category?: string;
+    favorite?: boolean;
+  }) => {
+    try {
+      // Fetch current note to get etag and merge fields
+      const current = await fetchNotesAPI<Note>(`/notes/${args.id}`);
+      const updated = await fetchNotesAPI<Note>(`/notes/${args.id}`, {
+        method: 'PUT',
+        ifMatch: current.etag,
+        body: {
+          title: args.title ?? current.title,
+          content: args.content ?? current.content,
+          category: args.category ?? current.category,
+          favorite: args.favorite ?? current.favorite,
+        },
+      });
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Note updated: ${formatNote(updated)}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return handleError(error, 'Error updating note');
+    }
+  },
+};
+
+export const deleteNoteTool = {
+  name: 'delete_note',
+  description: 'Delete a note by its ID.',
+  inputSchema: z.object({
+    id: z.number().int().describe('Note ID (from list_notes)'),
+  }),
+  handler: async (args: { id: number }) => {
+    try {
+      await fetchNotesAPI(`/notes/${args.id}`, { method: 'DELETE' });
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Note ${args.id} deleted.`,
+          },
+        ],
+      };
+    } catch (error) {
+      return handleError(error, 'Error deleting note');
+    }
+  },
+};
+
+export const notesTools = [
+  listNotesTool,
+  getNoteTool,
+  createNoteTool,
+  updateNoteTool,
+  deleteNoteTool,
+];
