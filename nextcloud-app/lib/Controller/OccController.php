@@ -3,6 +3,9 @@
 namespace OCA\AIquila\Controller;
 
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use Psr\Log\LoggerInterface;
@@ -23,24 +26,29 @@ class OccController extends Controller {
     }
 
     /**
-     * Execute an OCC command and return the output.
+     * Execute an OCC command and return the output
+     *
+     * @param string       $command OCC command name (e.g. "maintenance:mode")
+     * @param list<string> $args    Additional command arguments
+     * @param int          $timeout Execution timeout in seconds (1–600, default: 120)
+     *
+     * 200: Command completed; see exitCode for success/failure
+     * 400: No command was provided
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{success: bool, stdout: string, stderr: string, exitCode: int}, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, error: string}, array{}>
      *
      * @NoCSRFRequired
      */
-    public function execute(): JSONResponse {
-        $command = $this->request->getParam('command', '');
-        $args = $this->request->getParam('args', []);
-        $timeout = (int) $this->request->getParam('timeout', self::DEFAULT_TIMEOUT);
-
+    #[NoCSRFRequired]
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function execute(string $command = '', array $args = [], int $timeout = 120): JSONResponse {
         if (empty($command)) {
             return new JSONResponse([
                 'success' => false,
                 'error' => 'No command provided',
-            ], 400);
-        }
-
-        if (!is_array($args)) {
-            $args = [];
+            ], Http::STATUS_BAD_REQUEST);
         }
 
         $timeout = max(1, min($timeout, self::MAX_TIMEOUT));
@@ -78,7 +86,7 @@ class OccController extends Controller {
             return new JSONResponse([
                 'success' => false,
                 'error' => 'Cannot locate PHP CLI binary',
-            ], 500);
+            ], Http::STATUS_INTERNAL_SERVER_ERROR);
         }
 
         // Build the shell command with proper escaping
@@ -108,7 +116,7 @@ class OccController extends Controller {
             return new JSONResponse([
                 'success' => false,
                 'error' => 'Failed to start process',
-            ], 500);
+            ], Http::STATUS_INTERNAL_SERVER_ERROR);
         }
 
         fclose($pipes[0]);
@@ -142,7 +150,7 @@ class OccController extends Controller {
                     'stdout' => $stdout,
                     'stderr' => $stderr,
                     'exitCode' => -1,
-                ], 408);
+                ], Http::STATUS_REQUEST_TIMEOUT);
             }
 
             usleep(50000);
