@@ -1470,7 +1470,7 @@
                     {
                         "name": "width",
                         "in": "query",
-                        "description": "Preview width in pixels (16–1024, default: 256)",
+                        "description": "Preview width in pixels (16-1024, default: 256)",
                         "schema": {
                             "type": "integer",
                             "format": "int64",
@@ -1480,7 +1480,7 @@
                     {
                         "name": "height",
                         "in": "query",
-                        "description": "Preview height in pixels (16–1024, default: 256)",
+                        "description": "Preview height in pixels (16-1024, default: 256)",
                         "schema": {
                             "type": "integer",
                             "format": "int64",
@@ -1604,12 +1604,12 @@
                                     "max_tokens": {
                                         "type": "string",
                                         "default": "",
-                                        "description": "Maximum tokens per response (1–100000)"
+                                        "description": "Maximum tokens per response (1-100000)"
                                     },
                                     "api_timeout": {
                                         "type": "string",
                                         "default": "",
-                                        "description": "HTTP timeout in seconds (10–1800)"
+                                        "description": "HTTP timeout in seconds (10-1800)"
                                     }
                                 }
                             }
@@ -1892,7 +1892,7 @@
                                         "type": "integer",
                                         "format": "int64",
                                         "default": 120,
-                                        "description": "Execution timeout in seconds (1–600, default: 120)"
+                                        "description": "Execution timeout in seconds (1-600, default: 120)"
                                     }
                                 }
                             }

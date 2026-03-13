@@ -4,7 +4,6 @@ namespace OCA\AIquila\Controller;
 
 use OCA\AIquila\Service\FileService;
 use OCP\AppFramework\Controller;
-use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
@@ -53,16 +52,15 @@ class FileController extends Controller {
     #[OpenAPI]
     public function info(string $path = ''): JSONResponse {
         if (empty($path)) {
-            return new JSONResponse(['error' => 'No path provided'], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => 'No path provided'], 400);
         }
-
         try {
             return new JSONResponse($this->fileService->getInfo($path, $this->userId));
         } catch (NotFoundException $e) {
-            return new JSONResponse(['error' => 'File not found: ' . $path], Http::STATUS_NOT_FOUND);
+            return new JSONResponse(['error' => 'File not found: ' . $path], 404);
         } catch (\Exception $e) {
             $this->logger->error('FileController::info error', ['exception' => $e->getMessage()]);
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+            return new JSONResponse(['error' => $e->getMessage()], 500);
         }
     }
 
@@ -89,12 +87,12 @@ class FileController extends Controller {
         try {
             return new JSONResponse($this->fileService->listDirectory($path, $this->userId));
         } catch (NotFoundException $e) {
-            return new JSONResponse(['error' => 'Directory not found: ' . $path], Http::STATUS_NOT_FOUND);
+            return new JSONResponse(['error' => 'Directory not found: ' . $path], 404);
         } catch (\InvalidArgumentException $e) {
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => $e->getMessage()], 400);
         } catch (\Exception $e) {
             $this->logger->error('FileController::listDir error', ['exception' => $e->getMessage()]);
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+            return new JSONResponse(['error' => $e->getMessage()], 500);
         }
     }
 
@@ -119,25 +117,24 @@ class FileController extends Controller {
     #[OpenAPI]
     public function content(string $path = ''): JSONResponse {
         if (empty($path)) {
-            return new JSONResponse(['error' => 'No path provided'], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => 'No path provided'], 400);
         }
-
         try {
             return new JSONResponse($this->fileService->getContent($path, $this->userId));
         } catch (NotFoundException $e) {
-            return new JSONResponse(['error' => 'File not found: ' . $path], Http::STATUS_NOT_FOUND);
+            return new JSONResponse(['error' => 'File not found: ' . $path], 404);
         } catch (\InvalidArgumentException $e) {
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => $e->getMessage()], 400);
         } catch (\RuntimeException $e) {
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_REQUEST_ENTITY_TOO_LARGE);
+            return new JSONResponse(['error' => $e->getMessage()], 413);
         } catch (\Exception $e) {
             $this->logger->error('FileController::content error', ['exception' => $e->getMessage()]);
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+            return new JSONResponse(['error' => $e->getMessage()], 500);
         }
     }
 
     /**
-     * Download a file directly (binary response — not included in OpenAPI spec)
+     * Download a file directly (binary response - not included in OpenAPI spec)
      *
      * @param string $path Path to the file within the user's Nextcloud storage
      *
@@ -150,14 +147,9 @@ class FileController extends Controller {
         if (empty($path)) {
             return new DataDownloadResponse('', 'error.txt', 'text/plain');
         }
-
         try {
             $file = $this->fileService->getFile($path, $this->userId);
-            return new DataDownloadResponse(
-                $file->getContent(),
-                $file->getName(),
-                $file->getMimetype()
-            );
+            return new DataDownloadResponse($file->getContent(), $file->getName(), $file->getMimetype());
         } catch (NotFoundException $e) {
             return new DataDownloadResponse('File not found', 'error.txt', 'text/plain');
         } catch (\Exception $e) {
@@ -189,20 +181,17 @@ class FileController extends Controller {
     #[OpenAPI]
     public function search(string $query = '', ?string $mime = null, string $path = '/'): JSONResponse {
         if (empty($query)) {
-            return new JSONResponse(['error' => 'No search query provided'], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => 'No search query provided'], 400);
         }
-
         try {
-            return new JSONResponse(
-                $this->fileService->search($query, $this->userId, $mime, $path)
-            );
+            return new JSONResponse($this->fileService->search($query, $this->userId, $mime, $path));
         } catch (NotFoundException $e) {
-            return new JSONResponse(['error' => 'Base path not found: ' . $path], Http::STATUS_NOT_FOUND);
+            return new JSONResponse(['error' => 'Base path not found: ' . $path], 404);
         } catch (\InvalidArgumentException $e) {
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => $e->getMessage()], 400);
         } catch (\Exception $e) {
             $this->logger->error('FileController::search error', ['exception' => $e->getMessage()]);
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+            return new JSONResponse(['error' => $e->getMessage()], 500);
         }
     }
 
@@ -210,8 +199,8 @@ class FileController extends Controller {
      * Get a base64-encoded preview image for a file
      *
      * @param string $path   Path to the file within the user's Nextcloud storage
-     * @param int    $width  Preview width in pixels (16–1024, default: 256)
-     * @param int    $height Preview height in pixels (16–1024, default: 256)
+     * @param int    $width  Preview width in pixels (16-1024, default: 256)
+     * @param int    $height Preview height in pixels (16-1024, default: 256)
      *
      * 200: Base64-encoded preview image with MIME type
      * 400: No path provided or preview cannot be generated
@@ -229,23 +218,19 @@ class FileController extends Controller {
     #[OpenAPI]
     public function preview(string $path = '', int $width = 256, int $height = 256): JSONResponse {
         if (empty($path)) {
-            return new JSONResponse(['error' => 'No path provided'], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => 'No path provided'], 400);
         }
-
         $width = max(16, min($width, 1024));
         $height = max(16, min($height, 1024));
-
         try {
-            return new JSONResponse(
-                $this->fileService->getPreview($path, $this->userId, $width, $height)
-            );
+            return new JSONResponse($this->fileService->getPreview($path, $this->userId, $width, $height));
         } catch (NotFoundException $e) {
-            return new JSONResponse(['error' => 'File not found: ' . $path], Http::STATUS_NOT_FOUND);
+            return new JSONResponse(['error' => 'File not found: ' . $path], 404);
         } catch (\RuntimeException $e) {
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => $e->getMessage()], 400);
         } catch (\Exception $e) {
             $this->logger->error('FileController::preview error', ['exception' => $e->getMessage()]);
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+            return new JSONResponse(['error' => $e->getMessage()], 500);
         }
     }
 }

@@ -3,7 +3,6 @@
 namespace OCA\AIquila\Controller;
 
 use OCP\AppFramework\Controller;
-use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
@@ -82,22 +81,20 @@ class ChatController extends Controller {
     #[NoAdminRequired]
     #[OpenAPI]
     public function ask(string $prompt = '', string $context = ''): JSONResponse {
-        // Check rate limit
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
-            ], Http::STATUS_TOO_MANY_REQUESTS);
+            ], 429);
         }
 
         if (!$prompt) {
-            return new JSONResponse(['error' => 'No prompt provided'], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => 'No prompt provided'], 400);
         }
 
-        // Validate content length
         if (!$this->validateContentLength($prompt . $context)) {
             return new JSONResponse([
                 'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
-            ], Http::STATUS_REQUEST_ENTITY_TOO_LARGE);
+            ], 413);
         }
 
         $result = $this->claudeService->ask($prompt, $context, $this->userId);
@@ -129,11 +126,11 @@ class ChatController extends Controller {
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
-            ], Http::STATUS_TOO_MANY_REQUESTS);
+            ], 429);
         }
 
         if (empty($messages)) {
-            return new JSONResponse(['error' => 'No messages provided'], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => 'No messages provided'], 400);
         }
 
         // Validate total content size
@@ -145,7 +142,7 @@ class ChatController extends Controller {
         if ($totalLength > self::MAX_CONTENT_LENGTH) {
             return new JSONResponse([
                 'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
-            ], Http::STATUS_REQUEST_ENTITY_TOO_LARGE);
+            ], 413);
         }
 
         $result = $this->claudeService->chat($messages, $system, $this->userId, $options);
@@ -172,22 +169,20 @@ class ChatController extends Controller {
     #[NoAdminRequired]
     #[OpenAPI]
     public function summarize(string $content = ''): JSONResponse {
-        // Check rate limit
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
-            ], Http::STATUS_TOO_MANY_REQUESTS);
+            ], 429);
         }
 
         if (!$content) {
-            return new JSONResponse(['error' => 'No content provided'], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => 'No content provided'], 400);
         }
 
-        // Validate content length
         if (!$this->validateContentLength($content)) {
             return new JSONResponse([
                 'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
-            ], Http::STATUS_REQUEST_ENTITY_TOO_LARGE);
+            ], 413);
         }
 
         $result = $this->claudeService->summarize($content, $this->userId);
@@ -221,29 +216,29 @@ class ChatController extends Controller {
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
-            ], Http::STATUS_TOO_MANY_REQUESTS);
+            ], 429);
         }
 
         if (empty($filePath)) {
-            return new JSONResponse(['error' => 'No filePath provided'], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => 'No filePath provided'], 400);
         }
 
         if (!$this->validateContentLength($prompt)) {
             return new JSONResponse([
                 'error' => 'Prompt too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
-            ], Http::STATUS_REQUEST_ENTITY_TOO_LARGE);
+            ], 413);
         }
 
         try {
             $fileData = $this->fileService->getContent($filePath, $this->userId);
         } catch (\OCP\Files\NotFoundException $e) {
-            return new JSONResponse(['error' => 'File not found: ' . $filePath], Http::STATUS_NOT_FOUND);
+            return new JSONResponse(['error' => 'File not found: ' . $filePath], 404);
         } catch (\InvalidArgumentException $e) {
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['error' => $e->getMessage()], 400);
         } catch (\RuntimeException $e) {
-            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_REQUEST_ENTITY_TOO_LARGE);
+            return new JSONResponse(['error' => $e->getMessage()], 413);
         } catch (\Exception $e) {
-            return new JSONResponse(['error' => 'Could not read file: ' . $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+            return new JSONResponse(['error' => 'Could not read file: ' . $e->getMessage()], 500);
         }
 
         $mimeType = $fileData['mimeType'];

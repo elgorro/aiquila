@@ -5,7 +5,6 @@ namespace OCA\AIquila\Controller;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\AppFramework\Controller;
-use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
@@ -86,8 +85,8 @@ class SettingsController extends Controller {
      *
      * @param string $api_key    Anthropic API key for the instance
      * @param string $model      Default Claude model ID
-     * @param string $max_tokens Maximum tokens per response (1–100000)
-     * @param string $api_timeout HTTP timeout in seconds (10–1800)
+     * @param string $max_tokens Maximum tokens per response (1-100000)
+     * @param string $api_timeout HTTP timeout in seconds (10-1800)
      *
      * 200: Admin settings saved successfully
      *
@@ -95,25 +94,18 @@ class SettingsController extends Controller {
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function saveAdmin(string $api_key = '', string $model = '', string $max_tokens = '', string $api_timeout = ''): JSONResponse {
-        // Save API key if provided
         if (!empty($api_key)) {
             $this->config->setAppValue($this->appName, 'api_key', $api_key);
         }
-
-        // Save model if provided
         if (!empty($model)) {
             $this->config->setAppValue($this->appName, 'model', $model);
         }
-
-        // Save max tokens if provided
         if (!empty($max_tokens)) {
             $maxTokensInt = (int)$max_tokens;
             if ($maxTokensInt >= 1 && $maxTokensInt <= 100000) {
                 $this->config->setAppValue($this->appName, 'max_tokens', (string)$maxTokensInt);
             }
         }
-
-        // Save timeout if provided
         if (!empty($api_timeout)) {
             $apiTimeoutInt = (int)$api_timeout;
             if ($apiTimeoutInt >= 10 && $apiTimeoutInt <= 1800) {
@@ -141,73 +133,49 @@ class SettingsController extends Controller {
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function testConfig(string $api_key = '', string $model = '', string $max_tokens = '', string $timeout = ''): JSONResponse {
-        // Use provided values or fall back to saved config
         $testApiKey = !empty($api_key) ? $api_key : $this->config->getAppValue($this->appName, 'api_key', '');
         $testModel = !empty($model) ? $model : $this->config->getAppValue($this->appName, 'model', ClaudeModels::DEFAULT_MODEL);
         $testMaxTokens = !empty($max_tokens) ? (int)$max_tokens : (int)$this->config->getAppValue($this->appName, 'max_tokens', '4096');
         $testTimeout = !empty($timeout) ? (int)$timeout : (int)$this->config->getAppValue($this->appName, 'api_timeout', '30');
 
         if (empty($testApiKey)) {
-            return new JSONResponse([
-                'success' => false,
-                'message' => 'No API key provided'
-            ], Http::STATUS_BAD_REQUEST);
+            return new JSONResponse(['success' => false, 'message' => 'No API key provided'], 400);
         }
 
-        // Temporarily save test config
         $originalConfig = [
-            'api_key' => $this->config->getAppValue($this->appName, 'api_key', ''),
-            'model' => $this->config->getAppValue($this->appName, 'model', ''),
-            'max_tokens' => $this->config->getAppValue($this->appName, 'max_tokens', ''),
+            'api_key'     => $this->config->getAppValue($this->appName, 'api_key', ''),
+            'model'       => $this->config->getAppValue($this->appName, 'model', ''),
+            'max_tokens'  => $this->config->getAppValue($this->appName, 'max_tokens', ''),
             'api_timeout' => $this->config->getAppValue($this->appName, 'api_timeout', ''),
         ];
 
         try {
-            // Set test configuration
             $this->config->setAppValue($this->appName, 'api_key', $testApiKey);
             $this->config->setAppValue($this->appName, 'model', $testModel);
             $this->config->setAppValue($this->appName, 'max_tokens', (string)$testMaxTokens);
             $this->config->setAppValue($this->appName, 'api_timeout', (string)$testTimeout);
 
-            // Send test request
-            $result = $this->claudeService->ask(
-                'Test: Respond with "OK" if you receive this.',
-                '',
-                null
-            );
+            $result = $this->claudeService->ask('Test: Respond with "OK" if you receive this.', '', null);
 
-            // Restore original configuration
             foreach ($originalConfig as $key => $value) {
                 if (!empty($value)) {
                     $this->config->setAppValue($this->appName, $key, $value);
                 }
             }
 
-            // Return result directly
             if (isset($result['error'])) {
-                return new JSONResponse([
-                    'success' => false,
-                    'message' => $result['error']
-                ], Http::STATUS_BAD_REQUEST);
+                return new JSONResponse(['success' => false, 'message' => $result['error']], 400);
             }
 
-            return new JSONResponse([
-                'success' => true,
-                'message' => $result['response']
-            ]);
+            return new JSONResponse(['success' => true, 'message' => $result['response']]);
 
         } catch (\Throwable $e) {
-            // Restore original configuration
             foreach ($originalConfig as $key => $value) {
                 if (!empty($value)) {
                     $this->config->setAppValue($this->appName, $key, $value);
                 }
             }
-
-            return new JSONResponse([
-                'success' => false,
-                'message' => $e->getMessage()
-            ], Http::STATUS_INTERNAL_SERVER_ERROR);
+            return new JSONResponse(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 }

@@ -1470,7 +1470,7 @@
                     {
                         "name": "width",
                         "in": "query",
-                        "description": "Preview width in pixels (16–1024, default: 256)",
+                        "description": "Preview width in pixels (16-1024, default: 256)",
                         "schema": {
                             "type": "integer",
                             "format": "int64",
@@ -1480,7 +1480,7 @@
                     {
                         "name": "height",
                         "in": "query",
-                        "description": "Preview height in pixels (16–1024, default: 256)",
+                        "description": "Preview height in pixels (16-1024, default: 256)",
                         "schema": {
                             "type": "integer",
                             "format": "int64",
