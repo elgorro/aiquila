@@ -2,7 +2,9 @@
 # Functional MCP tool test for AIquila standalone.
 # Authenticates via OAuth PKCE (no container restart), then exercises core
 # Nextcloud tools: system_status, list_files, create_folder, write_file,
-# read_file, search_files, get_file_info, delete.  Cleans up after itself.
+# read_file, search_files, get_file_info, copy_file, move_file,
+# create_share, list_shares, update_share, delete_share, delete.
+# Cleans up after itself.
 # Usage: ./test-tools.sh [base-url]
 #   base-url defaults to https://localhost:3340 (via Caddy, self-signed TLS)
 
@@ -199,14 +201,72 @@ sep "Step 8 — search_files (query: aiquila-test)"
 mcp_tool 17 "search_files" "{\"query\":\"aiquila-test\"}"
 check_ok && step_ok || step_fail "search_files returned an error"
 
-# ── Step 9: delete file ──────────────────────────────────────────────────────
-sep "Step 9 — delete $TEST_FILE"
-mcp_tool 18 "delete" "{\"path\":\"$TEST_FILE\"}"
+# ── Step 9: copy_file ───────────────────────────────────────────────────────
+COPY_FILE="$TEST_DIR/hello-copy-$TIMESTAMP.txt"
+sep "Step 9 — copy_file $TEST_FILE → $COPY_FILE"
+mcp_tool 18 "copy_file" "{\"source\":\"$TEST_FILE\",\"destination\":\"$COPY_FILE\"}"
+check_ok && step_ok || step_fail "copy_file returned an error"
+
+# ── Step 10: read_file (verify copy) ────────────────────────────────────────
+sep "Step 10 — read_file $COPY_FILE (verify copy content)"
+mcp_tool 19 "read_file" "{\"path\":\"$COPY_FILE\"}"
+check_text "$TEST_CONTENT" && step_ok || step_fail "copied file content mismatch or error"
+
+# ── Step 11: move_file ──────────────────────────────────────────────────────
+MOVED_FILE="$TEST_DIR/hello-moved-$TIMESTAMP.txt"
+sep "Step 11 — move_file $COPY_FILE → $MOVED_FILE"
+mcp_tool 20 "move_file" "{\"source\":\"$COPY_FILE\",\"destination\":\"$MOVED_FILE\"}"
+check_ok && step_ok || step_fail "move_file returned an error"
+
+# ── Step 12: read_file (verify move) ────────────────────────────────────────
+sep "Step 12 — read_file $MOVED_FILE (verify moved file)"
+mcp_tool 21 "read_file" "{\"path\":\"$MOVED_FILE\"}"
+check_text "$TEST_CONTENT" && step_ok || step_fail "moved file content mismatch or error"
+
+# ── Step 13: create_share (public link on test file) ───────────────────────
+sep "Step 13 — create_share (public link on $TEST_FILE)"
+mcp_tool 22 "create_share" "{\"path\":\"$TEST_FILE\",\"shareType\":3}"
+check_text "Share created" && step_ok || step_fail "create_share returned an error"
+SHARE_ID=$(python3 -c "
+import json, re
+raw = open('$TMPFILE').read().strip()
+if 'data:' in raw:
+    lines = [l[5:].strip() for l in raw.splitlines() if l.startswith('data:')]
+    raw = lines[-1] if lines else raw
+d = json.loads(raw)
+text = ''.join(c.get('text','') for c in d.get('result',{}).get('content',[]))
+m = re.search(r'ID: (\d+)', text)
+print(m.group(1) if m else '')
+")
+echo "  share_id: $SHARE_ID"
+
+# ── Step 14: list_shares (verify share exists) ─────────────────────────────
+sep "Step 14 — list_shares (verify share on $TEST_FILE)"
+mcp_tool 23 "list_shares" "{\"path\":\"$TEST_FILE\"}"
+check_text "$TEST_FILE" && step_ok || step_fail "list_shares: test file share not found"
+
+# ── Step 15: update_share (add expiration) ─────────────────────────────────
+sep "Step 15 — update_share (add expiration to share $SHARE_ID)"
+mcp_tool 24 "update_share" "{\"shareId\":$SHARE_ID,\"expireDate\":\"2099-12-31\"}"
+check_text "updated" && step_ok || step_fail "update_share returned an error"
+
+# ── Step 16: delete_share ──────────────────────────────────────────────────
+sep "Step 16 — delete_share $SHARE_ID"
+mcp_tool 25 "delete_share" "{\"shareId\":$SHARE_ID}"
+check_text "deleted successfully" && step_ok || step_fail "delete_share returned an error"
+
+# ── Step 17: delete files ───────────────────────────────────────────────────
+sep "Step 17 — delete $TEST_FILE"
+mcp_tool 26 "delete" "{\"path\":\"$TEST_FILE\"}"
 check_ok && step_ok || step_fail "delete file returned an error"
 
-# ── Step 10: delete folder ───────────────────────────────────────────────────
-sep "Step 10 — delete $TEST_DIR"
-mcp_tool 19 "delete" "{\"path\":\"$TEST_DIR\"}"
+sep "Step 17b — delete $MOVED_FILE"
+mcp_tool 27 "delete" "{\"path\":\"$MOVED_FILE\"}"
+check_ok && step_ok || step_fail "delete moved file returned an error"
+
+# ── Step 18: delete folder ──────────────────────────────────────────────────
+sep "Step 18 — delete $TEST_DIR"
+mcp_tool 28 "delete" "{\"path\":\"$TEST_DIR\"}"
 check_ok && step_ok || step_fail "delete folder returned an error"
 
 # ── Summary ──────────────────────────────────────────────────────────────────

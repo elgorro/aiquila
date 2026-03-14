@@ -8,6 +8,8 @@ const mockClient = {
   putFileContents: vi.fn(),
   createDirectory: vi.fn(),
   deleteFile: vi.fn(),
+  moveFile: vi.fn(),
+  copyFile: vi.fn(),
 };
 
 vi.mock('webdav', () => ({
@@ -117,6 +119,96 @@ describe('MCP Tools', () => {
       await client.putFileContents('/test.txt', 'New content');
 
       expect(mockClient.putFileContents).toHaveBeenCalledWith('/test.txt', 'New content');
+    });
+  });
+
+  describe('move_file', () => {
+    it('should move a file successfully', async () => {
+      mockClient.moveFile.mockResolvedValue(undefined);
+
+      const { moveFileTool } = await import('../tools/system/files.js');
+      const result = await moveFileTool.handler({
+        source: '/docs/old.txt',
+        destination: '/docs/new.txt',
+        overwrite: false,
+      });
+
+      expect(mockClient.moveFile).toHaveBeenCalledWith('/docs/old.txt', '/docs/new.txt', {
+        overwrite: false,
+      });
+      expect(result.content[0].text).toContain('Moved successfully');
+    });
+
+    it('should forward overwrite parameter', async () => {
+      mockClient.moveFile.mockResolvedValue(undefined);
+
+      const { moveFileTool } = await import('../tools/system/files.js');
+      await moveFileTool.handler({
+        source: '/a.txt',
+        destination: '/b.txt',
+        overwrite: true,
+      });
+
+      expect(mockClient.moveFile).toHaveBeenCalledWith('/a.txt', '/b.txt', { overwrite: true });
+    });
+
+    it('should handle errors', async () => {
+      mockClient.moveFile.mockRejectedValue(new Error('404 Not Found'));
+
+      const { moveFileTool } = await import('../tools/system/files.js');
+      const result = await moveFileTool.handler({
+        source: '/nonexistent.txt',
+        destination: '/dest.txt',
+        overwrite: false,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('404 Not Found');
+    });
+  });
+
+  describe('copy_file', () => {
+    it('should copy a file successfully', async () => {
+      mockClient.copyFile.mockResolvedValue(undefined);
+
+      const { copyFileTool } = await import('../tools/system/files.js');
+      const result = await copyFileTool.handler({
+        source: '/docs/original.txt',
+        destination: '/docs/copy.txt',
+        overwrite: false,
+      });
+
+      expect(mockClient.copyFile).toHaveBeenCalledWith('/docs/original.txt', '/docs/copy.txt', {
+        overwrite: false,
+      });
+      expect(result.content[0].text).toContain('Copied successfully');
+    });
+
+    it('should forward overwrite parameter', async () => {
+      mockClient.copyFile.mockResolvedValue(undefined);
+
+      const { copyFileTool } = await import('../tools/system/files.js');
+      await copyFileTool.handler({
+        source: '/a.txt',
+        destination: '/b.txt',
+        overwrite: true,
+      });
+
+      expect(mockClient.copyFile).toHaveBeenCalledWith('/a.txt', '/b.txt', { overwrite: true });
+    });
+
+    it('should handle errors', async () => {
+      mockClient.copyFile.mockRejectedValue(new Error('404 Not Found'));
+
+      const { copyFileTool } = await import('../tools/system/files.js');
+      const result = await copyFileTool.handler({
+        source: '/nonexistent.txt',
+        destination: '/dest.txt',
+        overwrite: false,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('404 Not Found');
     });
   });
 
@@ -2164,6 +2256,152 @@ END:VCALENDAR</c:calendar-data>
       const result = await listSharesTool.handler({});
 
       expect(result.content[0].text).toContain('No shares found');
+    });
+  });
+
+  describe('create_share', () => {
+    it('should create a user share', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: {
+            id: 42,
+            share_type: 0,
+            uid_owner: 'alice',
+            displayname_owner: 'Alice',
+            permissions: 19,
+            stime: 1707312000,
+            path: '/Documents/report.pdf',
+            share_with: 'bob',
+            share_with_displayname: 'Bob',
+          },
+        },
+      });
+
+      const { createShareTool } = await import('../tools/apps/shares.js');
+      const result = await createShareTool.handler({
+        path: '/Documents/report.pdf',
+        shareType: 0,
+        shareWith: 'bob',
+      });
+
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/apps/files_sharing/api/v1/shares', {
+        method: 'POST',
+        body: { path: '/Documents/report.pdf', shareType: '0', shareWith: 'bob' },
+      });
+      expect(result.content[0].text).toContain('Share created');
+      expect(result.content[0].text).toContain('42');
+      expect(result.content[0].text).toContain('User');
+    });
+
+    it('should create a public link share and return token/url', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: {
+            id: 55,
+            share_type: 3,
+            uid_owner: 'alice',
+            displayname_owner: 'Alice',
+            permissions: 1,
+            stime: 1707312000,
+            path: '/Photos/cat.jpg',
+            token: 'xYz789',
+            url: 'https://cloud.example.com/s/xYz789',
+          },
+        },
+      });
+
+      const { createShareTool } = await import('../tools/apps/shares.js');
+      const result = await createShareTool.handler({
+        path: '/Photos/cat.jpg',
+        shareType: 3,
+      });
+
+      expect(result.content[0].text).toContain('xYz789');
+      expect(result.content[0].text).toContain('https://cloud.example.com/s/xYz789');
+    });
+
+    it('should handle API errors', async () => {
+      mockFetchOCS.mockRejectedValue(new Error('OCS 404: Share not found'));
+
+      const { createShareTool } = await import('../tools/apps/shares.js');
+      const result = await createShareTool.handler({
+        path: '/nonexistent',
+        shareType: 0,
+        shareWith: 'bob',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error creating share');
+    });
+  });
+
+  describe('update_share', () => {
+    it('should update share permissions', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: {
+            id: 42,
+            share_type: 0,
+            uid_owner: 'alice',
+            displayname_owner: 'Alice',
+            permissions: 1,
+            stime: 1707312000,
+            path: '/Documents/report.pdf',
+            share_with: 'bob',
+          },
+        },
+      });
+
+      const { updateShareTool } = await import('../tools/apps/shares.js');
+      const result = await updateShareTool.handler({ shareId: 42, permissions: 1 });
+
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/apps/files_sharing/api/v1/shares/42', {
+        method: 'PUT',
+        body: { permissions: '1' },
+      });
+      expect(result.content[0].text).toContain('Share 42 updated');
+    });
+
+    it('should handle nonexistent share', async () => {
+      mockFetchOCS.mockRejectedValue(new Error('OCS 404: Wrong share ID'));
+
+      const { updateShareTool } = await import('../tools/apps/shares.js');
+      const result = await updateShareTool.handler({ shareId: 9999, permissions: 1 });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error updating share');
+    });
+  });
+
+  describe('delete_share', () => {
+    it('should delete a share', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: [],
+        },
+      });
+
+      const { deleteShareTool } = await import('../tools/apps/shares.js');
+      const result = await deleteShareTool.handler({ shareId: 42 });
+
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/apps/files_sharing/api/v1/shares/42', {
+        method: 'DELETE',
+      });
+      expect(result.content[0].text).toContain('Share 42 deleted successfully');
+    });
+
+    it('should handle nonexistent share', async () => {
+      mockFetchOCS.mockRejectedValue(new Error('OCS 404: Wrong share ID'));
+
+      const { deleteShareTool } = await import('../tools/apps/shares.js');
+      const result = await deleteShareTool.handler({ shareId: 9999 });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error deleting share');
     });
   });
 
