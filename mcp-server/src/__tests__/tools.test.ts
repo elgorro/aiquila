@@ -8,6 +8,8 @@ const mockClient = {
   putFileContents: vi.fn(),
   createDirectory: vi.fn(),
   deleteFile: vi.fn(),
+  moveFile: vi.fn(),
+  copyFile: vi.fn(),
 };
 
 vi.mock('webdav', () => ({
@@ -117,6 +119,96 @@ describe('MCP Tools', () => {
       await client.putFileContents('/test.txt', 'New content');
 
       expect(mockClient.putFileContents).toHaveBeenCalledWith('/test.txt', 'New content');
+    });
+  });
+
+  describe('move_file', () => {
+    it('should move a file successfully', async () => {
+      mockClient.moveFile.mockResolvedValue(undefined);
+
+      const { moveFileTool } = await import('../tools/system/files.js');
+      const result = await moveFileTool.handler({
+        source: '/docs/old.txt',
+        destination: '/docs/new.txt',
+        overwrite: false,
+      });
+
+      expect(mockClient.moveFile).toHaveBeenCalledWith('/docs/old.txt', '/docs/new.txt', {
+        overwrite: false,
+      });
+      expect(result.content[0].text).toContain('Moved successfully');
+    });
+
+    it('should forward overwrite parameter', async () => {
+      mockClient.moveFile.mockResolvedValue(undefined);
+
+      const { moveFileTool } = await import('../tools/system/files.js');
+      await moveFileTool.handler({
+        source: '/a.txt',
+        destination: '/b.txt',
+        overwrite: true,
+      });
+
+      expect(mockClient.moveFile).toHaveBeenCalledWith('/a.txt', '/b.txt', { overwrite: true });
+    });
+
+    it('should handle errors', async () => {
+      mockClient.moveFile.mockRejectedValue(new Error('404 Not Found'));
+
+      const { moveFileTool } = await import('../tools/system/files.js');
+      const result = await moveFileTool.handler({
+        source: '/nonexistent.txt',
+        destination: '/dest.txt',
+        overwrite: false,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('404 Not Found');
+    });
+  });
+
+  describe('copy_file', () => {
+    it('should copy a file successfully', async () => {
+      mockClient.copyFile.mockResolvedValue(undefined);
+
+      const { copyFileTool } = await import('../tools/system/files.js');
+      const result = await copyFileTool.handler({
+        source: '/docs/original.txt',
+        destination: '/docs/copy.txt',
+        overwrite: false,
+      });
+
+      expect(mockClient.copyFile).toHaveBeenCalledWith('/docs/original.txt', '/docs/copy.txt', {
+        overwrite: false,
+      });
+      expect(result.content[0].text).toContain('Copied successfully');
+    });
+
+    it('should forward overwrite parameter', async () => {
+      mockClient.copyFile.mockResolvedValue(undefined);
+
+      const { copyFileTool } = await import('../tools/system/files.js');
+      await copyFileTool.handler({
+        source: '/a.txt',
+        destination: '/b.txt',
+        overwrite: true,
+      });
+
+      expect(mockClient.copyFile).toHaveBeenCalledWith('/a.txt', '/b.txt', { overwrite: true });
+    });
+
+    it('should handle errors', async () => {
+      mockClient.copyFile.mockRejectedValue(new Error('404 Not Found'));
+
+      const { copyFileTool } = await import('../tools/system/files.js');
+      const result = await copyFileTool.handler({
+        source: '/nonexistent.txt',
+        destination: '/dest.txt',
+        overwrite: false,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('404 Not Found');
     });
   });
 

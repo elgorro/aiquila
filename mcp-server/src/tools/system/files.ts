@@ -334,6 +334,88 @@ export const analyzeImageTool = {
 };
 
 /**
+ * Move or rename a file or folder in Nextcloud
+ */
+export const moveFileTool = {
+  name: 'move_file',
+  description: 'Move or rename a file or folder in Nextcloud',
+  inputSchema: z.object({
+    source: z.string().describe('The source path of the file or folder to move'),
+    destination: z.string().describe('The destination path'),
+    overwrite: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Whether to overwrite if the destination already exists'),
+  }),
+  handler: async (args: { source: string; destination: string; overwrite: boolean }) => {
+    try {
+      const client = getWebDAVClient();
+      await client.moveFile(args.source, args.destination, { overwrite: args.overwrite });
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Moved successfully: ${args.source} → ${args.destination}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error moving file: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+};
+
+/**
+ * Copy a file or folder in Nextcloud
+ */
+export const copyFileTool = {
+  name: 'copy_file',
+  description: 'Copy a file or folder in Nextcloud',
+  inputSchema: z.object({
+    source: z.string().describe('The source path of the file or folder to copy'),
+    destination: z.string().describe('The destination path for the copy'),
+    overwrite: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Whether to overwrite if the destination already exists'),
+  }),
+  handler: async (args: { source: string; destination: string; overwrite: boolean }) => {
+    try {
+      const client = getWebDAVClient();
+      await client.copyFile(args.source, args.destination, { overwrite: args.overwrite });
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Copied successfully: ${args.source} → ${args.destination}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error copying file: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+};
+
+/**
  * Export all file system tools
  */
 export const fileSystemTools = [
@@ -342,6 +424,8 @@ export const fileSystemTools = [
   writeFileTool,
   createFolderTool,
   deleteTool,
+  moveFileTool,
+  copyFileTool,
   getFileInfoTool,
   searchFilesTool,
   getFileContentTool,
