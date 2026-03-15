@@ -181,6 +181,25 @@
     font-size: 0.9em;
 }
 
+#mcp-oauth-status {
+    margin-left: 10px;
+    font-size: 0.9em;
+}
+
+.mcp-oauth-authenticated {
+    color: var(--color-success);
+    font-weight: bold;
+}
+
+.mcp-oauth-expired {
+    color: var(--color-warning);
+    font-weight: bold;
+}
+
+.mcp-oauth-not-authenticated {
+    color: var(--color-text-maxcontrast);
+}
+
 .aiquila-resources {
     margin-top: 30px;
     padding-top: 20px;

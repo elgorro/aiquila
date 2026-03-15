@@ -100,11 +100,17 @@ style('aiquila', 'admin');
                 <select id="mcp-auth-type">
                     <option value="none">None</option>
                     <option value="bearer">Bearer Token</option>
+                    <option value="oauth2">OAuth 2.1 (PKCE)</option>
                 </select>
             </div>
             <div class="form-group" id="mcp-token-group" style="display: none;">
                 <label for="mcp-auth-token">Bearer Token</label>
                 <input type="password" id="mcp-auth-token" placeholder="Token">
+            </div>
+            <div class="form-group" id="mcp-oauth-group" style="display: none;">
+                <button type="button" id="mcp-oauth-authenticate" class="secondary">Authenticate</button>
+                <span id="mcp-oauth-status"></span>
+                <p class="hint">Click to open the MCP server login page and authorize access.</p>
             </div>
             <button type="button" id="mcp-save-server" class="primary">Save</button>
             <button type="button" id="mcp-cancel-form">Cancel</button>

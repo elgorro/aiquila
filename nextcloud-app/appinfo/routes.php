@@ -19,7 +19,9 @@ return [
         ['name' => 'mcp_server#update',  'url' => '/api/admin/mcp-servers/{id}',      'verb' => 'PUT'],
         ['name' => 'mcp_server#destroy', 'url' => '/api/admin/mcp-servers/{id}',      'verb' => 'DELETE'],
         ['name' => 'mcp_server#test',    'url' => '/api/admin/mcp-servers/{id}/test', 'verb' => 'POST'],
-        ['name' => 'mcp_server#tools',   'url' => '/api/admin/mcp-servers/{id}/tools','verb' => 'GET'],
+        ['name' => 'mcp_server#tools',         'url' => '/api/admin/mcp-servers/{id}/tools',          'verb' => 'GET'],
+        ['name' => 'mcp_server#authorize',     'url' => '/api/admin/mcp-servers/{id}/oauth/authorize', 'verb' => 'POST'],
+        ['name' => 'mcp_server#oauthCallback', 'url' => '/api/admin/mcp-servers/{id}/oauth/callback',  'verb' => 'GET'],
 
         // File API
         ['name' => 'file#info',     'url' => '/api/files/info',     'verb' => 'GET'],

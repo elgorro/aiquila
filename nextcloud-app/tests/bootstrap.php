@@ -270,6 +270,40 @@ if (!class_exists('OCP\Util')) {
     class_alias('OCP_Util', 'OCP\Util');
 }
 
+if (!interface_exists('OCP\IURLGenerator')) {
+    interface OCP_IURLGenerator {
+        public function linkToRoute(string $routeName, array $arguments = []): string;
+        public function linkToRouteAbsolute(string $routeName, array $arguments = []): string;
+        public function linkTo(string $appName, string $file, array $args = []): string;
+        public function getAbsoluteURL(string $url): string;
+        public function imagePath(string $appName, string $image): string;
+    }
+    class_alias('OCP_IURLGenerator', 'OCP\IURLGenerator');
+}
+
+if (!class_exists('OCP\AppFramework\Http\DataDisplayResponse')) {
+    class OCP_AppFramework_Http_DataDisplayResponse {
+        private string $data;
+        private int $status;
+        private array $headers = [];
+        public function __construct(string $data = '', int $status = 200, array $headers = []) {
+            $this->data = $data;
+            $this->status = $status;
+            $this->headers = $headers;
+        }
+        public function getData(): string { return $this->data; }
+        public function getStatus(): int { return $this->status; }
+        public function addHeader(string $name, string $value): void { $this->headers[$name] = $value; }
+    }
+    class_alias('OCP_AppFramework_Http_DataDisplayResponse', 'OCP\AppFramework\Http\DataDisplayResponse');
+}
+
+if (!class_exists('OCP\AppFramework\Http\Attribute\NoCSRFRequired')) {
+    #[\Attribute(\Attribute::TARGET_METHOD)]
+    class OCP_AppFramework_Http_Attribute_NoCSRFRequired {}
+    class_alias('OCP_AppFramework_Http_Attribute_NoCSRFRequired', 'OCP\AppFramework\Http\Attribute\NoCSRFRequired');
+}
+
 if (!interface_exists('Psr\Log\LoggerInterface')) {
     interface Psr_Log_LoggerInterface {
         public function emergency(string|\Stringable $message, array $context = []): void;

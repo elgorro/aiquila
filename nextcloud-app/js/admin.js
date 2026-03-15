@@ -51,9 +51,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const mcpAuthType = document.getElementById('mcp-auth-type');
     const mcpTokenGroup = document.getElementById('mcp-token-group');
     const mcpFormStatus = document.getElementById('mcp-form-status');
+    const mcpOauthGroup = document.getElementById('mcp-oauth-group');
+    const mcpOauthStatus = document.getElementById('mcp-oauth-status');
 
     mcpAuthType.addEventListener('change', function() {
         mcpTokenGroup.style.display = this.value === 'bearer' ? '' : 'none';
+        mcpOauthGroup.style.display = this.value === 'oauth2' ? '' : 'none';
     });
 
     mcpAddBtn.addEventListener('click', function() {
@@ -63,6 +66,8 @@ document.addEventListener('DOMContentLoaded', function() {
         mcpAuthType.value = 'none';
         document.getElementById('mcp-auth-token').value = '';
         mcpTokenGroup.style.display = 'none';
+        mcpOauthGroup.style.display = 'none';
+        mcpOauthStatus.textContent = '';
         document.getElementById('mcp-form-title').textContent = 'Add MCP Server';
         mcpFormStatus.textContent = '';
         mcpForm.style.display = '';
@@ -70,6 +75,49 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('mcp-cancel-form').addEventListener('click', function() {
         mcpForm.style.display = 'none';
+    });
+
+    // OAuth authenticate button
+    document.getElementById('mcp-oauth-authenticate').addEventListener('click', async function() {
+        var serverId = document.getElementById('mcp-server-id').value;
+        if (!serverId) {
+            mcpOauthStatus.textContent = 'Save the server first, then authenticate.';
+            return;
+        }
+
+        mcpOauthStatus.textContent = 'Starting OAuth flow...';
+
+        try {
+            var response = await fetch(OC.generateUrl('/apps/aiquila/api/admin/mcp-servers/' + serverId + '/oauth/authorize'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'requesttoken': OC.requestToken },
+            });
+            var result = await response.json();
+            if (result.error) {
+                mcpOauthStatus.textContent = 'Error: ' + result.error;
+                return;
+            }
+            // Open popup to MCP server's authorize page
+            var popup = window.open(result.authorize_url, 'aiquila-oauth', 'width=600,height=700,popup=yes');
+            if (!popup) {
+                mcpOauthStatus.textContent = 'Popup blocked. Please allow popups for this site.';
+                return;
+            }
+            mcpOauthStatus.textContent = 'Waiting for authentication...';
+        } catch (err) {
+            mcpOauthStatus.textContent = 'Error: ' + err.message;
+        }
+    });
+
+    // Listen for OAuth completion from popup
+    window.addEventListener('message', function(event) {
+        if (event.origin !== window.location.origin) return;
+        if (event.data && event.data.type === 'aiquila-oauth-complete') {
+            mcpOauthStatus.textContent = 'Authenticated!';
+            mcpOauthStatus.style.color = 'var(--color-success)';
+            mcpForm.style.display = 'none';
+            loadMcpServers();
+        }
     });
 
     document.getElementById('mcp-save-server').addEventListener('click', async function() {
@@ -128,6 +176,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const toolInfo = s.tool_count !== null ? s.tool_count + ' tools' : '';
             const enabledLabel = s.is_enabled ? 'Enabled' : 'Disabled';
 
+            var oauthBadge = '';
+            if (s.auth_type === 'oauth2' && s.oauth_status) {
+                var oauthClass = 'mcp-oauth-' + s.oauth_status.replace('_', '-');
+                var oauthLabel = s.oauth_status === 'authenticated' ? 'OAuth: OK' : (s.oauth_status === 'expired' ? 'OAuth: Expired' : 'OAuth: Not authenticated');
+                oauthBadge = ' | <span class="' + oauthClass + '">' + oauthLabel + '</span>';
+            }
+
             return '<div class="mcp-server-card" data-id="' + s.id + '">'
                 + '<div class="mcp-server-header">'
                 + '<strong>' + escapeHtml(s.display_name) + '</strong>'
@@ -135,7 +190,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 + '</div>'
                 + '<div class="mcp-server-details">'
                 + '<span class="mcp-url">' + escapeHtml(s.url) + '</span>'
-                + '<span class="mcp-meta">' + s.auth_type + ' | ' + enabledLabel + (toolInfo ? ' | ' + toolInfo : '') + '</span>'
+                + '<span class="mcp-meta">' + s.auth_type + ' | ' + enabledLabel + (toolInfo ? ' | ' + toolInfo : '') + oauthBadge + '</span>'
                 + (s.last_error ? '<span class="mcp-error">' + escapeHtml(s.last_error) + '</span>' : '')
                 + '</div>'
                 + '<div class="mcp-server-actions">'
@@ -189,6 +244,14 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('mcp-url').value = server.url;
         mcpAuthType.value = server.auth_type;
         mcpTokenGroup.style.display = server.auth_type === 'bearer' ? '' : 'none';
+        mcpOauthGroup.style.display = server.auth_type === 'oauth2' ? '' : 'none';
+        if (server.auth_type === 'oauth2' && server.oauth_status) {
+            var label = server.oauth_status === 'authenticated' ? 'Authenticated' : (server.oauth_status === 'expired' ? 'Token expired — re-authenticate' : 'Not authenticated');
+            mcpOauthStatus.textContent = label;
+            mcpOauthStatus.style.color = server.oauth_status === 'authenticated' ? 'var(--color-success)' : 'var(--color-warning)';
+        } else {
+            mcpOauthStatus.textContent = '';
+        }
         document.getElementById('mcp-auth-token').value = '';
         document.getElementById('mcp-form-title').textContent = 'Edit MCP Server';
         mcpFormStatus.textContent = '';

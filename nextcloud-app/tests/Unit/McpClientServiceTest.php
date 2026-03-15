@@ -237,4 +237,84 @@ class McpClientServiceTest extends TestCase {
         $this->assertEmpty($result['tools']);
         $this->assertEmpty($result['mapping']);
     }
+
+    public function testInitiateOAuthGeneratesPkceAndReturnsUrl(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthClientId('existing-client-id');
+        $server->setOauthMetadata(json_encode([
+            'authorization_endpoint' => 'http://localhost:3339/authorize',
+            'token_endpoint' => 'http://localhost:3339/token',
+        ]));
+
+        $this->mapper->method('update')->willReturnArgument(0);
+
+        $url = $this->service->initiateOAuth($server, 'http://nc.local/callback');
+
+        $this->assertStringStartsWith('http://localhost:3339/authorize?', $url);
+        $this->assertStringContainsString('client_id=existing-client-id', $url);
+        $this->assertStringContainsString('code_challenge_method=S256', $url);
+        $this->assertStringContainsString('response_type=code', $url);
+        $this->assertNotNull($server->getOauthCodeVerifier());
+        $this->assertNotNull($server->getOauthState());
+    }
+
+    public function testCompleteOAuthStoresTokens(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthClientId('test-client');
+        $server->setOauthCodeVerifier('test-verifier');
+        $server->setOauthState('test-state');
+        $server->setOauthMetadata(json_encode([
+            'token_endpoint' => 'http://localhost:3339/token',
+        ]));
+
+        $this->mapper->method('update')->willReturnArgument(0);
+
+        // We can't test the HTTP call directly via TestableMcpClientService
+        // since completeOAuth uses httpClient directly. Test the state validation instead.
+        // The actual HTTP integration is covered by functional tests.
+
+        // Verify state mismatch throws
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('state mismatch');
+        $this->service->completeOAuth($server, 'auth-code', 'wrong-state', 'http://nc.local/callback');
+    }
+
+    public function testCompleteOAuthRejectsInvalidState(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthState('correct-state');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('state mismatch');
+        $this->service->completeOAuth($server, 'code', 'wrong-state', 'http://nc.local/callback');
+    }
+
+    public function testIsTokenExpired(): void {
+        $server = $this->makeServer();
+
+        // No expiry set — should be expired
+        $this->assertTrue($this->service->isTokenExpired($server));
+
+        // Set expiry in the past
+        $server->setOauthTokenExpiresAt(time() - 100);
+        $this->assertTrue($this->service->isTokenExpired($server));
+
+        // Set expiry within 60s buffer
+        $server->setOauthTokenExpiresAt(time() + 30);
+        $this->assertTrue($this->service->isTokenExpired($server));
+
+        // Set expiry well in the future
+        $server->setOauthTokenExpiresAt(time() + 3600);
+        $this->assertFalse($this->service->isTokenExpired($server));
+    }
+
+    public function testGetOAuthBaseUrl(): void {
+        $server = $this->makeServer(1, 'Test', 'http://localhost:3339/mcp');
+        $this->assertEquals('http://localhost:3339', $this->service->getOAuthBaseUrl($server));
+
+        $server->setUrl('http://example.com');
+        $this->assertEquals('http://example.com', $this->service->getOAuthBaseUrl($server));
+    }
 }

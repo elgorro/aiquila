@@ -8,22 +8,27 @@ use OCA\AIquila\Db\McpServerMapper;
 use OCA\AIquila\Service\McpClientService;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\IRequest;
+use OCP\IURLGenerator;
 use PHPUnit\Framework\TestCase;
 
 class McpServerControllerTest extends TestCase {
     private McpServerMapper $mapper;
     private McpClientService $mcpClient;
+    private IURLGenerator $urlGenerator;
     private McpServerController $controller;
+    private IRequest $request;
 
     protected function setUp(): void {
-        $request = $this->createMock(IRequest::class);
+        $this->request = $this->createMock(IRequest::class);
         $this->mapper = $this->createMock(McpServerMapper::class);
         $this->mcpClient = $this->createMock(McpClientService::class);
+        $this->urlGenerator = $this->createMock(IURLGenerator::class);
         $this->controller = new McpServerController(
             'aiquila',
-            $request,
+            $this->request,
             $this->mapper,
-            $this->mcpClient
+            $this->mcpClient,
+            $this->urlGenerator
         );
     }
 
@@ -83,7 +88,6 @@ class McpServerControllerTest extends TestCase {
             $ref = new \ReflectionClass($s);
             $parent = $ref->getParentClass();
             $idProp = $parent->getProperty('id');
-            $idProp->setAccessible(true);
             $idProp->setValue($s, 1);
             return $s;
         });
@@ -160,5 +164,62 @@ class McpServerControllerTest extends TestCase {
 
         $this->assertEquals(200, $response->getStatus());
         $this->assertEquals('Updated Name', $data['display_name']);
+    }
+
+    public function testCreateAcceptsOauth2AuthType(): void {
+        $this->mapper->method('insert')->willReturnCallback(function (McpServer $s) {
+            $ref = new \ReflectionClass($s);
+            $parent = $ref->getParentClass();
+            $idProp = $parent->getProperty('id');
+            $idProp->setValue($s, 2);
+            return $s;
+        });
+
+        $response = $this->controller->create('OAuth Server', 'http://localhost:3339/mcp', 'oauth2', '');
+        $data = $response->getData();
+
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertEquals('oauth2', $data['auth_type']);
+        $this->assertNull($data['auth_token_masked']);
+    }
+
+    public function testAuthorizeReturnsUrl(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $this->mapper->method('findById')->willReturn($server);
+
+        $this->urlGenerator->method('linkToRouteAbsolute')->willReturn('http://nc.local/callback');
+        $this->mcpClient->method('initiateOAuth')->willReturn('http://mcp.local/authorize?state=abc');
+
+        $response = $this->controller->authorize(1);
+        $data = $response->getData();
+
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertArrayHasKey('authorize_url', $data);
+        $this->assertStringContainsString('authorize', $data['authorize_url']);
+    }
+
+    public function testAuthorizeNotFound(): void {
+        $this->mapper->method('findById')->willThrowException(new DoesNotExistException(''));
+
+        $response = $this->controller->authorize(999);
+        $this->assertEquals(404, $response->getStatus());
+    }
+
+    public function testOauthCallbackSuccess(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $this->mapper->method('findById')->willReturn($server);
+
+        $this->request->method('getParam')->willReturnMap([
+            ['code', '', 'auth-code-123'],
+            ['state', '', 'state-abc'],
+        ]);
+        $this->urlGenerator->method('linkToRouteAbsolute')->willReturn('http://nc.local/callback');
+
+        $response = $this->controller->oauthCallback(1);
+
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertStringContainsString('aiquila-oauth-complete', $response->getData());
     }
 }

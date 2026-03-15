@@ -8,23 +8,29 @@ use OCA\AIquila\Db\McpServer;
 use OCA\AIquila\Db\McpServerMapper;
 use OCA\AIquila\Service\McpClientService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\IRequest;
+use OCP\IURLGenerator;
 
 class McpServerController extends Controller {
     private McpServerMapper $mapper;
     private McpClientService $mcpClient;
+    private IURLGenerator $urlGenerator;
 
     public function __construct(
         string $appName,
         IRequest $request,
         McpServerMapper $mapper,
-        McpClientService $mcpClient
+        McpClientService $mcpClient,
+        IURLGenerator $urlGenerator
     ) {
         parent::__construct($appName, $request);
         $this->mapper = $mapper;
         $this->mcpClient = $mcpClient;
+        $this->urlGenerator = $urlGenerator;
     }
 
     /**
@@ -66,8 +72,8 @@ class McpServerController extends Controller {
             return new JSONResponse(['error' => 'Display name and URL are required'], 400);
         }
 
-        if (!in_array($authType, ['none', 'bearer'], true)) {
-            return new JSONResponse(['error' => 'Invalid auth type. Must be "none" or "bearer"'], 400);
+        if (!in_array($authType, ['none', 'bearer', 'oauth2'], true)) {
+            return new JSONResponse(['error' => 'Invalid auth type. Must be "none", "bearer", or "oauth2"'], 400);
         }
 
         $now = time();
@@ -121,9 +127,18 @@ class McpServerController extends Controller {
         if (!empty($url)) {
             $server->setUrl($url);
         }
-        if (!empty($authType) && in_array($authType, ['none', 'bearer'], true)) {
+        if (!empty($authType) && in_array($authType, ['none', 'bearer', 'oauth2'], true)) {
+            $oldAuthType = $server->getAuthType();
             $server->setAuthType($authType);
             if ($authType === 'none') {
+                $server->setAuthToken(null);
+            }
+            // Clear OAuth fields when switching away from oauth2
+            if ($oldAuthType === 'oauth2' && $authType !== 'oauth2') {
+                $this->mcpClient->clearOAuthFields($server);
+            }
+            // Clear bearer token when switching to oauth2
+            if ($authType === 'oauth2') {
                 $server->setAuthToken(null);
             }
         }
@@ -213,6 +228,74 @@ class McpServerController extends Controller {
     }
 
     /**
+     * Initiate the OAuth 2.1 PKCE flow for an MCP server
+     *
+     * @param int $id Server ID
+     *
+     * 200: Authorize URL to open in popup
+     * 404: Server not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{authorize_url: string}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function authorize(int $id): JSONResponse {
+        try {
+            $server = $this->mapper->findById($id);
+        } catch (\Throwable $e) {
+            return new JSONResponse(['error' => 'Server not found'], 404);
+        }
+
+        try {
+            $callbackUrl = $this->urlGenerator->linkToRouteAbsolute(
+                'aiquila.mcp_server.oauthCallback',
+                ['id' => $id]
+            );
+            $authorizeUrl = $this->mcpClient->initiateOAuth($server, $callbackUrl);
+            return new JSONResponse(['authorize_url' => $authorizeUrl]);
+        } catch (\Throwable $e) {
+            return new JSONResponse(['error' => 'OAuth initiation failed: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * OAuth callback endpoint — receives the authorization code from the popup
+     *
+     * @param int $id Server ID
+     *
+     * @return DataDisplayResponse HTML response that closes the popup
+     */
+    #[NoCSRFRequired]
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function oauthCallback(int $id): DataDisplayResponse {
+        $code = $this->request->getParam('code', '');
+        $state = $this->request->getParam('state', '');
+
+        try {
+            $server = $this->mapper->findById($id);
+            $callbackUrl = $this->urlGenerator->linkToRouteAbsolute(
+                'aiquila.mcp_server.oauthCallback',
+                ['id' => $id]
+            );
+            $this->mcpClient->completeOAuth($server, $code, $state, $callbackUrl);
+
+            $html = '<!DOCTYPE html><html><body><script>'
+                . 'window.opener.postMessage({type:"aiquila-oauth-complete",serverId:' . (int)$id . '}, window.location.origin);'
+                . 'window.close();'
+                . '</script><p>Authentication successful. This window should close automatically.</p></body></html>';
+        } catch (\Throwable $e) {
+            $error = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+            $html = '<!DOCTYPE html><html><body>'
+                . '<h3>Authentication Failed</h3><p>' . $error . '</p>'
+                . '<p><button onclick="window.close()">Close</button></p></body></html>';
+        }
+
+        $response = new DataDisplayResponse($html);
+        $response->addHeader('Content-Type', 'text/html; charset=utf-8');
+        return $response;
+    }
+
+    /**
      * Serialize an McpServer entity for API response, masking the auth token.
      */
     private function serializeServer(McpServer $server): array {
@@ -220,6 +303,16 @@ class McpServerController extends Controller {
         $maskedToken = null;
         if ($token) {
             $maskedToken = str_repeat('*', max(0, strlen($token) - 4)) . substr($token, -4);
+        }
+
+        // Determine OAuth status
+        $oauthStatus = null;
+        if ($server->getAuthType() === 'oauth2') {
+            if ($server->getOauthAccessToken()) {
+                $oauthStatus = $this->mcpClient->isTokenExpired($server) ? 'expired' : 'authenticated';
+            } else {
+                $oauthStatus = 'not_authenticated';
+            }
         }
 
         return [
@@ -235,6 +328,7 @@ class McpServerController extends Controller {
             'last_connected_at' => $server->getLastConnectedAt(),
             'created_at' => $server->getCreatedAt(),
             'updated_at' => $server->getUpdatedAt(),
+            'oauth_status' => $oauthStatus,
         ];
     }
 }

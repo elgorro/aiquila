@@ -48,7 +48,12 @@ class McpClientService {
             'Accept' => 'application/json, text/event-stream',
         ];
 
-        if ($server->getAuthType() === 'bearer' && $server->getAuthToken()) {
+        if ($server->getAuthType() === 'oauth2' && $server->getOauthAccessToken()) {
+            if ($this->isTokenExpired($server)) {
+                $this->refreshOAuthToken($server);
+            }
+            $headers['Authorization'] = 'Bearer ' . $server->getOauthAccessToken();
+        } elseif ($server->getAuthType() === 'bearer' && $server->getAuthToken()) {
             $headers['Authorization'] = 'Bearer ' . $server->getAuthToken();
         }
 
@@ -328,5 +333,235 @@ class McpClientService {
         $slug = strtolower(trim($name));
         $slug = preg_replace('/[^a-z0-9]+/', '_', $slug);
         return trim($slug, '_');
+    }
+
+    /**
+     * Discover OAuth 2.1 endpoints from the MCP server's well-known metadata.
+     */
+    public function discoverOAuth(McpServer $server): array {
+        $baseUrl = $this->getOAuthBaseUrl($server);
+        $url = rtrim($baseUrl, '/') . '/.well-known/oauth-authorization-server';
+
+        $response = $this->httpClient->request('GET', $url);
+        $metadata = $response->toArray();
+
+        $server->setOauthMetadata(json_encode($metadata));
+        $server->setUpdatedAt(time());
+        $this->mapper->update($server);
+
+        return $metadata;
+    }
+
+    /**
+     * Register a dynamic OAuth client with the MCP server.
+     */
+    public function registerOAuthClient(McpServer $server, string $callbackUrl): string {
+        $metadata = $this->getOAuthMetadata($server);
+        $registrationEndpoint = $metadata['registration_endpoint'] ?? null;
+
+        if (!$registrationEndpoint) {
+            throw new \RuntimeException('No registration_endpoint in OAuth metadata');
+        }
+
+        $response = $this->httpClient->request('POST', $registrationEndpoint, [
+            'json' => [
+                'client_name' => self::CLIENT_NAME,
+                'redirect_uris' => [$callbackUrl],
+                'grant_types' => ['authorization_code', 'refresh_token'],
+                'token_endpoint_auth_method' => 'none',
+            ],
+        ]);
+
+        $result = $response->toArray();
+        $clientId = $result['client_id'] ?? null;
+
+        if (!$clientId) {
+            throw new \RuntimeException('No client_id returned from dynamic registration');
+        }
+
+        $server->setOauthClientId($clientId);
+        $server->setUpdatedAt(time());
+        $this->mapper->update($server);
+
+        return $clientId;
+    }
+
+    /**
+     * Initiate the OAuth 2.1 PKCE flow. Returns the authorize URL for the popup.
+     */
+    public function initiateOAuth(McpServer $server, string $callbackUrl): string {
+        // Register client if not already done
+        if (!$server->getOauthClientId()) {
+            $this->registerOAuthClient($server, $callbackUrl);
+        }
+
+        $metadata = $this->getOAuthMetadata($server);
+        $authorizeEndpoint = $metadata['authorization_endpoint'] ?? null;
+
+        if (!$authorizeEndpoint) {
+            throw new \RuntimeException('No authorization_endpoint in OAuth metadata');
+        }
+
+        // PKCE: generate verifier and challenge
+        $verifier = rtrim(strtr(base64_encode(random_bytes(96)), '+/', '-_'), '=');
+        $challenge = rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
+
+        // CSRF state
+        $state = bin2hex(random_bytes(16));
+
+        // Store verifier + state for the callback
+        $server->setOauthCodeVerifier($verifier);
+        $server->setOauthState($state);
+        $server->setUpdatedAt(time());
+        $this->mapper->update($server);
+
+        // Build authorize URL
+        $params = http_build_query([
+            'client_id' => $server->getOauthClientId(),
+            'redirect_uri' => $callbackUrl,
+            'response_type' => 'code',
+            'code_challenge' => $challenge,
+            'code_challenge_method' => 'S256',
+            'state' => $state,
+        ]);
+
+        return $authorizeEndpoint . '?' . $params;
+    }
+
+    /**
+     * Complete the OAuth flow by exchanging the authorization code for tokens.
+     */
+    public function completeOAuth(McpServer $server, string $code, string $state, string $callbackUrl): void {
+        // Verify CSRF state
+        if ($state !== $server->getOauthState()) {
+            throw new \RuntimeException('OAuth state mismatch — possible CSRF attack');
+        }
+
+        $metadata = $this->getOAuthMetadata($server);
+        $tokenEndpoint = $metadata['token_endpoint'] ?? null;
+
+        if (!$tokenEndpoint) {
+            throw new \RuntimeException('No token_endpoint in OAuth metadata');
+        }
+
+        $response = $this->httpClient->request('POST', $tokenEndpoint, [
+            'body' => [
+                'grant_type' => 'authorization_code',
+                'code' => $code,
+                'code_verifier' => $server->getOauthCodeVerifier(),
+                'client_id' => $server->getOauthClientId(),
+                'redirect_uri' => $callbackUrl,
+            ],
+        ]);
+
+        $result = $response->toArray();
+
+        if (!isset($result['access_token'])) {
+            throw new \RuntimeException('No access_token in token response');
+        }
+
+        $server->setOauthAccessToken($result['access_token']);
+        $server->setOauthRefreshToken($result['refresh_token'] ?? null);
+        $server->setOauthTokenExpiresAt(time() + ($result['expires_in'] ?? 3600));
+        $server->setOauthCodeVerifier(null);
+        $server->setOauthState(null);
+        $server->setLastStatus('ok');
+        $server->setUpdatedAt(time());
+        $this->mapper->update($server);
+    }
+
+    /**
+     * Refresh the OAuth access token using the refresh token.
+     */
+    public function refreshOAuthToken(McpServer $server): void {
+        $metadata = $this->getOAuthMetadata($server);
+        $tokenEndpoint = $metadata['token_endpoint'] ?? null;
+
+        if (!$tokenEndpoint || !$server->getOauthRefreshToken()) {
+            $this->markAuthExpired($server);
+            throw new \RuntimeException('Cannot refresh: missing token endpoint or refresh token');
+        }
+
+        try {
+            $response = $this->httpClient->request('POST', $tokenEndpoint, [
+                'body' => [
+                    'grant_type' => 'refresh_token',
+                    'refresh_token' => $server->getOauthRefreshToken(),
+                    'client_id' => $server->getOauthClientId(),
+                ],
+            ]);
+
+            $result = $response->toArray();
+
+            if (!isset($result['access_token'])) {
+                throw new \RuntimeException('No access_token in refresh response');
+            }
+
+            $server->setOauthAccessToken($result['access_token']);
+            if (isset($result['refresh_token'])) {
+                $server->setOauthRefreshToken($result['refresh_token']);
+            }
+            $server->setOauthTokenExpiresAt(time() + ($result['expires_in'] ?? 3600));
+            $server->setUpdatedAt(time());
+            $this->mapper->update($server);
+        } catch (\Throwable $e) {
+            $this->markAuthExpired($server);
+            throw new \RuntimeException('OAuth token refresh failed: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    public function isTokenExpired(McpServer $server): bool {
+        $expiresAt = $server->getOauthTokenExpiresAt();
+        if ($expiresAt === null) {
+            return true;
+        }
+        // Refresh when less than 60 seconds remaining
+        return time() >= ($expiresAt - 60);
+    }
+
+    public function getOAuthBaseUrl(McpServer $server): string {
+        $url = $server->getUrl();
+        // Strip /mcp suffix to get the base URL
+        if (str_ends_with($url, '/mcp')) {
+            return substr($url, 0, -4);
+        }
+        return $url;
+    }
+
+    public function getOAuthMetadata(McpServer $server): array {
+        $cached = $server->getOauthMetadata();
+        if ($cached) {
+            return json_decode($cached, true);
+        }
+        return $this->discoverOAuth($server);
+    }
+
+    private function markAuthExpired(McpServer $server): void {
+        $server->setLastStatus('auth_expired');
+        $server->setOauthAccessToken(null);
+        $server->setOauthRefreshToken(null);
+        $server->setOauthTokenExpiresAt(null);
+        $server->setUpdatedAt(time());
+        try {
+            $this->mapper->update($server);
+        } catch (\Throwable $e) {
+            $this->logger->warning('MCP: failed to mark auth expired', [
+                'server' => $server->getDisplayName(),
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Clear all OAuth fields from a server entity.
+     */
+    public function clearOAuthFields(McpServer $server): void {
+        $server->setOauthClientId(null);
+        $server->setOauthAccessToken(null);
+        $server->setOauthRefreshToken(null);
+        $server->setOauthTokenExpiresAt(null);
+        $server->setOauthCodeVerifier(null);
+        $server->setOauthState(null);
+        $server->setOauthMetadata(null);
     }
 }

@@ -96,6 +96,7 @@ services:
       NODE_ENV: development
       MCP_TRANSPORT: http
       MCP_PORT: "3339"
+      MCP_ALLOW_UNAUTHENTICATED: "true"
     volumes:
       # Mount source for live development
       - ../../mcp-server:/app

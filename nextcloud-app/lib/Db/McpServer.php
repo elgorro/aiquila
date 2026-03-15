@@ -29,6 +29,20 @@ use OCP\AppFramework\Db\Entity;
  * @method void setCreatedAt(int $createdAt)
  * @method int getUpdatedAt()
  * @method void setUpdatedAt(int $updatedAt)
+ * @method string|null getOauthClientId()
+ * @method void setOauthClientId(?string $oauthClientId)
+ * @method string|null getOauthAccessToken()
+ * @method void setOauthAccessToken(?string $oauthAccessToken)
+ * @method string|null getOauthRefreshToken()
+ * @method void setOauthRefreshToken(?string $oauthRefreshToken)
+ * @method int|null getOauthTokenExpiresAt()
+ * @method void setOauthTokenExpiresAt(?int $oauthTokenExpiresAt)
+ * @method string|null getOauthCodeVerifier()
+ * @method void setOauthCodeVerifier(?string $oauthCodeVerifier)
+ * @method string|null getOauthState()
+ * @method void setOauthState(?string $oauthState)
+ * @method string|null getOauthMetadata()
+ * @method void setOauthMetadata(?string $oauthMetadata)
  */
 class McpServer extends Entity {
     protected string $displayName = '';
@@ -42,6 +56,13 @@ class McpServer extends Entity {
     protected ?int $lastConnectedAt = null;
     protected int $createdAt = 0;
     protected int $updatedAt = 0;
+    protected ?string $oauthClientId = null;
+    protected ?string $oauthAccessToken = null;
+    protected ?string $oauthRefreshToken = null;
+    protected ?int $oauthTokenExpiresAt = null;
+    protected ?string $oauthCodeVerifier = null;
+    protected ?string $oauthState = null;
+    protected ?string $oauthMetadata = null;
 
     public function __construct() {
         $this->addType('displayName', 'string');
@@ -55,5 +76,12 @@ class McpServer extends Entity {
         $this->addType('lastConnectedAt', 'integer');
         $this->addType('createdAt', 'integer');
         $this->addType('updatedAt', 'integer');
+        $this->addType('oauthClientId', 'string');
+        $this->addType('oauthAccessToken', 'string');
+        $this->addType('oauthRefreshToken', 'string');
+        $this->addType('oauthTokenExpiresAt', 'integer');
+        $this->addType('oauthCodeVerifier', 'string');
+        $this->addType('oauthState', 'string');
+        $this->addType('oauthMetadata', 'string');
     }
 }

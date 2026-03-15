@@ -72,6 +72,32 @@ class Version0002Date20260315000000 extends SimpleMigrationStep {
             'default' => 0,
         ]);
 
+        // OAuth 2.1 PKCE columns
+        $table->addColumn('oauth_client_id', Types::STRING, [
+            'notnull' => false,
+            'length' => 255,
+        ]);
+        $table->addColumn('oauth_access_token', Types::TEXT, [
+            'notnull' => false,
+        ]);
+        $table->addColumn('oauth_refresh_token', Types::TEXT, [
+            'notnull' => false,
+        ]);
+        $table->addColumn('oauth_token_expires_at', Types::BIGINT, [
+            'notnull' => false,
+        ]);
+        $table->addColumn('oauth_code_verifier', Types::STRING, [
+            'notnull' => false,
+            'length' => 255,
+        ]);
+        $table->addColumn('oauth_state', Types::STRING, [
+            'notnull' => false,
+            'length' => 64,
+        ]);
+        $table->addColumn('oauth_metadata', Types::TEXT, [
+            'notnull' => false,
+        ]);
+
         $table->setPrimaryKey(['id']);
     }
 }
