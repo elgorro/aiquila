@@ -5,6 +5,7 @@ namespace OCA\AIquila\Tests\Unit;
 use OCA\AIquila\Controller\ChatController;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
+use OCA\AIquila\Service\McpClientService;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IRequest;
@@ -15,6 +16,7 @@ class ChatControllerTest extends TestCase {
     private $cacheFactory;
     private $claude;
     private $fileService;
+    private $mcpClient;
     private $request;
     private ChatController $ctrl;
 
@@ -24,12 +26,14 @@ class ChatControllerTest extends TestCase {
         $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
         $this->claude      = $this->createMock(ClaudeSDKService::class);
         $this->fileService = $this->createMock(FileService::class);
+        $this->mcpClient   = $this->createMock(McpClientService::class);
         $this->request     = $this->createMock(IRequest::class);
         $this->ctrl        = new ChatController(
             'aiquila',
             $this->request,
             $this->claude,
             $this->fileService,
+            $this->mcpClient,
             'testuser',
             $this->cacheFactory
         );

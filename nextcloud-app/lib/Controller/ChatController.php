@@ -11,10 +11,12 @@ use OCP\ICache;
 use OCP\ICacheFactory;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
+use OCA\AIquila\Service\McpClientService;
 
 class ChatController extends Controller {
     private ClaudeSDKService $claudeService;
     private FileService $fileService;
+    private McpClientService $mcpClient;
     private ?string $userId;
     private ICache $cache;
 
@@ -28,12 +30,14 @@ class ChatController extends Controller {
         IRequest $request,
         ClaudeSDKService $claudeService,
         FileService $fileService,
+        McpClientService $mcpClient,
         ?string $userId,
         ICacheFactory $cacheFactory
     ) {
         parent::__construct($appName, $request);
         $this->claudeService = $claudeService;
         $this->fileService = $fileService;
+        $this->mcpClient = $mcpClient;
         $this->userId = $userId;
         $this->cache = $cacheFactory->createDistributed('aiquila_ratelimit');
     }
@@ -145,7 +149,30 @@ class ChatController extends Controller {
             ], 413);
         }
 
-        $result = $this->claudeService->chat($messages, $system, $this->userId, $options);
+        // Check for enabled MCP servers and use agentic tool loop if available
+        try {
+            $allTools = $this->mcpClient->getAllTools();
+        } catch (\Throwable $e) {
+            $allTools = ['tools' => [], 'mapping' => []];
+        }
+
+        if (!empty($allTools['tools'])) {
+            $mapping = $allTools['mapping'];
+            $mcpClient = $this->mcpClient;
+            $result = $this->claudeService->chatWithTools(
+                $messages,
+                $allTools['tools'],
+                function (string $name, array $input) use ($mcpClient, $mapping): array {
+                    return $mcpClient->executeTool($name, $input, $mapping);
+                },
+                $system,
+                $this->userId,
+                $options,
+            );
+        } else {
+            $result = $this->claudeService->chat($messages, $system, $this->userId, $options);
+        }
+
         return new JSONResponse($result);
     }
 
