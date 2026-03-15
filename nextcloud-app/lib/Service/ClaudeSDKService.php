@@ -86,6 +86,7 @@ class ClaudeSDKService {
      *   top_p         (float)
      *   top_k         (int)
      *   stop_sequences (array)
+     *   tools          (array)  – Anthropic-format tool definitions
      */
     private function buildRequestParams(
         array   $messages,
@@ -118,6 +119,11 @@ class ClaudeSDKService {
             }
         }
 
+        // Tools
+        if (!empty($options['tools'])) {
+            $params['tools'] = $options['tools'];
+        }
+
         return $params;
     }
 
@@ -135,6 +141,7 @@ class ClaudeSDKService {
             topP: $params['top_p'] ?? null,
             topK: $params['top_k'] ?? null,
             stopSequences: $params['stop_sequences'] ?? null,
+            tools: $params['tools'] ?? null,
         );
     }
 
@@ -351,6 +358,145 @@ class ClaudeSDKService {
         } catch (\Throwable $e) {
             return $this->handleException($e, 'chat');
         }
+    }
+
+    /**
+     * Agentic tool-use loop: sends messages + tools to Claude, executes tool
+     * calls via the provided callback, and loops until Claude produces a final
+     * text response or the iteration cap is reached.
+     *
+     * @param array $messages Conversation messages
+     * @param array $tools Anthropic-format tool definitions
+     * @param callable $toolExecutor fn(string $name, array $input): array — returns MCP tool result
+     * @param string|null $system Optional system prompt
+     * @param string|null $userId User ID for API key resolution
+     * @param array $options Optional: temperature, top_p, etc.
+     * @param int $maxIterations Safety cap on tool-use loop iterations
+     * @return array ['response' => string, 'usage' => [...]] or ['error' => string]
+     */
+    public function chatWithTools(
+        array    $messages,
+        array    $tools,
+        callable $toolExecutor,
+        ?string  $system = null,
+        ?string  $userId = null,
+        array    $options = [],
+        int      $maxIterations = 10
+    ): array {
+        try {
+            $client = $this->getClient($userId);
+        } catch (\Throwable $e) {
+            return $this->handleException($e, 'chatWithTools');
+        }
+
+        if ($system !== null) {
+            $options['system'] = $system;
+        }
+        $options['tools'] = $tools;
+
+        $totalInputTokens = 0;
+        $totalOutputTokens = 0;
+
+        for ($i = 0; $i < $maxIterations; $i++) {
+            try {
+                $params = $this->buildRequestParams($messages, $userId, $options);
+                $response = $this->callCreate($client, $params);
+            } catch (\Throwable $e) {
+                return $this->handleException($e, 'chatWithTools');
+            }
+
+            $totalInputTokens += $response->usage->inputTokens ?? 0;
+            $totalOutputTokens += $response->usage->outputTokens ?? 0;
+
+            // Check if response contains tool use blocks
+            $toolUseBlocks = [];
+            $textParts = [];
+            foreach ($response->content as $block) {
+                if ($block->type === 'tool_use') {
+                    $toolUseBlocks[] = $block;
+                } elseif ($block->type === 'text') {
+                    $textParts[] = $block->text;
+                }
+            }
+
+            // If no tool use, return the text response
+            if (empty($toolUseBlocks) || ($response->stopReason ?? '') === 'end_turn') {
+                if (empty($toolUseBlocks)) {
+                    return [
+                        'response' => implode('', $textParts),
+                        'usage' => [
+                            'input_tokens' => $totalInputTokens,
+                            'output_tokens' => $totalOutputTokens,
+                        ],
+                    ];
+                }
+            }
+
+            // Build assistant message with the full content (text + tool_use blocks)
+            $assistantContent = [];
+            foreach ($response->content as $block) {
+                if ($block->type === 'text') {
+                    $assistantContent[] = ['type' => 'text', 'text' => $block->text];
+                } elseif ($block->type === 'tool_use') {
+                    $assistantContent[] = [
+                        'type' => 'tool_use',
+                        'id' => $block->id,
+                        'name' => $block->name,
+                        'input' => $block->input,
+                    ];
+                }
+            }
+            $messages[] = ['role' => 'assistant', 'content' => $assistantContent];
+
+            // Execute each tool and build tool_result blocks
+            $toolResults = [];
+            foreach ($toolUseBlocks as $block) {
+                $input = is_array($block->input) ? $block->input : (array)$block->input;
+                $result = $toolExecutor($block->name, $input);
+
+                // Convert MCP result to Anthropic tool_result format
+                $resultContent = '';
+                if (isset($result['content']) && is_array($result['content'])) {
+                    foreach ($result['content'] as $part) {
+                        if (($part['type'] ?? '') === 'text') {
+                            $resultContent .= $part['text'];
+                        }
+                    }
+                } else {
+                    $resultContent = json_encode($result);
+                }
+
+                $toolResult = [
+                    'type' => 'tool_result',
+                    'tool_use_id' => $block->id,
+                    'content' => $resultContent,
+                ];
+                if (!empty($result['isError'])) {
+                    $toolResult['is_error'] = true;
+                }
+                $toolResults[] = $toolResult;
+            }
+
+            $messages[] = ['role' => 'user', 'content' => $toolResults];
+
+            $this->logger->debug('AIquila SDK: chatWithTools iteration', [
+                'iteration' => $i + 1,
+                'tool_calls' => count($toolUseBlocks),
+            ]);
+        }
+
+        // Max iterations reached — return whatever text we have
+        $this->logger->warning('AIquila SDK: chatWithTools reached max iterations', [
+            'maxIterations' => $maxIterations,
+        ]);
+
+        return [
+            'response' => implode('', $textParts ?? []) ?: 'I was unable to complete the request within the allowed number of tool-use iterations.',
+            'usage' => [
+                'input_tokens' => $totalInputTokens,
+                'output_tokens' => $totalOutputTokens,
+            ],
+        ];
     }
 
     /**

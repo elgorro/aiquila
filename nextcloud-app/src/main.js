@@ -6,6 +6,23 @@
 import { generateUrl } from '@nextcloud/router'
 import { loadState } from '@nextcloud/initial-state'
 import axios from '@nextcloud/axios'
+import { getFilePickerBuilder, FilePickerClosed } from '@nextcloud/dialogs'
+import '@nextcloud/dialogs/style.css'
+
+// ── Attached files state ──────────────────────────────────────────────
+let attachedFiles = []
+
+// ── Slash-command registry ────────────────────────────────────────────
+const SLASH_COMMANDS = [
+	{
+		id: 'add-file',
+		label: '/add-file',
+		icon: '📎',
+		description: 'Attach a file from Nextcloud',
+		handler: handleAddFile,
+		acceptsArgs: true,
+	},
+]
 
 function main() {
 	// Get configuration from initial state
@@ -75,8 +92,10 @@ function createChatInterface(container, config) {
 				</div>
 			</div>
 
-			<div>
-				<textarea id="prompt-input" placeholder="Ask Claude anything..." rows="3" style="width: 100%; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--border-radius); font-family: var(--font-face); resize: vertical; font-size: 14px;"></textarea>
+			<div style="position: relative;">
+				<div id="slash-menu" class="slash-menu"></div>
+				<div id="file-chips" class="file-chips"></div>
+				<textarea id="prompt-input" placeholder="Ask Claude anything… Type / for commands" rows="3" style="width: 100%; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--border-radius); font-family: var(--font-face); resize: vertical; font-size: 14px;"></textarea>
 				<div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
 					<button id="clear-btn" class="secondary">Clear</button>
 					<button id="ask-btn" class="primary">Ask Claude</button>
@@ -89,6 +108,8 @@ function createChatInterface(container, config) {
 	const input = document.getElementById('prompt-input')
 	const askBtn = document.getElementById('ask-btn')
 	const clearBtn = document.getElementById('clear-btn')
+	const slashMenu = document.getElementById('slash-menu')
+	const fileChips = document.getElementById('file-chips')
 
 	// ── Settings panel wiring ──────────────────────────────────────────────
 	const settingsPanel = document.getElementById('settings-panel')
@@ -183,23 +204,256 @@ function createChatInterface(container, config) {
 		}
 	}
 
+	// ── Slash-menu logic ──────────────────────────────────────────────────
+	let menuActiveIndex = -1
+
+	function showSlashMenu(filter) {
+		const matches = SLASH_COMMANDS.filter(cmd =>
+			cmd.label.startsWith('/' + filter),
+		)
+		if (matches.length === 0) {
+			hideSlashMenu()
+			return
+		}
+
+		slashMenu.innerHTML = matches
+			.map(
+				(cmd, i) => `
+			<div class="slash-menu-item${i === 0 ? ' active' : ''}" data-id="${cmd.id}">
+				<span class="icon">${cmd.icon}</span>
+				<span class="label">${cmd.label}</span>
+				<span class="description">${cmd.description}</span>
+			</div>
+		`,
+			)
+			.join('')
+
+		menuActiveIndex = 0
+		slashMenu.classList.add('visible')
+
+		slashMenu.querySelectorAll('.slash-menu-item').forEach((el) => {
+			el.addEventListener('click', () => {
+				selectSlashCommand(el.dataset.id)
+			})
+		})
+	}
+
+	function hideSlashMenu() {
+		slashMenu.classList.remove('visible')
+		slashMenu.innerHTML = ''
+		menuActiveIndex = -1
+	}
+
+	function selectSlashCommand(id) {
+		const cmd = SLASH_COMMANDS.find((c) => c.id === id)
+		if (!cmd) return
+
+		hideSlashMenu()
+
+		// Check for inline args: /add-file:/path/to/file
+		const text = input.value.trim()
+		const colonIdx = text.indexOf(':')
+		const args = colonIdx !== -1 ? text.substring(colonIdx + 1).trim() : ''
+
+		input.value = ''
+		cmd.handler(args, { input, fileChips })
+	}
+
+	input.addEventListener('input', () => {
+		const text = input.value
+		// Show menu when text starts with / and is a single token (no spaces)
+		if (text.startsWith('/') && !text.includes(' ')) {
+			// Don't show menu if it looks like a completed command with args (has colon)
+			// but DO allow typing /add-file: to trigger on Enter
+			const filter = text.substring(1).split(':')[0]
+			showSlashMenu(filter)
+		} else {
+			hideSlashMenu()
+		}
+	})
+
 	// ── Chat wiring ────────────────────────────────────────────────────────
-	askBtn.addEventListener('click', () => sendMessage(input.value, historyDiv, input, askBtn))
+	askBtn.addEventListener('click', () => sendMessage(input.value, historyDiv, input, askBtn, fileChips))
 	clearBtn.addEventListener('click', () => {
 		input.value = ''
+		attachedFiles = []
+		renderFileChips(fileChips)
 		historyDiv.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-lighter);"><p>Start a conversation with Claude...</p></div>'
 	})
 
 	input.addEventListener('keydown', (e) => {
-		if (e.key === 'Enter' && !e.shiftKey) {
-			e.preventDefault()
-			sendMessage(input.value, historyDiv, input, askBtn)
+		// Slash-menu keyboard navigation
+		if (slashMenu.classList.contains('visible')) {
+			const items = slashMenu.querySelectorAll('.slash-menu-item')
+			if (e.key === 'ArrowDown') {
+				e.preventDefault()
+				menuActiveIndex = Math.min(menuActiveIndex + 1, items.length - 1)
+				updateMenuActive(items)
+				return
+			}
+			if (e.key === 'ArrowUp') {
+				e.preventDefault()
+				menuActiveIndex = Math.max(menuActiveIndex - 1, 0)
+				updateMenuActive(items)
+				return
+			}
+			if (e.key === 'Enter') {
+				e.preventDefault()
+				if (menuActiveIndex >= 0 && items[menuActiveIndex]) {
+					selectSlashCommand(items[menuActiveIndex].dataset.id)
+				}
+				return
+			}
+			if (e.key === 'Escape') {
+				e.preventDefault()
+				hideSlashMenu()
+				input.value = ''
+				return
+			}
 		}
+
+		// Handle /command:args when menu is NOT visible (e.g. typed full command)
+		if (e.key === 'Enter' && !e.shiftKey) {
+			const text = input.value.trim()
+			if (text.startsWith('/')) {
+				e.preventDefault()
+				const cmdName = text.substring(1).split(':')[0].split(' ')[0]
+				const cmd = SLASH_COMMANDS.find((c) => c.id === cmdName)
+				if (cmd) {
+					const colonIdx = text.indexOf(':')
+					const args = colonIdx !== -1 ? text.substring(colonIdx + 1).trim() : ''
+					input.value = ''
+					hideSlashMenu()
+					cmd.handler(args, { input, fileChips })
+					return
+				}
+			}
+
+			e.preventDefault()
+			sendMessage(input.value, historyDiv, input, askBtn, fileChips)
+		}
+	})
+
+	function updateMenuActive(items) {
+		items.forEach((el, i) => {
+			el.classList.toggle('active', i === menuActiveIndex)
+		})
+	}
+}
+
+// ── /add-file handler ─────────────────────────────────────────────────
+async function handleAddFile(args, { input, fileChips }) {
+	if (args) {
+		// Direct path mode: /add-file:/path/to/file
+		try {
+			const url = generateUrl('/apps/aiquila/api/files/info')
+			const res = await axios.get(url, { params: { path: args } })
+			const info = res.data
+			addFile({
+				path: args,
+				name: info.name || args.split('/').pop(),
+				size: info.size || 0,
+				mime: info.mimeType || 'application/octet-stream',
+			}, fileChips)
+		} catch {
+			addMessageToHistory(
+				document.getElementById('chat-history'),
+				'error',
+				'File not found: ' + args,
+			)
+		}
+	} else {
+		// File picker mode
+		try {
+			const picker = getFilePickerBuilder('Select files')
+				.setMultiSelect(true)
+				.setType(1) // Choose files
+				.allowDirectories(false)
+				.build()
+
+			const paths = await picker.pick()
+
+			// pick() returns a string (single) or array (multi)
+			const pathList = Array.isArray(paths) ? paths : [paths]
+			for (const p of pathList) {
+				try {
+					const url = generateUrl('/apps/aiquila/api/files/info')
+					const res = await axios.get(url, { params: { path: p } })
+					const info = res.data
+					addFile({
+						path: p,
+						name: info.name || p.split('/').pop(),
+						size: info.size || 0,
+						mime: info.mimeType || 'application/octet-stream',
+					}, fileChips)
+				} catch {
+					// If info call fails, still add with basic info
+					addFile({
+						path: p,
+						name: p.split('/').pop(),
+						size: 0,
+						mime: 'application/octet-stream',
+					}, fileChips)
+				}
+			}
+		} catch (err) {
+			if (!(err instanceof FilePickerClosed)) {
+				console.error('File picker error:', err)
+			}
+		}
+	}
+
+	input.focus()
+}
+
+function addFile(file, fileChips) {
+	// Avoid duplicates
+	if (attachedFiles.some((f) => f.path === file.path)) return
+	attachedFiles.push(file)
+	renderFileChips(fileChips)
+}
+
+function removeFile(path, fileChips) {
+	attachedFiles = attachedFiles.filter((f) => f.path !== path)
+	renderFileChips(fileChips)
+}
+
+function renderFileChips(container) {
+	container.innerHTML = attachedFiles
+		.map(
+			(f) => `
+		<div class="file-chip" data-path="${f.path}">
+			<span class="name" title="${f.path}">${f.name}</span>
+			<span class="size">${humanSize(f.size)}</span>
+			<button class="remove" title="Remove">✕</button>
+		</div>
+	`,
+		)
+		.join('')
+
+	container.querySelectorAll('.file-chip .remove').forEach((btn) => {
+		btn.addEventListener('click', () => {
+			const path = btn.closest('.file-chip').dataset.path
+			removeFile(path, container)
+		})
 	})
 }
 
-async function sendMessage(prompt, historyDiv, input, button) {
-	if (!prompt.trim()) return
+function humanSize(bytes) {
+	if (!bytes) return ''
+	const units = ['B', 'KB', 'MB', 'GB']
+	let i = 0
+	let size = bytes
+	while (size >= 1024 && i < units.length - 1) {
+		size /= 1024
+		i++
+	}
+	return size.toFixed(i > 0 ? 1 : 0) + ' ' + units[i]
+}
+
+// ── Send message ──────────────────────────────────────────────────────
+async function sendMessage(prompt, historyDiv, input, button, fileChips) {
+	if (!prompt.trim() && attachedFiles.length === 0) return
 
 	// Clear empty state if present
 	if (historyDiv.querySelector('p')) {
@@ -209,18 +463,29 @@ async function sendMessage(prompt, historyDiv, input, button) {
 	input.disabled = true
 	button.disabled = true
 
+	// Build user message display with attached file names
+	let userDisplay = prompt
+	if (attachedFiles.length > 0) {
+		const fileNames = attachedFiles.map((f) => f.name).join(', ')
+		userDisplay += (prompt.trim() ? '\n' : '') + '📎 ' + fileNames
+	}
+
 	// Add user message
-	addMessageToHistory(historyDiv, 'user', prompt)
+	addMessageToHistory(historyDiv, 'user', userDisplay)
 
 	// Show loading
 	const loadingDiv = addMessageToHistory(historyDiv, 'assistant', '⏳ Thinking...')
 
 	try {
 		const url = generateUrl('/apps/aiquila/api/ask')
-		const response = await axios.post(url, {
+		const body = {
 			prompt: prompt,
-			context: ''
-		})
+			context: '',
+		}
+		if (attachedFiles.length > 0) {
+			body.files = attachedFiles.map((f) => f.path)
+		}
+		const response = await axios.post(url, body)
 
 		loadingDiv.remove()
 
@@ -233,6 +498,8 @@ async function sendMessage(prompt, historyDiv, input, button) {
 		}
 
 		input.value = ''
+		attachedFiles = []
+		renderFileChips(fileChips)
 	} catch (error) {
 		loadingDiv.remove()
 		addMessageToHistory(historyDiv, 'error', 'Failed to communicate with Claude: ' + error.message)

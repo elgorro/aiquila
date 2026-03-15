@@ -1,0 +1,110 @@
+/* AIquila Chat – slash menu & file chips */
+
+/* ── Slash command quick menu ─────────────────────────────────────────── */
+
+.slash-menu {
+	position: absolute;
+	bottom: 100%;
+	left: 0;
+	right: 0;
+	margin-bottom: 4px;
+	background: var(--color-main-background);
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+	max-height: 200px;
+	overflow-y: auto;
+	z-index: 1000;
+	display: none;
+}
+
+.slash-menu.visible {
+	display: block;
+}
+
+.slash-menu-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 12px;
+	cursor: pointer;
+	font-size: 14px;
+}
+
+.slash-menu-item:hover,
+.slash-menu-item.active {
+	background: var(--color-background-hover);
+}
+
+.slash-menu-item .icon {
+	flex-shrink: 0;
+	font-size: 16px;
+	width: 24px;
+	text-align: center;
+}
+
+.slash-menu-item .label {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.slash-menu-item .description {
+	color: var(--color-text-lighter);
+	font-size: 13px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ── File chips ───────────────────────────────────────────────────────── */
+
+.file-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.file-chips:empty {
+	display: none;
+}
+
+.file-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	background: var(--color-background-dark);
+	border: 1px solid var(--color-border);
+	border-radius: 16px;
+	font-size: 13px;
+	max-width: 260px;
+}
+
+.file-chip .name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.file-chip .size {
+	color: var(--color-text-lighter);
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.file-chip .remove {
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 0 2px;
+	font-size: 14px;
+	line-height: 1;
+	color: var(--color-text-lighter);
+	border-radius: 50%;
+}
+
+.file-chip .remove:hover {
+	color: var(--color-error);
+	background: var(--color-background-hover);
+}
