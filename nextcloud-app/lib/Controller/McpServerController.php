@@ -262,14 +262,12 @@ class McpServerController extends Controller {
      * OAuth callback endpoint — receives the authorization code from the popup
      *
      * @param int $id Server ID
-     *
-     * @return DataDisplayResponse HTML response that closes the popup
+     * @param string $code Authorization code from the OAuth provider
+     * @param string $state CSRF state parameter
      */
     #[NoCSRFRequired]
-    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
-    public function oauthCallback(int $id): DataDisplayResponse {
-        $code = $this->request->getParam('code', '');
-        $state = $this->request->getParam('state', '');
+    #[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]
+    public function oauthCallback(int $id, string $code = '', string $state = ''): DataDisplayResponse {
 
         try {
             $server = $this->mapper->findById($id);

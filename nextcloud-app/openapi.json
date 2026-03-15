@@ -25,7 +25,7 @@
         "/index.php/apps/aiquila/api/ask": {
             "post": {
                 "operationId": "chat-ask",
-                "summary": "Send a single-turn prompt to Claude",
+                "summary": "Send a single-turn prompt to Claude, optionally with attached files",
                 "tags": [
                     "chat"
                 ],
@@ -53,6 +53,14 @@
                                         "type": "string",
                                         "default": "",
                                         "description": "Optional context to provide alongside the prompt"
+                                    },
+                                    "files": {
+                                        "type": "array",
+                                        "default": [],
+                                        "description": "Optional list of Nextcloud file paths to include as context",
+                                        "items": {
+                                            "type": "string"
+                                        }
                                     }
                                 }
                             }
@@ -114,6 +122,24 @@
                     },
                     "400": {
                         "description": "No prompt was provided",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "One of the attached files was not found",
                         "content": {
                             "application/json": {
                                 "schema": {
