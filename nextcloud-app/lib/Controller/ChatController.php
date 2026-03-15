@@ -65,18 +65,21 @@ class ChatController extends Controller {
     }
 
     /**
-     * Send a single-turn prompt to Claude
+     * Send a single-turn prompt to Claude, optionally with attached files
      *
      * @param string $prompt  The user's question or instruction
      * @param string $context Optional context to provide alongside the prompt
+     * @param list<string> $files Optional list of Nextcloud file paths to include as context
      *
      * 200: Claude response with model info and token usage
      * 400: No prompt was provided
+     * 404: One of the attached files was not found
      * 413: Prompt or context exceeds the 5 MB content limit
      * 429: Rate limit exceeded (10 requests per minute)
      *
      * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>
      *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      *        |JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>
      *        |JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
      *
@@ -84,7 +87,7 @@ class ChatController extends Controller {
      */
     #[NoAdminRequired]
     #[OpenAPI]
-    public function ask(string $prompt = '', string $context = ''): JSONResponse {
+    public function ask(string $prompt = '', string $context = '', array $files = []): JSONResponse {
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
@@ -94,6 +97,73 @@ class ChatController extends Controller {
         if (!$prompt) {
             return new JSONResponse(['error' => 'No prompt provided'], 400);
         }
+
+        // When files are attached, load their content and delegate appropriately
+        if (!empty($files)) {
+            return $this->askWithFiles($prompt, $files);
+        }
+
+        if (!$this->validateContentLength($prompt . $context)) {
+            return new JSONResponse([
+                'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
+            ], 413);
+        }
+
+        $result = $this->claudeService->ask($prompt, $context, $this->userId);
+        return new JSONResponse($result);
+    }
+
+    /**
+     * Handle ask() with attached files — reads content and delegates to the appropriate Claude method
+     */
+    private function askWithFiles(string $prompt, array $files): JSONResponse {
+        $fileDataList = [];
+        foreach ($files as $path) {
+            try {
+                $fileDataList[] = $this->fileService->getContent($path, $this->userId);
+            } catch (\OCP\Files\NotFoundException $e) {
+                return new JSONResponse(['error' => 'File not found: ' . $path], 404);
+            } catch (\InvalidArgumentException $e) {
+                return new JSONResponse(['error' => $e->getMessage()], 400);
+            } catch (\RuntimeException $e) {
+                return new JSONResponse(['error' => $e->getMessage()], 413);
+            } catch (\Exception $e) {
+                return new JSONResponse(['error' => 'Could not read file: ' . $e->getMessage()], 500);
+            }
+        }
+
+        // Single image → delegate to vision
+        if (count($fileDataList) === 1 && str_starts_with($fileDataList[0]['mimeType'], 'image/')) {
+            $f = $fileDataList[0];
+            $result = $this->claudeService->askWithImage(
+                $prompt,
+                $f['content'],
+                $f['mimeType'],
+                $this->userId,
+            );
+            return new JSONResponse($result);
+        }
+
+        // Single PDF → delegate to document
+        if (count($fileDataList) === 1 && $fileDataList[0]['mimeType'] === 'application/pdf') {
+            $f = $fileDataList[0];
+            $rawBytes = base64_decode($f['content']);
+            $result = $this->claudeService->askWithDocument(
+                $prompt,
+                $rawBytes,
+                'application/pdf',
+                $f['name'],
+                $this->userId,
+            );
+            return new JSONResponse($result);
+        }
+
+        // Otherwise, concatenate as text context
+        $contextParts = [];
+        foreach ($fileDataList as $f) {
+            $contextParts[] = "--- File: {$f['name']} ({$f['mimeType']}, {$f['size']} bytes) ---\n{$f['content']}";
+        }
+        $context = implode("\n\n", $contextParts);
 
         if (!$this->validateContentLength($prompt . $context)) {
             return new JSONResponse([

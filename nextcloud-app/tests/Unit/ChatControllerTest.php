@@ -80,6 +80,70 @@ class ChatControllerTest extends TestCase {
         $this->assertEquals(['response' => 'Hi there!'], $response->getData());
     }
 
+    // ── ask() with files tests ──────────────────────────────────────────
+
+    public function testAskWithFilesSendsContext(): void {
+        $this->cache->method('get')->willReturn(null);
+
+        $this->fileService->expects($this->once())
+            ->method('getContent')
+            ->with('/test.txt', 'testuser')
+            ->willReturn([
+                'name' => 'test.txt',
+                'mimeType' => 'text/plain',
+                'size' => 11,
+                'content' => 'hello world',
+            ]);
+
+        $this->claude->expects($this->once())
+            ->method('ask')
+            ->with(
+                'Summarize this',
+                $this->stringContains('--- File: test.txt (text/plain, 11 bytes) ---'),
+                'testuser',
+            )
+            ->willReturn(['response' => 'It says hello.']);
+
+        $response = $this->ctrl->ask('Summarize this', '', ['/test.txt']);
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertEquals(['response' => 'It says hello.'], $response->getData());
+    }
+
+    public function testAskWithNonexistentFileReturns404(): void {
+        $this->cache->method('get')->willReturn(null);
+
+        $this->fileService->expects($this->once())
+            ->method('getContent')
+            ->with('/missing.txt', 'testuser')
+            ->willThrowException(new \OCP\Files\NotFoundException('not found'));
+
+        $response = $this->ctrl->ask('Read this', '', ['/missing.txt']);
+        $this->assertEquals(404, $response->getStatus());
+        $this->assertStringContainsString('missing.txt', $response->getData()['error']);
+    }
+
+    public function testAskWithImageFileDelegatesToVision(): void {
+        $this->cache->method('get')->willReturn(null);
+
+        $this->fileService->expects($this->once())
+            ->method('getContent')
+            ->with('/photo.png', 'testuser')
+            ->willReturn([
+                'name' => 'photo.png',
+                'mimeType' => 'image/png',
+                'size' => 1024,
+                'content' => base64_encode('fakepng'),
+            ]);
+
+        $this->claude->expects($this->once())
+            ->method('askWithImage')
+            ->willReturn(['response' => 'I see a photo.']);
+
+        $response = $this->ctrl->ask('Describe this', '', ['/photo.png']);
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertEquals(['response' => 'I see a photo.'], $response->getData());
+    }
+
     // ── summarize() tests ─────────────────────────────────────────────────
 
     public function testSummarizeReturnsErrorWhenNoContent(): void {
