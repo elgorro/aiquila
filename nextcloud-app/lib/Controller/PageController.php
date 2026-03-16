@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Controller;
 
+use OCA\AIquila\Db\Conversation;
+use OCA\AIquila\Db\ConversationMapper;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\TemplateResponse;
@@ -18,6 +20,7 @@ class PageController extends Controller {
 
     private IInitialState $initialState;
     private ClaudeSDKService $claudeService;
+    private ConversationMapper $conversationMapper;
     private ?string $userId;
 
     public function __construct(
@@ -25,11 +28,13 @@ class PageController extends Controller {
         IRequest $request,
         IInitialState $initialState,
         ClaudeSDKService $claudeService,
+        ConversationMapper $conversationMapper,
         ?string $userId
     ) {
         parent::__construct($appName, $request);
         $this->initialState = $initialState;
         $this->claudeService = $claudeService;
+        $this->conversationMapper = $conversationMapper;
         $this->userId = $userId;
     }
 
@@ -46,6 +51,13 @@ class PageController extends Controller {
             'max_tokens'  => $config['max_tokens'],
             'has_api_key' => !empty($config['api_key']),
         ]);
+
+        $this->initialState->provideInitialState('conversations',
+            array_map(
+                fn(Conversation $c) => $c->jsonSerialize(),
+                $this->conversationMapper->findAllByUser($this->userId)
+            )
+        );
 
         // Load main script
         Util::addScript('aiquila', 'aiquila-main');
