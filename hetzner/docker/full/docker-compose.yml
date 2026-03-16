@@ -133,6 +133,7 @@ services:
       MCP_REGISTRATION_ENABLED: ${MCP_REGISTRATION_ENABLED:-false}
       MCP_REGISTRATION_TOKEN: ${MCP_REGISTRATION_TOKEN:-}
       MCP_CLIENT_REDIRECT_URIS: ${MCP_CLIENT_REDIRECT_URIS:-https://claude.ai/api/mcp/auth_callback}
+      MCP_INTERNAL_TOKEN: ${MCP_INTERNAL_TOKEN:-}
       MCP_TRUST_PROXY: "1" # hardcoded: Traefik is always a single proxy hop
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:

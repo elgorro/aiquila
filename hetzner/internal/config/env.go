@@ -54,6 +54,7 @@ type FullEnv struct {
 	ClientID           string
 	RegistrationEnabled bool
 	RegistrationToken  string
+	MCPInternalToken   string
 	CrowdSecBouncerKey string
 	AcmeEmail          string
 	NCMetricsToken     string
@@ -232,6 +233,10 @@ func GenerateFull(ncDomain, mcpDomain, ncAdminUser, ncAdminPassword, ncMCPUser, 
 	if err != nil {
 		return nil, fmt.Errorf("generate metrics token: %w", err)
 	}
+	internalToken, err := randomHex(32)
+	if err != nil {
+		return nil, fmt.Errorf("generate internal token: %w", err)
+	}
 	return &FullEnv{
 		NCDomain:            ncDomain,
 		MCPDomain:           mcpDomain,
@@ -246,6 +251,7 @@ func GenerateFull(ncDomain, mcpDomain, ncAdminUser, ncAdminPassword, ncMCPUser, 
 		ClientID:            "aiquila-claude",
 		RegistrationEnabled: true,
 		RegistrationToken:   regToken,
+		MCPInternalToken:    internalToken,
 		CrowdSecBouncerKey:  bouncerKey,
 		AcmeEmail:           acmeEmail,
 		NCMetricsToken:      metricsToken,
@@ -287,6 +293,10 @@ func (e *FullEnv) Render() string {
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_ENABLED=%v\n", e.RegistrationEnabled))
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_TOKEN=%s\n", e.RegistrationToken))
 	b.WriteString("MCP_TRUST_PROXY=true\n")
+	b.WriteString("\n")
+
+	b.WriteString("# Internal token for NC→MCP auth on Docker network\n")
+	b.WriteString(fmt.Sprintf("MCP_INTERNAL_TOKEN=%s\n", e.MCPInternalToken))
 	b.WriteString("\n")
 
 	b.WriteString("# CrowdSec\n")

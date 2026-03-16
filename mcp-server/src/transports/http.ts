@@ -293,6 +293,9 @@ export async function startHttp(): Promise<void> {
         logger.info({ gated: !!registrationToken }, 'Dynamic client registration enabled');
       }
     }
+    if (process.env.MCP_INTERNAL_TOKEN) {
+      logger.info('Internal bearer token configured (MCP_INTERNAL_TOKEN)');
+    }
     logger.info('View logs: docker compose logs -f   or   make logs-follow');
     void (async () => {
       // Advisory TLS check — logs a warning if the cert is self-signed or untrusted,

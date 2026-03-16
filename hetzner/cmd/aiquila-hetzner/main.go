@@ -876,6 +876,20 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 		return fmt.Errorf("patch .env with app password: %w", err)
 	}
 
+	// Auto-register the MCP server in the AIquila NC app so it connects on first boot
+	fmt.Println("\n── Registering MCP server in AIquila app")
+	registerCmd := fmt.Sprintf(
+		`docker compose -f /opt/aiquila/docker-compose.yml exec -T nc php occ aiquila:mcp:add `+
+			`--name "AIquila MCP" --url "http://mcp:3339/mcp" --auth bearer --token "%s"`,
+		fullEnv.MCPInternalToken,
+	)
+	regOut, regErr := provision.RunCommand(sshClient, registerCmd)
+	if regErr != nil {
+		fmt.Fprintf(os.Stderr, "  Warning: MCP registration failed: %v\n%s", regErr, regOut)
+	} else {
+		fmt.Print(regOut)
+	}
+
 	fmt.Println("\n── Starting MCP service")
 	out, err = provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose up -d mcp 2>&1")
 	if err != nil {
