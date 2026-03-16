@@ -7,14 +7,15 @@ use PHPUnit\Framework\TestCase;
 
 class ClaudeModelsTest extends TestCase {
 
-    public function testDefaultModelIsSonnet45(): void {
-        $this->assertEquals(ClaudeModels::SONNET_4_5, ClaudeModels::DEFAULT_MODEL);
+    public function testDefaultModelIsSonnet46(): void {
+        $this->assertEquals(ClaudeModels::SONNET_4_6, ClaudeModels::DEFAULT_MODEL);
     }
 
-    public function testGetAllModelsReturnsAllSixModels(): void {
+    public function testGetAllModelsReturnsAllSevenModels(): void {
         $models = ClaudeModels::getAllModels();
-        $this->assertCount(6, $models);
+        $this->assertCount(7, $models);
         $this->assertContains(ClaudeModels::OPUS_4_6,   $models);
+        $this->assertContains(ClaudeModels::SONNET_4_6, $models);
         $this->assertContains(ClaudeModels::SONNET_4_5, $models);
         $this->assertContains(ClaudeModels::HAIKU_4_5,  $models);
         $this->assertContains(ClaudeModels::OPUS_4_5,   $models);
@@ -33,14 +34,16 @@ class ClaudeModelsTest extends TestCase {
         );
     }
 
-    public function testSupportsThinkingOnlyForOpus46(): void {
+    public function testSupportsThinkingForAdaptiveModels(): void {
         $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::OPUS_4_6));
+        $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::SONNET_4_6));
         $this->assertFalse(ClaudeModels::supportsThinking(ClaudeModels::SONNET_4_5));
         $this->assertFalse(ClaudeModels::supportsThinking(ClaudeModels::HAIKU_4_5));
     }
 
-    public function testSupportsEffortOnlyForOpus46(): void {
+    public function testSupportsEffortForAdaptiveModels(): void {
         $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::OPUS_4_6));
+        $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::SONNET_4_6));
         $this->assertFalse(ClaudeModels::supportsEffort(ClaudeModels::SONNET_4_5));
         $this->assertFalse(ClaudeModels::supportsEffort(ClaudeModels::HAIKU_4_5));
     }
@@ -49,6 +52,26 @@ class ClaudeModelsTest extends TestCase {
         $params = ClaudeModels::getModelParams(ClaudeModels::OPUS_4_6);
         $this->assertArrayHasKey('thinking', $params);
         $this->assertArrayHasKey('effort',   $params);
+    }
+
+    public function testGetMaxTokenCeilingForSonnet46(): void {
+        $this->assertEquals(64000, ClaudeModels::getMaxTokenCeiling(ClaudeModels::SONNET_4_6));
+    }
+
+    public function testGetModelParamsForSonnet46IncludesThinkingAndEffort(): void {
+        $params = ClaudeModels::getModelParams(ClaudeModels::SONNET_4_6);
+        $this->assertArrayHasKey('thinking', $params);
+        $this->assertEquals(['type' => 'adaptive'], $params['thinking']);
+        $this->assertArrayHasKey('effort', $params);
+        $this->assertEquals('medium', $params['effort']);
+    }
+
+    public function testGetModelParamsEffortLevels(): void {
+        $opus = ClaudeModels::getModelParams(ClaudeModels::OPUS_4_6);
+        $this->assertEquals('high', $opus['effort']);
+
+        $sonnet = ClaudeModels::getModelParams(ClaudeModels::SONNET_4_6);
+        $this->assertEquals('medium', $sonnet['effort']);
     }
 
     public function testGetModelParamsForOtherModelsIsEmpty(): void {

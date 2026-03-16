@@ -3,6 +3,7 @@
 namespace OCA\AIquila\Tests\Unit;
 
 use OCA\AIquila\Controller\PageController;
+use OCA\AIquila\Db\ConversationMapper;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\AppFramework\Http\TemplateResponse;
@@ -13,18 +14,24 @@ use PHPUnit\Framework\TestCase;
 class PageControllerTest extends TestCase {
     private $initialState;
     private $claude;
+    private $conversationMapper;
     private $request;
     private PageController $ctrl;
 
     protected function setUp(): void {
-        $this->initialState = $this->createMock(IInitialState::class);
-        $this->claude       = $this->createMock(ClaudeSDKService::class);
-        $this->request      = $this->createMock(IRequest::class);
-        $this->ctrl         = new PageController(
+        $this->initialState       = $this->createMock(IInitialState::class);
+        $this->claude             = $this->createMock(ClaudeSDKService::class);
+        $this->conversationMapper = $this->createMock(ConversationMapper::class);
+        $this->request            = $this->createMock(IRequest::class);
+
+        $this->conversationMapper->method('findAllByUser')->willReturn([]);
+
+        $this->ctrl = new PageController(
             'aiquila',
             $this->request,
             $this->initialState,
             $this->claude,
+            $this->conversationMapper,
             'testuser'
         );
     }
@@ -43,20 +50,17 @@ class PageControllerTest extends TestCase {
                 'timeout'    => 30,
             ]);
 
-        $capturedKey  = null;
-        $capturedData = null;
-        $this->initialState->expects($this->once())
-            ->method('provideInitialState')
-            ->willReturnCallback(function (string $key, mixed $data) use (&$capturedKey, &$capturedData): void {
-                $capturedKey  = $key;
-                $capturedData = $data;
+        $captured = [];
+        $this->initialState->method('provideInitialState')
+            ->willReturnCallback(function (string $key, mixed $data) use (&$captured): void {
+                $captured[$key] = $data;
             });
 
         $this->ctrl->index();
 
-        $this->assertEquals('config', $capturedKey);
-        $this->assertArrayHasKey('model', $capturedData);
-        $this->assertEquals(ClaudeModels::HAIKU_4_5, $capturedData['model']);
+        $this->assertArrayHasKey('config', $captured);
+        $this->assertArrayHasKey('model', $captured['config']);
+        $this->assertEquals(ClaudeModels::HAIKU_4_5, $captured['config']['model']);
     }
 
     public function testIndexProvidesHasApiKeyTrue(): void {
@@ -69,15 +73,15 @@ class PageControllerTest extends TestCase {
                 'timeout'    => 30,
             ]);
 
-        $capturedData = null;
+        $captured = [];
         $this->initialState->method('provideInitialState')
-            ->willReturnCallback(function (string $key, mixed $data) use (&$capturedData): void {
-                $capturedData = $data;
+            ->willReturnCallback(function (string $key, mixed $data) use (&$captured): void {
+                $captured[$key] = $data;
             });
 
         $this->ctrl->index();
 
-        $this->assertTrue($capturedData['has_api_key']);
+        $this->assertTrue($captured['config']['has_api_key']);
     }
 
     public function testIndexProvidesHasApiKeyFalse(): void {
@@ -90,15 +94,15 @@ class PageControllerTest extends TestCase {
                 'timeout'    => 30,
             ]);
 
-        $capturedData = null;
+        $captured = [];
         $this->initialState->method('provideInitialState')
-            ->willReturnCallback(function (string $key, mixed $data) use (&$capturedData): void {
-                $capturedData = $data;
+            ->willReturnCallback(function (string $key, mixed $data) use (&$captured): void {
+                $captured[$key] = $data;
             });
 
         $this->ctrl->index();
 
-        $this->assertFalse($capturedData['has_api_key']);
+        $this->assertFalse($captured['config']['has_api_key']);
     }
 
     public function testIndexReturnsTemplateResponse(): void {

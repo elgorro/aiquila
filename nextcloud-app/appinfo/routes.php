@@ -3,6 +3,14 @@
 return [
     'routes' => [
         ['name' => 'page#index', 'url' => '/', 'verb' => 'GET'],
+        // Conversation API
+        ['name' => 'conversation#index',   'url' => '/api/conversations',              'verb' => 'GET'],
+        ['name' => 'conversation#create',  'url' => '/api/conversations',              'verb' => 'POST'],
+        ['name' => 'conversation#show',    'url' => '/api/conversations/{id}',          'verb' => 'GET'],
+        ['name' => 'conversation#update',  'url' => '/api/conversations/{id}',          'verb' => 'PUT'],
+        ['name' => 'conversation#destroy', 'url' => '/api/conversations/{id}',          'verb' => 'DELETE'],
+        ['name' => 'conversation#message', 'url' => '/api/conversations/{id}/messages', 'verb' => 'POST'],
+
         ['name' => 'chat#ask', 'url' => '/api/ask', 'verb' => 'POST'],
         ['name' => 'chat#chat', 'url' => '/api/chat', 'verb' => 'POST'],
         ['name' => 'chat#summarize', 'url' => '/api/summarize', 'verb' => 'POST'],
