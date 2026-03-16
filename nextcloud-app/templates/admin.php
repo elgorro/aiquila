@@ -37,7 +37,7 @@ style('aiquila', 'admin');
                     <option value="<?php echo htmlspecialchars($m); ?>">
                 <?php endforeach; ?>
             </datalist>
-            <p class="hint">Default: <?php echo htmlspecialchars($_['default_model']); ?> (Claude Sonnet 4.5, recommended). claude-opus-4-6 supports adaptive thinking and 128K output tokens.</p>
+            <p class="hint">Default: <?php echo htmlspecialchars($_['default_model']); ?> (Claude Sonnet 4.6, recommended). claude-sonnet-4-6 and claude-opus-4-6 support adaptive thinking. Opus supports 128K output tokens, Sonnet 64K.</p>
         </div>
 
         <div class="form-group">
@@ -47,9 +47,9 @@ style('aiquila', 'admin');
                    name="max_tokens"
                    value="<?php echo $_['max_tokens']; ?>"
                    min="1"
-                   max="100000"
+                   max="128000"
                    step="1">
-            <p class="hint">Default: 4096 (range: 1-100,000)</p>
+            <p class="hint">Default: 16384 (range: 1-128,000)</p>
         </div>
 
         <div class="form-group">

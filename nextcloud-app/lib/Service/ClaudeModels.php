@@ -16,6 +16,9 @@ class ClaudeModels {
     /** Opus 4.6 – latest frontier model (adaptive thinking, 128K output) */
     public const OPUS_4_6   = 'claude-opus-4-6';
 
+    /** Sonnet 4.6 – adaptive thinking, 64K output */
+    public const SONNET_4_6 = 'claude-sonnet-4-6';
+
     /** Sonnet 4.5 – recommended default: fast, capable, cost-effective */
     public const SONNET_4_5 = 'claude-sonnet-4-5-20250929';
 
@@ -33,23 +36,26 @@ class ClaudeModels {
 
     // ── Application defaults ───────────────────────────────────────────────
 
-    public const DEFAULT_MODEL      = self::SONNET_4_5;
-    public const DEFAULT_MAX_TOKENS = 4096;
+    public const DEFAULT_MODEL      = self::SONNET_4_6;
+    public const DEFAULT_MAX_TOKENS = 16384;
 
     // ── Per-model output token ceilings ────────────────────────────────────
 
     private const MAX_TOKENS_CEILING = [
-        self::OPUS_4_6 => 128000,
+        self::OPUS_4_6   => 128000,
+        self::SONNET_4_6 => 64000,
     ];
 
     // ── Capability flags ───────────────────────────────────────────────────
 
     private const SUPPORTS_THINKING = [
-        self::OPUS_4_6 => true,
+        self::OPUS_4_6   => true,
+        self::SONNET_4_6 => true,
     ];
 
     private const SUPPORTS_EFFORT = [
-        self::OPUS_4_6 => true,
+        self::OPUS_4_6   => true,
+        self::SONNET_4_6 => true,
     ];
 
     // ── Public API ─────────────────────────────────────────────────────────
@@ -76,6 +82,7 @@ class ClaudeModels {
     public static function getAllModels(): array {
         return [
             self::OPUS_4_6,
+            self::SONNET_4_6,
             self::SONNET_4_5,
             self::HAIKU_4_5,
             self::OPUS_4_5,
@@ -90,15 +97,21 @@ class ClaudeModels {
      * Returns [] for models that need no special handling, so callers can
      * always use array_merge() unconditionally.
      */
+    // ── Per-model effort level (Opus deep, Sonnet balanced) ────────────
+    private const EFFORT_LEVEL = [
+        self::OPUS_4_6   => 'high',
+        self::SONNET_4_6 => 'medium',
+    ];
+
     public static function getModelParams(string $model): array {
         $params = [];
 
         if (self::supportsThinking($model)) {
-            $params['thinking'] = ['type' => 'adaptive', 'budget_tokens' => 8000];
+            $params['thinking'] = ['type' => 'adaptive'];
         }
 
         if (self::supportsEffort($model)) {
-            $params['effort'] = 'high';
+            $params['effort'] = self::EFFORT_LEVEL[$model] ?? 'medium';
         }
 
         return $params;
