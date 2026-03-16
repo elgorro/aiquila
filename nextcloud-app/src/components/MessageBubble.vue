@@ -16,17 +16,23 @@
 				{{ file.fileName }}
 			</span>
 		</div>
+		<div v-if="hasTokens" class="message-tokens">
+			<NcProgressBar :value="tokenPercent" size="small" />
+			<span class="token-label">{{ totalTokens }} tokens ({{ message.inputTokens }} in / {{ message.outputTokens }} out)</span>
+		</div>
 	</div>
 </template>
 
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import NcProgressBar from '@nextcloud/vue/components/NcProgressBar'
 
 export default {
 	name: 'MessageBubble',
 	components: {
 		NcNoteCard,
+		NcProgressBar,
 	},
 	props: {
 		message: {
@@ -47,6 +53,17 @@ export default {
 		},
 		messageContent() {
 			return this.message.content || ''
+		},
+		hasTokens() {
+			return this.message.role === 'assistant'
+				&& (this.message.inputTokens != null || this.message.outputTokens != null)
+		},
+		totalTokens() {
+			return (this.message.inputTokens || 0) + (this.message.outputTokens || 0)
+		},
+		tokenPercent() {
+			if (this.totalTokens === 0) return 0
+			return Math.round(((this.message.outputTokens || 0) / this.totalTokens) * 100)
 		},
 	},
 	methods: {
@@ -99,5 +116,16 @@ export default {
 	border: 1px solid var(--color-border);
 	border-radius: 12px;
 	font-size: 12px;
+}
+
+.message-tokens {
+	margin-top: 8px;
+}
+
+.token-label {
+	display: block;
+	margin-top: 2px;
+	font-size: 12px;
+	color: var(--color-text-lighter);
 }
 </style>

@@ -16,6 +16,9 @@
 				<span>{{ t('aiquila', 'Thinking…') }}</span>
 			</div>
 		</div>
+		<div v-if="conversationTokens.total > 0" class="token-summary">
+			{{ t('aiquila', 'Total: {total} tokens ({input} in / {output} out)', conversationTokens) }}
+		</div>
 		<ChatInput :disabled="sending" @send="onSend" />
 	</div>
 </template>
@@ -59,6 +62,19 @@ export default {
 			deep: true,
 		},
 	},
+	computed: {
+		conversationTokens() {
+			let input = 0
+			let output = 0
+			for (const msg of this.conversation.messages) {
+				if (msg.role === 'assistant') {
+					input += msg.inputTokens || 0
+					output += msg.outputTokens || 0
+				}
+			}
+			return { total: input + output, input, output }
+		},
+	},
 	methods: {
 		t,
 		scrollToBottom() {
@@ -95,6 +111,13 @@ export default {
 	flex: 1;
 	overflow-y: auto;
 	padding: 16px;
+}
+
+.token-summary {
+	padding: 4px 16px;
+	font-size: 12px;
+	color: var(--color-text-lighter);
+	text-align: right;
 }
 
 .chat-loading {
