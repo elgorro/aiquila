@@ -41,7 +41,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.1.59",
+      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.1.63",
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"
