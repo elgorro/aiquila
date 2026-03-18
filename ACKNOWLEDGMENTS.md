@@ -2,6 +2,12 @@
 
 AIquila is built on these excellent open-source projects and services.
 
+## Design
+
+| Contributor | Role |
+|-------------|------|
+| [Petre Chikviladze](https://www.instagram.com/chikviladzepetre) | App logo design |
+
 ## Core platforms
 | Project | Version | Role |
 |---------|---------|------|
