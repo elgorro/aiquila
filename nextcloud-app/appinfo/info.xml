@@ -43,6 +43,7 @@ Built with [Claude](https://www.anthropic.com/claude) by [Anthropic](https://www
     <discussion>https://github.com/elgorro/aiquila/discussions</discussion>
     <bugs>https://github.com/elgorro/aiquila/issues</bugs>
     <repository>https://github.com/elgorro/aiquila</repository>
+    <screenshot>https://raw.githubusercontent.com/elgorro/aiquila/main/nextcloud-app/img/Appstore.png</screenshot>
     <donation>https://liberapay.com/elgorro/donate</donation>
     <dependencies>
         <php min-version="8.4"/>
