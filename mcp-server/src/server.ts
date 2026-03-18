@@ -9,6 +9,7 @@ import { appsTools } from './tools/system/apps.js';
 import { securityTools } from './tools/system/security.js';
 import { occTools } from './tools/system/occ.js';
 import { tagsTools } from './tools/system/tags.js';
+import { searchTools } from './tools/system/search.js';
 
 // Import app-specific tools
 import { tasksTools } from './tools/apps/tasks.js';
@@ -48,6 +49,7 @@ const allToolSets = [
   bookmarksTools,
   mapsTools,
   tagsTools,
+  searchTools,
   assistantTools,
 ];
 
