@@ -43,6 +43,11 @@ class Application extends App implements IBootstrap {
         if (interface_exists(\OCP\TaskProcessing\IProvider::class)) {
             $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeImageToTextProvider::class);
         }
+
+        // Register Unified Search provider for AIquila chat conversations
+        if (interface_exists(\OCP\Search\IProvider::class)) {
+            $context->registerSearchProvider(\OCA\AIquila\Search\AiquilaSearchProvider::class);
+        }
     }
 
     public function boot(IBootContext $context): void {
