@@ -4,8 +4,8 @@ Complete guide to installing and configuring the AIquila Nextcloud app.
 
 ## Prerequisites
 
-- Nextcloud 32 or higher
-- PHP 8.1 or higher with Composer
+- Nextcloud 33 or higher
+- PHP 8.4 or higher with Composer
 - Node.js 20 or higher (for building frontend)
 - npm 10 or higher
 - Claude API key from [console.anthropic.com](https://console.anthropic.com)
@@ -329,7 +329,7 @@ Need help? Check out these resources:
 
 ## Next Steps
 
-- [MCP Server Setup](mcp-installation.md) - Allow Claude Desktop to access your Nextcloud files
+- [MCP Server Setup](../mcp/setup.md) - Allow Claude Desktop to access your Nextcloud files
 - [Internal API Guide](../internal-api.md) - Integrate AIquila into your own apps
 - [Docker Development](../dev/docker-setup.md) - Set up complete development environment
 

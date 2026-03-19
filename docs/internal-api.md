@@ -98,8 +98,6 @@ $result = $aiquila->analyzeFile(
 );
 ```
 
-**Note:** File analysis is currently not fully implemented. Use `ask()` with file content for now.
-
 ### `isConfigured(?string $userId = null): bool`
 
 Check if AIquila is configured and ready to use.
@@ -165,8 +163,6 @@ $result = $aiquila->askAsync(
     true  // send notification
 );
 ```
-
-**Note:** Currently runs synchronously. Background job support coming soon.
 
 ## Use Cases
 
@@ -385,16 +381,6 @@ assert(isset($result['response']));
 ## Support
 
 For issues or questions:
-- GitHub: https://github.com/yourrepo/aiquila
+- GitHub: https://github.com/elgorro/aiquila
 - Nextcloud Forum: https://help.nextcloud.com
-- Documentation: https://github.com/yourrepo/aiquila/tree/main/docs
-
-## Changelog
-
-### v0.1.1
-- Added public IAIquila interface
-- Added AIquilaService implementation
-- Support for ask(), summarize(), analyzeFile()
-- Configuration checking with isConfigured()
-- Status reporting with getStatus()
-- Async processing support (experimental)
+- Documentation: https://github.com/elgorro/aiquila/tree/main/docs

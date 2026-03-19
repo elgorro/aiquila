@@ -1,142 +1,128 @@
-# Installation Guide
+# Getting Started
 
-AIquila provides two main components that can be installed independently:
+Choose the path that matches how you want to use AIquila.
 
-## 1. AIquila Nextcloud App
+## Path 1: Claude Desktop / Claude Code (simplest)
 
-**Recommended for most users**
+Give Claude direct access to your Nextcloud — files, calendar, tasks, contacts, mail, bookmarks, maps, notes, recipes, and more.
 
-Integrates Claude AI directly into your Nextcloud instance with:
-- 💬 **Chat Interface** - Interactive conversations at `/apps/aiquila`
-- 🤖 **Text Processing Provider** - Works with Nextcloud Assistant
-- 🔌 **Public API** - RESTful endpoints for other apps
-
-**[→ Complete Setup Guide](installation/aiquila-setup.md)**
-
-### Quick Start
+**Prerequisites:** Node.js 20+, a Nextcloud instance, a Nextcloud app password.
 
 ```bash
-# 1. Install dependencies
-cd nextcloud-app
-composer install
-npm install
-npm run build
+# 1. Run with npx (no clone needed)
+npx aiquila-mcp
 
-# 2. Deploy to Nextcloud
+# 2. Or add to Claude Desktop config (~/.config/claude/claude_desktop_config.json):
+```
+
+```json
+{
+  "mcpServers": {
+    "aiquila": {
+      "command": "npx",
+      "args": ["-y", "aiquila-mcp"],
+      "env": {
+        "NEXTCLOUD_URL": "https://cloud.example.com",
+        "NEXTCLOUD_USER": "your-username",
+        "NEXTCLOUD_PASSWORD": "your-app-password"
+      }
+    }
+  }
+}
+```
+
+```bash
+# 3. Restart Claude Desktop
+# 4. Ask Claude: "List my Nextcloud files"
+```
+
+**[Full MCP Setup Guide →](mcp/setup.md)**
+
+---
+
+## Path 2: Claude.ai (remote MCP)
+
+Connect Claude.ai to your Nextcloud via Docker + OAuth 2.0. Requires a publicly accessible server.
+
+```bash
+# 1. Clone and configure
+git clone https://github.com/elgorro/aiquila.git
+cd aiquila/docker/standalone
+cp .env.example .env
+nano .env   # Set NEXTCLOUD_URL, credentials, and MCP_AUTH_* vars
+
+# 2. Start the stack
+make up
+
+# 3. Add the MCP server URL in Claude.ai settings
+# 4. Complete OAuth login when prompted
+```
+
+**[Standalone Docker Guide →](mcp/standalone-docker.md)** | **[OAuth Setup →](mcp/oauth.md)**
+
+---
+
+## Path 3: Nextcloud App
+
+Add Claude AI directly inside your Nextcloud UI — chat interface, text processing, and public API.
+
+**Prerequisites:** Nextcloud 33+, PHP 8.4+, Claude API key.
+
+```bash
+# 1. Install from Nextcloud App Store (recommended)
+# Settings → Apps → search "AIquila" → Install
+
+# 2. Or install manually:
+cd nextcloud-app && composer install && npm install && npm run build
 cp -r nextcloud-app /path/to/nextcloud/custom_apps/aiquila
-
-# 3. Enable the app
 sudo -u www-data php occ app:enable aiquila
 
-# 4. Configure API key
-# Go to Settings → Administration → AIquila
+# 3. Configure API key: Settings → Administration → AIquila
+# 4. Open /apps/aiquila to start chatting
 ```
 
-## 2. MCP Server (Optional)
+**[Full Nextcloud App Setup →](installation/aiquila-setup.md)**
 
-**For advanced users who want Claude Desktop integration**
+---
 
-Allows Claude Desktop/Mobile to access your Nextcloud files:
-- 📁 List, read, and search files
-- ✏️ Create, update, and delete files
-- 🛠️ Execute Nextcloud OCC commands
-- 🔗 Direct integration with Claude conversations
+## Path 4: Self-hosted on Hetzner Cloud
 
-**[→ Complete MCP Setup Guide](installation/mcp-installation.md)**
-
-### Quick Start
+Single-command provisioning of a production-ready AIquila server with Traefik, CrowdSec, and TLS.
 
 ```bash
-# 1. Build MCP server
-cd mcp-server
-npm install
-npm run build
+# 1. Install the CLI
+# Download from GitHub Releases or build from source
+cd hetzner && go build -o aiquila-hetzner .
 
-# 2. Create Nextcloud app password
-# Settings → Security → Devices & sessions
+# 2. Provision a server
+./aiquila-hetzner create \
+  --stack full \
+  --mcp-domain mcp.example.com \
+  --nc-domain cloud.example.com \
+  --nc-admin-user admin \
+  --nc-admin-password "secure-password"
 
-# 3. Configure Claude Desktop
-# Edit ~/.config/claude/claude_desktop_config.json
+# 3. DNS: point both domains to the server IP
+# 4. TLS certificates are provisioned automatically
 ```
 
-## Which Should You Install?
+**[Hetzner Deployment Guide →](hetzner/README.md)**
 
-| Feature | Nextcloud App | MCP Server |
-|---------|--------------|------------|
-| Chat with Claude in Nextcloud | ✅ | ❌ |
-| Nextcloud Assistant integration | ✅ | ❌ |
-| Public API for other apps | ✅ | ❌ |
-| Claude Desktop file access | ❌ | ✅ |
-| Mobile Claude file access | ❌ | ✅ |
-| Requires API key | ✅ | Via app |
-| Installation complexity | Medium | Low |
+---
 
-**Recommendation:**
-- **Just want AI in Nextcloud?** → Install the Nextcloud app
-- **Want Claude Desktop to access files?** → Install MCP server
-- **Want both?** → Install both (they work together!)
+## Which path is right for me?
 
-## Prerequisites
+| I want to... | Path |
+|--------------|------|
+| Use Claude Desktop/Code with Nextcloud | **Path 1** — `npx aiquila-mcp` |
+| Use Claude.ai with Nextcloud | **Path 2** — Docker + OAuth |
+| Add AI features inside Nextcloud | **Path 3** — Nextcloud App |
+| Deploy everything on a fresh server | **Path 4** — Hetzner |
+| Use multiple paths together | All paths work independently and together |
 
-### For Nextcloud App
-- Nextcloud 32 or higher
-- PHP 8.1+ with Composer
-- Node.js 20+ and npm 10+
-- Claude API key from [console.anthropic.com](https://console.anthropic.com)
+## What's next?
 
-### For MCP Server
-- Node.js 20 or higher
-- npm 10 or higher
-- Nextcloud instance (any version with WebDAV)
-- Claude Desktop app
-- Nextcloud app password
-
-## Resources
-
-- 📦 [GitHub Repository](https://github.com/elgorro/aiquila)
-- 📖 [Documentation](https://github.com/elgorro/aiquila/tree/main/docs)
-- 🐛 [Report Issues](https://github.com/elgorro/aiquila/issues)
-- 💬 [Discussions](https://github.com/elgorro/aiquila/discussions)
-
-## Documentation
-
-### Installation Guides
-- **[AIquila Nextcloud App Setup](installation/aiquila-setup.md)** - Complete Nextcloud app installation
-- **[MCP Server Installation](installation/mcp-installation.md)** - Claude Desktop integration
-
-### Usage Guides
-- [Internal API Guide](internal-api.md) - Integrate AIquila into your apps
-- [Connectivity Guide](connectivity.md) - Network and connection troubleshooting
-
-### Development Guides
-- [Docker Development Setup](dev/docker-setup.md) - Development environment
-- [Development Guide](dev/development.md) - Contributing and workflow
-- [Best Practices](dev/best-practices.md) - Code quality guidelines
-- [CI/CD Setup](dev/ci-cd.md) - Continuous integration
-
-## Getting Help
-
-1. Check the relevant setup guide above
-2. Search [existing issues](https://github.com/elgorro/aiquila/issues)
-3. Ask in [discussions](https://github.com/elgorro/aiquila/discussions)
-4. Open a new issue with detailed information
-
-## Quick Troubleshooting
-
-### Nextcloud App Issues
-See the [AIquila Setup Guide - Troubleshooting](installation/aiquila-setup.md#troubleshooting) section.
-
-### MCP Server Issues
-See the [MCP Installation Guide - Troubleshooting](installation/mcp-installation.md#troubleshooting) section.
-
-## What's Next?
-
-After installation:
-
-1. **Configure your API key** in Nextcloud admin settings
-2. **Test the chat interface** at `/apps/aiquila`
-3. **Try the Nextcloud Assistant** integration
-4. **Explore the public API** for custom integrations
-5. **Set up MCP server** if you want Claude Desktop access
-
-Happy chatting with Claude! 🎉
+- **[Full Documentation](README.md)** — architecture, configuration, and all guides
+- **[MCP Tools Reference](mcp/README.md#tools-reference)** — 100+ tools across 20 modules
+- **[Internal API](internal-api.md)** — integrate AIquila into your own Nextcloud apps
+- **[Connectivity Guide](connectivity.md)** — network and connection troubleshooting

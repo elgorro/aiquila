@@ -8,7 +8,7 @@ The Docker environment provides a complete, isolated development setup with:
 
 - **Caddy 2** - Reverse proxy with automatic HTTPS (self-signed certs for dev)
 - **PostgreSQL 16** - Production-grade database
-- **Nextcloud 32** - Test instance with AIquila pre-installed from tarball
+- **Nextcloud 33** - Test instance with AIquila pre-installed from tarball
 - **Redis 7** - Caching and performance
 - **MCP Server** - Development container with hot reload (HTTP transport on port 3339)
 - **MailHog** - Email testing and debugging

@@ -54,7 +54,7 @@
 ### MCP Server
 
 - Build for production: `npm run build`
-- Use Node.js 18+ for better performance
+- Use Node.js 20+ for better performance
 - Consider caching for frequently accessed data
 - Monitor WebDAV connection health
 
@@ -82,7 +82,7 @@ Enable debug logging during development:
 
 **MCP Server:**
 ```bash
-DEBUG=* npm run dev
+LOG_LEVEL=debug npm run dev
 ```
 
 **Nextcloud:**
@@ -130,10 +130,10 @@ sudo -u www-data php occ app:update aiquila
 ### Commit Messages
 
 Use conventional commits:
-- `feat: add photo tagging support`
-- `fix: handle empty task lists`
+- `feat(mcp): add photo tagging support`
+- `fix(nextcloud): handle empty task lists`
 - `docs: update installation guide`
-- `test: add ClaudeService unit tests`
+- `test(mcp): add ClaudeService unit tests`
 
 ## Roadmap Considerations
 
