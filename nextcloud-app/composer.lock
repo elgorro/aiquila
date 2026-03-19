@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f825362c1204d74dfbcbe02dd19f6c64",
+    "content-hash": "d68fef7b82ff405f7856ff54a7c68b76",
     "packages": [
         {
             "name": "anthropic-ai/sdk",
-            "version": "v0.5.0",
+            "version": "v0.8.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/anthropics/anthropic-sdk-php.git",
-                "reference": "10fda7762a72247fdba0e7134635d7e7c26030be"
+                "reference": "7d49eb04a1b1a57e08879c94c655e7ecd506424b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/anthropics/anthropic-sdk-php/zipball/10fda7762a72247fdba0e7134635d7e7c26030be",
-                "reference": "10fda7762a72247fdba0e7134635d7e7c26030be",
+                "url": "https://api.github.com/repos/anthropics/anthropic-sdk-php/zipball/7d49eb04a1b1a57e08879c94c655e7ecd506424b",
+                "reference": "7d49eb04a1b1a57e08879c94c655e7ecd506424b",
                 "shasum": ""
             },
             "require": {
@@ -29,7 +29,9 @@
                 "psr/http-message": "^1|^2"
             },
             "require-dev": {
+                "aws/aws-sdk-php": "^3.368",
                 "friendsofphp/php-cs-fixer": "^3",
+                "google/auth": "^1.49",
                 "nyholm/psr7": "^1",
                 "pestphp/pest": "^3",
                 "php-http/mock-client": "^1",
@@ -38,6 +40,10 @@
                 "phpstan/phpstan-phpunit": "^2",
                 "phpunit/phpunit": "^11",
                 "symfony/http-client": "^7"
+            },
+            "suggest": {
+                "aws/aws-sdk-php": "Allows using the AWS Bedrock SDK",
+                "google/auth": "Allows using the Google Vertex SDK"
             },
             "type": "library",
             "autoload": {
@@ -55,9 +61,9 @@
             "description": "Anthropic PHP SDK",
             "support": {
                 "issues": "https://github.com/anthropics/anthropic-sdk-php/issues",
-                "source": "https://github.com/anthropics/anthropic-sdk-php/tree/v0.5.0"
+                "source": "https://github.com/anthropics/anthropic-sdk-php/tree/v0.8.0"
             },
-            "time": "2026-01-30T19:18:03+00:00"
+            "time": "2026-03-18T18:41:58+00:00"
         },
         {
             "name": "nyholm/psr7",
