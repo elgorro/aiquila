@@ -5,7 +5,7 @@
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `hetzner-integration-test.yml` | Manual dispatch | Full two-server E2E test |
-| `hetzner-nc-nightly.yml` | _(planned)_ nightly cron | NC image build + smoke test |
+| _(planned: snapshot caching)_ | nightly cron | NC image build + snapshot for fast integration tests |
 
 ---
 
@@ -107,9 +107,13 @@ mid-run. This prevents runaway billing from forgotten servers.
 
 ---
 
-## Roadmap: Nightly Nextcloud Builds
+## Roadmap: Nightly Infrastructure Snapshots
 
-**Motivation:** NC releases patch versions frequently. A nightly build verifies:
+> **Note:** Nightly App Store publishing (beta channel) is already handled by `nc-release.yml`
+> as part of the release pipeline. This section is about **Hetzner infrastructure snapshots**
+> for speeding up integration tests.
+
+**Motivation:** NC releases patch versions frequently. A nightly infrastructure build verifies:
 
 - The PHP 8.4 Dockerfile upgrade still compiles cleanly with the latest NC33 patch image
 - The AIquila app installs and enables without errors (`occ app:enable aiquila`)

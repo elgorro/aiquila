@@ -110,9 +110,10 @@ git push origin main
 # 4. Workflow runs automatically:
 #    - Creates tag: nc-v0.1.1
 #    - Creates GitHub Release
-#    - Waits for your approval to publish to app store
+#    - Publishes nightly to App Store beta channel (automatic)
+#    - Waits for your approval to publish stable to App Store
 
-# 5. Approve app store publishing:
+# 5. Approve stable app store publishing:
 #    Go to: https://github.com/YOUR-REPO/actions
 #    Click on the workflow run
 #    Click "Review deployments" and approve "nextcloud-appstore"
@@ -214,7 +215,8 @@ Navigate to: **Repository Settings → Secrets and variables → Actions → New
 
 ### Setup Manual Approval Gate
 
-To enable the manual approval before publishing to app store:
+To enable manual approval before publishing the **stable** release to the app store
+(nightly publishes automatically without approval):
 
 1. Go to **Repository Settings → Environments**
 2. Create new environment: `nextcloud-appstore`
@@ -222,7 +224,8 @@ To enable the manual approval before publishing to app store:
 4. Add yourself as a required reviewer
 5. Save
 
-Now the workflow will wait for your approval before publishing to the app store!
+Now the workflow will publish to the nightly/beta channel automatically, then wait
+for your approval before publishing the stable release.
 
 ### Version Requirements
 
