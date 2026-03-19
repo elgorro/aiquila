@@ -115,7 +115,7 @@ class TestableClaudeSDKService extends ClaudeSDKService {
             $p->setAccessible(true);
             $p->setValue($stub, $val);
         }
-        $usage = Usage::with(null, null, null, 10, 20, null, null);
+        $usage = Usage::with(null, null, null, null, 10, 20, null, null);
         $p = $ref->getProperty('usage');
         $p->setValue($stub, $usage);
         return $stub;
@@ -726,13 +726,13 @@ class ClaudeServiceTest extends TestCase {
 
     public function testListModelsReturnsIds(): void {
         $this->configWithApiKey();
-        $m1 = ModelInfo::with('claude-3-5-sonnet-20241022', new \DateTime(), 'Claude 3.5 Sonnet');
-        $m2 = ModelInfo::with('claude-3-haiku-20240307',    new \DateTime(), 'Claude 3 Haiku');
+        $m1 = ModelInfo::with(ClaudeModels::SONNET_4_6, null, new \DateTime(), 'Claude Sonnet 4.6', null, null);
+        $m2 = ModelInfo::with(ClaudeModels::HAIKU_4_5, null, new \DateTime(), 'Claude Haiku 4.5', null, null);
         $this->testable->setListModelsItems([$m1, $m2]);
 
         $result = $this->testable->listModels('testuser');
 
-        $this->assertSame(['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'], $result);
+        $this->assertSame([ClaudeModels::SONNET_4_6, ClaudeModels::HAIKU_4_5], $result);
     }
 
     public function testListModelsNoApiKeyReturnsNull(): void {
@@ -758,7 +758,7 @@ class ClaudeServiceTest extends TestCase {
 
     public function testRetrieveModelReturnsInfo(): void {
         $this->configWithApiKey();
-        $info = ModelInfo::with('claude-sonnet-4-6', new \DateTime(), 'Claude Sonnet 4.6');
+        $info = ModelInfo::with(ClaudeModels::SONNET_4_6, null, new \DateTime(), 'Claude Sonnet 4.6', null, null);
         $this->testable->setRetrieveModelInfo($info);
 
         $result = $this->testable->retrieveModel('claude-sonnet-4-6', 'testuser');

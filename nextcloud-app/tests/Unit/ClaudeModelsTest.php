@@ -51,7 +51,8 @@ class ClaudeModelsTest extends TestCase {
     public function testGetModelParamsForOpus46IncludesThinkingAndEffort(): void {
         $params = ClaudeModels::getModelParams(ClaudeModels::OPUS_4_6);
         $this->assertArrayHasKey('thinking', $params);
-        $this->assertArrayHasKey('effort',   $params);
+        $this->assertArrayHasKey('outputConfig', $params);
+        $this->assertArrayHasKey('effort', $params['outputConfig']);
     }
 
     public function testGetMaxTokenCeilingForSonnet46(): void {
@@ -62,16 +63,16 @@ class ClaudeModelsTest extends TestCase {
         $params = ClaudeModels::getModelParams(ClaudeModels::SONNET_4_6);
         $this->assertArrayHasKey('thinking', $params);
         $this->assertEquals(['type' => 'adaptive'], $params['thinking']);
-        $this->assertArrayHasKey('effort', $params);
-        $this->assertEquals('medium', $params['effort']);
+        $this->assertArrayHasKey('outputConfig', $params);
+        $this->assertEquals('medium', $params['outputConfig']['effort']);
     }
 
     public function testGetModelParamsEffortLevels(): void {
         $opus = ClaudeModels::getModelParams(ClaudeModels::OPUS_4_6);
-        $this->assertEquals('high', $opus['effort']);
+        $this->assertEquals('high', $opus['outputConfig']['effort']);
 
         $sonnet = ClaudeModels::getModelParams(ClaudeModels::SONNET_4_6);
-        $this->assertEquals('medium', $sonnet['effort']);
+        $this->assertEquals('medium', $sonnet['outputConfig']['effort']);
     }
 
     public function testGetModelParamsForOtherModelsIsEmpty(): void {
