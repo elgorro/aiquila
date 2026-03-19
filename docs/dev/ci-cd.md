@@ -10,6 +10,8 @@ AIquila uses GitHub Actions for continuous integration and deployment.
 | `lint.yml` | Push/PR to main | Code quality checks |
 | `mcp-release.yml` | Version change in `mcp-server/` | Auto-release MCP server (GitHub Release + Docker + npm + MCP Registry) |
 | `nc-release.yml` | Version change in `nextcloud-app/` | Auto-release & publish NC app |
+| `hetzner-release.yml` | Version change in `hetzner/` | Auto-release Hetzner CLI (GitHub Release + cosign) |
+| `hetzner-integration-test.yml` | Manual dispatch | Full two-server E2E integration test |
 
 ## Test Workflow (`test.yml`)
 
@@ -115,6 +117,47 @@ git push origin main
 #    Click "Review deployments" and approve "nextcloud-appstore"
 ```
 
+### Hetzner CLI Release (`hetzner-release.yml`)
+
+**Triggers:** Automatically when version changes in `hetzner/VERSION` on push to `main`
+
+**What it does:**
+1. Detects version change in `hetzner/VERSION`
+2. Builds Linux amd64/arm64 Go binaries
+3. Generates SHA-256 checksums
+4. Signs all artifacts with cosign (GitHub OIDC — no secrets needed)
+5. Creates tag `hetzner-vX.X.X` and GitHub Release
+
+**How to release:**
+```bash
+# 1. Bump version in hetzner/VERSION
+echo "1.2.0" > hetzner/VERSION
+
+# 2. Commit and push to main
+git add hetzner/VERSION
+git commit -m "chore(hetzner): bump CLI to v1.2.0"
+git push origin main
+
+# 3. Workflow runs automatically and creates:
+#    - Tag: hetzner-v1.2.0
+#    - GitHub Release with signed binaries + checksums
+```
+
+### Hetzner Integration Test (`hetzner-integration-test.yml`)
+
+**Triggers:** Manual dispatch (`workflow_dispatch`)
+
+**What it does:**
+1. Provisions two Hetzner cloud servers:
+   - Nextcloud server (`cpx21`) — Nextcloud with the AIquila app installed
+   - MCP server (`cpx11`) — MCP server pointing at the Nextcloud instance
+2. Runs 6 test groups: `oauth`, `tools`, `mcp_protocol`, `nc_app`, `connector` (off by default), `infra`
+3. Always destroys servers on completion (orphan cleanup ensures no leaked resources)
+
+**Required secrets:** `HCLOUD_TOKEN`, `HETZNER_DNS_TOKEN`, `ANTHROPIC_API_KEY`
+
+See [`docs/hetzner/ci-flow.md`](../hetzner/ci-flow.md) for the detailed timeline and cost breakdown.
+
 ### Secrets
 
 #### For MCP Server Publishing (One-time setup — no secrets required)
@@ -159,6 +202,14 @@ Navigate to: **Repository Settings → Secrets and variables → Actions → New
 
 4. **`NEXTCLOUD_APPSTORE_TOKEN`** - Your app store API token
    - Get from: [apps.nextcloud.com](https://apps.nextcloud.com) → Account Settings → API Token
+
+#### For Hetzner Integration Test (Required for E2E tests)
+
+5. **`HCLOUD_TOKEN`** — Hetzner Cloud API token (used to provision/destroy test servers)
+
+6. **`HETZNER_DNS_TOKEN`** — Hetzner DNS API token (used for DNS records during provisioning)
+
+7. **`ANTHROPIC_API_KEY`** — Anthropic API key (used by the connector test group)
 
 ### Setup Manual Approval Gate
 
