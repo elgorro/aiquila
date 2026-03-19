@@ -19,7 +19,7 @@ use OCP\AppFramework\Db\Entity;
  * @method int getUpdatedAt()
  * @method void setUpdatedAt(int $updatedAt)
  */
-class Conversation extends Entity {
+class Conversation extends Entity implements \JsonSerializable {
     protected string $userId = '';
     protected ?string $title = null;
     protected string $model = '';
@@ -32,5 +32,16 @@ class Conversation extends Entity {
         $this->addType('model', 'string');
         $this->addType('createdAt', 'integer');
         $this->addType('updatedAt', 'integer');
+    }
+
+    public function jsonSerialize(): array {
+        return [
+            'id' => $this->getId(),
+            'userId' => $this->getUserId(),
+            'title' => $this->getTitle(),
+            'model' => $this->getModel(),
+            'createdAt' => $this->getCreatedAt(),
+            'updatedAt' => $this->getUpdatedAt(),
+        ];
     }
 }
