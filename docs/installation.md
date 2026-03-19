@@ -110,6 +110,41 @@ cd hetzner && go build -o aiquila-hetzner .
 
 ---
 
+## Path 5: Claude Mobile App (voice)
+
+Use Claude on your phone with voice input to manage Nextcloud hands-free — list tasks, create notes, check your calendar, all by speaking.
+
+**Prerequisites:** Same as Path 2 (Docker + OAuth on a publicly accessible server), plus the Claude mobile app (iOS/Android).
+
+```bash
+# 1. Set up the MCP server with OAuth (see Path 2)
+#    → Standalone Docker Guide + OAuth Setup
+
+# 2. Install the Claude app on iOS or Android
+
+# 3. In the Claude app, go to Settings → MCP Servers
+#    Add your MCP server URL (e.g. https://mcp.example.com/mcp)
+#    Complete the OAuth login when prompted
+
+# 4. (Optional) Set up voice input:
+```
+
+**Voice input options:**
+
+- **FUTO Voice** (recommended, open-source) — Install from [F-Droid](https://f-droid.org) or Play Store, set as your default keyboard, then tap the microphone icon in the Claude app to dictate.
+- **Google Assistant** — Use "Hey Google, ask Claude..." or the share-to-Claude workflow on Android.
+- **iOS Dictation** — Use the built-in dictation button on the iOS keyboard.
+
+**Example voice commands:**
+- "List my tasks for today"
+- "Create a note called grocery list with milk, eggs, and bread"
+- "What's on my calendar tomorrow?"
+- "Search my files for the project proposal"
+
+**[Standalone Docker Guide →](mcp/standalone-docker.md)** | **[OAuth Setup →](mcp/oauth.md)**
+
+---
+
 ## Which path is right for me?
 
 | I want to... | Path |
@@ -118,6 +153,7 @@ cd hetzner && go build -o aiquila-hetzner .
 | Use Claude.ai with Nextcloud | **Path 2** — Docker + OAuth |
 | Add AI features inside Nextcloud | **Path 3** — Nextcloud App |
 | Deploy everything on a fresh server | **Path 4** — Hetzner |
+| Use Claude on my phone with voice | **Path 5** — Claude Mobile + Voice |
 | Use multiple paths together | All paths work independently and together |
 
 ## What's next?

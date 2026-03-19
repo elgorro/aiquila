@@ -4,11 +4,12 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 
 ## Getting Started
 
-**[Getting Started Guide](installation.md)** — four paths to get up and running:
+**[Getting Started Guide](installation.md)** — five paths to get up and running:
 1. **Claude Desktop / Claude Code** — `npx aiquila-mcp` (simplest)
 2. **Claude.ai** — Docker + OAuth remote MCP
 3. **Nextcloud App** — AI inside Nextcloud UI
 4. **Hetzner Cloud** — single-command production deploy
+5. **Claude Mobile App** — voice-driven Nextcloud via Claude app
 
 ## MCP Server
 
