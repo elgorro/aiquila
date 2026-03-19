@@ -1,6 +1,6 @@
 # AIquila MCP Server
 
-MCP (Model Context Protocol) server that gives Claude full access to your Nextcloud instance — files, calendar, tasks, contacts, mail, maps, bookmarks, notes, and more. 113 tools across 18 categories.
+MCP (Model Context Protocol) server that gives Claude full access to your Nextcloud instance — files, calendar, tasks, contacts, mail, maps, bookmarks, notes, and more. 126 tools across 20 categories.
 
 ## Quick Start
 
@@ -26,33 +26,35 @@ Add to `~/.config/claude/claude_desktop_config.json`:
 
 Generate an App Password in Nextcloud: **Settings → Security → Devices & sessions**.
 
-### Docker / Claude.ai (HTTP transport)
+### Docker / Claude.ai / Claude Mobile (HTTP transport)
 
-See the [Docker setup guide](https://github.com/elgorro/aiquila/blob/main/docs/mcp/setup.md#docker--claudeai-http-transport) for running AIquila as an HTTP server with OAuth for Claude.ai.
+See the [Docker setup guide](https://github.com/elgorro/aiquila/blob/main/docs/mcp/setup.md#docker--claudeai-http-transport) for running AIquila as an HTTP server with OAuth for Claude.ai and Claude Mobile.
 
 ## What It Can Do
 
 | Category | Tools |
 |----------|------:|
-| Files | 8 |
-| Status & Diagnostics | 2 |
-| App Management | 4 |
+| Files | 11 |
+| Status & Diagnostics | 3 |
+| App Management | 6 |
 | Tags | 6 |
 | Security | 2 |
-| Shares | 1 |
+| Search | 2 |
 | OCC Command | 1 |
+| Shares | 4 |
 | Tasks | 6 |
 | Calendar | 6 |
-| Notes | 3 |
+| Notes | 5 |
 | Contacts | 6 |
 | Cookbook | 6 |
 | Bookmarks | 13 |
 | Mail | 8 |
-| Maps | 24 |
+| Maps | 26 |
+| Assistant / AI | 4 |
 | Users | 4 |
 | Groups | 4 |
 | AIquila | 3 |
-| **Total** | **113** |
+| **Total** | **126** |
 
 ## Configuration
 
@@ -77,7 +79,7 @@ Optional Nextcloud apps unlock additional tool categories: Tasks, Calendar, Cont
 ## Documentation
 
 - [Setup Guide](https://github.com/elgorro/aiquila/blob/main/docs/mcp/setup.md) — detailed installation and configuration
-- [Tools Reference](https://github.com/elgorro/aiquila/blob/main/docs/mcp/README.md) — all 113 tools documented
+- [Tools Reference](https://github.com/elgorro/aiquila/blob/main/docs/mcp/README.md) — all 126 tools documented
 - [Architecture](https://github.com/elgorro/aiquila/blob/main/docs/dev/mcp-server-architecture.md) — design and internals
 - [Full Documentation](https://github.com/elgorro/aiquila/blob/main/docs/) — complete docs index
 
