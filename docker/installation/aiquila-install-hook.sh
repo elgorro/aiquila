@@ -9,7 +9,7 @@ APPS_DIR="/var/www/html/custom_apps"
 
 occ() {
     if [ "$(id -u)" = "0" ]; then
-        gosu www-data php /var/www/html/occ "$@"
+        su -p www-data -s /bin/sh -c "php /var/www/html/occ $*"
     else
         php /var/www/html/occ "$@"
     fi

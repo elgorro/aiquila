@@ -4,18 +4,26 @@
     <id>aiquila</id>
     <name>AIquila</name>
     <namespace>AIquila</namespace>
-    <summary>Claude AI Integration for Nextcloud</summary>
+    <summary>Connect Nextcloud with Claude AI — chat, MCP tools, and voice</summary>
     <description><![CDATA[
-**AIquila** brings [Claude AI](https://www.anthropic.com/claude) capabilities directly into your [Nextcloud](https://nextcloud.com) instance — private, self-hosted, and under your control.
+**AIquila** connects your [Nextcloud](https://nextcloud.com) with [Claude AI](https://www.anthropic.com/claude) — private, self-hosted, and under your control.
 
-> **Early Release** — This app is under active development. Features and APIs may change. Feedback and contributions are welcome.
-
-### Features
+### Nextcloud App
 
 - **Chat** — Converse with Claude about your files and documents
 - **Summarize** — Generate concise summaries of any document
 - **Create & Edit** — Draft, rewrite, and refine content with AI assistance
 - **Text Tools** — Spellcheck, rephrase, and improve your writing
+
+### MCP Server
+
+AIquila includes a [Model Context Protocol](https://modelcontextprotocol.io) server with 100+ tools that gives Claude Desktop, Claude Code, Claude.ai, and the Claude mobile app direct access to your Nextcloud:
+
+- **Files** — Browse, read, write, search, and share
+- **Calendar & Tasks** — View, create, and manage events and to-dos
+- **Contacts & Mail** — Read and manage address books, accounts, and messages
+- **Notes & Recipes** — Create and edit Markdown notes and recipes
+- **Bookmarks & Maps** — Manage bookmarks, GPS tracks, favorites, and photos
 
 ### Resources
 
@@ -26,9 +34,9 @@
 
 ---
 
-Built with [Claude](https://www.anthropic.com/claude) by [Anthropic](https://www.anthropic.com). Made possible by the [Nextcloud](https://nextcloud.com) platform and its open-source community. Thank you.
+Made possible by [Claude](https://www.anthropic.com/claude) from [Anthropic](https://www.anthropic.com) and the [Nextcloud](https://nextcloud.com) open-source community.
     ]]></description>
-    <version>0.1.66</version>
+    <version>0.1.67</version>
     <licence>AGPL-3.0-or-later</licence>
     <author mail="aiquila@mailbox.org">elgorro</author>
     <documentation>

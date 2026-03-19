@@ -18,75 +18,212 @@ The Model Context Protocol (MCP) is an open standard developed by Anthropic that
 
 ### System Tools
 Core system operations via WebDAV and OCC:
-- **File Operations** (WebDAV) - List, read, write, create, and delete files and folders
-- **System Status** (OCC) - Monitor system status and run configuration checks
-- **App Management** (OCC) - List, enable, and disable Nextcloud apps
-- **Security** (OCC) - Verify system and app integrity
+- **File Operations** (WebDAV) — List, read, write, move, copy, search, and delete files and folders
+- **File Analysis** — Read binary files (images, PDFs) and analyze images with Claude vision
+- **System Status** (OCC) — Monitor system status, local time, and run configuration checks
+- **App Management** (OCC) — List, enable, disable, install, and uninstall Nextcloud apps
+- **Security** (OCC) — Verify system and app integrity
+- **Search** — Unified search across all Nextcloud apps
+- **OCC** — Execute arbitrary Nextcloud CLI commands
 
 ### App Integrations
 Nextcloud apps and administration:
-- **Tasks** - Create and manage tasks via CalDAV
-- **Cookbook** - Add and manage recipes
-- **Notes** - Create markdown notes
-- **Users** - Manage user accounts (list, info, enable, disable)
-- **Groups** - Manage groups and memberships
-- **Shares** - List and audit file shares
-- **AIquila** - Configure and test Claude integration
+- **Calendar** — Full CRUD for events with recurrence, attendees, and alarms (CalDAV)
+- **Tasks** — Full CRUD for tasks with subtasks, priorities, and categories (CalDAV)
+- **Contacts** — Full CRUD for contacts with structured fields (CardDAV)
+- **Mail** — Email accounts, mailboxes, messages, send, and flags
+- **Bookmarks** — Bookmark CRUD, folder hierarchy, and tag management
+- **Maps** — Favorites, GPS devices/tracks, photo geotagging, custom maps, import/export
+- **Notes** — Markdown notes with categories and search
+- **Cookbook** — Recipe management with schema.org format
+- **Assistant** — Nextcloud AI task processing and image generation
+- **Shares** — File share CRUD and auditing
+- **Users** — Manage user accounts
+- **Groups** — Manage groups and memberships
+- **File Tags** — Personal and system tag management
+- **AIquila** — Configure and test Claude integration
 
-**Total: 28 tools across 11 modules**
+**Total: 100+ tools across 20 modules**
 
 ## Tools Reference
 
 ### System Tools
 
-#### File Operations
+#### File Operations (11 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_files` | List files and folders | [System Tools](tools/system-tools.md#list_files) |
-| `read_file` | Read file contents | [System Tools](tools/system-tools.md#read_file) |
+| `read_file` | Read file contents (text) | [System Tools](tools/system-tools.md#read_file) |
+| `get_file_content` | Read file with mime type (text/base64/image) | [System Tools](tools/system-tools.md) |
 | `write_file` | Create or update files | [System Tools](tools/system-tools.md#write_file) |
 | `create_folder` | Create folders | [System Tools](tools/system-tools.md#create_folder) |
 | `delete` | Delete files or folders | [System Tools](tools/system-tools.md#delete) |
+| `move_file` | Move or rename files/folders | [System Tools](tools/system-tools.md) |
+| `copy_file` | Copy files/folders | [System Tools](tools/system-tools.md) |
+| `get_file_info` | Get file metadata | [System Tools](tools/system-tools.md) |
+| `search_files` | Search files by name/mime type | [System Tools](tools/system-tools.md) |
+| `analyze_image` | Analyze image with Claude vision | [System Tools](tools/system-tools.md) |
 
-#### System Status & Diagnostics
+#### System Status & Diagnostics (3 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `system_status` | Get system status | [System Tools](tools/system-tools.md#system_status) |
 | `run_setup_checks` | Run configuration checks | [System Tools](tools/system-tools.md#run_setup_checks) |
+| `get_local_time` | Get server local time & timezone | [System Tools](tools/system-tools.md) |
 
-#### App Management
+#### App Management (6 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_apps` | List installed apps | [System Tools](tools/system-tools.md#list_apps) |
 | `get_app_info` | Get app details | [System Tools](tools/system-tools.md#get_app_info) |
 | `enable_app` | Enable an app | [System Tools](tools/system-tools.md#enable_app) |
 | `disable_app` | Disable an app | [System Tools](tools/system-tools.md#disable_app) |
+| `install_app` | Install an app from the App Store | [System Tools](tools/system-tools.md) |
+| `uninstall_app` | Remove an app | [System Tools](tools/system-tools.md) |
 
-#### Security & Integrity
+#### Security & Integrity (2 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `check_core_integrity` | Check core system integrity | [System Tools](tools/system-tools.md#check_core_integrity) |
 | `check_app_integrity` | Check app integrity | [System Tools](tools/system-tools.md#check_app_integrity) |
 
+#### Search (2 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `unified_search` | Search across all NC apps | [System Tools](tools/system-tools.md#unified_search) |
+| `list_search_providers` | List available search providers | [System Tools](tools/system-tools.md#list_search_providers) |
+
+#### OCC (1 tool)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `run_occ` | Execute any OCC command | [System Tools](tools/system-tools.md) |
+
 ### App Tools
 
-#### Nextcloud Tasks
+#### Calendar (6 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_calendars` | List all calendars | [Calendar](tools/apps/calendar.md#list_calendars) |
+| `list_events` | List events in a time range | [Calendar](tools/apps/calendar.md#list_events) |
+| `get_event` | Get event details by UID | [Calendar](tools/apps/calendar.md#get_event) |
+| `create_event` | Create an event | [Calendar](tools/apps/calendar.md#create_event) |
+| `update_event` | Update an event | [Calendar](tools/apps/calendar.md#update_event) |
+| `delete_event` | Delete an event | [Calendar](tools/apps/calendar.md#delete_event) |
+
+#### Tasks (6 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_task_lists` | List all task lists | [Tasks](tools/apps/tasks.md#list_task_lists) |
+| `list_tasks` | List tasks with details | [Tasks](tools/apps/tasks.md#list_tasks) |
 | `create_task` | Create a new task | [Tasks](tools/apps/tasks.md#create_task) |
+| `update_task` | Update a task | [Tasks](tools/apps/tasks.md#update_task) |
+| `complete_task` | Mark task complete/reopen | [Tasks](tools/apps/tasks.md#complete_task) |
+| `delete_task` | Delete a task | [Tasks](tools/apps/tasks.md#delete_task) |
 
-#### Nextcloud Cookbook
+#### Contacts (6 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `add_recipe` | Add a recipe | [Cookbook](tools/apps/cookbook.md#add_recipe) |
+| `list_address_books` | List address books | [Contacts](tools/apps/contacts.md#list_address_books) |
+| `list_contacts` | List/search contacts | [Contacts](tools/apps/contacts.md#list_contacts) |
+| `get_contact` | Get contact details | [Contacts](tools/apps/contacts.md#get_contact) |
+| `create_contact` | Create a contact | [Contacts](tools/apps/contacts.md#create_contact) |
+| `update_contact` | Update a contact | [Contacts](tools/apps/contacts.md#update_contact) |
+| `delete_contact` | Delete a contact | [Contacts](tools/apps/contacts.md#delete_contact) |
 
-#### Nextcloud Notes
+#### Mail (8 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
+| `list_mail_accounts` | List email accounts | [Mail](tools/apps/mail.md#list_mail_accounts) |
+| `list_mailboxes` | List mailboxes/folders | [Mail](tools/apps/mail.md#list_mailboxes) |
+| `list_messages` | List messages in a mailbox | [Mail](tools/apps/mail.md#list_messages) |
+| `read_message` | Read full message content | [Mail](tools/apps/mail.md#read_message) |
+| `send_message` | Send an email | [Mail](tools/apps/mail.md#send_message) |
+| `delete_message` | Delete a message | [Mail](tools/apps/mail.md#delete_message) |
+| `move_message` | Move message to another mailbox | [Mail](tools/apps/mail.md#move_message) |
+| `set_message_flags` | Set read/star/junk flags | [Mail](tools/apps/mail.md#set_message_flags) |
+
+#### Bookmarks (13 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_bookmarks` | List/search bookmarks | [Bookmarks](tools/apps/bookmarks.md#list_bookmarks) |
+| `get_bookmark` | Get bookmark details | [Bookmarks](tools/apps/bookmarks.md#get_bookmark) |
+| `create_bookmark` | Create a bookmark | [Bookmarks](tools/apps/bookmarks.md#create_bookmark) |
+| `update_bookmark` | Update a bookmark | [Bookmarks](tools/apps/bookmarks.md#update_bookmark) |
+| `delete_bookmark` | Delete a bookmark | [Bookmarks](tools/apps/bookmarks.md#delete_bookmark) |
+| `list_bookmark_folders` | List folder hierarchy | [Bookmarks](tools/apps/bookmarks.md#list_bookmark_folders) |
+| `get_bookmark_folder_contents` | Get folder contents | [Bookmarks](tools/apps/bookmarks.md#get_bookmark_folder_contents) |
+| `create_bookmark_folder` | Create a folder | [Bookmarks](tools/apps/bookmarks.md#create_bookmark_folder) |
+| `update_bookmark_folder` | Rename/move a folder | [Bookmarks](tools/apps/bookmarks.md#update_bookmark_folder) |
+| `delete_bookmark_folder` | Delete a folder | [Bookmarks](tools/apps/bookmarks.md#delete_bookmark_folder) |
+| `list_bookmark_tags` | List all tags | [Bookmarks](tools/apps/bookmarks.md#list_bookmark_tags) |
+| `rename_bookmark_tag` | Rename a tag | [Bookmarks](tools/apps/bookmarks.md#rename_bookmark_tag) |
+| `delete_bookmark_tag` | Delete a tag | [Bookmarks](tools/apps/bookmarks.md#delete_bookmark_tag) |
+
+#### Maps (26 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_map_favorites` | List saved locations | [Maps](tools/apps/maps.md#list_map_favorites) |
+| `create_map_favorite` | Create a favorite | [Maps](tools/apps/maps.md#create_map_favorite) |
+| `update_map_favorite` | Update a favorite | [Maps](tools/apps/maps.md#update_map_favorite) |
+| `delete_map_favorite` | Delete a favorite | [Maps](tools/apps/maps.md#delete_map_favorite) |
+| `export_map_favorites` | Export favorites as GPX | [Maps](tools/apps/maps.md#export_map_favorites) |
+| `import_map_favorites` | Import favorites from file | [Maps](tools/apps/maps.md#import_map_favorites) |
+| `list_map_devices` | List GPS devices | [Maps](tools/apps/maps.md#list_map_devices) |
+| `get_map_device_points` | Get device location history | [Maps](tools/apps/maps.md#get_map_device_points) |
+| `add_map_device_point` | Log a GPS point | [Maps](tools/apps/maps.md#add_map_device_point) |
+| `update_map_device` | Update device color | [Maps](tools/apps/maps.md#update_map_device) |
+| `delete_map_device` | Delete a device | [Maps](tools/apps/maps.md#delete_map_device) |
+| `export_map_devices` | Export device data as GPX | [Maps](tools/apps/maps.md#export_map_devices) |
+| `import_map_devices` | Import device data | [Maps](tools/apps/maps.md#import_map_devices) |
+| `list_map_tracks` | List GPS tracks | [Maps](tools/apps/maps.md#list_map_tracks) |
+| `get_map_track` | Get track details/content | [Maps](tools/apps/maps.md#get_map_track) |
+| `update_map_track` | Update track metadata | [Maps](tools/apps/maps.md#update_map_track) |
+| `export_map_route` | Export route as GPX | [Maps](tools/apps/maps.md#export_map_route) |
+| `list_map_photos` | List geolocated photos | [Maps](tools/apps/maps.md#list_map_photos) |
+| `list_map_photos_nonlocalized` | List photos without GPS | [Maps](tools/apps/maps.md#list_map_photos_nonlocalized) |
+| `place_map_photos` | Set GPS coords on photos | [Maps](tools/apps/maps.md#place_map_photos) |
+| `reset_map_photo_coords` | Remove GPS from photos | [Maps](tools/apps/maps.md#reset_map_photo_coords) |
+| `list_maps` | List custom maps | [Maps](tools/apps/maps.md#list_maps) |
+| `create_map` | Create a custom map | [Maps](tools/apps/maps.md#create_map) |
+| `update_map` | Update a custom map | [Maps](tools/apps/maps.md#update_map) |
+| `delete_map` | Delete a custom map | [Maps](tools/apps/maps.md#delete_map) |
+
+#### Notes (5 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_notes` | List all notes | [Notes](tools/apps/notes.md#list_notes) |
+| `get_note` | Get note content | [Notes](tools/apps/notes.md#get_note) |
 | `create_note` | Create a note | [Notes](tools/apps/notes.md#create_note) |
+| `update_note` | Update a note | [Notes](tools/apps/notes.md#update_note) |
+| `delete_note` | Delete a note | [Notes](tools/apps/notes.md#delete_note) |
 
-#### Nextcloud User Management
+#### Cookbook (6 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_recipes` | List/search recipes | [Cookbook](tools/apps/cookbook.md#list_recipes) |
+| `list_recipe_categories` | List recipe categories | [Cookbook](tools/apps/cookbook.md#list_recipe_categories) |
+| `get_recipe` | Get full recipe details | [Cookbook](tools/apps/cookbook.md#get_recipe) |
+| `create_recipe` | Create a recipe | [Cookbook](tools/apps/cookbook.md#create_recipe) |
+| `update_recipe` | Update a recipe | [Cookbook](tools/apps/cookbook.md#update_recipe) |
+| `delete_recipe` | Delete a recipe | [Cookbook](tools/apps/cookbook.md#delete_recipe) |
+
+#### Assistant / AI (4 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_text_tasks` | List available AI task types | [Assistant](tools/apps/assistant.md#list_text_tasks) |
+| `process_text` | Submit text processing task | [Assistant](tools/apps/assistant.md#process_text) |
+| `get_task_result` | Get AI task status/result | [Assistant](tools/apps/assistant.md#get_task_result) |
+| `generate_image` | Generate image from prompt | [Assistant](tools/apps/assistant.md#generate_image) |
+
+#### Shares (4 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_shares` | List file shares | [Shares](tools/apps/shares.md#list_shares) |
+| `create_share` | Create a share | [Shares](tools/apps/shares.md#create_share) |
+| `update_share` | Update a share | [Shares](tools/apps/shares.md#update_share) |
+| `delete_share` | Delete a share | [Shares](tools/apps/shares.md#delete_share) |
+
+#### Users (4 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_users` | List all users | [Users](tools/apps/users.md#list_users) |
@@ -94,7 +231,7 @@ Nextcloud apps and administration:
 | `enable_user` | Enable a user | [Users](tools/apps/users.md#enable_user) |
 | `disable_user` | Disable a user | [Users](tools/apps/users.md#disable_user) |
 
-#### Nextcloud Group Management
+#### Groups (4 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_groups` | List all groups | [Groups](tools/apps/groups.md#list_groups) |
@@ -102,12 +239,17 @@ Nextcloud apps and administration:
 | `add_user_to_group` | Add user to group | [Groups](tools/apps/groups.md#add_user_to_group) |
 | `remove_user_from_group` | Remove user from group | [Groups](tools/apps/groups.md#remove_user_from_group) |
 
-#### Nextcloud Shares
+#### File Tags (4 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `list_shares` | List file shares | [Shares](tools/apps/shares.md#list_shares) |
+| `get_file_tags` | Get tags on a file | [System Tools](tools/system-tools.md) |
+| `set_file_tags` | Set tags on a file | [System Tools](tools/system-tools.md) |
+| `list_system_tags` | List all system tags | [System Tools](tools/system-tools.md) |
+| `create_system_tag` | Create a system tag | [System Tools](tools/system-tools.md) |
+| `assign_system_tag` | Assign system tag to file | [System Tools](tools/system-tools.md) |
+| `remove_system_tag` | Remove system tag from file | [System Tools](tools/system-tools.md) |
 
-#### AIquila Internal
+#### AIquila Internal (3 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `aiquila_show_config` | Show configuration | [AIquila](tools/apps/aiquila.md#aiquila_show_config) |
@@ -128,18 +270,27 @@ mcp-server/
 │   └── tools/
 │       ├── types.ts         # Shared type definitions
 │       ├── system/          # System-level tools
-│       │   ├── files.ts     # File operations (5 tools)
-│       │   ├── status.ts    # System status (2 tools)
-│       │   ├── apps.ts      # App management (4 tools)
-│       │   └── security.ts  # Security checks (2 tools)
+│       │   ├── files.ts     # File operations (11 tools)
+│       │   ├── status.ts    # System status (3 tools)
+│       │   ├── apps.ts      # App management (6 tools)
+│       │   ├── security.ts  # Security checks (2 tools)
+│       │   ├── search.ts    # Unified search (2 tools)
+│       │   └── occ.ts       # OCC command execution (1 tool)
 │       └── apps/            # App-specific tools
-│           ├── tasks.ts     # Nextcloud Tasks (2 tools)
-│           ├── cookbook.ts  # Nextcloud Cookbook (1 tool)
-│           ├── notes.ts     # Nextcloud Notes (1 tool)
-│           ├── users.ts     # User Management (4 tools)
-│           ├── groups.ts    # Group Management (4 tools)
-│           ├── shares.ts    # Share Management (1 tool)
-│           └── aiquila.ts   # AIquila internal (3 tools)
+│           ├── calendar.ts  # Calendar events (6 tools)
+│           ├── tasks.ts     # Tasks via CalDAV (6 tools)
+│           ├── contacts.ts  # Contacts via CardDAV (6 tools)
+│           ├── mail.ts      # Email management (8 tools)
+│           ├── bookmarks.ts # Bookmarks, folders, tags (13 tools)
+│           ├── maps.ts      # Maps, GPS, tracks, photos (26 tools)
+│           ├── notes.ts     # Markdown notes (5 tools)
+│           ├── cookbook.ts   # Recipes (6 tools)
+│           ├── assistant.ts # NC AI task processing (4 tools)
+│           ├── shares.ts    # File sharing (4 tools)
+│           ├── users.ts     # User management (4 tools)
+│           ├── groups.ts    # Group management (4 tools)
+│           ├── tags.ts      # File tagging (6 tools)
+│           └── aiquila.ts   # AIquila config/test (3 tools)
 ```
 
 For developers looking to extend the server, see:
@@ -222,10 +373,6 @@ Ask Claude: "Audit all public link shares"
 - **Issues**: Report bugs at [GitHub Issues](https://github.com/elgorro/aiquila/issues)
 - **Development**: See [docs/dev/](../dev/) for developer documentation
 - **Nextcloud**: Refer to [Nextcloud documentation](https://docs.nextcloud.com/) for app-specific features
-
-## Version
-
-Current version: **0.1.1**
 
 ## License
 

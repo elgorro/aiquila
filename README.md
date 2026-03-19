@@ -21,7 +21,17 @@ AIquila has three components that can be used independently or together:
 
 ## Getting Started
 
-- [Installation Guide](docs/installation.md) — set up AIquila for the first time
+Pick the path that fits your setup:
+
+| Path | What you get | Guide |
+|------|-------------|-------|
+| `npx aiquila-mcp` | Claude Desktop/Code + Nextcloud | [Quick start](docs/installation.md#path-1-claude-desktop--claude-code-simplest) |
+| Docker + OAuth | Claude.ai + Nextcloud | [Quick start](docs/installation.md#path-2-claudeai-remote-mcp) |
+| Nextcloud App | AI inside Nextcloud UI | [Quick start](docs/installation.md#path-3-nextcloud-app) |
+| Hetzner Cloud | Full production deploy | [Quick start](docs/installation.md#path-4-self-hosted-on-hetzner-cloud) |
+| Claude Mobile + Voice | Phone + Nextcloud hands-free | [Quick start](docs/installation.md#path-5-claude-mobile-app-voice) |
+
+- [Getting Started Guide](docs/installation.md) — all five paths with step-by-step instructions
 - [Full Documentation](docs/README.md) — architecture, configuration, and advanced topics
 
 ## License

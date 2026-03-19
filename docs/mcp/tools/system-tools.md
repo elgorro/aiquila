@@ -411,6 +411,50 @@ Ask Claude: "Has the photos app been modified?"
 
 ---
 
+## Search Tools
+
+Tools for searching across all Nextcloud apps via the Unified Search API.
+
+### unified_search
+
+Search across all Nextcloud apps (files, calendar, contacts, mail, notes, etc.) using Unified Search. Optionally filter by a specific provider ID.
+
+**Parameters:**
+- `query` (string, required): The search query
+- `provider` (string, optional): Search a specific provider by ID (e.g., `files`, `calendar`, `contacts`)
+- `limit` (number, optional): Maximum results per provider (default 5)
+- `cursor` (string, optional): Pagination cursor returned from a previous search
+
+**Returns:**
+Search results grouped by provider, each with title, subtitle, and resource URL.
+
+**Example Usage:**
+```
+Ask Claude: "Search Nextcloud for 'meeting notes'"
+Ask Claude: "Search my contacts for 'Alice'"
+Ask Claude: "Find files matching 'budget 2026'"
+```
+
+---
+
+### list_search_providers
+
+List all available Unified Search providers in Nextcloud. Use this to discover provider IDs for targeted searches with `unified_search`.
+
+**Parameters:**
+None
+
+**Returns:**
+List of available search providers with IDs and names.
+
+**Example Usage:**
+```
+Ask Claude: "What search providers are available?"
+Ask Claude: "List search sources in Nextcloud"
+```
+
+---
+
 ## Development
 
 To extend system tools or add new operations:

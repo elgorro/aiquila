@@ -2,18 +2,18 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.elgorro/aiquila-mcp",
   "title": "AIquila — Nextcloud MCP Server",
-  "description": "MCP server for Nextcloud: file management, search, calendar, contacts, and system status.",
+  "description": "MCP server for Nextcloud: files, calendar, tasks, contacts, mail, bookmarks, maps, notes, recipes, shares, AI assistant, and system administration. 126 tools across 20 categories.",
   "repository": {
     "url": "https://github.com/elgorro/aiquila.git",
     "source": "github"
   },
-  "version": "0.1.64",
+  "version": "0.1.67",
   "websiteUrl": "https://github.com/elgorro/aiquila",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "aiquila-mcp",
-      "version": "0.1.64",
+      "version": "0.1.67",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

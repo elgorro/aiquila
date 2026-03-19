@@ -28,7 +28,7 @@ help:
 	@echo "  make shell-db       - Open PostgreSQL shell"
 	@echo ""
 	@echo "Testing:"
-	@echo "  make test           - Run installation verification"
+	@echo "  make test           - Run full test suite (NC checks + MCP tools)"
 	@echo "  make test-mcp       - Run MCP server tests"
 	@echo "  make nc-log         - Show Nextcloud application log"
 	@echo ""
@@ -117,21 +117,9 @@ shell-db:
 nc-log:
 	$(COMPOSE) exec nextcloud tail -100 /var/www/html/data/nextcloud.log 2>/dev/null || echo "(no log file yet)"
 
-# Installation verification
+# Full test suite (NC checks + MCP tools)
 test:
-	@echo "=== Verifying AIquila installation ==="
-	@echo ""
-	@echo "--- App status ---"
-	@$(COMPOSE) exec nextcloud su -p www-data -s /bin/sh -c "php /var/www/html/occ app:list" 2>/dev/null | grep -A2 aiquila || echo "FAIL: aiquila not in app list"
-	@echo ""
-	@echo "--- File checks ---"
-	@$(COMPOSE) exec nextcloud test -f /var/www/html/custom_apps/aiquila/appinfo/info.xml && echo "OK: appinfo/info.xml" || echo "FAIL: appinfo/info.xml missing"
-	@$(COMPOSE) exec nextcloud test -f /var/www/html/custom_apps/aiquila/lib/AppInfo/Application.php && echo "OK: lib/AppInfo/Application.php" || echo "FAIL: lib/AppInfo/Application.php missing"
-	@$(COMPOSE) exec nextcloud test -f /var/www/html/custom_apps/aiquila/js/aiquila-main.js && echo "OK: js/aiquila-main.js" || echo "FAIL: js/aiquila-main.js missing"
-	@$(COMPOSE) exec nextcloud test -f /var/www/html/custom_apps/aiquila/vendor/autoload.php && echo "OK: vendor/autoload.php" || echo "FAIL: vendor/autoload.php missing"
-	@echo ""
-	@echo "--- HTTP check ---"
-	@curl -s -o /dev/null -w "HTTP status: %{http_code}\n" http://localhost:8080/status.php || echo "FAIL: Nextcloud not responding"
+	@bash scripts/test.sh
 
 # Run MCP server tests
 test-mcp:

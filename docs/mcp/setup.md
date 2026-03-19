@@ -4,7 +4,7 @@ This guide will walk you through setting up the AIquila MCP Server to connect Cl
 
 ## Prerequisites
 
-- **Node.js** 24 or higher (LTS)
+- **Node.js** 20 or higher (LTS)
 - **Nextcloud** instance with WebDAV access
 - **Nextcloud credentials** (URL, username, password)
 - **Claude Desktop** or another MCP-compatible client
@@ -197,7 +197,7 @@ npm run build
 
 **Problem**: Module not found errors
 
-**Solution**: Ensure you're using Node.js 18 or higher:
+**Solution**: Ensure you're using Node.js 20 or higher:
 ```bash
 node --version
 ```

@@ -238,8 +238,57 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  publish-to-appstore:
+  publish-nightly:
     needs: [check-version, build-and-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish nightly to Nextcloud App Store
+        run: |
+          VERSION=${{ needs.check-version.outputs.version }}
+          TAG_NAME="nc-v${VERSION}"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/aiquila.tar.gz"
+
+          # Download signature
+          SIGNATURE=""
+          SIG_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/aiquila.tar.gz.sig"
+          SIGNATURE=$(curl -sL "$SIG_URL" || true)
+
+          PAYLOAD=$(jq -n \
+            --arg download "$RELEASE_URL" \
+            --arg signature "$SIGNATURE" \
+            '{
+              download: $download,
+              signature: $signature,
+              nightly: true
+            }')
+
+          echo "Publishing nightly to Nextcloud App Store..."
+          echo "Download URL: $RELEASE_URL"
+
+          RESPONSE=$(curl -X POST \
+            -H "Authorization: Token ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            https://apps.nextcloud.com/api/v1/apps/releases \
+            -w "\n%{http_code}" \
+            -s)
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "Response code: $HTTP_CODE"
+          echo "Response body: $BODY"
+
+          if [ "$HTTP_CODE" == "200" ] || [ "$HTTP_CODE" == "201" ]; then
+            echo "Successfully published nightly to Nextcloud App Store!"
+          else
+            echo "Failed to publish nightly to Nextcloud App Store"
+            echo "Response: $BODY"
+            exit 1
+          fi
+
+  publish-to-appstore:
+    needs: [check-version, build-and-release, publish-nightly]
     runs-on: ubuntu-latest
     environment: nextcloud-appstore  # This creates a manual approval gate
     steps:
