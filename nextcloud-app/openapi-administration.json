@@ -3,7 +3,7 @@
     "info": {
         "title": "aiquila-administration",
         "version": "0.0.1",
-        "description": "Claude AI Integration for Nextcloud",
+        "description": "Connect Nextcloud with Claude AI \u2014 chat, MCP tools, and voice",
         "license": {
             "name": "AGPL-3.0-or-later"
         }
