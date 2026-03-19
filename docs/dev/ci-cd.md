@@ -9,7 +9,7 @@ AIquila uses GitHub Actions for continuous integration and deployment.
 | `test.yml` | Push/PR to main | Run tests |
 | `lint.yml` | Push/PR to main | Code quality checks |
 | `mcp-release.yml` | Version change in `mcp-server/` | Auto-release MCP server (GitHub Release + Docker + npm + MCP Registry) |
-| `nc-release.yml` | Version change in `nextcloud-app/` | Auto-release & publish NC app |
+| `nc-release.yml` | Version change in `nextcloud-app/` | Auto-release & publish NC app (nightly + stable) |
 | `hetzner-release.yml` | Version change in `hetzner/` | Auto-release Hetzner CLI (GitHub Release + cosign) |
 | `hetzner-integration-test.yml` | Manual dispatch | Full two-server E2E integration test |
 
@@ -89,8 +89,9 @@ git push origin main
 5. Packages app (excludes: tests/, vendor/, node_modules/, src/)
 6. Signs package (if `NC_SIGN_KEY` secret exists)
 7. Creates GitHub release with `aiquila.tar.gz` and signature
-8. **Waits for manual approval** (via GitHub environment protection)
-9. Publishes to Nextcloud App Store
+8. **Publishes nightly** to the Nextcloud App Store beta channel (`"nightly": true`) — no approval needed
+9. **Waits for manual approval** (via GitHub environment protection)
+10. Publishes stable release to Nextcloud App Store
 
 **How to release:**
 ```bash
