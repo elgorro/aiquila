@@ -7,13 +7,13 @@
     "url": "https://github.com/elgorro/aiquila.git",
     "source": "github"
   },
-  "version": "0.1.64",
+  "version": "0.1.67",
   "websiteUrl": "https://github.com/elgorro/aiquila",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "aiquila-mcp",
-      "version": "0.1.64",
+      "version": "0.1.67",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
