@@ -111,7 +111,7 @@ class ClaudeModels {
         }
 
         if (self::supportsEffort($model)) {
-            $params['effort'] = self::EFFORT_LEVEL[$model] ?? 'medium';
+            $params['outputConfig'] = ['effort' => self::EFFORT_LEVEL[$model] ?? 'medium'];
         }
 
         return $params;
