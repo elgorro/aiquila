@@ -10,7 +10,6 @@ export function syncVersions(pkgPath, serverJsonPath) {
     if (p.registryType === 'npm') p.version = version;
     if (p.registryType === 'oci') {
       p.identifier = p.identifier.replace(/:[^:]+$/, ':' + version);
-      p.version = version;
     }
   });
   writeFileSync(serverJsonPath, JSON.stringify(s, null, 2) + '\n');
