@@ -20,6 +20,10 @@ use OCP\AppFramework\Db\Entity;
  * @method void setOutputTokens(?int $outputTokens)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
+ * @method int|null getCacheCreationTokens()
+ * @method void setCacheCreationTokens(?int $cacheCreationTokens)
+ * @method int|null getCacheReadTokens()
+ * @method void setCacheReadTokens(?int $cacheReadTokens)
  */
 class Message extends Entity implements \JsonSerializable {
     protected int $conversationId = 0;
@@ -28,6 +32,8 @@ class Message extends Entity implements \JsonSerializable {
     protected ?int $inputTokens = null;
     protected ?int $outputTokens = null;
     protected int $createdAt = 0;
+    protected ?int $cacheCreationTokens = null;
+    protected ?int $cacheReadTokens = null;
 
     public function __construct() {
         $this->addType('conversationId', 'integer');
@@ -36,6 +42,8 @@ class Message extends Entity implements \JsonSerializable {
         $this->addType('inputTokens', 'integer');
         $this->addType('outputTokens', 'integer');
         $this->addType('createdAt', 'integer');
+        $this->addType('cacheCreationTokens', 'integer');
+        $this->addType('cacheReadTokens', 'integer');
     }
 
     public function jsonSerialize(): array {
@@ -46,6 +54,8 @@ class Message extends Entity implements \JsonSerializable {
             'content' => $this->getContent(),
             'inputTokens' => $this->getInputTokens(),
             'outputTokens' => $this->getOutputTokens(),
+            'cacheCreationTokens' => $this->getCacheCreationTokens(),
+            'cacheReadTokens' => $this->getCacheReadTokens(),
             'createdAt' => $this->getCreatedAt(),
         ];
     }

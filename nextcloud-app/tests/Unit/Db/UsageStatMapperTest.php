@@ -77,13 +77,13 @@ class UsageStatMapperTest extends MapperTestCase {
     public function testSumTokensByUserReturnsCorrectTotals(): void {
         $this->qb->method('executeQuery')->willReturn($this->result);
         $this->result->method('fetch')
-            ->willReturn(['total_input' => '1500', 'total_output' => '750']);
+            ->willReturn(['total_input' => '1500', 'total_output' => '750', 'total_cache_creation' => '100', 'total_cache_read' => '200']);
         $this->result->method('closeCursor')->willReturn(true);
 
         $mapper = new UsageStatMapper($this->db);
         $totals = $mapper->sumTokensByUser('eve');
 
-        $this->assertEquals(['input_tokens' => 1500, 'output_tokens' => 750], $totals);
+        $this->assertEquals(['input_tokens' => 1500, 'output_tokens' => 750, 'cache_creation_tokens' => 100, 'cache_read_tokens' => 200], $totals);
     }
 
     public function testSumTokensByUserReturnsZeroWhenNoRows(): void {
@@ -94,7 +94,7 @@ class UsageStatMapperTest extends MapperTestCase {
         $mapper = new UsageStatMapper($this->db);
         $totals = $mapper->sumTokensByUser('eve');
 
-        $this->assertEquals(['input_tokens' => 0, 'output_tokens' => 0], $totals);
+        $this->assertEquals(['input_tokens' => 0, 'output_tokens' => 0, 'cache_creation_tokens' => 0, 'cache_read_tokens' => 0], $totals);
     }
 
     public function testTableName(): void {

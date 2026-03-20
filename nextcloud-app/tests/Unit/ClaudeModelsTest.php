@@ -27,6 +27,10 @@ class ClaudeModelsTest extends TestCase {
         $this->assertEquals(128000, ClaudeModels::getMaxTokenCeiling(ClaudeModels::OPUS_4_6));
     }
 
+    public function testGetMaxTokenCeilingForSonnet46(): void {
+        $this->assertEquals(64000, ClaudeModels::getMaxTokenCeiling(ClaudeModels::SONNET_4_6));
+    }
+
     public function testGetMaxTokenCeilingForUnknownModelReturnsDefault(): void {
         $this->assertEquals(
             ClaudeModels::DEFAULT_MAX_TOKENS,
@@ -48,34 +52,21 @@ class ClaudeModelsTest extends TestCase {
         $this->assertFalse(ClaudeModels::supportsEffort(ClaudeModels::HAIKU_4_5));
     }
 
-    public function testGetModelParamsForOpus46IncludesThinkingAndEffort(): void {
-        $params = ClaudeModels::getModelParams(ClaudeModels::OPUS_4_6);
-        $this->assertArrayHasKey('thinking', $params);
-        $this->assertArrayHasKey('outputConfig', $params);
-        $this->assertArrayHasKey('effort', $params['outputConfig']);
+    public function testGetEffortLevelForOpus46(): void {
+        $this->assertEquals('high', ClaudeModels::getEffortLevel(ClaudeModels::OPUS_4_6));
     }
 
-    public function testGetMaxTokenCeilingForSonnet46(): void {
-        $this->assertEquals(64000, ClaudeModels::getMaxTokenCeiling(ClaudeModels::SONNET_4_6));
+    public function testGetEffortLevelForSonnet46(): void {
+        $this->assertEquals('medium', ClaudeModels::getEffortLevel(ClaudeModels::SONNET_4_6));
     }
 
-    public function testGetModelParamsForSonnet46IncludesThinkingAndEffort(): void {
-        $params = ClaudeModels::getModelParams(ClaudeModels::SONNET_4_6);
-        $this->assertArrayHasKey('thinking', $params);
-        $this->assertEquals(['type' => 'adaptive'], $params['thinking']);
-        $this->assertArrayHasKey('outputConfig', $params);
-        $this->assertEquals('medium', $params['outputConfig']['effort']);
+    public function testGetEffortLevelForUnknownModelReturnsMedium(): void {
+        $this->assertEquals('medium', ClaudeModels::getEffortLevel('claude-unknown-model'));
     }
 
-    public function testGetModelParamsEffortLevels(): void {
-        $opus = ClaudeModels::getModelParams(ClaudeModels::OPUS_4_6);
-        $this->assertEquals('high', $opus['outputConfig']['effort']);
-
-        $sonnet = ClaudeModels::getModelParams(ClaudeModels::SONNET_4_6);
-        $this->assertEquals('medium', $sonnet['outputConfig']['effort']);
-    }
-
-    public function testGetModelParamsForOtherModelsIsEmpty(): void {
-        $this->assertEquals([], ClaudeModels::getModelParams(ClaudeModels::SONNET_4_5));
+    public function testEffortLevelConstantsArePublic(): void {
+        $this->assertIsArray(ClaudeModels::EFFORT_LEVEL);
+        $this->assertArrayHasKey(ClaudeModels::OPUS_4_6, ClaudeModels::EFFORT_LEVEL);
+        $this->assertArrayHasKey(ClaudeModels::SONNET_4_6, ClaudeModels::EFFORT_LEVEL);
     }
 }

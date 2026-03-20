@@ -4678,6 +4678,120 @@ describe('Maps Tools', () => {
       expect(result.content[0].text).toContain('Network timeout');
     });
   });
+
+  describe('OCC output redaction', () => {
+    it('should redact PHP array format key-value pairs', async () => {
+      const { redactSensitiveOutput } = await import('../tools/system/occ-redact.js');
+
+      const input = `"dbpassword" => "s3cret_db_pass"`;
+      const result = redactSensitiveOutput(input);
+      expect(result).toBe(`"dbpassword" => "[REDACTED]"`);
+    });
+
+    it('should redact JSON format key-value pairs', async () => {
+      const { redactSensitiveOutput } = await import('../tools/system/occ-redact.js');
+
+      const input = `"password": "my_secret_pass"`;
+      const result = redactSensitiveOutput(input);
+      expect(result).toBe(`"password": "[REDACTED]"`);
+    });
+
+    it('should redact multiple sensitive keys', async () => {
+      const { redactSensitiveOutput } = await import('../tools/system/occ-redact.js');
+
+      const input = [
+        `"secret": "abc123"`,
+        `"mail_smtppassword": "smtp_pass"`,
+        `"api_key": "key-xyz"`,
+        `"passwordsalt": "saltyvalue"`,
+      ].join('\n');
+      const result = redactSensitiveOutput(input);
+      expect(result).toContain(`"secret": "[REDACTED]"`);
+      expect(result).toContain(`"mail_smtppassword": "[REDACTED]"`);
+      expect(result).toContain(`"api_key": "[REDACTED]"`);
+      expect(result).toContain(`"passwordsalt": "[REDACTED]"`);
+    });
+
+    it('should pass through non-sensitive output unchanged', async () => {
+      const { redactSensitiveOutput } = await import('../tools/system/occ-redact.js');
+
+      const input = `Nextcloud 28.0.4\ninstalled: true\nmaintenance: false`;
+      expect(redactSensitiveOutput(input)).toBe(input);
+    });
+
+    it('should redact database URI credentials', async () => {
+      const { redactSensitiveOutput } = await import('../tools/system/occ-redact.js');
+
+      const input = `mysql://admin:super_secret@localhost/nextcloud`;
+      const result = redactSensitiveOutput(input);
+      expect(result).toBe(`mysql://admin:[REDACTED]@localhost/nextcloud`);
+    });
+
+    it('should redact PHP stack trace paths', async () => {
+      const { redactSensitiveOutput } = await import('../tools/system/occ-redact.js');
+
+      const input = `Error at /var/www/html/lib/private/App.php:123`;
+      const result = redactSensitiveOutput(input);
+      expect(result).toBe(`Error at [REDACTED_PATH]`);
+    });
+
+    it('should handle a realistic config:list JSON blob', async () => {
+      const { redactSensitiveOutput } = await import('../tools/system/occ-redact.js');
+
+      const input = JSON.stringify(
+        {
+          system: {
+            version: '28.0.4',
+            dbpassword: 'real_db_password',
+            secret: 'instance_secret_value',
+            mail_smtppassword: 'smtp_pw',
+            installed: true,
+            overwrite_cli_url: 'https://cloud.example.com',
+          },
+        },
+        null,
+        2
+      );
+      const result = redactSensitiveOutput(input);
+      expect(result).toContain(`"version": "28.0.4"`);
+      expect(result).toContain(`"installed": true`);
+      expect(result).toContain(`"dbpassword": "[REDACTED]"`);
+      expect(result).toContain(`"secret": "[REDACTED]"`);
+      expect(result).toContain(`"mail_smtppassword": "[REDACTED]"`);
+      expect(result).not.toContain('real_db_password');
+      expect(result).not.toContain('instance_secret_value');
+    });
+
+    it('should handle empty string input', async () => {
+      const { redactSensitiveOutput } = await import('../tools/system/occ-redact.js');
+
+      expect(redactSensitiveOutput('')).toBe('');
+    });
+
+    it('should redact output in the handler response', async () => {
+      mockExecuteOCC.mockResolvedValue({
+        success: true,
+        exitCode: 0,
+        stdout: `"dbpassword": "hunter2"`,
+        stderr: `Warning at /var/www/html/lib/foo.php:42`,
+      });
+
+      const { runOccTool } = await import('../tools/system/occ.js');
+      const result = await runOccTool.handler({ command: 'config:app:get', args: ['core'] });
+
+      expect(result.content[0].text).toContain(`"dbpassword": "[REDACTED]"`);
+      expect(result.content[0].text).not.toContain('hunter2');
+      expect(result.content[0].text).toContain('[REDACTED_PATH]');
+      expect(result.content[0].text).not.toContain('/var/www/html/lib/foo.php');
+    });
+
+    it('should not include config:list in default allowlist', async () => {
+      delete process.env.MCP_OCC_ALLOWLIST;
+      const { getOccAllowlist } = await import('../tools/system/occ.js');
+      const allowlist = getOccAllowlist();
+      expect(allowlist).not.toContain('config:list');
+    });
+  });
 });
 
 describe('Search Tools', () => {

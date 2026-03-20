@@ -91,29 +91,17 @@ class ClaudeModels {
         ];
     }
 
-    /**
-     * Returns extra API parameters to merge into a messages->create() call.
-     *
-     * Returns [] for models that need no special handling, so callers can
-     * always use array_merge() unconditionally.
-     */
-    // ── Per-model effort level (Opus deep, Sonnet balanced) ────────────
-    private const EFFORT_LEVEL = [
+    // ── Per-model effort level (app-level policy) ────────────────────────
+
+    public const EFFORT_LEVEL = [
         self::OPUS_4_6   => 'high',
         self::SONNET_4_6 => 'medium',
     ];
 
-    public static function getModelParams(string $model): array {
-        $params = [];
-
-        if (self::supportsThinking($model)) {
-            $params['thinking'] = ['type' => 'adaptive'];
-        }
-
-        if (self::supportsEffort($model)) {
-            $params['outputConfig'] = ['effort' => self::EFFORT_LEVEL[$model] ?? 'medium'];
-        }
-
-        return $params;
+    /**
+     * Default effort level for a model (app-level policy, not SDK data).
+     */
+    public static function getEffortLevel(string $model): string {
+        return self::EFFORT_LEVEL[$model] ?? 'medium';
     }
 }

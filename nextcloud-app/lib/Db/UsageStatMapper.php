@@ -32,13 +32,15 @@ class UsageStatMapper extends QBMapper {
     }
 
     /**
-     * @return array{input_tokens: int, output_tokens: int}
+     * @return array{input_tokens: int, output_tokens: int, cache_creation_tokens: int, cache_read_tokens: int}
      */
     public function sumTokensByUser(string $userId): array {
         $qb = $this->db->getQueryBuilder();
         $qb->select(
             $qb->func()->sum('input_tokens', 'total_input'),
-            $qb->func()->sum('output_tokens', 'total_output')
+            $qb->func()->sum('output_tokens', 'total_output'),
+            $qb->func()->sum('cache_creation_tokens', 'total_cache_creation'),
+            $qb->func()->sum('cache_read_tokens', 'total_cache_read')
         )
             ->from($this->getTableName())
             ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)));
@@ -50,6 +52,8 @@ class UsageStatMapper extends QBMapper {
         return [
             'input_tokens' => (int)($row['total_input'] ?? 0),
             'output_tokens' => (int)($row['total_output'] ?? 0),
+            'cache_creation_tokens' => (int)($row['total_cache_creation'] ?? 0),
+            'cache_read_tokens' => (int)($row['total_cache_read'] ?? 0),
         ];
     }
 }

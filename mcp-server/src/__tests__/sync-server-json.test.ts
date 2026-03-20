@@ -32,6 +32,7 @@ describe('sync-server-json', () => {
     expect(result.version).toBe('9.9.9');
     expect(result.packages[0].version).toBe('9.9.9');
     expect(result.packages[1].identifier).toBe('ghcr.io/elgorro/aiquila-mcp:9.9.9');
+    expect(result.packages[1].version).toBe('9.9.9');
   });
 
   it('returns the version string', () => {
