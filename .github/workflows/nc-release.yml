@@ -20,7 +20,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Check if version changed
         id: check
@@ -57,6 +57,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -116,11 +118,6 @@ jobs:
           cp nextcloud-app/composer.json ${TEMP_DIR}/
           cp nextcloud-app/LICENSE ${TEMP_DIR}/ 2>/dev/null || true
 
-          # Copy CHANGELOG if it exists
-          if [ -f "nextcloud-app/CHANGELOG.md" ]; then
-            cp nextcloud-app/CHANGELOG.md ${TEMP_DIR}/
-          fi
-
           # Create tarball
           cd /tmp
           tar -czf ${APP_ID}.tar.gz ${PACKAGE_NAME}
@@ -175,61 +172,70 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract changelog for this version
-        id: changelog
+      - name: Generate changelog
         run: |
           VERSION=${{ needs.check-version.outputs.version }}
+          PREV_VERSION=${{ needs.check-version.outputs.previous-version }}
+          PREV_TAG="nc-v${PREV_VERSION}"
 
-          if [ -f "nextcloud-app/CHANGELOG.md" ]; then
-            # Try to extract changelog for this version
-            # This is a simple extraction - adjust regex as needed for your CHANGELOG format
-            CHANGELOG=$(sed -n "/## \[${VERSION}\]/,/## \[/p" nextcloud-app/CHANGELOG.md | sed '$d' | tail -n +2)
-
-            if [ -z "$CHANGELOG" ]; then
-              CHANGELOG="See CHANGELOG.md for details"
-            fi
+          # Check if previous tag exists
+          if git rev-parse "${PREV_TAG}" >/dev/null 2>&1; then
+            RANGE="${PREV_TAG}..HEAD"
           else
-            CHANGELOG="No changelog available"
+            RANGE="HEAD"
           fi
 
-          # Save to file to handle multiline
-          echo "$CHANGELOG" > /tmp/changelog.txt
+          CHANGELOG=$(git log ${RANGE} --pretty=format:"%s" -- nextcloud-app/ | awk -F: '
+            /^feat/  { feats = feats "\n- " substr($0, index($0,":")+2) }
+            /^fix/   { fixes = fixes "\n- " substr($0, index($0,":")+2) }
+            /^chore|^docs|^refactor|^perf|^ci|^test/ { other = other "\n- " substr($0, index($0,":")+2) }
+            END {
+              if (feats) printf "### Features%s\n\n", feats
+              if (fixes) printf "### Bug Fixes%s\n\n", fixes
+              if (other) printf "### Other Changes%s\n\n", other
+            }
+          ')
+
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="No conventional commits found for this release."
+          fi
+
+          cat > /tmp/release-body.txt << ENDOFBODY
+          ## AIquila Nextcloud App v${VERSION}
+
+          ${CHANGELOG}
+
+          ### Installation
+
+          1. Download \`aiquila.tar.gz\` from the assets below
+          2. Extract to your Nextcloud apps directory:
+             \`\`\`bash
+             cd /path/to/nextcloud/apps
+             tar -xzf aiquila.tar.gz
+             \`\`\`
+          3. Enable the app:
+             \`\`\`bash
+             php occ app:enable aiquila
+             \`\`\`
+
+          ### Nextcloud App Store
+
+          This release can be published to the Nextcloud App Store using the signed package.
+
+          **Signature:** Available in \`aiquila.tar.gz.sig\`
+
+          ---
+          *This release was automatically created by GitHub Actions*
+          ENDOFBODY
+
+          sed -i 's/^          //' /tmp/release-body.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: nc-v${{ needs.check-version.outputs.version }}
           name: Nextcloud App v${{ needs.check-version.outputs.version }}
-          body: |
-            ## AIquila Nextcloud App Release v${{ needs.check-version.outputs.version }}
-
-            **Previous version:** ${{ needs.check-version.outputs.previous-version }}
-
-            ### What's Changed
-
-            $(cat /tmp/changelog.txt)
-
-            ### Installation
-
-            1. Download `aiquila.tar.gz` from the assets below
-            2. Extract to your Nextcloud apps directory:
-               ```bash
-               cd /path/to/nextcloud/apps
-               tar -xzf aiquila.tar.gz
-               ```
-            3. Enable the app:
-               ```bash
-               php occ app:enable aiquila
-               ```
-
-            ### Nextcloud App Store
-
-            This release can be published to the Nextcloud App Store using the signed package.
-
-            **Signature:** Available in `aiquila.tar.gz.sig`
-
-            ---
-            *This release was automatically created by GitHub Actions*
+          body_path: /tmp/release-body.txt
           files: |
             aiquila.tar.gz
             aiquila.tar.gz.sig

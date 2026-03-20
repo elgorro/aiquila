@@ -20,7 +20,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Check if version changed
         id: check
@@ -57,6 +57,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -99,6 +101,65 @@ jobs:
 
           echo "Created package: ${PACKAGE_NAME}.tar.gz"
 
+      - name: Generate changelog
+        run: |
+          VERSION=${{ needs.check-version.outputs.version }}
+          PREV_VERSION=${{ needs.check-version.outputs.previous-version }}
+          PREV_TAG="mcp-v${PREV_VERSION}"
+
+          # Check if previous tag exists
+          if git rev-parse "${PREV_TAG}" >/dev/null 2>&1; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            # Fallback: use all commits touching mcp-server/
+            RANGE="HEAD"
+          fi
+
+          CHANGELOG=$(git log ${RANGE} --pretty=format:"%s" -- mcp-server/ | awk -F: '
+            /^feat/  { feats = feats "\n- " substr($0, index($0,":")+2) }
+            /^fix/   { fixes = fixes "\n- " substr($0, index($0,":")+2) }
+            /^chore|^docs|^refactor|^perf|^ci|^test/ { other = other "\n- " substr($0, index($0,":")+2) }
+            END {
+              if (feats) printf "### Features%s\n\n", feats
+              if (fixes) printf "### Bug Fixes%s\n\n", fixes
+              if (other) printf "### Other Changes%s\n\n", other
+            }
+          ')
+
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="No conventional commits found for this release."
+          fi
+
+          # Build release body
+          cat > /tmp/release-body.txt << ENDOFBODY
+          ## MCP Server v${VERSION}
+
+          ${CHANGELOG}
+
+          ### Installation
+
+          \`\`\`bash
+          # Via npm (recommended)
+          npx aiquila-mcp@${VERSION}
+
+          # Or download and extract
+          wget https://github.com/${{ github.repository }}/releases/download/mcp-v${VERSION}/aiquila-mcp-v${VERSION}.tar.gz
+          tar -xzf aiquila-mcp-v${VERSION}.tar.gz
+          cd aiquila-mcp-v${VERSION}
+          npm install --production
+          npm start
+          \`\`\`
+
+          ### Requirements
+          - Node.js 24 or higher
+
+          ---
+          *This release was automatically created by GitHub Actions*
+          ENDOFBODY
+
+          # Remove leading whitespace from heredoc indentation
+          sed -i 's/^          //' /tmp/release-body.txt
+
       - name: Create Git tag
         run: |
           VERSION=${{ needs.check-version.outputs.version }}
@@ -117,29 +178,7 @@ jobs:
         with:
           tag_name: mcp-v${{ needs.check-version.outputs.version }}
           name: MCP Server v${{ needs.check-version.outputs.version }}
-          body: |
-            ## MCP Server Release v${{ needs.check-version.outputs.version }}
-
-            **Previous version:** ${{ needs.check-version.outputs.previous-version }}
-
-            ### Installation
-
-            ```bash
-            # Download and extract
-            wget https://github.com/${{ github.repository }}/releases/download/mcp-v${{ needs.check-version.outputs.version }}/aiquila-mcp-v${{ needs.check-version.outputs.version }}.tar.gz
-            tar -xzf aiquila-mcp-v${{ needs.check-version.outputs.version }}.tar.gz
-            cd aiquila-mcp-v${{ needs.check-version.outputs.version }}
-
-            # Install dependencies and run
-            npm install --production
-            npm start
-            ```
-
-            ### Requirements
-            - Node.js 24 or higher
-
-            ---
-            *This release was automatically created by GitHub Actions*
+          body_path: /tmp/release-body.txt
           files: |
             aiquila-mcp-v${{ needs.check-version.outputs.version }}.tar.gz
           draft: false
