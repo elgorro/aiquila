@@ -120,6 +120,33 @@ describe('MCP Tools', () => {
 
       expect(mockClient.putFileContents).toHaveBeenCalledWith('/test.txt', 'New content');
     });
+
+    it('should reject content exceeding MCP_MAX_FILE_SIZE', async () => {
+      // Set a small limit for testing
+      process.env.MCP_MAX_FILE_SIZE = '10';
+      // Re-import to pick up the new env var
+      vi.resetModules();
+      const { FileContentSchema } = await import('../tools/types.js');
+
+      const result = FileContentSchema.safeParse({ path: '/test.txt', content: 'a'.repeat(11) });
+      expect(result.success).toBe(false);
+
+      // Clean up
+      delete process.env.MCP_MAX_FILE_SIZE;
+      vi.resetModules();
+    });
+
+    it('should accept content within MCP_MAX_FILE_SIZE', async () => {
+      process.env.MCP_MAX_FILE_SIZE = '10';
+      vi.resetModules();
+      const { FileContentSchema } = await import('../tools/types.js');
+
+      const result = FileContentSchema.safeParse({ path: '/test.txt', content: 'a'.repeat(10) });
+      expect(result.success).toBe(true);
+
+      delete process.env.MCP_MAX_FILE_SIZE;
+      vi.resetModules();
+    });
   });
 
   describe('move_file', () => {

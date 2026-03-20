@@ -39,6 +39,7 @@ The MCP server requires three environment variables to connect to your Nextcloud
 
 Optional:
 
+- `MCP_MAX_FILE_SIZE` - Maximum `write_file` content length in bytes (default `1073741824` = 1 GB)
 - `LOG_LEVEL` - Log verbosity sent to stderr: `trace`, `debug`, `info` (default), `warn`, `error`, `fatal`
 
 ### Setting Up Environment Variables

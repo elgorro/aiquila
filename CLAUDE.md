@@ -81,6 +81,7 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_AUTH_ISSUER` | If auth | public HTTPS URL of this server |
 | `MCP_AUTH_STATE_DIR` | No | Directory for persisted OAuth state (default `/app/state`) |
 | `MCP_LOCALE` | No | BCP 47 locale tag for `localTime` in `get_local_time` (e.g. `sv-SE`); defaults to system locale |
+| `MCP_MAX_FILE_SIZE` | No | Max `write_file` content length in bytes (default `1073741824` = 1 GB) |
 | `LOG_LEVEL` | No | `trace`/`debug`/`info`/`warn`/`error`/`fatal` |
 
 ## Tests

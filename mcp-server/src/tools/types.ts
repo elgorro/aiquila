@@ -30,9 +30,14 @@ export const FolderPathSchema = z.object({
   path: z.string().describe('The folder path to create in Nextcloud'),
 });
 
+const MAX_FILE_SIZE = parseInt(process.env.MCP_MAX_FILE_SIZE || '', 10) || 1024 * 1024 * 1024;
+
 export const FileContentSchema = z.object({
   path: z.string().describe('The file path in Nextcloud'),
-  content: z.string().describe('The content to write to the file'),
+  content: z
+    .string()
+    .max(MAX_FILE_SIZE, `File content exceeds maximum size of ${MAX_FILE_SIZE} bytes`)
+    .describe('The content to write to the file'),
 });
 
 /**

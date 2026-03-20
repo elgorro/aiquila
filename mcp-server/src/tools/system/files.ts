@@ -59,7 +59,8 @@ export const readFileTool = {
  */
 export const writeFileTool = {
   name: 'write_file',
-  description: 'Create or update a file in Nextcloud',
+  description:
+    'Create or update a file in Nextcloud. File size is limited (default 1 GB, configurable via MCP_MAX_FILE_SIZE).',
   inputSchema: FileContentSchema,
   handler: async (args: { path: string; content: string }) => {
     const client = getWebDAVClient();
