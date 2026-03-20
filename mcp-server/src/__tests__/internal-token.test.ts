@@ -34,7 +34,11 @@ describe('MCP_INTERNAL_TOKEN', () => {
     await expect(provider.verifyAccessToken('not-a-jwt')).rejects.toThrow();
   });
 
-  it('falls through when token length differs', async () => {
+  it('rejects a shorter token without timing leak', async () => {
     await expect(provider.verifyAccessToken('short')).rejects.toThrow();
+  });
+
+  it('rejects a longer token without timing leak', async () => {
+    await expect(provider.verifyAccessToken('a'.repeat(128))).rejects.toThrow();
   });
 });

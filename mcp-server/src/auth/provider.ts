@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import type {
   OAuthServerProvider,
@@ -268,10 +268,9 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
   async verifyAccessToken(token: string): Promise<AuthInfo> {
     // Internal token bypass for service-to-service auth (e.g. NC → MCP on Docker network)
     const internalToken = process.env.MCP_INTERNAL_TOKEN;
-    if (internalToken && token.length === internalToken.length) {
-      const a = Buffer.from(token);
-      const b = Buffer.from(internalToken);
-      if (timingSafeEqual(a, b)) {
+    if (internalToken) {
+      const hash = (s: string) => createHash('sha256').update(s).digest();
+      if (timingSafeEqual(hash(token), hash(internalToken))) {
         return {
           token,
           clientId: 'internal',
