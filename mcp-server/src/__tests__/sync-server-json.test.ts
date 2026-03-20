@@ -13,7 +13,7 @@ describe('sync-server-json', () => {
     rmSync(tmpDir, { recursive: true });
   });
 
-  it('syncs all three version fields in server.json', () => {
+  it('syncs version fields in server.json (OCI has no version field)', () => {
     writeFileSync(resolve(tmpDir, 'package.json'), JSON.stringify({ version: '9.9.9' }));
     writeFileSync(
       resolve(tmpDir, 'server.json'),
@@ -32,7 +32,7 @@ describe('sync-server-json', () => {
     expect(result.version).toBe('9.9.9');
     expect(result.packages[0].version).toBe('9.9.9');
     expect(result.packages[1].identifier).toBe('ghcr.io/elgorro/aiquila-mcp:9.9.9');
-    expect(result.packages[1].version).toBe('9.9.9');
+    expect(result.packages[1]).not.toHaveProperty('version');
   });
 
   it('returns the version string', () => {
