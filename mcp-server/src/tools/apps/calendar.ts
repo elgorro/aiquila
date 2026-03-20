@@ -1069,6 +1069,26 @@ export const updateEventTool = {
       .optional()
       .describe('New classification'),
     rrule: z.string().nullable().optional().describe('New recurrence rule, or null to remove'),
+    alarm: z
+      .number()
+      .nullable()
+      .optional()
+      .describe('Reminder in minutes before the event, or null to remove existing alarm'),
+    attendees: z
+      .array(
+        z.object({
+          email: z.string().describe('Attendee email'),
+          cn: z.string().optional().describe('Display name'),
+          role: z
+            .enum(['REQ-PARTICIPANT', 'OPT-PARTICIPANT', 'NON-PARTICIPANT', 'CHAIR'])
+            .optional()
+            .describe('Attendee role'),
+          rsvp: z.boolean().optional().describe('Request RSVP (default: true)'),
+        })
+      )
+      .nullable()
+      .optional()
+      .describe('Replace attendees list, or null to remove all attendees'),
   }),
   handler: async (args: {
     uid: string;
@@ -1083,6 +1103,13 @@ export const updateEventTool = {
     categories?: string[];
     accessClass?: string;
     rrule?: string | null;
+    alarm?: number | null;
+    attendees?: Array<{
+      email: string;
+      cn?: string;
+      role?: string;
+      rsvp?: boolean;
+    }> | null;
   }) => {
     try {
       const config = getNextcloudConfig();
@@ -1132,6 +1159,43 @@ export const updateEventTool = {
             /END:VEVENT/,
             `CATEGORIES:${args.categories.map(escapeICalValue).join(',')}\r\nEND:VEVENT`
           );
+        }
+      }
+
+      // Handle alarm (VALARM)
+      if (args.alarm !== undefined) {
+        // Remove existing VALARM block
+        modified = modified.replace(/BEGIN:VALARM[\s\S]*?END:VALARM\r?\n?/g, '');
+        if (args.alarm !== null && args.alarm > 0) {
+          const sign = '-';
+          const totalSeconds = args.alarm * 60;
+          const hours = Math.floor(totalSeconds / 3600);
+          const minutes = Math.floor((totalSeconds % 3600) / 60);
+          const durationStr = `${sign}PT${hours > 0 ? hours + 'H' : ''}${minutes > 0 ? minutes + 'M' : ''}`;
+          modified = modified.replace(
+            /END:VEVENT/,
+            `BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Reminder\r\nTRIGGER:${durationStr}\r\nEND:VALARM\r\nEND:VEVENT`
+          );
+        }
+      }
+
+      // Handle attendees
+      if (args.attendees !== undefined) {
+        // Remove existing ATTENDEE and ORGANIZER lines
+        modified = modified.replace(/^ATTENDEE[;:].*\r?\n?/gm, '');
+        modified = modified.replace(/^ORGANIZER[;:].*\r?\n?/gm, '');
+        if (args.attendees !== null && args.attendees.length > 0) {
+          let attendeeLines = `ORGANIZER;CN=${config.user}:mailto:${config.user}`;
+          for (const attendee of args.attendees) {
+            let atLine = 'ATTENDEE';
+            if (attendee.cn) atLine += `;CN=${attendee.cn}`;
+            atLine += `;ROLE=${attendee.role || 'REQ-PARTICIPANT'}`;
+            atLine += `;PARTSTAT=NEEDS-ACTION`;
+            if (attendee.rsvp !== false) atLine += `;RSVP=TRUE`;
+            atLine += `:mailto:${attendee.email}`;
+            attendeeLines += `\r\n${atLine}`;
+          }
+          modified = modified.replace(/END:VEVENT/, `${attendeeLines}\r\nEND:VEVENT`);
         }
       }
 

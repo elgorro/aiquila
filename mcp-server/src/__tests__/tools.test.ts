@@ -2133,6 +2133,131 @@ END:VCALENDAR</C:calendar-data>
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('not found');
     });
+
+    it('should add alarm to event', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(resolveResponse) })
+        .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+
+      const { updateEventTool } = await import('../tools/apps/calendar.js');
+      const result = await updateEventTool.handler({
+        uid: 'event-1',
+        calendarName: 'personal',
+        alarm: 15,
+      });
+
+      expect(result.content[0].text).toContain('updated successfully');
+      const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body;
+      expect(putBody).toContain('BEGIN:VALARM');
+      expect(putBody).toContain('TRIGGER:-PT15M');
+      expect(putBody).toContain('ACTION:DISPLAY');
+      expect(putBody).toContain('END:VALARM');
+    });
+
+    it('should remove alarm when set to null', async () => {
+      const responseWithAlarm = `<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/event-1.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"etag-upd1"</d:getetag>
+      <c:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-1
+SUMMARY:Old title
+DTSTART:20240315T090000Z
+DTEND:20240315T100000Z
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder
+TRIGGER:-PT15M
+END:VALARM
+END:VEVENT
+END:VCALENDAR</c:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(responseWithAlarm) })
+        .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+
+      const { updateEventTool } = await import('../tools/apps/calendar.js');
+      const result = await updateEventTool.handler({
+        uid: 'event-1',
+        calendarName: 'personal',
+        alarm: null,
+      });
+
+      expect(result.content[0].text).toContain('updated successfully');
+      const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body;
+      expect(putBody).not.toContain('BEGIN:VALARM');
+      expect(putBody).not.toContain('END:VALARM');
+    });
+
+    it('should add attendees to event', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(resolveResponse) })
+        .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+
+      const { updateEventTool } = await import('../tools/apps/calendar.js');
+      const result = await updateEventTool.handler({
+        uid: 'event-1',
+        calendarName: 'personal',
+        attendees: [
+          { email: 'alice@example.com', cn: 'Alice' },
+          { email: 'bob@example.com', role: 'OPT-PARTICIPANT', rsvp: false },
+        ],
+      });
+
+      expect(result.content[0].text).toContain('updated successfully');
+      const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body;
+      expect(putBody).toContain('ORGANIZER;CN=admin:mailto:admin');
+      expect(putBody).toContain(
+        'ATTENDEE;CN=Alice;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:alice@example.com'
+      );
+      expect(putBody).toContain(
+        'ATTENDEE;ROLE=OPT-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bob@example.com'
+      );
+    });
+
+    it('should remove attendees when set to null', async () => {
+      const responseWithAttendees = `<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/event-1.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"etag-upd1"</d:getetag>
+      <c:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-1
+SUMMARY:Old title
+DTSTART:20240315T090000Z
+DTEND:20240315T100000Z
+ORGANIZER;CN=admin:mailto:admin
+ATTENDEE;CN=Alice;ROLE=REQ-PARTICIPANT:mailto:alice@example.com
+END:VEVENT
+END:VCALENDAR</c:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(responseWithAttendees) })
+        .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+
+      const { updateEventTool } = await import('../tools/apps/calendar.js');
+      const result = await updateEventTool.handler({
+        uid: 'event-1',
+        calendarName: 'personal',
+        attendees: null,
+      });
+
+      expect(result.content[0].text).toContain('updated successfully');
+      const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body;
+      expect(putBody).not.toMatch(/^ORGANIZER/m);
+      expect(putBody).not.toMatch(/^ATTENDEE/m);
+    });
   });
 
   describe('delete_event', () => {
