@@ -191,6 +191,7 @@ MCP_REGISTRATION_TOKEN=<secret>  # optional: gates POST /register with Bearer to
 | `MCP_TRANSPORT` | No | `stdio` | `stdio` or `http` |
 | `MCP_MAX_FILE_SIZE` | No | `1073741824` | Max `write_file` content length in bytes (1 GB) |
 | `LOG_LEVEL` | No | `info` | `trace` / `debug` / `info` / `warn` / `error` / `fatal` |
+| `MCP_OCC_ALLOWLIST` | No | *(built-in)* | Comma-separated list of allowed OCC commands for `run_occ` |
 
 ### HTTP Transport
 

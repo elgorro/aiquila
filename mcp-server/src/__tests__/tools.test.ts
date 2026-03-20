@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { FileStat } from 'webdav';
 
 // Mock webdav client
@@ -4572,6 +4572,10 @@ describe('Maps Tools', () => {
   });
 
   describe('run_occ', () => {
+    afterEach(() => {
+      delete process.env.MCP_OCC_ALLOWLIST;
+    });
+
     it('should return success output for a successful command', async () => {
       mockExecuteOCC.mockResolvedValue({
         success: true,
@@ -4586,6 +4590,46 @@ describe('Maps Tools', () => {
       expect(result.isError).toBe(false);
       expect(result.content[0].text).toContain('Command completed successfully');
       expect(result.content[0].text).toContain('app:list output');
+    });
+
+    it('should reject commands not in the allowlist', async () => {
+      const { runOccTool } = await import('../tools/system/occ.js');
+      const result = await runOccTool.handler({ command: 'user:delete' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not in the OCC allowlist');
+      expect(result.content[0].text).toContain('user:delete');
+      expect(mockExecuteOCC).not.toHaveBeenCalled();
+    });
+
+    it('should not allow prefix matching (user:delete vs user:list)', async () => {
+      const { runOccTool } = await import('../tools/system/occ.js');
+      const result = await runOccTool.handler({ command: 'user:delete' });
+
+      expect(result.isError).toBe(true);
+      expect(mockExecuteOCC).not.toHaveBeenCalled();
+    });
+
+    it('should use custom allowlist from MCP_OCC_ALLOWLIST env var', async () => {
+      process.env.MCP_OCC_ALLOWLIST = 'custom:cmd,another:cmd';
+
+      mockExecuteOCC.mockResolvedValue({
+        success: true,
+        exitCode: 0,
+        stdout: 'custom output',
+        stderr: '',
+      });
+
+      const { runOccTool, getOccAllowlist } = await import('../tools/system/occ.js');
+
+      expect(getOccAllowlist()).toEqual(['custom:cmd', 'another:cmd']);
+
+      const result = await runOccTool.handler({ command: 'custom:cmd' });
+      expect(result.isError).toBe(false);
+
+      // Default commands should be blocked when custom list is set
+      const result2 = await runOccTool.handler({ command: 'app:list' });
+      expect(result2.isError).toBe(true);
     });
 
     it('should return clear permission denied message on 403', async () => {

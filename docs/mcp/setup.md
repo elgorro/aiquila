@@ -41,6 +41,7 @@ Optional:
 
 - `MCP_MAX_FILE_SIZE` - Maximum `write_file` content length in bytes (default `1073741824` = 1 GB)
 - `LOG_LEVEL` - Log verbosity sent to stderr: `trace`, `debug`, `info` (default), `warn`, `error`, `fatal`
+- `MCP_OCC_ALLOWLIST` - Comma-separated list of allowed OCC commands for `run_occ` (overrides default allowlist)
 
 ### Setting Up Environment Variables
 

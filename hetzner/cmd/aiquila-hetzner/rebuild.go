@@ -240,6 +240,9 @@ func runRebuild(cmd *cobra.Command, _ []string) error {
 		}
 		fmt.Printf("  Uploaded %s\n", f.path)
 	}
+	if err := uploader.Chmod("/opt/aiquila/.env", 0o600); err != nil {
+		return fmt.Errorf("secure .env: %w", err)
+	}
 
 	appLog.Info("upload", "files uploaded", "count", len(uploads))
 

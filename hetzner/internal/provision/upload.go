@@ -3,6 +3,7 @@ package provision
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/pkg/sftp"
@@ -44,6 +45,14 @@ func (u *Uploader) WriteFile(remotePath, content string) error {
 
 	if _, err := io.WriteString(f, content); err != nil {
 		return fmt.Errorf("write remote file %q: %w", remotePath, err)
+	}
+	return nil
+}
+
+// Chmod sets the permissions on a remote file.
+func (u *Uploader) Chmod(remotePath string, mode os.FileMode) error {
+	if err := u.client.Chmod(remotePath, mode); err != nil {
+		return fmt.Errorf("chmod %q to %o: %w", remotePath, mode, err)
 	}
 	return nil
 }

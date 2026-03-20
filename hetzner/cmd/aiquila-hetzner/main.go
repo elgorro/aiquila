@@ -686,6 +686,9 @@ func provisionMCPStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pri
 		}
 		fmt.Printf("  Uploaded %s\n", f.path)
 	}
+	if err := uploader.Chmod("/opt/aiquila/.env", 0o600); err != nil {
+		return fmt.Errorf("secure .env: %w", err)
+	}
 	appLog.Info("upload", "files uploaded", "count", len(uploads))
 
 	fmt.Println("\n── Starting Docker services")
@@ -747,6 +750,9 @@ func provisionNCStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, priv
 			return fmt.Errorf("upload %s: %w", f.path, err)
 		}
 		fmt.Printf("  Uploaded %s\n", f.path)
+	}
+	if err := uploader.Chmod("/opt/aiquila/.env", 0o600); err != nil {
+		return fmt.Errorf("secure .env: %w", err)
 	}
 	appLog.Info("upload", "files uploaded", "count", len(uploads))
 
@@ -826,6 +832,9 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 			return fmt.Errorf("upload %s: %w", f.path, err)
 		}
 		fmt.Printf("  Uploaded %s\n", f.path)
+	}
+	if err := uploader.Chmod("/opt/aiquila/.env", 0o600); err != nil {
+		return fmt.Errorf("secure .env: %w", err)
 	}
 	appLog.Info("upload", "files uploaded", "count", len(uploads))
 

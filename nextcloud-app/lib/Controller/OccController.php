@@ -3,7 +3,6 @@
 namespace OCA\AIquila\Controller;
 
 use OCP\AppFramework\Controller;
-use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
@@ -39,9 +38,7 @@ class OccController extends Controller {
      *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, error: string}, array{}>
      *        |JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, error: string}, array{}>
      *
-     * @NoCSRFRequired
      */
-    #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function execute(string $command = '', array $args = [], int $timeout = 120): JSONResponse {
