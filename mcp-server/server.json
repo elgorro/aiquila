@@ -5,8 +5,17 @@
   "description": "Nextcloud MCP server — files, calendar, contacts, mail, maps, notes, tasks & 120+ more tools",
   "repository": {
     "url": "https://github.com/elgorro/aiquila.git",
-    "source": "github"
+    "source": "github",
+    "id": "1101224211",
+    "subfolder": "mcp-server"
   },
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/elgorro/aiquila/main/nextcloud-app/img/app.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": ["any"]
+    }
+  ],
   "version": "0.1.68",
   "websiteUrl": "https://github.com/elgorro/aiquila",
   "packages": [
@@ -41,7 +50,8 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.1.64",
+      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.1.68",
+      "version": "0.1.68",
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"
