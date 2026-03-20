@@ -13,16 +13,18 @@
     {
       "src": "https://raw.githubusercontent.com/elgorro/aiquila/main/nextcloud-app/img/app.svg",
       "mimeType": "image/svg+xml",
-      "sizes": ["any"]
+      "sizes": [
+        "any"
+      ]
     }
   ],
-  "version": "0.2.5",
+  "version": "0.2.6",
   "websiteUrl": "https://github.com/elgorro/aiquila",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "aiquila-mcp",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -50,8 +52,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.2.5",
-      "version": "0.2.5",
+      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.2.6",
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"

@@ -19,7 +19,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Check if version changed
         id: check
@@ -48,6 +48,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -78,6 +80,89 @@ jobs:
               "${f}"
           done
 
+      - name: Generate changelog
+        run: |
+          VERSION=$(cat hetzner/VERSION)
+          PREV_VERSION=${{ needs.check-version.outputs.previous-version }}
+          PREV_TAG="hetzner-v${PREV_VERSION}"
+
+          if git rev-parse "${PREV_TAG}" >/dev/null 2>&1; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+
+          CHANGELOG=$(git log ${RANGE} --pretty=format:"%s" -- hetzner/ | awk -F: '
+            /^feat/  { feats = feats "\n- " substr($0, index($0,":")+2) }
+            /^fix/   { fixes = fixes "\n- " substr($0, index($0,":")+2) }
+            /^chore|^docs|^refactor|^perf|^ci|^test/ { other = other "\n- " substr($0, index($0,":")+2) }
+            END {
+              if (feats) printf "### Features%s\n\n", feats
+              if (fixes) printf "### Bug Fixes%s\n\n", fixes
+              if (other) printf "### Other Changes%s\n\n", other
+            }
+          ')
+
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="No conventional commits found for this release."
+          fi
+
+          cat > /tmp/release-body.txt << ENDOFBODY
+          ## aiquila-hetzner v${VERSION}
+
+          ${CHANGELOG}
+
+          Single-command provisioner for AIquila MCP Server on Hetzner Cloud.
+
+          ### Installation
+
+          \`\`\`bash
+          # Linux amd64
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/hetzner-v${VERSION}/aiquila-hetzner-linux-amd64 \\
+            -o aiquila-hetzner
+          chmod +x aiquila-hetzner
+          sudo mv aiquila-hetzner /usr/local/bin/
+
+          # Linux arm64
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/hetzner-v${VERSION}/aiquila-hetzner-linux-arm64 \\
+            -o aiquila-hetzner
+          chmod +x aiquila-hetzner
+          sudo mv aiquila-hetzner /usr/local/bin/
+          \`\`\`
+
+          ### Verify
+
+          \`\`\`bash
+          aiquila-hetzner --version
+          \`\`\`
+
+          ### Verify integrity
+
+          **Checksum (simple):**
+          \`\`\`bash
+          sha256sum --check checksums.txt
+          \`\`\`
+
+          **Cosign (cryptographic, proves built by this repo's CI):**
+          \`\`\`bash
+          cosign verify-blob \\
+            --certificate=aiquila-hetzner-linux-amd64.pem \\
+            --signature=aiquila-hetzner-linux-amd64.sig \\
+            --certificate-identity-regexp="https://github.com/${{ github.repository }}/.github/workflows/hetzner-release.yml" \\
+            --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \\
+            aiquila-hetzner-linux-amd64
+          \`\`\`
+
+          ### Requirements
+          - \`HCLOUD_TOKEN\` environment variable (Hetzner Cloud API token)
+          - Nextcloud instance with app password
+
+          ---
+          *This release was automatically created by GitHub Actions*
+          ENDOFBODY
+
+          sed -i 's/^          //' /tmp/release-body.txt
+
       - name: Create Git tag
         run: |
           VERSION=$(cat hetzner/VERSION)
@@ -96,58 +181,7 @@ jobs:
         with:
           tag_name: hetzner-v${{ needs.check-version.outputs.version }}
           name: aiquila-hetzner v${{ needs.check-version.outputs.version }}
-          body: |
-            ## aiquila-hetzner v${{ needs.check-version.outputs.version }}
-
-            **Previous version:** ${{ needs.check-version.outputs.previous-version }}
-
-            Single-command provisioner for AIquila MCP Server on Hetzner Cloud.
-
-            ### Installation
-
-            ```bash
-            # Linux amd64
-            curl -fsSL https://github.com/${{ github.repository }}/releases/download/hetzner-v${{ needs.check-version.outputs.version }}/aiquila-hetzner-linux-amd64 \
-              -o aiquila-hetzner
-            chmod +x aiquila-hetzner
-            sudo mv aiquila-hetzner /usr/local/bin/
-
-            # Linux arm64
-            curl -fsSL https://github.com/${{ github.repository }}/releases/download/hetzner-v${{ needs.check-version.outputs.version }}/aiquila-hetzner-linux-arm64 \
-              -o aiquila-hetzner
-            chmod +x aiquila-hetzner
-            sudo mv aiquila-hetzner /usr/local/bin/
-            ```
-
-            ### Verify
-
-            ```bash
-            aiquila-hetzner --version
-            ```
-
-            ### Verify integrity
-
-            **Checksum (simple):**
-            ```bash
-            sha256sum --check checksums.txt
-            ```
-
-            **Cosign (cryptographic, proves built by this repo's CI):**
-            ```bash
-            cosign verify-blob \
-              --certificate=aiquila-hetzner-linux-amd64.pem \
-              --signature=aiquila-hetzner-linux-amd64.sig \
-              --certificate-identity-regexp="https://github.com/${{ github.repository }}/.github/workflows/hetzner-release.yml" \
-              --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-              aiquila-hetzner-linux-amd64
-            ```
-
-            ### Requirements
-            - `HCLOUD_TOKEN` environment variable (Hetzner Cloud API token)
-            - Nextcloud instance with app password
-
-            ---
-            *This release was automatically created by GitHub Actions*
+          body_path: /tmp/release-body.txt
           files: |
             dist/aiquila-hetzner-linux-amd64
             dist/aiquila-hetzner-linux-amd64.sig
