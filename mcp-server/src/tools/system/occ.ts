@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { executeOCC, formatOccError } from '../../client/aiquila.js';
+import { redactSensitiveOutput } from './occ-redact.js';
 
 /**
  * Nextcloud OCC Command Execution Tools
@@ -11,7 +12,6 @@ const DEFAULT_OCC_ALLOWLIST = [
   'status',
   'app:list',
   'app:check-code',
-  'config:list',
   'config:app:get',
   'setupchecks',
   'integrity:check-core',
@@ -48,7 +48,7 @@ export const runOccTool = {
   description:
     'Execute an allowlisted Nextcloud OCC command on the server and return the output. ' +
     'Only commands in the allowlist may be run (configurable via MCP_OCC_ALLOWLIST env var). ' +
-    'Allowed by default: status, app:list, app:check-code, config:list, config:app:get, ' +
+    'Allowed by default: status, app:list, app:check-code, config:app:get, ' +
     'setupchecks, integrity:check-core, integrity:check-app, user:list, user:info, group:list, ' +
     'maintenance:mode, maintenance:mimetype:update-db, db:add-missing-indices, ' +
     'db:add-missing-columns, db:add-missing-primary-keys, files:scan, files:cleanup, ' +
@@ -93,15 +93,15 @@ export const runOccTool = {
       }
 
       if (result.stdout) {
-        output += `--- stdout ---\n${result.stdout}\n`;
+        output += `--- stdout ---\n${redactSensitiveOutput(result.stdout)}\n`;
       }
 
       if (result.stderr) {
-        output += `--- stderr ---\n${result.stderr}\n`;
+        output += `--- stderr ---\n${redactSensitiveOutput(result.stderr)}\n`;
       }
 
       if (result.error) {
-        output += `Error: ${result.error}\n`;
+        output += `Error: ${redactSensitiveOutput(result.error)}\n`;
       }
 
       return {
