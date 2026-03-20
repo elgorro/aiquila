@@ -30,6 +30,7 @@ if (!interface_exists('OCP\IConfig')) {
     interface OCP_IConfig {
         public function getAppValue(string $appName, string $key, string $default = ''): string;
         public function setAppValue(string $appName, string $key, string $value): void;
+        public function deleteAppValue(string $appName, string $key): void;
         public function getUserValue(string $userId, string $appName, string $key, string $default = ''): string;
         public function setUserValue(string $userId, string $appName, string $key, string $value): void;
         public function deleteUserValue(string $userId, string $appName, string $key): void;
@@ -317,4 +318,40 @@ if (!interface_exists('Psr\Log\LoggerInterface')) {
         public function log(mixed $level, string|\Stringable $message, array $context = []): void;
     }
     class_alias('Psr_Log_LoggerInterface', 'Psr\Log\LoggerInterface');
+}
+
+if (!interface_exists('OCP\Security\ICredentialsManager')) {
+    interface OCP_Security_ICredentialsManager {
+        public function store(string $userId, string $identifier, mixed $credentials): void;
+        public function retrieve(string $userId, string $identifier): mixed;
+        public function delete(string $userId, string $identifier): void;
+    }
+    class_alias('OCP_Security_ICredentialsManager', 'OCP\Security\ICredentialsManager');
+}
+
+if (!interface_exists('OCP\Security\ICrypto')) {
+    interface OCP_Security_ICrypto {
+        public function encrypt(string $plaintext, string $password = ''): string;
+        public function decrypt(string $encryptedContent, string $password = ''): string;
+    }
+    class_alias('OCP_Security_ICrypto', 'OCP\Security\ICrypto');
+}
+
+if (!interface_exists('OCP\Migration\IOutput')) {
+    interface OCP_Migration_IOutput {
+        public function info(string $message): void;
+        public function warning(string $message): void;
+        public function startProgress(int $max = 0): void;
+        public function advance(int $step = 1, string $description = ''): void;
+        public function finishProgress(): void;
+    }
+    class_alias('OCP_Migration_IOutput', 'OCP\Migration\IOutput');
+}
+
+if (!interface_exists('OCP\Migration\IRepairStep')) {
+    interface OCP_Migration_IRepairStep {
+        public function getName(): string;
+        public function run(\OCP\Migration\IOutput $output): void;
+    }
+    class_alias('OCP_Migration_IRepairStep', 'OCP\Migration\IRepairStep');
 }

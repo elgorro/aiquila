@@ -4,6 +4,7 @@ namespace OCA\AIquila\Controller;
 
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
+use OCA\AIquila\Service\CredentialService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
@@ -15,18 +16,21 @@ class SettingsController extends Controller {
     private IConfig $config;
     private ?string $userId;
     private ClaudeSDKService $claudeService;
+    private CredentialService $credentials;
 
     public function __construct(
         string $appName,
         IRequest $request,
         IConfig $config,
         ?string $userId,
-        ClaudeSDKService $claudeService
+        ClaudeSDKService $claudeService,
+        CredentialService $credentials
     ) {
         parent::__construct($appName, $request);
         $this->config = $config;
         $this->userId = $userId;
         $this->claudeService = $claudeService;
+        $this->credentials = $credentials;
     }
 
     /**
@@ -41,14 +45,14 @@ class SettingsController extends Controller {
     #[NoAdminRequired]
     #[OpenAPI]
     public function get(): JSONResponse {
-        $userKey   = $this->config->getUserValue($this->userId, $this->appName, 'api_key', '');
-        $userModel = $this->config->getUserValue($this->userId, $this->appName, 'model',   '');
+        $hasUserKey = $this->credentials->hasApiKey($this->userId);
+        $userModel  = $this->config->getUserValue($this->userId, $this->appName, 'model', '');
 
         $liveModels      = $this->claudeService->listModels($this->userId);
         $availableModels = $liveModels ?? ClaudeModels::getAllModels();
 
         return new JSONResponse([
-            'hasUserKey'      => !empty($userKey),
+            'hasUserKey'      => $hasUserKey,
             'userModel'       => $userModel,
             'availableModels' => $availableModels,
         ]);
@@ -69,7 +73,11 @@ class SettingsController extends Controller {
     #[NoAdminRequired]
     #[OpenAPI]
     public function save(string $api_key = '', string $model = ''): JSONResponse {
-        $this->config->setUserValue($this->userId, $this->appName, 'api_key', $api_key);
+        if ($api_key !== '') {
+            $this->credentials->setApiKey($this->userId, $api_key);
+        } else {
+            $this->credentials->deleteApiKey($this->userId);
+        }
 
         if ($model !== '') {
             $this->config->setUserValue($this->userId, $this->appName, 'model', $model);
@@ -95,7 +103,7 @@ class SettingsController extends Controller {
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function saveAdmin(string $api_key = '', string $model = '', string $max_tokens = '', string $api_timeout = ''): JSONResponse {
         if (!empty($api_key)) {
-            $this->config->setAppValue($this->appName, 'api_key', $api_key);
+            $this->credentials->setApiKey(null, $api_key);
         }
         if (!empty($model)) {
             $this->config->setAppValue($this->appName, 'model', $model);
@@ -133,7 +141,7 @@ class SettingsController extends Controller {
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function testConfig(string $api_key = '', string $model = '', string $max_tokens = '', string $timeout = ''): JSONResponse {
-        $testApiKey = !empty($api_key) ? $api_key : $this->config->getAppValue($this->appName, 'api_key', '');
+        $testApiKey = !empty($api_key) ? $api_key : $this->credentials->getApiKey(null);
         $testModel = !empty($model) ? $model : $this->config->getAppValue($this->appName, 'model', ClaudeModels::DEFAULT_MODEL);
         $testMaxTokens = !empty($max_tokens) ? (int)$max_tokens : (int)$this->config->getAppValue($this->appName, 'max_tokens', '4096');
         $testTimeout = !empty($timeout) ? (int)$timeout : (int)$this->config->getAppValue($this->appName, 'api_timeout', '30');
@@ -142,21 +150,28 @@ class SettingsController extends Controller {
             return new JSONResponse(['success' => false, 'message' => 'No API key provided'], 400);
         }
 
+        // Save originals for non-sensitive config (API key handled via CredentialService)
+        $originalApiKey = $this->credentials->getApiKey(null);
         $originalConfig = [
-            'api_key'     => $this->config->getAppValue($this->appName, 'api_key', ''),
             'model'       => $this->config->getAppValue($this->appName, 'model', ''),
             'max_tokens'  => $this->config->getAppValue($this->appName, 'max_tokens', ''),
             'api_timeout' => $this->config->getAppValue($this->appName, 'api_timeout', ''),
         ];
 
         try {
-            $this->config->setAppValue($this->appName, 'api_key', $testApiKey);
+            $this->credentials->setApiKey(null, $testApiKey);
             $this->config->setAppValue($this->appName, 'model', $testModel);
             $this->config->setAppValue($this->appName, 'max_tokens', (string)$testMaxTokens);
             $this->config->setAppValue($this->appName, 'api_timeout', (string)$testTimeout);
 
             $result = $this->claudeService->ask('Test: Respond with "OK" if you receive this.', '', null);
 
+            // Restore originals
+            if ($originalApiKey !== '') {
+                $this->credentials->setApiKey(null, $originalApiKey);
+            } else {
+                $this->credentials->deleteApiKey(null);
+            }
             foreach ($originalConfig as $key => $value) {
                 if (!empty($value)) {
                     $this->config->setAppValue($this->appName, $key, $value);
@@ -170,6 +185,12 @@ class SettingsController extends Controller {
             return new JSONResponse(['success' => true, 'message' => $result['response']]);
 
         } catch (\Throwable $e) {
+            // Restore originals
+            if ($originalApiKey !== '') {
+                $this->credentials->setApiKey(null, $originalApiKey);
+            } else {
+                $this->credentials->deleteApiKey(null);
+            }
             foreach ($originalConfig as $key => $value) {
                 if (!empty($value)) {
                     $this->config->setAppValue($this->appName, $key, $value);

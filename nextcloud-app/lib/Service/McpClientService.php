@@ -13,6 +13,7 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 class McpClientService {
     private McpServerMapper $mapper;
     private LoggerInterface $logger;
+    private CredentialService $credentials;
     private HttpClientInterface $httpClient;
 
     private const PROTOCOL_VERSION = '2025-03-26';
@@ -24,9 +25,10 @@ class McpClientService {
     /** @var array<int, bool> Track which servers have been initialized */
     private array $initialized = [];
 
-    public function __construct(McpServerMapper $mapper, LoggerInterface $logger) {
+    public function __construct(McpServerMapper $mapper, LoggerInterface $logger, CredentialService $credentials) {
         $this->mapper = $mapper;
         $this->logger = $logger;
+        $this->credentials = $credentials;
         $this->httpClient = HttpClient::create(['timeout' => 30]);
     }
 
@@ -52,9 +54,9 @@ class McpClientService {
             if ($this->isTokenExpired($server)) {
                 $this->refreshOAuthToken($server);
             }
-            $headers['Authorization'] = 'Bearer ' . $server->getOauthAccessToken();
+            $headers['Authorization'] = 'Bearer ' . $this->credentials->decryptToken($server->getOauthAccessToken());
         } elseif ($server->getAuthType() === 'bearer' && $server->getAuthToken()) {
-            $headers['Authorization'] = 'Bearer ' . $server->getAuthToken();
+            $headers['Authorization'] = 'Bearer ' . $this->credentials->decryptToken($server->getAuthToken());
         }
 
         $serverId = $server->getId();
@@ -460,8 +462,8 @@ class McpClientService {
             throw new \RuntimeException('No access_token in token response');
         }
 
-        $server->setOauthAccessToken($result['access_token']);
-        $server->setOauthRefreshToken($result['refresh_token'] ?? null);
+        $server->setOauthAccessToken($this->credentials->encryptToken($result['access_token']));
+        $server->setOauthRefreshToken($this->credentials->encryptToken($result['refresh_token'] ?? null));
         $server->setOauthTokenExpiresAt(time() + ($result['expires_in'] ?? 3600));
         $server->setOauthCodeVerifier(null);
         $server->setOauthState(null);
@@ -486,7 +488,7 @@ class McpClientService {
             $response = $this->httpClient->request('POST', $tokenEndpoint, [
                 'body' => [
                     'grant_type' => 'refresh_token',
-                    'refresh_token' => $server->getOauthRefreshToken(),
+                    'refresh_token' => $this->credentials->decryptToken($server->getOauthRefreshToken()),
                     'client_id' => $server->getOauthClientId(),
                 ],
             ]);
@@ -497,9 +499,9 @@ class McpClientService {
                 throw new \RuntimeException('No access_token in refresh response');
             }
 
-            $server->setOauthAccessToken($result['access_token']);
+            $server->setOauthAccessToken($this->credentials->encryptToken($result['access_token']));
             if (isset($result['refresh_token'])) {
-                $server->setOauthRefreshToken($result['refresh_token']);
+                $server->setOauthRefreshToken($this->credentials->encryptToken($result['refresh_token']));
             }
             $server->setOauthTokenExpiresAt(time() + ($result['expires_in'] ?? 3600));
             $server->setUpdatedAt(time());

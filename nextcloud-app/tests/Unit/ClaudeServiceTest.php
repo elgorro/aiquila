@@ -16,6 +16,7 @@ use Anthropic\Messages\Usage;
 use Anthropic\Models\ModelInfo;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
+use OCA\AIquila\Service\CredentialService;
 use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
@@ -125,14 +126,16 @@ class TestableClaudeSDKService extends ClaudeSDKService {
 class ClaudeServiceTest extends TestCase {
     private $config;
     private $logger;
+    private $credentials;
     private ClaudeSDKService $service;
     private TestableClaudeSDKService $testable;
 
     protected function setUp(): void {
-        $this->config   = $this->createMock(IConfig::class);
-        $this->logger   = $this->createMock(LoggerInterface::class);
-        $this->service  = new ClaudeSDKService($this->config, $this->logger);
-        $this->testable = new TestableClaudeSDKService($this->config, $this->logger);
+        $this->config      = $this->createMock(IConfig::class);
+        $this->logger      = $this->createMock(LoggerInterface::class);
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->service     = new ClaudeSDKService($this->config, $this->logger, $this->credentials);
+        $this->testable    = new TestableClaudeSDKService($this->config, $this->logger, $this->credentials);
     }
 
     // ── PSR-7 helpers for building SDK exceptions ─────────────────────────
@@ -165,10 +168,10 @@ class ClaudeServiceTest extends TestCase {
     }
 
     private function configWithApiKey(): void {
+        $this->credentials->method('getApiKey')->willReturn('test-key');
         $this->config->method('getUserValue')->willReturn('');
         $this->config->method('getAppValue')
             ->willReturnCallback(fn($app, $key, $default) => match ($key) {
-                'api_key'    => 'test-key',
                 'model'      => ClaudeModels::DEFAULT_MODEL,
                 'max_tokens' => '4096',
                 default      => $default,
@@ -178,20 +181,16 @@ class ClaudeServiceTest extends TestCase {
     // ── getApiKey ─────────────────────────────────────────────────────────
 
     public function testGetApiKeyReturnsUserKeyFirst(): void {
-        $this->config->method('getUserValue')
-            ->with('testuser', 'aiquila', 'api_key', '')
+        $this->credentials->method('getApiKey')
+            ->with('testuser')
             ->willReturn('user-api-key');
 
         $this->assertEquals('user-api-key', $this->service->getApiKey('testuser'));
     }
 
     public function testGetApiKeyFallsBackToAdminKey(): void {
-        $this->config->method('getUserValue')
-            ->with('testuser', 'aiquila', 'api_key', '')
-            ->willReturn('');
-
-        $this->config->method('getAppValue')
-            ->with('aiquila', 'api_key', '')
+        $this->credentials->method('getApiKey')
+            ->with('testuser')
             ->willReturn('admin-api-key');
 
         $this->assertEquals('admin-api-key', $this->service->getApiKey('testuser'));
@@ -280,8 +279,7 @@ class ClaudeServiceTest extends TestCase {
     // ── ask(): no API key ─────────────────────────────────────────────────
 
     public function testAskReturnsErrorWhenNoApiKey(): void {
-        $this->config->method('getUserValue')->willReturn('');
-        $this->config->method('getAppValue')->willReturn('');
+        $this->credentials->method('getApiKey')->willReturn('');
 
         $result = $this->service->ask('Hello', '', 'testuser');
         $this->assertArrayHasKey('error', $result);

@@ -5,6 +5,7 @@ namespace OCA\AIquila\Tests\Unit;
 use OCA\AIquila\Controller\McpServerController;
 use OCA\AIquila\Db\McpServer;
 use OCA\AIquila\Db\McpServerMapper;
+use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\McpClientService;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\IRequest;
@@ -14,6 +15,7 @@ use PHPUnit\Framework\TestCase;
 class McpServerControllerTest extends TestCase {
     private McpServerMapper $mapper;
     private McpClientService $mcpClient;
+    private CredentialService $credentials;
     private IURLGenerator $urlGenerator;
     private McpServerController $controller;
     private IRequest $request;
@@ -22,12 +24,19 @@ class McpServerControllerTest extends TestCase {
         $this->request = $this->createMock(IRequest::class);
         $this->mapper = $this->createMock(McpServerMapper::class);
         $this->mcpClient = $this->createMock(McpClientService::class);
+        $this->credentials = $this->createMock(CredentialService::class);
         $this->urlGenerator = $this->createMock(IURLGenerator::class);
+
+        // Default: encryptToken returns a fixed encrypted value
+        $this->credentials->method('encryptToken')
+            ->willReturnCallback(fn(?string $v) => $v !== null && $v !== '' ? 'encrypted:' . $v : $v);
+
         $this->controller = new McpServerController(
             'aiquila',
             $this->request,
             $this->mapper,
             $this->mcpClient,
+            $this->credentials,
             $this->urlGenerator
         );
     }
@@ -63,14 +72,13 @@ class McpServerControllerTest extends TestCase {
     public function testIndexMasksAuthToken(): void {
         $server = $this->makeServer();
         $server->setAuthType('bearer');
-        $server->setAuthToken('super-secret-token-12345');
+        $server->setAuthToken('encrypted:super-secret-token-12345');
         $this->mapper->method('findAll')->willReturn([$server]);
 
         $response = $this->controller->index();
         $data = $response->getData();
 
-        $this->assertNotEquals('super-secret-token-12345', $data[0]['auth_token_masked']);
-        $this->assertStringEndsWith('2345', $data[0]['auth_token_masked']);
+        $this->assertEquals('****', $data[0]['auth_token_masked']);
     }
 
     public function testCreateValidatesRequired(): void {
@@ -97,6 +105,21 @@ class McpServerControllerTest extends TestCase {
 
         $this->assertEquals(200, $response->getStatus());
         $this->assertEquals('My MCP', $data['display_name']);
+    }
+
+    public function testCreateBearerEncryptsToken(): void {
+        $this->mapper->method('insert')->willReturnCallback(function (McpServer $s) {
+            // Verify the token was encrypted before insert
+            $this->assertEquals('encrypted:my-token', $s->getAuthToken());
+            $ref = new \ReflectionClass($s);
+            $parent = $ref->getParentClass();
+            $idProp = $parent->getProperty('id');
+            $idProp->setValue($s, 1);
+            return $s;
+        });
+
+        $response = $this->controller->create('My MCP', 'http://localhost:3339/mcp', 'bearer', 'my-token');
+        $this->assertEquals(200, $response->getStatus());
     }
 
     public function testDestroyNotFound(): void {

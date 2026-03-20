@@ -25,11 +25,13 @@ use Psr\Log\LoggerInterface;
 class ClaudeSDKService {
     private IConfig $config;
     private LoggerInterface $logger;
+    private CredentialService $credentials;
     private string $appName = 'aiquila';
 
-    public function __construct(IConfig $config, LoggerInterface $logger) {
+    public function __construct(IConfig $config, LoggerInterface $logger, CredentialService $credentials) {
         $this->config = $config;
         $this->logger = $logger;
+        $this->credentials = $credentials;
     }
 
     /**
@@ -48,11 +50,7 @@ class ClaudeSDKService {
      * Get API key (user-specific or admin)
      */
     public function getApiKey(?string $userId = null): string {
-        if ($userId) {
-            $userKey = $this->config->getUserValue($userId, $this->appName, 'api_key', '');
-            if ($userKey) return $userKey;
-        }
-        return $this->config->getAppValue($this->appName, 'api_key', '');
+        return $this->credentials->getApiKey($userId);
     }
 
     /**
