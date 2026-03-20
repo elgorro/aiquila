@@ -22,6 +22,10 @@ use OCP\AppFramework\Db\Entity;
  * @method void setConversationId(?int $conversationId)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
+ * @method int|null getCacheCreationTokens()
+ * @method void setCacheCreationTokens(?int $cacheCreationTokens)
+ * @method int|null getCacheReadTokens()
+ * @method void setCacheReadTokens(?int $cacheReadTokens)
  */
 class UsageStat extends Entity {
     protected string $userId = '';
@@ -31,6 +35,8 @@ class UsageStat extends Entity {
     protected string $requestType = '';
     protected ?int $conversationId = null;
     protected int $createdAt = 0;
+    protected ?int $cacheCreationTokens = null;
+    protected ?int $cacheReadTokens = null;
 
     public function __construct() {
         $this->addType('userId', 'string');
@@ -40,5 +46,7 @@ class UsageStat extends Entity {
         $this->addType('requestType', 'string');
         $this->addType('conversationId', 'integer');
         $this->addType('createdAt', 'integer');
+        $this->addType('cacheCreationTokens', 'integer');
+        $this->addType('cacheReadTokens', 'integer');
     }
 }

@@ -288,6 +288,8 @@ class ConversationController extends Controller {
         $assistantMsg->setContent($result['response']);
         $assistantMsg->setInputTokens($result['usage']['input_tokens'] ?? null);
         $assistantMsg->setOutputTokens($result['usage']['output_tokens'] ?? null);
+        $assistantMsg->setCacheCreationTokens($result['usage']['cache_creation_tokens'] ?? null);
+        $assistantMsg->setCacheReadTokens($result['usage']['cache_read_tokens'] ?? null);
         $assistantMsg->setCreatedAt(time());
         $assistantMsg = $this->messageMapper->insert($assistantMsg);
 

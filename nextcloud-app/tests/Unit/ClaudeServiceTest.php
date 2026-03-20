@@ -17,6 +17,8 @@ use Anthropic\Models\ModelInfo;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
+use OCP\ICache;
+use OCP\ICacheFactory;
 use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
@@ -87,7 +89,7 @@ class TestableClaudeSDKService extends ClaudeSDKService {
 
     protected function callRetrieveModel(Client $client, string $modelId): ModelInfo {
         if ($this->retrieveModelException !== null) throw $this->retrieveModelException;
-        return $this->retrieveModelInfo ?? ModelInfo::with('test-model', new \DateTime(), 'Test Model');
+        return $this->retrieveModelInfo ?? ModelInfo::with($modelId, null, new \DateTime(), 'Test Model', null, null);
     }
 
     // Bypass real Client construction; callCreate/callCreateStream intercept before use.
@@ -127,6 +129,7 @@ class ClaudeServiceTest extends TestCase {
     private $config;
     private $logger;
     private $credentials;
+    private $cacheFactory;
     private ClaudeSDKService $service;
     private TestableClaudeSDKService $testable;
 
@@ -134,8 +137,15 @@ class ClaudeServiceTest extends TestCase {
         $this->config      = $this->createMock(IConfig::class);
         $this->logger      = $this->createMock(LoggerInterface::class);
         $this->credentials = $this->createMock(CredentialService::class);
-        $this->service     = new ClaudeSDKService($this->config, $this->logger, $this->credentials);
-        $this->testable    = new TestableClaudeSDKService($this->config, $this->logger, $this->credentials);
+
+        $cache = $this->createMock(ICache::class);
+        $cache->method('get')->willReturn(null);
+        $cache->method('set')->willReturn(true);
+        $this->cacheFactory = $this->createMock(ICacheFactory::class);
+        $this->cacheFactory->method('createDistributed')->willReturn($cache);
+
+        $this->service     = new ClaudeSDKService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $this->testable    = new TestableClaudeSDKService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
     }
 
     // ── PSR-7 helpers for building SDK exceptions ─────────────────────────

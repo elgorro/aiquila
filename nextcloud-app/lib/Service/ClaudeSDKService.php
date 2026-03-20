@@ -13,6 +13,8 @@ use Anthropic\Core\Exceptions\PermissionDeniedException;
 use Anthropic\Core\Exceptions\RateLimitException;
 use Anthropic\Messages\Message;
 use Anthropic\Models\ModelInfo;
+use OCP\ICache;
+use OCP\ICacheFactory;
 use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 
@@ -26,12 +28,16 @@ class ClaudeSDKService {
     private IConfig $config;
     private LoggerInterface $logger;
     private CredentialService $credentials;
+    private ICache $cache;
     private string $appName = 'aiquila';
 
-    public function __construct(IConfig $config, LoggerInterface $logger, CredentialService $credentials) {
+    private const CAPABILITY_CACHE_TTL = 3600; // 1 hour
+
+    public function __construct(IConfig $config, LoggerInterface $logger, CredentialService $credentials, ICacheFactory $cacheFactory) {
         $this->config = $config;
         $this->logger = $logger;
         $this->credentials = $credentials;
+        $this->cache = $cacheFactory->createDistributed('aiquila_model_caps');
     }
 
     /**
@@ -69,7 +75,52 @@ class ClaudeSDKService {
      */
     public function getMaxTokens(?string $userId = null): int {
         $stored = (int)$this->config->getAppValue($this->appName, 'max_tokens', (string)ClaudeModels::DEFAULT_MAX_TOKENS);
-        return min($stored, ClaudeModels::getMaxTokenCeiling($this->getModel($userId)));
+        $caps = $this->resolveModelCapabilities($this->getModel($userId), $userId);
+        return min($stored, $caps['max_tokens']);
+    }
+
+    /**
+     * Resolve model capabilities dynamically via the SDK, with caching and static fallback.
+     *
+     * @return array{max_tokens: int, supports_thinking: bool, supports_effort: bool}
+     */
+    private function resolveModelCapabilities(string $model, ?string $userId = null): array {
+        $cacheKey = $model;
+        $cached = $this->cache->get($cacheKey);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        try {
+            $client = $this->getClient($userId);
+            $info = $this->callRetrieveModel($client, $model);
+
+            $caps = [
+                'max_tokens' => $info->maxTokens ?? ClaudeModels::getMaxTokenCeiling($model),
+                'supports_thinking' => $info->capabilities->thinking->supported ?? false,
+                'supports_effort' => $info->capabilities->effort->supported ?? false,
+            ];
+
+            $this->cache->set($cacheKey, $caps, self::CAPABILITY_CACHE_TTL);
+
+            $this->logger->debug('AIquila SDK: Resolved model capabilities dynamically', [
+                'model' => $model,
+                'caps' => $caps,
+            ]);
+
+            return $caps;
+        } catch (\Throwable $e) {
+            $this->logger->debug('AIquila SDK: Falling back to static capabilities', [
+                'model' => $model,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'max_tokens' => ClaudeModels::getMaxTokenCeiling($model),
+                'supports_thinking' => ClaudeModels::supportsThinking($model),
+                'supports_effort' => ClaudeModels::supportsEffort($model),
+            ];
+        }
     }
 
     /**
@@ -92,14 +143,21 @@ class ClaudeSDKService {
         array   $options = []
     ): array {
         $model = $this->getModel($userId);
-        $params = array_merge(
-            [
-                'model'      => $model,
-                'max_tokens' => $this->getMaxTokens($userId),
-                'messages'   => $messages,
-            ],
-            ClaudeModels::getModelParams($model)
-        );
+        $caps = $this->resolveModelCapabilities($model, $userId);
+
+        $params = [
+            'model'      => $model,
+            'max_tokens' => $this->getMaxTokens($userId),
+            'messages'   => $messages,
+        ];
+
+        if ($caps['supports_thinking']) {
+            $params['thinking'] = ['type' => 'adaptive'];
+        }
+
+        if ($caps['supports_effort']) {
+            $params['outputConfig'] = ['effort' => ClaudeModels::getEffortLevel($model)];
+        }
 
         // System prompt
         if (!empty($options['system'])) {
@@ -185,6 +243,12 @@ class ClaudeSDKService {
         try {
             $client = $this->getClient($userId);
             $items  = $this->callListModels($client, ['limit' => 1000]);
+
+            // Warm capability cache for each model
+            foreach ($items as $m) {
+                $this->cacheModelInfoCapabilities($m);
+            }
+
             return array_map(fn(ModelInfo $m) => $m->id, $items);
         } catch (\Throwable $e) {
             $this->logger->warning('AIquila SDK: Could not list models', [
@@ -202,6 +266,9 @@ class ClaudeSDKService {
         try {
             $client = $this->getClient($userId);
             $info   = $this->callRetrieveModel($client, $modelId);
+
+            $this->cacheModelInfoCapabilities($info);
+
             return ['id' => $info->id, 'display_name' => $info->displayName];
         } catch (\Throwable $e) {
             $this->logger->warning('AIquila SDK: Could not retrieve model', [
@@ -210,6 +277,18 @@ class ClaudeSDKService {
             ]);
             return null;
         }
+    }
+
+    /**
+     * Extract and cache capabilities from a ModelInfo object.
+     */
+    private function cacheModelInfoCapabilities(ModelInfo $info): void {
+        $caps = [
+            'max_tokens' => $info->maxTokens ?? ClaudeModels::getMaxTokenCeiling($info->id),
+            'supports_thinking' => $info->capabilities->thinking->supported ?? false,
+            'supports_effort' => $info->capabilities->effort->supported ?? false,
+        ];
+        $this->cache->set($info->id, $caps, self::CAPABILITY_CACHE_TTL);
     }
 
     /**
@@ -223,6 +302,36 @@ class ClaudeSDKService {
             }
         }
         return $text;
+    }
+
+    /**
+     * Extract usage data from a Message response, including cache tokens.
+     *
+     * @return array{input_tokens: int, output_tokens: int, cache_creation_tokens: int|null, cache_read_tokens: int|null}
+     */
+    private function extractUsage(Message $response): array {
+        return [
+            'input_tokens' => $response->usage->inputTokens ?? 0,
+            'output_tokens' => $response->usage->outputTokens ?? 0,
+            'cache_creation_tokens' => $response->usage->cacheCreationInputTokens,
+            'cache_read_tokens' => $response->usage->cacheReadInputTokens,
+        ];
+    }
+
+    /**
+     * Log informational response metadata (inference geo, service tier) at debug level.
+     */
+    private function logResponseMetadata(Message $response): void {
+        $meta = [];
+        if (isset($response->usage->inferenceGeo) && $response->usage->inferenceGeo !== null) {
+            $meta['inference_geo'] = $response->usage->inferenceGeo;
+        }
+        if (isset($response->usage->serviceTier) && $response->usage->serviceTier !== null) {
+            $meta['service_tier'] = $response->usage->serviceTier;
+        }
+        if (!empty($meta)) {
+            $this->logger->debug('AIquila SDK: Response metadata', $meta);
+        }
     }
 
     /**
@@ -292,15 +401,16 @@ class ClaudeSDKService {
 
             $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId, $options));
 
+            $usage = $this->extractUsage($response);
+
             $this->logger->info('AIquila SDK: Successful response', [
                 'stop_reason' => $response->stopReason ?? 'unknown',
-                'usage' => [
-                    'input_tokens' => $response->usage->inputTokens ?? 0,
-                    'output_tokens' => $response->usage->outputTokens ?? 0,
-                ]
+                'usage' => $usage,
             ]);
 
-            return ['response' => $this->extractText($response)];
+            $this->logResponseMetadata($response);
+
+            return ['response' => $this->extractText($response), 'usage' => $usage];
 
         } catch (\Throwable $e) {
             return $this->handleException($e, 'ask');
@@ -339,20 +449,18 @@ class ClaudeSDKService {
 
             $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId, $options));
 
+            $usage = $this->extractUsage($response);
+
             $this->logger->info('AIquila SDK: chat() response', [
                 'stop_reason' => $response->stopReason ?? 'unknown',
-                'usage' => [
-                    'input_tokens'  => $response->usage->inputTokens ?? 0,
-                    'output_tokens' => $response->usage->outputTokens ?? 0,
-                ],
+                'usage' => $usage,
             ]);
+
+            $this->logResponseMetadata($response);
 
             return [
                 'response' => $this->extractText($response),
-                'usage' => [
-                    'input_tokens'  => $response->usage->inputTokens ?? 0,
-                    'output_tokens' => $response->usage->outputTokens ?? 0,
-                ],
+                'usage' => $usage,
             ];
 
         } catch (\Throwable $e) {
@@ -396,6 +504,8 @@ class ClaudeSDKService {
 
         $totalInputTokens = 0;
         $totalOutputTokens = 0;
+        $totalCacheCreationTokens = 0;
+        $totalCacheReadTokens = 0;
 
         for ($i = 0; $i < $maxIterations; $i++) {
             try {
@@ -407,6 +517,10 @@ class ClaudeSDKService {
 
             $totalInputTokens += $response->usage->inputTokens ?? 0;
             $totalOutputTokens += $response->usage->outputTokens ?? 0;
+            $totalCacheCreationTokens += $response->usage->cacheCreationInputTokens ?? 0;
+            $totalCacheReadTokens += $response->usage->cacheReadInputTokens ?? 0;
+
+            $this->logResponseMetadata($response);
 
             // Check if response contains tool use blocks
             $toolUseBlocks = [];
@@ -427,6 +541,8 @@ class ClaudeSDKService {
                         'usage' => [
                             'input_tokens' => $totalInputTokens,
                             'output_tokens' => $totalOutputTokens,
+                            'cache_creation_tokens' => $totalCacheCreationTokens ?: null,
+                            'cache_read_tokens' => $totalCacheReadTokens ?: null,
                         ],
                     ];
                 }
@@ -495,6 +611,8 @@ class ClaudeSDKService {
             'usage' => [
                 'input_tokens' => $totalInputTokens,
                 'output_tokens' => $totalOutputTokens,
+                'cache_creation_tokens' => $totalCacheCreationTokens ?: null,
+                'cache_read_tokens' => $totalCacheReadTokens ?: null,
             ],
         ];
     }
@@ -568,16 +686,17 @@ class ClaudeSDKService {
 
             $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId));
 
+            $usage = $this->extractUsage($response);
+
             $this->logger->info('AIquila SDK: Document analysis response', [
                 'stop_reason' => $response->stopReason ?? 'unknown',
                 'media_type'  => $mediaType,
-                'usage' => [
-                    'input_tokens'  => $response->usage->inputTokens ?? 0,
-                    'output_tokens' => $response->usage->outputTokens ?? 0,
-                ],
+                'usage' => $usage,
             ]);
 
-            return ['response' => $this->extractText($response)];
+            $this->logResponseMetadata($response);
+
+            return ['response' => $this->extractText($response), 'usage' => $usage];
 
         } catch (\Throwable $e) {
             return $this->handleException($e, 'askWithDocument');
@@ -692,15 +811,16 @@ class ClaudeSDKService {
             ];
             $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId));
 
+            $usage = $this->extractUsage($response);
+
             $this->logger->info('AIquila SDK: Image analysis response', [
                 'stop_reason' => $response->stopReason ?? 'unknown',
-                'usage' => [
-                    'input_tokens' => $response->usage->inputTokens ?? 0,
-                    'output_tokens' => $response->usage->outputTokens ?? 0,
-                ]
+                'usage' => $usage,
             ]);
 
-            return ['response' => $this->extractText($response)];
+            $this->logResponseMetadata($response);
+
+            return ['response' => $this->extractText($response), 'usage' => $usage];
 
         } catch (\Throwable $e) {
             return $this->handleException($e, 'Image analysis');
