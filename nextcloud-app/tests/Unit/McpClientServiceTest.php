@@ -4,6 +4,7 @@ namespace OCA\AIquila\Tests\Unit;
 
 use OCA\AIquila\Db\McpServer;
 use OCA\AIquila\Db\McpServerMapper;
+use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\McpClientService;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -19,8 +20,8 @@ class TestableMcpClientService extends McpClientService {
     /** Captured calls: [['method' => ..., 'params' => ...], ...] */
     public array $capturedCalls = [];
 
-    public function __construct(McpServerMapper $mapper, LoggerInterface $logger) {
-        parent::__construct($mapper, $logger);
+    public function __construct(McpServerMapper $mapper, LoggerInterface $logger, CredentialService $credentials) {
+        parent::__construct($mapper, $logger, $credentials);
     }
 
     /**
@@ -89,12 +90,21 @@ class TestableMcpClientService extends McpClientService {
 class McpClientServiceTest extends TestCase {
     private McpServerMapper $mapper;
     private LoggerInterface $logger;
+    private CredentialService $credentials;
     private TestableMcpClientService $service;
 
     protected function setUp(): void {
         $this->mapper = $this->createMock(McpServerMapper::class);
         $this->logger = $this->createMock(LoggerInterface::class);
-        $this->service = new TestableMcpClientService($this->mapper, $this->logger);
+        $this->credentials = $this->createMock(CredentialService::class);
+
+        // Default: encrypt/decrypt pass through for test simplicity
+        $this->credentials->method('encryptToken')
+            ->willReturnCallback(fn(?string $v) => $v);
+        $this->credentials->method('decryptToken')
+            ->willReturnCallback(fn(?string $v) => $v);
+
+        $this->service = new TestableMcpClientService($this->mapper, $this->logger, $this->credentials);
     }
 
     private function makeServer(int $id = 1, string $name = 'Test Server', string $url = 'http://localhost:3339/mcp'): McpServer {
@@ -270,10 +280,6 @@ class McpClientServiceTest extends TestCase {
         ]));
 
         $this->mapper->method('update')->willReturnArgument(0);
-
-        // We can't test the HTTP call directly via TestableMcpClientService
-        // since completeOAuth uses httpClient directly. Test the state validation instead.
-        // The actual HTTP integration is covered by functional tests.
 
         // Verify state mismatch throws
         $this->expectException(\RuntimeException::class);

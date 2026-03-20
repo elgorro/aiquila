@@ -62,6 +62,11 @@ Made possible by [Claude](https://www.anthropic.com/claude) from [Anthropic](htt
         <admin-section>OCA\AIquila\Settings\AdminSection</admin-section>
         <personal>OCA\AIquila\Settings\UserSettings</personal>
     </settings>
+    <repair-steps>
+        <post-migration>
+            <step>OCA\AIquila\Migration\RepairEncryptMcpTokens</step>
+        </post-migration>
+    </repair-steps>
     <commands>
         <command>OCA\AIquila\Command\ConfigureCommand</command>
         <command>OCA\AIquila\Command\TestSDKCommand</command>

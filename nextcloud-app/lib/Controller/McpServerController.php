@@ -6,6 +6,7 @@ namespace OCA\AIquila\Controller;
 
 use OCA\AIquila\Db\McpServer;
 use OCA\AIquila\Db\McpServerMapper;
+use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\McpClientService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -18,6 +19,7 @@ use OCP\IURLGenerator;
 class McpServerController extends Controller {
     private McpServerMapper $mapper;
     private McpClientService $mcpClient;
+    private CredentialService $credentials;
     private IURLGenerator $urlGenerator;
 
     public function __construct(
@@ -25,11 +27,13 @@ class McpServerController extends Controller {
         IRequest $request,
         McpServerMapper $mapper,
         McpClientService $mcpClient,
+        CredentialService $credentials,
         IURLGenerator $urlGenerator
     ) {
         parent::__construct($appName, $request);
         $this->mapper = $mapper;
         $this->mcpClient = $mcpClient;
+        $this->credentials = $credentials;
         $this->urlGenerator = $urlGenerator;
     }
 
@@ -81,7 +85,7 @@ class McpServerController extends Controller {
         $server->setDisplayName($displayName);
         $server->setUrl($url);
         $server->setAuthType($authType);
-        $server->setAuthToken($authType === 'bearer' ? $authToken : null);
+        $server->setAuthToken($authType === 'bearer' ? $this->credentials->encryptToken($authToken) : null);
         $server->setIsEnabled(true);
         $server->setCreatedAt($now);
         $server->setUpdatedAt($now);
@@ -143,7 +147,7 @@ class McpServerController extends Controller {
             }
         }
         if (!empty($authToken) && $server->getAuthType() === 'bearer') {
-            $server->setAuthToken($authToken);
+            $server->setAuthToken($this->credentials->encryptToken($authToken));
         }
         if ($isEnabled !== null) {
             $server->setIsEnabled($isEnabled);
@@ -298,10 +302,7 @@ class McpServerController extends Controller {
      */
     private function serializeServer(McpServer $server): array {
         $token = $server->getAuthToken();
-        $maskedToken = null;
-        if ($token) {
-            $maskedToken = str_repeat('*', max(0, strlen($token) - 4)) . substr($token, -4);
-        }
+        $maskedToken = $token ? '****' : null;
 
         // Determine OAuth status
         $oauthStatus = null;

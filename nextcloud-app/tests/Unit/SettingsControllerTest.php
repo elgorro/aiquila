@@ -5,6 +5,7 @@ namespace OCA\AIquila\Tests\Unit;
 use OCA\AIquila\Controller\SettingsController;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
+use OCA\AIquila\Service\CredentialService;
 use OCP\IConfig;
 use OCP\IRequest;
 use PHPUnit\Framework\TestCase;
@@ -13,22 +14,26 @@ class SettingsControllerTest extends TestCase {
     private $config;
     private $request;
     private $claude;
+    private $credentials;
     private SettingsController $ctrl;
 
     protected function setUp(): void {
-        $this->config  = $this->createMock(IConfig::class);
-        $this->request = $this->createMock(IRequest::class);
-        $this->claude  = $this->createMock(ClaudeSDKService::class);
-        $this->ctrl    = new SettingsController(
+        $this->config      = $this->createMock(IConfig::class);
+        $this->request     = $this->createMock(IRequest::class);
+        $this->claude      = $this->createMock(ClaudeSDKService::class);
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->ctrl        = new SettingsController(
             'aiquila',
             $this->request,
             $this->config,
             'testuser',
-            $this->claude
+            $this->claude,
+            $this->credentials
         );
     }
 
     public function testGetReturnsHasUserKeyFalse(): void {
+        $this->credentials->method('hasApiKey')->with('testuser')->willReturn(false);
         $this->config->method('getUserValue')->willReturn('');
         $this->claude->method('listModels')->willReturn(null);
 
@@ -39,10 +44,10 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testGetReturnsHasUserKeyTrue(): void {
+        $this->credentials->method('hasApiKey')->with('testuser')->willReturn(true);
         $this->config->method('getUserValue')
             ->willReturnMap([
-                ['testuser', 'aiquila', 'api_key', '', 'user-secret-key'],
-                ['testuser', 'aiquila', 'model',   '', ''],
+                ['testuser', 'aiquila', 'model', '', ''],
             ]);
         $this->claude->method('listModels')->willReturn(null);
 
@@ -53,10 +58,10 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testGetReturnsUserModelAndAvailableModels(): void {
+        $this->credentials->method('hasApiKey')->willReturn(false);
         $this->config->method('getUserValue')
             ->willReturnMap([
-                ['testuser', 'aiquila', 'api_key', '', ''],
-                ['testuser', 'aiquila', 'model',   '', ClaudeModels::HAIKU_4_5],
+                ['testuser', 'aiquila', 'model', '', ClaudeModels::HAIKU_4_5],
             ]);
         $this->claude->method('listModels')->willReturn(null);
 
@@ -68,6 +73,7 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testGetUsesLiveModelsWhenAvailable(): void {
+        $this->credentials->method('hasApiKey')->willReturn(false);
         $this->config->method('getUserValue')->willReturn('');
         $this->claude->method('listModels')->with('testuser')->willReturn(['claude-test-model']);
 
@@ -78,6 +84,7 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testGetFallsBackToStaticModelsWhenListFails(): void {
+        $this->credentials->method('hasApiKey')->willReturn(false);
         $this->config->method('getUserValue')->willReturn('');
         $this->claude->method('listModels')->with('testuser')->willReturn(null);
 
@@ -88,24 +95,24 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testSaveStoresApiKeyAndModel(): void {
-        $calls = [];
-        $this->config->method('setUserValue')
-            ->willReturnCallback(function (string $uid, string $app, string $key, string $val) use (&$calls): void {
-                $calls[] = [$uid, $app, $key, $val];
-            });
+        $this->credentials->expects($this->once())
+            ->method('setApiKey')
+            ->with('testuser', 'my-api-key');
+
+        $this->config->expects($this->once())
+            ->method('setUserValue')
+            ->with('testuser', 'aiquila', 'model', ClaudeModels::OPUS_4_6);
 
         $response = $this->ctrl->save('my-api-key', ClaudeModels::OPUS_4_6);
 
         $this->assertEquals(200, $response->getStatus());
         $this->assertEquals('ok', $response->getData()['status']);
-        $this->assertContains(['testuser', 'aiquila', 'api_key', 'my-api-key'], $calls);
-        $this->assertContains(['testuser', 'aiquila', 'model', ClaudeModels::OPUS_4_6], $calls);
     }
 
     public function testSaveWithEmptyModelDeletesUserValue(): void {
-        $this->config->expects($this->once())
-            ->method('setUserValue')
-            ->with('testuser', 'aiquila', 'api_key', 'some-key');
+        $this->credentials->expects($this->once())
+            ->method('setApiKey')
+            ->with('testuser', 'some-key');
 
         $this->config->expects($this->once())
             ->method('deleteUserValue')
@@ -115,15 +122,11 @@ class SettingsControllerTest extends TestCase {
         $this->assertEquals('ok', $response->getData()['status']);
     }
 
-    public function testSaveWithEmptyApiKeyClearsKey(): void {
-        $calls = [];
-        $this->config->method('setUserValue')
-            ->willReturnCallback(function (string $uid, string $app, string $key, string $val) use (&$calls): void {
-                $calls[] = [$uid, $app, $key, $val];
-            });
+    public function testSaveWithEmptyApiKeyDeletesKey(): void {
+        $this->credentials->expects($this->once())
+            ->method('deleteApiKey')
+            ->with('testuser');
 
         $this->ctrl->save('', ClaudeModels::SONNET_4_5);
-
-        $this->assertContains(['testuser', 'aiquila', 'api_key', ''], $calls);
     }
 }

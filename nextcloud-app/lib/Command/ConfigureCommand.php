@@ -4,6 +4,7 @@ namespace OCA\AIquila\Command;
 
 use OC\Core\Command\Base;
 use OCA\AIquila\Service\ClaudeModels;
+use OCA\AIquila\Service\CredentialService;
 use OCP\IConfig;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -11,11 +12,13 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 class ConfigureCommand extends Base {
     private IConfig $config;
+    private CredentialService $credentials;
     private const APP_NAME = 'aiquila';
 
-    public function __construct(IConfig $config) {
+    public function __construct(IConfig $config, CredentialService $credentials) {
         parent::__construct();
         $this->config = $config;
+        $this->credentials = $credentials;
     }
 
     protected function configure(): void {
@@ -69,7 +72,7 @@ class ConfigureCommand extends Base {
                 $output->writeln('<error>Invalid API key format. Must start with sk-ant-</error>');
                 return 1;
             }
-            $this->config->setAppValue(self::APP_NAME, 'api_key', $apiKey);
+            $this->credentials->setApiKey(null, $apiKey);
             $output->writeln('<info>✓ API key updated</info>');
             $updated = true;
         }
@@ -123,7 +126,7 @@ class ConfigureCommand extends Base {
     }
 
     private function showConfiguration(OutputInterface $output): int {
-        $apiKey = $this->config->getAppValue(self::APP_NAME, 'api_key', '');
+        $hasKey = $this->credentials->hasApiKey(null);
         $model = $this->config->getAppValue(self::APP_NAME, 'model', ClaudeModels::DEFAULT_MODEL);
         $maxTokens = $this->config->getAppValue(self::APP_NAME, 'max_tokens', '4096');
         $timeout = $this->config->getAppValue(self::APP_NAME, 'api_timeout', '30');
@@ -132,10 +135,8 @@ class ConfigureCommand extends Base {
         $output->writeln('<info>AIquila Configuration:</info>');
         $output->writeln('');
 
-        // Mask API key for security
-        if (!empty($apiKey)) {
-            $maskedKey = substr($apiKey, 0, 10) . '...' . substr($apiKey, -4);
-            $output->writeln('  API Key:    <comment>' . $maskedKey . '</comment> (configured)');
+        if ($hasKey) {
+            $output->writeln('  API Key:    <comment>(configured)</comment>');
         } else {
             $output->writeln('  API Key:    <error>Not configured</error>');
         }

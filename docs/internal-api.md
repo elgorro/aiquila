@@ -326,8 +326,8 @@ For large files, consider:
 ## Security Considerations
 
 1. **API Keys:**
-   - Admin keys are stored in Nextcloud config
-   - User keys are encrypted in database
+   - Both admin and user keys are stored via `ICredentialsManager` (encrypted at rest)
+   - MCP server tokens are encrypted via `ICrypto` before database storage
    - Never expose API keys in responses
 
 2. **User Context:**

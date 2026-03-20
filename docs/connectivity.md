@@ -121,10 +121,10 @@ Benefits:
 
 ### API Key Storage
 
-- Admin API keys are stored in Nextcloud's `oc_appconfig` table
-- User API keys are stored in `oc_preferences` table
-- Both are stored as plain text (Nextcloud standard)
-- Consider using Nextcloud's Secret storage for production
+- API keys are stored via Nextcloud's `ICredentialsManager` (encrypted at rest)
+- MCP server tokens (bearer, OAuth) are encrypted via `ICrypto` before database storage
+- On upgrade, existing plaintext keys are automatically migrated to encrypted storage
+- Keys are never exposed in admin UI or CLI output — only `(configured)` / `****` is shown
 
 ### HTTPS
 

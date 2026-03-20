@@ -116,7 +116,7 @@ php occ app:list
 php occ app:enable aiquila
 php occ user:list
 php occ config:app:get aiquila
-php occ config:app:set aiquila api_key --value="sk-ant-..."
+php occ aiquila:configure --api-key="sk-ant-..."
 ```
 
 ### Database Access
