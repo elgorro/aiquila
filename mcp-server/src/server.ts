@@ -25,6 +25,7 @@ import { mailTools } from './tools/apps/mail.js';
 import { bookmarksTools } from './tools/apps/bookmarks.js';
 import { mapsTools } from './tools/apps/maps.js';
 import { assistantTools } from './tools/apps/assistant.js';
+import { translateTools } from './tools/apps/translate.js';
 
 const SERVER_NAME = 'aiquila';
 const _require = createRequire(import.meta.url);
@@ -51,6 +52,7 @@ const allToolSets = [
   tagsTools,
   searchTools,
   assistantTools,
+  translateTools,
 ];
 
 /**
