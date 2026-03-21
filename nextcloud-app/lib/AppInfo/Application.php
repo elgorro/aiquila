@@ -29,6 +29,9 @@ class Application extends App implements IBootstrap {
             return $c->get(AIquilaService::class);
         });
 
+        // Expose app capabilities via /ocs/v2.php/cloud/capabilities
+        $context->registerCapability(\OCA\AIquila\Capabilities\AIquilaCapability::class);
+
         // Register Claude Text Processing Providers for native Nextcloud Assistant integration
         // Wrapped in a check so the app degrades gracefully on NC versions where this API was removed (NC33+)
         if (interface_exists(\OCP\TextProcessing\IProvider::class)) {
