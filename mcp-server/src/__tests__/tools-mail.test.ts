@@ -117,7 +117,7 @@ describe('Mail Tools', () => {
     });
   });
 
-  describe('list_messages', () => {
+  describe('mail_list_messages', () => {
     it('should return formatted message summaries', async () => {
       mockFetchOCS.mockResolvedValue({
         ocs: {
@@ -168,7 +168,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'list_messages')!;
+      const tool = mailTools.find((t) => t.name === 'mail_list_messages')!;
       const result = await tool.handler({ mailboxId: 10 });
 
       expect(result.content[0].text).toContain('Hello World');
@@ -191,7 +191,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'list_messages')!;
+      const tool = mailTools.find((t) => t.name === 'mail_list_messages')!;
       const result = await tool.handler({ mailboxId: 10 });
 
       expect(result.content[0].text).toContain('No messages found');
@@ -201,7 +201,7 @@ describe('Mail Tools', () => {
       mockFetchOCS.mockRejectedValue(new Error('OCS API error: 404 Not Found'));
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'list_messages')!;
+      const tool = mailTools.find((t) => t.name === 'mail_list_messages')!;
       const result = await tool.handler({ mailboxId: 999 });
 
       expect(result.isError).toBe(true);
@@ -209,7 +209,7 @@ describe('Mail Tools', () => {
     });
   });
 
-  describe('read_message', () => {
+  describe('mail_read_message', () => {
     it('should return full message content', async () => {
       mockFetchOCS.mockResolvedValue({
         ocs: {
@@ -232,7 +232,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'read_message')!;
+      const tool = mailTools.find((t) => t.name === 'mail_read_message')!;
       const result = await tool.handler({ messageId: 100 });
 
       expect(result.content[0].text).toContain('Subject: Test Subject');
@@ -250,7 +250,7 @@ describe('Mail Tools', () => {
       mockFetchOCS.mockRejectedValue(new Error('Message not found'));
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'read_message')!;
+      const tool = mailTools.find((t) => t.name === 'mail_read_message')!;
       const result = await tool.handler({ messageId: 999 });
 
       expect(result.isError).toBe(true);
@@ -258,7 +258,7 @@ describe('Mail Tools', () => {
     });
   });
 
-  describe('send_message', () => {
+  describe('mail_send_message', () => {
     it('should send email successfully', async () => {
       // First call: GET /accounts to find fromEmail
       // Second call: POST /messages/send
@@ -276,7 +276,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'send_message')!;
+      const tool = mailTools.find((t) => t.name === 'mail_send_message')!;
       const result = await tool.handler({
         accountId: 1,
         to: ['alice@example.com'],
@@ -303,7 +303,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'send_message')!;
+      const tool = mailTools.find((t) => t.name === 'mail_send_message')!;
       const result = await tool.handler({
         accountId: 999,
         to: ['alice@example.com'],
@@ -316,12 +316,12 @@ describe('Mail Tools', () => {
     });
   });
 
-  describe('delete_message', () => {
+  describe('mail_delete_message', () => {
     it('should delete a message', async () => {
       mockFetchMailAPI.mockResolvedValue({ ok: true, status: 200 });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'delete_message')!;
+      const tool = mailTools.find((t) => t.name === 'mail_delete_message')!;
       const result = await tool.handler({ messageId: 100 });
 
       expect(result.content[0].text).toContain('Message 100 deleted');
@@ -336,7 +336,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'delete_message')!;
+      const tool = mailTools.find((t) => t.name === 'mail_delete_message')!;
       const result = await tool.handler({ messageId: 999 });
 
       expect(result.isError).toBe(true);
@@ -344,12 +344,12 @@ describe('Mail Tools', () => {
     });
   });
 
-  describe('move_message', () => {
+  describe('mail_move_message', () => {
     it('should move a message', async () => {
       mockFetchMailAPI.mockResolvedValue({ ok: true, status: 200 });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'move_message')!;
+      const tool = mailTools.find((t) => t.name === 'mail_move_message')!;
       const result = await tool.handler({ messageId: 100, destMailboxId: 20 });
 
       expect(result.content[0].text).toContain('Message 100 moved to mailbox 20');
@@ -367,7 +367,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'move_message')!;
+      const tool = mailTools.find((t) => t.name === 'mail_move_message')!;
       const result = await tool.handler({ messageId: 100, destMailboxId: 999 });
 
       expect(result.isError).toBe(true);
@@ -375,12 +375,12 @@ describe('Mail Tools', () => {
     });
   });
 
-  describe('set_message_flags', () => {
+  describe('mail_set_message_flags', () => {
     it('should set flags on a message', async () => {
       mockFetchMailAPI.mockResolvedValue({ ok: true, status: 200 });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'set_message_flags')!;
+      const tool = mailTools.find((t) => t.name === 'mail_set_message_flags')!;
       const result = await tool.handler({ messageId: 100, flags: { seen: true, flagged: true } });
 
       expect(result.content[0].text).toContain('Flags updated on message 100');
@@ -400,7 +400,7 @@ describe('Mail Tools', () => {
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'set_message_flags')!;
+      const tool = mailTools.find((t) => t.name === 'mail_set_message_flags')!;
       const result = await tool.handler({ messageId: 100, flags: { seen: true } });
 
       expect(result.isError).toBe(true);
