@@ -164,7 +164,7 @@ const listMailboxesTool = {
 };
 
 const listMessagesTool = {
-  name: 'list_messages',
+  name: 'mail_list_messages',
   description:
     'List email messages in a Nextcloud Mail mailbox. Supports pagination via cursor. Returns subject, sender, date, and message IDs.',
   inputSchema: z.object({
@@ -236,7 +236,7 @@ const listMessagesTool = {
 };
 
 const readMessageTool = {
-  name: 'read_message',
+  name: 'mail_read_message',
   description:
     'Read the full content of an email message by ID. Returns headers, body text, and attachment list.',
   inputSchema: z.object({
@@ -297,7 +297,7 @@ const readMessageTool = {
 };
 
 const sendMessageTool = {
-  name: 'send_message',
+  name: 'mail_send_message',
   description:
     'Send an email message through Nextcloud Mail. Requires an account ID and recipient addresses.',
   inputSchema: z.object({
@@ -373,7 +373,7 @@ const sendMessageTool = {
 };
 
 const deleteMessageTool = {
-  name: 'delete_message',
+  name: 'mail_delete_message',
   description: 'Delete an email message by ID. This typically moves it to trash.',
   inputSchema: z.object({
     messageId: z.number().describe('The message ID to delete'),
@@ -406,7 +406,7 @@ const deleteMessageTool = {
 };
 
 const moveMessageTool = {
-  name: 'move_message',
+  name: 'mail_move_message',
   description: 'Move an email message to a different mailbox/folder.',
   inputSchema: z.object({
     messageId: z.number().describe('The message ID to move'),
@@ -446,7 +446,7 @@ const moveMessageTool = {
 };
 
 const setMessageFlagsTool = {
-  name: 'set_message_flags',
+  name: 'mail_set_message_flags',
   description:
     'Set flags on an email message (mark as read/unread, star/unstar, mark as important or junk).',
   inputSchema: z.object({

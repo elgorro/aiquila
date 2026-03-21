@@ -355,3 +355,17 @@ if (!interface_exists('OCP\Migration\IRepairStep')) {
     }
     class_alias('OCP_Migration_IRepairStep', 'OCP\Migration\IRepairStep');
 }
+
+if (!interface_exists('OCP\App\IAppManager')) {
+    interface OCP_App_IAppManager {
+        public function getAppVersion(string $appId): string;
+    }
+    class_alias('OCP_App_IAppManager', 'OCP\App\IAppManager');
+}
+
+if (!interface_exists('OCP\Capabilities\ICapability')) {
+    interface OCP_Capabilities_ICapability {
+        public function getCapabilities(): array;
+    }
+    class_alias('OCP_Capabilities_ICapability', 'OCP\Capabilities\ICapability');
+}
