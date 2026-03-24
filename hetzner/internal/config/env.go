@@ -295,6 +295,9 @@ func (e *FullEnv) Render() string {
 	b.WriteString("MCP_TRUST_PROXY=true\n")
 	b.WriteString("\n")
 
+	b.WriteString("# Extra hostnames for MCP SDK DNS rebinding protection (Docker service names)\n")
+	b.WriteString("MCP_ALLOWED_HOSTS=mcp\n")
+	b.WriteString("\n")
 	b.WriteString("# Internal token for NC→MCP auth on Docker network\n")
 	b.WriteString(fmt.Sprintf("MCP_INTERNAL_TOKEN=%s\n", e.MCPInternalToken))
 	b.WriteString("\n")
