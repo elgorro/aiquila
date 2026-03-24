@@ -26,7 +26,7 @@ interface OcsRequestOptions {
   body?: Record<string, string>;
   /** JSON body (for newer TaskProcessing and text2image endpoints) */
   jsonBody?: unknown;
-  queryParams?: Record<string, string>;
+  queryParams?: Record<string, string | string[]>;
 }
 
 /**
@@ -44,7 +44,14 @@ export async function fetchOCS<T = unknown>(
 
   let url = `${config.url}${path}`;
   if (options.queryParams) {
-    const params = new URLSearchParams(options.queryParams);
+    const params = new URLSearchParams();
+    for (const [key, val] of Object.entries(options.queryParams)) {
+      if (Array.isArray(val)) {
+        for (const v of val) params.append(key, v);
+      } else {
+        params.append(key, val);
+      }
+    }
     url += `?${params.toString()}`;
   }
 

@@ -27,6 +27,11 @@ import { mapsTools } from './tools/apps/maps.js';
 import { assistantTools } from './tools/apps/assistant.js';
 import { translateTools } from './tools/apps/translate.js';
 import { talkTools } from './tools/apps/talk.js';
+import { userStatusTools } from './tools/apps/user-status.js';
+import { absenceTools } from './tools/apps/absence.js';
+import { notificationsTools } from './tools/apps/notifications.js';
+import { trashTools } from './tools/apps/trash.js';
+import { versionsTools } from './tools/apps/versions.js';
 
 const SERVER_NAME = 'aiquila';
 const _require = createRequire(import.meta.url);
@@ -55,6 +60,11 @@ const allToolSets = [
   assistantTools,
   translateTools,
   talkTools,
+  userStatusTools,
+  absenceTools,
+  notificationsTools,
+  trashTools,
+  versionsTools,
 ];
 
 /**
