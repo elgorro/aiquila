@@ -417,6 +417,75 @@ export const copyFileTool = {
 };
 
 /**
+ * Perform multiple file operations (move, copy, delete) in a single call
+ */
+export const bulkFileOperationsTool = {
+  name: 'bulk_file_operations',
+  description:
+    'Execute multiple file operations (move, copy, delete) sequentially in a single call. Returns per-item results.',
+  inputSchema: z.object({
+    operations: z
+      .array(
+        z.object({
+          action: z.enum(['move', 'copy', 'delete']).describe('The operation to perform'),
+          source: z.string().describe('Source file/folder path'),
+          destination: z.string().optional().describe('Destination path (required for move/copy)'),
+        })
+      )
+      .min(1)
+      .max(100)
+      .describe('Array of file operations to execute sequentially'),
+  }),
+  handler: async (args: {
+    operations: Array<{ action: 'move' | 'copy' | 'delete'; source: string; destination?: string }>;
+  }) => {
+    const client = getWebDAVClient();
+    const results: string[] = [];
+    let succeeded = 0;
+
+    for (const op of args.operations) {
+      try {
+        if ((op.action === 'move' || op.action === 'copy') && !op.destination) {
+          results.push(`✗ ${op.action} ${op.source} — missing destination`);
+          continue;
+        }
+
+        switch (op.action) {
+          case 'move':
+            await client.moveFile(op.source, op.destination!);
+            results.push(`✓ move ${op.source} → ${op.destination}`);
+            succeeded++;
+            break;
+          case 'copy':
+            await client.copyFile(op.source, op.destination!);
+            results.push(`✓ copy ${op.source} → ${op.destination}`);
+            succeeded++;
+            break;
+          case 'delete':
+            await client.deleteFile(op.source);
+            results.push(`✓ delete ${op.source}`);
+            succeeded++;
+            break;
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        results.push(`✗ ${op.action} ${op.source} — ${msg}`);
+      }
+    }
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Bulk operations: ${succeeded}/${args.operations.length} succeeded\n${results.join('\n')}`,
+        },
+      ],
+      ...(succeeded < args.operations.length ? { isError: true } : {}),
+    };
+  },
+};
+
+/**
  * Export all file system tools
  */
 export const fileSystemTools = [
@@ -431,4 +500,5 @@ export const fileSystemTools = [
   searchFilesTool,
   getFileContentTool,
   analyzeImageTool,
+  bulkFileOperationsTool,
 ];

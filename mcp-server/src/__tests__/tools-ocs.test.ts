@@ -2926,4 +2926,626 @@ END:VCARD</cr:address-data>
       expect(allowlist).not.toContain('config:list');
     });
   });
+
+  // ─── Bulk File Operations ─────────────────────────────────────────────
+
+  describe('bulk_file_operations', () => {
+    it('should execute multiple operations', async () => {
+      mockClient.moveFile.mockResolvedValue(undefined);
+      mockClient.copyFile.mockResolvedValue(undefined);
+      mockClient.deleteFile.mockResolvedValue(undefined);
+
+      const { bulkFileOperationsTool } = await import('../tools/system/files.js');
+      const result = await bulkFileOperationsTool.handler({
+        operations: [
+          { action: 'move', source: '/a.txt', destination: '/b.txt' },
+          { action: 'copy', source: '/c.txt', destination: '/d.txt' },
+          { action: 'delete', source: '/e.txt' },
+        ],
+      });
+
+      expect(result.content[0].text).toContain('3/3 succeeded');
+      expect(result.content[0].text).toContain('move /a.txt');
+      expect(result.content[0].text).toContain('delete /e.txt');
+    });
+
+    it('should handle partial failures', async () => {
+      mockClient.moveFile.mockResolvedValue(undefined);
+      mockClient.deleteFile.mockRejectedValue(new Error('Not found'));
+
+      const { bulkFileOperationsTool } = await import('../tools/system/files.js');
+      const result = await bulkFileOperationsTool.handler({
+        operations: [
+          { action: 'move', source: '/a.txt', destination: '/b.txt' },
+          { action: 'delete', source: '/missing.txt' },
+        ],
+      });
+
+      expect(result.content[0].text).toContain('1/2 succeeded');
+      expect(result.isError).toBe(true);
+    });
+
+    it('should reject move/copy without destination', async () => {
+      const { bulkFileOperationsTool } = await import('../tools/system/files.js');
+      const result = await bulkFileOperationsTool.handler({
+        operations: [{ action: 'move', source: '/a.txt' }],
+      });
+
+      expect(result.content[0].text).toContain('missing destination');
+    });
+  });
+
+  // ─── Trash Tools ─────────────────────────────────────────────────────
+
+  describe('list_trash', () => {
+    it('should list trash items', async () => {
+      const xml = `<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+  <d:response>
+    <d:href>/remote.php/dav/trashbin/admin/trash/</d:href>
+    <d:propstat><d:prop></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/remote.php/dav/trashbin/admin/trash/doc.pdf.d1711234567</d:href>
+    <d:propstat><d:prop>
+      <d:displayname>doc.pdf</d:displayname>
+      <d:getcontentlength>10240</d:getcontentlength>
+      <oc:trashbin-original-location>Documents/doc.pdf</oc:trashbin-original-location>
+      <oc:trashbin-delete-timestamp>1711234567</oc:trashbin-delete-timestamp>
+    </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 207,
+        statusText: 'Multi-Status',
+        text: () => Promise.resolve(xml),
+        headers: new Headers(),
+      });
+
+      const { listTrashTool } = await import('../tools/apps/trash.js');
+      const result = await listTrashTool.handler();
+
+      expect(result.content[0].text).toContain('doc.pdf');
+      expect(result.content[0].text).toContain('Documents/doc.pdf');
+    });
+
+    it('should handle empty trash', async () => {
+      const xml = `<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/remote.php/dav/trashbin/admin/trash/</d:href>
+    <d:propstat><d:prop></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 207,
+        text: () => Promise.resolve(xml),
+        headers: new Headers(),
+      });
+
+      const { listTrashTool } = await import('../tools/apps/trash.js');
+      const result = await listTrashTool.handler();
+
+      expect(result.content[0].text).toContain('empty');
+    });
+  });
+
+  describe('restore_from_trash', () => {
+    it('should restore a trash item', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 201,
+        statusText: 'Created',
+        headers: new Headers(),
+      });
+
+      const { restoreFromTrashTool } = await import('../tools/apps/trash.js');
+      const result = await restoreFromTrashTool.handler({
+        trashKey: 'doc.pdf.d1711234567',
+      });
+
+      expect(result.content[0].text).toContain('Restored');
+    });
+  });
+
+  describe('empty_trash', () => {
+    it('should empty the trash', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 204,
+        statusText: 'No Content',
+        headers: new Headers(),
+      });
+
+      const { emptyTrashTool } = await import('../tools/apps/trash.js');
+      const result = await emptyTrashTool.handler();
+
+      expect(result.content[0].text).toContain('emptied');
+    });
+  });
+
+  // ─── File Versioning Tools ──────────────────────────────────────────────
+
+  describe('list_file_versions', () => {
+    it('should list file versions', async () => {
+      const xml = `<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/remote.php/dav/versions/admin/versions/12345</d:href>
+    <d:propstat><d:prop></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/remote.php/dav/versions/admin/versions/12345/1711234567</d:href>
+    <d:propstat><d:prop>
+      <d:getlastmodified>Sat, 23 Mar 2024 15:16:07 GMT</d:getlastmodified>
+      <d:getcontentlength>5120</d:getcontentlength>
+    </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 207,
+        text: () => Promise.resolve(xml),
+        headers: new Headers(),
+      });
+
+      const { listFileVersionsTool } = await import('../tools/apps/versions.js');
+      const result = await listFileVersionsTool.handler({ fileId: 12345 });
+
+      expect(result.content[0].text).toContain('1711234567');
+      expect(result.content[0].text).toContain('Sat, 23 Mar 2024');
+    });
+
+    it('should handle no versions', async () => {
+      const xml = `<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/remote.php/dav/versions/admin/versions/12345</d:href>
+    <d:propstat><d:prop></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 207,
+        text: () => Promise.resolve(xml),
+        headers: new Headers(),
+      });
+
+      const { listFileVersionsTool } = await import('../tools/apps/versions.js');
+      const result = await listFileVersionsTool.handler({ fileId: 12345 });
+
+      expect(result.content[0].text).toContain('No previous versions');
+    });
+  });
+
+  describe('restore_file_version', () => {
+    it('should restore a file version', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 201,
+        statusText: 'Created',
+        headers: new Headers(),
+      });
+
+      const { restoreFileVersionTool } = await import('../tools/apps/versions.js');
+      const result = await restoreFileVersionTool.handler({
+        fileId: 12345,
+        versionId: '1711234567',
+      });
+
+      expect(result.content[0].text).toContain('Restored version 1711234567');
+    });
+  });
+
+  // ─── Notification Tools ──────────────────────────────────────────────
+
+  describe('list_notifications', () => {
+    it('should list notifications', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: [
+            {
+              notification_id: 1,
+              app: 'files_sharing',
+              subject: 'Alice shared doc.pdf with you',
+              message: '',
+              datetime: '2026-03-24T12:00:00+00:00',
+            },
+          ],
+        },
+      });
+
+      const { listNotificationsTool } = await import('../tools/apps/notifications.js');
+      const result = await listNotificationsTool.handler();
+
+      expect(result.content[0].text).toContain('Alice shared doc.pdf');
+    });
+
+    it('should handle empty notifications', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data: [] },
+      });
+
+      const { listNotificationsTool } = await import('../tools/apps/notifications.js');
+      const result = await listNotificationsTool.handler();
+
+      expect(result.content[0].text).toContain('No notifications');
+    });
+  });
+
+  describe('get_notification', () => {
+    it('should get notification details', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: { notification_id: 1, app: 'files', subject: 'Test' },
+        },
+      });
+
+      const { getNotificationTool } = await import('../tools/apps/notifications.js');
+      const result = await getNotificationTool.handler({ id: 1 });
+
+      expect(result.content[0].text).toContain('Test');
+    });
+  });
+
+  describe('mark_notification_read', () => {
+    it('should mark notification as read', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data: {} },
+      });
+
+      const { markNotificationReadTool } = await import('../tools/apps/notifications.js');
+      const result = await markNotificationReadTool.handler({ id: 1 });
+
+      expect(result.content[0].text).toContain('marked as read');
+    });
+  });
+
+  describe('delete_all_notifications', () => {
+    it('should delete all notifications', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data: {} },
+      });
+
+      const { deleteAllNotificationsTool } = await import('../tools/apps/notifications.js');
+      const result = await deleteAllNotificationsTool.handler();
+
+      expect(result.content[0].text).toContain('All notifications deleted');
+    });
+  });
+
+  // ─── Share Enhancement Tools ──────────────────────────────────────────
+
+  describe('get_share', () => {
+    it('should return share details', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: { id: 42, share_type: 0, path: '/doc.pdf', share_with: 'bob' },
+        },
+      });
+
+      const { getShareTool } = await import('../tools/apps/shares.js');
+      const result = await getShareTool.handler({ shareId: 42 });
+
+      expect(result.content[0].text).toContain('42');
+      expect(result.content[0].text).toContain('doc.pdf');
+    });
+  });
+
+  describe('list_shares_with_me', () => {
+    it('should list shares shared with current user', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: [
+            {
+              id: 1,
+              share_type: 0,
+              path: '/shared-doc.pdf',
+              uid_owner: 'alice',
+              displayname_owner: 'Alice',
+            },
+          ],
+        },
+      });
+
+      const { listSharesWithMeTool } = await import('../tools/apps/shares.js');
+      const result = await listSharesWithMeTool.handler();
+
+      expect(result.content[0].text).toContain('shared-doc.pdf');
+      expect(result.content[0].text).toContain('Alice');
+    });
+
+    it('should handle no shares', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data: [] },
+      });
+
+      const { listSharesWithMeTool } = await import('../tools/apps/shares.js');
+      const result = await listSharesWithMeTool.handler();
+
+      expect(result.content[0].text).toContain('No shares found');
+    });
+  });
+
+  describe('search_sharees', () => {
+    it('should search for share recipients', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 100, message: 'OK' },
+          data: {
+            exact: { users: [], groups: [] },
+            users: [{ label: 'Bob', value: { shareType: 0, shareWith: 'bob' } }],
+          },
+        },
+      });
+
+      const { searchShareesTool } = await import('../tools/apps/shares.js');
+      const result = await searchShareesTool.handler({ search: 'bob' });
+
+      expect(result.content[0].text).toContain('Bob');
+      expect(mockFetchOCS).toHaveBeenCalledWith(
+        '/ocs/v1.php/apps/files_sharing/api/v1/sharees',
+        expect.objectContaining({
+          queryParams: expect.objectContaining({ search: 'bob', 'shareType[]': expect.any(Array) }),
+        })
+      );
+    });
+  });
+
+  describe('list_pending_shares', () => {
+    it('should list pending remote shares', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 100, message: 'OK' },
+          data: [{ id: 5, name: 'shared-folder', remote: 'https://other.cloud' }],
+        },
+      });
+
+      const { listPendingSharesTool } = await import('../tools/apps/shares.js');
+      const result = await listPendingSharesTool.handler();
+
+      expect(result.content[0].text).toContain('shared-folder');
+    });
+
+    it('should handle no pending shares', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 100, message: 'OK' }, data: [] },
+      });
+
+      const { listPendingSharesTool } = await import('../tools/apps/shares.js');
+      const result = await listPendingSharesTool.handler();
+
+      expect(result.content[0].text).toContain('No pending');
+    });
+  });
+
+  describe('accept_pending_share', () => {
+    it('should accept pending share', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 100, message: 'OK' }, data: {} },
+      });
+
+      const { acceptPendingShareTool } = await import('../tools/apps/shares.js');
+      const result = await acceptPendingShareTool.handler({ shareId: 5 });
+
+      expect(result.content[0].text).toContain('accepted');
+      expect(mockFetchOCS).toHaveBeenCalledWith(
+        '/ocs/v1.php/apps/files_sharing/api/v1/remote_shares/pending/5',
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+  });
+
+  describe('decline_pending_share', () => {
+    it('should decline pending share', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 100, message: 'OK' }, data: {} },
+      });
+
+      const { declinePendingShareTool } = await import('../tools/apps/shares.js');
+      const result = await declinePendingShareTool.handler({ shareId: 5 });
+
+      expect(result.content[0].text).toContain('declined');
+    });
+  });
+
+  // ─── User Status Tools ──────────────────────────────────────────────────
+
+  describe('get_user_status', () => {
+    it('should return current user status', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: {
+            userId: 'admin',
+            status: 'online',
+            icon: '☕',
+            message: 'Coffee break',
+            clearAt: null,
+          },
+        },
+      });
+
+      const { getUserStatusTool } = await import('../tools/apps/user-status.js');
+      const result = await getUserStatusTool.handler({});
+
+      expect(result.content[0].text).toContain('online');
+      expect(result.content[0].text).toContain('Coffee break');
+      expect(result).not.toHaveProperty('isError');
+    });
+
+    it('should handle errors', async () => {
+      mockFetchOCS.mockRejectedValue(new Error('API error'));
+
+      const { getUserStatusTool } = await import('../tools/apps/user-status.js');
+      const result = await getUserStatusTool.handler({});
+
+      expect(result.isError).toBe(true);
+    });
+  });
+
+  describe('set_user_status', () => {
+    it('should set status type', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data: {} },
+      });
+
+      const { setUserStatusTool } = await import('../tools/apps/user-status.js');
+      const result = await setUserStatusTool.handler({ statusType: 'dnd' });
+
+      expect(result.content[0].text).toContain('dnd');
+      expect(mockFetchOCS).toHaveBeenCalledWith(
+        '/ocs/v2.php/apps/user_status/api/v1/user_status/status',
+        expect.objectContaining({ method: 'PUT', body: { statusType: 'dnd' } })
+      );
+    });
+  });
+
+  describe('set_user_status_message', () => {
+    it('should set custom message with icon', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data: {} },
+      });
+
+      const { setUserStatusMessageTool } = await import('../tools/apps/user-status.js');
+      const result = await setUserStatusMessageTool.handler({
+        message: 'In a meeting',
+        statusIcon: '📅',
+      });
+
+      expect(result.content[0].text).toContain('📅');
+      expect(result.content[0].text).toContain('In a meeting');
+    });
+  });
+
+  describe('clear_user_status_message', () => {
+    it('should clear status message', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data: {} },
+      });
+
+      const { clearUserStatusMessageTool } = await import('../tools/apps/user-status.js');
+      const result = await clearUserStatusMessageTool.handler();
+
+      expect(result.content[0].text).toContain('cleared');
+      expect(mockFetchOCS).toHaveBeenCalledWith(
+        '/ocs/v2.php/apps/user_status/api/v1/user_status/message',
+        expect.objectContaining({ method: 'DELETE' })
+      );
+    });
+  });
+
+  describe('list_user_statuses', () => {
+    it('should list all user statuses', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: [
+            { userId: 'alice', status: 'online', icon: null, message: null },
+            { userId: 'bob', status: 'away', icon: '🏠', message: 'Working from home' },
+          ],
+        },
+      });
+
+      const { listUserStatusesTool } = await import('../tools/apps/user-status.js');
+      const result = await listUserStatusesTool.handler({});
+
+      expect(result.content[0].text).toContain('alice: online');
+      expect(result.content[0].text).toContain('bob: away');
+      expect(result.content[0].text).toContain('Working from home');
+    });
+
+    it('should handle empty statuses', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data: [] },
+      });
+
+      const { listUserStatusesTool } = await import('../tools/apps/user-status.js');
+      const result = await listUserStatusesTool.handler({});
+
+      expect(result.content[0].text).toContain('No user statuses found');
+    });
+  });
+
+  // ─── Absence / Out-of-Office Tools ──────────────────────────────────────
+
+  describe('get_out_of_office', () => {
+    it('should return absence status', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: {
+            id: '1',
+            firstDay: '2026-04-01',
+            lastDay: '2026-04-10',
+            status: 'Vacation',
+            message: 'On holiday',
+          },
+        },
+      });
+
+      const { getOutOfOfficeTool } = await import('../tools/apps/absence.js');
+      const result = await getOutOfOfficeTool.handler({});
+
+      expect(result.content[0].text).toContain('Vacation');
+      expect(result.content[0].text).toContain('2026-04-01');
+    });
+
+    it('should handle 404 gracefully', async () => {
+      mockFetchOCS.mockRejectedValue(new Error('OCS API error: 404 Not Found'));
+
+      const { getOutOfOfficeTool } = await import('../tools/apps/absence.js');
+      const result = await getOutOfOfficeTool.handler({});
+
+      expect(result.content[0].text).toContain('No out-of-office status set');
+      expect(result).not.toHaveProperty('isError');
+    });
+  });
+
+  describe('set_out_of_office', () => {
+    it('should set absence period', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data: {} },
+      });
+
+      const { setOutOfOfficeTool } = await import('../tools/apps/absence.js');
+      const result = await setOutOfOfficeTool.handler({
+        firstDay: '2026-04-01',
+        lastDay: '2026-04-10',
+        status: 'Vacation',
+        message: 'On holiday',
+      });
+
+      expect(result.content[0].text).toContain('Out-of-office set');
+      expect(result.content[0].text).toContain('2026-04-01');
+      expect(result.content[0].text).toContain('2026-04-10');
+    });
+  });
+
+  describe('clear_out_of_office', () => {
+    it('should clear absence', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data: {} },
+      });
+
+      const { clearOutOfOfficeTool } = await import('../tools/apps/absence.js');
+      const result = await clearOutOfOfficeTool.handler({});
+
+      expect(result.content[0].text).toContain('cleared');
+      expect(mockFetchOCS).toHaveBeenCalledWith(
+        expect.stringContaining('/outOfOffice/'),
+        expect.objectContaining({ method: 'DELETE' })
+      );
+    });
+  });
 });
