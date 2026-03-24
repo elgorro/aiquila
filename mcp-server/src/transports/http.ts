@@ -130,6 +130,22 @@ export async function startHttp(): Promise<void> {
     }
   }
 
+  // MCP_ALLOWED_HOSTS lets operators add extra trusted hostnames (e.g. Docker
+  // service names like "mcp") so that container-to-container requests pass the
+  // SDK's DNS rebinding protection.  Comma-separated, whitespace-trimmed.
+  const extraHosts = process.env.MCP_ALLOWED_HOSTS;
+  if (extraHosts) {
+    const extras = extraHosts
+      .split(',')
+      .map((h) => h.trim())
+      .filter(Boolean);
+    if (allowedHosts) {
+      allowedHosts = [...new Set([...allowedHosts, ...extras])];
+    } else {
+      allowedHosts = [...new Set(['localhost', '127.0.0.1', ...extras])];
+    }
+  }
+
   const app = createMcpExpressApp({ host, allowedHosts });
 
   // Simple health check — bypasses all auth middleware so Docker health checks
