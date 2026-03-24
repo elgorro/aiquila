@@ -171,13 +171,10 @@ describe('Share Tools', () => {
       const { updateShareTool } = await import('../tools/apps/shares.js');
       const result = await updateShareTool.handler({ shareId: 42, permissions: 1 });
 
-      expect(mockFetchOCS).toHaveBeenCalledWith(
-        '/ocs/v2.php/apps/files_sharing/api/v1/shares/42',
-        {
-          method: 'PUT',
-          body: { permissions: '1' },
-        }
-      );
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/apps/files_sharing/api/v1/shares/42', {
+        method: 'PUT',
+        body: { permissions: '1' },
+      });
       expect(result.content[0].text).toContain('Share 42 updated');
     });
 
@@ -204,12 +201,9 @@ describe('Share Tools', () => {
       const { deleteShareTool } = await import('../tools/apps/shares.js');
       const result = await deleteShareTool.handler({ shareId: 42 });
 
-      expect(mockFetchOCS).toHaveBeenCalledWith(
-        '/ocs/v2.php/apps/files_sharing/api/v1/shares/42',
-        {
-          method: 'DELETE',
-        }
-      );
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/apps/files_sharing/api/v1/shares/42', {
+        method: 'DELETE',
+      });
       expect(result.content[0].text).toContain('Share 42 deleted successfully');
     });
 
