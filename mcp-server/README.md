@@ -10,17 +10,17 @@ Add to `~/.config/claude/claude_desktop_config.json`:
 
 ```json
 {
-  "mcpServers": {
-    "aiquila": {
-      "command": "npx",
-      "args": ["-y", "aiquila-mcp"],
-      "env": {
-        "NEXTCLOUD_URL": "https://your-nextcloud.example.com",
-        "NEXTCLOUD_USER": "your-username",
-        "NEXTCLOUD_PASSWORD": "your-app-password"
-      }
-    }
-  }
+	"mcpServers": {
+		"aiquila": {
+			"command": "npx",
+			"args": ["-y", "aiquila-mcp"],
+			"env": {
+				"NEXTCLOUD_URL": "https://your-nextcloud.example.com",
+				"NEXTCLOUD_USER": "your-username",
+				"NEXTCLOUD_PASSWORD": "your-app-password"
+			}
+		}
+	}
 }
 ```
 
@@ -32,42 +32,42 @@ See the [Docker setup guide](https://github.com/elgorro/aiquila/blob/main/docs/m
 
 ## What It Can Do
 
-| Category | Tools |
-|----------|------:|
-| Files | 11 |
-| Status & Diagnostics | 3 |
-| App Management | 6 |
-| Tags | 6 |
-| Security | 2 |
-| Search | 2 |
-| OCC Command | 1 |
-| Shares | 4 |
-| Tasks | 6 |
-| Calendar | 6 |
-| Notes | 5 |
-| Contacts | 6 |
-| Cookbook | 6 |
-| Bookmarks | 13 |
-| Mail | 8 |
-| Maps | 26 |
-| Assistant / AI | 4 |
-| Users | 4 |
-| Groups | 4 |
-| AIquila | 3 |
-| **Total** | **126** |
+| Category             |   Tools |
+| -------------------- | ------: |
+| Files                |      11 |
+| Status & Diagnostics |       3 |
+| App Management       |       6 |
+| Tags                 |       6 |
+| Security             |       2 |
+| Search               |       2 |
+| OCC Command          |       1 |
+| Shares               |       4 |
+| Tasks                |       6 |
+| Calendar             |       6 |
+| Notes                |       5 |
+| Contacts             |       6 |
+| Cookbook             |       6 |
+| Bookmarks            |      13 |
+| Mail                 |       8 |
+| Maps                 |      26 |
+| Assistant / AI       |       4 |
+| Users                |       4 |
+| Groups               |       4 |
+| AIquila              |       3 |
+| **Total**            | **126** |
 
 ## Configuration
 
-| Variable | Required | Notes |
-|----------|----------|-------|
-| `NEXTCLOUD_URL` | Yes | trailing slash stripped automatically |
-| `NEXTCLOUD_USER` | Yes | |
-| `NEXTCLOUD_PASSWORD` | Yes | use an App Password |
-| `MCP_TRANSPORT` | No | `stdio` (default) or `http` |
-| `MCP_AUTH_ENABLED` | No | `true` to enable OAuth for Claude.ai |
-| `MCP_AUTH_SECRET` | If auth | `openssl rand -hex 32` |
-| `MCP_AUTH_ISSUER` | If auth | public HTTPS URL of this server |
-| `LOG_LEVEL` | No | `trace`/`debug`/`info`/`warn`/`error`/`fatal` |
+| Variable             | Required | Notes                                         |
+| -------------------- | -------- | --------------------------------------------- |
+| `NEXTCLOUD_URL`      | Yes      | trailing slash stripped automatically         |
+| `NEXTCLOUD_USER`     | Yes      |                                               |
+| `NEXTCLOUD_PASSWORD` | Yes      | use an App Password                           |
+| `MCP_TRANSPORT`      | No       | `stdio` (default) or `http`                   |
+| `MCP_AUTH_ENABLED`   | No       | `true` to enable OAuth for Claude.ai          |
+| `MCP_AUTH_SECRET`    | If auth  | `openssl rand -hex 32`                        |
+| `MCP_AUTH_ISSUER`    | If auth  | public HTTPS URL of this server               |
+| `LOG_LEVEL`          | No       | `trace`/`debug`/`info`/`warn`/`error`/`fatal` |
 
 ## Requirements
 

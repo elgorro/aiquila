@@ -13,9 +13,7 @@
     {
       "src": "https://raw.githubusercontent.com/elgorro/aiquila/main/nextcloud-app/img/app.svg",
       "mimeType": "image/svg+xml",
-      "sizes": [
-        "any"
-      ]
+      "sizes": ["any"]
     }
   ],
   "version": "0.2.7",
