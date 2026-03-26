@@ -362,7 +362,6 @@ function formatRecurrence(rrule: string): string {
     if (k && v) map[k] = v;
   }
 
-  let result = '';
   const freq = map.FREQ;
   const interval = map.INTERVAL ? parseInt(map.INTERVAL, 10) : 1;
 
@@ -373,6 +372,7 @@ function formatRecurrence(rrule: string): string {
     YEARLY: ['year', 'years'],
   };
 
+  let result: string;
   if (freq && freqNames[freq]) {
     const [singular, plural] = freqNames[freq];
     result = interval === 1 ? `Every ${singular}` : `Every ${interval} ${plural}`;
