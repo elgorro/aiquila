@@ -1,6 +1,16 @@
 import { logger } from '../logger.js';
 
 /**
+ * Build a regex that matches an XML element with any namespace prefix.
+ * e.g. nsTagContent("calendar-data") matches <c:calendar-data>, <cal:calendar-data>, <calendar-data>
+ */
+export function nsTagContent(localName: string): RegExp {
+  return new RegExp(
+    `<(?:[a-zA-Z][a-zA-Z0-9]*:)?${localName}[^>]*>([\\s\\S]*?)</(?:[a-zA-Z][a-zA-Z0-9]*:)?${localName}>`
+  );
+}
+
+/**
  * Decode XML character entities in text extracted via regex.
  * Needed because we parse XML responses with regex instead of a DOM parser.
  */

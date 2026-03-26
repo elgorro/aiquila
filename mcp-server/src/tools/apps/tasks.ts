@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { decodeXmlEntities, fetchCalDAV } from '../../client/caldav.js';
+import { decodeXmlEntities, fetchCalDAV, nsTagContent } from '../../client/caldav.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -38,20 +38,6 @@ interface ParsedTask {
   hideCompletedSubtasks: boolean;
   etag?: string;
   href?: string;
-}
-
-// ---------------------------------------------------------------------------
-// XML helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Build a regex that matches an XML element with any namespace prefix.
- * e.g. nsTagContent("calendar-data") matches <c:calendar-data>, <cal:calendar-data>, <calendar-data>
- */
-function nsTagContent(localName: string): RegExp {
-  return new RegExp(
-    `<(?:[a-zA-Z][a-zA-Z0-9]*:)?${localName}[^>]*>([\\s\\S]*?)</(?:[a-zA-Z][a-zA-Z0-9]*:)?${localName}>`
-  );
 }
 
 // ---------------------------------------------------------------------------

@@ -84,7 +84,7 @@ describe('Contacts Tools', () => {
     <d:href>/remote.php/dav/addressbooks/users/testuser/contacts/contact-1.vcf</d:href>
     <d:propstat>
       <d:prop>
-        <d:getetag>"etag-1"</d:getetag>
+        <d:getetag>&quot;etag-1&quot;</d:getetag>
         <cr:address-data>BEGIN:VCARD
 VERSION:3.0
 UID:contact-1
@@ -102,7 +102,7 @@ END:VCARD</cr:address-data>
     <d:href>/remote.php/dav/addressbooks/users/testuser/contacts/contact-2.vcf</d:href>
     <d:propstat>
       <d:prop>
-        <d:getetag>"etag-2"</d:getetag>
+        <d:getetag>&quot;etag-2&quot;</d:getetag>
         <cr:address-data>BEGIN:VCARD
 VERSION:3.0
 UID:contact-2
@@ -157,7 +157,7 @@ END:VCARD</cr:address-data>
     <d:href>/remote.php/dav/addressbooks/users/testuser/contacts/contact-1.vcf</d:href>
     <d:propstat>
       <d:prop>
-        <d:getetag>"etag-1"</d:getetag>
+        <d:getetag>&quot;etag-1&quot;</d:getetag>
         <cr:address-data>BEGIN:VCARD
 VERSION:3.0
 UID:contact-1
@@ -301,7 +301,7 @@ END:VCARD</cr:address-data>
     <d:href>/remote.php/dav/addressbooks/users/testuser/contacts/contact-1.vcf</d:href>
     <d:propstat>
       <d:prop>
-        <d:getetag>"etag-old"</d:getetag>
+        <d:getetag>&quot;etag-old&quot;</d:getetag>
         <cr:address-data>BEGIN:VCARD
 VERSION:3.0
 UID:contact-1
@@ -350,6 +350,56 @@ END:VCARD</cr:address-data>
       expect(body).toContain('FN:John Doe');
     });
 
+    it('should normalize &quot;-encoded ETags from XML', async () => {
+      // NC/libxml2 encodes " as &quot; in XML text content.
+      // The ETag in <d:getetag>&quot;abc&quot;</d:getetag> must become "abc" (single quotes).
+      const resolveResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cr="urn:ietf:params:xml:ns:carddav">
+  <d:response>
+    <d:href>/remote.php/dav/addressbooks/users/testuser/contacts/contact-1.vcf</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:getetag>&quot;entity-encoded-etag&quot;</d:getetag>
+        <cr:address-data>BEGIN:VCARD
+VERSION:3.0
+UID:contact-1
+FN:Test
+END:VCARD</cr:address-data>
+      </d:prop>
+    </d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      let callCount = 0;
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({
+            ok: true,
+            text: () => Promise.resolve(resolveResponse),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 204,
+          text: () => Promise.resolve(''),
+        });
+      });
+
+      const { updateContactTool } = await import('../tools/apps/contacts.js');
+      const result = await updateContactTool.handler({
+        uid: 'contact-1',
+        addressBookName: 'contacts',
+        fullName: 'Updated',
+      });
+
+      expect(result.content[0].text).toContain('Contact updated successfully');
+
+      // Verify single-layer quoting in If-Match (not double-quoted)
+      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
+      expect(putCall[1].headers['If-Match']).toBe('"entity-encoded-etag"');
+    });
+
     it('should handle ETag conflict', async () => {
       const resolveResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <d:multistatus xmlns:d="DAV:" xmlns:cr="urn:ietf:params:xml:ns:carddav">
@@ -357,7 +407,7 @@ END:VCARD</cr:address-data>
     <d:href>/remote.php/dav/addressbooks/users/testuser/contacts/contact-1.vcf</d:href>
     <d:propstat>
       <d:prop>
-        <d:getetag>"etag-old"</d:getetag>
+        <d:getetag>&quot;etag-old&quot;</d:getetag>
         <cr:address-data>BEGIN:VCARD
 VERSION:3.0
 UID:contact-1
@@ -404,7 +454,7 @@ END:VCARD</cr:address-data>
     <d:href>/remote.php/dav/addressbooks/users/testuser/contacts/contact-1.vcf</d:href>
     <d:propstat>
       <d:prop>
-        <d:getetag>"etag-1"</d:getetag>
+        <d:getetag>&quot;etag-1&quot;</d:getetag>
         <cr:address-data>BEGIN:VCARD
 VERSION:3.0
 UID:contact-1
