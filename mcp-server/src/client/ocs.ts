@@ -82,6 +82,12 @@ export async function fetchOCS<T = unknown>(
   );
 
   if (!response.ok) {
+    if (response.status === 403) {
+      throw new Error(
+        'Permission denied. This operation requires admin or sub-admin privileges. ' +
+          'Ensure the configured Nextcloud user has sufficient permissions.'
+      );
+    }
     const text = await response.text();
     throw new Error(`OCS API error: ${response.status} ${response.statusText} - ${text}`);
   }

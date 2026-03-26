@@ -12,7 +12,8 @@ import { executeOCC } from '../../client/aiquila.js';
  */
 export const listAppsTool = {
   name: 'list_apps',
-  description: 'List all installed Nextcloud apps with their enabled/disabled status',
+  description:
+    'List all installed Nextcloud apps with their enabled/disabled status. Requires admin privileges',
   inputSchema: z.object({
     filter: z
       .enum(['all', 'enabled', 'disabled'])
@@ -60,7 +61,7 @@ export const listAppsTool = {
  */
 export const getAppInfoTool = {
   name: 'get_app_info',
-  description: 'Get detailed information about a specific Nextcloud app',
+  description: 'Get detailed information about a specific Nextcloud app. Requires admin privileges',
   inputSchema: z.object({
     appId: z.string().describe('The app ID (e.g., "tasks", "deck", "photos")'),
   }),
@@ -97,7 +98,7 @@ export const getAppInfoTool = {
  */
 export const enableAppTool = {
   name: 'enable_app',
-  description: 'Enable a disabled Nextcloud app',
+  description: 'Enable a disabled Nextcloud app. Requires admin privileges',
   inputSchema: z.object({
     appId: z.string().describe('The app ID to enable (e.g., "tasks", "deck", "photos")'),
   }),
@@ -134,7 +135,8 @@ export const enableAppTool = {
  */
 export const disableAppTool = {
   name: 'disable_app',
-  description: 'Disable an enabled Nextcloud app (preserves data but removes functionality)',
+  description:
+    'Disable an enabled Nextcloud app (preserves data but removes functionality). Requires admin privileges',
   inputSchema: z.object({
     appId: z.string().describe('The app ID to disable (e.g., "tasks", "deck", "photos")'),
   }),

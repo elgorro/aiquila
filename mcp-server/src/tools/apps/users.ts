@@ -11,7 +11,7 @@ import { fetchOCS } from '../../client/ocs.js';
  */
 export const listUsersTool = {
   name: 'list_users',
-  description: 'List all users in the Nextcloud instance',
+  description: 'List all users in the Nextcloud instance. Requires admin or sub-admin privileges',
   inputSchema: z.object({
     search: z.string().optional().describe('Search/filter string for user IDs'),
     limit: z.number().optional().describe('Maximum number of users to return'),
@@ -57,7 +57,8 @@ export const listUsersTool = {
  */
 export const getUserInfoTool = {
   name: 'get_user_info',
-  description: 'Get detailed information about a specific Nextcloud user',
+  description:
+    'Get detailed information about a specific Nextcloud user. Non-admin users can only query their own user ID',
   inputSchema: z.object({
     userId: z.string().describe('The user ID (login name) to get information about'),
   }),
@@ -94,7 +95,7 @@ export const getUserInfoTool = {
  */
 export const enableUserTool = {
   name: 'enable_user',
-  description: 'Enable a disabled Nextcloud user account',
+  description: 'Enable a disabled Nextcloud user account. Requires admin privileges',
   inputSchema: z.object({
     userId: z.string().describe('The user ID (login name) to enable'),
   }),
@@ -131,7 +132,8 @@ export const enableUserTool = {
  */
 export const disableUserTool = {
   name: 'disable_user',
-  description: 'Disable a Nextcloud user account (prevents login but preserves data)',
+  description:
+    'Disable a Nextcloud user account (prevents login but preserves data). Requires admin privileges',
   inputSchema: z.object({
     userId: z.string().describe('The user ID (login name) to disable'),
   }),
