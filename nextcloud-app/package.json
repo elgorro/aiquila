@@ -19,8 +19,8 @@
   "license": "AGPL-3.0",
   "devDependencies": {
     "@nextcloud/vite-config": "^2.5.2",
-    "@vitejs/plugin-vue": "^6.0.4",
-    "vite": "^7.3.1"
+    "@vitejs/plugin-vue": "^6.0.5",
+    "vite": "^8.0.3"
   },
   "dependencies": {
     "@nextcloud/axios": "^2.5.2",
@@ -29,20 +29,12 @@
     "@nextcloud/initial-state": "^3.0.0",
     "@nextcloud/l10n": "^3.4.1",
     "@nextcloud/router": "^3.1.0",
-    "@nextcloud/vue": "^9.5.0",
-    "vue": "^3.5.30",
+    "@nextcloud/vue": "^9.6.0",
+    "vue": "^3.5.31",
     "vue-material-design-icons": "^5.3.1"
   },
   "engines": {
-    "node": "^20.0.0",
-    "npm": "^10.0.0"
-  },
-  "overrides": {
-    "@microsoft/api-extractor": {
-      "minimatch": "10.2.4"
-    },
-    "immutable": "^5.1.5",
-    "dompurify": "^3.3.2",
-    "qs": "^6.14.2"
+    "node": "^24.0.0",
+    "npm": "^11.0.0"
   }
 }

@@ -59,13 +59,18 @@ describe('App Management Tools', () => {
     });
 
     it('should handle errors', async () => {
-      mockFetchOCS.mockRejectedValue(new Error('OCS API error: 403 Forbidden'));
+      mockFetchOCS.mockRejectedValue(
+        new Error(
+          'Permission denied. This operation requires admin or sub-admin privileges. ' +
+            'Ensure the configured Nextcloud user has sufficient permissions.'
+        )
+      );
 
       const { listAppsTool } = await import('../tools/system/apps.js');
       const result = await listAppsTool.handler({});
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('403');
+      expect(result.content[0].text).toContain('Permission denied');
     });
   });
 

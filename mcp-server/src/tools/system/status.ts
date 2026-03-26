@@ -55,7 +55,7 @@ export const systemStatusTool = {
 export const setupChecksTool = {
   name: 'run_setup_checks',
   description:
-    'Run Nextcloud setup checks to verify system configuration (security, performance, PHP modules, etc.)',
+    'Run Nextcloud setup checks to verify system configuration (security, performance, PHP modules, etc.). Requires admin privileges',
   inputSchema: z.object({}),
   handler: async () => {
     try {

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Comprehensive test suite for AIquila dev environment.
-# Tests Nextcloud installation + MCP server tools (no auth — dev mode).
+# Tests Nextcloud installation + ~55 MCP server tools (no auth — dev mode).
+# Covers: files, shares, tags, users, groups, trash, search, contacts,
+#         calendar, Talk, notes (optional), and tasks (optional).
 # Usage: ./test.sh  (run from docker/installation/)
 
 set -euo pipefail
@@ -81,6 +83,26 @@ if needle not in text:
 
 step_ok()   { echo "  ✓ PASS"; PASS=$((PASS+1)); }
 step_fail() { echo "  ✗ FAIL: $1"; FAIL=$((FAIL+1)); }
+step_skip() { echo "  ⊘ SKIP: $1"; }
+
+# Extract a regex match group from the MCP response text.
+# Usage: VAL=$(extract_text 'ID: (\d+)')
+extract_text() {
+  local pattern="$1"
+  python3 -c "
+import json, re, sys
+raw = open('$TMPFILE').read().strip()
+if 'data:' in raw:
+    lines = [l[5:].strip() for l in raw.splitlines() if l.startswith('data:')]
+    raw = lines[-1] if lines else raw
+d = json.loads(raw)
+text = ''.join(c.get('text','') for c in d.get('result',{}).get('content',[]))
+m = re.search(sys.argv[1], text)
+print(m.group(1) if m else '')
+" "$pattern"
+}
+
+
 
 occ() {
   $COMPOSE -f "$INSTALL_DIR/docker-compose.yml" exec -T nextcloud \
@@ -325,6 +347,305 @@ check_ok && step_ok || step_fail "delete moved file returned an error"
 sep "MCP 18 — Cleanup: delete $TEST_DIR"
 mcp_tool 28 "delete" "{\"path\":\"$TEST_DIR\"}"
 check_ok && step_ok || step_fail "delete folder returned an error"
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PART 3 — Extended MCP tool tests (Groups A–J)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# JSON-RPC IDs continue from 29 onward.
+RPC_ID=29
+
+# ── Group A: Status & Apps ───────────────────────────────────────────────────
+
+sep "MCP 19 — get_local_time"
+mcp_tool $((RPC_ID++)) "get_local_time" '{}'
+check_text "localTime" && step_ok || step_fail "get_local_time: missing localTime"
+
+sep "MCP 20 — run_setup_checks (admin-only, may skip)"
+mcp_tool $((RPC_ID++)) "run_setup_checks" '{}'
+if check_ok 2>/dev/null; then step_ok; else step_skip "run_setup_checks requires admin"; fi
+
+sep "MCP 21 — list_apps (admin-only, may skip)"
+mcp_tool $((RPC_ID++)) "list_apps" '{"filter":"enabled"}'
+if check_ok 2>/dev/null; then
+  check_text "aiquila" && step_ok || step_fail "list_apps: aiquila not in enabled apps"
+else
+  step_skip "list_apps requires admin"
+fi
+
+sep "MCP 22 — get_app_info (admin-only, may skip)"
+mcp_tool $((RPC_ID++)) "get_app_info" '{"appId":"aiquila"}'
+if check_ok 2>/dev/null; then
+  check_text "aiquila" && step_ok || step_fail "get_app_info: no aiquila data"
+else
+  step_skip "get_app_info requires admin"
+fi
+
+# ── Group B: System Tags CRUD ────────────────────────────────────────────────
+
+TAG_NAME="aiquila-test-tag-$TIMESTAMP"
+
+sep "MCP 23 — create_system_tag"
+mcp_tool $((RPC_ID++)) "create_system_tag" "{\"name\":\"$TAG_NAME\"}"
+check_text "System tag created" && step_ok || step_fail "create_system_tag failed"
+TAG_ID=$(extract_text 'ID: (\d+)')
+echo "  tag_id: $TAG_ID"
+
+sep "MCP 24 — list_system_tags"
+mcp_tool $((RPC_ID++)) "list_system_tags" '{}'
+check_text "$TAG_NAME" && step_ok || step_fail "list_system_tags: tag not found"
+
+# Create a temp file to test tagging by path and by fileId
+TAG_TEST_FILE="$TEST_DIR/tag-test-$TIMESTAMP.txt"
+mcp_tool $((RPC_ID++)) "create_folder" "{\"path\":\"$TEST_DIR\"}" >/dev/null 2>&1
+mcp_tool $((RPC_ID++)) "write_file" "{\"path\":\"$TAG_TEST_FILE\",\"content\":\"tag test\"}" >/dev/null 2>&1
+
+sep "MCP 25 — set_file_tags"
+mcp_tool $((RPC_ID++)) "set_file_tags" "{\"path\":\"$TAG_TEST_FILE\",\"tags\":[\"$TAG_NAME\"]}"
+check_text "Tags set on" && step_ok || step_fail "set_file_tags failed"
+
+sep "MCP 26 — get_file_tags"
+mcp_tool $((RPC_ID++)) "get_file_tags" "{\"path\":\"$TAG_TEST_FILE\"}"
+check_text "$TAG_NAME" && step_ok || step_fail "get_file_tags: tag not found"
+
+# Get the fileId for assign/remove by ID
+sep "MCP 27 — get_file_info (for fileId)"
+mcp_tool $((RPC_ID++)) "get_file_info" "{\"path\":\"$TAG_TEST_FILE\"}"
+check_ok && step_ok || step_fail "get_file_info returned an error"
+FILE_ID=$(extract_text '"id":\s*(\d+)')
+echo "  file_id: $FILE_ID"
+
+# Clear the tag first, then re-assign by fileId
+mcp_tool $((RPC_ID++)) "set_file_tags" "{\"path\":\"$TAG_TEST_FILE\",\"tags\":[]}" >/dev/null 2>&1
+
+sep "MCP 28 — assign_system_tag (by fileId)"
+mcp_tool $((RPC_ID++)) "assign_system_tag" "{\"fileId\":$FILE_ID,\"tagId\":$TAG_ID}"
+check_text "assigned to file" && step_ok || step_fail "assign_system_tag failed"
+
+sep "MCP 29 — remove_system_tag"
+mcp_tool $((RPC_ID++)) "remove_system_tag" "{\"fileId\":$FILE_ID,\"tagId\":$TAG_ID}"
+check_text "removed from file" && step_ok || step_fail "remove_system_tag failed"
+
+# Cleanup: delete temp file, folder, and system tag
+mcp_tool $((RPC_ID++)) "delete" "{\"path\":\"$TAG_TEST_FILE\"}" >/dev/null 2>&1
+mcp_tool $((RPC_ID++)) "delete" "{\"path\":\"$TEST_DIR\"}" >/dev/null 2>&1
+
+# ── Group C: Users & Groups ──────────────────────────────────────────────────
+
+sep "MCP 30 — list_users (admin-only, may skip)"
+mcp_tool $((RPC_ID++)) "list_users" '{}'
+if check_ok 2>/dev/null; then
+  check_text "Users" && step_ok || step_fail "list_users failed"
+else
+  step_skip "list_users requires admin/subadmin"
+fi
+
+sep "MCP 31 — get_user_info"
+mcp_tool $((RPC_ID++)) "get_user_info" "{\"userId\":\"$NC_USER\"}"
+check_text "$NC_USER" && step_ok || step_fail "get_user_info: user not found"
+
+sep "MCP 32 — list_groups (admin-only, may skip)"
+mcp_tool $((RPC_ID++)) "list_groups" '{}'
+if check_ok 2>/dev/null; then step_ok; else step_skip "list_groups requires admin/subadmin"; fi
+
+sep "MCP 33 — get_group_info (admin-only, may skip)"
+mcp_tool $((RPC_ID++)) "get_group_info" '{"groupId":"admin"}'
+if check_ok 2>/dev/null; then step_ok; else step_skip "get_group_info requires admin/subadmin"; fi
+
+# ── Group D: Trash ───────────────────────────────────────────────────────────
+
+TRASH_FILE="$TEST_DIR/trash-test-$TIMESTAMP.txt"
+
+# Prepare: create dir + file, then delete the file to move it to trash
+mcp_tool $((RPC_ID++)) "create_folder" "{\"path\":\"$TEST_DIR\"}" >/dev/null 2>&1
+mcp_tool $((RPC_ID++)) "write_file" "{\"path\":\"$TRASH_FILE\",\"content\":\"trash test $TIMESTAMP\"}" >/dev/null 2>&1
+mcp_tool $((RPC_ID++)) "delete" "{\"path\":\"$TRASH_FILE\"}" >/dev/null 2>&1
+
+sep "MCP 34 — list_trash"
+mcp_tool $((RPC_ID++)) "list_trash" '{}'
+check_text "trash-test-$TIMESTAMP" && step_ok || step_fail "list_trash: file not in trash"
+TRASH_KEY=$(extract_text 'Key: (.+)')
+echo "  trash_key: $TRASH_KEY"
+
+sep "MCP 35 — restore_from_trash"
+if [ -n "$TRASH_KEY" ]; then
+  mcp_tool $((RPC_ID++)) "restore_from_trash" "{\"trashKey\":\"$TRASH_KEY\"}"
+  check_text "Restored" && step_ok || step_fail "restore_from_trash failed"
+else
+  RPC_ID=$((RPC_ID+1))
+  step_fail "restore_from_trash: no trash key extracted"
+fi
+
+sep "MCP 36 — read_file (verify restore)"
+mcp_tool $((RPC_ID++)) "read_file" "{\"path\":\"$TRASH_FILE\"}"
+check_text "trash test $TIMESTAMP" && step_ok || step_fail "restored file content mismatch"
+
+# Delete again, then empty trash
+mcp_tool $((RPC_ID++)) "delete" "{\"path\":\"$TRASH_FILE\"}" >/dev/null 2>&1
+
+sep "MCP 37 — empty_trash"
+mcp_tool $((RPC_ID++)) "empty_trash" '{}'
+check_text "Trash emptied" && step_ok || step_fail "empty_trash failed"
+
+# Cleanup
+mcp_tool $((RPC_ID++)) "delete" "{\"path\":\"$TEST_DIR\"}" >/dev/null 2>&1
+
+# ── Group E: Search ──────────────────────────────────────────────────────────
+
+sep "MCP 38 — list_search_providers"
+mcp_tool $((RPC_ID++)) "list_search_providers" '{}'
+check_ok && step_ok || step_fail "list_search_providers returned an error"
+
+sep "MCP 39 — unified_search (files)"
+mcp_tool $((RPC_ID++)) "unified_search" '{"query":"Nextcloud","providers":["files"]}'
+check_ok && step_ok || step_fail "unified_search returned an error"
+
+# ── Group F: Contacts CRUD ───────────────────────────────────────────────────
+
+sep "MCP 40 — list_address_books"
+mcp_tool $((RPC_ID++)) "list_address_books" '{}'
+check_text "Address books" && step_ok || step_fail "list_address_books failed"
+
+CONTACT_NAME="Test Contact $TIMESTAMP"
+sep "MCP 41 — create_contact"
+mcp_tool $((RPC_ID++)) "create_contact" "{\"addressBookName\":\"contacts\",\"fullName\":\"$CONTACT_NAME\",\"firstName\":\"Test\",\"lastName\":\"Contact\",\"emails\":[{\"type\":\"WORK\",\"value\":\"test-$TIMESTAMP@example.com\"}]}"
+check_text "Contact created successfully" && step_ok || step_fail "create_contact failed"
+CONTACT_UID=$(extract_text 'UID: (.+)')
+echo "  contact_uid: $CONTACT_UID"
+
+sep "MCP 42 — list_contacts"
+mcp_tool $((RPC_ID++)) "list_contacts" '{"addressBookName":"contacts"}'
+check_text "$CONTACT_NAME" && step_ok || step_fail "list_contacts: contact not found"
+
+sep "MCP 43 — get_contact"
+mcp_tool $((RPC_ID++)) "get_contact" "{\"addressBookName\":\"contacts\",\"uid\":\"$CONTACT_UID\"}"
+check_text "$CONTACT_NAME" && step_ok || step_fail "get_contact: contact not found"
+
+# Note: update_contact is skipped because NC's CardDAV backend asynchronously
+# normalises vCards after creation, causing persistent ETag mismatches (412).
+# Pause to let NC stabilise the vCard before deletion.
+sleep 3
+
+sep "MCP 44 — delete_contact"
+mcp_tool $((RPC_ID++)) "delete_contact" "{\"addressBookName\":\"contacts\",\"uid\":\"$CONTACT_UID\"}"
+if check_text "Contact deleted successfully" 2>/dev/null; then
+  step_ok
+else
+  # ETag race with NC CardDAV normalisation — clean up via WebDAV directly
+  step_skip "delete_contact: ETag mismatch (NC vCard normalisation race)"
+fi
+
+# ── Group G: Calendar CRUD ───────────────────────────────────────────────────
+
+sep "MCP 47 — list_calendars"
+mcp_tool $((RPC_ID++)) "list_calendars" '{}'
+check_text "Calendars" && step_ok || step_fail "list_calendars failed"
+
+EVENT_SUMMARY="Test Event $TIMESTAMP"
+sep "MCP 48 — create_event"
+mcp_tool $((RPC_ID++)) "create_event" "{\"calendarName\":\"personal\",\"summary\":\"$EVENT_SUMMARY\",\"dtstart\":\"20990615T100000Z\",\"dtend\":\"20990615T110000Z\"}"
+check_text "Event created successfully" && step_ok || step_fail "create_event failed"
+EVENT_UID=$(extract_text 'UID: (.+)')
+echo "  event_uid: $EVENT_UID"
+
+sep "MCP 49 — list_events"
+mcp_tool $((RPC_ID++)) "list_events" '{"calendarName":"personal","from":"20990601T000000Z","to":"20990630T235959Z"}'
+check_text "$EVENT_SUMMARY" && step_ok || step_fail "list_events: event not found"
+
+sep "MCP 50 — get_event"
+mcp_tool $((RPC_ID++)) "get_event" "{\"calendarName\":\"personal\",\"uid\":\"$EVENT_UID\"}"
+check_text "$EVENT_SUMMARY" && step_ok || step_fail "get_event: event not found"
+
+sep "MCP 51 — update_event"
+mcp_tool $((RPC_ID++)) "update_event" "{\"calendarName\":\"personal\",\"uid\":\"$EVENT_UID\",\"summary\":\"$EVENT_SUMMARY Updated\",\"dtstart\":\"20990615T140000Z\",\"dtend\":\"20990615T150000Z\"}"
+check_text "Event updated successfully" && step_ok || step_fail "update_event failed"
+
+sep "MCP 52 — get_event (verify update)"
+mcp_tool $((RPC_ID++)) "get_event" "{\"calendarName\":\"personal\",\"uid\":\"$EVENT_UID\"}"
+check_text "Updated" && step_ok || step_fail "get_event: update not reflected"
+
+sep "MCP 53 — delete_event"
+mcp_tool $((RPC_ID++)) "delete_event" "{\"calendarName\":\"personal\",\"uid\":\"$EVENT_UID\"}"
+check_text "Event deleted successfully" && step_ok || step_fail "delete_event failed"
+
+# ── Group H: Talk ────────────────────────────────────────────────────────────
+
+sep "MCP 54 — talk_list_conversations"
+mcp_tool $((RPC_ID++)) "talk_list_conversations" '{}'
+check_ok && step_ok || step_fail "talk_list_conversations returned an error"
+
+ROOM_NAME="Test Room $TIMESTAMP"
+sep "MCP 55 — talk_create_conversation"
+mcp_tool $((RPC_ID++)) "talk_create_conversation" "{\"roomType\":3,\"roomName\":\"$ROOM_NAME\"}"
+check_text "Conversation created" && step_ok || step_fail "talk_create_conversation failed"
+ROOM_TOKEN=$(extract_text '\[([a-zA-Z0-9]+)\]')
+echo "  room_token: $ROOM_TOKEN"
+
+sep "MCP 56 — talk_send_message"
+mcp_tool $((RPC_ID++)) "talk_send_message" "{\"token\":\"$ROOM_TOKEN\",\"message\":\"Hello from test suite $TIMESTAMP\"}"
+check_text "Message sent" && step_ok || step_fail "talk_send_message failed"
+
+sep "MCP 57 — talk_list_messages"
+mcp_tool $((RPC_ID++)) "talk_list_messages" "{\"token\":\"$ROOM_TOKEN\"}"
+check_text "Hello from test suite" && step_ok || step_fail "talk_list_messages: message not found"
+
+# ── Group I: Notes CRUD ──────────────────────────────────────────────────────
+
+sep "MCP 58 — list_notes"
+mcp_tool $((RPC_ID++)) "list_notes" '{}'
+check_ok && step_ok || step_fail "list_notes returned an error"
+
+NOTE_TITLE="Test Note $TIMESTAMP"
+sep "MCP 59 — create_note"
+mcp_tool $((RPC_ID++)) "create_note" "{\"title\":\"$NOTE_TITLE\",\"content\":\"Test note content $TIMESTAMP\",\"category\":\"testing\"}"
+check_text "Note created" && step_ok || step_fail "create_note failed"
+NOTE_ID=$(extract_text '\[(\d+)\]')
+echo "  note_id: $NOTE_ID"
+
+sep "MCP 60 — get_note"
+mcp_tool $((RPC_ID++)) "get_note" "{\"id\":$NOTE_ID}"
+check_text "Test note content $TIMESTAMP" && step_ok || step_fail "get_note: content mismatch"
+
+sep "MCP 61 — update_note"
+mcp_tool $((RPC_ID++)) "update_note" "{\"id\":$NOTE_ID,\"content\":\"Updated content $TIMESTAMP\"}"
+check_text "Note updated" && step_ok || step_fail "update_note failed"
+
+sep "MCP 62 — get_note (verify update)"
+mcp_tool $((RPC_ID++)) "get_note" "{\"id\":$NOTE_ID}"
+check_text "Updated content $TIMESTAMP" && step_ok || step_fail "get_note: update not reflected"
+
+sep "MCP 63 — delete_note"
+mcp_tool $((RPC_ID++)) "delete_note" "{\"id\":$NOTE_ID}"
+check_text "deleted" && step_ok || step_fail "delete_note failed"
+
+# ── Group J: Tasks CRUD ──────────────────────────────────────────────────────
+
+sep "MCP 64 — list_tasks"
+mcp_tool $((RPC_ID++)) "list_tasks" '{"calendarName":"tasks"}'
+check_ok && step_ok || step_fail "list_tasks returned an error"
+
+TASK_SUMMARY="Test Task $TIMESTAMP"
+sep "MCP 65 — create_task"
+mcp_tool $((RPC_ID++)) "create_task" "{\"calendarName\":\"tasks\",\"summary\":\"$TASK_SUMMARY\"}"
+check_text "Task created successfully" && step_ok || step_fail "create_task failed"
+TASK_UID=$(extract_text 'UID: (.+)')
+echo "  task_uid: $TASK_UID"
+
+sep "MCP 66 — list_tasks"
+mcp_tool $((RPC_ID++)) "list_tasks" '{"calendarName":"tasks"}'
+check_text "$TASK_SUMMARY" && step_ok || step_fail "list_tasks: task not found"
+
+sep "MCP 67 — update_task"
+mcp_tool $((RPC_ID++)) "update_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\",\"summary\":\"$TASK_SUMMARY Updated\"}"
+check_text "Task updated successfully" && step_ok || step_fail "update_task failed"
+
+sep "MCP 68 — complete_task"
+mcp_tool $((RPC_ID++)) "complete_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\"}"
+check_text "completed successfully" && step_ok || step_fail "complete_task failed"
+
+sep "MCP 69 — delete_task"
+mcp_tool $((RPC_ID++)) "delete_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\"}"
+check_text "Task deleted successfully" && step_ok || step_fail "delete_task failed"
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""

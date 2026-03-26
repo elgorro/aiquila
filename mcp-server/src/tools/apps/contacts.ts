@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { decodeXmlEntities, fetchCalDAV } from '../../client/caldav.js';
+import { decodeXmlEntities, fetchCalDAV, nsTagContent } from '../../client/caldav.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -259,7 +259,7 @@ function parseVCards(responseXml: string): ParsedContact[] {
 
   for (const block of responseBlocks) {
     const hrefMatch = block.match(/<d:href>([^<]+)<\/d:href>/);
-    const etagMatch = block.match(/<d:getetag>"?([^"<]+)"?<\/d:getetag>/);
+    const etagMatch = block.match(nsTagContent('getetag'));
 
     // Match address-data with any namespace prefix or none
     const cardDataMatch = block.match(
@@ -274,7 +274,9 @@ function parseVCards(responseXml: string): ParsedContact[] {
     for (const vcardBlock of vcardBlocks) {
       const contact = parseVCardBlock(vcardBlock);
       if (contact) {
-        contact.etag = etagMatch?.[1];
+        contact.etag = etagMatch
+          ? decodeXmlEntities(etagMatch[1].trim()).replace(/^"|"$/g, '')
+          : undefined;
         contact.href = hrefMatch?.[1];
         contacts.push(contact);
       }
@@ -408,7 +410,7 @@ async function resolveContactByUid(
   const responseText = await response.text();
 
   const hrefMatch = responseText.match(/<d:href>([^<]+)<\/d:href>/);
-  const etagMatch = responseText.match(/<d:getetag>"?([^"<]+)"?<\/d:getetag>/);
+  const etagMatch = responseText.match(nsTagContent('getetag'));
   const cardDataMatch = responseText.match(
     /<(?:[a-z0-9]+:)?address-data[^>]*>([\s\S]*?)<\/(?:[a-z0-9]+:)?address-data>/
   );
@@ -417,9 +419,12 @@ async function resolveContactByUid(
     throw new Error(`Contact with UID "${uid}" not found in address book "${addressBookName}"`);
   }
 
+  const rawEtag = decodeXmlEntities(etagMatch[1].trim());
+  const etag = rawEtag.startsWith('"') ? rawEtag : `"${rawEtag}"`;
+
   return {
     href: hrefMatch[1],
-    etag: decodeXmlEntities(etagMatch[1]),
+    etag,
     vcardData: decodeXmlEntities(cardDataMatch[1]),
   };
 }
@@ -1010,7 +1015,7 @@ export const updateContactTool = {
         body: modified,
         headers: {
           'Content-Type': 'text/vcard; charset=utf-8',
-          'If-Match': `"${etag}"`,
+          'If-Match': etag,
         },
       });
 
@@ -1066,7 +1071,7 @@ export const deleteContactTool = {
       const response = await fetchCalDAV(deleteUrl, {
         method: 'DELETE',
         headers: {
-          'If-Match': `"${etag}"`,
+          'If-Match': etag,
         },
       });
 

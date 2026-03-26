@@ -915,6 +915,9 @@ func installAiquilaAppFromStore(sshClient *xssh.Client) error {
 	fmt.Println("\n── Installing AIquila app from Nextcloud app store")
 	installCmd := `docker compose -f /opt/aiquila/docker-compose.yml exec -T nc php occ app:install aiquila && \
 docker compose -f /opt/aiquila/docker-compose.yml exec -T nc bash -c '\
+(php occ app:install spreed 2>/dev/null || php occ app:enable spreed) && \
+php occ app:install notes && \
+php occ app:install tasks && \
 php occ app:enable metrics && \
 php occ config:system:set trusted_proxies 0 --value="172.16.0.0/12" && \
 php occ config:system:set forwarded_for_headers 0 --value="HTTP_X_FORWARDED_FOR" && \

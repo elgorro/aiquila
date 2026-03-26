@@ -124,6 +124,14 @@ else
     tail -20 /var/log/apache2/error.log 2>/dev/null || true
 fi
 
+# Install optional apps for full test coverage
+echo ""
+echo "[INSTALL] Installing Talk, Notes, and Tasks apps..."
+run_occ app:install spreed 2>/dev/null || run_occ app:enable spreed
+run_occ app:install notes
+run_occ app:install tasks
+echo "[OK] Talk, Notes, and Tasks installed"
+
 # Show final status
 echo ""
 echo "=== Installation Status ==="
