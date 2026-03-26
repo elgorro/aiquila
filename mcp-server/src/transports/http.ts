@@ -234,6 +234,8 @@ export async function startHttp(): Promise<void> {
         provider,
         issuerUrl: new URL(issuerUrl),
         resourceServerUrl: new URL(MCP_PATH, issuerUrl),
+        serviceDocumentationUrl: new URL('https://github.com/elgorro/aiquila'),
+        scopesSupported: ['mcp:tools', 'mcp:resources', 'mcp:prompts'],
       })
     );
 
