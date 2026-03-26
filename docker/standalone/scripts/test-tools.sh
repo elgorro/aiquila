@@ -110,24 +110,7 @@ print(m.group(1) if m else '')
 " "$pattern"
 }
 
-# Check whether the last mcp_tool response indicates the app/feature is unavailable.
-check_app_available() {
-  python3 -c "
-import json, sys
-raw = open('$TMPFILE').read().strip()
-if 'data:' in raw:
-    lines = [l[5:].strip() for l in raw.splitlines() if l.startswith('data:')]
-    raw = lines[-1] if lines else raw
-d = json.loads(raw)
-if 'error' in d:
-    sys.exit(1)
-if d.get('result',{}).get('isError'):
-    text = ''.join(c.get('text','') for c in d['result'].get('content',[]))
-    lower = text.lower()
-    if any(k in lower for k in ['not installed', 'not enabled', 'not found', '404', '403']):
-        sys.exit(1)
-"
-}
+
 
 # ── Auth — quick PKCE flow (no container restart) ─────────────────────────────
 sep "Auth — OAuth PKCE"
@@ -510,97 +493,82 @@ check_text "Event deleted successfully" && step_ok || step_fail "delete_event fa
 
 # ── Group H: Talk ────────────────────────────────────────────────────────────
 
-sep "Step 54 — talk_list_conversations (pre-check)"
+sep "Step 54 — talk_list_conversations"
 mcp_tool $((RPC_ID++)) "talk_list_conversations" '{}'
-if check_app_available; then
-  check_ok && step_ok || step_fail "talk_list_conversations returned an error"
+check_ok && step_ok || step_fail "talk_list_conversations returned an error"
 
-  ROOM_NAME="Test Room $TIMESTAMP"
-  sep "Step 55 — talk_create_conversation"
-  mcp_tool $((RPC_ID++)) "talk_create_conversation" "{\"roomType\":3,\"roomName\":\"$ROOM_NAME\"}"
-  check_text "Conversation created" && step_ok || step_fail "talk_create_conversation failed"
-  ROOM_TOKEN=$(extract_text '\[([a-zA-Z0-9]+)\]')
-  echo "  room_token: $ROOM_TOKEN"
+ROOM_NAME="Test Room $TIMESTAMP"
+sep "Step 55 — talk_create_conversation"
+mcp_tool $((RPC_ID++)) "talk_create_conversation" "{\"roomType\":3,\"roomName\":\"$ROOM_NAME\"}"
+check_text "Conversation created" && step_ok || step_fail "talk_create_conversation failed"
+ROOM_TOKEN=$(extract_text '\[([a-zA-Z0-9]+)\]')
+echo "  room_token: $ROOM_TOKEN"
 
-  sep "Step 56 — talk_send_message"
-  mcp_tool $((RPC_ID++)) "talk_send_message" "{\"token\":\"$ROOM_TOKEN\",\"message\":\"Hello from test suite $TIMESTAMP\"}"
-  check_text "Message sent" && step_ok || step_fail "talk_send_message failed"
+sep "Step 56 — talk_send_message"
+mcp_tool $((RPC_ID++)) "talk_send_message" "{\"token\":\"$ROOM_TOKEN\",\"message\":\"Hello from test suite $TIMESTAMP\"}"
+check_text "Message sent" && step_ok || step_fail "talk_send_message failed"
 
-  sep "Step 57 — talk_list_messages"
-  mcp_tool $((RPC_ID++)) "talk_list_messages" "{\"token\":\"$ROOM_TOKEN\"}"
-  check_text "Hello from test suite" && step_ok || step_fail "talk_list_messages: message not found"
-else
-  step_skip "Talk app not available"
-  RPC_ID=$((RPC_ID+3))
-fi
+sep "Step 57 — talk_list_messages"
+mcp_tool $((RPC_ID++)) "talk_list_messages" "{\"token\":\"$ROOM_TOKEN\"}"
+check_text "Hello from test suite" && step_ok || step_fail "talk_list_messages: message not found"
 
-# ── Group I: Notes CRUD (skippable) ──────────────────────────────────────────
+# ── Group I: Notes CRUD ──────────────────────────────────────────────────────
 
-sep "Step 58 — list_notes (pre-check)"
+sep "Step 58 — list_notes"
 mcp_tool $((RPC_ID++)) "list_notes" '{}'
-if check_app_available; then
-  check_ok && step_ok || step_fail "list_notes returned an error"
+check_ok && step_ok || step_fail "list_notes returned an error"
 
-  NOTE_TITLE="Test Note $TIMESTAMP"
-  sep "Step 59 — create_note"
-  mcp_tool $((RPC_ID++)) "create_note" "{\"title\":\"$NOTE_TITLE\",\"content\":\"Test note content $TIMESTAMP\",\"category\":\"testing\"}"
-  check_text "Note created" && step_ok || step_fail "create_note failed"
-  NOTE_ID=$(extract_text '\[(\d+)\]')
-  echo "  note_id: $NOTE_ID"
+NOTE_TITLE="Test Note $TIMESTAMP"
+sep "Step 59 — create_note"
+mcp_tool $((RPC_ID++)) "create_note" "{\"title\":\"$NOTE_TITLE\",\"content\":\"Test note content $TIMESTAMP\",\"category\":\"testing\"}"
+check_text "Note created" && step_ok || step_fail "create_note failed"
+NOTE_ID=$(extract_text '\[(\d+)\]')
+echo "  note_id: $NOTE_ID"
 
-  sep "Step 60 — get_note"
-  mcp_tool $((RPC_ID++)) "get_note" "{\"id\":$NOTE_ID}"
-  check_text "Test note content $TIMESTAMP" && step_ok || step_fail "get_note: content mismatch"
+sep "Step 60 — get_note"
+mcp_tool $((RPC_ID++)) "get_note" "{\"id\":$NOTE_ID}"
+check_text "Test note content $TIMESTAMP" && step_ok || step_fail "get_note: content mismatch"
 
-  sep "Step 61 — update_note"
-  mcp_tool $((RPC_ID++)) "update_note" "{\"id\":$NOTE_ID,\"content\":\"Updated content $TIMESTAMP\"}"
-  check_text "Note updated" && step_ok || step_fail "update_note failed"
+sep "Step 61 — update_note"
+mcp_tool $((RPC_ID++)) "update_note" "{\"id\":$NOTE_ID,\"content\":\"Updated content $TIMESTAMP\"}"
+check_text "Note updated" && step_ok || step_fail "update_note failed"
 
-  sep "Step 62 — get_note (verify update)"
-  mcp_tool $((RPC_ID++)) "get_note" "{\"id\":$NOTE_ID}"
-  check_text "Updated content $TIMESTAMP" && step_ok || step_fail "get_note: update not reflected"
+sep "Step 62 — get_note (verify update)"
+mcp_tool $((RPC_ID++)) "get_note" "{\"id\":$NOTE_ID}"
+check_text "Updated content $TIMESTAMP" && step_ok || step_fail "get_note: update not reflected"
 
-  sep "Step 63 — delete_note"
-  mcp_tool $((RPC_ID++)) "delete_note" "{\"id\":$NOTE_ID}"
-  check_text "deleted" && step_ok || step_fail "delete_note failed"
-else
-  step_skip "Notes app not installed"
-  RPC_ID=$((RPC_ID+5))
-fi
+sep "Step 63 — delete_note"
+mcp_tool $((RPC_ID++)) "delete_note" "{\"id\":$NOTE_ID}"
+check_text "deleted" && step_ok || step_fail "delete_note failed"
 
-# ── Group J: Tasks CRUD (skippable) ──────────────────────────────────────────
+# ── Group J: Tasks CRUD ──────────────────────────────────────────────────────
 
-sep "Step 64 — list_tasks (pre-check for Tasks app)"
+sep "Step 64 — list_tasks"
 mcp_tool $((RPC_ID++)) "list_tasks" '{"calendarName":"tasks"}'
-if check_app_available; then
-  check_ok && step_ok || step_fail "list_tasks returned an error"
+check_ok && step_ok || step_fail "list_tasks returned an error"
 
-  TASK_SUMMARY="Test Task $TIMESTAMP"
-  sep "Step 65 — create_task"
-  mcp_tool $((RPC_ID++)) "create_task" "{\"calendarName\":\"tasks\",\"summary\":\"$TASK_SUMMARY\"}"
-  check_text "Task created successfully" && step_ok || step_fail "create_task failed"
-  TASK_UID=$(extract_text 'UID: (.+)')
-  echo "  task_uid: $TASK_UID"
+TASK_SUMMARY="Test Task $TIMESTAMP"
+sep "Step 65 — create_task"
+mcp_tool $((RPC_ID++)) "create_task" "{\"calendarName\":\"tasks\",\"summary\":\"$TASK_SUMMARY\"}"
+check_text "Task created successfully" && step_ok || step_fail "create_task failed"
+TASK_UID=$(extract_text 'UID: (.+)')
+echo "  task_uid: $TASK_UID"
 
-  sep "Step 66 — list_tasks"
-  mcp_tool $((RPC_ID++)) "list_tasks" '{"calendarName":"tasks"}'
-  check_text "$TASK_SUMMARY" && step_ok || step_fail "list_tasks: task not found"
+sep "Step 66 — list_tasks"
+mcp_tool $((RPC_ID++)) "list_tasks" '{"calendarName":"tasks"}'
+check_text "$TASK_SUMMARY" && step_ok || step_fail "list_tasks: task not found"
 
-  sep "Step 67 — update_task"
-  mcp_tool $((RPC_ID++)) "update_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\",\"summary\":\"$TASK_SUMMARY Updated\"}"
-  check_text "Task updated successfully" && step_ok || step_fail "update_task failed"
+sep "Step 67 — update_task"
+mcp_tool $((RPC_ID++)) "update_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\",\"summary\":\"$TASK_SUMMARY Updated\"}"
+check_text "Task updated successfully" && step_ok || step_fail "update_task failed"
 
-  sep "Step 68 — complete_task"
-  mcp_tool $((RPC_ID++)) "complete_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\"}"
-  check_text "completed successfully" && step_ok || step_fail "complete_task failed"
+sep "Step 68 — complete_task"
+mcp_tool $((RPC_ID++)) "complete_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\"}"
+check_text "completed successfully" && step_ok || step_fail "complete_task failed"
 
-  sep "Step 69 — delete_task"
-  mcp_tool $((RPC_ID++)) "delete_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\"}"
-  check_text "Task deleted successfully" && step_ok || step_fail "delete_task failed"
-else
-  step_skip "Tasks app not installed"
-  RPC_ID=$((RPC_ID+5))
-fi
+sep "Step 69 — delete_task"
+mcp_tool $((RPC_ID++)) "delete_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\"}"
+check_text "Task deleted successfully" && step_ok || step_fail "delete_task failed"
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""

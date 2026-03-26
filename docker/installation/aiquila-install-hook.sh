@@ -34,6 +34,13 @@ echo "[OCC] Enabling AIquila app..."
 occ app:enable aiquila
 echo "[OK] AIquila enabled"
 
+# --- Install optional apps for full test coverage ---
+echo "[OCC] Installing Talk, Notes, and Tasks apps..."
+occ app:install spreed 2>/dev/null || occ app:enable spreed
+occ app:install notes
+occ app:install tasks
+echo "[OK] Talk, Notes, and Tasks installed"
+
 # --- Optional: create test user ---
 if [ -n "${AIQUILA_TEST_USER:-}" ] && [ -n "${AIQUILA_TEST_PASSWORD:-}" ]; then
     echo "[SETUP] Creating test user: $AIQUILA_TEST_USER"
