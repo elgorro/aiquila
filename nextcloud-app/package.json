@@ -1,6 +1,6 @@
 {
   "name": "aiquila",
-  "version": "0.1.17",
+  "version": "0.2.9",
   "description": "Claude AI Integration for Nextcloud",
   "type": "module",
   "main": "src/main.js",
@@ -20,7 +20,7 @@
   "devDependencies": {
     "@nextcloud/vite-config": "^2.5.2",
     "@vitejs/plugin-vue": "^6.0.5",
-    "vite": "^8.0.3"
+    "vite": "^7.3.1"
   },
   "dependencies": {
     "@nextcloud/axios": "^2.5.2",
