@@ -15,6 +15,7 @@ import { searchTools } from './tools/system/search.js';
 import { tasksTools } from './tools/apps/tasks.js';
 import { calendarTools } from './tools/apps/calendar.js';
 import { cookbookTools } from './tools/apps/cookbook.js';
+import { deckTools } from './tools/apps/deck.js';
 import { notesTools } from './tools/apps/notes.js';
 import { aiquilaTools } from './tools/apps/aiquila.js';
 import { usersTools } from './tools/apps/users.js';
@@ -43,6 +44,7 @@ const allToolSets = [
   calendarTools,
   tasksTools,
   cookbookTools,
+  deckTools,
   notesTools,
   aiquilaTools,
   usersTools,
