@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { startStdio } from './transports/stdio.js';
 import { startHttp } from './transports/http.js';
 import { logger } from './logger.js';
