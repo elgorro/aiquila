@@ -21,6 +21,7 @@ import { aiquilaTools } from './tools/apps/aiquila.js';
 import { usersTools } from './tools/apps/users.js';
 import { groupsTools } from './tools/apps/groups.js';
 import { circlesTools } from './tools/apps/circles.js';
+import { photosTools } from './tools/apps/photos.js';
 import { sharesTools } from './tools/apps/shares.js';
 import { contactsTools } from './tools/apps/contacts.js';
 import { mailTools } from './tools/apps/mail.js';
@@ -51,6 +52,7 @@ const allToolSets = [
   usersTools,
   groupsTools,
   circlesTools,
+  photosTools,
   appsTools,
   occTools,
   securityTools,
