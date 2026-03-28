@@ -266,66 +266,111 @@ export const getFileContentTool = {
 };
 
 /**
- * Analyze an image stored in Nextcloud using Claude vision.
+ * Analyze one or more images stored in Nextcloud using Claude vision.
  *
- * Fetches the image via the AIquila API and returns it as an MCP image
- * content block alongside the user's prompt so Claude can answer questions
- * about it (OCR, visual Q&A, document analysis, etc.).
+ * Fetches images via the AIquila API and returns them as MCP image
+ * content blocks alongside the user's prompt so Claude can answer questions
+ * about them (OCR, visual Q&A, document analysis, comparison, etc.).
  */
 export const analyzeImageTool = {
   name: 'analyze_image',
   description:
-    'Analyze an image stored in Nextcloud using Claude vision. Ask questions about image content, extract text (OCR), describe visuals, or analyse documents. The image is returned alongside your prompt for Claude to answer.',
+    'Analyze one or more images stored in Nextcloud using Claude vision. Ask questions about image content, extract text (OCR), describe visuals, compare images, or analyse documents. Supports up to 20 images for multi-image comparison.',
   inputSchema: z.object({
-    path: z.string().describe("The image file path in Nextcloud (e.g., '/Photos/receipt.jpg')"),
+    path: z
+      .string()
+      .optional()
+      .describe(
+        "Single image file path in Nextcloud (e.g., '/Photos/receipt.jpg'). Use 'paths' for multiple images."
+      ),
+    paths: z
+      .array(z.string())
+      .max(20)
+      .optional()
+      .describe(
+        "Multiple image file paths for comparison (max 20). E.g., ['/Photos/before.jpg', '/Photos/after.jpg']"
+      ),
     prompt: z
       .string()
       .describe(
-        'What to ask about the image (e.g., "What text is in this image?", "Describe what you see")'
+        'What to ask about the image(s) (e.g., "What text is in this image?", "Compare these images")'
       ),
   }),
-  handler: async (args: { path: string; prompt: string }) => {
-    try {
-      const result = await fetchAiquilaAPI<{
-        name: string;
-        mimeType: string;
-        size: number;
-        encoding: string;
-        content: string;
-      }>('/files/content', { queryParams: { path: args.path } });
+  handler: async (args: { path?: string; paths?: string[]; prompt: string }) => {
+    const imagePaths = args.paths ?? (args.path ? [args.path] : []);
 
-      if (!result.mimeType.startsWith('image/')) {
+    if (imagePaths.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: "Error: No image path provided. Specify either 'path' (single image) or 'paths' (multiple images).",
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    try {
+      // Fetch all images in parallel
+      const results = await Promise.all(
+        imagePaths.map((p) =>
+          fetchAiquilaAPI<{
+            name: string;
+            mimeType: string;
+            size: number;
+            encoding: string;
+            content: string;
+          }>('/files/content', { queryParams: { path: p } })
+        )
+      );
+
+      // Validate all files are images
+      const nonImages = results
+        .map((r, i) => ({ ...r, path: imagePaths[i] }))
+        .filter((r) => !r.mimeType.startsWith('image/'));
+
+      if (nonImages.length > 0) {
+        const list = nonImages.map((r) => `${r.path} (${r.mimeType})`).join(', ');
         return {
           content: [
             {
               type: 'text' as const,
-              text: `Error: ${args.path} is not an image file (mime type: ${result.mimeType}). Use get_file_content for non-image files.`,
+              text: `Error: Non-image file(s): ${list}. Use get_file_content for non-image files.`,
             },
           ],
           isError: true,
         };
       }
 
-      // Return the prompt as text + the image for Claude vision analysis
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `File: ${result.name} (${result.mimeType}, ${result.size} bytes)\n\n${args.prompt}`,
-          },
-          {
-            type: 'image' as const,
-            data: result.content,
-            mimeType: result.mimeType,
-          },
-        ],
-      };
+      // Build file info header
+      const fileInfo = results.map((r) => `${r.name} (${r.mimeType}, ${r.size} bytes)`).join(', ');
+
+      // Return prompt as text + all images for Claude vision analysis
+      const content: Array<
+        { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
+      > = [
+        {
+          type: 'text' as const,
+          text:
+            results.length === 1
+              ? `File: ${fileInfo}\n\n${args.prompt}`
+              : `Analyzing ${results.length} images: ${fileInfo}\n\n${args.prompt}`,
+        },
+        ...results.map((r) => ({
+          type: 'image' as const,
+          data: r.content,
+          mimeType: r.mimeType,
+        })),
+      ];
+
+      return { content };
     } catch (error) {
       return {
         content: [
           {
             type: 'text' as const,
-            text: `Error fetching image: ${error instanceof Error ? error.message : String(error)}`,
+            text: `Error fetching image(s): ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
         isError: true,

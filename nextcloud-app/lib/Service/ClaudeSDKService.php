@@ -828,6 +828,70 @@ class ClaudeSDKService {
     }
 
     /**
+     * Ask Claude about multiple images using vision capabilities.
+     *
+     * Builds a single user message with N image content blocks followed by
+     * the text prompt, per Claude best practice (images before text).
+     *
+     * @param string $prompt What to ask about the images
+     * @param array<array{base64: string, mimeType: string}> $images Image data array
+     * @param string|null $userId User ID for API key
+     * @return array ['response' => string, 'usage' => array] or ['error' => string]
+     */
+    public function askWithImages(string $prompt, array $images, ?string $userId = null): array {
+        if (empty($images)) {
+            return ['error' => 'No images provided'];
+        }
+
+        if (count($images) > 20) {
+            return ['error' => 'Too many images. Maximum 20 images per request.'];
+        }
+
+        try {
+            $client = $this->getClient($userId);
+
+            $content = [];
+            foreach ($images as $img) {
+                $content[] = [
+                    'type' => 'image',
+                    'source' => [
+                        'type' => 'base64',
+                        'media_type' => $img['mimeType'],
+                        'data' => $img['base64'],
+                    ],
+                ];
+            }
+            $content[] = [
+                'type' => 'text',
+                'text' => $prompt,
+            ];
+
+            $messages = [
+                [
+                    'role' => 'user',
+                    'content' => $content,
+                ],
+            ];
+            $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId));
+
+            $usage = $this->extractUsage($response);
+
+            $this->logger->info('AIquila SDK: Multi-image analysis response', [
+                'image_count' => count($images),
+                'stop_reason' => $response->stopReason ?? 'unknown',
+                'usage' => $usage,
+            ]);
+
+            $this->logResponseMetadata($response);
+
+            return ['response' => $this->extractText($response), 'usage' => $usage];
+
+        } catch (\Throwable $e) {
+            return $this->handleException($e, 'Multi-image analysis');
+        }
+    }
+
+    /**
      * Stream response from Claude
      *
      * @param string $prompt The question/prompt

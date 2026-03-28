@@ -11,11 +11,13 @@ use OCP\ICache;
 use OCP\ICacheFactory;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
+use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\McpClientService;
 
 class ChatController extends Controller {
     private ClaudeSDKService $claudeService;
     private FileService $fileService;
+    private ImageOptimizer $imageOptimizer;
     private McpClientService $mcpClient;
     private ?string $userId;
     private ICache $cache;
@@ -30,6 +32,7 @@ class ChatController extends Controller {
         IRequest $request,
         ClaudeSDKService $claudeService,
         FileService $fileService,
+        ImageOptimizer $imageOptimizer,
         McpClientService $mcpClient,
         ?string $userId,
         ICacheFactory $cacheFactory
@@ -37,6 +40,7 @@ class ChatController extends Controller {
         parent::__construct($appName, $request);
         $this->claudeService = $claudeService;
         $this->fileService = $fileService;
+        $this->imageOptimizer = $imageOptimizer;
         $this->mcpClient = $mcpClient;
         $this->userId = $userId;
         $this->cache = $cacheFactory->createDistributed('aiquila_ratelimit');
@@ -132,21 +136,49 @@ class ChatController extends Controller {
             }
         }
 
-        // Single image → delegate to vision
-        if (count($fileDataList) === 1 && str_starts_with($fileDataList[0]['mimeType'], 'image/')) {
-            $f = $fileDataList[0];
-            $result = $this->claudeService->askWithImage(
-                $prompt,
-                $f['content'],
-                $f['mimeType'],
-                $this->userId,
-            );
+        // Partition files by type
+        $images = [];
+        $documents = [];
+        $textParts = [];
+
+        foreach ($fileDataList as $f) {
+            if (str_starts_with($f['mimeType'], 'image/') && $this->imageOptimizer->isSupported($f['mimeType'])) {
+                $optimized = $this->imageOptimizer->optimize(
+                    base64_decode($f['content']),
+                    $f['mimeType']
+                );
+                $images[] = ['base64' => $optimized['data'], 'mimeType' => $optimized['mimeType']];
+            } elseif ($f['mimeType'] === 'application/pdf') {
+                $documents[] = $f;
+            } else {
+                $textParts[] = "--- File: {$f['name']} ({$f['mimeType']}, {$f['size']} bytes) ---\n{$f['content']}";
+            }
+        }
+
+        if (count($images) > ImageOptimizer::MAX_IMAGES) {
+            return new JSONResponse([
+                'error' => 'Too many images. Maximum ' . ImageOptimizer::MAX_IMAGES . ' images per request.'
+            ], 400);
+        }
+
+        // Images only (no other file types)
+        if (!empty($images) && empty($documents) && empty($textParts)) {
+            if (count($images) === 1) {
+                $result = $this->claudeService->askWithImage(
+                    $prompt,
+                    $images[0]['base64'],
+                    $images[0]['mimeType'],
+                    $this->userId,
+                );
+            } else {
+                $result = $this->claudeService->askWithImages($prompt, $images, $this->userId);
+            }
             return new JSONResponse($result);
         }
 
-        // Single PDF → delegate to document
-        if (count($fileDataList) === 1 && $fileDataList[0]['mimeType'] === 'application/pdf') {
-            $f = $fileDataList[0];
+        // Single PDF only
+        if (empty($images) && count($documents) === 1 && empty($textParts)) {
+            $f = $documents[0];
             $rawBytes = base64_decode($f['content']);
             $result = $this->claudeService->askWithDocument(
                 $prompt,
@@ -158,12 +190,50 @@ class ChatController extends Controller {
             return new JSONResponse($result);
         }
 
-        // Otherwise, concatenate as text context
-        $contextParts = [];
-        foreach ($fileDataList as $f) {
-            $contextParts[] = "--- File: {$f['name']} ({$f['mimeType']}, {$f['size']} bytes) ---\n{$f['content']}";
+        // Mixed content: build structured content blocks for a single user message
+        if (!empty($images) || !empty($documents)) {
+            $content = [];
+
+            // Images first (Claude best practice: images before text)
+            foreach ($images as $img) {
+                $content[] = [
+                    'type' => 'image',
+                    'source' => [
+                        'type' => 'base64',
+                        'media_type' => $img['mimeType'],
+                        'data' => $img['base64'],
+                    ],
+                ];
+            }
+
+            // PDFs as document blocks
+            foreach ($documents as $doc) {
+                $content[] = [
+                    'type' => 'document',
+                    'source' => [
+                        'type' => 'base64',
+                        'media_type' => 'application/pdf',
+                        'data' => $doc['content'],
+                    ],
+                    'title' => $doc['name'],
+                ];
+            }
+
+            // Text files as context in the text block
+            $promptWithContext = $prompt;
+            if (!empty($textParts)) {
+                $promptWithContext = implode("\n\n", $textParts) . "\n\n" . $prompt;
+            }
+
+            $content[] = ['type' => 'text', 'text' => $promptWithContext];
+
+            $messages = [['role' => 'user', 'content' => $content]];
+            $result = $this->claudeService->chat($messages, null, $this->userId);
+            return new JSONResponse($result);
         }
-        $context = implode("\n\n", $contextParts);
+
+        // Text-only fallback (no images, no PDFs)
+        $context = implode("\n\n", $textParts);
 
         if (!$this->validateContentLength($prompt . $context)) {
             return new JSONResponse([
@@ -340,11 +410,15 @@ class ChatController extends Controller {
 
         $mimeType = $fileData['mimeType'];
 
-        if (str_starts_with($mimeType, 'image/')) {
+        if (str_starts_with($mimeType, 'image/') && $this->imageOptimizer->isSupported($mimeType)) {
+            $optimized = $this->imageOptimizer->optimize(
+                base64_decode($fileData['content']),
+                $mimeType
+            );
             $result = $this->claudeService->askWithImage(
                 $prompt,
-                $fileData['content'], // already base64
-                $mimeType,
+                $optimized['data'],
+                $optimized['mimeType'],
                 $this->userId
             );
         } elseif ($mimeType === 'application/pdf') {

@@ -5,6 +5,7 @@ namespace OCA\AIquila\Tests\Unit;
 use OCA\AIquila\Controller\ChatController;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
+use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\McpClientService;
 use OCP\ICache;
 use OCP\ICacheFactory;
@@ -16,6 +17,7 @@ class ChatControllerTest extends TestCase {
     private $cacheFactory;
     private $claude;
     private $fileService;
+    private $imageOptimizer;
     private $mcpClient;
     private $request;
     private ChatController $ctrl;
@@ -26,6 +28,12 @@ class ChatControllerTest extends TestCase {
         $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
         $this->claude      = $this->createMock(ClaudeSDKService::class);
         $this->fileService = $this->createMock(FileService::class);
+        $this->imageOptimizer = $this->createMock(ImageOptimizer::class);
+        // By default, optimizer passes through images unchanged
+        $this->imageOptimizer->method('isSupported')->willReturn(true);
+        $this->imageOptimizer->method('optimize')->willReturnCallback(
+            fn(string $raw, string $mime) => ['data' => base64_encode($raw), 'mimeType' => $mime, 'resized' => false]
+        );
         $this->mcpClient   = $this->createMock(McpClientService::class);
         $this->request     = $this->createMock(IRequest::class);
         $this->ctrl        = new ChatController(
@@ -33,6 +41,7 @@ class ChatControllerTest extends TestCase {
             $this->request,
             $this->claude,
             $this->fileService,
+            $this->imageOptimizer,
             $this->mcpClient,
             'testuser',
             $this->cacheFactory
@@ -142,6 +151,65 @@ class ChatControllerTest extends TestCase {
         $response = $this->ctrl->ask('Describe this', '', ['/photo.png']);
         $this->assertEquals(200, $response->getStatus());
         $this->assertEquals(['response' => 'I see a photo.'], $response->getData());
+    }
+
+    public function testAskWithMultipleImagesDelegatesToAskWithImages(): void {
+        $this->cache->method('get')->willReturn(null);
+
+        $this->fileService->expects($this->exactly(2))
+            ->method('getContent')
+            ->willReturnOnConsecutiveCalls(
+                [
+                    'name' => 'a.jpg',
+                    'mimeType' => 'image/jpeg',
+                    'size' => 500,
+                    'content' => base64_encode('fakejpg1'),
+                ],
+                [
+                    'name' => 'b.jpg',
+                    'mimeType' => 'image/jpeg',
+                    'size' => 600,
+                    'content' => base64_encode('fakejpg2'),
+                ]
+            );
+
+        $this->claude->expects($this->once())
+            ->method('askWithImages')
+            ->willReturn(['response' => 'Two images compared.']);
+
+        $response = $this->ctrl->ask('Compare these', '', ['/a.jpg', '/b.jpg']);
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertEquals(['response' => 'Two images compared.'], $response->getData());
+    }
+
+    public function testAskWithMixedFilesUsesStructuredContent(): void {
+        $this->cache->method('get')->willReturn(null);
+
+        $this->fileService->expects($this->exactly(2))
+            ->method('getContent')
+            ->willReturnOnConsecutiveCalls(
+                [
+                    'name' => 'photo.png',
+                    'mimeType' => 'image/png',
+                    'size' => 1024,
+                    'content' => base64_encode('fakepng'),
+                ],
+                [
+                    'name' => 'notes.txt',
+                    'mimeType' => 'text/plain',
+                    'size' => 11,
+                    'content' => 'hello world',
+                ]
+            );
+
+        // Mixed content goes through chat() with structured messages
+        $this->claude->expects($this->once())
+            ->method('chat')
+            ->willReturn(['response' => 'Mixed content analyzed.']);
+
+        $response = $this->ctrl->ask('Analyze all', '', ['/photo.png', '/notes.txt']);
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertEquals(['response' => 'Mixed content analyzed.'], $response->getData());
     }
 
     // ── summarize() tests ─────────────────────────────────────────────────

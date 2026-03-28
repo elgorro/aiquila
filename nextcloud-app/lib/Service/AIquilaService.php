@@ -17,6 +17,7 @@ use Psr\Log\LoggerInterface;
 class AIquilaService implements IAIquila {
     private ClaudeSDKService $claudeSDKService;
     private FileService $fileService;
+    private ImageOptimizer $imageOptimizer;
     private IConfig $config;
     private INotificationManager $notificationManager;
     private LoggerInterface $logger;
@@ -25,12 +26,14 @@ class AIquilaService implements IAIquila {
     public function __construct(
         ClaudeSDKService $claudeSDKService,
         FileService $fileService,
+        ImageOptimizer $imageOptimizer,
         IConfig $config,
         INotificationManager $notificationManager,
         LoggerInterface $logger
     ) {
         $this->claudeSDKService = $claudeSDKService;
         $this->fileService = $fileService;
+        $this->imageOptimizer = $imageOptimizer;
         $this->config = $config;
         $this->notificationManager = $notificationManager;
         $this->logger = $logger;
@@ -106,11 +109,15 @@ class AIquilaService implements IAIquila {
             $fileData = $this->fileService->getContent($filePath, $userId);
             $mimeType = $fileData['mimeType'];
 
-            if (str_starts_with($mimeType, 'image/')) {
+            if (str_starts_with($mimeType, 'image/') && $this->imageOptimizer->isSupported($mimeType)) {
+                $optimized = $this->imageOptimizer->optimize(
+                    base64_decode($fileData['content']),
+                    $mimeType
+                );
                 return $this->claudeSDKService->askWithImage(
                     $prompt,
-                    $fileData['content'], // already base64
-                    $mimeType,
+                    $optimized['data'],
+                    $optimized['mimeType'],
                     $userId
                 );
             }
@@ -124,6 +131,69 @@ class AIquilaService implements IAIquila {
             return ['error' => 'File not found: ' . $filePath];
         } catch (\Exception $e) {
             $this->logger->error('AIquila: Exception in analyzeFile()', ['exception' => $e->getMessage()]);
+            return ['error' => 'File analysis error: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * Analyze multiple files with Claude (multi-image vision, document, text)
+     *
+     * @param string[] $filePaths Array of Nextcloud file paths
+     * @param string $prompt What to ask about the files
+     * @param string|null $userId User ID who owns the files
+     * @return array ['response' => string] or ['error' => string]
+     */
+    public function analyzeFiles(array $filePaths, string $prompt, ?string $userId = null): array {
+        $this->logger->info('AIquila: Multi-file analysis request', [
+            'user' => $userId,
+            'file_count' => count($filePaths),
+        ]);
+
+        try {
+            $images = [];
+            $textParts = [];
+
+            foreach ($filePaths as $filePath) {
+                $fileData = $this->fileService->getContent($filePath, $userId);
+                $mimeType = $fileData['mimeType'];
+
+                if (str_starts_with($mimeType, 'image/') && $this->imageOptimizer->isSupported($mimeType)) {
+                    $optimized = $this->imageOptimizer->optimize(
+                        base64_decode($fileData['content']),
+                        $mimeType
+                    );
+                    $images[] = ['base64' => $optimized['data'], 'mimeType' => $optimized['mimeType']];
+                } else {
+                    $textParts[] = "--- File: {$fileData['name']} ({$mimeType}, {$fileData['size']} bytes) ---\n{$fileData['content']}";
+                }
+            }
+
+            if (count($images) > ImageOptimizer::MAX_IMAGES) {
+                return ['error' => 'Too many images. Maximum ' . ImageOptimizer::MAX_IMAGES . ' per request.'];
+            }
+
+            // Images only
+            if (!empty($images) && empty($textParts)) {
+                if (count($images) === 1) {
+                    return $this->claudeSDKService->askWithImage($prompt, $images[0]['base64'], $images[0]['mimeType'], $userId);
+                }
+                return $this->claudeSDKService->askWithImages($prompt, $images, $userId);
+            }
+
+            // Text only or mixed — use text context
+            $context = implode("\n\n", $textParts);
+            if (!empty($images)) {
+                // Mixed: use askWithImages and prepend text context to prompt
+                $promptWithContext = $context . "\n\n" . $prompt;
+                return $this->claudeSDKService->askWithImages($promptWithContext, $images, $userId);
+            }
+
+            return $this->claudeSDKService->ask($prompt, $context, $userId);
+
+        } catch (NotFoundException $e) {
+            return ['error' => 'File not found: ' . $e->getMessage()];
+        } catch (\Exception $e) {
+            $this->logger->error('AIquila: Exception in analyzeFiles()', ['exception' => $e->getMessage()]);
             return ['error' => 'File analysis error: ' . $e->getMessage()];
         }
     }

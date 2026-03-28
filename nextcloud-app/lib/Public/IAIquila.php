@@ -49,6 +49,19 @@ interface IAIquila {
     public function analyzeFile(string $filePath, string $prompt, ?string $userId = null): array;
 
     /**
+     * Analyze multiple Nextcloud files with Claude AI (supports multi-image vision)
+     *
+     * Images are analyzed using Claude Vision (up to 20 images per request).
+     * PDFs use document understanding. Other files are included as text context.
+     *
+     * @param string[] $filePaths Array of Nextcloud file paths
+     * @param string $prompt What to ask about the files
+     * @param string|null $userId User ID who owns/can access the files
+     * @return array Returns ['response' => string] on success or ['error' => string] on failure
+     */
+    public function analyzeFiles(array $filePaths, string $prompt, ?string $userId = null): array;
+
+    /**
      * Check if AIquila is configured and ready to use
      *
      * @param string|null $userId Optional user ID to check for user-specific configuration

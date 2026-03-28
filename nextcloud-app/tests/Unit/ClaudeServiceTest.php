@@ -730,6 +730,55 @@ class ClaudeServiceTest extends TestCase {
         $this->assertStringContainsString('Connection to Claude API failed', $result['error']);
     }
 
+    // ── askWithImages(): multi-image exception handling ─────────────────────
+
+    public function testAskWithImagesReturnsErrorWhenEmpty(): void {
+        $this->configWithApiKey();
+
+        $result = $this->testable->askWithImages('Compare', [], 'testuser');
+        $this->assertArrayHasKey('error', $result);
+        $this->assertStringContainsString('No images', $result['error']);
+    }
+
+    public function testAskWithImagesReturnsErrorWhenTooMany(): void {
+        $this->configWithApiKey();
+
+        $images = array_fill(0, 21, ['base64' => 'data', 'mimeType' => 'image/png']);
+        $result = $this->testable->askWithImages('Compare', $images, 'testuser');
+        $this->assertArrayHasKey('error', $result);
+        $this->assertStringContainsString('Too many images', $result['error']);
+    }
+
+    public function testAskWithImagesReturnsInvalidApiKeyOnAuthenticationException(): void {
+        $this->configWithApiKey();
+        $this->testable->throwOnCreate($this->makeStatusException(AuthenticationException::class, 401));
+
+        $images = [['base64' => 'data1', 'mimeType' => 'image/jpeg'], ['base64' => 'data2', 'mimeType' => 'image/png']];
+        $result = $this->testable->askWithImages('Compare', $images, 'testuser');
+        $this->assertArrayHasKey('error', $result);
+        $this->assertStringContainsString('Invalid API key', $result['error']);
+    }
+
+    public function testAskWithImagesReturnsRateLimitOnRateLimitException(): void {
+        $this->configWithApiKey();
+        $this->testable->throwOnCreate($this->makeStatusException(RateLimitException::class, 429));
+
+        $images = [['base64' => 'data1', 'mimeType' => 'image/jpeg']];
+        $result = $this->testable->askWithImages('Describe', $images, 'testuser');
+        $this->assertArrayHasKey('error', $result);
+        $this->assertStringContainsString('Rate limit exceeded', $result['error']);
+    }
+
+    public function testAskWithImagesReturnsConnectionErrorOnAPIConnectionException(): void {
+        $this->configWithApiKey();
+        $this->testable->throwOnCreate($this->makeConnectionException());
+
+        $images = [['base64' => 'data1', 'mimeType' => 'image/jpeg']];
+        $result = $this->testable->askWithImages('Describe', $images, 'testuser');
+        $this->assertArrayHasKey('error', $result);
+        $this->assertStringContainsString('Connection to Claude API failed', $result['error']);
+    }
+
     // ── listModels() ──────────────────────────────────────────────────────
 
     public function testListModelsReturnsIds(): void {
