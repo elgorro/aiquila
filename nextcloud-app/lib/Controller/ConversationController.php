@@ -12,6 +12,7 @@ use OCA\AIquila\Db\MessageFileMapper;
 use OCA\AIquila\Db\MessageMapper;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
+use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\McpClientService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
@@ -26,6 +27,7 @@ class ConversationController extends Controller {
     private MessageFileMapper $messageFileMapper;
     private ClaudeSDKService $claudeService;
     private FileService $fileService;
+    private ImageOptimizer $imageOptimizer;
     private McpClientService $mcpClient;
     private ?string $userId;
 
@@ -37,6 +39,7 @@ class ConversationController extends Controller {
         MessageFileMapper $messageFileMapper,
         ClaudeSDKService $claudeService,
         FileService $fileService,
+        ImageOptimizer $imageOptimizer,
         McpClientService $mcpClient,
         ?string $userId
     ) {
@@ -46,6 +49,7 @@ class ConversationController extends Controller {
         $this->messageFileMapper = $messageFileMapper;
         $this->claudeService = $claudeService;
         $this->fileService = $fileService;
+        $this->imageOptimizer = $imageOptimizer;
         $this->mcpClient = $mcpClient;
         $this->userId = $userId;
     }
@@ -250,12 +254,18 @@ class ConversationController extends Controller {
             ];
         }
 
-        // 4. If files are attached to THIS message, load content and prepend to the last user message
+        // 4. If files are attached to THIS message, build structured content blocks
+        //    so images go through Claude Vision and PDFs through document understanding
         if (!empty($files)) {
-            $fileContext = $this->buildFileContext($files);
-            if ($fileContext !== null) {
+            $contentBlocks = $this->buildFileContentBlocks($files);
+            if (!empty($contentBlocks)) {
                 $lastIdx = count($claudeMessages) - 1;
-                $claudeMessages[$lastIdx]['content'] = $fileContext . "\n\n" . $claudeMessages[$lastIdx]['content'];
+                $userText = $claudeMessages[$lastIdx]['content'];
+                // Convert plain string content to structured array with file blocks + text
+                $claudeMessages[$lastIdx]['content'] = array_merge(
+                    $contentBlocks,
+                    [['type' => 'text', 'text' => $userText]]
+                );
             }
         }
 
@@ -313,19 +323,58 @@ class ConversationController extends Controller {
     }
 
     /**
-     * Build file context string from file paths
+     * Build structured Claude API content blocks from file paths.
+     *
+     * Images are returned as vision-compatible image blocks (optimized),
+     * PDFs as document blocks, and text files as text blocks.
+     *
+     * @param string[] $files File paths
+     * @return array Claude API content blocks (image/document/text)
      */
-    private function buildFileContext(array $files): ?string {
-        $parts = [];
+    private function buildFileContentBlocks(array $files): array {
+        $blocks = [];
         foreach ($files as $filePath) {
             try {
                 $fileData = $this->fileService->getContent($filePath, $this->userId);
-                $parts[] = "--- File: {$fileData['name']} ({$fileData['mimeType']}, {$fileData['size']} bytes) ---\n{$fileData['content']}";
+                $mimeType = $fileData['mimeType'];
+
+                if (str_starts_with($mimeType, 'image/') && $this->imageOptimizer->isSupported($mimeType)) {
+                    $optimized = $this->imageOptimizer->optimize(
+                        base64_decode($fileData['content']),
+                        $mimeType
+                    );
+                    $blocks[] = [
+                        'type' => 'image',
+                        'source' => [
+                            'type' => 'base64',
+                            'media_type' => $optimized['mimeType'],
+                            'data' => $optimized['data'],
+                        ],
+                    ];
+                } elseif ($mimeType === 'application/pdf') {
+                    $blocks[] = [
+                        'type' => 'document',
+                        'source' => [
+                            'type' => 'base64',
+                            'media_type' => 'application/pdf',
+                            'data' => $fileData['content'],
+                        ],
+                        'title' => $fileData['name'],
+                    ];
+                } else {
+                    $blocks[] = [
+                        'type' => 'text',
+                        'text' => "--- File: {$fileData['name']} ({$mimeType}, {$fileData['size']} bytes) ---\n{$fileData['content']}",
+                    ];
+                }
             } catch (\Exception $e) {
-                $parts[] = "--- File: " . basename($filePath) . " (could not read: {$e->getMessage()}) ---";
+                $blocks[] = [
+                    'type' => 'text',
+                    'text' => "--- File: " . basename($filePath) . " (could not read: {$e->getMessage()}) ---",
+                ];
             }
         }
-        return empty($parts) ? null : implode("\n\n", $parts);
+        return $blocks;
     }
 
     /**
