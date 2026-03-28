@@ -595,6 +595,171 @@ export const photosGetMetadataTool = {
 };
 
 // ---------------------------------------------------------------------------
+// photos_set_favorite
+// ---------------------------------------------------------------------------
+
+export const photosSetFavoriteTool = {
+  name: 'photos_set_favorite',
+  description: 'Mark or unmark a file as favorite.',
+  inputSchema: z.object({
+    path: z.string().describe('File path in Nextcloud (e.g., "/Photos/sunset.jpg")'),
+    favorite: z.boolean().describe('true to mark as favorite, false to unmark'),
+  }),
+  handler: async (args: { path: string; favorite: boolean }) => {
+    try {
+      const config = getNextcloudConfig();
+      const normalizedPath = args.path.startsWith('/') ? args.path : `/${args.path}`;
+      const url = `${filesUrl(config)}${normalizedPath}`;
+
+      const body = `<?xml version="1.0"?>
+<d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+  <d:set>
+    <d:prop>
+      <oc:favorite>${args.favorite ? '1' : '0'}</oc:favorite>
+    </d:prop>
+  </d:set>
+</d:propertyupdate>`;
+
+      const response = await fetchCalDAV(url, {
+        method: 'PROPPATCH',
+        body,
+      });
+
+      if (response.status >= 200 && response.status < 300) {
+        const action = args.favorite ? 'marked as favorite' : 'removed from favorites';
+        return text(`"${args.path}" ${action}.`);
+      }
+      if (response.status === 404) {
+        return error(`File not found: ${args.path}`);
+      }
+      const respBody = await response.text();
+      return error(
+        `Error setting favorite: ${response.status} ${response.statusText}\n${respBody}`
+      );
+    } catch (err) {
+      return wrapError(`setting favorite on "${args.path}"`, err);
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// photos_set_album_location
+// ---------------------------------------------------------------------------
+
+export const photosSetAlbumLocationTool = {
+  name: 'photos_set_album_location',
+  description: 'Set or update the location metadata on a photo album.',
+  inputSchema: z.object({
+    name: z.string().describe('Album name'),
+    location: z.string().describe('Location string (e.g., "Paris, France")'),
+  }),
+  handler: async (args: { name: string; location: string }) => {
+    try {
+      const config = getNextcloudConfig();
+      const url = `${albumsUrl(config)}/${encodeURIComponent(args.name)}`;
+
+      const body = `<?xml version="1.0"?>
+<d:propertyupdate xmlns:d="DAV:" xmlns:nc="http://nextcloud.org/ns">
+  <d:set>
+    <d:prop>
+      <nc:location>${args.location.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</nc:location>
+    </d:prop>
+  </d:set>
+</d:propertyupdate>`;
+
+      const response = await fetchCalDAV(url, {
+        method: 'PROPPATCH',
+        body,
+      });
+
+      if (response.status >= 200 && response.status < 300) {
+        return text(`Album "${args.name}" location set to "${args.location}".`);
+      }
+      if (response.status === 404) {
+        return error(`Album "${args.name}" not found.`);
+      }
+      const respBody = await response.text();
+      return error(
+        `Error setting album location: ${response.status} ${response.statusText}\n${respBody}`
+      );
+    } catch (err) {
+      return wrapError(`setting location on album "${args.name}"`, err);
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// photos_add_collaborators
+// ---------------------------------------------------------------------------
+
+export const photosAddCollaboratorsTool = {
+  name: 'photos_add_collaborators',
+  description:
+    'Add collaborators (users or groups) to a photo album. Collaborators can view and add photos to the album.',
+  inputSchema: z.object({
+    albumName: z.string().describe('Album name'),
+    collaborators: z
+      .array(
+        z.object({
+          id: z.string().describe('User ID or group ID'),
+          type: z.number().describe('Collaborator type: 0 = user, 1 = group'),
+        })
+      )
+      .describe('Array of collaborators to add'),
+  }),
+  handler: async (args: {
+    albumName: string;
+    collaborators: Array<{ id: string; type: number }>;
+  }) => {
+    try {
+      const config = getNextcloudConfig();
+      const url = `${albumsUrl(config)}/${encodeURIComponent(args.albumName)}`;
+
+      // Build collaborator XML elements
+      const collabElements = args.collaborators
+        .map(
+          (c) =>
+            `      <nc:collaborator>
+        <id>${c.id.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</id>
+        <type>${c.type}</type>
+      </nc:collaborator>`
+        )
+        .join('\n');
+
+      const body = `<?xml version="1.0"?>
+<d:propertyupdate xmlns:d="DAV:" xmlns:nc="http://nextcloud.org/ns">
+  <d:set>
+    <d:prop>
+      <nc:collaborators>
+${collabElements}
+      </nc:collaborators>
+    </d:prop>
+  </d:set>
+</d:propertyupdate>`;
+
+      const response = await fetchCalDAV(url, {
+        method: 'PROPPATCH',
+        body,
+      });
+
+      if (response.status >= 200 && response.status < 300) {
+        const names = args.collaborators.map((c) => c.id).join(', ');
+        return text(`Added collaborators to album "${args.albumName}": ${names}`);
+      }
+      if (response.status === 404) {
+        return error(`Album "${args.albumName}" not found.`);
+      }
+      const respBody = await response.text();
+      return error(
+        `Error adding collaborators: ${response.status} ${response.statusText}\n${respBody}`
+      );
+    } catch (err) {
+      return wrapError(`adding collaborators to album "${args.albumName}"`, err);
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Export
 // ---------------------------------------------------------------------------
 
@@ -607,4 +772,7 @@ export const photosTools = [
   photosAddToAlbumTool,
   photosRemoveFromAlbumTool,
   photosGetMetadataTool,
+  photosSetFavoriteTool,
+  photosSetAlbumLocationTool,
+  photosAddCollaboratorsTool,
 ];

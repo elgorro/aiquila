@@ -597,4 +597,188 @@ describe('Photos Tools', () => {
       );
     });
   });
+
+  // -------------------------------------------------------------------------
+  // photos_set_favorite
+  // -------------------------------------------------------------------------
+
+  describe('photos_set_favorite', () => {
+    it('should mark file as favorite', async () => {
+      mockFetchCalDAV.mockResolvedValue(mockResponse(207, ''));
+
+      const { photosSetFavoriteTool } = await import('../tools/apps/photos.js');
+      const result = await photosSetFavoriteTool.handler({
+        path: '/Photos/sunset.jpg',
+        favorite: true,
+      });
+
+      expect(result.content[0].text).toContain('marked as favorite');
+      expect(mockFetchCalDAV).toHaveBeenCalledWith(
+        'https://cloud.example.com/remote.php/dav/files/admin/Photos/sunset.jpg',
+        expect.objectContaining({ method: 'PROPPATCH' })
+      );
+      const callBody = mockFetchCalDAV.mock.calls[0][1].body;
+      expect(callBody).toContain('<oc:favorite>1</oc:favorite>');
+    });
+
+    it('should unmark file as favorite', async () => {
+      mockFetchCalDAV.mockResolvedValue(mockResponse(207, ''));
+
+      const { photosSetFavoriteTool } = await import('../tools/apps/photos.js');
+      const result = await photosSetFavoriteTool.handler({
+        path: '/Photos/sunset.jpg',
+        favorite: false,
+      });
+
+      expect(result.content[0].text).toContain('removed from favorites');
+      const callBody = mockFetchCalDAV.mock.calls[0][1].body;
+      expect(callBody).toContain('<oc:favorite>0</oc:favorite>');
+    });
+
+    it('should handle file not found', async () => {
+      mockFetchCalDAV.mockResolvedValue(mockResponse(404, '', 'Not Found'));
+
+      const { photosSetFavoriteTool } = await import('../tools/apps/photos.js');
+      const result = await photosSetFavoriteTool.handler({
+        path: '/Photos/missing.jpg',
+        favorite: true,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('File not found');
+    });
+
+    it('should handle API error', async () => {
+      mockFetchCalDAV.mockRejectedValue(new Error('Network error'));
+
+      const { photosSetFavoriteTool } = await import('../tools/apps/photos.js');
+      const result = await photosSetFavoriteTool.handler({
+        path: '/Photos/test.jpg',
+        favorite: true,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Network error');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // photos_set_album_location
+  // -------------------------------------------------------------------------
+
+  describe('photos_set_album_location', () => {
+    it('should set album location', async () => {
+      mockFetchCalDAV.mockResolvedValue(mockResponse(207, ''));
+
+      const { photosSetAlbumLocationTool } = await import('../tools/apps/photos.js');
+      const result = await photosSetAlbumLocationTool.handler({
+        name: 'Vacation',
+        location: 'Paris, France',
+      });
+
+      expect(result.content[0].text).toContain('location set to "Paris, France"');
+      expect(mockFetchCalDAV).toHaveBeenCalledWith(
+        'https://cloud.example.com/remote.php/dav/photos/admin/albums/Vacation',
+        expect.objectContaining({ method: 'PROPPATCH' })
+      );
+      const callBody = mockFetchCalDAV.mock.calls[0][1].body;
+      expect(callBody).toContain('<nc:location>Paris, France</nc:location>');
+    });
+
+    it('should escape special characters in location', async () => {
+      mockFetchCalDAV.mockResolvedValue(mockResponse(207, ''));
+
+      const { photosSetAlbumLocationTool } = await import('../tools/apps/photos.js');
+      await photosSetAlbumLocationTool.handler({
+        name: 'Trip',
+        location: 'Rock & Roll <Hall>',
+      });
+
+      const callBody = mockFetchCalDAV.mock.calls[0][1].body;
+      expect(callBody).toContain('Rock &amp; Roll &lt;Hall&gt;');
+    });
+
+    it('should handle album not found', async () => {
+      mockFetchCalDAV.mockResolvedValue(mockResponse(404, '', 'Not Found'));
+
+      const { photosSetAlbumLocationTool } = await import('../tools/apps/photos.js');
+      const result = await photosSetAlbumLocationTool.handler({
+        name: 'Missing',
+        location: 'Nowhere',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not found');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // photos_add_collaborators
+  // -------------------------------------------------------------------------
+
+  describe('photos_add_collaborators', () => {
+    it('should add user collaborator', async () => {
+      mockFetchCalDAV.mockResolvedValue(mockResponse(207, ''));
+
+      const { photosAddCollaboratorsTool } = await import('../tools/apps/photos.js');
+      const result = await photosAddCollaboratorsTool.handler({
+        albumName: 'Vacation',
+        collaborators: [{ id: 'alice', type: 0 }],
+      });
+
+      expect(result.content[0].text).toContain('Added collaborators');
+      expect(result.content[0].text).toContain('alice');
+      expect(mockFetchCalDAV).toHaveBeenCalledWith(
+        'https://cloud.example.com/remote.php/dav/photos/admin/albums/Vacation',
+        expect.objectContaining({ method: 'PROPPATCH' })
+      );
+      const callBody = mockFetchCalDAV.mock.calls[0][1].body;
+      expect(callBody).toContain('<id>alice</id>');
+      expect(callBody).toContain('<type>0</type>');
+    });
+
+    it('should add multiple collaborators including groups', async () => {
+      mockFetchCalDAV.mockResolvedValue(mockResponse(207, ''));
+
+      const { photosAddCollaboratorsTool } = await import('../tools/apps/photos.js');
+      const result = await photosAddCollaboratorsTool.handler({
+        albumName: 'Team',
+        collaborators: [
+          { id: 'alice', type: 0 },
+          { id: 'photographers', type: 1 },
+        ],
+      });
+
+      expect(result.content[0].text).toContain('alice, photographers');
+      const callBody = mockFetchCalDAV.mock.calls[0][1].body;
+      expect(callBody).toContain('<type>0</type>');
+      expect(callBody).toContain('<type>1</type>');
+    });
+
+    it('should handle album not found', async () => {
+      mockFetchCalDAV.mockResolvedValue(mockResponse(404, '', 'Not Found'));
+
+      const { photosAddCollaboratorsTool } = await import('../tools/apps/photos.js');
+      const result = await photosAddCollaboratorsTool.handler({
+        albumName: 'Missing',
+        collaborators: [{ id: 'alice', type: 0 }],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not found');
+    });
+
+    it('should handle API error', async () => {
+      mockFetchCalDAV.mockRejectedValue(new Error('Forbidden'));
+
+      const { photosAddCollaboratorsTool } = await import('../tools/apps/photos.js');
+      const result = await photosAddCollaboratorsTool.handler({
+        albumName: 'Album',
+        collaborators: [{ id: 'bob', type: 0 }],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Forbidden');
+    });
+  });
 });
