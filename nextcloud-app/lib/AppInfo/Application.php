@@ -41,10 +41,24 @@ class Application extends App implements IBootstrap {
             $context->registerTextProcessingProvider(\OCA\AIquila\TextProcessing\ClaudeTopicsProvider::class);
         }
 
-        // Register Claude Vision TaskProcessing Provider (NC 29+) for image-to-text tasks
-        // Wrapped in a check so the app degrades gracefully on older NC versions
-        if (interface_exists(\OCP\TaskProcessing\IProvider::class)) {
+        // Register Claude TaskProcessing Providers (NC 30+)
+        // These integrate with the Nextcloud Assistant for vision, text generation, and more
+        if (interface_exists(\OCP\TaskProcessing\ISynchronousProvider::class)) {
+            // Vision providers
             $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeImageToTextProvider::class);
+            $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeAnalyzeImagesProvider::class);
+
+            // Text-to-text providers (successor to TextProcessing API)
+            $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeTextToTextProvider::class);
+            $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeSummaryProvider::class);
+            $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeHeadlineProvider::class);
+            $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeTopicsProvider::class);
+            $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeTranslateProvider::class);
+            $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeProofreadProvider::class);
+            $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeChangeToneProvider::class);
+            $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeSimplificationProvider::class);
+            $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeReformulationProvider::class);
+            $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeFormalizationProvider::class);
         }
 
         // Register Unified Search provider for AIquila chat conversations

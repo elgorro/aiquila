@@ -13,10 +13,19 @@
 				</p>
 			</NcNoteCard>
 
+			<!-- Image preview -->
+			<div v-if="isImage" class="aiquila-image-preview">
+				<img v-if="previewUrl"
+					:src="previewUrl"
+					:alt="file.basename"
+					class="preview-image" />
+				<NcLoadingIcon v-else :size="32" />
+			</div>
+
 			<!-- Input field for question -->
 			<NcTextField v-model="prompt"
 				:label="t('aiquila', 'What would you like to know?')"
-				:placeholder="t('aiquila', 'Ask a question about this file...')"
+				:placeholder="isImage ? t('aiquila', 'Ask a question about this image...') : t('aiquila', 'Ask a question about this file...')"
 				type="textarea"
 				:rows="4"
 				class="aiquila-prompt-input" />
@@ -27,9 +36,10 @@
 					:disabled="loading"
 					@click="summarize">
 					<template #icon>
-						<FileDocumentIcon :size="20" />
+						<FileDocumentIcon v-if="!isImage" :size="20" />
+						<ImageIcon v-else :size="20" />
 					</template>
-					{{ t('aiquila', 'Summarize') }}
+					{{ isImage ? t('aiquila', 'Describe') : t('aiquila', 'Summarize') }}
 				</NcButton>
 
 				<NcButton type="primary"
@@ -65,10 +75,12 @@
 import { NcModal, NcTextField, NcButton, NcNoteCard, NcLoadingIcon } from '@nextcloud/vue'
 import FileDocumentIcon from 'vue-material-design-icons/FileDocument.vue'
 import CommentQuestionIcon from 'vue-material-design-icons/CommentQuestion.vue'
+import ImageIcon from 'vue-material-design-icons/Image.vue'
 
 import axios from '@nextcloud/axios'
-import { generateUrl } from '@nextcloud/router'
 import { translate as t } from '@nextcloud/l10n'
+
+import { isImageMime, getFilePreview, analyzeFile } from '../api.js'
 
 export default {
 	name: 'AskClaudeModal',
@@ -81,6 +93,7 @@ export default {
 		NcLoadingIcon,
 		FileDocumentIcon,
 		CommentQuestionIcon,
+		ImageIcon,
 	},
 
 	props: {
@@ -100,6 +113,7 @@ export default {
 			response: '',
 			error: '',
 			loading: false,
+			previewUrl: null,
 		}
 	},
 
@@ -112,13 +126,36 @@ export default {
 			return this.file.size > 5 * 1024 * 1024 // 5MB
 		},
 
+		isImage() {
+			return isImageMime(this.file.mime)
+		},
+
+		isPdf() {
+			return this.file.mime === 'application/pdf'
+		},
+
 		filePath() {
 			return this.file.path || this.file.source
 		},
 	},
 
+	mounted() {
+		if (this.isImage) {
+			this.loadPreview()
+		}
+	},
+
 	methods: {
 		t,
+
+		async loadPreview() {
+			try {
+				const { data } = await getFilePreview(this.filePath, 400, 400)
+				this.previewUrl = 'data:' + data.mimeType + ';base64,' + data.content
+			} catch {
+				// Preview not available
+			}
+		},
 
 		async getFileContent() {
 			try {
@@ -130,35 +167,26 @@ export default {
 			}
 		},
 
-		async callClaudeAPI(endpoint, data) {
-			try {
-				const response = await axios.post(
-					generateUrl(`/apps/aiquila/api/${endpoint}`),
-					data
-				)
-				return response.data
-			} catch (err) {
-				console.error('[AIquila] API error:', err)
-				throw new Error(
-					err.response?.data?.error
-					|| t('aiquila', 'Failed to communicate with Claude API')
-				)
-			}
-		},
-
 		async summarize() {
 			this.loading = true
 			this.error = ''
 			this.response = ''
 
 			try {
-				const content = await this.getFileContent()
-				const result = await this.callClaudeAPI('summarize', { content })
-
-				if (result.error) {
-					this.error = result.error
-				} else {
+				if (this.isImage || this.isPdf) {
+					const defaultPrompt = this.isImage
+						? 'Describe this image in detail.'
+						: 'Summarize this document.'
+					const result = await this.analyzeViaBackend(defaultPrompt)
 					this.response = result.response
+				} else {
+					const content = await this.getFileContent()
+					const result = await this.callClaudeAPI('summarize', { content })
+					if (result.error) {
+						this.error = result.error
+					} else {
+						this.response = result.response
+					}
 				}
 			} catch (err) {
 				this.error = err.message
@@ -175,21 +203,58 @@ export default {
 			this.response = ''
 
 			try {
-				const content = await this.getFileContent()
-				const result = await this.callClaudeAPI('ask', {
-					prompt: this.prompt,
-					context: content,
-				})
-
-				if (result.error) {
-					this.error = result.error
-				} else {
+				if (this.isImage || this.isPdf) {
+					const result = await this.analyzeViaBackend(this.prompt)
 					this.response = result.response
+				} else {
+					const content = await this.getFileContent()
+					const result = await this.callClaudeAPI('ask', {
+						prompt: this.prompt,
+						context: content,
+					})
+					if (result.error) {
+						this.error = result.error
+					} else {
+						this.response = result.response
+					}
 				}
 			} catch (err) {
 				this.error = err.message
 			} finally {
 				this.loading = false
+			}
+		},
+
+		async analyzeViaBackend(prompt) {
+			try {
+				const { data } = await analyzeFile(this.filePath, prompt)
+				if (data.error) {
+					throw new Error(data.error)
+				}
+				return data
+			} catch (err) {
+				throw new Error(
+					err.response?.data?.error
+					|| err.message
+					|| t('aiquila', 'Failed to analyze file'),
+				)
+			}
+		},
+
+		async callClaudeAPI(endpoint, data) {
+			try {
+				const { generateUrl } = await import('@nextcloud/router')
+				const response = await axios.post(
+					generateUrl(`/apps/aiquila/api/${endpoint}`),
+					data,
+				)
+				return response.data
+			} catch (err) {
+				console.error('[AIquila] API error:', err)
+				throw new Error(
+					err.response?.data?.error
+					|| t('aiquila', 'Failed to communicate with Claude API'),
+				)
 			}
 		},
 	},
@@ -201,6 +266,24 @@ export default {
 	padding: 20px;
 	min-width: 500px;
 	max-width: 700px;
+}
+
+.aiquila-image-preview {
+	display: flex;
+	justify-content: center;
+	margin-bottom: 16px;
+	padding: 8px;
+	background: var(--color-background-dark);
+	border-radius: var(--border-radius-large);
+	min-height: 100px;
+	align-items: center;
+}
+
+.preview-image {
+	max-width: 100%;
+	max-height: 300px;
+	border-radius: var(--border-radius);
+	object-fit: contain;
 }
 
 .aiquila-prompt-input {

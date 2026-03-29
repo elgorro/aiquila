@@ -29,8 +29,15 @@ class AIquilaCapability implements ICapability {
             $providers[] = 'topics';
         }
 
-        if (interface_exists(\OCP\TaskProcessing\IProvider::class)) {
+        if (interface_exists(\OCP\TaskProcessing\ISynchronousProvider::class)) {
             $providers[] = 'image-to-text';
+            $providers[] = 'analyze-images';
+            $providers[] = 'translate';
+            $providers[] = 'proofread';
+            $providers[] = 'changetone';
+            $providers[] = 'simplification';
+            $providers[] = 'reformulation';
+            $providers[] = 'formalization';
         }
 
         return [

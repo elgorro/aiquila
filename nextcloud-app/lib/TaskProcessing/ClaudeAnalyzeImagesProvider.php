@@ -12,16 +12,16 @@ use OCP\TaskProcessing\ShapeDescriptor;
 use Psr\Log\LoggerInterface;
 
 /**
- * Claude Vision TaskProcessing Provider (single image)
+ * Claude Vision multi-image TaskProcessing Provider
  *
- * Registers Claude as an image-to-text (vision) provider in Nextcloud's
- * TaskProcessing framework (NC 29+). This enables "Describe this image"
- * actions in Files, Photos, and the Nextcloud Assistant.
+ * Registers Claude as a core:analyze-images provider in Nextcloud's
+ * TaskProcessing framework (NC 30+). This powers the "Analyze images"
+ * action in the Nextcloud Assistant, supporting up to 20 images at once.
  *
- * Input:  image (binary)
- * Output: output (string)
+ * Input:  input (text prompt) + images (list of image files)
+ * Output: output (text description/analysis)
  */
-class ClaudeImageToTextProvider implements ISynchronousProvider {
+class ClaudeAnalyzeImagesProvider implements ISynchronousProvider {
 
     public function __construct(
         private ClaudeSDKService $claudeService,
@@ -31,7 +31,7 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
     }
 
     public function getId(): string {
-        return 'aiquila:image_to_text';
+        return 'aiquila:analyze_images';
     }
 
     public function getName(): string {
@@ -39,21 +39,15 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return 'core:image2text';
+        return 'core:analyze-images';
     }
 
     public function getExpectedRuntime(): int {
-        return 30;
+        return 60;
     }
 
     public function getOptionalInputShape(): array {
-        return [
-            'prompt' => new ShapeDescriptor(
-                'Prompt',
-                'Optional question or instruction about the image',
-                EShapeType::Text
-            ),
-        ];
+        return [];
     }
 
     public function getOptionalOutputShape(): array {
@@ -73,7 +67,7 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
     }
 
     public function getOptionalInputShapeDefaults(): array {
-        return ['prompt' => 'Describe this image in detail.'];
+        return [];
     }
 
     public function getOutputShapeEnumValues(): array {
@@ -85,42 +79,60 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
     }
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
-        if (empty($input['image'])) {
-            throw new \RuntimeException('No image provided in task input');
+        $prompt = $input['input'] ?? 'Describe these images in detail.';
+        $imageList = $input['images'] ?? [];
+
+        if (empty($imageList)) {
+            throw new \RuntimeException('No images provided');
         }
 
-        $imageData = $input['image'];
-        $prompt = !empty($input['prompt']) ? $input['prompt'] : 'Describe this image in detail.';
+        if (count($imageList) > ImageOptimizer::MAX_IMAGES) {
+            throw new \RuntimeException('Too many images. Maximum is ' . ImageOptimizer::MAX_IMAGES);
+        }
 
-        $mimeType = $this->detectMimeType($imageData);
-
-        $this->logger->debug('Claude ImageToText: Processing image', [
-            'mime_type' => $mimeType,
+        $this->logger->debug('Claude AnalyzeImages: Processing {count} images', [
+            'count' => count($imageList),
             'prompt_length' => strlen($prompt),
         ]);
 
-        $reportProgress(0.3);
+        $images = [];
+        $total = count($imageList);
+        foreach ($imageList as $i => $imageData) {
+            $mimeType = $this->detectMimeType($imageData);
 
-        // Optimize image for Claude Vision
-        if ($this->imageOptimizer->isSupported($mimeType)) {
-            $optimized = $this->imageOptimizer->optimize($imageData, $mimeType);
-            $base64 = $optimized['data'];
-            $mimeType = $optimized['mimeType'];
-        } else {
-            $base64 = base64_encode($imageData);
+            if ($this->imageOptimizer->isSupported($mimeType)) {
+                $optimized = $this->imageOptimizer->optimize($imageData, $mimeType);
+                $images[] = [
+                    'base64' => $optimized['data'],
+                    'mimeType' => $optimized['mimeType'],
+                ];
+            } else {
+                $images[] = [
+                    'base64' => base64_encode($imageData),
+                    'mimeType' => $mimeType,
+                ];
+            }
+
+            $reportProgress(($i + 1) / ($total + 1));
         }
 
-        $reportProgress(0.5);
-
-        $result = $this->claudeService->askWithImage(
-            $prompt,
-            $base64,
-            $mimeType,
-            $userId,
-        );
+        if (count($images) === 1) {
+            $result = $this->claudeService->askWithImage(
+                $prompt,
+                $images[0]['base64'],
+                $images[0]['mimeType'],
+                $userId,
+            );
+        } else {
+            $result = $this->claudeService->askWithImages(
+                $prompt,
+                $images,
+                $userId,
+            );
+        }
 
         if (isset($result['error'])) {
-            $this->logger->error('Claude ImageToText: Error', ['error' => $result['error']]);
+            $this->logger->error('Claude AnalyzeImages: Error', ['error' => $result['error']]);
             throw new \RuntimeException($result['error']);
         }
 

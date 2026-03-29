@@ -45,3 +45,17 @@ export function saveSettings(data) {
 export function getFileInfo(path) {
 	return axios.get(url('/api/files/info'), { params: { path } })
 }
+
+export const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
+export function isImageMime(mime) {
+	return IMAGE_MIMES.some(m => mime?.startsWith(m))
+}
+
+export function getFilePreview(path, width = 256, height = 256) {
+	return axios.get(url('/api/files/preview'), { params: { path, width, height } })
+}
+
+export function analyzeFile(filePath, prompt) {
+	return axios.post(url('/api/analyze-file'), { filePath, prompt })
+}
