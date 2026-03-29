@@ -1,9 +1,22 @@
 <template>
-	<div class="chat-input">
+	<div class="chat-input"
+		@dragover.prevent="onDragOver"
+		@dragenter.prevent="onDragEnter"
+		@dragleave.prevent="onDragLeave"
+		@drop.prevent="onDrop">
+		<!-- Drop overlay -->
+		<div v-if="dragging" class="drop-overlay">
+			{{ t('aiquila', 'Drop files here') }}
+		</div>
+
 		<div v-if="attachedFiles.length > 0" class="file-chips">
 			<span v-for="file in attachedFiles"
 				:key="file.path"
 				class="file-chip">
+				<img v-if="previews[file.path]"
+					:src="previews[file.path]"
+					class="file-thumb"
+					:alt="file.name" />
 				<span class="name" :title="file.path">{{ file.name }}</span>
 				<span v-if="file.size" class="size">{{ humanSize(file.size) }}</span>
 				<button class="remove" :title="t('aiquila', 'Remove')" @click="removeFile(file.path)">
@@ -28,7 +41,8 @@
 				:disabled="disabled"
 				rows="3"
 				@input="onInput"
-				@keydown="onKeydown" />
+				@keydown="onKeydown"
+				@paste="onPaste" />
 		</div>
 		<div class="input-actions">
 			<NcButton type="primary"
@@ -44,9 +58,12 @@
 import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import { getFilePickerBuilder, FilePickerClosed } from '@nextcloud/dialogs'
+import { getCurrentUser } from '@nextcloud/auth'
+import axios from '@nextcloud/axios'
+import { generateRemoteUrl } from '@nextcloud/router'
 import '@nextcloud/dialogs/style.css'
 
-import { getFileInfo } from '../api.js'
+import { getFileInfo, getFilePreview, isImageMime } from '../api.js'
 
 const SLASH_COMMANDS = [
 	{
@@ -73,9 +90,12 @@ export default {
 		return {
 			prompt: '',
 			attachedFiles: [],
+			previews: {},
 			menuVisible: false,
 			menuActiveIndex: 0,
 			filteredCommands: [],
+			dragging: false,
+			dragCounter: 0,
 		}
 	},
 	methods: {
@@ -200,9 +220,21 @@ export default {
 		addFile(file) {
 			if (this.attachedFiles.some(f => f.path === file.path)) return
 			this.attachedFiles.push(file)
+			if (isImageMime(file.mime)) {
+				this.loadPreview(file.path)
+			}
+		},
+		async loadPreview(path) {
+			try {
+				const { data } = await getFilePreview(path, 48, 48)
+				this.previews[path] = 'data:' + data.mimeType + ';base64,' + data.content
+			} catch {
+				// Preview not available, no thumbnail shown
+			}
 		},
 		removeFile(path) {
 			this.attachedFiles = this.attachedFiles.filter(f => f.path !== path)
+			delete this.previews[path]
 		},
 		humanSize(bytes) {
 			if (!bytes) return ''
@@ -223,6 +255,107 @@ export default {
 			})
 			this.prompt = ''
 			this.attachedFiles = []
+			this.previews = {}
+		},
+		onDragOver() {
+			// Keep dragging state while over the element
+		},
+		onDragEnter() {
+			this.dragCounter++
+			this.dragging = true
+		},
+		onDragLeave() {
+			this.dragCounter--
+			if (this.dragCounter <= 0) {
+				this.dragging = false
+				this.dragCounter = 0
+			}
+		},
+		async onDrop(e) {
+			this.dragging = false
+			this.dragCounter = 0
+
+			const files = e.dataTransfer?.files
+			if (files && files.length > 0) {
+				for (const file of files) {
+					if (isImageMime(file.type)) {
+						const path = await this.uploadFile(file)
+						if (path) {
+							this.addFile({
+								path,
+								name: file.name,
+								size: file.size,
+								mime: file.type,
+							})
+						}
+					}
+				}
+				return
+			}
+
+			// Try NC internal path from text/plain
+			const textData = e.dataTransfer?.getData('text/plain')
+			if (textData && textData.startsWith('/')) {
+				try {
+					const { data: info } = await getFileInfo(textData)
+					this.addFile({
+						path: textData,
+						name: info.name || textData.split('/').pop(),
+						size: info.size || 0,
+						mime: info.mimeType || 'application/octet-stream',
+					})
+				} catch {
+					// Not a valid file path
+				}
+			}
+		},
+		async onPaste(e) {
+			const items = e.clipboardData?.files
+			if (!items || items.length === 0) return
+
+			const imageFiles = Array.from(items).filter(f => isImageMime(f.type))
+			if (imageFiles.length === 0) return
+
+			e.preventDefault()
+			for (const file of imageFiles) {
+				const ext = file.type.split('/')[1] || 'png'
+				const name = 'paste-' + Date.now() + '.' + ext
+				const renamedFile = new File([file], name, { type: file.type })
+				const path = await this.uploadFile(renamedFile)
+				if (path) {
+					this.addFile({
+						path,
+						name,
+						size: file.size,
+						mime: file.type,
+					})
+				}
+			}
+		},
+		async uploadFile(file) {
+			const user = getCurrentUser()
+			if (!user) return null
+
+			const folder = '/AIquila Uploads'
+			const davBase = generateRemoteUrl('dav/files/' + user.uid)
+
+			// Ensure folder exists
+			try {
+				await axios({ method: 'MKCOL', url: davBase + folder })
+			} catch {
+				// Folder already exists (405) or other non-fatal error
+			}
+
+			const filePath = folder + '/' + file.name
+			try {
+				await axios.put(davBase + filePath, file, {
+					headers: { 'Content-Type': file.type },
+				})
+				return filePath
+			} catch (err) {
+				console.error('[AIquila] Failed to upload file:', err)
+				return null
+			}
 		},
 	},
 }
@@ -233,6 +366,23 @@ export default {
 	padding: 12px 16px;
 	border-top: 1px solid var(--color-border);
 	background: var(--color-main-background);
+	position: relative;
+}
+
+.drop-overlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--color-primary-element-light);
+	border: 2px dashed var(--color-primary-element);
+	border-radius: var(--border-radius);
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--color-primary-element);
+	z-index: 10;
+	pointer-events: none;
 }
 
 .file-chips {
@@ -252,6 +402,14 @@ export default {
 	border-radius: 16px;
 	font-size: 13px;
 	max-width: 260px;
+}
+
+.file-thumb {
+	width: 32px;
+	height: 32px;
+	object-fit: cover;
+	border-radius: 4px;
+	flex-shrink: 0;
 }
 
 .file-chip .name {
