@@ -61,6 +61,21 @@ class Application extends App implements IBootstrap {
             $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeFormalizationProvider::class);
         }
 
+        // Register notification formatter for AIquila task notifications
+        $context->registerNotifierService(\OCA\AIquila\Notifier\AIquilaNotifier::class);
+
+        // Listen for task processing completion events to notify users
+        if (class_exists(\OCP\TaskProcessing\Events\TaskSuccessfulEvent::class)) {
+            $context->registerEventListener(
+                \OCP\TaskProcessing\Events\TaskSuccessfulEvent::class,
+                \OCA\AIquila\Listener\TaskSuccessfulListener::class
+            );
+            $context->registerEventListener(
+                \OCP\TaskProcessing\Events\TaskFailedEvent::class,
+                \OCA\AIquila\Listener\TaskFailedListener::class
+            );
+        }
+
         // Register setup checks for admin overview (Settings → Overview)
         if (interface_exists(\OCP\SetupCheck\ISetupCheck::class)) {
             $context->registerSetupCheck(\OCA\AIquila\SetupCheck\ApiKeyConfigured::class);
