@@ -29,6 +29,10 @@ class Application extends App implements IBootstrap {
             return $c->get(AIquilaService::class);
         });
 
+        // Declarative Settings (NC 29+) — model, max_tokens, api_timeout
+        $context->registerDeclarativeSettings(\OCA\AIquila\Settings\AdminDeclarativeSettings::class);
+        $context->registerDeclarativeSettings(\OCA\AIquila\Settings\UserDeclarativeSettings::class);
+
         // Expose app capabilities via /ocs/v2.php/cloud/capabilities
         $context->registerCapability(\OCA\AIquila\Capabilities\AIquilaCapability::class);
 

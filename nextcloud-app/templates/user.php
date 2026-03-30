@@ -5,25 +5,14 @@ style('aiquila', 'user');
 ?>
 
 <div id="aiquila-user" class="section">
-    <h2>AIquila Personal Settings</h2>
+    <h2>AIquila API Key</h2>
 
     <p class="settings-hint">
-        Configure your personal Claude API key. This will override the admin-configured key.
+        Set a personal Claude API key to override the admin-configured key.
         Get your API key from <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a>
     </p>
 
     <form id="aiquila-user-form">
-        <label for="aiquila-user-model">Model preference</label>
-        <select id="aiquila-user-model" name="model">
-            <option value="">(admin default)</option>
-            <?php foreach ($_['available_models'] as $modelId): ?>
-            <option value="<?php echo htmlspecialchars($modelId); ?>"
-                <?php echo ($_['user_model'] === $modelId) ? 'selected' : ''; ?>>
-                <?php echo htmlspecialchars($modelId); ?>
-            </option>
-            <?php endforeach; ?>
-        </select>
-
         <label for="aiquila-user-api-key">Personal Claude API Key</label>
         <input type="password"
                id="aiquila-user-api-key"

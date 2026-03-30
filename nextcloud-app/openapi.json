@@ -1427,7 +1427,7 @@
         "/index.php/apps/aiquila/api/settings": {
             "post": {
                 "operationId": "settings-save",
-                "summary": "Save user-level API key and model preference",
+                "summary": "Save user-level API key",
                 "tags": [
                     "settings"
                 ],

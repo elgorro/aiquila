@@ -1427,7 +1427,7 @@
         "/index.php/apps/aiquila/api/settings": {
             "post": {
                 "operationId": "settings-save",
-                "summary": "Save user-level API key and model preference",
+                "summary": "Save user-level API key",
                 "tags": [
                     "settings"
                 ],
@@ -2258,8 +2258,8 @@
         "/index.php/apps/aiquila/api/admin/settings": {
             "post": {
                 "operationId": "settings-save-admin",
-                "summary": "Save admin-level settings (API key, model, token limits, timeout)",
-                "description": "This endpoint requires admin access",
+                "summary": "Save admin-level API key",
+                "description": "Model, max_tokens, and api_timeout are now managed by Declarative Settings.\nThis endpoint requires admin access",
                 "tags": [
                     "settings"
                 ],
@@ -2282,21 +2282,6 @@
                                         "type": "string",
                                         "default": "",
                                         "description": "Anthropic API key for the instance"
-                                    },
-                                    "model": {
-                                        "type": "string",
-                                        "default": "",
-                                        "description": "Default Claude model ID"
-                                    },
-                                    "max_tokens": {
-                                        "type": "string",
-                                        "default": "",
-                                        "description": "Maximum tokens per response (1-100000)"
-                                    },
-                                    "api_timeout": {
-                                        "type": "string",
-                                        "default": "",
-                                        "description": "HTTP timeout in seconds (10-1800)"
                                     }
                                 }
                             }
@@ -2376,8 +2361,8 @@
         "/index.php/apps/aiquila/api/admin/test": {
             "post": {
                 "operationId": "settings-test-config",
-                "summary": "Test the current or provided admin configuration by sending a live request to Claude",
-                "description": "This endpoint requires admin access",
+                "summary": "Test the current configuration by sending a live request to Claude",
+                "description": "Uses saved model/max_tokens/api_timeout from Declarative Settings. Optionally accepts an API key override for testing before saving.\nThis endpoint requires admin access",
                 "tags": [
                     "settings"
                 ],
@@ -2400,21 +2385,6 @@
                                         "type": "string",
                                         "default": "",
                                         "description": "API key to test (uses saved key if empty)"
-                                    },
-                                    "model": {
-                                        "type": "string",
-                                        "default": "",
-                                        "description": "Model to test (uses saved model if empty)"
-                                    },
-                                    "max_tokens": {
-                                        "type": "string",
-                                        "default": "",
-                                        "description": "Max tokens for the test request"
-                                    },
-                                    "timeout": {
-                                        "type": "string",
-                                        "default": "",
-                                        "description": "HTTP timeout for the test request"
                                     }
                                 }
                             }

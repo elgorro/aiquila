@@ -474,6 +474,36 @@ if (!interface_exists('OCP\SetupCheck\ISetupCheck')) {
     class_alias('OCP_SetupCheck_ISetupCheck', 'OCP\SetupCheck\ISetupCheck');
 }
 
+// ── OCP\Settings\DeclarativeSettings ──────────────────────────────────────
+
+if (!interface_exists('OCP\Settings\IDeclarativeSettingsForm')) {
+    interface OCP_Settings_IDeclarativeSettingsForm {
+        public function getSchema(): array;
+    }
+    class_alias('OCP_Settings_IDeclarativeSettingsForm', 'OCP\Settings\IDeclarativeSettingsForm');
+}
+
+if (!class_exists('OCP\Settings\DeclarativeSettingsTypes')) {
+    class OCP_Settings_DeclarativeSettingsTypes {
+        public const SECTION_TYPE_ADMIN = 'admin';
+        public const SECTION_TYPE_PERSONAL = 'personal';
+        public const STORAGE_TYPE_INTERNAL = 'internal';
+        public const STORAGE_TYPE_EXTERNAL = 'external';
+        public const TEXT = 'text';
+        public const PASSWORD = 'password';
+        public const EMAIL = 'email';
+        public const TEL = 'tel';
+        public const URL = 'url';
+        public const NUMBER = 'number';
+        public const CHECKBOX = 'checkbox';
+        public const MULTI_CHECKBOX = 'multi-checkbox';
+        public const RADIO = 'radio';
+        public const SELECT = 'select';
+        public const MULTI_SELECT = 'multi-select';
+    }
+    class_alias('OCP_Settings_DeclarativeSettingsTypes', 'OCP\Settings\DeclarativeSettingsTypes');
+}
+
 if (!class_exists('OCP\SetupCheck\SetupResult')) {
     class OCP_SetupCheck_SetupResult {
         private function __construct(
