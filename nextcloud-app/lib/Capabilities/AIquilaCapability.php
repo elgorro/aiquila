@@ -21,24 +21,20 @@ class AIquilaCapability implements ICapability {
     }
 
     public function getCapabilities(): array {
-        $providers = ['text-generation'];
-
-        if (interface_exists(\OCP\TextProcessing\IProvider::class)) {
-            $providers[] = 'summarize';
-            $providers[] = 'headline';
-            $providers[] = 'topics';
-        }
-
-        if (interface_exists(\OCP\TaskProcessing\ISynchronousProvider::class)) {
-            $providers[] = 'image-to-text';
-            $providers[] = 'analyze-images';
-            $providers[] = 'translate';
-            $providers[] = 'proofread';
-            $providers[] = 'changetone';
-            $providers[] = 'simplification';
-            $providers[] = 'reformulation';
-            $providers[] = 'formalization';
-        }
+        $providers = [
+            'text-generation',
+            'summarize',
+            'headline',
+            'topics',
+            'image-to-text',
+            'analyze-images',
+            'translate',
+            'proofread',
+            'changetone',
+            'simplification',
+            'reformulation',
+            'formalization',
+        ];
 
         return [
             self::APP_ID => [
