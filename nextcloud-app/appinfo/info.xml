@@ -55,7 +55,7 @@ Made possible by [Claude](https://www.anthropic.com/claude) from [Anthropic](htt
     <donation>https://liberapay.com/elgorro/donate</donation>
     <dependencies>
         <php min-version="8.4"/>
-        <nextcloud min-version="31" max-version="33"/>
+        <nextcloud min-version="33" max-version="33"/>
     </dependencies>
     <settings>
         <admin>OCA\AIquila\Settings\AdminSettings</admin>
