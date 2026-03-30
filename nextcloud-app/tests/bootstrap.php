@@ -370,6 +370,89 @@ if (!interface_exists('OCP\Capabilities\ICapability')) {
     class_alias('OCP_Capabilities_ICapability', 'OCP\Capabilities\ICapability');
 }
 
+// ── OCP\Notification ─────────────────────────────────────────────────────
+
+if (!interface_exists('OCP\Notification\INotification')) {
+    interface OCP_Notification_INotification {
+        public function getApp(): string;
+        public function setApp(string $app): static;
+        public function getUser(): string;
+        public function setUser(string $user): static;
+        public function setDateTime(\DateTimeInterface $dateTime): static;
+        public function getSubject(): string;
+        public function setSubject(string $subject, array $parameters = []): static;
+        public function getSubjectParameters(): array;
+        public function setParsedSubject(string $subject): static;
+        public function setParsedMessage(string $message): static;
+        public function setIcon(string $icon): static;
+        public function setObject(string $type, string $id): static;
+        public function getObjectType(): string;
+        public function getObjectId(): string;
+    }
+    class_alias('OCP_Notification_INotification', 'OCP\Notification\INotification');
+}
+
+if (!interface_exists('OCP\Notification\INotifier')) {
+    interface OCP_Notification_INotifier {
+        public function getID(): string;
+        public function getName(): string;
+        public function prepare(\OCP\Notification\INotification $notification, string $languageCode): \OCP\Notification\INotification;
+    }
+    class_alias('OCP_Notification_INotifier', 'OCP\Notification\INotifier');
+}
+
+if (!interface_exists('OCP\Notification\IManager')) {
+    interface OCP_Notification_IManager {
+        public function createNotification(): \OCP\Notification\INotification;
+        public function notify(\OCP\Notification\INotification $notification): void;
+    }
+    class_alias('OCP_Notification_IManager', 'OCP\Notification\IManager');
+}
+
+// ── OCP\EventDispatcher ──────────────────────────────────────────────────
+
+if (!class_exists('OCP\EventDispatcher\Event')) {
+    class OCP_EventDispatcher_Event {}
+    class_alias('OCP_EventDispatcher_Event', 'OCP\EventDispatcher\Event');
+}
+
+if (!interface_exists('OCP\EventDispatcher\IEventListener')) {
+    interface OCP_EventDispatcher_IEventListener {
+        public function handle(\OCP\EventDispatcher\Event $event): void;
+    }
+    class_alias('OCP_EventDispatcher_IEventListener', 'OCP\EventDispatcher\IEventListener');
+}
+
+// ── OCP\TaskProcessing ───────────────────────────────────────────────────
+
+if (!class_exists('OCP\TaskProcessing\Task')) {
+    class OCP_TaskProcessing_Task {
+        public function getId(): ?int { return null; }
+        public function getTaskTypeId(): string { return ''; }
+        public function getAppId(): string { return ''; }
+        public function getUserId(): ?string { return null; }
+        public function getProviderId(): ?string { return null; }
+        public function getErrorMessage(): ?string { return null; }
+    }
+    class_alias('OCP_TaskProcessing_Task', 'OCP\TaskProcessing\Task');
+}
+
+if (!class_exists('OCP\TaskProcessing\Events\TaskSuccessfulEvent')) {
+    class OCP_TaskProcessing_Events_TaskSuccessfulEvent extends \OCP\EventDispatcher\Event {
+        public function __construct(private \OCP\TaskProcessing\Task $task) { }
+        public function getTask(): \OCP\TaskProcessing\Task { return $this->task; }
+    }
+    class_alias('OCP_TaskProcessing_Events_TaskSuccessfulEvent', 'OCP\TaskProcessing\Events\TaskSuccessfulEvent');
+}
+
+if (!class_exists('OCP\TaskProcessing\Events\TaskFailedEvent')) {
+    class OCP_TaskProcessing_Events_TaskFailedEvent extends \OCP\EventDispatcher\Event {
+        public function __construct(private \OCP\TaskProcessing\Task $task) { }
+        public function getTask(): \OCP\TaskProcessing\Task { return $this->task; }
+    }
+    class_alias('OCP_TaskProcessing_Events_TaskFailedEvent', 'OCP\TaskProcessing\Events\TaskFailedEvent');
+}
+
 // ── OCP\IL10N ─────────────────────────────────────────────────────────────
 
 if (!interface_exists('OCP\IL10N')) {
