@@ -2,31 +2,23 @@
 
 namespace OCA\AIquila\Settings;
 
-use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\CredentialService;
 use OCP\AppFramework\Http\TemplateResponse;
-use OCP\IConfig;
 use OCP\Settings\ISettings;
 
 class UserSettings implements ISettings {
-    private IConfig $config;
     private CredentialService $credentials;
     private ?string $userId;
 
-    public function __construct(IConfig $config, CredentialService $credentials, ?string $userId) {
-        $this->config = $config;
+    public function __construct(CredentialService $credentials, ?string $userId) {
         $this->credentials = $credentials;
         $this->userId = $userId;
     }
 
     public function getForm(): TemplateResponse {
-        $hasKey    = $this->credentials->hasApiKey($this->userId);
-        $userModel = $this->config->getUserValue($this->userId, 'aiquila', 'model', '');
+        $hasKey = $this->credentials->hasApiKey($this->userId);
         return new TemplateResponse('aiquila', 'user', [
-            'api_key'          => $hasKey ? '********' : '',
-            'has_key'          => $hasKey,
-            'user_model'       => $userModel,
-            'available_models' => ClaudeModels::getAllModels(),
+            'has_key' => $hasKey,
         ], '');
     }
 

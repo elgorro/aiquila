@@ -6,7 +6,11 @@ document.addEventListener('DOMContentLoaded', function() {
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
         const apiKey = document.getElementById('aiquila-user-api-key').value;
-        const model = document.getElementById('aiquila-user-model').value;
+
+        if (!apiKey) {
+            status.textContent = 'Enter an API key to save.';
+            return;
+        }
 
         status.textContent = 'Saving...';
         status.className = '';
@@ -18,7 +22,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json',
                     'requesttoken': OC.requestToken,
                 },
-                body: JSON.stringify({ api_key: apiKey, model: model }),
+                body: JSON.stringify({ api_key: apiKey }),
             });
 
             if (response.ok) {

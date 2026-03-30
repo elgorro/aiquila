@@ -8,9 +8,11 @@ document.addEventListener('DOMContentLoaded', function() {
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
         const apiKey = document.getElementById('aiquila-api-key').value;
-        const model = document.getElementById('aiquila-model').value;
-        const maxTokens = document.getElementById('aiquila-max-tokens').value;
-        const apiTimeout = document.getElementById('aiquila-timeout').value;
+
+        if (!apiKey) {
+            status.textContent = 'Enter an API key to save.';
+            return;
+        }
 
         status.textContent = 'Saving...';
 
@@ -21,20 +23,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json',
                     'requesttoken': OC.requestToken,
                 },
-                body: JSON.stringify({
-                    api_key: apiKey,
-                    model: model,
-                    max_tokens: maxTokens,
-                    api_timeout: apiTimeout
-                }),
+                body: JSON.stringify({ api_key: apiKey }),
             });
 
             if (response.ok) {
                 status.textContent = 'Saved!';
-                if (apiKey) {
-                    document.getElementById('aiquila-api-key').value = '';
-                    document.getElementById('aiquila-api-key').placeholder = 'API key configured';
-                }
+                document.getElementById('aiquila-api-key').value = '';
+                document.getElementById('aiquila-api-key').placeholder = 'API key configured';
             } else {
                 status.textContent = 'Error saving';
             }
@@ -297,9 +292,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     testButton.addEventListener('click', async function() {
         const apiKey = document.getElementById('aiquila-api-key').value;
-        const model = document.getElementById('aiquila-model').value;
-        const maxTokens = document.getElementById('aiquila-max-tokens').value;
-        const apiTimeout = document.getElementById('aiquila-timeout').value;
 
         testButton.disabled = true;
         testButton.textContent = 'Testing...';
@@ -312,12 +304,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json',
                     'requesttoken': OC.requestToken,
                 },
-                body: JSON.stringify({
-                    api_key: apiKey,
-                    model: model,
-                    max_tokens: maxTokens,
-                    timeout: apiTimeout
-                }),
+                body: JSON.stringify({ api_key: apiKey }),
             });
 
             const result = await response.json();
