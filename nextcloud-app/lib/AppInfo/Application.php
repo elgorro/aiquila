@@ -61,6 +61,13 @@ class Application extends App implements IBootstrap {
             $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeFormalizationProvider::class);
         }
 
+        // Register setup checks for admin overview (Settings → Overview)
+        if (interface_exists(\OCP\SetupCheck\ISetupCheck::class)) {
+            $context->registerSetupCheck(\OCA\AIquila\SetupCheck\ApiKeyConfigured::class);
+            $context->registerSetupCheck(\OCA\AIquila\SetupCheck\AnthropicApiReachable::class);
+            $context->registerSetupCheck(\OCA\AIquila\SetupCheck\PhpExtensions::class);
+        }
+
         // Register Unified Search provider for AIquila chat conversations
         if (interface_exists(\OCP\Search\IProvider::class)) {
             $context->registerSearchProvider(\OCA\AIquila\Search\AiquilaSearchProvider::class);

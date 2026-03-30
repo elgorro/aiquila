@@ -369,3 +369,59 @@ if (!interface_exists('OCP\Capabilities\ICapability')) {
     }
     class_alias('OCP_Capabilities_ICapability', 'OCP\Capabilities\ICapability');
 }
+
+// ── OCP\IL10N ─────────────────────────────────────────────────────────────
+
+if (!interface_exists('OCP\IL10N')) {
+    interface OCP_IL10N {
+        public function t(string $text, array $parameters = []): string;
+        public function n(string $textSingular, string $textPlural, int $count, array $parameters = []): string;
+    }
+    class_alias('OCP_IL10N', 'OCP\IL10N');
+}
+
+// ── OCP\SetupCheck ────────────────────────────────────────────────────────
+
+if (!interface_exists('OCP\SetupCheck\ISetupCheck')) {
+    interface OCP_SetupCheck_ISetupCheck {
+        public function getName(): string;
+        public function getCategory(): string;
+        public function run(): \OCP\SetupCheck\SetupResult;
+    }
+    class_alias('OCP_SetupCheck_ISetupCheck', 'OCP\SetupCheck\ISetupCheck');
+}
+
+if (!class_exists('OCP\SetupCheck\SetupResult')) {
+    class OCP_SetupCheck_SetupResult {
+        private function __construct(
+            private string $severity,
+            private ?string $description = null,
+        ) {
+        }
+
+        public static function success(?string $description = null): self {
+            return new self('success', $description);
+        }
+
+        public static function info(?string $description = null): self {
+            return new self('info', $description);
+        }
+
+        public static function warning(?string $description = null): self {
+            return new self('warning', $description);
+        }
+
+        public static function error(?string $description = null): self {
+            return new self('error', $description);
+        }
+
+        public function getSeverity(): string {
+            return $this->severity;
+        }
+
+        public function getDescription(): ?string {
+            return $this->description;
+        }
+    }
+    class_alias('OCP_SetupCheck_SetupResult', 'OCP\SetupCheck\SetupResult');
+}
