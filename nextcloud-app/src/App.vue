@@ -2,82 +2,85 @@
 	<NcContent app-name="aiquila">
 		<NcAppNavigation>
 			<template #list>
-				<NcAppNavigationNew :text="t('aiquila', 'New chat')"
-					@new="onNewChat" />
-				<div v-if="projects.length > 0" class="project-filter">
-					<NcSelect v-model="activeProjectId"
-						:options="projectFilterOptions"
-						:placeholder="t('aiquila', 'All conversations')"
-						:clearable="true"
-						label="label"
-						:reduce="o => o.value"
-						@input="activeProjectId = $event" />
-				</div>
-				<NcAppNavigationItem v-for="conv in filteredConversations"
-					:key="conv.id"
-					:name="editingId === conv.id ? '' : (conv.title || t('aiquila', 'Untitled'))"
-					:class="{ active: conv.id === activeConversationId }"
-					@click="onSelectConversation(conv.id)">
-					<template v-if="editingId === conv.id" #name>
-						<input ref="renameInput"
-							v-model="editingTitle"
-							class="rename-input"
-							@keydown.enter="onSaveRename(conv.id)"
-							@keydown.escape="onCancelRename"
-							@blur="onSaveRename(conv.id)"
-							@click.stop />
-					</template>
-					<template #actions>
-						<NcActionButton @click="onStartRename(conv)">
-							{{ t('aiquila', 'Rename') }}
-						</NcActionButton>
-						<NcActionButton @click="onDuplicateConversation(conv.id)">
-							{{ t('aiquila', 'Duplicate') }}
-						</NcActionButton>
-						<NcActionButton @click="confirmDelete(conv.id)">
-							{{ t('aiquila', 'Delete') }}
-						</NcActionButton>
-					</template>
-				</NcAppNavigationItem>
+				<ChatSidebar v-if="activeTab === 'chat'"
+					:conversations="conversations"
+					:active-conversation-id="activeConversationId"
+					:projects="projects"
+					:active-project-filter="activeProjectFilter"
+					@new-chat="onNewChat"
+					@select-conversation="onSelectConversation"
+					@delete-conversation="confirmDeleteConversation"
+					@duplicate-conversation="onDuplicateConversation"
+					@conversation-renamed="onConversationUpdated"
+					@update-project-filter="activeProjectFilter = $event" />
+				<ProjectSidebar v-if="activeTab === 'projects'"
+					:projects="projects"
+					:active-project-id="activeProjectIdForEditor"
+					@new-project="onNewProject"
+					@select-project="onSelectProject"
+					@delete-project="confirmDeleteProject"
+					@duplicate-project="onDuplicateProject"
+					@project-renamed="onProjectRenamed" />
+				<CoworkSidebar v-if="activeTab === 'cowork'" />
 			</template>
 			<template #footer>
 				<NcAppNavigationSettings :name="t('aiquila', 'Settings')">
-					<NavigationSettings @open-projects="showProjectManager = true" />
+					<NavigationSettings />
 				</NcAppNavigationSettings>
 			</template>
 		</NcAppNavigation>
 		<NcAppContent>
-			<ChatView v-if="activeConversation"
-				:conversation="activeConversation"
-				:projects="projects"
-				@conversation-updated="onConversationUpdated"
-				@message-sent="onMessageSent" />
-			<NcEmptyContent v-else
-				:name="t('aiquila', 'Ask Claude')">
-				<template #icon>
-					<ChatIcon :size="64" />
-				</template>
-				<template #action>
-					<NcButton type="primary" @click="onNewChat">
-						{{ t('aiquila', 'New chat') }}
-					</NcButton>
-				</template>
-				{{ t('aiquila', 'Select a conversation or start a new chat') }}
-			</NcEmptyContent>
+			<div class="app-content-inner">
+				<TabSelector v-model="activeTab" />
+				<div class="tab-content">
+					<!-- Chat tab -->
+					<ChatView v-if="activeTab === 'chat' && activeConversation"
+						:conversation="activeConversation"
+						:projects="projects"
+						@conversation-updated="onConversationUpdated"
+						@message-sent="onMessageSent" />
+					<NcEmptyContent v-else-if="activeTab === 'chat'"
+						:name="t('aiquila', 'Ask Claude')">
+						<template #icon>
+							<ChatIcon :size="64" />
+						</template>
+						<template #action>
+							<NcButton type="primary" @click="onNewChat">
+								{{ t('aiquila', 'New chat') }}
+							</NcButton>
+						</template>
+						{{ t('aiquila', 'Select a conversation or start a new chat') }}
+					</NcEmptyContent>
+
+					<!-- Projects tab -->
+					<ProjectEditor v-if="activeTab === 'projects'"
+						:project="activeProject"
+						@project-updated="onProjectUpdated"
+						@create-project="onNewProject" />
+
+					<!-- Cowork tab -->
+					<CoworkView v-if="activeTab === 'cowork'" />
+				</div>
+			</div>
 		</NcAppContent>
-		<ProjectManager v-if="showProjectManager"
-			:projects="projects"
-			@close="showProjectManager = false"
-			@projects-changed="loadProjects" />
-		<NcDialog v-if="deleteConfirmId !== null"
-			:name="t('aiquila', 'Delete conversation')"
-			@closing="deleteConfirmId = null">
-			<p>{{ t('aiquila', 'Delete this conversation and all its messages? This cannot be undone.') }}</p>
+
+		<!-- Delete confirmation (shared for conversations and projects) -->
+		<NcDialog v-if="deleteConfirm.id !== null"
+			:name="deleteConfirm.type === 'project'
+				? t('aiquila', 'Delete project')
+				: t('aiquila', 'Delete conversation')"
+			@closing="onCancelDelete">
+			<p v-if="deleteConfirm.type === 'project'">
+				{{ t('aiquila', 'Delete this project? Conversations using it will keep their messages but lose the project link.') }}
+			</p>
+			<p v-else>
+				{{ t('aiquila', 'Delete this conversation and all its messages? This cannot be undone.') }}
+			</p>
 			<template #actions>
-				<NcButton type="secondary" @click="deleteConfirmId = null">
+				<NcButton type="secondary" @click="onCancelDelete">
 					{{ t('aiquila', 'Cancel') }}
 				</NcButton>
-				<NcButton type="error" @click="onDeleteConversation(deleteConfirmId)">
+				<NcButton type="error" @click="onConfirmDelete">
 					{{ t('aiquila', 'Delete') }}
 				</NcButton>
 			</template>
@@ -90,27 +93,30 @@ import { loadState } from '@nextcloud/initial-state'
 import { translate as t } from '@nextcloud/l10n'
 import NcContent from '@nextcloud/vue/components/NcContent'
 import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
-import NcAppNavigationNew from '@nextcloud/vue/components/NcAppNavigationNew'
-import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
 import NcAppNavigationSettings from '@nextcloud/vue/components/NcAppNavigationSettings'
-import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
-import NcSelect from '@nextcloud/vue/components/NcSelect'
 import ChatIcon from 'vue-material-design-icons/Chat.vue'
 
+import TabSelector from './components/TabSelector.vue'
+import ChatSidebar from './components/ChatSidebar.vue'
 import ChatView from './components/ChatView.vue'
+import ProjectSidebar from './components/ProjectSidebar.vue'
+import ProjectEditor from './components/ProjectEditor.vue'
+import CoworkSidebar from './components/CoworkSidebar.vue'
+import CoworkView from './components/CoworkView.vue'
 import NavigationSettings from './components/NavigationSettings.vue'
-import ProjectManager from './components/ProjectManager.vue'
 import {
 	createConversation,
 	getConversation,
-	updateConversation,
 	deleteConversation,
 	duplicateConversation,
 	listProjects,
+	getProject,
+	createProject,
+	deleteProject,
 } from './api.js'
 
 export default {
@@ -118,51 +124,43 @@ export default {
 	components: {
 		NcContent,
 		NcAppNavigation,
-		NcAppNavigationNew,
-		NcAppNavigationItem,
 		NcAppNavigationSettings,
-		NcActionButton,
 		NcAppContent,
 		NcEmptyContent,
 		NcButton,
 		NcDialog,
-		NcSelect,
 		ChatIcon,
+		TabSelector,
+		ChatSidebar,
 		ChatView,
+		ProjectSidebar,
+		ProjectEditor,
+		CoworkSidebar,
+		CoworkView,
 		NavigationSettings,
-		ProjectManager,
 	},
 	data() {
 		return {
+			activeTab: 'chat',
 			conversations: loadState('aiquila', 'conversations', []),
 			activeConversationId: null,
 			activeConversation: null,
 			loading: false,
-			editingId: null,
-			editingTitle: '',
-			deleteConfirmId: null,
 			projects: [],
-			activeProjectId: null,
-			showProjectManager: false,
+			activeProjectFilter: null,
+			activeProjectIdForEditor: null,
+			activeProject: null,
+			deleteConfirm: { id: null, type: null },
 		}
-	},
-	computed: {
-		filteredConversations() {
-			if (!this.activeProjectId) return this.conversations
-			return this.conversations.filter(c => c.projectId === this.activeProjectId)
-		},
-		projectFilterOptions() {
-			return this.projects.map(p => ({
-				value: p.id,
-				label: p.title,
-			}))
-		},
 	},
 	async mounted() {
 		await this.loadProjects()
 	},
 	methods: {
 		t,
+
+		// ── Projects ──────────────────────────────────────────
+
 		async loadProjects() {
 			try {
 				const { data } = await listProjects()
@@ -171,7 +169,80 @@ export default {
 				console.error('Failed to load projects:', err)
 			}
 		},
+		async onSelectProject(id) {
+			if (this.activeProjectIdForEditor === id) return
+			this.activeProjectIdForEditor = id
+			try {
+				const { data } = await getProject(id)
+				this.activeProject = data
+			} catch (err) {
+				console.error('Failed to load project:', err)
+				this.activeProject = null
+			}
+		},
+		async onNewProject() {
+			try {
+				const { data } = await createProject({
+					title: t('aiquila', 'New project'),
+					description: '',
+					systemPrompt: '',
+				})
+				this.projects.unshift(data)
+				await this.onSelectProject(data.id)
+			} catch (err) {
+				console.error('Failed to create project:', err)
+			}
+		},
+		async onDuplicateProject(id) {
+			const original = this.projects.find(p => p.id === id)
+			if (!original) return
+			try {
+				const { data } = await createProject({
+					title: original.title + ' (copy)',
+					description: original.description || '',
+					systemPrompt: original.systemPrompt || '',
+				})
+				this.projects.unshift(data)
+				await this.onSelectProject(data.id)
+			} catch (err) {
+				console.error('Failed to duplicate project:', err)
+			}
+		},
+		onProjectRenamed(updatedProject) {
+			this.updateProjectInList(updatedProject)
+		},
+		onProjectUpdated(updatedProject) {
+			this.updateProjectInList(updatedProject)
+			if (this.activeProject && this.activeProject.id === updatedProject.id) {
+				this.activeProject = { ...this.activeProject, ...updatedProject }
+			}
+		},
+		updateProjectInList(project) {
+			const idx = this.projects.findIndex(p => p.id === project.id)
+			if (idx !== -1) {
+				this.projects.splice(idx, 1, { ...this.projects[idx], ...project })
+			}
+		},
+		confirmDeleteProject(id) {
+			this.deleteConfirm = { id, type: 'project' }
+		},
+		async onDeleteProject(id) {
+			try {
+				await deleteProject(id)
+				this.projects = this.projects.filter(p => p.id !== id)
+				if (this.activeProjectIdForEditor === id) {
+					this.activeProjectIdForEditor = null
+					this.activeProject = null
+				}
+			} catch (err) {
+				console.error('Failed to delete project:', err)
+			}
+		},
+
+		// ── Conversations ─────────────────────────────────────
+
 		async onNewChat() {
+			this.activeTab = 'chat'
 			try {
 				const { data } = await createConversation()
 				this.conversations.unshift(data)
@@ -194,11 +265,10 @@ export default {
 				this.loading = false
 			}
 		},
-		confirmDelete(id) {
-			this.deleteConfirmId = id
+		confirmDeleteConversation(id) {
+			this.deleteConfirm = { id, type: 'conversation' }
 		},
 		async onDeleteConversation(id) {
-			this.deleteConfirmId = null
 			try {
 				await deleteConversation(id)
 				this.conversations = this.conversations.filter(c => c.id !== id)
@@ -209,33 +279,6 @@ export default {
 			} catch (err) {
 				console.error('Failed to delete conversation:', err)
 			}
-		},
-		onStartRename(conv) {
-			this.editingId = conv.id
-			this.editingTitle = conv.title || ''
-			this.$nextTick(() => {
-				const input = this.$refs.renameInput
-				if (Array.isArray(input)) {
-					input[0]?.focus()
-				} else {
-					input?.focus()
-				}
-			})
-		},
-		async onSaveRename(id) {
-			if (this.editingId !== id) return
-			const title = this.editingTitle.trim()
-			this.editingId = null
-			if (!title) return
-			try {
-				const { data } = await updateConversation(id, { title })
-				this.onConversationUpdated(data)
-			} catch (err) {
-				console.error('Rename failed:', err)
-			}
-		},
-		onCancelRename() {
-			this.editingId = null
 		},
 		async onDuplicateConversation(id) {
 			try {
@@ -265,27 +308,36 @@ export default {
 			}
 			this.onConversationUpdated(conversation)
 		},
+
+		// ── Delete confirmation ───────────────────────────────
+
+		onCancelDelete() {
+			this.deleteConfirm = { id: null, type: null }
+		},
+		onConfirmDelete() {
+			const { id, type } = this.deleteConfirm
+			if (!id) return
+			this.deleteConfirm = { id: null, type: null }
+			if (type === 'project') {
+				this.onDeleteProject(id)
+			} else {
+				this.onDeleteConversation(id)
+			}
+		},
 	},
 }
 </script>
 
 <style scoped>
-:deep(.app-navigation-entry.active) {
-	background-color: var(--color-primary-element-light) !important;
+.app-content-inner {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
 }
 
-.rename-input {
-	width: 100%;
-	padding: 4px 8px;
-	border: 1px solid var(--color-primary-element);
-	border-radius: var(--border-radius);
-	font-size: 14px;
-	background: var(--color-main-background);
-	color: var(--color-main-text);
-	outline: none;
-}
-
-.project-filter {
-	padding: 4px 8px 8px;
+.tab-content {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
 }
 </style>

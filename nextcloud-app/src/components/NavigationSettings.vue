@@ -54,15 +54,6 @@
 			</div>
 		</details>
 
-		<details class="settings-section">
-			<summary>{{ t('aiquila', 'Projects') }}</summary>
-			<div class="section-content">
-				<NcButton type="secondary" @click="$emit('open-projects')">
-					{{ t('aiquila', 'Manage projects') }}
-				</NcButton>
-			</div>
-		</details>
-
 		<div class="setting-actions">
 			<NcButton type="secondary" @click="onCancel">
 				{{ t('aiquila', 'Cancel') }}
@@ -95,7 +86,7 @@ export default {
 		NcTextField,
 		NcCheckboxRadioSwitch,
 	},
-	emits: ['open-projects'],
+	emits: [],
 	data() {
 		return {
 			modelOptions: [],
