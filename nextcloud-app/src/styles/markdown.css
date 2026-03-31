@@ -1,0 +1,241 @@
+/* Markdown content styles for MessageBubble */
+
+.markdown-body {
+	line-height: 1.6;
+	word-wrap: break-word;
+}
+
+.markdown-body p {
+	margin: 0 0 8px;
+}
+
+.markdown-body p:last-child {
+	margin-bottom: 0;
+}
+
+.markdown-body a {
+	color: var(--color-primary-element);
+	text-decoration: underline;
+}
+
+.markdown-body a:hover {
+	opacity: 0.8;
+}
+
+.markdown-body strong {
+	font-weight: 700;
+}
+
+.markdown-body em {
+	font-style: italic;
+}
+
+.markdown-body code {
+	padding: 2px 6px;
+	background: var(--color-background-hover);
+	border-radius: 4px;
+	font-family: 'Menlo', 'Consolas', 'Liberation Mono', monospace;
+	font-size: 0.9em;
+}
+
+.markdown-body pre {
+	margin: 0;
+	overflow-x: auto;
+}
+
+.markdown-body pre code {
+	padding: 0;
+	background: none;
+	border-radius: 0;
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+/* Code block container */
+.markdown-body .code-block {
+	margin: 8px 0;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius);
+	overflow: hidden;
+	background: #1e1e1e;
+}
+
+.markdown-body .code-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 4px 12px;
+	background: #2d2d2d;
+	border-bottom: 1px solid #404040;
+	font-size: 12px;
+}
+
+.markdown-body .code-lang {
+	color: #999;
+	text-transform: uppercase;
+	font-size: 11px;
+	letter-spacing: 0.5px;
+}
+
+.markdown-body .copy-code-btn {
+	background: none;
+	border: 1px solid #555;
+	border-radius: 4px;
+	color: #ccc;
+	cursor: pointer;
+	font-size: 11px;
+	padding: 2px 8px;
+	transition: all 0.15s ease;
+}
+
+.markdown-body .copy-code-btn:hover {
+	background: #404040;
+	color: #fff;
+	border-color: #777;
+}
+
+.markdown-body .code-block pre {
+	padding: 12px;
+	margin: 0;
+}
+
+/* Tables */
+.markdown-body table {
+	border-collapse: collapse;
+	width: 100%;
+	margin: 8px 0;
+	font-size: 14px;
+}
+
+.markdown-body th,
+.markdown-body td {
+	padding: 6px 12px;
+	border: 1px solid var(--color-border);
+	text-align: left;
+}
+
+.markdown-body th {
+	background: var(--color-background-hover);
+	font-weight: 600;
+}
+
+.markdown-body tr:nth-child(even) {
+	background: var(--color-background-hover);
+}
+
+/* Lists */
+.markdown-body ul,
+.markdown-body ol {
+	padding-left: 24px;
+	margin: 4px 0 8px;
+}
+
+.markdown-body li {
+	margin-bottom: 2px;
+}
+
+.markdown-body li > ul,
+.markdown-body li > ol {
+	margin: 2px 0;
+}
+
+/* Blockquotes */
+.markdown-body blockquote {
+	margin: 8px 0;
+	padding: 4px 16px;
+	border-left: 3px solid var(--color-primary-element);
+	color: var(--color-text-lighter);
+	background: var(--color-background-hover);
+	border-radius: 0 var(--border-radius) var(--border-radius) 0;
+}
+
+.markdown-body blockquote p {
+	margin: 0;
+}
+
+/* Horizontal rule */
+.markdown-body hr {
+	border: none;
+	border-top: 1px solid var(--color-border);
+	margin: 12px 0;
+}
+
+/* Headings */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+	margin: 12px 0 4px;
+	font-weight: 600;
+}
+
+.markdown-body h1 { font-size: 1.4em; }
+.markdown-body h2 { font-size: 1.2em; }
+.markdown-body h3 { font-size: 1.1em; }
+.markdown-body h4 { font-size: 1em; }
+
+/* highlight.js github-dark-inspired theme (inline) */
+.hljs {
+	color: #d4d4d4;
+	background: #1e1e1e;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link {
+	color: #569cd6;
+}
+
+.hljs-function .hljs-keyword {
+	color: #569cd6;
+}
+
+.hljs-string,
+.hljs-title.function_,
+.hljs-title.class_ {
+	color: #ce9178;
+}
+
+.hljs-comment,
+.hljs-quote {
+	color: #6a9955;
+	font-style: italic;
+}
+
+.hljs-number,
+.hljs-regexp,
+.hljs-literal,
+.hljs-bullet {
+	color: #b5cea8;
+}
+
+.hljs-meta,
+.hljs-tag {
+	color: #9cdcfe;
+}
+
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-type,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+	color: #dcdcaa;
+}
+
+.hljs-built_in,
+.hljs-params {
+	color: #4ec9b0;
+}
+
+.hljs-symbol,
+.hljs-deletion {
+	color: #f44747;
+}
+
+.hljs-addition {
+	color: #6a9955;
+}

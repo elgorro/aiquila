@@ -51,10 +51,15 @@ class SettingsController extends Controller {
         $liveModels      = $this->claudeService->listModels($this->userId);
         $availableModels = $liveModels ?? ClaudeModels::getAllModels();
 
+        $defaultSystemPrompt = $this->config->getUserValue($this->userId, $this->appName, 'default_system_prompt', '');
+        $defaultVerbose = $this->config->getUserValue($this->userId, $this->appName, 'default_verbose', '0') === '1';
+
         return new JSONResponse([
-            'hasUserKey'      => $hasUserKey,
-            'userModel'       => $userModel,
-            'availableModels' => $availableModels,
+            'hasUserKey'          => $hasUserKey,
+            'userModel'           => $userModel,
+            'availableModels'     => $availableModels,
+            'defaultSystemPrompt' => $defaultSystemPrompt,
+            'defaultVerbose'      => $defaultVerbose,
         ]);
     }
 
@@ -72,7 +77,12 @@ class SettingsController extends Controller {
      */
     #[NoAdminRequired]
     #[OpenAPI]
-    public function save(string $api_key = '', string $model = ''): JSONResponse {
+    public function save(
+        string $api_key = '',
+        string $model = '',
+        ?string $default_system_prompt = null,
+        ?string $default_verbose = null
+    ): JSONResponse {
         if ($api_key !== '') {
             $this->credentials->setApiKey($this->userId, $api_key);
         } else {
@@ -83,6 +93,18 @@ class SettingsController extends Controller {
             $this->config->setUserValue($this->userId, $this->appName, 'model', $model);
         } else {
             $this->config->deleteUserValue($this->userId, $this->appName, 'model');
+        }
+
+        if ($default_system_prompt !== null) {
+            if ($default_system_prompt !== '') {
+                $this->config->setUserValue($this->userId, $this->appName, 'default_system_prompt', $default_system_prompt);
+            } else {
+                $this->config->deleteUserValue($this->userId, $this->appName, 'default_system_prompt');
+            }
+        }
+
+        if ($default_verbose !== null) {
+            $this->config->setUserValue($this->userId, $this->appName, 'default_verbose', $default_verbose === '1' ? '1' : '0');
         }
 
         return new JSONResponse(['status' => 'ok']);

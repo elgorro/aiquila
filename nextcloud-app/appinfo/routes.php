@@ -9,7 +9,18 @@ return [
         ['name' => 'conversation#show',    'url' => '/api/conversations/{id}',          'verb' => 'GET'],
         ['name' => 'conversation#update',  'url' => '/api/conversations/{id}',          'verb' => 'PUT'],
         ['name' => 'conversation#destroy', 'url' => '/api/conversations/{id}',          'verb' => 'DELETE'],
-        ['name' => 'conversation#message', 'url' => '/api/conversations/{id}/messages', 'verb' => 'POST'],
+        ['name' => 'conversation#message',   'url' => '/api/conversations/{id}/messages',  'verb' => 'POST'],
+        ['name' => 'conversation#duplicate', 'url' => '/api/conversations/{id}/duplicate', 'verb' => 'POST'],
+        ['name' => 'conversation#search',    'url' => '/api/conversations/search',         'verb' => 'GET'],
+
+        // Project API
+        ['name' => 'project#index',      'url' => '/api/projects',                        'verb' => 'GET'],
+        ['name' => 'project#create',     'url' => '/api/projects',                        'verb' => 'POST'],
+        ['name' => 'project#show',       'url' => '/api/projects/{id}',                   'verb' => 'GET'],
+        ['name' => 'project#update',     'url' => '/api/projects/{id}',                   'verb' => 'PUT'],
+        ['name' => 'project#destroy',    'url' => '/api/projects/{id}',                   'verb' => 'DELETE'],
+        ['name' => 'project#addPath',    'url' => '/api/projects/{id}/paths',             'verb' => 'POST'],
+        ['name' => 'project#removePath', 'url' => '/api/projects/{id}/paths/{pathId}',    'verb' => 'DELETE'],
 
         ['name' => 'chat#ask', 'url' => '/api/ask', 'verb' => 'POST'],
         ['name' => 'chat#chat', 'url' => '/api/chat', 'verb' => 'POST'],

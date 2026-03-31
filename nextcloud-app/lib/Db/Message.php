@@ -24,6 +24,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setCacheCreationTokens(?int $cacheCreationTokens)
  * @method int|null getCacheReadTokens()
  * @method void setCacheReadTokens(?int $cacheReadTokens)
+ * @method int|null getLatencyMs()
+ * @method void setLatencyMs(?int $latencyMs)
  */
 class Message extends Entity implements \JsonSerializable {
     protected int $conversationId = 0;
@@ -34,6 +36,7 @@ class Message extends Entity implements \JsonSerializable {
     protected int $createdAt = 0;
     protected ?int $cacheCreationTokens = null;
     protected ?int $cacheReadTokens = null;
+    protected ?int $latencyMs = null;
 
     public function __construct() {
         $this->addType('conversationId', 'integer');
@@ -44,6 +47,7 @@ class Message extends Entity implements \JsonSerializable {
         $this->addType('createdAt', 'integer');
         $this->addType('cacheCreationTokens', 'integer');
         $this->addType('cacheReadTokens', 'integer');
+        $this->addType('latencyMs', 'integer');
     }
 
     public function jsonSerialize(): array {
@@ -56,6 +60,7 @@ class Message extends Entity implements \JsonSerializable {
             'outputTokens' => $this->getOutputTokens(),
             'cacheCreationTokens' => $this->getCacheCreationTokens(),
             'cacheReadTokens' => $this->getCacheReadTokens(),
+            'latencyMs' => $this->getLatencyMs(),
             'createdAt' => $this->getCreatedAt(),
         ];
     }
