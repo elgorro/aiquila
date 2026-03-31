@@ -22,6 +22,9 @@
     "@vitejs/plugin-vue": "^6.0.5",
     "vite": "^7.3.1"
   },
+  "overrides": {
+    "brace-expansion": "^2.0.3"
+  },
   "dependencies": {
     "@nextcloud/axios": "^2.5.2",
     "@nextcloud/dialogs": "^7.3.0",
