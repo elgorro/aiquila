@@ -12,12 +12,12 @@
 		<div v-if="attachedFiles.length > 0" class="file-chips">
 			<span v-for="file in attachedFiles"
 				:key="file.path"
-				class="file-chip">
+				:class="['file-chip', { 'file-chip--dir': file.mime === 'httpd/unix-directory' }]">
 				<img v-if="previews[file.path]"
 					:src="previews[file.path]"
 					class="file-thumb"
 					:alt="file.name" />
-				<span class="name" :title="file.path">{{ file.name }}</span>
+				<span class="name" :title="file.path">{{ file.mime === 'httpd/unix-directory' ? '📁 ' + file.name : file.name }}</span>
 				<span v-if="file.size" class="size">{{ humanSize(file.size) }}</span>
 				<button class="remove" :title="t('aiquila', 'Remove')" @click="removeFile(file.path)">
 					✕
@@ -266,7 +266,12 @@ export default {
 		},
 		async handleAddDirectory(args) {
 			if (args) {
-				this.$emit('command', { type: 'add-directory', path: args })
+				this.addFile({
+					path: args,
+					name: args.split('/').pop() || args,
+					size: 0,
+					mime: 'httpd/unix-directory',
+				})
 			} else {
 				try {
 					const picker = getFilePickerBuilder('Select directory')
@@ -276,7 +281,12 @@ export default {
 						.build()
 
 					const path = await picker.pick()
-					this.$emit('command', { type: 'add-directory', path })
+					this.addFile({
+						path,
+						name: path.split('/').pop() || path,
+						size: 0,
+						mime: 'httpd/unix-directory',
+					})
 				} catch (err) {
 					if (!(err instanceof FilePickerClosed)) {
 						console.error('Directory picker error:', err)
@@ -471,6 +481,12 @@ export default {
 	border-radius: 16px;
 	font-size: 13px;
 	max-width: 260px;
+}
+
+.file-chip--dir {
+	background: #3d3100;
+	border-color: #665200;
+	color: #ffd54f;
 }
 
 .file-thumb {

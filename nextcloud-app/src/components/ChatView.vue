@@ -34,6 +34,16 @@
 				@keydown.escape="showSearch = false" />
 			<button class="search-close" @click="showSearch = false">✕</button>
 		</div>
+		<div v-if="showProjectPicker" class="project-picker">
+			<NcSelect ref="projectSelect"
+				:options="projectOptions"
+				:placeholder="t('aiquila', 'Select a project…')"
+				label="label"
+				:reduce="o => o.value"
+				:autoscroll="false"
+				@update:model-value="attachProject($event)" />
+			<button class="picker-close" @click="showProjectPicker = false">✕</button>
+		</div>
 		<ChatInput :disabled="sending"
 			@send="onSend"
 			@command="onCommand" />
@@ -43,6 +53,7 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import NcSelect from '@nextcloud/vue/components/NcSelect'
 
 import MessageBubble from './MessageBubble.vue'
 import ChatInput from './ChatInput.vue'
@@ -54,6 +65,7 @@ export default {
 	name: 'ChatView',
 	components: {
 		NcLoadingIcon,
+		NcSelect,
 		MessageBubble,
 		ChatInput,
 	},
@@ -77,6 +89,7 @@ export default {
 			dotTimer: null,
 			showSearch: false,
 			searchQuery: '',
+			showProjectPicker: false,
 		}
 	},
 	watch: {
@@ -90,6 +103,18 @@ export default {
 			// Reset verbose on conversation switch (keep user preference via settings default)
 			this.showSearch = false
 			this.searchQuery = ''
+			this.showProjectPicker = false
+		},
+		showProjectPicker(val) {
+			if (val) {
+				this.$nextTick(() => {
+					const input = this.$refs.projectSelect?.$el?.querySelector('input')
+					if (input) {
+						input.focus()
+						input.click()
+					}
+				})
+			}
 		},
 	},
 	computed: {
@@ -108,6 +133,12 @@ export default {
 			if (!this.conversation.projectId) return null
 			const project = this.projects.find(p => p.id === this.conversation.projectId)
 			return project?.title || null
+		},
+		projectOptions() {
+			return this.projects.map(p => ({
+				value: p.id,
+				label: p.title,
+			}))
 		},
 	},
 	mounted() {
@@ -156,11 +187,29 @@ export default {
 				this.detachProject()
 				break
 			case 'add-project':
-				// Handled by emitting up or opening project picker
+				if (args) {
+					const id = parseInt(args, 10)
+					if (!isNaN(id)) {
+						this.attachProject(id)
+						return
+					}
+				}
+				if (this.projects.length === 0) {
+					// No projects exist — nothing to pick
+					return
+				}
+				this.showProjectPicker = true
 				break
-			case 'add-directory':
-				// Could attach directory listing as context to next message
-				break
+			}
+		},
+		async attachProject(projectId) {
+			try {
+				const { data } = await updateConversation(this.conversation.id, { projectId })
+				this.$emit('conversation-updated', data)
+			} catch (err) {
+				console.error('Failed to attach project:', err)
+			} finally {
+				this.showProjectPicker = false
 			}
 		},
 		async detachProject() {
@@ -292,6 +341,32 @@ export default {
 }
 
 .search-close:hover {
+	color: var(--color-error);
+}
+
+.project-picker {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 16px;
+	border-top: 1px solid var(--color-border);
+	background: var(--color-background-hover);
+}
+
+.project-picker :deep(.v-select) {
+	flex: 1;
+}
+
+.picker-close {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--color-text-lighter);
+	font-size: 16px;
+	padding: 4px;
+}
+
+.picker-close:hover {
 	color: var(--color-error);
 }
 </style>
