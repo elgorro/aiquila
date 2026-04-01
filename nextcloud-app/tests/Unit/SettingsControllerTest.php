@@ -48,6 +48,8 @@ class SettingsControllerTest extends TestCase {
         $this->config->method('getUserValue')
             ->willReturnMap([
                 ['testuser', 'aiquila', 'model', '', ''],
+                ['testuser', 'aiquila', 'default_system_prompt', '', ''],
+                ['testuser', 'aiquila', 'default_verbose', '0', '0'],
             ]);
         $this->claude->method('listModels')->willReturn(null);
 
@@ -62,6 +64,8 @@ class SettingsControllerTest extends TestCase {
         $this->config->method('getUserValue')
             ->willReturnMap([
                 ['testuser', 'aiquila', 'model', '', ClaudeModels::HAIKU_4_5],
+                ['testuser', 'aiquila', 'default_system_prompt', '', ''],
+                ['testuser', 'aiquila', 'default_verbose', '0', '0'],
             ]);
         $this->claude->method('listModels')->willReturn(null);
 
