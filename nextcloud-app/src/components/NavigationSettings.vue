@@ -1,31 +1,58 @@
 <template>
 	<div class="nav-settings">
-		<div class="setting-group">
-			<label for="settings-model">{{ t('aiquila', 'Model preference') }}</label>
-			<NcSelect v-model="selectedModel"
-				input-id="settings-model"
-				:options="modelOptions"
-				:placeholder="t('aiquila', '(admin default)')"
-				:clearable="true"
-				@input="dirty = true" />
-		</div>
+		<details class="settings-section" open>
+			<summary>{{ t('aiquila', 'Model & API') }}</summary>
+			<div class="section-content">
+				<div class="setting-group">
+					<label for="settings-model">{{ t('aiquila', 'Model preference') }}</label>
+					<NcSelect v-model="selectedModel"
+						input-id="settings-model"
+						:options="modelOptions"
+						:placeholder="t('aiquila', '(admin default)')"
+						:clearable="true"
+						@input="dirty = true" />
+				</div>
 
-		<div class="setting-group">
-			<label for="settings-api-key">
-				{{ t('aiquila', 'Personal API key') }}
-				<span class="hint">{{ t('aiquila', '(overrides admin key)') }}</span>
-			</label>
-			<div class="key-row">
-				<NcTextField id="settings-api-key"
-					v-model="apiKey"
-					type="password"
-					:placeholder="keyPlaceholder"
-					@update:model-value="dirty = true" />
-				<NcButton type="tertiary" @click="onClearKey">
-					{{ t('aiquila', 'Clear key') }}
-				</NcButton>
+				<div class="setting-group">
+					<label for="settings-api-key">
+						{{ t('aiquila', 'Personal API key') }}
+						<span class="hint">{{ t('aiquila', '(overrides admin key)') }}</span>
+					</label>
+					<div class="key-row">
+						<NcTextField id="settings-api-key"
+							v-model="apiKey"
+							type="password"
+							:placeholder="keyPlaceholder"
+							@update:model-value="dirty = true" />
+						<NcButton type="tertiary" @click="onClearKey">
+							{{ t('aiquila', 'Clear key') }}
+						</NcButton>
+					</div>
+				</div>
 			</div>
-		</div>
+		</details>
+
+		<details class="settings-section">
+			<summary>{{ t('aiquila', 'Defaults') }}</summary>
+			<div class="section-content">
+				<div class="setting-group">
+					<label for="settings-system-prompt">{{ t('aiquila', 'Default system prompt') }}</label>
+					<textarea id="settings-system-prompt"
+						v-model="defaultSystemPrompt"
+						class="system-prompt-input"
+						rows="3"
+						:placeholder="t('aiquila', 'Custom instructions for Claude…')"
+						@input="dirty = true" />
+				</div>
+
+				<div class="setting-group">
+					<NcCheckboxRadioSwitch :checked="defaultVerbose"
+						@update:checked="val => { defaultVerbose = val; dirty = true }">
+						{{ t('aiquila', 'Show verbose mode by default') }}
+					</NcCheckboxRadioSwitch>
+				</div>
+			</div>
+		</details>
 
 		<div class="setting-actions">
 			<NcButton type="secondary" @click="onCancel">
@@ -47,6 +74,7 @@ import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 
 import { getSettings, saveSettings } from '../api.js'
 
@@ -56,7 +84,9 @@ export default {
 		NcButton,
 		NcSelect,
 		NcTextField,
+		NcCheckboxRadioSwitch,
 	},
+	emits: [],
 	data() {
 		return {
 			modelOptions: [],
@@ -64,6 +94,8 @@ export default {
 			apiKey: '',
 			hasUserKey: false,
 			clearKey: false,
+			defaultSystemPrompt: '',
+			defaultVerbose: false,
 			saving: false,
 			dirty: false,
 			status: '',
@@ -89,6 +121,8 @@ export default {
 				this.modelOptions = (data.availableModels || [])
 				this.selectedModel = data.userModel || null
 				this.hasUserKey = !!data.hasUserKey
+				this.defaultSystemPrompt = data.defaultSystemPrompt || ''
+				this.defaultVerbose = !!data.defaultVerbose
 				this.loaded = true
 			} catch (err) {
 				this.status = t('aiquila', 'Failed to load settings: ') + err.message
@@ -105,6 +139,7 @@ export default {
 			this.clearKey = false
 			this.dirty = false
 			this.status = ''
+			this.loadSettings()
 		},
 		async onSave() {
 			this.saving = true
@@ -113,17 +148,19 @@ export default {
 				await saveSettings({
 					model: this.selectedModel || '',
 					api_key: this.clearKey ? '' : this.apiKey,
+					default_system_prompt: this.defaultSystemPrompt,
+					default_verbose: this.defaultVerbose ? '1' : '0',
 				})
 				this.status = t('aiquila', 'Saved!')
 				this.statusType = 'success'
 				this.dirty = false
-				this.apiKey = ''
-				this.clearKey = false
 				if (this.clearKey) {
 					this.hasUserKey = false
 				} else if (this.apiKey) {
 					this.hasUserKey = true
 				}
+				this.apiKey = ''
+				this.clearKey = false
 			} catch (err) {
 				this.status = t('aiquila', 'Error saving: ') + err.message
 				this.statusType = 'error'
@@ -140,8 +177,32 @@ export default {
 	padding: 8px;
 }
 
+.settings-section {
+	margin-bottom: 8px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius);
+	overflow: hidden;
+}
+
+.settings-section summary {
+	padding: 8px 12px;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	background: var(--color-background-hover);
+	user-select: none;
+}
+
+.settings-section summary:hover {
+	background: var(--color-background-dark);
+}
+
+.section-content {
+	padding: 8px 12px 12px;
+}
+
 .setting-group {
-	margin-bottom: 12px;
+	margin-bottom: 10px;
 }
 
 .setting-group label {
@@ -165,6 +226,18 @@ export default {
 .key-row .v-select,
 .key-row input {
 	flex: 1;
+}
+
+.system-prompt-input {
+	width: 100%;
+	padding: 8px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius);
+	font-family: var(--font-face);
+	font-size: 13px;
+	resize: vertical;
+	background: var(--color-main-background);
+	color: var(--color-main-text);
 }
 
 .setting-actions {

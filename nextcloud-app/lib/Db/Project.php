@@ -10,32 +10,36 @@ use OCP\AppFramework\Db\Entity;
  * @method int getId()
  * @method string getUserId()
  * @method void setUserId(string $userId)
- * @method string|null getTitle()
- * @method void setTitle(?string $title)
- * @method string getModel()
- * @method void setModel(string $model)
+ * @method string getTitle()
+ * @method void setTitle(string $title)
+ * @method string|null getDescription()
+ * @method void setDescription(?string $description)
+ * @method string|null getSystemPrompt()
+ * @method void setSystemPrompt(?string $systemPrompt)
+ * @method bool getIsActive()
+ * @method void setIsActive(bool $isActive)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
  * @method int getUpdatedAt()
  * @method void setUpdatedAt(int $updatedAt)
- * @method int|null getProjectId()
- * @method void setProjectId(?int $projectId)
  */
-class Conversation extends Entity implements \JsonSerializable {
+class Project extends Entity implements \JsonSerializable {
     protected string $userId = '';
-    protected ?string $title = null;
-    protected string $model = '';
+    protected string $title = '';
+    protected ?string $description = null;
+    protected ?string $systemPrompt = null;
+    protected bool $isActive = true;
     protected int $createdAt = 0;
     protected int $updatedAt = 0;
-    protected ?int $projectId = null;
 
     public function __construct() {
         $this->addType('userId', 'string');
         $this->addType('title', 'string');
-        $this->addType('model', 'string');
+        $this->addType('description', 'string');
+        $this->addType('systemPrompt', 'string');
+        $this->addType('isActive', 'boolean');
         $this->addType('createdAt', 'integer');
         $this->addType('updatedAt', 'integer');
-        $this->addType('projectId', 'integer');
     }
 
     public function jsonSerialize(): array {
@@ -43,10 +47,11 @@ class Conversation extends Entity implements \JsonSerializable {
             'id' => $this->getId(),
             'userId' => $this->getUserId(),
             'title' => $this->getTitle(),
-            'model' => $this->getModel(),
+            'description' => $this->getDescription(),
+            'systemPrompt' => $this->getSystemPrompt(),
+            'isActive' => $this->getIsActive(),
             'createdAt' => $this->getCreatedAt(),
             'updatedAt' => $this->getUpdatedAt(),
-            'projectId' => $this->getProjectId(),
         ];
     }
 }

@@ -59,3 +59,46 @@ export function getFilePreview(path, width = 256, height = 256) {
 export function analyzeFile(filePath, prompt) {
 	return axios.post(url('/api/analyze-file'), { filePath, prompt })
 }
+
+// Conversation extras
+export function duplicateConversation(id) {
+	return axios.post(url(`/api/conversations/${id}/duplicate`))
+}
+
+export function searchConversations(query, limit = 20, cursor = 0) {
+	return axios.get(url('/api/conversations/search'), { params: { query, limit, cursor } })
+}
+
+// Project API
+export function listProjects() {
+	return axios.get(url('/api/projects'))
+}
+
+export function createProject(data) {
+	return axios.post(url('/api/projects'), data)
+}
+
+export function getProject(id) {
+	return axios.get(url(`/api/projects/${id}`))
+}
+
+export function updateProject(id, data) {
+	return axios.put(url(`/api/projects/${id}`), data)
+}
+
+export function deleteProject(id) {
+	return axios.delete(url(`/api/projects/${id}`))
+}
+
+export function addProjectPath(id, path, pathType) {
+	return axios.post(url(`/api/projects/${id}/paths`), { path, pathType })
+}
+
+export function removeProjectPath(id, pathId) {
+	return axios.delete(url(`/api/projects/${id}/paths/${pathId}`))
+}
+
+// File listing
+export function listDirectory(path) {
+	return axios.get(url('/api/files/list'), { params: { path } })
+}

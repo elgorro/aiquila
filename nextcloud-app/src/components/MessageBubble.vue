@@ -6,6 +6,8 @@
 		<NcNoteCard v-if="isError" type="error">
 			{{ messageContent }}
 		</NcNoteCard>
+		<!-- eslint-disable-next-line vue/no-v-html -->
+		<div v-else-if="renderedContent" class="message-content markdown-body" v-html="renderedContent" />
 		<div v-else class="message-content">
 			{{ messageContent }}
 		</div>
@@ -29,9 +31,35 @@
 				{{ file.fileName }}
 			</span>
 		</div>
-		<div v-if="hasTokens" class="message-tokens">
+		<div v-if="hasTokens && !verbose" class="message-tokens">
 			<NcProgressBar :value="tokenPercent" size="small" />
 			<span class="token-label">{{ totalTokens }} tokens ({{ message.inputTokens }} in / {{ message.outputTokens }} out)</span>
+		</div>
+		<div v-if="verbose && message.role === 'assistant'" class="verbose-info">
+			<div class="verbose-row">
+				<span class="verbose-label">Model:</span>
+				<span class="verbose-value">{{ model || '—' }}</span>
+			</div>
+			<div class="verbose-row">
+				<span class="verbose-label">Input:</span>
+				<span class="verbose-value">{{ formatNum(message.inputTokens) }} tokens</span>
+			</div>
+			<div class="verbose-row">
+				<span class="verbose-label">Output:</span>
+				<span class="verbose-value">{{ formatNum(message.outputTokens) }} tokens</span>
+			</div>
+			<div v-if="message.cacheCreationTokens" class="verbose-row">
+				<span class="verbose-label">Cache create:</span>
+				<span class="verbose-value">{{ formatNum(message.cacheCreationTokens) }}</span>
+			</div>
+			<div v-if="message.cacheReadTokens" class="verbose-row">
+				<span class="verbose-label">Cache read:</span>
+				<span class="verbose-value">{{ formatNum(message.cacheReadTokens) }}</span>
+			</div>
+			<div v-if="message.latencyMs" class="verbose-row">
+				<span class="verbose-label">Latency:</span>
+				<span class="verbose-value">{{ (message.latencyMs / 1000).toFixed(1) }}s</span>
+			</div>
 		</div>
 	</div>
 </template>
@@ -42,6 +70,8 @@ import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcProgressBar from '@nextcloud/vue/components/NcProgressBar'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { isImageMime, getFilePreview } from '../api.js'
+import { renderMarkdown, attachCopyHandlers } from '../utils/markdown.js'
+import '../styles/markdown.css'
 
 export default {
 	name: 'MessageBubble',
@@ -54,6 +84,14 @@ export default {
 		message: {
 			type: Object,
 			required: true,
+		},
+		verbose: {
+			type: Boolean,
+			default: false,
+		},
+		model: {
+			type: String,
+			default: '',
 		},
 	},
 	data() {
@@ -74,6 +112,12 @@ export default {
 		},
 		messageContent() {
 			return this.message.content || ''
+		},
+		renderedContent() {
+			if (this.message.role === 'assistant' && !this.isError && this.messageContent) {
+				return renderMarkdown(this.messageContent)
+			}
+			return null
 		},
 		hasTokens() {
 			return this.message.role === 'assistant'
@@ -97,6 +141,10 @@ export default {
 	},
 	mounted() {
 		this.loadPreviews()
+		this.$nextTick(() => attachCopyHandlers(this.$el))
+	},
+	updated() {
+		this.$nextTick(() => attachCopyHandlers(this.$el))
 	},
 	methods: {
 		t,
@@ -109,6 +157,10 @@ export default {
 					// Preview not available
 				}
 			}
+		},
+		formatNum(n) {
+			if (n == null) return '—'
+			return n.toLocaleString()
 		},
 	},
 }
@@ -141,6 +193,10 @@ export default {
 .message-content {
 	white-space: pre-wrap;
 	word-wrap: break-word;
+}
+
+.message-content.markdown-body {
+	white-space: normal;
 }
 
 .message-files {
@@ -200,5 +256,29 @@ export default {
 	margin-top: 2px;
 	font-size: 12px;
 	color: var(--color-text-lighter);
+}
+
+.verbose-info {
+	margin-top: 8px;
+	padding: 8px 10px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius);
+	background: var(--color-background-hover);
+	font-size: 12px;
+}
+
+.verbose-row {
+	display: flex;
+	gap: 8px;
+	padding: 1px 0;
+}
+
+.verbose-label {
+	color: var(--color-text-lighter);
+	min-width: 90px;
+}
+
+.verbose-value {
+	font-family: 'Menlo', 'Consolas', monospace;
 }
 </style>

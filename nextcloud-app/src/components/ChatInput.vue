@@ -12,12 +12,12 @@
 		<div v-if="attachedFiles.length > 0" class="file-chips">
 			<span v-for="file in attachedFiles"
 				:key="file.path"
-				class="file-chip">
+				:class="['file-chip', { 'file-chip--dir': file.mime === 'httpd/unix-directory' }]">
 				<img v-if="previews[file.path]"
 					:src="previews[file.path]"
 					class="file-thumb"
 					:alt="file.name" />
-				<span class="name" :title="file.path">{{ file.name }}</span>
+				<span class="name" :title="file.path">{{ file.mime === 'httpd/unix-directory' ? '📁 ' + file.name : file.name }}</span>
 				<span v-if="file.size" class="size">{{ humanSize(file.size) }}</span>
 				<button class="remove" :title="t('aiquila', 'Remove')" @click="removeFile(file.path)">
 					✕
@@ -72,6 +72,36 @@ const SLASH_COMMANDS = [
 		icon: '📎',
 		description: 'Attach a file from Nextcloud',
 	},
+	{
+		id: 'add-directory',
+		label: '/add-directory',
+		icon: '📁',
+		description: 'Attach a directory listing as context',
+	},
+	{
+		id: 'add-project',
+		label: '/add-project',
+		icon: '📦',
+		description: 'Attach a project context',
+	},
+	{
+		id: 'remove-project',
+		label: '/remove-project',
+		icon: '🗑️',
+		description: 'Detach project from conversation',
+	},
+	{
+		id: 'verbose',
+		label: '/verbose',
+		icon: '🔍',
+		description: 'Toggle verbose mode (show detailed stats)',
+	},
+	{
+		id: 'search',
+		label: '/search',
+		icon: '🔎',
+		description: 'Search across conversation messages',
+	},
 ]
 
 export default {
@@ -85,7 +115,7 @@ export default {
 			default: false,
 		},
 	},
-	emits: ['send'],
+	emits: ['send', 'command'],
 	data() {
 		return {
 			prompt: '',
@@ -162,8 +192,25 @@ export default {
 			this.prompt = ''
 			this.menuVisible = false
 
-			if (cmd.id === 'add-file') {
+			switch (cmd.id) {
+			case 'add-file':
 				this.handleAddFile(args)
+				break
+			case 'add-directory':
+				this.handleAddDirectory(args)
+				break
+			case 'add-project':
+				this.$emit('command', { type: 'add-project', args })
+				break
+			case 'remove-project':
+				this.$emit('command', { type: 'remove-project' })
+				break
+			case 'verbose':
+				this.$emit('command', { type: 'toggle-verbose' })
+				break
+			case 'search':
+				this.$emit('command', { type: 'search', args })
+				break
 			}
 		},
 		async handleAddFile(args) {
@@ -211,6 +258,38 @@ export default {
 				} catch (err) {
 					if (!(err instanceof FilePickerClosed)) {
 						console.error('File picker error:', err)
+					}
+				}
+			}
+
+			this.$refs.input?.focus()
+		},
+		async handleAddDirectory(args) {
+			if (args) {
+				this.addFile({
+					path: args,
+					name: args.split('/').pop() || args,
+					size: 0,
+					mime: 'httpd/unix-directory',
+				})
+			} else {
+				try {
+					const picker = getFilePickerBuilder('Select directory')
+						.setType(1)
+						.allowDirectories(true)
+						.setMimeTypeFilter(['httpd/unix-directory'])
+						.build()
+
+					const path = await picker.pick()
+					this.addFile({
+						path,
+						name: path.split('/').pop() || path,
+						size: 0,
+						mime: 'httpd/unix-directory',
+					})
+				} catch (err) {
+					if (!(err instanceof FilePickerClosed)) {
+						console.error('Directory picker error:', err)
 					}
 				}
 			}
@@ -404,6 +483,12 @@ export default {
 	max-width: 260px;
 }
 
+.file-chip--dir {
+	background: #3d3100;
+	border-color: #665200;
+	color: #ffd54f;
+}
+
 .file-thumb {
 	width: 32px;
 	height: 32px;
@@ -473,7 +558,7 @@ export default {
 	border: 1px solid var(--color-border);
 	border-radius: var(--border-radius);
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-	max-height: 200px;
+	max-height: 280px;
 	overflow-y: auto;
 	z-index: 1000;
 }

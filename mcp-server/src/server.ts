@@ -35,6 +35,7 @@ import { absenceTools } from './tools/apps/absence.js';
 import { notificationsTools } from './tools/apps/notifications.js';
 import { trashTools } from './tools/apps/trash.js';
 import { versionsTools } from './tools/apps/versions.js';
+import { projectsTools } from './tools/apps/projects.js';
 
 const SERVER_NAME = 'aiquila';
 const _require = createRequire(import.meta.url);
@@ -71,6 +72,7 @@ const allToolSets = [
   notificationsTools,
   trashTools,
   versionsTools,
+  projectsTools,
 ];
 
 /**

@@ -10,6 +10,8 @@ use OCA\AIquila\Db\Message as MessageEntity;
 use OCA\AIquila\Db\MessageFile;
 use OCA\AIquila\Db\MessageFileMapper;
 use OCA\AIquila\Db\MessageMapper;
+use OCA\AIquila\Db\ProjectMapper;
+use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\ImageOptimizer;
@@ -25,6 +27,8 @@ class ConversationController extends Controller {
     private ConversationMapper $conversationMapper;
     private MessageMapper $messageMapper;
     private MessageFileMapper $messageFileMapper;
+    private ProjectMapper $projectMapper;
+    private ProjectPathMapper $projectPathMapper;
     private ClaudeSDKService $claudeService;
     private FileService $fileService;
     private ImageOptimizer $imageOptimizer;
@@ -37,6 +41,8 @@ class ConversationController extends Controller {
         ConversationMapper $conversationMapper,
         MessageMapper $messageMapper,
         MessageFileMapper $messageFileMapper,
+        ProjectMapper $projectMapper,
+        ProjectPathMapper $projectPathMapper,
         ClaudeSDKService $claudeService,
         FileService $fileService,
         ImageOptimizer $imageOptimizer,
@@ -47,6 +53,8 @@ class ConversationController extends Controller {
         $this->conversationMapper = $conversationMapper;
         $this->messageMapper = $messageMapper;
         $this->messageFileMapper = $messageFileMapper;
+        $this->projectMapper = $projectMapper;
+        $this->projectPathMapper = $projectPathMapper;
         $this->claudeService = $claudeService;
         $this->fileService = $fileService;
         $this->imageOptimizer = $imageOptimizer;
@@ -129,10 +137,11 @@ class ConversationController extends Controller {
     }
 
     /**
-     * Update a conversation (title)
+     * Update a conversation (title and/or project link)
      *
      * @param int $id Conversation ID
      * @param string $title New title
+     * @param int|null $projectId Project ID to link (null to clear)
      *
      * 200: Updated conversation
      * 404: Conversation not found
@@ -142,14 +151,23 @@ class ConversationController extends Controller {
      */
     #[NoAdminRequired]
     #[OpenAPI]
-    public function update(int $id, string $title = ''): JSONResponse {
+    public function update(int $id, string $title = '', ?int $projectId = null): JSONResponse {
         try {
             $conversation = $this->conversationMapper->findByIdAndUser($id, $this->userId);
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Conversation not found'], 404);
         }
 
-        $conversation->setTitle($title);
+        if ($title !== '') {
+            $conversation->setTitle($title);
+        }
+
+        // Allow explicitly setting or clearing project association
+        $requestParams = $this->request->getParams();
+        if (array_key_exists('projectId', $requestParams)) {
+            $conversation->setProjectId($projectId);
+        }
+
         $conversation->setUpdatedAt(time());
         $this->conversationMapper->update($conversation);
 
@@ -269,8 +287,32 @@ class ConversationController extends Controller {
             }
         }
 
-        // 5. Call Claude (with MCP tools if available)
-        $result = $this->callClaude($claudeMessages);
+        // 5. Load project system prompt if conversation has a project
+        $systemPrompt = null;
+        if ($conversation->getProjectId() !== null) {
+            try {
+                $project = $this->projectMapper->findByIdAndUser($conversation->getProjectId(), $this->userId);
+                $systemPrompt = $project->getSystemPrompt();
+
+                // Build project context from paths
+                $paths = $this->projectPathMapper->findByProject($project->getId());
+                if (!empty($paths)) {
+                    $contextLines = ['Project: ' . $project->getTitle()];
+                    foreach ($paths as $projectPath) {
+                        $contextLines[] = '- [' . $projectPath->getPathType() . '] ' . $projectPath->getPath();
+                    }
+                    $pathContext = implode("\n", $contextLines);
+                    $systemPrompt = ($systemPrompt ? $systemPrompt . "\n\n" : '') . $pathContext;
+                }
+            } catch (DoesNotExistException $e) {
+                // Project was deleted, ignore
+            }
+        }
+
+        // 6. Call Claude (with MCP tools if available)
+        $startMs = (int)(microtime(true) * 1000);
+        $result = $this->callClaude($claudeMessages, $systemPrompt);
+        $latencyMs = (int)(microtime(true) * 1000) - $startMs;
 
         if (isset($result['error'])) {
             // Persist error as assistant message so user sees it in history
@@ -278,6 +320,7 @@ class ConversationController extends Controller {
             $assistantMsg->setConversationId($id);
             $assistantMsg->setRole('assistant');
             $assistantMsg->setContent('Error: ' . $result['error']);
+            $assistantMsg->setLatencyMs($latencyMs);
             $assistantMsg->setCreatedAt(time());
             $assistantMsg = $this->messageMapper->insert($assistantMsg);
 
@@ -291,7 +334,7 @@ class ConversationController extends Controller {
             ]);
         }
 
-        // 6. Persist assistant response
+        // 7. Persist assistant response
         $assistantMsg = new MessageEntity();
         $assistantMsg->setConversationId($id);
         $assistantMsg->setRole('assistant');
@@ -300,6 +343,7 @@ class ConversationController extends Controller {
         $assistantMsg->setOutputTokens($result['usage']['output_tokens'] ?? null);
         $assistantMsg->setCacheCreationTokens($result['usage']['cache_creation_tokens'] ?? null);
         $assistantMsg->setCacheReadTokens($result['usage']['cache_read_tokens'] ?? null);
+        $assistantMsg->setLatencyMs($latencyMs);
         $assistantMsg->setCreatedAt(time());
         $assistantMsg = $this->messageMapper->insert($assistantMsg);
 
@@ -320,6 +364,102 @@ class ConversationController extends Controller {
             'assistantMessage' => $assistantMsg->jsonSerialize(),
             'conversation' => $conversation->jsonSerialize(),
         ]);
+    }
+
+    /**
+     * Duplicate a conversation with all its messages and files
+     *
+     * @param int $id Conversation ID
+     *
+     * 200: The duplicated conversation
+     * 404: Conversation not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, title: ?string, model: string}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
+    #[NoAdminRequired]
+    #[OpenAPI]
+    public function duplicate(int $id): JSONResponse {
+        try {
+            $original = $this->conversationMapper->findByIdAndUser($id, $this->userId);
+        } catch (DoesNotExistException $e) {
+            return new JSONResponse(['error' => 'Conversation not found'], 404);
+        }
+
+        $now = time();
+
+        // Clone conversation
+        $newConv = new Conversation();
+        $newConv->setUserId($this->userId);
+        $newConv->setTitle(($original->getTitle() ?? '') . ' (copy)');
+        $newConv->setModel($original->getModel());
+        $newConv->setProjectId($original->getProjectId());
+        $newConv->setCreatedAt($now);
+        $newConv->setUpdatedAt($now);
+        $newConv = $this->conversationMapper->insert($newConv);
+
+        // Clone messages and their files
+        $messages = $this->messageMapper->findByConversation($id);
+        foreach ($messages as $msg) {
+            $newMsg = new MessageEntity();
+            $newMsg->setConversationId($newConv->getId());
+            $newMsg->setRole($msg->getRole());
+            $newMsg->setContent($msg->getContent());
+            $newMsg->setInputTokens($msg->getInputTokens());
+            $newMsg->setOutputTokens($msg->getOutputTokens());
+            $newMsg->setCacheCreationTokens($msg->getCacheCreationTokens());
+            $newMsg->setCacheReadTokens($msg->getCacheReadTokens());
+            $newMsg->setLatencyMs($msg->getLatencyMs());
+            $newMsg->setCreatedAt($msg->getCreatedAt());
+            $newMsg = $this->messageMapper->insert($newMsg);
+
+            $files = $this->messageFileMapper->findByMessage($msg->getId());
+            foreach ($files as $file) {
+                $newFile = new MessageFile();
+                $newFile->setMessageId($newMsg->getId());
+                $newFile->setFilePath($file->getFilePath());
+                $newFile->setFileName($file->getFileName());
+                $newFile->setMimeType($file->getMimeType());
+                $newFile->setCreatedAt($file->getCreatedAt());
+                $this->messageFileMapper->insert($newFile);
+            }
+        }
+
+        return new JSONResponse($newConv->jsonSerialize());
+    }
+
+    /**
+     * Search messages across all conversations
+     *
+     * @param string $query Search query
+     * @param int $limit Max results
+     * @param int $cursor Pagination cursor (message ID)
+     *
+     * 200: Matching messages
+     *
+     * @return JSONResponse<Http::STATUS_OK, list<array<string, mixed>>, array{}>
+     */
+    #[NoAdminRequired]
+    #[OpenAPI]
+    public function search(string $query = '', int $limit = 20, int $cursor = 0): JSONResponse {
+        if (trim($query) === '') {
+            return new JSONResponse([]);
+        }
+
+        $messages = $this->messageMapper->search($this->userId, $query, $limit, $cursor);
+        $result = [];
+        foreach ($messages as $msg) {
+            $data = $msg->jsonSerialize();
+            try {
+                $conv = $this->conversationMapper->findByIdAndUser($msg->getConversationId(), $this->userId);
+                $data['conversationTitle'] = $conv->getTitle();
+            } catch (DoesNotExistException $e) {
+                $data['conversationTitle'] = null;
+            }
+            $result[] = $data;
+        }
+
+        return new JSONResponse($result);
     }
 
     /**
@@ -380,7 +520,7 @@ class ConversationController extends Controller {
     /**
      * Call Claude with MCP tool support if available
      */
-    private function callClaude(array $messages): array {
+    private function callClaude(array $messages, ?string $systemPrompt = null): array {
         try {
             $allTools = $this->mcpClient->getAllTools();
         } catch (\Throwable $e) {
@@ -396,12 +536,12 @@ class ConversationController extends Controller {
                 function (string $name, array $input) use ($mcpClient, $mapping): array {
                     return $mcpClient->executeTool($name, $input, $mapping);
                 },
-                null,
+                $systemPrompt,
                 $this->userId,
             );
         }
 
-        return $this->claudeService->chat($messages, null, $this->userId);
+        return $this->claudeService->chat($messages, $systemPrompt, $this->userId);
     }
 
     /**
