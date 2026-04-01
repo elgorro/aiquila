@@ -11,6 +11,7 @@ use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Db\ConversationMapper;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
@@ -42,7 +43,7 @@ class ProjectController extends Controller {
      *
      * 200: List of projects with their paths
      *
-     * @return JSONResponse
+     * @return JSONResponse<Http::STATUS_OK, list<array<string, mixed>>, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -69,7 +70,7 @@ class ProjectController extends Controller {
      *
      * 200: The created project
      *
-     * @return JSONResponse
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -102,7 +103,8 @@ class ProjectController extends Controller {
      * 200: Project with paths
      * 404: Project not found
      *
-     * @return JSONResponse
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -132,7 +134,8 @@ class ProjectController extends Controller {
      * 200: Updated project
      * 404: Project not found
      *
-     * @return JSONResponse
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -168,7 +171,8 @@ class ProjectController extends Controller {
      * 200: Deletion confirmed
      * 404: Project not found
      *
-     * @return JSONResponse
+     * @return JSONResponse<Http::STATUS_OK, array{deleted: true}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -205,7 +209,9 @@ class ProjectController extends Controller {
      * 400: Invalid path type
      * 404: Project not found
      *
-     * @return JSONResponse
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -243,7 +249,8 @@ class ProjectController extends Controller {
      * 200: Deletion confirmed
      * 404: Project or path not found
      *
-     * @return JSONResponse
+     * @return JSONResponse<Http::STATUS_OK, array{deleted: true}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]

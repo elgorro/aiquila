@@ -68,6 +68,8 @@ class SettingsController extends Controller {
      *
      * @param string $api_key Personal Anthropic API key (leave empty to clear)
      * @param string $model   Preferred Claude model ID (leave empty to use admin default)
+     * @param string|null $default_system_prompt Default system prompt (null to keep unchanged)
+     * @param string|null $default_verbose Enable verbose mode by default ('1' or null to keep unchanged)
      *
      * 200: Settings saved successfully
      *

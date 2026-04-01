@@ -137,10 +137,11 @@ class ConversationController extends Controller {
     }
 
     /**
-     * Update a conversation (title)
+     * Update a conversation (title and/or project link)
      *
      * @param int $id Conversation ID
      * @param string $title New title
+     * @param int|null $projectId Project ID to link (null to clear)
      *
      * 200: Updated conversation
      * 404: Conversation not found
@@ -373,7 +374,8 @@ class ConversationController extends Controller {
      * 200: The duplicated conversation
      * 404: Conversation not found
      *
-     * @return JSONResponse
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, title: ?string, model: string}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -435,7 +437,7 @@ class ConversationController extends Controller {
      *
      * 200: Matching messages
      *
-     * @return JSONResponse
+     * @return JSONResponse<Http::STATUS_OK, list<array<string, mixed>>, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
