@@ -1,11 +1,13 @@
 <template>
 	<div style="display: contents">
 	<NcAppNavigationNew :text="t('aiquila', 'New project')"
-		@new="$emit('new-project')" />
+		@click="$emit('new-project')" />
 	<NcAppNavigationItem v-for="project in projects"
 		:key="project.id"
 		:name="editingId === project.id ? '' : project.title"
 		:class="{ active: project.id === activeProjectId }"
+		:menu-open="menuOpenId === project.id"
+		@update:menu-open="val => menuOpenId = val ? project.id : null"
 		@click="onItemClick(project.id)">
 		<template v-if="editingId === project.id" #name>
 			<input ref="renameInput"
@@ -67,6 +69,7 @@ export default {
 		return {
 			editingId: null,
 			editingTitle: '',
+			menuOpenId: null,
 		}
 	},
 	methods: {
@@ -76,6 +79,7 @@ export default {
 			this.$emit('select-project', id)
 		},
 		onStartRename(project) {
+			this.menuOpenId = null
 			this.editingId = project.id
 			this.editingTitle = project.title || ''
 			setTimeout(() => {

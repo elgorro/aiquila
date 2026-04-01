@@ -1,7 +1,7 @@
 <template>
 	<div style="display: contents">
 	<NcAppNavigationNew :text="t('aiquila', 'New chat')"
-		@new="$emit('new-chat')" />
+		@click="$emit('new-chat')" />
 	<div v-if="projects.length > 0" class="project-filter">
 		<NcSelect :model-value="activeProjectFilter"
 			:options="projectFilterOptions"
@@ -15,6 +15,8 @@
 		:key="conv.id"
 		:name="editingId === conv.id ? '' : (conv.title || t('aiquila', 'Untitled'))"
 		:class="{ active: conv.id === activeConversationId }"
+		:menu-open="menuOpenId === conv.id"
+		@update:menu-open="val => menuOpenId = val ? conv.id : null"
 		@click="onItemClick(conv.id)">
 		<template v-if="editingId === conv.id" #name>
 			<input ref="renameInput"
@@ -87,6 +89,7 @@ export default {
 		return {
 			editingId: null,
 			editingTitle: '',
+			menuOpenId: null,
 		}
 	},
 	computed: {
@@ -108,6 +111,7 @@ export default {
 			this.$emit('select-conversation', id)
 		},
 		onStartRename(conv) {
+			this.menuOpenId = null
 			this.editingId = conv.id
 			this.editingTitle = conv.title || ''
 			setTimeout(() => {
