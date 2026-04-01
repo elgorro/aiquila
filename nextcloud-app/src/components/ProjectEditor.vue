@@ -55,6 +55,29 @@
 		<p v-if="status" :class="['status-msg', statusType]">
 			{{ status }}
 		</p>
+
+		<!-- Related Chats -->
+		<div class="form-group related-chats-section">
+			<label>{{ t('aiquila', 'Related chats') }}</label>
+			<div v-if="relatedChats.length === 0" class="paths-empty">
+				{{ t('aiquila', 'No conversations linked to this project yet.') }}
+			</div>
+			<div v-for="chat in relatedChats"
+				:key="chat.id"
+				class="path-item chat-item"
+				@click="$emit('navigate-to-chat', chat.id)">
+				<ChatIcon :size="16" />
+				<span class="path-value">{{ chat.title || t('aiquila', 'Untitled') }}</span>
+			</div>
+			<div class="path-actions">
+				<NcButton type="secondary" @click="$emit('new-project-chat', project.id)">
+					<template #icon>
+						<PlusIcon :size="20" />
+					</template>
+					{{ t('aiquila', 'New chat') }}
+				</NcButton>
+			</div>
+		</div>
 	</div>
 	<NcEmptyContent v-else
 		:name="t('aiquila', 'No project selected')">
@@ -75,6 +98,8 @@ import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
+import ChatIcon from 'vue-material-design-icons/Chat.vue'
+import PlusIcon from 'vue-material-design-icons/Plus.vue'
 import { getFilePickerBuilder, FilePickerClosed } from '@nextcloud/dialogs'
 import '@nextcloud/dialogs/style.css'
 
@@ -90,14 +115,20 @@ export default {
 		NcButton,
 		NcTextField,
 		NcEmptyContent,
+		ChatIcon,
+		PlusIcon,
 	},
 	props: {
 		project: {
 			type: Object,
 			default: null,
 		},
+		conversations: {
+			type: Array,
+			default: () => [],
+		},
 	},
-	emits: ['project-updated', 'create-project'],
+	emits: ['project-updated', 'create-project', 'navigate-to-chat', 'new-project-chat'],
 	data() {
 		return {
 			form: this.initForm(),
@@ -112,6 +143,10 @@ export default {
 			return this.form.title !== this.project.title
 				|| this.form.description !== (this.project.description || '')
 				|| this.form.systemPrompt !== (this.project.systemPrompt || '')
+		},
+		relatedChats() {
+			if (!this.project) return []
+			return this.conversations.filter(c => c.projectId === this.project.id)
 		},
 	},
 	watch: {
@@ -306,6 +341,22 @@ export default {
 
 .status-msg.error {
 	color: var(--color-error);
+}
+
+.related-chats-section {
+	margin-top: 24px;
+	border-top: 1px solid var(--color-border);
+	padding-top: 16px;
+}
+
+.chat-item {
+	cursor: pointer;
+	border-radius: var(--border-radius);
+	padding: 6px 8px;
+}
+
+.chat-item:hover {
+	background: var(--color-background-hover);
 }
 
 .empty-icon {

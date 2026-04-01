@@ -55,8 +55,11 @@
 					<!-- Projects tab -->
 					<ProjectEditor v-if="activeTab === 'projects'"
 						:project="activeProject"
+						:conversations="conversations"
 						@project-updated="onProjectUpdated"
-						@create-project="onNewProject" />
+						@create-project="onNewProject"
+						@navigate-to-chat="onNavigateToChat"
+						@new-project-chat="onNewProjectChat" />
 
 					<!-- Cowork tab -->
 					<CoworkView v-if="activeTab === 'cowork'" />
@@ -111,6 +114,7 @@ import NavigationSettings from './components/NavigationSettings.vue'
 import {
 	createConversation,
 	getConversation,
+	updateConversation,
 	deleteConversation,
 	duplicateConversation,
 	listProjects,
@@ -236,6 +240,25 @@ export default {
 				}
 			} catch (err) {
 				console.error('Failed to delete project:', err)
+			}
+		},
+
+		// ── Cross-tab navigation ──────────────────────────────
+
+		onNavigateToChat(conversationId) {
+			this.activeTab = 'chat'
+			this.onSelectConversation(conversationId)
+		},
+		async onNewProjectChat(projectId) {
+			try {
+				const { data: newConv } = await createConversation()
+				const { data: updated } = await updateConversation(newConv.id, { projectId })
+				const merged = { ...newConv, ...updated }
+				this.conversations.unshift(merged)
+				this.activeTab = 'chat'
+				await this.onSelectConversation(merged.id)
+			} catch (err) {
+				console.error('Failed to create project chat:', err)
 			}
 		},
 
