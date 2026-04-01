@@ -13,24 +13,14 @@
 	</div>
 	<NcAppNavigationItem v-for="conv in filteredConversations"
 		:key="conv.id"
-		:name="editingId === conv.id ? '' : (conv.title || t('aiquila', 'Untitled'))"
+		:name="conv.title || t('aiquila', 'Untitled')"
 		:class="{ active: conv.id === activeConversationId }"
-		:menu-open="menuOpenId === conv.id"
-		@update:menu-open="val => menuOpenId = val ? conv.id : null"
-		@click="onItemClick(conv.id)">
-		<template v-if="editingId === conv.id" #name>
-			<input ref="renameInput"
-				v-model="editingTitle"
-				class="rename-input"
-				@keydown.enter="onSaveRename(conv.id)"
-				@keydown.escape="onCancelRename"
-				@blur="onSaveRename(conv.id)"
-				@click.stop />
-		</template>
+		:editable="true"
+		:edit-label="t('aiquila', 'Rename')"
+		:edit-placeholder="t('aiquila', 'Conversation name')"
+		@update:name="newName => onSaveRename(conv.id, newName)"
+		@click="$emit('select-conversation', conv.id)">
 		<template #actions>
-			<NcActionButton @click.stop="onStartRename(conv)">
-				{{ t('aiquila', 'Rename') }}
-			</NcActionButton>
 			<NcActionButton @click.stop="$emit('duplicate-conversation', conv.id)">
 				{{ t('aiquila', 'Duplicate') }}
 			</NcActionButton>
@@ -85,13 +75,6 @@ export default {
 		'conversation-renamed',
 		'update-project-filter',
 	],
-	data() {
-		return {
-			editingId: null,
-			editingTitle: '',
-			menuOpenId: null,
-		}
-	},
 	computed: {
 		filteredConversations() {
 			if (!this.activeProjectFilter) return this.conversations
@@ -106,25 +89,8 @@ export default {
 	},
 	methods: {
 		t,
-		onItemClick(id) {
-			if (this.editingId) return
-			this.$emit('select-conversation', id)
-		},
-		onStartRename(conv) {
-			this.menuOpenId = null
-			this.editingId = conv.id
-			this.editingTitle = conv.title || ''
-			setTimeout(() => {
-				const input = this.$refs.renameInput
-				const el = Array.isArray(input) ? input[0] : input
-				el?.focus()
-				el?.select()
-			}, 50)
-		},
-		async onSaveRename(id) {
-			if (this.editingId !== id) return
-			const title = this.editingTitle.trim()
-			this.editingId = null
+		async onSaveRename(id, newName) {
+			const title = newName.trim()
 			if (!title) return
 			try {
 				const { data } = await updateConversation(id, { title })
@@ -133,9 +99,6 @@ export default {
 				console.error('Rename failed:', err)
 			}
 		},
-		onCancelRename() {
-			this.editingId = null
-		},
 	},
 }
 </script>
@@ -143,17 +106,6 @@ export default {
 <style scoped>
 :deep(.app-navigation-entry.active) {
 	background-color: var(--color-primary-element-light) !important;
-}
-
-.rename-input {
-	width: 100%;
-	padding: 4px 8px;
-	border: 1px solid var(--color-primary-element);
-	border-radius: var(--border-radius);
-	font-size: 14px;
-	background: var(--color-main-background);
-	color: var(--color-main-text);
-	outline: none;
 }
 
 .project-filter {
