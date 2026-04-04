@@ -45,6 +45,14 @@
 				@paste="onPaste" />
 		</div>
 		<div class="input-actions">
+			<NcButton type="tertiary"
+				:disabled="disabled"
+				:title="t('aiquila', 'Attach files')"
+				@click="handleAddFile('')">
+				<template #icon>
+					<PaperclipIcon :size="20" />
+				</template>
+			</NcButton>
 			<NcButton type="primary"
 				:disabled="disabled || (!prompt.trim() && attachedFiles.length === 0)"
 				@click="onSend">
@@ -57,6 +65,7 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import PaperclipIcon from 'vue-material-design-icons/Paperclip.vue'
 import { getFilePickerBuilder, FilePickerClosed } from '@nextcloud/dialogs'
 import { getCurrentUser } from '@nextcloud/auth'
 import axios from '@nextcloud/axios'
@@ -108,6 +117,7 @@ export default {
 	name: 'ChatInput',
 	components: {
 		NcButton,
+		PaperclipIcon,
 	},
 	props: {
 		disabled: {
@@ -544,6 +554,8 @@ export default {
 .input-actions {
 	display: flex;
 	justify-content: flex-end;
+	align-items: center;
+	gap: 4px;
 	margin-top: 8px;
 }
 

@@ -117,15 +117,32 @@ Access at **`/apps/aiquila`**
 
 Features:
 - Interactive conversation with Claude
-- Message history during session
+- Conversation history with search
+- File and image attachments (see below)
+- Slash commands (`/add-file`, `/add-directory`, `/verbose`, `/search`, and more)
+- Markdown rendering in responses
 - Clean, responsive design
 - Quick access to settings (⚙️ icon)
 
 Usage:
 1. Navigate to `/apps/aiquila`
 2. Type your question in the text area
-3. Press **Enter** or click **Ask Claude**
+3. Press **Enter** or click **Send**
 4. See Claude's response appear in the chat history
+
+#### Attaching Files
+
+You can attach files to your message so Claude can read or analyze them:
+
+| Method | How |
+|--------|-----|
+| **Attachment button** | Click the 📎 button next to Send to open the Nextcloud file picker |
+| **Slash command** | Type `/add-file` and press Enter to open the file picker (multi-select) |
+| **Directory context** | Type `/add-directory` to attach a directory listing |
+| **Drag & drop** | Drag files from your desktop or browser into the chat input area |
+| **Clipboard paste** | Press `Ctrl+V` to paste an image from your clipboard |
+
+Attached files appear as chips above the text input (with thumbnails for images). Pasted and dropped images are automatically uploaded to the `/AIquila Uploads` folder in your Nextcloud files.
 
 ### 2. Nextcloud Assistant Integration
 

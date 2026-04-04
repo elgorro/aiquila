@@ -36,7 +36,7 @@ AIquila includes a [Model Context Protocol](https://modelcontextprotocol.io) ser
 
 Made possible by [Claude](https://www.anthropic.com/claude) from [Anthropic](https://www.anthropic.com) and the [Nextcloud](https://nextcloud.com) open-source community.
     ]]></description>
-    <version>0.2.11</version>
+    <version>0.2.12</version>
     <licence>AGPL-3.0-or-later</licence>
     <author mail="aiquila@mailbox.org">elgorro</author>
     <documentation>
