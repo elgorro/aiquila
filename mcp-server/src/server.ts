@@ -1,93 +1,30 @@
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { logger } from './logger.js';
-
-// Import system tools
-import { fileSystemTools } from './tools/system/files.js';
-import { statusTools } from './tools/system/status.js';
-import { appsTools } from './tools/system/apps.js';
-import { securityTools } from './tools/system/security.js';
-import { occTools } from './tools/system/occ.js';
-import { tagsTools } from './tools/system/tags.js';
-import { searchTools } from './tools/system/search.js';
-
-// Import app-specific tools
-import { tasksTools } from './tools/apps/tasks.js';
-import { calendarTools } from './tools/apps/calendar.js';
-import { cookbookTools } from './tools/apps/cookbook.js';
-import { deckTools } from './tools/apps/deck.js';
-import { notesTools } from './tools/apps/notes.js';
-import { aiquilaTools } from './tools/apps/aiquila.js';
-import { usersTools } from './tools/apps/users.js';
-import { groupsTools } from './tools/apps/groups.js';
-import { circlesTools } from './tools/apps/circles.js';
-import { photosTools } from './tools/apps/photos.js';
-import { sharesTools } from './tools/apps/shares.js';
-import { contactsTools } from './tools/apps/contacts.js';
-import { mailTools } from './tools/apps/mail.js';
-import { bookmarksTools } from './tools/apps/bookmarks.js';
-import { mapsTools } from './tools/apps/maps.js';
-import { assistantTools } from './tools/apps/assistant.js';
-import { translateTools } from './tools/apps/translate.js';
-import { talkTools } from './tools/apps/talk.js';
-import { userStatusTools } from './tools/apps/user-status.js';
-import { absenceTools } from './tools/apps/absence.js';
-import { notificationsTools } from './tools/apps/notifications.js';
-import { trashTools } from './tools/apps/trash.js';
-import { versionsTools } from './tools/apps/versions.js';
-import { projectsTools } from './tools/apps/projects.js';
+import { getFilteredToolSets } from './tool-registry.js';
 
 const SERVER_NAME = 'aiquila';
 const _require = createRequire(import.meta.url);
 export const SERVER_VERSION: string = _require('../package.json').version;
 
-const allToolSets = [
-  fileSystemTools,
-  statusTools,
-  calendarTools,
-  tasksTools,
-  cookbookTools,
-  deckTools,
-  notesTools,
-  aiquilaTools,
-  usersTools,
-  groupsTools,
-  circlesTools,
-  photosTools,
-  appsTools,
-  occTools,
-  securityTools,
-  sharesTools,
-  contactsTools,
-  mailTools,
-  bookmarksTools,
-  mapsTools,
-  tagsTools,
-  searchTools,
-  assistantTools,
-  translateTools,
-  talkTools,
-  userStatusTools,
-  absenceTools,
-  notificationsTools,
-  trashTools,
-  versionsTools,
-  projectsTools,
-];
-
 /**
- * Create a fully-configured McpServer with all tools registered.
+ * Create a fully-configured McpServer with filtered tools registered.
+ *
+ * Tools are filtered based on the MCP_TOOLS env var (explicit whitelist)
+ * or auto-detected from enabled Nextcloud apps at startup.
  *
  * Returns a new instance each time because the MCP SDK Protocol
  * class throws if connect() is called more than once.
  */
-export function createServer(): McpServer {
+export async function createServer(): Promise<McpServer> {
   const server = new McpServer({
     name: SERVER_NAME,
     version: SERVER_VERSION,
   });
 
-  for (const toolSet of allToolSets) {
+  const toolSets = await getFilteredToolSets();
+
+  for (const toolSet of toolSets) {
     for (const tool of toolSet) {
       const name = tool.name;
       server.registerTool(
