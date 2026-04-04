@@ -178,7 +178,7 @@ export async function startHttp(): Promise<void> {
   // operation and allows distributed clients (like Claude.ai) to connect from
   // multiple IPs without needing a shared session.
   const handleMcpRequest = async (req: any, res: any) => {
-    const mcpServer = createServer();
+    const mcpServer = await createServer();
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await mcpServer.connect(transport);
     res.on('close', () => {

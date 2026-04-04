@@ -4,7 +4,7 @@ import { logger } from '../logger.js';
 import { fetchStatus } from '../client/ocs.js';
 
 export async function startStdio(): Promise<void> {
-  const server = createServer();
+  const server = await createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   logger.info('AIquila MCP server running (stdio transport)');
