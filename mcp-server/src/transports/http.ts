@@ -239,6 +239,18 @@ export async function startHttp(): Promise<void> {
       })
     );
 
+    // Fallback: serve protected resource metadata at the root well-known path too,
+    // so clients that use the server root URL (without /mcp) can discover the resource.
+    // The SDK only mounts at /.well-known/oauth-protected-resource/mcp per RFC 9728.
+    app.get('/.well-known/oauth-protected-resource', (_req, res) => {
+      res.json({
+        resource: new URL(MCP_PATH, issuerUrl).href,
+        authorization_servers: [issuerUrl],
+        scopes_supported: ['mcp:tools', 'mcp:resources', 'mcp:prompts'],
+        resource_documentation: 'https://github.com/elgorro/aiquila',
+      });
+    });
+
     // Parse URL-encoded form submissions from the login page
     app.use(express.urlencoded({ extended: false }));
 
