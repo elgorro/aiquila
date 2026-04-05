@@ -278,9 +278,8 @@ export async function startHttp(): Promise<void> {
     })();
     app.post('/auth/login', loginRateLimit, loginHandler(provider));
 
-    // Protect /mcp with Bearer token auth
-    app.all(
-      MCP_PATH,
+    // Protect /mcp (and / as alias) with Bearer token auth
+    const authMiddleware = [
       (req: any, res: any, next: any) => {
         res.on('finish', () => {
           if (res.statusCode === 401 || res.statusCode === 403) {
@@ -296,12 +295,16 @@ export async function startHttp(): Promise<void> {
       async (req: any, res: any) => {
         logger.debug({ method: req.method, rpcMethod: req.body?.method }, '[mcp] Request received');
         await handleMcpRequest(req, res);
-      }
-    );
+      },
+    ];
+    app.all(MCP_PATH, ...authMiddleware);
+    app.all('/', ...authMiddleware);
   } else {
-    app.all(MCP_PATH, async (req: any, res: any) => {
+    const mcpHandler = async (req: any, res: any) => {
       await handleMcpRequest(req, res);
-    });
+    };
+    app.all(MCP_PATH, mcpHandler);
+    app.all('/', mcpHandler);
   }
 
   app.listen(port, host, () => {
