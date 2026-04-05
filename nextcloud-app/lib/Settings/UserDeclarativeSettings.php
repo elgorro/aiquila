@@ -26,7 +26,7 @@ class UserDeclarativeSettings implements IDeclarativeSettingsForm {
 			'description' => 'Override the default Claude model for your requests.',
 			'fields' => [
 				[
-					'id' => 'model',
+					'id' => 'user_model',
 					'title' => 'Preferred Model',
 					'description' => 'Leave on "(admin default)" to use the instance-wide model.',
 					'type' => DeclarativeSettingsTypes::SELECT,
