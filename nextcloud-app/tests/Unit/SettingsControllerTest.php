@@ -47,7 +47,7 @@ class SettingsControllerTest extends TestCase {
         $this->credentials->method('hasApiKey')->with('testuser')->willReturn(true);
         $this->config->method('getUserValue')
             ->willReturnMap([
-                ['testuser', 'aiquila', 'model', '', ''],
+                ['testuser', 'aiquila', 'user_model', '', ''],
                 ['testuser', 'aiquila', 'default_system_prompt', '', ''],
                 ['testuser', 'aiquila', 'default_verbose', '0', '0'],
             ]);
@@ -63,7 +63,7 @@ class SettingsControllerTest extends TestCase {
         $this->credentials->method('hasApiKey')->willReturn(false);
         $this->config->method('getUserValue')
             ->willReturnMap([
-                ['testuser', 'aiquila', 'model', '', ClaudeModels::HAIKU_4_5],
+                ['testuser', 'aiquila', 'user_model', '', ClaudeModels::HAIKU_4_5],
                 ['testuser', 'aiquila', 'default_system_prompt', '', ''],
                 ['testuser', 'aiquila', 'default_verbose', '0', '0'],
             ]);
@@ -105,7 +105,7 @@ class SettingsControllerTest extends TestCase {
 
         $this->config->expects($this->once())
             ->method('setUserValue')
-            ->with('testuser', 'aiquila', 'model', ClaudeModels::OPUS_4_6);
+            ->with('testuser', 'aiquila', 'user_model', ClaudeModels::OPUS_4_6);
 
         $response = $this->ctrl->save('my-api-key', ClaudeModels::OPUS_4_6);
 
@@ -120,7 +120,7 @@ class SettingsControllerTest extends TestCase {
 
         $this->config->expects($this->once())
             ->method('deleteUserValue')
-            ->with('testuser', 'aiquila', 'model');
+            ->with('testuser', 'aiquila', 'user_model');
 
         $response = $this->ctrl->save('some-key', '');
         $this->assertEquals('ok', $response->getData()['status']);

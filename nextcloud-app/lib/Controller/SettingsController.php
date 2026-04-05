@@ -46,7 +46,7 @@ class SettingsController extends Controller {
     #[OpenAPI]
     public function get(): JSONResponse {
         $hasUserKey = $this->credentials->hasApiKey($this->userId);
-        $userModel  = $this->config->getUserValue($this->userId, $this->appName, 'model', '');
+        $userModel  = $this->config->getUserValue($this->userId, $this->appName, 'user_model', '');
 
         $liveModels      = $this->claudeService->listModels($this->userId);
         $availableModels = $liveModels ?? ClaudeModels::getAllModels();
@@ -92,9 +92,9 @@ class SettingsController extends Controller {
         }
 
         if ($model !== '') {
-            $this->config->setUserValue($this->userId, $this->appName, 'model', $model);
+            $this->config->setUserValue($this->userId, $this->appName, 'user_model', $model);
         } else {
-            $this->config->deleteUserValue($this->userId, $this->appName, 'model');
+            $this->config->deleteUserValue($this->userId, $this->appName, 'user_model');
         }
 
         if ($default_system_prompt !== null) {
