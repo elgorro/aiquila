@@ -218,7 +218,7 @@ class ClaudeServiceTest extends TestCase {
 
     public function testGetModelReturnsUserPreferenceOverAdminModel(): void {
         $this->config->method('getUserValue')
-            ->willReturnMap([['testuser', 'aiquila', 'model', '', 'claude-haiku-4-5-20251001']]);
+            ->willReturnMap([['testuser', 'aiquila', 'user_model', '', 'claude-haiku-4-5-20251001']]);
 
         $this->assertEquals('claude-haiku-4-5-20251001', $this->service->getModel('testuser'));
     }
