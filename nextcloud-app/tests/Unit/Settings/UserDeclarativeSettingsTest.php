@@ -27,7 +27,7 @@ class UserDeclarativeSettingsTest extends TestCase {
 
 	public function testModelField(): void {
 		$fields = $this->settings->getSchema()['fields'];
-		$model = $this->findField($fields, 'model');
+		$model = $this->findField($fields, 'user_model');
 
 		$this->assertNotNull($model, 'model field should exist');
 		$this->assertSame(DeclarativeSettingsTypes::SELECT, $model['type']);
