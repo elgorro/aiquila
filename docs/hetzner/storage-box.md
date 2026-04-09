@@ -2,10 +2,7 @@
 
 ← [Overview](README.md)
 
-> **Alpha feature.** Storage Box integration works but has not been hardened through
-> extensive production use. Test it with non-critical data before relying on it for
-> anything important. Manual steps are provided below for servers that were provisioned
-> without `--storage-box`.
+> Manual steps are provided below for servers that were provisioned without `--storage-box`.
 
 ---
 
@@ -18,14 +15,12 @@ re-provisioning, they are the recommended way to keep Nextcloud data across rebu
 
 When `--storage-box` is supplied to `aiquila-hetzner create`, the CLI:
 
-1. Retrieves Storage Box details from the Hetzner Robot API.
+1. Retrieves Storage Box details via the Hetzner Cloud API.
 2. Enables Samba/CIFS access if it is not already on.
 3. Sets the CIFS mount password (auto-generated 24-char string if `--storage-box-password` is omitted).
-4. Enables SSH access and uploads an SSH public key labeled `aiquila` (auto-generated
-   ed25519 pair if `--storage-box-ssh-key` is omitted).
-5. Mounts the share at `/mnt/storagebox` on the server via CIFS.
-6. Writes a persistent `/etc/fstab` entry so the share is remounted on reboot.
-7. On `nextcloud` and `full` stacks: creates `/mnt/storagebox/nextcloud/` and
+4. Mounts the share at `/mnt/storagebox` on the server via CIFS.
+5. Writes a persistent `/etc/fstab` entry so the share is remounted on reboot.
+6. On `nextcloud` and `full` stacks: creates `/mnt/storagebox/nextcloud/` and
    symlinks `/opt/aiquila/data/nc` → `/mnt/storagebox/nextcloud` so Nextcloud data
    lands on the Storage Box automatically.
 
@@ -38,18 +33,16 @@ When `--storage-box` is supplied to `aiquila-hetzner create`, the CLI:
 
 ### Prerequisites
 
-- A Hetzner Storage Box purchased from the [Robot panel](https://robot.hetzner.com).
-- Hetzner Robot API credentials (username + password from the Robot panel).
+- A Hetzner Storage Box purchased from the [Cloud Console](https://console.hetzner.cloud)
+  or [Robot panel](https://robot.hetzner.com).
+- A Hetzner Cloud API token (`$HCLOUD_TOKEN`) — the same token used for server provisioning.
 
 ### CLI flags
 
 | Flag | Env var | Default | Description |
 |------|---------|---------|-------------|
-| `--storage-box <id>` | — | — | Storage Box ID (integer, from Robot panel) |
-| `--robot-user <user>` | `HETZNER_ROBOT_USER` | — | Robot API username |
-| `--robot-password <pass>` | `HETZNER_ROBOT_PASSWORD` | — | Robot API password |
+| `--storage-box <id>` | — | — | Storage Box ID (integer) |
 | `--storage-box-password <pass>` | `HETZNER_STORAGE_BOX_PASSWORD` | auto-generated | CIFS mount password |
-| `--storage-box-ssh-key <path>` | — | auto-generated | Path to SSH public key file to add |
 
 ### Example
 
@@ -58,39 +51,16 @@ aiquila-hetzner create \
   --stack nextcloud \
   --nc-domain nc.example.com \
   --nc-admin-password secret \
-  --storage-box 1234567 \
-  --robot-user robot_XXXXXXXX \
-  --robot-password YOUR_ROBOT_PASSWORD
+  --storage-box 1234567
 ```
 
 ### Config file
 
 ```yaml
 storage_box: 1234567
-robot_user: robot_XXXXXXXX
-robot_password: YOUR_ROBOT_PASSWORD
 # Optional:
 storage_box_password: custom-cifs-password   # auto-generated if omitted
-storage_box_ssh_key: ~/.ssh/storagebox.pub   # auto-generated ed25519 pair if omitted
 ```
-
-### Auto-generated SSH key pair
-
-When `--storage-box-ssh-key` is omitted, the CLI generates an ed25519 key pair and
-saves it to the current working directory:
-
-```
-storagebox-1234567       ← private key (mode 0600)
-storagebox-1234567.pub   ← public key
-```
-
-The private key can be used to access the Storage Box directly over SFTP:
-
-```bash
-sftp -P 23 -i storagebox-1234567 <login>@<host>
-```
-
-The login and host are printed in the provisioning summary.
 
 ---
 
@@ -99,25 +69,17 @@ The login and host are printed in the provisioning summary.
 Use these steps to mount a Storage Box on a server that was already provisioned
 **without** `--storage-box`, or to reproduce the setup manually.
 
-### Step 1 — Enable Samba/CIFS in the Robot panel
+### Step 1 — Enable Samba/CIFS
 
-1. Log in to [robot.hetzner.com](https://robot.hetzner.com).
-2. Go to **Storage Boxes** → select your box.
-3. Under **Settings**, enable **Samba**.
-4. Note the **Server** hostname (e.g. `u123456.your-storagebox.de`) and
-   **Login** (e.g. `u123456`).
+In the [Cloud Console](https://console.hetzner.cloud) or
+[Robot panel](https://robot.hetzner.com), navigate to your Storage Box settings
+and enable **Samba**. Note the **Server** hostname (e.g. `u123456.your-storagebox.de`)
+and **Login** (e.g. `u123456`).
 
 ### Step 2 — Set a CIFS password
 
-In the Robot panel, under **Storage Box → Settings**, set a password.
-This is separate from your Robot account password.
-
-```bash
-# Or via the Robot API:
-curl -u robot_XXXXXXXX:ROBOT_PASSWORD \
-  -X POST https://robot-ws.your-server.de/storagebox/1234567/password \
-  -d "password=YOUR_CIFS_PASSWORD"
-```
+Set a password for your Storage Box in the Cloud Console or Robot panel.
+This is separate from your Hetzner account password.
 
 ### Step 3 — Install cifs-utils on the server
 
@@ -204,9 +166,6 @@ mount | grep storagebox
 
 # Check available space
 df -h /mnt/storagebox
-
-# SFTP access (requires SSH enabled in Robot panel + key uploaded)
-sftp -P 23 u123456@u123456.your-storagebox.de
 ```
 
 ---

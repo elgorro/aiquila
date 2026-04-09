@@ -101,4 +101,4 @@ billable API call. Use `--noconfirm` to skip the prompt in CI/CD pipelines.
 | Audit log | [audit-log.md](audit-log.md) |
 | Traefik (reverse proxy & TLS) | [traefik.md](traefik.md) |
 | CrowdSec (intrusion prevention) | [crowdsec.md](crowdsec.md) |
-| Storage Box (alpha) | [storage-box.md](storage-box.md) |
+| Storage Box | [storage-box.md](storage-box.md) |

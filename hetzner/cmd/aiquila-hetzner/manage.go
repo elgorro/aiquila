@@ -84,7 +84,7 @@ func runList(_ *cobra.Command, _ []string) error {
 			srv.Name,
 			srv.ID,
 			srv.ServerType.Name,
-			srv.Datacenter.Location.Name,
+			srv.Location.Name,
 			serverStatusIcon(srv.Status),
 			srv.PublicNet.IPv4.IP.String(),
 		)

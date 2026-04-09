@@ -12,12 +12,12 @@ import (
 // Create creates a Hetzner Cloud Volume in the same location as srv,
 // attaches it to the server, and returns the volume and its device path.
 func Create(ctx context.Context, client *hcloud.Client, srv *hcloud.Server, name string, sizeGB int, labels map[string]string) (*hcloud.Volume, string, error) {
-	fmt.Printf("  Creating volume %q (%d GB) in %s\n", name, sizeGB, srv.Datacenter.Location.Name)
+	fmt.Printf("  Creating volume %q (%d GB) in %s\n", name, sizeGB, srv.Location.Name)
 
 	result, _, err := client.Volume.Create(ctx, hcloud.VolumeCreateOpts{
 		Name:     name,
 		Size:     sizeGB,
-		Location: srv.Datacenter.Location,
+		Location: srv.Location,
 		Labels:   labels,
 	})
 	if err != nil {
