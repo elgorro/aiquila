@@ -74,6 +74,8 @@ aiquila-hetzner rebuild --config hetzner/examples/deploy-mcp.yaml
 | `swap` | string | `--swap` | Swap file size, e.g. `2G` |
 | `volume_size` | int | `--volume-size` | Cloud Volume size in GB |
 | `luks` | bool | `--luks` | LUKS-encrypt the volume |
+| `storage_box` | int | `--storage-box` | Storage Box ID for CIFS mount |
+| `storage_box_password` | string | `--storage-box-password` | CIFS password (auto-generated if omitted) |
 | `network` | string | `--network` | Attach to an existing private network |
 | `labels` | []string | `--label` | Resource labels `key=value` (repeatable) |
 | `dns_zone` | string | `--dns-zone` | Hetzner DNS zone for auto-record creation |
@@ -146,6 +148,4 @@ directly.
 | `NEXTCLOUD_URL` | `create`, `rebuild` (MCP/full stacks) | Falls back to active profile |
 | `NEXTCLOUD_USER` | `create`, `rebuild` (MCP/full stacks) | Falls back to active profile |
 | `NEXTCLOUD_PASSWORD` | `create`, `rebuild` (MCP/full stacks) | Falls back to active profile |
-| `HETZNER_ROBOT_USER` | `create --storage-box` | Hetzner Robot API username |
-| `HETZNER_ROBOT_PASSWORD` | `create --storage-box` | Hetzner Robot API password |
 | `HETZNER_STORAGE_BOX_PASSWORD` | `create --storage-box` | CIFS mount password for storage box |

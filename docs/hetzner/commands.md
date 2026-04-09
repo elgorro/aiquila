@@ -84,6 +84,8 @@ Run `aiquila-hetzner options` to list all server types, locations, and images av
 |------|---------|-------------|
 | `--volume-size` | 0 (disabled) | Cloud Volume size in GB, mounted at `/opt/aiquila` |
 | `--luks` | false | LUKS-encrypt the volume (requires `--volume-size`; experimental) |
+| `--storage-box` | 0 (disabled) | Storage Box ID — mount at `/mnt/storagebox` via CIFS |
+| `--storage-box-password` | auto-generated | CIFS password (`$HETZNER_STORAGE_BOX_PASSWORD`) |
 | `--swap` | — | Create swap file (e.g. `1G`, `2G`) |
 
 **Services & extras:**

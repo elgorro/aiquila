@@ -55,10 +55,7 @@ var (
 	createVolumeSize int
 	createLUKS       bool
 	createStorageBox         int
-	createRobotUser          string
-	createRobotPassword      string
 	createStorageBoxPassword string
-	createStorageBoxSSHKey   string
 	createDryRun     bool
 	createNoConfirm  bool
 	createLabels        []string
@@ -158,15 +155,9 @@ func buildCreateCmd() *cobra.Command {
 	cmd.Flags().IntVar(&createVolumeSize, "volume-size", 0, "Create Hetzner Cloud Volume (GB) and mount at /opt/aiquila")
 	cmd.Flags().BoolVar(&createLUKS, "luks", false, "[EXPERIMENTAL] LUKS-encrypt the Cloud Volume (requires --volume-size)")
 	cmd.Flags().IntVar(&createStorageBox, "storage-box", 0,
-		"Hetzner Storage Box ID — mount at /mnt/storagebox via CIFS (requires --robot-user/--robot-password)")
-	cmd.Flags().StringVar(&createRobotUser, "robot-user", "",
-		"Hetzner Robot API username (default: $HETZNER_ROBOT_USER)")
-	cmd.Flags().StringVar(&createRobotPassword, "robot-password", "",
-		"Hetzner Robot API password (default: $HETZNER_ROBOT_PASSWORD)")
+		"Hetzner Storage Box ID — mount at /mnt/storagebox via CIFS")
 	cmd.Flags().StringVar(&createStorageBoxPassword, "storage-box-password", "",
 		"CIFS password for the storage box (default: auto-generate; env: $HETZNER_STORAGE_BOX_PASSWORD)")
-	cmd.Flags().StringVar(&createStorageBoxSSHKey, "storage-box-ssh-key", "",
-		"Path to SSH public key file to add to the storage box (auto-generate ed25519 key pair if omitted)")
 	cmd.Flags().BoolVar(&createDryRun, "dry-run", false, "Print what would be created without making any API calls")
 	cmd.Flags().StringArrayVar(&createLabels, "label", nil, "Resource label key=value (repeatable, applied to server/firewall/key/volume)")
 	cmd.Flags().StringVar(&createDNSZone, "dns-zone", "", "Hetzner DNS zone (e.g. example.com) — creates <name>.<zone> A record after server IP is known")
@@ -275,17 +266,8 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	if createStorageBox == 0 && fileCfg.StorageBox != 0 {
 		createStorageBox = fileCfg.StorageBox
 	}
-	if createRobotUser == "" {
-		createRobotUser = fileCfg.RobotUser
-	}
-	if createRobotPassword == "" {
-		createRobotPassword = fileCfg.RobotPassword
-	}
 	if createStorageBoxPassword == "" {
 		createStorageBoxPassword = fileCfg.StorageBoxPassword
-	}
-	if createStorageBoxSSHKey == "" {
-		createStorageBoxSSHKey = fileCfg.StorageBoxSSHKey
 	}
 	if createNetworkName == "" && fileCfg.Network != "" {
 		createNetworkName = fileCfg.Network
@@ -320,12 +302,6 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 		packages = createPackages
 	}
 
-	if createRobotUser == "" {
-		createRobotUser = os.Getenv("HETZNER_ROBOT_USER")
-	}
-	if createRobotPassword == "" {
-		createRobotPassword = os.Getenv("HETZNER_ROBOT_PASSWORD")
-	}
 	if createStorageBoxPassword == "" {
 		createStorageBoxPassword = os.Getenv("HETZNER_STORAGE_BOX_PASSWORD")
 	}
@@ -373,10 +349,6 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	if createLUKS && createVolumeSize == 0 {
 		fmt.Fprintln(os.Stderr, "WARNING: --luks requires --volume-size; ignoring --luks")
 		createLUKS = false
-	}
-
-	if createStorageBox > 0 && (createRobotUser == "" || createRobotPassword == "") {
-		return fmt.Errorf("--storage-box requires --robot-user and --robot-password (or $HETZNER_ROBOT_USER/$HETZNER_ROBOT_PASSWORD)")
 	}
 
 	if createName == "" {
@@ -518,16 +490,29 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 		var storageBoxLogin, storageBoxHost, sbPassword string
 		if createStorageBox > 0 {
 			fmt.Println("\n── Storage Box")
-			robotClient := storagebox.NewClient(createRobotUser, createRobotPassword)
-			box, err := robotClient.GetStorageBox(createStorageBox)
+			box, _, err := client.StorageBox.GetByID(ctx, int64(createStorageBox))
 			if err != nil {
 				return fmt.Errorf("get storage box %d: %w", createStorageBox, err)
 			}
-			fmt.Printf("  Storage Box #%d: %s (%s, %s)\n", box.ID, box.Product, box.Location, box.Server)
-			if !box.Samba {
+			locName := ""
+			if box.Location != nil {
+				locName = box.Location.Name
+			}
+			typeName := ""
+			if box.StorageBoxType != nil {
+				typeName = box.StorageBoxType.Description
+			}
+			fmt.Printf("  Storage Box #%d: %s (%s, %s)\n", box.ID, typeName, locName, box.Server)
+			if !box.AccessSettings.SambaEnabled {
 				fmt.Println("  Enabling Samba/CIFS access...")
-				if err := robotClient.EnableSamba(box.ID); err != nil {
+				action, _, err := client.StorageBox.UpdateAccessSettings(ctx, box, hcloud.StorageBoxUpdateAccessSettingsOpts{
+					SambaEnabled: hcloud.Ptr(true),
+				})
+				if err != nil {
 					return fmt.Errorf("enable samba: %w", err)
+				}
+				if err := client.Action.WaitForFunc(ctx, nil, action); err != nil {
+					return fmt.Errorf("wait for samba enable: %w", err)
 				}
 			}
 			if createStorageBoxPassword != "" {
@@ -535,48 +520,17 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 			} else {
 				sbPassword = generatePassword(24)
 			}
-			if err := robotClient.SetPassword(box.ID, sbPassword); err != nil {
+			pwAction, _, err := client.StorageBox.ResetPassword(ctx, box, hcloud.StorageBoxResetPasswordOpts{
+				Password: sbPassword,
+			})
+			if err != nil {
 				return fmt.Errorf("set storage box password: %w", err)
 			}
-			storageBoxLogin = box.Login
+			if err := client.Action.WaitForFunc(ctx, nil, pwAction); err != nil {
+				return fmt.Errorf("wait for password reset: %w", err)
+			}
+			storageBoxLogin = box.Username
 			storageBoxHost = box.Server
-
-			// Resolve SSH public key: use provided file, or auto-generate ed25519 pair.
-			var sshPubKey string
-			if createStorageBoxSSHKey != "" {
-				keyData, err := os.ReadFile(createStorageBoxSSHKey)
-				if err != nil {
-					return fmt.Errorf("read SSH public key %s: %w", createStorageBoxSSHKey, err)
-				}
-				sshPubKey = strings.TrimSpace(string(keyData))
-			} else {
-				pub, priv, err := storagebox.GenerateSSHKeyPair()
-				if err != nil {
-					return fmt.Errorf("generate SSH key pair: %w", err)
-				}
-				privPath := fmt.Sprintf("storagebox-%d", createStorageBox)
-				pubPath := privPath + ".pub"
-				if err := os.WriteFile(privPath, priv, 0600); err != nil {
-					return fmt.Errorf("write private key: %w", err)
-				}
-				if err := os.WriteFile(pubPath, pub, 0644); err != nil {
-					return fmt.Errorf("write public key: %w", err)
-				}
-				fmt.Printf("  Generated SSH key pair: %s (private), %s (public)\n", privPath, pubPath)
-				fmt.Printf("  Connect: ssh -p23 -i %s %s@%s\n", privPath, storageBoxLogin, storageBoxHost)
-				sshPubKey = strings.TrimSpace(string(pub))
-			}
-
-			if !box.SSH {
-				fmt.Println("  Enabling SSH access...")
-				if err := robotClient.EnableSSH(box.ID); err != nil {
-					return fmt.Errorf("enable SSH on storage box: %w", err)
-				}
-			}
-			fmt.Println("  Adding SSH public key...")
-			if err := robotClient.AddSSHKey(box.ID, "aiquila", sshPubKey); err != nil {
-				return fmt.Errorf("add SSH key to storage box: %w", err)
-			}
 		}
 
 		// ── 13. Wait for SSH ────────────────────────────────────────────────────
@@ -1138,10 +1092,10 @@ func printFullSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 // serverPriceStr returns a formatted "€X.XXXX/hr  €X.XX/mo" string for the
 // server type at its actual location, or an empty string if unavailable.
 func serverPriceStr(srv *hcloud.Server) string {
-	if srv.ServerType == nil || srv.Datacenter == nil || srv.Datacenter.Location == nil {
+	if srv.ServerType == nil || srv.Location == nil {
 		return ""
 	}
-	locName := srv.Datacenter.Location.Name
+	locName := srv.Location.Name
 	for _, p := range srv.ServerType.Pricings {
 		if p.Location != nil && p.Location.Name == locName {
 			hourly, err1 := strconv.ParseFloat(p.Hourly.Gross, 64)
