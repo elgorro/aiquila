@@ -9,8 +9,8 @@ import { logger } from './logger.js';
  * Provides Model Context Protocol integration for Nextcloud
  *
  * Transport selection via MCP_TRANSPORT environment variable:
- *   - "stdio" (default): Standard input/output transport for Claude Desktop
- *   - "http": Streamable HTTP transport for Docker/network deployment
+ *   - "stdio" (default): Standard I/O transport for local MCP clients (e.g. Claude Desktop, Cursor)
+ *   - "http": Streamable HTTP transport for remote/network MCP clients
  */
 async function main() {
   const transport = process.env.MCP_TRANSPORT || 'stdio';

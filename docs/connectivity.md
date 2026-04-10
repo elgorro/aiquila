@@ -4,10 +4,11 @@
 
 ```
 ┌─────────────────────┐
-│   Claude App        │
-│  (Mobile/Desktop)   │
+│   MCP Client        │
+│  (Claude, Cursor,   │
+│   VS Code, …)       │
 └─────────┬───────────┘
-          │ MCP Protocol (stdio)
+          │ MCP Protocol (stdio or HTTP)
           ▼
 ┌─────────────────────┐
 │   MCP Server        │
@@ -60,13 +61,15 @@ Location:
 }
 ```
 
-### Using with Claude Mobile App
+### Using with HTTP-based MCP Clients
 
-The MCP server must be accessible from your device. Options:
+Clients like Claude.ai, Claude Mobile, Cursor, and VS Code extensions connect over HTTP rather than stdio. The MCP server must be accessible from the client. Options:
 
-1. **Local network**: Run MCP server on a machine accessible from your phone
-2. **Remote server**: Deploy MCP server on your Nextcloud host or a VPS
-3. **Tailscale/VPN**: Connect mobile device to your home network
+1. **Local network**: Run the MCP server on a machine accessible on your network
+2. **Remote server**: Deploy the MCP server on your Nextcloud host or a VPS
+3. **Tailscale/VPN**: Connect your client device to your home network
+
+HTTP-based clients also require OAuth 2.0 authentication. See the **[OAuth 2.0 Setup Guide](mcp/oauth.md)** for setup instructions.
 
 ## Nextcloud App Configuration
 

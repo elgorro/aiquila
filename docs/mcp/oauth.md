@@ -1,17 +1,15 @@
-# OAuth 2.0 Authentication for Claude.ai
+# OAuth 2.0 Authentication
 
-Claude.ai's MCP connector requires OAuth 2.0 before it will connect to a remote MCP server. AIquila's HTTP transport includes a built-in OAuth 2.1 provider that handles this automatically — no external identity service needed.
-
-Authentication is **opt-in** via a single environment variable, so existing stdio and Claude Desktop setups are completely unaffected.
+AIquila's HTTP transport includes a built-in OAuth 2.1 provider so any MCP client that supports OAuth can connect to a remote server without an external identity service. Authentication is **opt-in** — existing stdio and Claude Desktop setups are completely unaffected.
 
 ## How It Works
 
-When OAuth is enabled, the flow looks like this:
+When OAuth is enabled, the standard flow looks like this:
 
-1. **Claude.ai discovers** your server via the standard OAuth metadata endpoint (`/.well-known/oauth-authorization-server`)
-2. **Claude.ai redirects you** to a Nextcloud login form hosted by the MCP server
+1. **The MCP client discovers** your server via the OAuth metadata endpoint (`/.well-known/oauth-authorization-server`)
+2. **The client redirects you** to a Nextcloud login form hosted by the MCP server
 3. **You enter your Nextcloud credentials** — the server validates them against your Nextcloud instance
-4. **An access token (JWT) is issued** and stored by Claude.ai
+4. **An access token (JWT) is issued** and stored by the client
 5. **All subsequent MCP requests** carry this token automatically
 
 Your Nextcloud credentials are only used during login and are never stored by the MCP server.
@@ -19,7 +17,7 @@ Your Nextcloud credentials are only used during login and are never stored by th
 ## Prerequisites
 
 - AIquila MCP server running in HTTP transport mode (e.g. via [Standalone Docker](standalone-docker.md))
-- A **public HTTPS URL** for the MCP server — Claude.ai must be able to reach it over the internet with a valid TLS certificate
+- A **public HTTPS URL** for the MCP server — the client must be able to reach it over the internet with a valid TLS certificate
 - `openssl` available locally to generate a signing key
 
 ## Setup
@@ -48,21 +46,41 @@ MCP_AUTH_ISSUER=https://mcp.example.com
 | `MCP_AUTH_SECRET` | When auth on | HS256 signing key. Min 32 characters. Generate with `openssl rand -hex 32` |
 | `MCP_AUTH_ISSUER` | When auth on | Public HTTPS base URL of your MCP server (no trailing slash) |
 
-`MCP_AUTH_ISSUER` must exactly match the public URL Claude.ai uses to reach your server. It appears in the OAuth metadata that Claude.ai fetches, so any mismatch will break the flow.
+`MCP_AUTH_ISSUER` must exactly match the public URL your MCP client uses to reach your server. It appears in the OAuth metadata that clients fetch, so any mismatch will break the flow.
 
-### 3. Enable dynamic client registration
+### 3. Configure client registration
 
-Claude.ai self-registers as an OAuth client on first connect. Enable it:
+Choose one of two approaches:
+
+**Option A — Dynamic registration (recommended for most clients)**
+
+Enable dynamic registration so clients can self-register on first connect:
 
 ```env
 MCP_REGISTRATION_ENABLED=true
+# Optional: require a token to gate who may register
+MCP_REGISTRATION_TOKEN=<openssl rand -hex 32>
 ```
 
-Without this, Claude.ai cannot register itself and the OAuth flow will fail at the first step.
+This is the standard OAuth 2.0 approach and works with Claude.ai, Cursor, VS Code extensions, and any other client that supports RFC 7591.
+
+**Option B — Static pre-seeded client**
+
+For clients that do not support dynamic registration, pre-seed a client ID and redirect URI:
+
+```env
+MCP_CLIENT_ID=<stable-identifier>
+MCP_CLIENT_REDIRECT_URIS=<your-client-callback-url>
+```
+
+Check your MCP client's documentation for its callback URL. Example:
+- **Claude.ai / Claude Code**: `https://claude.ai/api/mcp/auth_callback`
+
+You can combine both options — a pre-seeded client and dynamic registration simultaneously.
 
 ### 4. Ensure your server is reachable over HTTPS
 
-Claude.ai requires a valid (non-self-signed) TLS certificate. Options:
+Most MCP clients require a valid (non-self-signed) TLS certificate. Options:
 
 - **Caddy with a real domain** — Point a domain at your server's IP, update the Caddyfile to use your domain instead of `local_certs`, and Caddy will obtain a Let's Encrypt certificate automatically.
 - **nginx + certbot** — See [nginx + Let's Encrypt](standalone-docker.md#option-b-nginx--certbot) in the standalone Docker guide.
@@ -112,7 +130,11 @@ curl -i https://mcp.example.com/mcp
 
 You should get `401 Unauthorized`. Without a valid Bearer token, all `/mcp` requests are blocked.
 
-### 8. Add the server to Claude.ai
+## Client-Specific Setup
+
+### Claude.ai / Claude Code
+
+Claude.ai uses dynamic registration. Enable it with `MCP_REGISTRATION_ENABLED=true`.
 
 In Claude.ai, go to **Settings** → **Integrations** → **Add MCP Server** and enter:
 
@@ -121,6 +143,30 @@ https://mcp.example.com/mcp
 ```
 
 Claude.ai will walk you through the OAuth login flow. When the Nextcloud login form appears, enter the credentials for the Nextcloud account you want Claude.ai to act as.
+
+In Claude Code (CLI), add the server:
+
+```bash
+claude mcp add --transport http https://mcp.example.com/mcp
+```
+
+### Cursor
+
+Cursor supports MCP via HTTP and uses dynamic registration. Enable `MCP_REGISTRATION_ENABLED=true`.
+
+In Cursor, add the server URL `https://mcp.example.com/mcp` in **Settings → MCP** (or your `~/.cursor/mcp.json`). Cursor will initiate the OAuth flow on first use.
+
+### VS Code (MCP extensions)
+
+VS Code MCP extensions (e.g. Continue, GitHub Copilot with MCP support) also use dynamic registration. Enable `MCP_REGISTRATION_ENABLED=true` and add the server URL in the extension's settings.
+
+### Other MCP clients
+
+For any MCP client that supports OAuth 2.0 with PKCE:
+
+1. Enable `MCP_REGISTRATION_ENABLED=true` (dynamic registration, recommended), **or** configure `MCP_CLIENT_ID` + `MCP_CLIENT_REDIRECT_URIS` with your client's callback URL.
+2. Point your client at `https://mcp.example.com/mcp`.
+3. Follow the OAuth flow prompted by your client.
 
 ## Token Lifetime
 
@@ -144,9 +190,9 @@ Tokens are stored in memory only — restarting the container invalidates all ac
 
 The OAuth router only mounts when `MCP_AUTH_ENABLED=true`. Check the container logs for the "OAuth 2.0 authentication enabled" line. If it's absent, the env var is not being read — verify your `.env` file and restart.
 
-### Claude.ai shows "unable to connect" or "invalid issuer"
+### Client shows "unable to connect" or "invalid issuer"
 
-`MCP_AUTH_ISSUER` must exactly match the URL Claude.ai uses to reach the server, including scheme and any subdomain. Compare the value in `/.well-known/oauth-authorization-server` → `"issuer"` with the URL you entered in Claude.ai.
+`MCP_AUTH_ISSUER` must exactly match the URL your MCP client uses to reach the server, including scheme and any subdomain. Compare the value in `/.well-known/oauth-authorization-server` → `"issuer"` with the URL you entered in your client.
 
 ### Login form appears but credentials are rejected
 
@@ -165,8 +211,18 @@ Error: MCP_AUTH_SECRET must be set when MCP_AUTH_ENABLED=true
 
 Set the missing variable in `.env` and restart.
 
-### Claude.ai reconnects frequently
+### Client reconnects frequently
 
-Claude.ai uses multiple backend worker IPs. In AIquila < 0.1.36, the stateful session model rejected connections from workers that didn't share session state, causing `400 Bad Request` on reconnects. Upgrade to **0.1.36+**, which uses per-request stateless transport — each request is handled independently with no session affinity required.
+Some clients (e.g. Claude.ai) connect from multiple backend IPs. AIquila uses per-request stateless transport — each request is handled independently with no session affinity required, so this is handled automatically.
 
-If you're already on 0.1.36+ and still see frequent reconnects, the container may be restarting and clearing in-memory tokens. Check `make logs` for crash/restart cycles.
+If you see frequent reconnects, the container may be restarting and clearing in-memory tokens. Check `make logs` for crash/restart cycles.
+
+### Pre-seeded client has no redirect URIs (warning in logs)
+
+If you see:
+
+```
+[config] MCP_CLIENT_ID is set but MCP_CLIENT_REDIRECT_URIS is empty
+```
+
+Set `MCP_CLIENT_REDIRECT_URIS` to your client's callback URL, or switch to dynamic registration with `MCP_REGISTRATION_ENABLED=true`.

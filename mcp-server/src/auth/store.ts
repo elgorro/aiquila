@@ -128,12 +128,13 @@ export class ClientsStore implements OAuthRegisteredClientsStore {
 
   /**
    * Creates a ClientsStore configured from environment variables:
-   *   MCP_CLIENT_ID  → pre-seeded static public PKCE client (for Claude.ai / Claude Desktop)
-   *   MCP_REGISTRATION_ENABLED=true      → enable dynamic POST /register
+   *   MCP_CLIENT_ID              → pre-seeded static public PKCE client (any MCP client)
+   *   MCP_CLIENT_REDIRECT_URIS   → comma-separated redirect URIs for the pre-seeded client
+   *   MCP_REGISTRATION_ENABLED=true → enable dynamic POST /register
    *
    * Note: no client_secret is stored — the SDK's clientAuth middleware requires the caller
    * to send client_secret whenever client.client_secret is set, which public OAuth clients
-   * (e.g. Claude.ai) never do. Security is enforced via PKCE instead.
+   * never do. Security is enforced via PKCE instead.
    */
   static fromEnv(): ClientsStore {
     const preseeded: OAuthClientInformationFull[] = [];
@@ -146,7 +147,17 @@ export class ClientsStore implements OAuthRegisteredClientsStore {
             .split(',')
             .map((u) => u.trim())
             .filter(Boolean)
-        : ['https://claude.ai/api/mcp/auth_callback'];
+        : [];
+
+      if (redirectUris.length === 0) {
+        logger.warn(
+          { clientId: id },
+          '[config] MCP_CLIENT_ID is set but MCP_CLIENT_REDIRECT_URIS is empty — ' +
+            'the pre-seeded client will not be able to complete the OAuth flow. ' +
+            "Set MCP_CLIENT_REDIRECT_URIS to your client's callback URL, or enable " +
+            'dynamic registration with MCP_REGISTRATION_ENABLED=true.'
+        );
+      }
 
       preseeded.push({
         client_id: id,

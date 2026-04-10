@@ -6,8 +6,8 @@ Technical architecture overview of the AIquila MCP Server for developers working
 
 The MCP server is a TypeScript/Node.js implementation of the [Model Context Protocol](https://modelcontextprotocol.io/) that exposes Nextcloud as a set of AI tools. It supports two deployment modes:
 
-- **stdio** — Claude Desktop (local, single-process)
-- **HTTP** — Claude.ai and other network clients (Docker, self-hosted)
+- **stdio** — local MCP clients (Claude Desktop, Cursor in stdio mode, etc.)
+- **HTTP** — remote/network MCP clients (Claude.ai, Cursor, VS Code, etc.) via Docker or self-hosted
 
 ## Technology Stack
 
@@ -57,12 +57,12 @@ mcp-server/src/
 
 Transport is selected at startup via the `MCP_TRANSPORT` environment variable (`stdio` by default).
 
-### stdio (`StdioServerTransport`) — Claude Desktop
+### stdio (`StdioServerTransport`) — local MCP clients
 
 A single long-lived `McpServer` instance is created at startup and connected to `StdioServerTransport`. JSON-RPC messages flow over stdin/stdout.
 
 ```
-Claude Desktop
+MCP Client (e.g. Claude Desktop)
      │
      │  JSON-RPC over stdin/stdout
      ▼
@@ -75,7 +75,7 @@ McpServer (single instance, lifetime = process)
 Tool handlers → Nextcloud APIs
 ```
 
-### HTTP (`StreamableHTTPServerTransport`) — Claude.ai / network clients
+### HTTP (`StreamableHTTPServerTransport`) — remote/network MCP clients
 
 **Per-request stateless**: a new `McpServer` + `StreamableHTTPServerTransport` is created for every incoming HTTP request, then torn down when the response closes.
 
@@ -91,11 +91,11 @@ const handleMcpRequest = async (req, res) => {
 
 Key points:
 - `sessionIdGenerator: undefined` — disables session tracking; no client affinity required
-- Required for Claude.ai, which connects from multiple backend IPs
+- Allows distributed clients (e.g. Claude.ai, Cursor) to connect from multiple IPs without a shared session
 - `SSEServerTransport` (MCP protocol version 2024-11-05) was deprecated in May 2025 — AIquila does not use it
 
 ```
-Claude.ai (multiple IPs)
+MCP Client (e.g. Claude.ai, Cursor, VS Code)
      │
      │  HTTPS (via Traefik/Caddy)
      ▼
@@ -119,30 +119,30 @@ When `MCP_AUTH_ENABLED=true`, the server runs a built-in OAuth 2.1 + PKCE author
 ### OAuth Flow
 
 ```
-1. Claude.ai  →  GET /.well-known/oauth-authorization-server
-                 (discovery: endpoints, capabilities)
+1. MCP Client  →  GET /.well-known/oauth-authorization-server
+                  (discovery: endpoints, capabilities)
 
-2. Claude.ai  →  POST /register  (if MCP_REGISTRATION_ENABLED=true)
-                 (dynamic client registration)
+2. MCP Client  →  POST /register  (if MCP_REGISTRATION_ENABLED=true)
+                  (dynamic client registration)
 
-3. Claude.ai  →  GET /authorize?response_type=code&code_challenge=...
-                 (PKCE auth code request)
+3. MCP Client  →  GET /authorize?response_type=code&code_challenge=...
+                  (PKCE auth code request)
 
-4. Server     →  200 HTML login form (POST /auth/login)
+4. Server      →  200 HTML login form (POST /auth/login)
 
-5. User       →  POST /auth/login  {username, password, code_challenge, ...}
+5. User        →  POST /auth/login  {username, password, code_challenge, ...}
 
-6. Server     →  validates credentials against OCS API
-                 /ocs/v2.php/cloud/user
+6. Server      →  validates credentials against OCS API
+                  /ocs/v2.php/cloud/user
 
-7. Server     →  302 redirect to client redirect_uri?code=<uuid>
+7. Server      →  302 redirect to client redirect_uri?code=<uuid>
 
-8. Claude.ai  →  POST /token  {code, code_verifier}
-                 (PKCE token exchange)
+8. MCP Client  →  POST /token  {code, code_verifier}
+                  (PKCE token exchange)
 
-9. Server     →  {access_token: <HS256 JWT, 1h>, refresh_token: <UUID, 24h>}
+9. Server      →  {access_token: <HS256 JWT, 1h>, refresh_token: <UUID, 24h>}
 
-10. Claude.ai  →  POST /mcp  Authorization: Bearer <access_token>
+10. MCP Client →  POST /mcp  Authorization: Bearer <access_token>
                   (every MCP request verified via requireBearerAuth middleware)
 ```
 
@@ -167,16 +167,17 @@ Authorization codes are in-memory only (5-min TTL, lost on restart by design).
 
 Two options for OAuth clients:
 
-**Static pre-seeded client** (for Claude.ai):
-```
-MCP_CLIENT_ID=<uuid>
-MCP_CLIENT_REDIRECT_URIS=https://claude.ai/api/mcp/auth_callback  # default
-```
-
-**Dynamic registration** (for any client):
+**Dynamic registration** (recommended — any MCP client):
 ```
 MCP_REGISTRATION_ENABLED=true
 MCP_REGISTRATION_TOKEN=<secret>  # optional: gates POST /register with Bearer token
+```
+
+**Static pre-seeded client** (for clients that do not support dynamic registration):
+```
+MCP_CLIENT_ID=<stable-identifier>
+MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
+# Example: https://claude.ai/api/mcp/auth_callback for Claude.ai / Claude Code
 ```
 
 ## Environment Variables
@@ -213,7 +214,7 @@ MCP_REGISTRATION_TOKEN=<secret>  # optional: gates POST /register with Bearer to
 | `MCP_REGISTRATION_ENABLED` | No | `false` | Enable dynamic client registration |
 | `MCP_REGISTRATION_TOKEN` | No | — | Bearer token to gate `POST /register` |
 | `MCP_CLIENT_ID` | No | — | Pre-seeded static client ID |
-| `MCP_CLIENT_REDIRECT_URIS` | No | `https://claude.ai/api/mcp/auth_callback` | Comma-separated redirect URIs for static client |
+| `MCP_CLIENT_REDIRECT_URIS` | No | `""` (empty) | Comma-separated redirect URIs for static client |
 
 ## Architecture Layers
 
@@ -260,20 +261,20 @@ Implements `OAuthServerProvider` from the MCP SDK. The provider is instantiated 
 
 ## Data Flow Examples
 
-### stdio (Claude Desktop)
+### stdio (local MCP client)
 
 ```
-User message → Claude → tools/call JSON-RPC
+User message → MCP client → tools/call JSON-RPC
   → stdin → StdioServerTransport → McpServer
   → tool handler → Nextcloud API
   → response → McpServer → StdioServerTransport → stdout
-  → Claude → user
+  → MCP client → user
 ```
 
-### HTTP + OAuth (Claude.ai)
+### HTTP + OAuth (remote MCP client)
 
 ```
-Claude.ai → HTTPS → Express router
+MCP client → HTTPS → Express router
   → requireBearerAuth (verify HS256 JWT)
   → per-request McpServer + StreamableHTTPServerTransport
   → tool handler → Nextcloud API

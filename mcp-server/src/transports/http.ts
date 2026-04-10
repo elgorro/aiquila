@@ -29,8 +29,8 @@ const TLS_CERT_ERROR_CODES = new Set([
 /**
  * Advisory TLS certificate check — purely informational, never crashes the server.
  *
- * Claude.ai and Claude mobile require a CA-trusted cert. If the issuer URL still
- * has a self-signed or untrusted cert at startup this is logged as a warning so
+ * Most MCP clients require a CA-trusted cert. If the issuer URL still has a
+ * self-signed or untrusted cert at startup this is logged as a warning so
  * operators know to fix it, but the MCP server continues running normally.
  *
  * Rationale: crashing or health-check-failing on a bad cert creates a deadlock on
@@ -78,8 +78,8 @@ async function checkIssuerTls(issuerUrl: string): Promise<void> {
         logger.warn(
           { issuer: issuerUrl, code },
           `[startup] TLS certificate not yet trusted (${code}). ` +
-            `Claude.ai and Claude mobile require a CA-trusted certificate — self-signed certs ` +
-            `will cause Claude to refuse the connection. ` +
+            `Most MCP clients require a CA-trusted certificate — self-signed certs ` +
+            `may cause clients to refuse the connection. ` +
             `Use Let's Encrypt (via Traefik or Caddy with a real domain) or mount a CA-signed cert. ` +
             `The MCP server will keep running; re-deploy once the cert is valid.`
         );
@@ -175,8 +175,8 @@ export async function startHttp(): Promise<void> {
 
   // Stateless mode: create a new transport + server per request so each MCP
   // call is handled independently. This is required by the SDK for stateless
-  // operation and allows distributed clients (like Claude.ai) to connect from
-  // multiple IPs without needing a shared session.
+  // operation and allows distributed clients (like Claude.ai, Cursor, etc.) to
+  // connect from multiple IPs without needing a shared session.
   const handleMcpRequest = async (req: any, res: any) => {
     const mcpServer = await createServer();
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
