@@ -2,9 +2,9 @@
 
 Choose the path that matches how you want to use AIquila.
 
-## Path 1: Claude Desktop / Claude Code (simplest)
+## Path 1: Local MCP Client (simplest)
 
-Give Claude direct access to your Nextcloud — files, calendar, tasks, contacts, mail, bookmarks, maps, notes, recipes, and more.
+Give any MCP client (Claude Desktop, Claude Code, Cursor, VS Code, etc.) direct access to your Nextcloud — files, calendar, tasks, contacts, mail, bookmarks, maps, notes, recipes, and more.
 
 **Prerequisites:** Node.js 20+, a Nextcloud instance, a Nextcloud app password.
 
@@ -12,7 +12,7 @@ Give Claude direct access to your Nextcloud — files, calendar, tasks, contacts
 # 1. Run with npx (no clone needed)
 npx aiquila-mcp
 
-# 2. Or add to Claude Desktop config (~/.config/claude/claude_desktop_config.json):
+# 2. Or add to your MCP client config (example: Claude Desktop ~/.config/claude/claude_desktop_config.json):
 ```
 
 ```json
@@ -32,17 +32,17 @@ npx aiquila-mcp
 ```
 
 ```bash
-# 3. Restart Claude Desktop
-# 4. Ask Claude: "List my Nextcloud files"
+# 3. Restart your MCP client
+# 4. Ask: "List my Nextcloud files"
 ```
 
 **[Full MCP Setup Guide →](mcp/setup.md)**
 
 ---
 
-## Path 2: Claude.ai (remote MCP)
+## Path 2: Remote MCP Client (Docker + OAuth)
 
-Connect Claude.ai to your Nextcloud via Docker + OAuth 2.0. Requires a publicly accessible server.
+Connect remote MCP clients (Claude.ai, Cursor, VS Code, etc.) to your Nextcloud via Docker + OAuth 2.0. Requires a publicly accessible server.
 
 ```bash
 # 1. Clone and configure
@@ -54,7 +54,7 @@ nano .env   # Set NEXTCLOUD_URL, credentials, and MCP_AUTH_* vars
 # 2. Start the stack
 make up
 
-# 3. Add the MCP server URL in Claude.ai settings
+# 3. Add the MCP server URL in your client's settings
 # 4. Complete OAuth login when prompted
 ```
 
@@ -110,19 +110,19 @@ cd hetzner && go build -o aiquila-hetzner .
 
 ---
 
-## Path 5: Claude Mobile App (voice)
+## Path 5: Mobile MCP Client (voice)
 
-Use Claude on your phone with voice input to manage Nextcloud hands-free — list tasks, create notes, check your calendar, all by speaking.
+Use an MCP-compatible mobile app with voice input to manage Nextcloud hands-free — list tasks, create notes, check your calendar, all by speaking.
 
-**Prerequisites:** Same as Path 2 (Docker + OAuth on a publicly accessible server), plus the Claude mobile app (iOS/Android).
+**Prerequisites:** Same as Path 2 (Docker + OAuth on a publicly accessible server), plus a mobile MCP client (e.g. Claude app for iOS/Android).
 
 ```bash
 # 1. Set up the MCP server with OAuth (see Path 2)
 #    → Standalone Docker Guide + OAuth Setup
 
-# 2. Install the Claude app on iOS or Android
+# 2. Install an MCP-compatible app on your phone
 
-# 3. In the Claude app, go to Settings → MCP Servers
+# 3. In the app, go to MCP server settings
 #    Add your MCP server URL (e.g. https://mcp.example.com/mcp)
 #    Complete the OAuth login when prompted
 
@@ -131,9 +131,9 @@ Use Claude on your phone with voice input to manage Nextcloud hands-free — lis
 
 **Voice input options:**
 
-- **FUTO Voice** (recommended, open-source) — Install from [F-Droid](https://f-droid.org) or Play Store, set as your default keyboard, then tap the microphone icon in the Claude app to dictate.
-- **Google Assistant** — Use "Hey Google, ask Claude..." or the share-to-Claude workflow on Android.
+- **FUTO Voice** (recommended, open-source) — Install from [F-Droid](https://f-droid.org) or Play Store, set as your default keyboard, then tap the microphone icon to dictate.
 - **iOS Dictation** — Use the built-in dictation button on the iOS keyboard.
+- **Android voice input** — Use your preferred voice keyboard.
 
 **Example voice commands:**
 - "List my tasks for today"
@@ -149,11 +149,11 @@ Use Claude on your phone with voice input to manage Nextcloud hands-free — lis
 
 | I want to... | Path |
 |--------------|------|
-| Use Claude Desktop/Code with Nextcloud | **Path 1** — `npx aiquila-mcp` |
-| Use Claude.ai with Nextcloud | **Path 2** — Docker + OAuth |
+| Use a local MCP client (Claude Desktop, Cursor, etc.) | **Path 1** — `npx aiquila-mcp` |
+| Use a remote MCP client (Claude.ai, VS Code, etc.) | **Path 2** — Docker + OAuth |
 | Add AI features inside Nextcloud | **Path 3** — Nextcloud App |
 | Deploy everything on a fresh server | **Path 4** — Hetzner |
-| Use Claude on my phone with voice | **Path 5** — Claude Mobile + Voice |
+| Use an MCP client on my phone with voice | **Path 5** — Mobile + Voice |
 | Use multiple paths together | All paths work independently and together |
 
 ## What's next?

@@ -327,13 +327,13 @@ describe('myNewTool', () => {
    npm run build
    ```
 
-2. **Update Claude Desktop config** (if needed)
+2. **Update your MCP client config** (if needed)
 
-3. **Restart Claude Desktop**
+3. **Restart your MCP client**
 
 4. **Test the tool:**
    ```
-   Ask Claude: "Use my new tool with parameter X"
+   Ask: "Use my new tool with parameter X"
    ```
 
 ## Common Patterns
@@ -378,7 +378,7 @@ inputSchema: PathSchema,  // Reuse common schemas
 1. Tool is exported in module array
 2. Module is imported in `index.ts`
 3. Server built successfully (`npm run build`)
-4. Claude Desktop restarted
+4. MCP client restarted
 
 ### Type Errors
 

@@ -1,15 +1,15 @@
 # AIquila MCP Server Documentation
 
-Welcome to the AIquila Model Context Protocol (MCP) Server documentation. This server enables Claude Desktop and other MCP clients to interact with your Nextcloud instance through a standardized protocol.
+Welcome to the AIquila Model Context Protocol (MCP) Server documentation. This server enables any MCP-compatible client to interact with your Nextcloud instance through a standardized protocol.
 
 ## What is MCP?
 
-The Model Context Protocol (MCP) is an open standard developed by Anthropic that enables AI assistants to connect to external data sources and tools. The AIquila MCP Server implements this protocol to provide seamless integration between Claude and Nextcloud.
+The Model Context Protocol (MCP) is an open standard developed by Anthropic that enables AI assistants to connect to external data sources and tools. The AIquila MCP Server implements this protocol to provide seamless integration between MCP clients and Nextcloud.
 
 ## Quick Links
 
 - **[Setup Guide](setup.md)** - Installation and configuration
-- **[OAuth 2.0 for Claude.ai](oauth.md)** - Connect Claude.ai with OAuth authentication
+- **[OAuth 2.0](oauth.md)** - OAuth authentication for remote MCP clients
 - **[MCP-Connector Integration](mcp-connector.md)** - Use AIquila via the Anthropic Messages API (beta)
 - **[Tools Reference](#tools-reference)** - Available tools and their usage
 - **[Development](development/)** - Guides for extending the server
@@ -302,70 +302,70 @@ For developers looking to extend the server, see:
 
 ### Working with Files
 ```
-Ask Claude: "List my documents folder in Nextcloud"
-Ask Claude: "Create a file called meeting-notes.md in /Documents"
-Ask Claude: "Read the contents of /Documents/project-plan.md"
+Ask your AI assistant: "List my documents folder in Nextcloud"
+Ask your AI assistant: "Create a file called meeting-notes.md in /Documents"
+Ask your AI assistant: "Read the contents of /Documents/project-plan.md"
 ```
 
 ### Managing Tasks
 ```
-Ask Claude: "Create a task 'Review pull requests' in my personal task list"
-Ask Claude: "Show me all my task lists"
+Ask your AI assistant: "Create a task 'Review pull requests' in my personal task list"
+Ask your AI assistant: "Show me all my task lists"
 ```
 
 ### Adding Recipes
 ```
-Ask Claude: "Add a recipe for chocolate chip cookies to my cookbook"
+Ask your AI assistant: "Add a recipe for chocolate chip cookies to my cookbook"
 ```
 
 ### Creating Notes
 ```
-Ask Claude: "Create a note with title 'Ideas' and content 'New project brainstorm'"
+Ask your AI assistant: "Create a note with title 'Ideas' and content 'New project brainstorm'"
 ```
 
 ### Managing Users
 ```
-Ask Claude: "List all Nextcloud users"
-Ask Claude: "Get information about user alice"
-Ask Claude: "Disable user bob"
-Ask Claude: "Enable user charlie"
+Ask your AI assistant: "List all Nextcloud users"
+Ask your AI assistant: "Get information about user alice"
+Ask your AI assistant: "Disable user bob"
+Ask your AI assistant: "Enable user charlie"
 ```
 
 ### Managing Groups
 ```
-Ask Claude: "List all groups"
-Ask Claude: "Show me who's in the admin group"
-Ask Claude: "Add alice to the developers group"
-Ask Claude: "Remove bob from the marketing group"
+Ask your AI assistant: "List all groups"
+Ask your AI assistant: "Show me who's in the admin group"
+Ask your AI assistant: "Add alice to the developers group"
+Ask your AI assistant: "Remove bob from the marketing group"
 ```
 
 ### System Monitoring
 ```
-Ask Claude: "Check Nextcloud system status"
-Ask Claude: "Run setup checks on my Nextcloud"
-Ask Claude: "What version of Nextcloud am I running?"
+Ask your AI assistant: "Check Nextcloud system status"
+Ask your AI assistant: "Run setup checks on my Nextcloud"
+Ask your AI assistant: "What version of Nextcloud am I running?"
 ```
 
 ### Managing Apps
 ```
-Ask Claude: "List all installed Nextcloud apps"
-Ask Claude: "Enable the tasks app"
-Ask Claude: "Disable the survey app"
-Ask Claude: "Get info about the photos app"
+Ask your AI assistant: "List all installed Nextcloud apps"
+Ask your AI assistant: "Enable the tasks app"
+Ask your AI assistant: "Disable the survey app"
+Ask your AI assistant: "Get info about the photos app"
 ```
 
 ### Security & Integrity
 ```
-Ask Claude: "Check Nextcloud core integrity"
-Ask Claude: "Verify the tasks app hasn't been modified"
-Ask Claude: "Run security integrity checks"
+Ask your AI assistant: "Check Nextcloud core integrity"
+Ask your AI assistant: "Verify the tasks app hasn't been modified"
+Ask your AI assistant: "Run security integrity checks"
 ```
 
 ### Auditing Shares
 ```
-Ask Claude: "List all file shares"
-Ask Claude: "Show me shares for user alice"
-Ask Claude: "Audit all public link shares"
+Ask your AI assistant: "List all file shares"
+Ask your AI assistant: "Show me shares for user alice"
+Ask your AI assistant: "Audit all public link shares"
 ```
 
 ## Getting Help

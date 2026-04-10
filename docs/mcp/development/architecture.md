@@ -10,7 +10,7 @@ The AIquila MCP Server is built with a modular, scalable architecture that separ
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Claude Desktop / MCP Client              │
+│                          MCP Client                          │
 └───────────────────────────────┬─────────────────────────────┘
                                 │ stdio (JSON-RPC)
 ┌───────────────────────────────▼─────────────────────────────┐
@@ -372,11 +372,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 ## Communication Flow
 
-### 1. Claude Desktop → MCP Server
+### 1. MCP Client → MCP Server
 
 ```
-1. User asks Claude: "List my files"
-2. Claude Desktop determines which tool to use
+1. User asks: "List my files"
+2. The MCP client determines which tool to use
 3. Sends JSON-RPC request over stdio:
    {
      "method": "tools/call",
@@ -411,8 +411,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 ```
 1. Server packages response
 2. Sends JSON-RPC response over stdio
-3. Claude Desktop receives result
-4. Claude presents to user in natural language
+3. MCP client receives result
+4. Client presents result to user in natural language
 ```
 
 ## Configuration Management

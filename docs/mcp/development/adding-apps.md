@@ -544,7 +544,7 @@ npm test
 ### 3. Manual Testing
 
 1. Build: `npm run build`
-2. Restart Claude Desktop
+2. Restart your MCP client
 3. Test tools through conversation
 
 ## Troubleshooting

@@ -346,7 +346,7 @@ Need help? Check out these resources:
 
 ## Next Steps
 
-- [MCP Server Setup](../mcp/setup.md) - Allow Claude Desktop to access your Nextcloud files
+- [MCP Server Setup](../mcp/setup.md) - Connect MCP clients to your Nextcloud
 - [Internal API Guide](../internal-api.md) - Integrate AIquila into your own apps
 - [Docker Development](../dev/docker-setup.md) - Set up complete development environment
 

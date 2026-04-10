@@ -107,7 +107,7 @@ LOG_LEVEL=debug npm run dev
 cd mcp-server
 npm update
 npm run build
-# Restart Claude Desktop
+# Restart your MCP client
 ```
 
 **Nextcloud App:**

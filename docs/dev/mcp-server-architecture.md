@@ -31,7 +31,7 @@ mcp-server/src/
 ├── server.ts            # McpServer factory + tool registration
 ├── logger.ts            # pino → stderr
 ├── transports/
-│   ├── stdio.ts         # StdioServerTransport (Claude Desktop)
+│   ├── stdio.ts         # StdioServerTransport (local MCP clients)
 │   └── http.ts          # Express app + StreamableHTTPServerTransport + auth middleware
 ├── auth/
 │   ├── provider.ts      # NextcloudOAuthProvider — JWT sign/verify, code issuance

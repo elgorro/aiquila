@@ -52,14 +52,14 @@ For better security, create a Nextcloud app password:
 
 | Protocol | URL | Notes |
 |----------|-----|-------|
-| HTTPS | `https://localhost:3340/mcp` | Self-signed (dev only — not usable with Claude.ai) |
+| HTTPS | `https://localhost:3340/mcp` | Self-signed (dev only — most remote clients reject self-signed certs) |
 | HTTP | `http://localhost:3339/mcp` | Direct, no TLS |
 
 ## MCP Client Configuration
 
-### Claude Desktop (Remote HTTP)
+### Local MCP Client (Remote HTTP)
 
-For Claude Desktop connecting to the dockerized MCP server:
+For a local MCP client (e.g. Claude Desktop) connecting to the dockerized MCP server:
 
 ```json
 {
@@ -71,11 +71,11 @@ For Claude Desktop connecting to the dockerized MCP server:
 }
 ```
 
-### Claude.ai (OAuth required)
+### Remote MCP Clients (OAuth required)
 
-> **⚠ Claude.ai requires a CA-trusted certificate — self-signed certs will not work.**
-> The default setup serves `localhost:3340` with a self-signed cert. Claude.ai and Claude
-> mobile silently reject self-signed connections. For Claude.ai you need a public domain
+> **⚠ Most remote MCP clients require a CA-trusted certificate — self-signed certs will not work.**
+> The default setup serves `localhost:3340` with a self-signed cert. Remote clients
+> typically reject self-signed connections. You need a public domain
 > with a Let's Encrypt (or other CA-signed) certificate.
 >
 > #### Option A: Caddy (automatic Let's Encrypt)
@@ -114,7 +114,7 @@ For Claude Desktop connecting to the dockerized MCP server:
 > proxy_read_timeout 3600s;
 > ```
 
-Claude.ai requires OAuth 2.0 authentication before it will connect to a remote MCP server. AIquila includes a built-in OAuth provider — enable it by setting three extra variables in `.env`:
+Remote MCP clients require OAuth 2.0 authentication to connect. AIquila includes a built-in OAuth provider — enable it by setting three extra variables in `.env`:
 
 ```env
 MCP_AUTH_ENABLED=true
@@ -122,7 +122,7 @@ MCP_AUTH_SECRET=<run: openssl rand -hex 32>
 MCP_AUTH_ISSUER=https://mcp.example.com   # your public HTTPS URL
 ```
 
-Then restart and add `https://mcp.example.com/mcp` in Claude.ai under **Settings → Integrations → Add MCP Server**.
+Then restart and add `https://mcp.example.com/mcp` in your MCP client's settings.
 
 See the **[OAuth 2.0 Setup Guide](oauth.md)** for the full walkthrough, including HTTPS requirements, token lifetimes, and troubleshooting.
 
