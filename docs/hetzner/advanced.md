@@ -156,9 +156,9 @@ and what to expect from `rebuild`.
 | `MCP_AUTH_ENABLED` | static `true` | OAuth 2.0 enabled |
 | `MCP_AUTH_SECRET` | auto 64-char hex | JWT signing key |
 | `MCP_AUTH_ISSUER` | `https://<domain>` | OAuth issuer URL |
-| `MCP_CLIENT_ID` | static `aiquila-claude` | OAuth client ID |
+| `MCP_CLIENT_ID` | empty | OAuth client ID (set for static pre-seeded client) |
 | `MCP_CLIENT_SECRET` | auto 64-char hex | OAuth client secret |
-| `MCP_CLIENT_REDIRECT_URIS` | static | Claude.ai callback URL |
+| `MCP_CLIENT_REDIRECT_URIS` | empty | Redirect URIs for pre-seeded client |
 | `MCP_REGISTRATION_ENABLED` | static `true` | Allow dynamic client registration |
 | `MCP_REGISTRATION_TOKEN` | auto 32-char hex | Token required for dynamic registration |
 | `MCP_TRUST_PROXY` | static `true` | Trust Traefik reverse-proxy headers |

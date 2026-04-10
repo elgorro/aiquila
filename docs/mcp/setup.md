@@ -1,13 +1,13 @@
 # AIquila MCP Server Setup Guide
 
-This guide will walk you through setting up the AIquila MCP Server to connect Claude Desktop (or other MCP clients) to your Nextcloud instance.
+This guide will walk you through setting up the AIquila MCP Server to connect any MCP-compatible client to your Nextcloud instance.
 
 ## Prerequisites
 
 - **Node.js** 20 or higher (LTS)
 - **Nextcloud** instance with WebDAV access
 - **Nextcloud credentials** (URL, username, password)
-- **Claude Desktop** or another MCP-compatible client
+- **MCP-compatible client** (Claude Desktop, Claude Code, Cursor, VS Code, etc.)
 
 ## Installation
 
@@ -77,19 +77,18 @@ For better security, use Nextcloud **App Passwords** instead of your main passwo
 4. Name it "MCP Server" or similar
 5. Use this generated password for `NEXTCLOUD_PASSWORD`
 
-## Claude Desktop Configuration
+## MCP Client Configuration
 
-### 1. Locate Claude Desktop Config
+### Stdio Client Setup (Claude Desktop, Cursor, etc.)
 
-The configuration file location depends on your operating system:
+Most local MCP clients use stdio transport. Below is the configuration format — check your client's documentation for the config file location.
 
+**Claude Desktop config locations:**
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 - **Linux**: `~/.config/Claude/claude_desktop_config.json`
 
-### 2. Add AIquila MCP Server
-
-Edit the configuration file to add the AIquila MCP server:
+Add the AIquila MCP server to your client's config:
 
 ```json
 {
@@ -109,7 +108,7 @@ Edit the configuration file to add the AIquila MCP server:
 
 **Important**: Replace `/absolute/path/to/aiquila` with the actual absolute path on your system.
 
-### 3. Alternative: Using npm Script
+### Alternative: Using npm Script
 
 Instead of `node dist/index.js`, you can use the npm start script:
 
@@ -130,12 +129,12 @@ Instead of `node dist/index.js`, you can use the npm start script:
 }
 ```
 
-### 4. Restart Claude Desktop
+### Restart Your Client
 
 After saving the configuration:
-1. Quit Claude Desktop completely
-2. Restart Claude Desktop
-3. The MCP server will automatically start when Claude Desktop launches
+1. Quit your MCP client completely
+2. Restart it
+3. The MCP server will automatically start when the client launches
 
 ## Verification
 
@@ -150,7 +149,7 @@ If successful, you should see a list of your Nextcloud files.
 
 ### View Available Tools
 
-In Claude Desktop, you can check which tools are available by asking:
+You can check which tools are available by asking:
 ```
 What Nextcloud tools are available?
 ```
@@ -163,7 +162,7 @@ You should see 70+ tools across categories including file operations, calendar, 
 
 **Problem**: "Missing Nextcloud credentials" error
 
-**Solution**: Ensure all three environment variables are set correctly in your Claude Desktop config.
+**Solution**: Ensure all three environment variables are set correctly in your MCP client config.
 
 ---
 
@@ -206,12 +205,12 @@ node --version
 
 ### Runtime Issues
 
-**Problem**: Tools not appearing in Claude Desktop
+**Problem**: Tools not appearing in your MCP client
 
 **Solution**:
-1. Check Claude Desktop logs (Help → Show Logs)
+1. Check your client's logs for MCP errors
 2. Verify the MCP server path in config is absolute
-3. Restart Claude Desktop completely
+3. Restart your MCP client completely
 
 ---
 
@@ -268,7 +267,7 @@ For active development with hot reload:
 ```bash
 cd mcp-server
 
-# stdio mode (default) - for Claude Desktop
+# stdio mode (default) - for local MCP clients
 npm run dev
 
 # HTTP mode - for network/Docker-style access

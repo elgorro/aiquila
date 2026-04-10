@@ -38,9 +38,9 @@
 | `NEXTCLOUD_USER` | Yes | Nextcloud username |
 | `NEXTCLOUD_PASSWORD` | Yes | App password (not your main password!) |
 
-### Claude Desktop Config
+### Stdio MCP Client Config
 
-Location:
+Example for Claude Desktop (check your client's docs for config location):
 - **Linux**: `~/.config/claude/claude_desktop_config.json`
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -63,7 +63,7 @@ Location:
 
 ### Using with HTTP-based MCP Clients
 
-Clients like Claude.ai, Claude Mobile, Cursor, and VS Code extensions connect over HTTP rather than stdio. The MCP server must be accessible from the client. Options:
+Remote MCP clients (Claude.ai, Cursor, VS Code extensions, etc.) connect over HTTP rather than stdio. The MCP server must be accessible from the client. Options:
 
 1. **Local network**: Run the MCP server on a machine accessible on your network
 2. **Remote server**: Deploy the MCP server on your Nextcloud host or a VPS
@@ -144,7 +144,7 @@ Ensure outbound HTTPS (port 443) is allowed to:
 
 ### If running MCP server remotely
 
-The MCP server communicates via stdio with Claude Desktop, so no inbound ports are needed on the MCP server machine. It only needs outbound access to your Nextcloud instance.
+The MCP server communicates via stdio with local MCP clients, so no inbound ports are needed on the MCP server machine. It only needs outbound access to your Nextcloud instance.
 
 ## Proxy Configuration
 

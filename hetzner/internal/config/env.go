@@ -95,7 +95,7 @@ func Generate(ncURL, ncUser, ncPassword, domain, acmeEmail string) (*Env, error)
 		AuthSecret:          authSecret,
 		ClientSecret:        clientSecret,
 		AuthIssuer:          "https://" + domain,
-		ClientID:            "aiquila-claude",
+		ClientID:            "",
 		RegistrationEnabled: true,
 		RegistrationToken:   regToken,
 		CrowdSecBouncerKey:  bouncerKey,
@@ -126,7 +126,7 @@ func (e *Env) Render() string {
 	b.WriteString(fmt.Sprintf("MCP_AUTH_ISSUER=%s\n", e.AuthIssuer))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_ID=%s\n", e.ClientID))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_SECRET=%s\n", e.ClientSecret))
-	b.WriteString("MCP_CLIENT_REDIRECT_URIS=https://claude.ai/api/mcp/auth_callback\n")
+	b.WriteString("MCP_CLIENT_REDIRECT_URIS=\n")
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_ENABLED=%v\n", e.RegistrationEnabled))
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_TOKEN=%s\n", e.RegistrationToken))
 	b.WriteString("MCP_TRUST_PROXY=true\n")
@@ -248,7 +248,7 @@ func GenerateFull(ncDomain, mcpDomain, ncAdminUser, ncAdminPassword, ncMCPUser, 
 		AuthSecret:          authSecret,
 		ClientSecret:        clientSecret,
 		AuthIssuer:          "https://" + mcpDomain,
-		ClientID:            "aiquila-claude",
+		ClientID:            "",
 		RegistrationEnabled: true,
 		RegistrationToken:   regToken,
 		MCPInternalToken:    internalToken,
@@ -289,7 +289,7 @@ func (e *FullEnv) Render() string {
 	b.WriteString(fmt.Sprintf("MCP_AUTH_ISSUER=%s\n", e.AuthIssuer))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_ID=%s\n", e.ClientID))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_SECRET=%s\n", e.ClientSecret))
-	b.WriteString("MCP_CLIENT_REDIRECT_URIS=https://claude.ai/api/mcp/auth_callback\n")
+	b.WriteString("MCP_CLIENT_REDIRECT_URIS=\n")
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_ENABLED=%v\n", e.RegistrationEnabled))
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_TOKEN=%s\n", e.RegistrationToken))
 	b.WriteString("MCP_TRUST_PROXY=true\n")

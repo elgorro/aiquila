@@ -61,7 +61,7 @@ Edit `src/index.ts`:
 ```typescript
 server.tool(
   "tool_name",
-  "Tool description for Claude",
+  "Tool description for the MCP client",
   {
     param1: z.string().describe("Parameter description"),
     param2: z.number().optional().describe("Optional param"),
@@ -73,11 +73,11 @@ server.tool(
 );
 ```
 
-### Testing with Claude
+### Testing with an MCP Client
 
 1. Build: `npm run build`
-2. Update `claude_desktop_config.json` to point to your dev build
-3. Restart Claude Desktop
+2. Update your MCP client config to point to your dev build
+3. Restart your MCP client
 4. Test the tools in conversation
 
 ## Nextcloud App Development
@@ -180,8 +180,8 @@ composer test
 # Run with verbose structured logging
 LOG_LEVEL=debug npm run dev
 
-# Check Claude Desktop logs
-tail -f ~/.config/claude/logs/mcp.log  # Linux
+# Check MCP client logs (example: Claude Desktop on Linux)
+tail -f ~/.config/claude/logs/mcp.log
 ```
 
 Logs are emitted as JSON to stderr. Set `LOG_LEVEL` to `trace` for maximum verbosity or `warn` to suppress startup noise in production.

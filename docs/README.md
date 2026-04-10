@@ -5,17 +5,17 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 ## Getting Started
 
 **[Getting Started Guide](installation.md)** — five paths to get up and running:
-1. **Claude Desktop / Claude Code** — `npx aiquila-mcp` (simplest)
-2. **Claude.ai** — Docker + OAuth remote MCP
+1. **Local MCP Client** — `npx aiquila-mcp` (simplest — Claude Desktop, Cursor, VS Code, etc.)
+2. **Remote MCP Client** — Docker + OAuth (Claude.ai, Cursor, VS Code, etc.)
 3. **Nextcloud App** — AI inside Nextcloud UI
 4. **Hetzner Cloud** — single-command production deploy
-5. **Claude Mobile App** — voice-driven Nextcloud via Claude app
+5. **Mobile MCP Client** — voice-driven Nextcloud via mobile app
 
 ## MCP Server
 
 - **[MCP Overview & Tools Reference](mcp/README.md)** — 100+ tools across 20 modules
-- **[Setup Guide](mcp/setup.md)** — installation and Claude Desktop configuration
-- **[OAuth 2.0](mcp/oauth.md)** — connect Claude.ai with OAuth authentication
+- **[Setup Guide](mcp/setup.md)** — installation and MCP client configuration
+- **[OAuth 2.0](mcp/oauth.md)** — OAuth authentication for remote MCP clients
 - **[Standalone Docker](mcp/standalone-docker.md)** — run MCP server in Docker (external Nextcloud)
 - **[MCP-Connector](mcp/mcp-connector.md)** — use AIquila via the Anthropic Messages API
 
@@ -74,8 +74,8 @@ docs/
 │
 ├── mcp/                             # MCP Server
 │   ├── README.md                    # Overview & full tools reference
-│   ├── setup.md                     # Setup guide (Claude Desktop / npx)
-│   ├── oauth.md                     # OAuth 2.0 for Claude.ai
+│   ├── setup.md                     # Setup guide (MCP client / npx)
+│   ├── oauth.md                     # OAuth 2.0 for remote MCP clients
 │   ├── standalone-docker.md         # Standalone Docker deployment
 │   ├── mcp-connector.md            # MCP-Connector (Messages API)
 │   ├── tools/                       # Tool documentation
