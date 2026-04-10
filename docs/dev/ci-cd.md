@@ -156,7 +156,7 @@ git push origin main
 2. Runs 6 test groups: `oauth`, `tools`, `mcp_protocol`, `nc_app`, `connector` (off by default), `infra`
 3. Always destroys servers on completion (orphan cleanup ensures no leaked resources)
 
-**Required secrets:** `HCLOUD_TOKEN`, `HETZNER_DNS_TOKEN`, `ANTHROPIC_API_KEY`
+**Required secrets:** `HCLOUD_TOKEN`, `ANTHROPIC_API_KEY`
 
 See [`docs/hetzner/ci-flow.md`](../hetzner/ci-flow.md) for the detailed timeline and cost breakdown.
 
@@ -207,11 +207,9 @@ Navigate to: **Repository Settings → Secrets and variables → Actions → New
 
 #### For Hetzner Integration Test (Required for E2E tests)
 
-5. **`HCLOUD_TOKEN`** — Hetzner Cloud API token (used to provision/destroy test servers)
+5. **`HCLOUD_TOKEN`** — Hetzner Cloud API token (used to provision/destroy test servers and DNS)
 
-6. **`HETZNER_DNS_TOKEN`** — Hetzner DNS API token (used for DNS records during provisioning)
-
-7. **`ANTHROPIC_API_KEY`** — Anthropic API key (used by the connector test group)
+6. **`ANTHROPIC_API_KEY`** — Anthropic API key (used by the connector test group)
 
 ### Setup Manual Approval Gate
 

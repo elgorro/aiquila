@@ -116,8 +116,7 @@ Actions → Hetzner Integration Test → Run workflow
 
 | Secret | Description |
 |--------|-------------|
-| `HCLOUD_TOKEN` | Hetzner Cloud API token |
-| `HETZNER_DNS_TOKEN` | Hetzner DNS token (A record creation/deletion) |
+| `HCLOUD_TOKEN` | Hetzner Cloud API token (also used for DNS) |
 | `ANTHROPIC_API_KEY` | Drives the Claude agent; also used by the connector test if enabled |
 
 ---
@@ -126,7 +125,6 @@ Actions → Hetzner Integration Test → Run workflow
 
 ```bash
 export HCLOUD_TOKEN=...
-export HETZNER_DNS_TOKEN=...
 export ANTHROPIC_API_KEY=...
 export NC_DOMAIN=nc-inttest.example.com
 export MCP_DOMAIN=mcp-inttest.example.com

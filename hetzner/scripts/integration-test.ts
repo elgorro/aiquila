@@ -69,7 +69,7 @@ const PROMPT = `
 You are an integration test agent for AIquila on Hetzner Cloud.
 
 Environment variables available:
-  HCLOUD_TOKEN, HETZNER_DNS_TOKEN, ANTHROPIC_API_KEY
+  HCLOUD_TOKEN, ANTHROPIC_API_KEY
   NC_DOMAIN, MCP_DOMAIN, DNS_ZONE
   NC_SERVER_TYPE (default: cpx21), MCP_SERVER_TYPE (default: cpx11)
   SSH_KEY_PATH (optional)

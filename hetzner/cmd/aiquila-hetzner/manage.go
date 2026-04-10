@@ -34,8 +34,7 @@ var (
 	// delete flags
 	deleteName     string
 	deleteToken    string
-	deleteDNSZone  string
-	deleteDNSToken string
+	deleteDNSZone string
 )
 
 // ── list ──────────────────────────────────────────────────────────────────────
@@ -272,7 +271,6 @@ and the Cloud Volume (<name>-vol) if present. Equivalent to 'destroy'.`,
 	cmd.Flags().StringVar(&deleteName, "name", "", "Server name to delete (required)")
 	cmd.Flags().StringVar(&deleteToken, "token", "", "Hetzner API token (default: $HCLOUD_TOKEN)")
 	cmd.Flags().StringVar(&deleteDNSZone, "dns-zone", "", "Hetzner DNS zone — deletes <name>.<zone> A/AAAA records")
-	cmd.Flags().StringVar(&deleteDNSToken, "dns-token", "", "Hetzner DNS API token (default: $HETZNER_DNS_TOKEN or $HCLOUD_TOKEN)")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
 }
@@ -285,7 +283,7 @@ func runDelete(_ *cobra.Command, _ []string) error {
 	}
 	appLog.Info("start", "deleting server", "name", deleteName)
 	fmt.Printf("==> Deleting %q and associated resources\n", deleteName)
-	return cleanupServer(ctx, client, deleteName, deleteDNSZone, deleteDNSToken)
+	return cleanupServer(ctx, client, deleteName, deleteDNSZone)
 }
 
 // cleanupServer deletes the server plus all resources created by 'create':
@@ -293,15 +291,11 @@ func runDelete(_ *cobra.Command, _ []string) error {
 // Resources are deleted in the safest order: server first (auto-detaches the
 // volume), then firewall, SSH key, and finally the volume.
 // If dnsZone is non-empty, DNS A/AAAA records for <name>.<dnsZone> are deleted first.
-func cleanupServer(ctx context.Context, client *hcloud.Client, name, dnsZone, dnsToken string) error {
+func cleanupServer(ctx context.Context, client *hcloud.Client, name, dnsZone string) error {
 	// 0. DNS records (before server deletion so zone lookup doesn't depend on server)
 	if dnsZone != "" {
 		fmt.Println("── DNS")
-		tok, err := dns.ResolveToken(dnsToken, globalProfile)
-		if err != nil {
-			return err
-		}
-		if err := dns.DeleteRecords(ctx, tok, dnsZone, name); err != nil {
+		if err := dns.DeleteRecords(ctx, client, dnsZone, name); err != nil {
 			return err
 		}
 	}
