@@ -44,7 +44,7 @@ type DeployConfig struct {
 	Labels     []string `yaml:"labels"    json:"labels"`
 	// DNS
 	DNSZone  string `yaml:"dns_zone"  json:"dns_zone"`
-	DNSToken string `yaml:"dns_token" json:"dns_token"`
+	DNSToken string `yaml:"dns_token" json:"dns_token"` // deprecated: DNS uses the Cloud API token
 	// SSH
 	SSHAllowCIDR string `yaml:"ssh_allow_cidr" json:"ssh_allow_cidr"`
 	// Nextcloud self-hosted (--stack nextcloud/full)

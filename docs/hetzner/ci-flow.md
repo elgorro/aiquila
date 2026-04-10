@@ -52,8 +52,7 @@ a named reviewer before secrets are exposed.
 
 | Secret | Used for |
 |--------|----------|
-| `HCLOUD_TOKEN` | Server provisioning and destroy |
-| `HETZNER_DNS_TOKEN` | DNS A/AAAA record creation |
+| `HCLOUD_TOKEN` | Server provisioning, DNS, and destroy |
 | `ANTHROPIC_API_KEY` | Drives the Claude agent; also used by the connector test if enabled |
 
 ---

@@ -59,8 +59,7 @@ var (
 	createDryRun     bool
 	createNoConfirm  bool
 	createLabels        []string
-	createDNSZone       string
-	createDNSToken      string
+	createDNSZone string
 	createSSHAllowCIDR  string
 	createNetworkName   string
 	createSwap          string
@@ -70,8 +69,7 @@ var (
 	// destroy flags
 	destroyName     string
 	destroyToken    string
-	destroyDNSZone  string
-	destroyDNSToken string
+	destroyDNSZone string
 )
 
 func main() {
@@ -161,7 +159,6 @@ func buildCreateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&createDryRun, "dry-run", false, "Print what would be created without making any API calls")
 	cmd.Flags().StringArrayVar(&createLabels, "label", nil, "Resource label key=value (repeatable, applied to server/firewall/key/volume)")
 	cmd.Flags().StringVar(&createDNSZone, "dns-zone", "", "Hetzner DNS zone (e.g. example.com) — creates <name>.<zone> A record after server IP is known")
-	cmd.Flags().StringVar(&createDNSToken, "dns-token", "", "Hetzner DNS API token (default: $HETZNER_DNS_TOKEN or $HCLOUD_TOKEN)")
 	cmd.Flags().StringVar(&createSSHAllowCIDR, "ssh-allow-cidr", "", "Restrict SSH (port 22) to this CIDR instead of 0.0.0.0/0 (e.g. 203.0.113.0/24)")
 	cmd.Flags().StringVar(&createNetworkName, "network", "", "Attach server to this private network (must exist; create with 'network create')")
 	cmd.Flags().StringVar(&createSwap, "swap", "", "Create a swap file of this size (e.g. 1G, 2G) — useful for cpx11/cx22 instances")
@@ -277,9 +274,6 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	}
 	if createDNSZone == "" && fileCfg.DNSZone != "" {
 		createDNSZone = fileCfg.DNSZone
-	}
-	if createDNSToken == "" && fileCfg.DNSToken != "" {
-		createDNSToken = fileCfg.DNSToken
 	}
 	if createSSHAllowCIDR == "" && fileCfg.SSHAllowCIDR != "" {
 		createSSHAllowCIDR = fileCfg.SSHAllowCIDR
@@ -451,11 +445,7 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 		// ── 10. DNS record (before Traefik starts requesting certs) ───────────
 		if createDNSZone != "" {
 			fmt.Println("\n── DNS")
-			dnsToken, err := dns.ResolveToken(createDNSToken, globalProfile)
-			if err != nil {
-				return err
-			}
-			if err := dns.EnsureRecord(ctx, dnsToken, createDNSZone, createName, serverIP, "A"); err != nil {
+			if err := dns.EnsureRecord(ctx, client, createDNSZone, createName, serverIP, "A"); err != nil {
 				return err
 			}
 			ipv6 := srv.PublicNet.IPv6.IP
@@ -463,7 +453,7 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 				// Use the first host address of the /64 prefix (/64 → ::1 suffix).
 				ipv6Host := ipv6.Mask(srv.PublicNet.IPv6.Network.Mask)
 				ipv6Host[len(ipv6Host)-1] = 1
-				if err := dns.EnsureRecord(ctx, dnsToken, createDNSZone, createName, ipv6Host.String(), "AAAA"); err != nil {
+				if err := dns.EnsureRecord(ctx, client, createDNSZone, createName, ipv6Host.String(), "AAAA"); err != nil {
 					return err
 				}
 			}
@@ -587,11 +577,11 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 		printPartialSummary(provisionedSrv, privKeyPath)
 		if createNoConfirm {
 			fmt.Println("\n  --noconfirm set — deleting partial deployment…")
-			_ = cleanupServer(ctx, client, createName, createDNSZone, createDNSToken)
+			_ = cleanupServer(ctx, client, createName, createDNSZone)
 		} else {
 			if !askKeepOrDelete() {
 				fmt.Println("\n── Deleting partial deployment")
-				_ = cleanupServer(ctx, client, createName, createDNSZone, createDNSToken)
+				_ = cleanupServer(ctx, client, createName, createDNSZone)
 			} else {
 				fmt.Printf("\n  Keeping server.  To delete later:\n"+
 					"    aiquila-hetzner delete --name %s\n", createName)
@@ -1133,7 +1123,6 @@ func buildDestroyCmd() *cobra.Command {
 	cmd.Flags().StringVar(&destroyName, "name", "", "Server name to destroy (required)")
 	cmd.Flags().StringVar(&destroyToken, "token", "", "Hetzner API token (default: $HCLOUD_TOKEN)")
 	cmd.Flags().StringVar(&destroyDNSZone, "dns-zone", "", "Hetzner DNS zone — deletes <name>.<zone> A/AAAA records")
-	cmd.Flags().StringVar(&destroyDNSToken, "dns-token", "", "Hetzner DNS API token (default: $HETZNER_DNS_TOKEN or $HCLOUD_TOKEN)")
 	_ = cmd.MarkFlagRequired("name")
 
 	return cmd
@@ -1147,7 +1136,7 @@ func runDestroy(_ *cobra.Command, _ []string) error {
 	}
 	appLog.Info("start", "destroying server", "name", destroyName)
 	fmt.Printf("==> Destroying %q and associated resources\n", destroyName)
-	return cleanupServer(ctx, client, destroyName, destroyDNSZone, destroyDNSToken)
+	return cleanupServer(ctx, client, destroyName, destroyDNSZone)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

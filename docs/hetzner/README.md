@@ -37,8 +37,7 @@ Three deployment configurations are supported via `--stack`:
 
 ## Prerequisites
 
-- Hetzner Cloud account + API token (`$HCLOUD_TOKEN`)
-- (Optional) Hetzner DNS token (`$HETZNER_DNS_TOKEN`) for DNS automation
+- Hetzner Cloud account + API token (`$HCLOUD_TOKEN`) — also used for DNS automation
 - For `--stack mcp`: existing Nextcloud instance with an app password
 - For `--stack nextcloud` / `full`: domain name for the Nextcloud server
 - Domain that points to (or will be pointed to) the server IP

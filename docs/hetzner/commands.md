@@ -74,7 +74,6 @@ Run `aiquila-hetzner options` to list all server types, locations, and images av
 | Flag | Description |
 |------|-------------|
 | `--dns-zone` | Hetzner DNS zone (e.g. `example.com`); creates `<name>.<zone>` A record |
-| `--dns-token` | Hetzner DNS token (default: `$HETZNER_DNS_TOKEN` or `$HCLOUD_TOKEN`) |
 | `--ssh-allow-cidr` | Restrict SSH to this CIDR (e.g. `203.0.113.0/24`) instead of `0.0.0.0/0` |
 | `--network` | Attach server to an existing private network |
 
@@ -113,7 +112,6 @@ Both commands are equivalent.
 | `--name` | Server name (required) |
 | `--token` | Hetzner API token |
 | `--dns-zone` | Delete `<name>.<zone>` A/AAAA records after destroy |
-| `--dns-token` | Hetzner DNS token |
 
 ---
 
@@ -213,7 +211,7 @@ Output is three tables: **Server types** (name, cores, RAM, disk, arch),
 
 ## `dns`
 
-Manage Hetzner DNS records (requires `$HETZNER_DNS_TOKEN`).
+Manage Hetzner DNS records via the Cloud Zone API (uses `$HCLOUD_TOKEN`).
 
 ```bash
 # Create A (and optionally AAAA) records
@@ -231,7 +229,7 @@ aiquila-hetzner dns delete --name mcp --zone example.com
 | `--zone` | DNS zone / apex domain (required) |
 | `--ip` | IPv4 address for the A record (required for `create`) |
 | `--ipv6` | IPv6 address for the AAAA record |
-| `--dns-token` | Hetzner DNS token (default: `$HETZNER_DNS_TOKEN` or `$HCLOUD_TOKEN`) |
+| `--token` | Hetzner API token (default: `$HCLOUD_TOKEN` or profile) |
 
 ---
 

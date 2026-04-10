@@ -79,7 +79,6 @@ aiquila-hetzner rebuild --config hetzner/examples/deploy-mcp.yaml
 | `network` | string | `--network` | Attach to an existing private network |
 | `labels` | []string | `--label` | Resource labels `key=value` (repeatable) |
 | `dns_zone` | string | `--dns-zone` | Hetzner DNS zone for auto-record creation |
-| `dns_token` | string | `--dns-token` | Hetzner DNS API token |
 | `ssh_allow_cidr` | string | `--ssh-allow-cidr` | Restrict SSH to this CIDR |
 | `packages` | []string | `--package` | Extra OS packages via cloud-init (repeatable) |
 
@@ -143,8 +142,7 @@ directly.
 
 | Variable | Used by | Notes |
 |----------|---------|-------|
-| `HCLOUD_TOKEN` | All commands | Hetzner Cloud API token |
-| `HETZNER_DNS_TOKEN` | `dns`, `create --dns-zone`, `destroy --dns-zone` | Defaults to `HCLOUD_TOKEN` if unset |
+| `HCLOUD_TOKEN` | All commands (incl. DNS) | Hetzner Cloud API token |
 | `NEXTCLOUD_URL` | `create`, `rebuild` (MCP/full stacks) | Falls back to active profile |
 | `NEXTCLOUD_USER` | `create`, `rebuild` (MCP/full stacks) | Falls back to active profile |
 | `NEXTCLOUD_PASSWORD` | `create`, `rebuild` (MCP/full stacks) | Falls back to active profile |

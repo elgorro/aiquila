@@ -50,7 +50,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
-      HETZNER_DNS_TOKEN: ${{ secrets.HETZNER_DNS_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       NC_DOMAIN: ${{ inputs.nc_domain }}
       MCP_DOMAIN: ${{ inputs.mcp_domain }}

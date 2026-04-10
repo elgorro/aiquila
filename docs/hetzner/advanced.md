@@ -106,8 +106,8 @@ aiquila-hetzner create --mcp-domain mcp.example.com \
   --dns-zone example.com
 ```
 
-Requires `$HETZNER_DNS_TOKEN` or `--dns-token`. The record name is derived from
-the first label of `--mcp-domain` (e.g. `mcp` from `mcp.example.com`).
+Uses the same Cloud API token (`$HCLOUD_TOKEN`). The record name is derived from
+the server `--name` flag (e.g. `mcp` → `mcp.example.com`).
 
 ---
 
