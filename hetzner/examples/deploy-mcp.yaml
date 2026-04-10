@@ -87,7 +87,7 @@ nc_password: YOUR_NEXTCLOUD_APP_PASSWORD
 # Mount a Hetzner Storage Box at /mnt/storagebox via CIFS.
 # Data persists on the storage box across server deletions.
 #
-# storage_box: 1234567          # Storage Box ID (Hetzner Robot panel → Storage Boxes)
+# storage_box: 1234567          # Storage Box ID (Hetzner Cloud Console → Storage Boxes)
 # storage_box_password: custom-cifs-password  # default: auto-generated; env: $HETZNER_STORAGE_BOX_PASSWORD
 
 # ── Extra OS packages ─────────────────────────────────────────────────────────
