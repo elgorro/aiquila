@@ -14,5 +14,7 @@ ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
+RUN mkdir -p /app/state && chown -R node:node /app
 EXPOSE 3339
+USER node
 CMD ["node", "dist/index.js"]
