@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { z } from 'zod';
 import { fetchNotesAPI, type Note } from '../../client/notes.js';
 import { handleAppError } from '../error-utils.js';

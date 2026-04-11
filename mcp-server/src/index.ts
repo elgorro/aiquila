@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: MIT
 
 import { startStdio } from './transports/stdio.js';
 import { startHttp } from './transports/http.js';

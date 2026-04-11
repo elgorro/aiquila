@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 /**
  * Shared DAV escape/unescape utilities for iCalendar and vCard values.
  *

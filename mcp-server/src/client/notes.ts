@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { getNextcloudConfig } from '../tools/types.js';
 import { logger } from '../logger.js';
 import { ApiError } from './aiquila.js';

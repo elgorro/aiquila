@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <template>
 	<div v-if="project" class="project-editor">
 		<h2 class="editor-title">{{ project.title }}</h2>

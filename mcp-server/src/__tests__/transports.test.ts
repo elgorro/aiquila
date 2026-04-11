@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock createServer to avoid pulling in all tool dependencies

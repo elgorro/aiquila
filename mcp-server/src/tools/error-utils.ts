@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { ApiError } from '../client/aiquila.js';
 
 type ErrorResult = { content: { type: 'text'; text: string }[]; isError: true };

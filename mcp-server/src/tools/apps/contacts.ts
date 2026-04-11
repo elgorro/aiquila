@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { z } from 'zod';
 import { decodeXmlEntities, fetchCalDAV, nsTagContent } from '../../client/caldav.js';
 import { escapeVCardValue, unescapeVCardValue } from '../dav-utils.js';

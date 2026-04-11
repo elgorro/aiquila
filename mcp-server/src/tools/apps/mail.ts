@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { z } from 'zod';
 import { fetchMailAPI } from '../../client/mail.js';
 import { fetchOCS } from '../../client/ocs.js';

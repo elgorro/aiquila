@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <template>
 	<NcModal
 		:name="t('aiquila', 'Ask Claude about {filename}', { filename: file.basename })"

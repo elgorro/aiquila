@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';

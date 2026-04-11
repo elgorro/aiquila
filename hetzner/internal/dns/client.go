@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package dns manages DNS records via the hcloud-go Zone API.
 package dns
 

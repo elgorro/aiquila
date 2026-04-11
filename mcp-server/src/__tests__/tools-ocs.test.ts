@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock webdav client (needed for bulk file operations)

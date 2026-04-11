@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { z } from 'zod';
 import { fetchCalDAV, nsTagContent, decodeXmlEntities } from '../../client/caldav.js';
 import { getNextcloudConfig } from '../types.js';

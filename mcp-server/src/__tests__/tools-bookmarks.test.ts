@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the Bookmarks API client module

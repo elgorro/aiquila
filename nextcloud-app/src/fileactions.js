@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * AIquila File Actions - Modern Vue Implementation
  * Registers "Ask Claude" action in Files app

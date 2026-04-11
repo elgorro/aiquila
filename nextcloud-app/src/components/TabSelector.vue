@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <template>
 	<div class="tab-selector">
 		<button v-for="tab in tabs"
