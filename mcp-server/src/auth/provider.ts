@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import type {

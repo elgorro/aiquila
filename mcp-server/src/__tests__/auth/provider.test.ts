@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NextcloudOAuthProvider, renderLoginForm } from '../../auth/provider.js';
 

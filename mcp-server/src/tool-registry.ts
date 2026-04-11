@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { fetchOCS } from './client/ocs.js';
 import { logger } from './logger.js';
 

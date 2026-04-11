@@ -1,5 +1,8 @@
+// SPDX-License-Identifier: MIT
+
 import { z } from 'zod';
 import { decodeXmlEntities, fetchCalDAV, nsTagContent } from '../../client/caldav.js';
+import { escapeICalValue } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -50,17 +53,6 @@ interface ParsedTask {
  */
 function unfoldICalLines(text: string): string {
   return text.replace(/\r?\n[ \t]/g, '');
-}
-
-/**
- * Escape special characters in iCalendar text values per RFC 5545.
- */
-function escapeICalValue(value: string): string {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/;/g, '\\;')
-    .replace(/,/g, '\\,')
-    .replace(/\n/g, '\\n');
 }
 
 /**

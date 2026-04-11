@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { NextcloudOAuthProvider, renderLoginForm } from './provider.js';
 import { logger } from '../logger.js';
 

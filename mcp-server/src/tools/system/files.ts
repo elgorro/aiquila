@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { z } from 'zod';
 import { getWebDAVClient } from '../../client/webdav.js';
 import { fetchAiquilaAPI } from '../../client/aiquila.js';

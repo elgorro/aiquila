@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { randomBytes } from "node:crypto";
 import { query, type HookCallback } from "@anthropic-ai/claude-agent-sdk";
 

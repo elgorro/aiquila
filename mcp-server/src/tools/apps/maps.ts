@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { z } from 'zod';
 import { fetchMapsExternalAPI, fetchMapsAPI } from '../../client/maps.js';
 

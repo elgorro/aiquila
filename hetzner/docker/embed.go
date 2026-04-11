@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package templates embeds the production docker stack template files.
 // These are read at build time and bundled into the aiquila-hetzner binary,
 // keeping hetzner/docker/{mcp,nextcloud,full}/ as the single source of truth

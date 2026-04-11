@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package profile manages named configuration profiles for aiquila-hetzner.
 // Profiles are stored in ~/.config/aiquila-hetzner/config.json (mode 0600).
 // Each profile stores a Hetzner API token plus optional Nextcloud credentials

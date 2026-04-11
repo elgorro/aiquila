@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <template>
 	<NcDialog :name="t('aiquila', 'Manage Projects')"
 		size="normal"

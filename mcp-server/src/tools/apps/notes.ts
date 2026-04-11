@@ -1,11 +1,19 @@
+// SPDX-License-Identifier: MIT
+
 import { z } from 'zod';
 import { fetchNotesAPI, type Note } from '../../client/notes.js';
-import { ApiError } from '../../client/aiquila.js';
+import { handleAppError } from '../error-utils.js';
 
 /**
  * Nextcloud Notes App Tools
  * Uses the Notes REST API v1 (/index.php/apps/notes/api/v1)
  */
+
+const notesStatusMap: Record<number, string> = {
+  404: 'Note not found.',
+  403: 'Note is read-only.',
+  412: 'Conflict: note was modified by someone else. Fetch the latest version and retry.',
+};
 
 function formatNote(note: Note): string {
   const date = new Date(note.modified * 1000).toISOString();
@@ -16,40 +24,6 @@ function formatNote(note: Note): string {
     .filter(Boolean)
     .join(' | ');
   return `[${note.id}] ${note.title}${meta ? ` (${meta})` : ''} — modified: ${date}`;
-}
-
-function handleError(
-  error: unknown,
-  context: string
-): { content: { type: 'text'; text: string }[]; isError: true } {
-  if (error instanceof ApiError) {
-    if (error.statusCode === 404) {
-      return { content: [{ type: 'text', text: `Note not found.` }], isError: true };
-    }
-    if (error.statusCode === 403) {
-      return { content: [{ type: 'text', text: `Note is read-only.` }], isError: true };
-    }
-    if (error.statusCode === 412) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Conflict: note was modified by someone else. Fetch the latest version and retry.`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-  return {
-    content: [
-      {
-        type: 'text',
-        text: `${context}: ${error instanceof Error ? error.message : String(error)}`,
-      },
-    ],
-    isError: true,
-  };
 }
 
 export const listNotesTool = {
@@ -85,7 +59,7 @@ export const listNotesTool = {
         ],
       };
     } catch (error) {
-      return handleError(error, 'Error listing notes');
+      return handleAppError(error, 'Error listing notes', notesStatusMap);
     }
   },
 };
@@ -108,7 +82,7 @@ export const getNoteTool = {
         ],
       };
     } catch (error) {
-      return handleError(error, 'Error getting note');
+      return handleAppError(error, 'Error getting note', notesStatusMap);
     }
   },
 };
@@ -147,7 +121,7 @@ export const createNoteTool = {
         ],
       };
     } catch (error) {
-      return handleError(error, 'Error creating note');
+      return handleAppError(error, 'Error creating note', notesStatusMap);
     }
   },
 };
@@ -191,7 +165,7 @@ export const updateNoteTool = {
         ],
       };
     } catch (error) {
-      return handleError(error, 'Error updating note');
+      return handleAppError(error, 'Error updating note', notesStatusMap);
     }
   },
 };
@@ -214,7 +188,7 @@ export const deleteNoteTool = {
         ],
       };
     } catch (error) {
-      return handleError(error, 'Error deleting note');
+      return handleAppError(error, 'Error deleting note', notesStatusMap);
     }
   },
 };

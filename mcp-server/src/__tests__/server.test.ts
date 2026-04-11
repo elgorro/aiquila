@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock webdav (required by file tools)
@@ -21,8 +23,9 @@ vi.mock('../client/bookmarks.js', () => ({
   fetchBookmarksAPI: vi.fn(),
 }));
 
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createServer } from '../server.js';
-import { _resetCache } from '../tool-registry.js';
+import { _resetCache, getFilteredToolSets } from '../tool-registry.js';
 
 describe('createServer', () => {
   beforeEach(() => {
@@ -46,8 +49,30 @@ describe('createServer', () => {
 
   it('should register tools on the server', async () => {
     const server = await createServer();
-    // McpServer exposes registered tools via the internal _registeredTools map
-    // We verify by checking the server is connectable (tools registered without error)
-    expect(server).toBeDefined();
+    const tools = (server as any)._registeredTools as Record<string, unknown>;
+    const names = Object.keys(tools);
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      expect(name).toBeTruthy();
+      expect(typeof name).toBe('string');
+    }
+  });
+
+  it('should register exactly the tools from getFilteredToolSets', async () => {
+    const server = await createServer();
+    const registeredCount = Object.keys((server as any)._registeredTools).length;
+    _resetCache();
+    const toolSets = await getFilteredToolSets();
+    const expectedCount = toolSets.reduce((sum, ts) => sum + ts.length, 0);
+    expect(registeredCount).toBe(expectedCount);
+  });
+
+  it('should connect to a transport', async () => {
+    const server = await createServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    await server.connect(serverTransport);
+    await clientTransport.close();
+    await server.close();
   });
 });

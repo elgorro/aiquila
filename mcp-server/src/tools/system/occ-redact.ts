@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 /**
  * Redacts sensitive information from OCC command output.
  * Applied to stdout/stderr before returning results to the MCP client.

@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <template>
 	<div class="chat-view">
 		<div v-if="conversation.projectId && projectName" class="project-badge">

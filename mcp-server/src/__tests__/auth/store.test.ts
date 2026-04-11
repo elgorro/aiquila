@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 vi.mock('node:fs');

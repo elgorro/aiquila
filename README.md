@@ -13,7 +13,7 @@ AIquila bridges your self-hosted Nextcloud instance with Claude AI. Instead of k
 
 AIquila has three components that can be used independently or together:
 
-**MCP Server** — A [Model Context Protocol](https://modelcontextprotocol.io) server that gives Claude (Desktop or Mobile) secure access to your Nextcloud. Through natural conversation, Claude can browse and manage files, read and create notes, handle tasks and bookmarks, and query recipes — all stored in your Nextcloud.
+**MCP Server** — A [Model Context Protocol](https://modelcontextprotocol.io) server that gives any MCP-compatible AI assistant secure access to your Nextcloud. Browse and manage files, read and create notes, handle tasks and bookmarks, manage projects, and query recipes — all stored in your Nextcloud.
 
 **Nextcloud App** — A native Nextcloud application that surfaces Claude AI actions directly inside the Nextcloud UI. Summarize a document, analyze a spreadsheet, or generate content without leaving your Nextcloud.
 

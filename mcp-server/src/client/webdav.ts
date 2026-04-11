@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import { createClient, WebDAVClient } from 'webdav';
 
 const NEXTCLOUD_URL = process.env.NEXTCLOUD_URL;

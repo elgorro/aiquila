@@ -1,18 +1,10 @@
+// SPDX-License-Identifier: MIT
+
 import { z } from 'zod';
 
 /**
  * Shared type definitions for MCP tools
  */
-
-/**
- * Standard response format for tool operations
- */
-export interface ToolResponse {
-  success: boolean;
-  message?: string;
-  data?: unknown;
-  error?: string;
-}
 
 /**
  * Zod schemas for common parameters

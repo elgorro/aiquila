@@ -10,7 +10,7 @@
 services:
   # MCP Server (Production image from GHCR)
   mcp-server:
-    image: ghcr.io/elgorro/aiquila-mcp:latest
+    image: ghcr.io/elgorro/aiquila-mcp:0.2.17
     container_name: aiquila-standalone-mcp
     restart: unless-stopped
     environment:
@@ -37,7 +37,7 @@ services:
 
   # Caddy Reverse Proxy (HTTPS)
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.11.2-alpine
     container_name: aiquila-standalone-caddy
     restart: unless-stopped
     depends_on:

@@ -111,7 +111,7 @@ services:
 
   # Caddy Reverse Proxy (HTTPS)
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.11.2-alpine
     container_name: aiquila-caddy
     restart: unless-stopped
     depends_on:
@@ -129,7 +129,7 @@ services:
 
   # MailHog (Email Testing)
   mailhog:
-    image: mailhog/mailhog:latest
+    image: mailhog/mailhog:v1.0.1
     container_name: aiquila-mailhog
     restart: unless-stopped
     ports:
@@ -140,7 +140,7 @@ services:
 
   # Adminer (Database UI)
   adminer:
-    image: adminer:latest
+    image: adminer:5.4.2
     container_name: aiquila-adminer
     restart: unless-stopped
     depends_on:

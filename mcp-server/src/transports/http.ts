@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 import https from 'node:https';
 import express from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';

@@ -1,5 +1,8 @@
+// SPDX-License-Identifier: MIT
+
 import { z } from 'zod';
 import { decodeXmlEntities, fetchCalDAV, nsTagContent } from '../../client/caldav.js';
+import { escapeVCardValue, unescapeVCardValue } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -63,22 +66,6 @@ interface ParsedContact {
 
 function unfoldVCardLines(text: string): string {
   return text.replace(/\r?\n[ \t]/g, '');
-}
-
-function escapeVCardValue(value: string): string {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/;/g, '\\;')
-    .replace(/,/g, '\\,')
-    .replace(/\n/g, '\\n');
-}
-
-function unescapeVCardValue(value: string): string {
-  return value
-    .replace(/\\n/gi, '\n')
-    .replace(/\\,/g, ',')
-    .replace(/\\;/g, ';')
-    .replace(/\\\\/g, '\\');
 }
 
 /**
