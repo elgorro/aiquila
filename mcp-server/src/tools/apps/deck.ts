@@ -7,11 +7,18 @@ import {
   type DeckLabel,
 } from '../../client/deck.js';
 import { ApiError } from '../../client/aiquila.js';
+import { handleAppError } from '../error-utils.js';
 
 /**
  * Nextcloud Deck App Tools
  * Uses the Deck REST API v1.0 (/index.php/apps/deck/api/v1.0)
  */
+
+const deckStatusMap: Record<number, string | ((e: ApiError) => string)> = {
+  404: 'Not found.',
+  403: 'Permission denied.',
+  400: (e) => `Bad request: ${e.responseBody}`,
+};
 
 function formatBoard(board: DeckBoard): string {
   const flags = [
@@ -72,35 +79,6 @@ function formatCardDetail(card: DeckCard): string {
   return lines.join('\n');
 }
 
-function handleError(
-  error: unknown,
-  context: string
-): { content: { type: 'text'; text: string }[]; isError: true } {
-  if (error instanceof ApiError) {
-    if (error.statusCode === 404) {
-      return { content: [{ type: 'text', text: 'Not found.' }], isError: true };
-    }
-    if (error.statusCode === 403) {
-      return { content: [{ type: 'text', text: 'Permission denied.' }], isError: true };
-    }
-    if (error.statusCode === 400) {
-      return {
-        content: [{ type: 'text', text: `Bad request: ${error.responseBody}` }],
-        isError: true,
-      };
-    }
-  }
-  return {
-    content: [
-      {
-        type: 'text',
-        text: `${context}: ${error instanceof Error ? error.message : String(error)}`,
-      },
-    ],
-    isError: true,
-  };
-}
-
 export const listBoardsTool = {
   name: 'deck_list_boards',
   description: 'List all Deck boards. Returns id, title, owner, and label count for each board.',
@@ -122,7 +100,7 @@ export const listBoardsTool = {
         ],
       };
     } catch (error) {
-      return handleError(error, 'Error listing boards');
+      return handleAppError(error, 'Error listing boards', deckStatusMap);
     }
   },
 };
@@ -171,7 +149,7 @@ export const getBoardTool = {
 
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     } catch (error) {
-      return handleError(error, 'Error getting board');
+      return handleAppError(error, 'Error getting board', deckStatusMap);
     }
   },
 };
@@ -197,7 +175,7 @@ export const createBoardTool = {
         content: [{ type: 'text' as const, text: `Board created: ${formatBoard(board)}` }],
       };
     } catch (error) {
-      return handleError(error, 'Error creating board');
+      return handleAppError(error, 'Error creating board', deckStatusMap);
     }
   },
 };
@@ -240,7 +218,7 @@ export const listStacksTool = {
         ],
       };
     } catch (error) {
-      return handleError(error, 'Error listing stacks');
+      return handleAppError(error, 'Error listing stacks', deckStatusMap);
     }
   },
 };
@@ -264,7 +242,7 @@ export const createStackTool = {
         content: [{ type: 'text' as const, text: `Stack created: ${formatStack(stack)}` }],
       };
     } catch (error) {
-      return handleError(error, 'Error creating stack');
+      return handleAppError(error, 'Error creating stack', deckStatusMap);
     }
   },
 };
@@ -285,7 +263,7 @@ export const getCardTool = {
 
       return { content: [{ type: 'text' as const, text: formatCardDetail(card) }] };
     } catch (error) {
-      return handleError(error, 'Error getting card');
+      return handleAppError(error, 'Error getting card', deckStatusMap);
     }
   },
 };
@@ -325,7 +303,7 @@ export const createCardTool = {
         content: [{ type: 'text' as const, text: `Card created: ${formatCard(card)}` }],
       };
     } catch (error) {
-      return handleError(error, 'Error creating card');
+      return handleAppError(error, 'Error creating card', deckStatusMap);
     }
   },
 };
@@ -373,7 +351,7 @@ export const updateCardTool = {
         content: [{ type: 'text' as const, text: `Card updated: ${formatCard(updated)}` }],
       };
     } catch (error) {
-      return handleError(error, 'Error updating card');
+      return handleAppError(error, 'Error updating card', deckStatusMap);
     }
   },
 };
@@ -418,7 +396,7 @@ export const moveCardTool = {
         ],
       };
     } catch (error) {
-      return handleError(error, 'Error moving card');
+      return handleAppError(error, 'Error moving card', deckStatusMap);
     }
   },
 };
@@ -449,7 +427,11 @@ export const archiveCardTool = {
         ],
       };
     } catch (error) {
-      return handleError(error, `Error ${args.archive ? 'archiving' : 'unarchiving'} card`);
+      return handleAppError(
+        error,
+        `Error ${args.archive ? 'archiving' : 'unarchiving'} card`,
+        deckStatusMap
+      );
     }
   },
 };
@@ -480,7 +462,7 @@ export const assignLabelTool = {
         ],
       };
     } catch (error) {
-      return handleError(error, 'Error assigning label');
+      return handleAppError(error, 'Error assigning label', deckStatusMap);
     }
   },
 };
@@ -510,7 +492,7 @@ export const assignUserTool = {
         ],
       };
     } catch (error) {
-      return handleError(error, 'Error assigning user');
+      return handleAppError(error, 'Error assigning user', deckStatusMap);
     }
   },
 };
