@@ -4,7 +4,7 @@
 # Usage: ./test-oauth.sh [base-url]
 #   base-url defaults to https://localhost:3340 (via Caddy, self-signed cert)
 
-set -e
+set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 STANDALONE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 

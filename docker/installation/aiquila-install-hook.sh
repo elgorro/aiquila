@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 echo "=== AIquila post-installation hook ==="
 echo "[INFO] Running as: $(id)"
