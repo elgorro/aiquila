@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { decodeXmlEntities, fetchCalDAV, nsTagContent } from '../../client/caldav.js';
+import { escapeICalValue, unescapeICalValue } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -64,22 +65,6 @@ interface ParsedAttendee {
 
 function unfoldICalLines(text: string): string {
   return text.replace(/\r?\n[ \t]/g, '');
-}
-
-function escapeICalValue(value: string): string {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/;/g, '\\;')
-    .replace(/,/g, '\\,')
-    .replace(/\n/g, '\\n');
-}
-
-function unescapeICalValue(value: string): string {
-  return value
-    .replace(/\\n/g, '\n')
-    .replace(/\\,/g, ',')
-    .replace(/\\;/g, ';')
-    .replace(/\\\\/g, '\\');
 }
 
 function formatICalDate(icalDate: string): string {
