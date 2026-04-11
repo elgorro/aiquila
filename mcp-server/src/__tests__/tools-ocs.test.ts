@@ -304,6 +304,71 @@ describe('OCS-based Tools', () => {
     });
   });
 
+  // ─── Setup Checks ─────────────────────────────────────────────────────
+
+  describe('run_setup_checks', () => {
+    it('should return success output', async () => {
+      mockExecuteOCC.mockResolvedValue({
+        success: true,
+        exitCode: 0,
+        stdout: 'All checks passed',
+        stderr: '',
+      });
+
+      const { setupChecksTool } = await import('../tools/system/status.js');
+      const result = await setupChecksTool.handler();
+
+      expect(result.content[0].text).toContain('Setup checks completed successfully');
+      expect(result.content[0].text).toContain('All checks passed');
+      expect(result.isError).toBe(false);
+    });
+
+    it('should report failure with exit code and stderr', async () => {
+      mockExecuteOCC.mockResolvedValue({
+        success: false,
+        exitCode: 1,
+        stdout: 'PHP module missing: imagick',
+        stderr: 'Warning: performance degraded',
+      });
+
+      const { setupChecksTool } = await import('../tools/system/status.js');
+      const result = await setupChecksTool.handler();
+
+      expect(result.content[0].text).toContain('found issues');
+      expect(result.content[0].text).toContain('imagick');
+      expect(result.content[0].text).toContain('stderr');
+      expect(result.content[0].text).toContain('performance degraded');
+      expect(result.isError).toBe(true);
+    });
+
+    it('should handle thrown errors', async () => {
+      mockExecuteOCC.mockRejectedValue(new Error('OCC unavailable'));
+
+      const { setupChecksTool } = await import('../tools/system/status.js');
+      const result = await setupChecksTool.handler();
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error running setup checks');
+    });
+  });
+
+  // ─── Get Local Time ───────────────────────────────────────────────────
+
+  describe('get_local_time', () => {
+    it('should return timezone, offset, and time info', async () => {
+      const { getLocalTimeTool } = await import('../tools/system/status.js');
+      const result = await getLocalTimeTool.handler();
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed).toHaveProperty('localTime');
+      expect(parsed).toHaveProperty('utcTime');
+      expect(parsed).toHaveProperty('timezone');
+      expect(parsed).toHaveProperty('utcOffset');
+      expect(parsed.utcOffset).toMatch(/^[+-]\d{2}:\d{2}$/);
+      expect(parsed.utcTime).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+  });
+
   // ─── Bulk File Operations ─────────────────────────────────────────────
 
   describe('bulk_file_operations', () => {

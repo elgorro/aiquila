@@ -45,6 +45,18 @@ describe('MCP Tools', () => {
 
       expect(formatted).toBe('📁 Documents\n📄 readme.txt');
     });
+
+    it('should call handler and return JSON', async () => {
+      mockClient.getDirectoryContents.mockResolvedValue([
+        { type: 'directory', basename: 'Photos' },
+      ]);
+
+      const { listFilesTool } = await import('../tools/system/files.js');
+      const result = await listFilesTool.handler({ path: '/' });
+
+      expect(result.content[0].text).toContain('Photos');
+      expect(mockClient.getDirectoryContents).toHaveBeenCalledWith('/');
+    });
   });
 
   describe('read_file', () => {
@@ -185,6 +197,32 @@ describe('MCP Tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('404 Not Found');
+    });
+  });
+
+  describe('create_folder', () => {
+    it('should call createDirectory and return success', async () => {
+      mockClient.createDirectory.mockResolvedValue(undefined);
+
+      const { createFolderTool } = await import('../tools/system/files.js');
+      const result = await createFolderTool.handler({ path: '/NewFolder' });
+
+      expect(mockClient.createDirectory).toHaveBeenCalledWith('/NewFolder');
+      expect(result.content[0].text).toContain('Folder created successfully');
+      expect(result.content[0].text).toContain('/NewFolder');
+    });
+  });
+
+  describe('delete', () => {
+    it('should call deleteFile and return success', async () => {
+      mockClient.deleteFile.mockResolvedValue(undefined);
+
+      const { deleteTool } = await import('../tools/system/files.js');
+      const result = await deleteTool.handler({ path: '/old-file.txt' });
+
+      expect(mockClient.deleteFile).toHaveBeenCalledWith('/old-file.txt');
+      expect(result.content[0].text).toContain('Deleted successfully');
+      expect(result.content[0].text).toContain('/old-file.txt');
     });
   });
 
