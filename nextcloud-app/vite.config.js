@@ -2,11 +2,16 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import pkg from './package.json' with { type: 'json' }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
 	plugins: [vue()],
+	define: {
+		appName: JSON.stringify(pkg.name),
+		appVersion: JSON.stringify(pkg.version),
+	},
 	build: {
 		outDir: 'js',
 		emptyOutDir: false,
