@@ -633,12 +633,14 @@ export const listEventsTool = {
     from: z
       .string()
       .optional()
-      .describe('Start of time range in YYYYMMDD or YYYYMMDDTHHmmssZ format. Defaults to today.'),
+      .describe(
+        'Start of time range (ISO 8601, e.g. 2026-04-12 or 2026-04-12T09:00:00Z). Defaults to today.'
+      ),
     to: z
       .string()
       .optional()
       .describe(
-        'End of time range in YYYYMMDD or YYYYMMDDTHHmmssZ format. Defaults to 30 days from now.'
+        'End of time range (ISO 8601, e.g. 2026-04-12 or 2026-04-12T09:00:00Z). Defaults to 30 days from now.'
       ),
     limit: z
       .number()
@@ -660,8 +662,8 @@ export const listEventsTool = {
       const defaultTo = new Date(now);
       defaultTo.setDate(defaultTo.getDate() + 30);
 
-      const fromStr = args.from || toICalDateTime(defaultFrom.toISOString());
-      const toStr = args.to || toICalDateTime(defaultTo.toISOString());
+      const fromStr = toICalDateTime(args.from || defaultFrom.toISOString());
+      const toStr = toICalDateTime(args.to || defaultTo.toISOString());
 
       const reportBody = `<?xml version="1.0" encoding="UTF-8"?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
