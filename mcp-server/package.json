@@ -1,7 +1,7 @@
 {
   "name": "aiquila-mcp",
-  "version": "0.2.17",
-  "description": "AIquila - MCP server for Nextcloud integration with Claude AI",
+  "version": "0.2.18",
+  "description": "AIquila - MCP server for Nextcloud integration",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
