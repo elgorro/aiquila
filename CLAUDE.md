@@ -55,9 +55,15 @@ Commit messages follow **Conventional Commits** with scope:
 
 ## Version Bumps
 
-- MCP server version: `mcp-server/package.json` → `"version"`
-- Nextcloud app version: `nextcloud-app/appinfo/info.xml` → `<version>`
-- Both are versioned independently, but always bump to **one above whichever component is currently highest** — so they stay on the same number after each release.
+All locations that must be updated on each release:
+
+- **MCP server**: `mcp-server/package.json` → `"version"`
+- **MCP registry**: `mcp-server/server.json` → `"version"` fields + `ghcr.io` image tag (auto-synced by `npm run build` except the image tag)
+- **Nextcloud app**: `nextcloud-app/appinfo/info.xml` → `<version>`
+- **Nextcloud frontend**: `nextcloud-app/package.json` → `"version"`
+- **Lock file**: run `npm install` in `mcp-server/` to sync `package-lock.json`
+
+Both components stay on the same version number.
 
 ## Architecture Notes
 
