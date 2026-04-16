@@ -20,7 +20,7 @@ import Anthropic from "@anthropic-ai/sdk";
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
 const response = await (anthropic.beta.messages as any).create({
-  model: "claude-opus-4-6",
+  model: "claude-opus-4-7",
   max_tokens: 2000,
   messages: [
     {

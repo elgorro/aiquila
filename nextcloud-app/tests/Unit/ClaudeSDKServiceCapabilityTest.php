@@ -162,6 +162,54 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $this->assertArrayHasKey('outputConfig', $params);
     }
 
+    public function testOpus47UsesXhighEffort(): void {
+        $this->cache->method('get')->willReturn(null);
+        $this->cache->expects($this->atLeastOnce())->method('set');
+
+        $this->config = $this->createMock(IConfig::class);
+        $this->config->method('getUserValue')->willReturn('');
+        $this->config->method('getAppValue')
+            ->willReturnCallback(fn($app, $key, $default) => match ($key) {
+                'model' => ClaudeModels::OPUS_4_7,
+                'max_tokens' => '4096',
+                default => $default,
+            });
+
+        $info = ModelInfo::with(
+            ClaudeModels::OPUS_4_7,
+            [
+                'batch' => ['supported' => true],
+                'citations' => ['supported' => false],
+                'code_execution' => ['supported' => false],
+                'context_management' => ['supported' => false, 'strategies' => []],
+                'effort' => [
+                    'supported' => true,
+                    'high' => ['supported' => true],
+                    'low' => ['supported' => true],
+                    'max' => ['supported' => true],
+                    'medium' => ['supported' => true],
+                ],
+                'image_input' => ['supported' => true],
+                'pdf_input' => ['supported' => true],
+                'structured_outputs' => ['supported' => false],
+                'thinking' => ['supported' => true, 'types' => ['adaptive' => ['supported' => true]]],
+            ],
+            new \DateTime(),
+            'Claude Opus 4.7',
+            1000000,
+            128000
+        );
+
+        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service->setRetrieveModelInfo($info);
+
+        $service->ask('test', '', 'testuser');
+        $params = $service->lastCreateParams;
+
+        $this->assertEquals(['type' => 'adaptive'], $params['thinking']);
+        $this->assertEquals('xhigh', $params['outputConfig']['effort']);
+    }
+
     public function testNonThinkingModelOmitsThinkingParams(): void {
         $this->cache->method('get')->willReturn(null);
 

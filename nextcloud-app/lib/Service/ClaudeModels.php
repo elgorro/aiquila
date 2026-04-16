@@ -14,7 +14,10 @@ class ClaudeModels {
 
     // ── Model ID constants ─────────────────────────────────────────────────
 
-    /** Opus 4.6 – latest frontier model (adaptive thinking, 128K output) */
+    /** Opus 4.7 – most capable frontier model (adaptive thinking, 128K output, 1M context, xhigh effort) */
+    public const OPUS_4_7   = 'claude-opus-4-7';
+
+    /** Opus 4.6 – frontier model (adaptive thinking, 128K output) */
     public const OPUS_4_6   = 'claude-opus-4-6';
 
     /** Sonnet 4.6 – adaptive thinking, 64K output */
@@ -43,6 +46,7 @@ class ClaudeModels {
     // ── Per-model output token ceilings ────────────────────────────────────
 
     private const MAX_TOKENS_CEILING = [
+        self::OPUS_4_7   => 128000,
         self::OPUS_4_6   => 128000,
         self::SONNET_4_6 => 64000,
     ];
@@ -50,11 +54,13 @@ class ClaudeModels {
     // ── Capability flags ───────────────────────────────────────────────────
 
     private const SUPPORTS_THINKING = [
+        self::OPUS_4_7   => true,
         self::OPUS_4_6   => true,
         self::SONNET_4_6 => true,
     ];
 
     private const SUPPORTS_EFFORT = [
+        self::OPUS_4_7   => true,
         self::OPUS_4_6   => true,
         self::SONNET_4_6 => true,
     ];
@@ -82,6 +88,7 @@ class ClaudeModels {
      */
     public static function getAllModels(): array {
         return [
+            self::OPUS_4_7,
             self::OPUS_4_6,
             self::SONNET_4_6,
             self::SONNET_4_5,
@@ -95,6 +102,7 @@ class ClaudeModels {
     // ── Per-model effort level (app-level policy) ────────────────────────
 
     public const EFFORT_LEVEL = [
+        self::OPUS_4_7   => 'xhigh',
         self::OPUS_4_6   => 'high',
         self::SONNET_4_6 => 'medium',
     ];
