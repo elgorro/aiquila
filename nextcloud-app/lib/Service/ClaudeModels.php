@@ -32,10 +32,10 @@ class ClaudeModels {
     /** Opus 4.5 */
     public const OPUS_4_5   = 'claude-opus-4-5-20251101';
 
-    /** Sonnet 4 (legacy) */
+    /** Sonnet 4 — deprecated by Anthropic (SDK 0.15.0 dropped from typed Model enum). Constant kept so existing user_model preferences continue to resolve. */
     public const SONNET_4   = 'claude-sonnet-4-20250514';
 
-    /** Opus 4 (legacy) */
+    /** Opus 4 — deprecated by Anthropic (SDK 0.15.0 dropped from typed Model enum). Constant kept so existing user_model preferences continue to resolve. */
     public const OPUS_4     = 'claude-opus-4-20250514';
 
     // ── Application defaults ───────────────────────────────────────────────
@@ -85,6 +85,8 @@ class ClaudeModels {
 
     /**
      * Ordered model list for the admin UI datalist (most capable first).
+     * SONNET_4 / OPUS_4 are intentionally omitted — Anthropic deprecated them
+     * and the SDK removed them from its typed Model enum in 0.15.0.
      */
     public static function getAllModels(): array {
         return [
@@ -94,8 +96,6 @@ class ClaudeModels {
             self::SONNET_4_5,
             self::HAIKU_4_5,
             self::OPUS_4_5,
-            self::SONNET_4,
-            self::OPUS_4,
         ];
     }
 

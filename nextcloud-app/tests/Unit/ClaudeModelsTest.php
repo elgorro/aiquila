@@ -11,17 +11,20 @@ class ClaudeModelsTest extends TestCase {
         $this->assertEquals(ClaudeModels::SONNET_4_6, ClaudeModels::DEFAULT_MODEL);
     }
 
-    public function testGetAllModelsReturnsAllEightModels(): void {
+    public function testGetAllModelsReturnsCurrentModelsOnly(): void {
         $models = ClaudeModels::getAllModels();
-        $this->assertCount(8, $models);
+        $this->assertCount(6, $models);
         $this->assertContains(ClaudeModels::OPUS_4_7,   $models);
         $this->assertContains(ClaudeModels::OPUS_4_6,   $models);
         $this->assertContains(ClaudeModels::SONNET_4_6, $models);
         $this->assertContains(ClaudeModels::SONNET_4_5, $models);
         $this->assertContains(ClaudeModels::HAIKU_4_5,  $models);
         $this->assertContains(ClaudeModels::OPUS_4_5,   $models);
-        $this->assertContains(ClaudeModels::SONNET_4,   $models);
-        $this->assertContains(ClaudeModels::OPUS_4,     $models);
+        // Sonnet 4 and Opus 4 are deprecated upstream (SDK 0.15.0 dropped
+        // them from the typed Model enum); the constants remain for
+        // backward compat but we no longer advertise them in the UI.
+        $this->assertNotContains(ClaudeModels::SONNET_4, $models);
+        $this->assertNotContains(ClaudeModels::OPUS_4,   $models);
         // Most capable first
         $this->assertSame(ClaudeModels::OPUS_4_7, $models[0]);
     }
