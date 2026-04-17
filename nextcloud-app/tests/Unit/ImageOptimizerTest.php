@@ -71,8 +71,8 @@ class ImageOptimizerTest extends TestCase {
             $this->markTestSkipped('GD extension not available');
         }
 
-        // Create a 2000x1000 JPEG (exceeds 1568px long edge)
-        $img = imagecreatetruecolor(2000, 1000);
+        // Create a 4000x2000 JPEG (exceeds the 2576 px long edge cap).
+        $img = imagecreatetruecolor(4000, 2000);
         ob_start();
         imagejpeg($img, null, 90);
         $rawBytes = ob_get_clean();
@@ -83,10 +83,10 @@ class ImageOptimizerTest extends TestCase {
         $this->assertEquals('image/jpeg', $result['mimeType']);
         $this->assertTrue($result['resized']);
 
-        // Verify the resized image fits within 1568px
+        // Verify the resized image fits within 2576 px.
         $resizedBytes = base64_decode($result['data']);
         $dims = getimagesizefromstring($resizedBytes);
-        $this->assertLessThanOrEqual(1568, max($dims[0], $dims[1]));
+        $this->assertLessThanOrEqual(2576, max($dims[0], $dims[1]));
         // Check aspect ratio preserved (2:1)
         $this->assertEqualsWithDelta(2.0, $dims[0] / $dims[1], 0.05);
     }
@@ -96,7 +96,8 @@ class ImageOptimizerTest extends TestCase {
             $this->markTestSkipped('GD extension not available');
         }
 
-        $img = imagecreatetruecolor(2000, 2000);
+        // Exceed the 2576 px long-edge cap so the optimizer resizes.
+        $img = imagecreatetruecolor(3000, 3000);
         ob_start();
         imagepng($img);
         $rawBytes = ob_get_clean();
@@ -114,7 +115,7 @@ class ImageOptimizerTest extends TestCase {
         }
 
         // Create a large GIF — should be skipped (may be animated)
-        $img = imagecreatetruecolor(2000, 2000);
+        $img = imagecreatetruecolor(3000, 3000);
         ob_start();
         imagegif($img);
         $rawBytes = ob_get_clean();
