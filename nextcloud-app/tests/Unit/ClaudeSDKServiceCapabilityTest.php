@@ -3,6 +3,9 @@
 namespace OCA\AIquila\Tests\Unit;
 
 use Anthropic\Client;
+use Anthropic\Core\Exceptions\RateLimitException;
+use Anthropic\ErrorType;
+use Anthropic\Messages\RefusalStopDetails;
 use Anthropic\Models\ModelInfo;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
@@ -162,6 +165,54 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $this->assertArrayHasKey('outputConfig', $params);
     }
 
+    public function testOpus47UsesXhighEffort(): void {
+        $this->cache->method('get')->willReturn(null);
+        $this->cache->expects($this->atLeastOnce())->method('set');
+
+        $this->config = $this->createMock(IConfig::class);
+        $this->config->method('getUserValue')->willReturn('');
+        $this->config->method('getAppValue')
+            ->willReturnCallback(fn($app, $key, $default) => match ($key) {
+                'model' => ClaudeModels::OPUS_4_7,
+                'max_tokens' => '4096',
+                default => $default,
+            });
+
+        $info = ModelInfo::with(
+            ClaudeModels::OPUS_4_7,
+            [
+                'batch' => ['supported' => true],
+                'citations' => ['supported' => false],
+                'code_execution' => ['supported' => false],
+                'context_management' => ['supported' => false, 'strategies' => []],
+                'effort' => [
+                    'supported' => true,
+                    'high' => ['supported' => true],
+                    'low' => ['supported' => true],
+                    'max' => ['supported' => true],
+                    'medium' => ['supported' => true],
+                ],
+                'image_input' => ['supported' => true],
+                'pdf_input' => ['supported' => true],
+                'structured_outputs' => ['supported' => false],
+                'thinking' => ['supported' => true, 'types' => ['adaptive' => ['supported' => true]]],
+            ],
+            new \DateTime(),
+            'Claude Opus 4.7',
+            1000000,
+            128000
+        );
+
+        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service->setRetrieveModelInfo($info);
+
+        $service->ask('test', '', 'testuser');
+        $params = $service->lastCreateParams;
+
+        $this->assertEquals(['type' => 'adaptive'], $params['thinking']);
+        $this->assertEquals('xhigh', $params['outputConfig']['effort']);
+    }
+
     public function testNonThinkingModelOmitsThinkingParams(): void {
         $this->cache->method('get')->willReturn(null);
 
@@ -208,6 +259,128 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
 
         $this->assertArrayNotHasKey('thinking', $params);
         $this->assertArrayNotHasKey('outputConfig', $params);
+    }
+
+    public function testCallCreateStreamForwardsTools(): void {
+        // Guard: callCreateStream() must forward the tools parameter to the SDK,
+        // otherwise streaming tool-calling silently degrades to tool-less behavior.
+        $ref = new \ReflectionMethod(ClaudeSDKService::class, 'callCreateStream');
+        $file = $ref->getFileName();
+        $src = file_get_contents($file);
+        $start = $ref->getStartLine() - 1;
+        $end = $ref->getEndLine();
+        $body = implode("\n", array_slice(explode("\n", $src), $start, $end - $start));
+
+        $this->assertStringContainsString(
+            "tools: \$params['tools'] ?? null",
+            $body,
+            'callCreateStream must forward tools to the SDK; see plan file stay-on-this-branch-imperative-fiddle.md change #1.'
+        );
+    }
+
+    public function testErrorTypeIncludedInExceptionLogContext(): void {
+        $this->cache->method('get')->willReturn([
+            'max_tokens' => 64000,
+            'supports_thinking' => false,
+            'supports_effort' => false,
+        ]);
+
+        // Build a RateLimitException (subclass of APIStatusException) and
+        // force the typed ErrorType via reflection — the SDK constructor
+        // needs full HTTP Request/Response objects which are awkward to mock.
+        $e = (new \ReflectionClass(RateLimitException::class))->newInstanceWithoutConstructor();
+        $typeProp = new \ReflectionProperty(\Anthropic\Core\Exceptions\APIStatusException::class, 'type');
+        $typeProp->setAccessible(true);
+        $typeProp->setValue($e, ErrorType::RATE_LIMIT_ERROR);
+        $msgProp = new \ReflectionProperty(\Exception::class, 'message');
+        $msgProp->setAccessible(true);
+        $msgProp->setValue($e, 'rate limited');
+
+        $capturedCtx = null;
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->atLeastOnce())
+            ->method('error')
+            ->willReturnCallback(function ($msg, $ctx) use (&$capturedCtx) {
+                if (str_contains($msg, 'Rate limit')) {
+                    $capturedCtx = $ctx;
+                }
+            });
+
+        $service = new class($this->config, $logger, $this->credentials, $this->cacheFactory, $e) extends ClaudeSDKService {
+            public function __construct($cfg, $log, $cred, $cf, private \Throwable $toThrow) {
+                parent::__construct($cfg, $log, $cred, $cf);
+            }
+            protected function callCreate(Client $client, array $params): \Anthropic\Messages\Message {
+                throw $this->toThrow;
+            }
+            protected function getClient(?string $userId = null): Client {
+                return (new \ReflectionClass(Client::class))->newInstanceWithoutConstructor();
+            }
+        };
+
+        $result = $service->ask('test', '', 'testuser');
+
+        $this->assertArrayHasKey('error', $result);
+        $this->assertNotNull($capturedCtx, 'Rate limit error should have been logged');
+        $this->assertArrayHasKey('error_type', $capturedCtx);
+        $this->assertEquals('rate_limit_error', $capturedCtx['error_type']);
+    }
+
+    public function testRefusalStopDetailsLoggedInResponseMetadata(): void {
+        $this->cache->method('get')->willReturn([
+            'max_tokens' => 64000,
+            'supports_thinking' => false,
+            'supports_effort' => false,
+        ]);
+
+        $capturedDebug = [];
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->method('debug')->willReturnCallback(function ($msg, $ctx = []) use (&$capturedDebug) {
+            if (str_contains($msg, 'Response metadata')) {
+                $capturedDebug[] = $ctx;
+            }
+        });
+
+        $refusal = RefusalStopDetails::with('cyber', 'I cannot help with that.');
+
+        $service = new class($this->config, $logger, $this->credentials, $this->cacheFactory, $refusal) extends ClaudeSDKService {
+            public function __construct($cfg, $log, $cred, $cf, private RefusalStopDetails $refusal) {
+                parent::__construct($cfg, $log, $cred, $cf);
+            }
+            protected function callCreate(Client $client, array $params): \Anthropic\Messages\Message {
+                $stub = (new \ReflectionClass(\Anthropic\Messages\Message::class))->newInstanceWithoutConstructor();
+                $ref = new \ReflectionClass($stub);
+                $textObj = new \stdClass();
+                $textObj->type = 'text';
+                $textObj->text = '';
+                foreach (['content' => [$textObj], 'stopReason' => 'refusal', 'stopDetails' => $this->refusal] as $prop => $val) {
+                    $p = $ref->getProperty($prop);
+                    $p->setAccessible(true);
+                    $p->setValue($stub, $val);
+                }
+                $usage = \Anthropic\Messages\Usage::with(null, null, null, null, 10, 5, null, null);
+                $p = $ref->getProperty('usage');
+                $p->setValue($stub, $usage);
+                return $stub;
+            }
+            protected function getClient(?string $userId = null): Client {
+                return (new \ReflectionClass(Client::class))->newInstanceWithoutConstructor();
+            }
+        };
+
+        $service->ask('test', '', 'testuser');
+
+        $found = null;
+        foreach ($capturedDebug as $ctx) {
+            if (isset($ctx['stop_details'])) {
+                $found = $ctx['stop_details'];
+                break;
+            }
+        }
+        $this->assertNotNull($found, 'Response metadata log should include stop_details for refusals');
+        $this->assertEquals('refusal', $found['type']);
+        $this->assertEquals('cyber', $found['category']);
+        $this->assertEquals('I cannot help with that.', $found['explanation']);
     }
 
     public function testUsageIncludesCacheTokens(): void {

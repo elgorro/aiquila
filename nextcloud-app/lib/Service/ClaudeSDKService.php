@@ -218,6 +218,7 @@ class ClaudeSDKService {
             topP: $params['top_p'] ?? null,
             topK: $params['top_k'] ?? null,
             stopSequences: $params['stop_sequences'] ?? null,
+            tools: $params['tools'] ?? null,
         );
     }
 
@@ -320,7 +321,8 @@ class ClaudeSDKService {
     }
 
     /**
-     * Log informational response metadata (inference geo, service tier) at debug level.
+     * Log informational response metadata (inference geo, service tier, refusal details)
+     * at debug level.
      */
     private function logResponseMetadata(Message $response): void {
         $meta = [];
@@ -329,6 +331,13 @@ class ClaudeSDKService {
         }
         if (isset($response->usage->serviceTier) && $response->usage->serviceTier !== null) {
             $meta['service_tier'] = $response->usage->serviceTier;
+        }
+        if (isset($response->stopDetails) && $response->stopDetails !== null) {
+            $meta['stop_details'] = [
+                'type' => $response->stopDetails->type,
+                'category' => $response->stopDetails->category ?? null,
+                'explanation' => $response->stopDetails->explanation ?? null,
+            ];
         }
         if (!empty($meta)) {
             $this->logger->debug('AIquila SDK: Response metadata', $meta);
@@ -341,28 +350,43 @@ class ClaudeSDKService {
      */
     private function handleException(\Throwable $e, string $context = ''): array {
         $prefix = $context ? "AIquila SDK: $context" : 'AIquila SDK';
+        $logCtx = $this->buildErrorLogContext($e);
         if ($e instanceof AuthenticationException) {
-            $this->logger->error("$prefix: Authentication error", ['error' => $e->getMessage()]);
+            $this->logger->error("$prefix: Authentication error", $logCtx);
             return ['error' => 'Invalid API key. Please check your configuration.'];
         }
         if ($e instanceof PermissionDeniedException) {
-            $this->logger->error("$prefix: Permission denied", ['error' => $e->getMessage()]);
+            $this->logger->error("$prefix: Permission denied", $logCtx);
             return ['error' => 'Your API key does not have permission to use this resource.'];
         }
         if ($e instanceof RateLimitException) {
-            $this->logger->error("$prefix: Rate limit exceeded", ['error' => $e->getMessage()]);
+            $this->logger->error("$prefix: Rate limit exceeded", $logCtx);
             return ['error' => 'Rate limit exceeded. Please try again later.'];
         }
         if ($e instanceof InternalServerException) {
-            $this->logger->error("$prefix: Anthropic server error", ['error' => $e->getMessage()]);
+            $this->logger->error("$prefix: Anthropic server error", $logCtx);
             return ['error' => 'Anthropic API is temporarily unavailable. Please try again later.'];
         }
         if ($e instanceof APIConnectionException || $e instanceof APITimeoutException) {
-            $this->logger->error("$prefix: Connection error", ['error' => $e->getMessage()]);
+            $this->logger->error("$prefix: Connection error", $logCtx);
             return ['error' => 'Connection to Claude API failed: ' . $e->getMessage()];
         }
-        $this->logger->error("$prefix: Error", ['error' => $e->getMessage(), 'class' => get_class($e)]);
+        $this->logger->error("$prefix: Error", $logCtx + ['class' => get_class($e)]);
         return ['error' => 'Error: ' . $e->getMessage()];
+    }
+
+    /**
+     * Build a log context for an SDK exception, including the typed
+     * ErrorType enum value when the exception carries one (SDK v0.9+).
+     *
+     * @return array{error: string, error_type?: string}
+     */
+    private function buildErrorLogContext(\Throwable $e): array {
+        $ctx = ['error' => $e->getMessage()];
+        if ($e instanceof APIStatusException && $e->type !== null) {
+            $ctx['error_type'] = $e->type->value;
+        }
+        return $ctx;
     }
 
     /**
@@ -938,22 +962,22 @@ class ClaudeSDKService {
             $this->logger->info('AIquila SDK: Stream completed successfully');
 
         } catch (AuthenticationException $e) {
-            $this->logger->error('AIquila SDK: Stream authentication error', ['error' => $e->getMessage()]);
+            $this->logger->error('AIquila SDK: Stream authentication error', $this->buildErrorLogContext($e));
             throw new \Exception('Invalid API key. Please check your configuration.');
         } catch (PermissionDeniedException $e) {
-            $this->logger->error('AIquila SDK: Stream permission denied', ['error' => $e->getMessage()]);
+            $this->logger->error('AIquila SDK: Stream permission denied', $this->buildErrorLogContext($e));
             throw new \Exception('Your API key does not have permission to use this resource.');
         } catch (RateLimitException $e) {
-            $this->logger->error('AIquila SDK: Stream rate limit exceeded', ['error' => $e->getMessage()]);
+            $this->logger->error('AIquila SDK: Stream rate limit exceeded', $this->buildErrorLogContext($e));
             throw new \Exception('Rate limit exceeded. Please try again later.');
         } catch (InternalServerException $e) {
-            $this->logger->error('AIquila SDK: Stream Anthropic server error', ['error' => $e->getMessage()]);
+            $this->logger->error('AIquila SDK: Stream Anthropic server error', $this->buildErrorLogContext($e));
             throw new \Exception('Anthropic API is temporarily unavailable. Please try again later.');
         } catch (APIConnectionException | APITimeoutException $e) {
-            $this->logger->error('AIquila SDK: Stream connection error', ['error' => $e->getMessage()]);
+            $this->logger->error('AIquila SDK: Stream connection error', $this->buildErrorLogContext($e));
             throw new \Exception('Connection to Claude API failed: ' . $e->getMessage());
         } catch (APIStatusException | \Exception $e) {
-            $this->logger->error('AIquila SDK: Stream error', ['error' => $e->getMessage(), 'class' => get_class($e)]);
+            $this->logger->error('AIquila SDK: Stream error', $this->buildErrorLogContext($e) + ['class' => get_class($e)]);
             throw new \Exception('Stream error: ' . $e->getMessage());
         }
     }

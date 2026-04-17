@@ -126,7 +126,7 @@ Get current AIquila configuration status.
   ```php
   [
       'configured' => bool,      // Whether an API key is set
-      'model' => string,         // Claude model (e.g., 'claude-sonnet-4-20250514')
+      'model' => string,         // Claude model (e.g., 'claude-opus-4-7', 'claude-sonnet-4-6')
       'max_tokens' => int,       // Maximum tokens (1-100000)
       'timeout' => int           // API timeout in seconds (10-1800)
   ]

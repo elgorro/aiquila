@@ -245,10 +245,13 @@ php occ aiquila:test --user username
 - **Validation**: Checked on first API request
 
 ### Model
-Current Claude models (as of January 2025):
-- `claude-sonnet-4-5-20250929` - Latest Sonnet (recommended)
-- `claude-opus-4-5-20250929` - Most capable, slower
-- `claude-3-5-sonnet-20241022` - Previous Sonnet version
+Current Claude models:
+- `claude-opus-4-7` - Most capable; adaptive thinking, xhigh effort (recommended for complex reasoning and agentic coding)
+- `claude-opus-4-6` - Frontier model with adaptive thinking, high effort
+- `claude-sonnet-4-6` - Adaptive thinking, medium effort (**default**)
+- `claude-sonnet-4-5-20250929` - Fast, cost-effective
+- `claude-haiku-4-5-20251001` - Fastest, most economical
+- `claude-opus-4-5-20251101` - Previous Opus generation
 
 ### Max Tokens
 - **Range**: 1 - 100,000

@@ -1,6 +1,6 @@
 {
   "name": "aiquila",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Claude AI Integration for Nextcloud",
   "type": "module",
   "main": "src/main.js",
@@ -23,7 +23,9 @@
     "vite": "^7.3.1"
   },
   "overrides": {
-    "brace-expansion": "^2.0.3"
+    "brace-expansion": "^2.0.3",
+    "dompurify": "^3.4.0",
+    "follow-redirects": "^1.16.0"
   },
   "dependencies": {
     "@nextcloud/axios": "^2.5.2",

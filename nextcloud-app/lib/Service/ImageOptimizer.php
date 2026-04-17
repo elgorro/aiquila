@@ -10,13 +10,14 @@ use Psr\Log\LoggerInterface;
 /**
  * Optimizes images before sending to Claude Vision API.
  *
- * Resizes images whose long edge exceeds 1568 px (Claude's optimal resolution)
- * to reduce token usage without losing visual quality.  Uses the GD library
- * (bundled with PHP) and falls back gracefully when GD is unavailable.
+ * Resizes images whose long edge exceeds 2576 px (Opus 4.7's native resolution,
+ * the upper bound accepted by all current Claude models) to cap token usage
+ * while preserving visual quality.  Uses the GD library (bundled with PHP)
+ * and falls back gracefully when GD is unavailable.
  */
 class ImageOptimizer {
-    /** Claude's recommended maximum long-edge resolution. */
-    private const MAX_LONG_EDGE = 1568;
+    /** Opus 4.7 native resolution (3.75 MP); accepted by all current Claude models. */
+    private const MAX_LONG_EDGE = 2576;
 
     /** Maximum number of images Claude accepts per request. */
     public const MAX_IMAGES = 20;
