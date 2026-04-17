@@ -12,11 +12,6 @@ use OCP\Settings\IDeclarativeSettingsForm;
 class AdminDeclarativeSettings implements IDeclarativeSettingsForm {
 
 	public function getSchema(): array {
-		$modelOptions = array_map(
-			fn (string $id) => ['name' => $id, 'value' => $id],
-			ClaudeModels::getAllModels()
-		);
-
 		return [
 			'id' => 'aiquila_admin',
 			'priority' => 20,
@@ -31,7 +26,7 @@ class AdminDeclarativeSettings implements IDeclarativeSettingsForm {
 					'title' => 'Default Claude Model',
 					'description' => 'The Claude model used for all requests unless overridden by a user.',
 					'type' => DeclarativeSettingsTypes::SELECT,
-					'options' => $modelOptions,
+					'options' => ClaudeModels::getAllModels(),
 					'default' => ClaudeModels::DEFAULT_MODEL,
 				],
 				[

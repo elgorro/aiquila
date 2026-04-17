@@ -33,12 +33,14 @@ class UserDeclarativeSettingsTest extends TestCase {
 		$this->assertSame(DeclarativeSettingsTypes::SELECT, $model['type']);
 		$this->assertSame('', $model['default']);
 
-		// First option should be the admin-default placeholder
-		$this->assertSame('', $model['options'][0]['value']);
+		// First option is the empty-string admin-default sentinel
+		$this->assertSame('', $model['options'][0]);
 
-		// Remaining options should be all available models
-		$optionValues = array_column(array_slice($model['options'], 1), 'value');
-		$this->assertSame(ClaudeModels::getAllModels(), $optionValues);
+		// Remaining options are all available models
+		$this->assertSame(
+			ClaudeModels::getAllModels(),
+			array_values(array_slice($model['options'], 1))
+		);
 	}
 
 	public function testDoesNotContainApiKey(): void {

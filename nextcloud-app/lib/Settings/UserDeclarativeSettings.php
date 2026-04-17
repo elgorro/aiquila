@@ -12,11 +12,6 @@ use OCP\Settings\IDeclarativeSettingsForm;
 class UserDeclarativeSettings implements IDeclarativeSettingsForm {
 
 	public function getSchema(): array {
-		$modelOptions = [['name' => '(admin default)', 'value' => '']];
-		foreach (ClaudeModels::getAllModels() as $id) {
-			$modelOptions[] = ['name' => $id, 'value' => $id];
-		}
-
 		return [
 			'id' => 'aiquila_user',
 			'priority' => 20,
@@ -29,9 +24,10 @@ class UserDeclarativeSettings implements IDeclarativeSettingsForm {
 				[
 					'id' => 'user_model',
 					'title' => 'Preferred Model',
-					'description' => 'Leave on "(admin default)" to use the instance-wide model.',
+					'description' => 'Leave on the blank entry to use the instance-wide model.',
 					'type' => DeclarativeSettingsTypes::SELECT,
-					'options' => $modelOptions,
+					'options' => array_merge([''], ClaudeModels::getAllModels()),
+					'placeholder' => '(admin default)',
 					'default' => '',
 				],
 			],

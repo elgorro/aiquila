@@ -33,8 +33,7 @@ class AdminDeclarativeSettingsTest extends TestCase {
 		$this->assertSame(DeclarativeSettingsTypes::SELECT, $model['type']);
 		$this->assertSame(ClaudeModels::DEFAULT_MODEL, $model['default']);
 
-		$optionValues = array_column($model['options'], 'value');
-		$this->assertSame(ClaudeModels::getAllModels(), $optionValues);
+		$this->assertSame(ClaudeModels::getAllModels(), $model['options']);
 	}
 
 	public function testMaxTokensField(): void {
