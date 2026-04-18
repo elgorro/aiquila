@@ -59,7 +59,7 @@ class AIquilaCapabilityTest extends TestCase {
         $this->config->method('getAppValue')
             ->willReturnMap([
                 ['aiquila', 'model', ClaudeModels::DEFAULT_MODEL, 'claude-opus-4-20250514'],
-                ['aiquila', 'search_enabled', 'yes', 'yes'],
+                ['aiquila', 'search_enabled', '1', '1'],
             ]);
         $this->credentialService->method('getApiKey')->willReturn('');
 
@@ -97,7 +97,7 @@ class AIquilaCapabilityTest extends TestCase {
         $this->config->method('getAppValue')
             ->willReturnMap([
                 ['aiquila', 'model', ClaudeModels::DEFAULT_MODEL, ClaudeModels::DEFAULT_MODEL],
-                ['aiquila', 'search_enabled', 'yes', 'no'],
+                ['aiquila', 'search_enabled', '1', '0'],
             ]);
         $this->credentialService->method('getApiKey')->willReturn('');
 
@@ -111,7 +111,7 @@ class AIquilaCapabilityTest extends TestCase {
         $this->config->method('getAppValue')
             ->willReturnMap([
                 ['aiquila', 'model', ClaudeModels::DEFAULT_MODEL, ClaudeModels::DEFAULT_MODEL],
-                ['aiquila', 'search_enabled', 'yes', 'yes'],
+                ['aiquila', 'search_enabled', '1', '1'],
             ]);
         $this->credentialService->method('getApiKey')->willReturn('');
 

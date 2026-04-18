@@ -5,37 +5,49 @@ style('aiquila', 'admin');
 ?>
 
 <div id="aiquila-admin" class="section">
-    <h2>AIquila API &amp; Connections</h2>
-
+    <h2>AIquila</h2>
     <p class="settings-hint">
-        Configure your Claude API key. Get one from
-        <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a>
+        AIquila connects Nextcloud to Anthropic's Claude models so your users can chat, summarise, translate and more directly inside Nextcloud. You need an Anthropic API key to get started; model and request tuning live in the cards further down this page.
     </p>
 
-    <form id="aiquila-admin-form">
-        <div class="form-group">
-            <label for="aiquila-api-key">Claude API Key</label>
-            <input type="password"
-                   id="aiquila-api-key"
-                   name="api_key"
-                   placeholder="<?php echo $_['has_key'] ? 'API key configured' : 'sk-ant-...'; ?>"
-                   value="">
+    <div class="section">
+        <h3>Claude API key</h3>
+        <p class="settings-hint">
+            Paste your Anthropic API key below. Get one from
+            <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>.
+            The key is stored encrypted in Nextcloud's credential manager and used for every request unless a user provides their own in personal settings. Use <em>Test Configuration</em> after saving to confirm the key actually reaches Anthropic.
+        </p>
+
+        <form id="aiquila-admin-form">
+            <div class="form-group">
+                <label for="aiquila-api-key">Claude API Key</label>
+                <input type="password"
+                       id="aiquila-api-key"
+                       name="api_key"
+                       placeholder="<?php echo $_['has_key'] ? 'API key configured' : 'sk-ant-...'; ?>"
+                       value="">
+            </div>
+
+            <button type="submit" class="primary">Save</button>
+            <button type="button" id="aiquila-test-config" class="secondary">Test Configuration</button>
+            <span id="aiquila-status"></span>
+        </form>
+
+        <div id="aiquila-test-result" style="display: none;">
+            <h4>Test Result</h4>
+            <pre id="aiquila-test-output"></pre>
         </div>
-
-        <button type="submit" class="primary">Save</button>
-        <button type="button" id="aiquila-test-config" class="secondary">Test Configuration</button>
-        <span id="aiquila-status"></span>
-    </form>
-
-    <div id="aiquila-test-result" style="display: none;">
-        <h3>Test Result</h3>
-        <pre id="aiquila-test-output"></pre>
     </div>
 
     <div id="aiquila-mcp-servers" class="section">
-        <h3>MCP Servers</h3>
+        <h3>MCP servers</h3>
         <p class="settings-hint">
-            Connect MCP servers to give Claude access to tools (files, calendar, notes, etc.)
+            Model Context Protocol (MCP) servers give Claude tools — files, calendar, notes, and so on — that it can call during a conversation. Each server you add here becomes available to every user on this instance.
+            New to MCP? Read
+            <a href="https://modelcontextprotocol.io/docs/getting-started/intro" target="_blank" rel="noopener noreferrer">What's MCP?</a>
+            or follow the
+            <a href="https://github.com/elgorro/aiquila/tree/main/docs/installation/mcp-installation.md" target="_blank" rel="noopener noreferrer">free MCP installation guide</a>
+            to run the bundled AIquila MCP server.
         </p>
 
         <div id="mcp-server-list"></div>
@@ -76,20 +88,12 @@ style('aiquila', 'admin');
         </div>
     </div>
 
-    <div class="aiquila-resources">
-        <h3>MCP</h3>
-        <ul>
-            <li><a href="https://github.com/elgorro/aiquila/tree/main/docs/installation/mcp-installation.md" target="_blank" rel="noopener noreferrer">🧭 Free MCP Installation</a></li>
-            <li><a href="https://modelcontextprotocol.io/docs/getting-started/intro" target="_blank" rel="noopener noreferrer">📖 What's MCP?</a></li>
-        </ul>
-    </div>
-
-    <div class="aiquila-resources">
+    <div class="aiquila-resources section">
         <h3>Resources</h3>
         <ul>
-            <li><a href="https://github.com/elgorro/aiquila" target="_blank" rel="noopener noreferrer">📦 GitHub Repository</a></li>
+            <li><a href="https://github.com/elgorro/aiquila" target="_blank" rel="noopener noreferrer">📦 GitHub repository</a></li>
             <li><a href="https://github.com/elgorro/aiquila/tree/main/docs" target="_blank" rel="noopener noreferrer">📖 Documentation</a></li>
-            <li><a href="https://github.com/elgorro/aiquila/issues" target="_blank" rel="noopener noreferrer">🐛 Report Issues</a></li>
+            <li><a href="https://github.com/elgorro/aiquila/issues" target="_blank" rel="noopener noreferrer">🐛 Report issues</a></li>
             <li><a href="https://github.com/elgorro/aiquila/discussions" target="_blank" rel="noopener noreferrer">💬 Discussions</a></li>
         </ul>
     </div>

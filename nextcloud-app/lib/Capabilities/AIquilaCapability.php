@@ -43,7 +43,7 @@ class AIquilaCapability implements ICapability {
                 'model'          => $this->config->getAppValue(self::APP_ID, 'model', ClaudeModels::DEFAULT_MODEL),
                 'providers'      => $providers,
                 'api_configured' => $this->credentialService->getApiKey(null) !== '',
-                'search_enabled' => $this->config->getAppValue(self::APP_ID, 'search_enabled', 'yes') === 'yes',
+                'search_enabled' => $this->config->getAppValue(self::APP_ID, 'search_enabled', '1') !== '0',
             ],
         ];
     }
