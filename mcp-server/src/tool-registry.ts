@@ -37,6 +37,7 @@ import { notificationsTools } from './tools/apps/notifications.js';
 import { trashTools } from './tools/apps/trash.js';
 import { versionsTools } from './tools/apps/versions.js';
 import { projectsTools } from './tools/apps/projects.js';
+import { pollsTools } from './tools/apps/polls.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolArray = Array<{
@@ -95,6 +96,7 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
   { category: 'talk', appIds: ['spreed'], tools: talkTools },
   { category: 'circles', appIds: ['circles'], tools: circlesTools },
   { category: 'bookmarks', appIds: ['bookmarks'], tools: bookmarksTools },
+  { category: 'polls', appIds: ['polls'], tools: pollsTools },
   { category: 'assistant', appIds: ['assistant'], tools: assistantTools },
   { category: 'translate', appIds: ['text_translate', 'translate'], tools: translateTools },
   { category: 'user_status', appIds: ['user_status'], tools: userStatusTools },
