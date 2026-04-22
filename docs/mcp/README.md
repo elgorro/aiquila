@@ -35,6 +35,7 @@ Nextcloud apps and administration:
 - **Bookmarks** — Bookmark CRUD, folder hierarchy, and tag management
 - **Maps** — Favorites, GPS devices/tracks, photo geotagging, custom maps, import/export
 - **Notes** — Markdown notes with categories and search
+- **Polls** — Create text/date polls, vote, comment, and share
 - **Cookbook** — Recipe management with schema.org format
 - **Assistant** — Nextcloud AI task processing and image generation
 - **Shares** — File share CRUD and auditing
@@ -196,6 +197,31 @@ Nextcloud apps and administration:
 | `create_note` | Create a note | [Notes](tools/apps/notes.md#create_note) |
 | `update_note` | Update a note | [Notes](tools/apps/notes.md#update_note) |
 | `delete_note` | Delete a note | [Notes](tools/apps/notes.md#delete_note) |
+
+#### Polls (21 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_polls` | List all polls | [Polls](tools/apps/polls.md#list_polls) |
+| `get_poll` | Get poll details | [Polls](tools/apps/polls.md#get_poll) |
+| `create_poll` | Create a new poll (text or date) | [Polls](tools/apps/polls.md#create_poll) |
+| `update_poll` | Update poll configuration | [Polls](tools/apps/polls.md#update_poll) |
+| `delete_poll` | Delete a poll | [Polls](tools/apps/polls.md#delete_poll) |
+| `close_poll` | Close voting on a poll | [Polls](tools/apps/polls.md#close_poll) |
+| `reopen_poll` | Reopen a closed poll | [Polls](tools/apps/polls.md#reopen_poll) |
+| `clone_poll` | Clone an existing poll | [Polls](tools/apps/polls.md#clone_poll) |
+| `list_poll_options` | List options with tallies | [Polls](tools/apps/polls.md#list_poll_options) |
+| `add_text_poll_option` | Add a text option | [Polls](tools/apps/polls.md#add_text_poll_option) |
+| `add_date_poll_option` | Add a date/time option | [Polls](tools/apps/polls.md#add_date_poll_option) |
+| `delete_poll_option` | Delete an option | [Polls](tools/apps/polls.md#delete_poll_option) |
+| `list_poll_votes` | List votes on a poll | [Polls](tools/apps/polls.md#list_poll_votes) |
+| `vote_on_poll` | Cast or change your vote | [Polls](tools/apps/polls.md#vote_on_poll) |
+| `list_poll_comments` | List poll comments | [Polls](tools/apps/polls.md#list_poll_comments) |
+| `add_poll_comment` | Post a comment | [Polls](tools/apps/polls.md#add_poll_comment) |
+| `delete_poll_comment` | Delete a comment | [Polls](tools/apps/polls.md#delete_poll_comment) |
+| `list_poll_shares` | List shares | [Polls](tools/apps/polls.md#list_poll_shares) |
+| `add_poll_share` | Share via link/user/email | [Polls](tools/apps/polls.md#add_poll_share) |
+| `delete_poll_share` | Revoke a share | [Polls](tools/apps/polls.md#delete_poll_share) |
+| `set_poll_subscription` | Subscribe/unsubscribe to updates | [Polls](tools/apps/polls.md#set_poll_subscription) |
 
 #### Cookbook (6 tools)
 | Tool | Description | Documentation |
