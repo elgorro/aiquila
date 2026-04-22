@@ -38,7 +38,12 @@ describe('Polls Tools', () => {
     it('returns a formatted poll list', async () => {
       mockFetchPollsAPI.mockResolvedValue([
         samplePoll,
-        { ...samplePoll, id: 8, configuration: { ...samplePoll.configuration, title: 'Sprint dates' }, type: 'datePoll' },
+        {
+          ...samplePoll,
+          id: 8,
+          configuration: { ...samplePoll.configuration, title: 'Sprint dates' },
+          type: 'datePoll',
+        },
       ]);
 
       const { listPollsTool } = await import('../tools/apps/polls.js');

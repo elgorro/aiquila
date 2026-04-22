@@ -126,7 +126,8 @@ export const listPollsTool = {
 
 export const getPollTool = {
   name: 'get_poll',
-  description: 'Get full details of a poll by ID: configuration, owner, status, and current user state.',
+  description:
+    'Get full details of a poll by ID: configuration, owner, status, and current user state.',
   inputSchema: z.object({
     pollId: z.number().int().describe('Poll ID (from list_polls)'),
   }),
@@ -215,9 +216,7 @@ export const updatePollTool = {
       }
       if (Object.keys(pollBody).length === 0) {
         return {
-          content: [
-            { type: 'text' as const, text: 'No fields provided to update.' },
-          ],
+          content: [{ type: 'text' as const, text: 'No fields provided to update.' }],
           isError: true,
         };
       }
@@ -346,7 +345,8 @@ export const listPollOptionsTool = {
 
 export const addTextPollOptionTool = {
   name: 'add_text_poll_option',
-  description: 'Add a text option to a textPoll (e.g. "Pizza", "Sushi"). Use add_date_poll_option for datePolls.',
+  description:
+    'Add a text option to a textPoll (e.g. "Pizza", "Sushi"). Use add_date_poll_option for datePolls.',
   inputSchema: z.object({
     pollId: z.number().int().describe('Poll ID (must be a textPoll)'),
     text: z.string().describe('Option text'),
@@ -375,9 +375,7 @@ export const addDatePollOptionTool = {
     'Add a date/time option to a datePoll. Provide startAt as ISO-8601 (e.g. "2026-05-12T14:00:00Z") and durationSeconds (e.g. 3600 for 1 hour).',
   inputSchema: z.object({
     pollId: z.number().int().describe('Poll ID (must be a datePoll)'),
-    startAt: z
-      .string()
-      .describe('Start date/time as ISO-8601 (e.g. "2026-05-12T14:00:00Z")'),
+    startAt: z.string().describe('Start date/time as ISO-8601 (e.g. "2026-05-12T14:00:00Z")'),
     durationSeconds: z
       .number()
       .int()
@@ -451,9 +449,7 @@ export const listPollVotesTool = {
   }),
   handler: async (args: { pollId: number }) => {
     try {
-      const { votes } = await fetchPollsAPI<{ votes: PollVote[] }>(
-        `/poll/${args.pollId}/votes`
-      );
+      const { votes } = await fetchPollsAPI<{ votes: PollVote[] }>(`/poll/${args.pollId}/votes`);
       if (!votes || votes.length === 0) {
         return { content: [{ type: 'text' as const, text: 'No votes yet.' }] };
       }
@@ -545,9 +541,7 @@ export const addPollCommentTool = {
         body: { pollId: args.pollId, message: args.message },
       });
       return {
-        content: [
-          { type: 'text' as const, text: `Comment added: ${formatComment(comment)}` },
-        ],
+        content: [{ type: 'text' as const, text: `Comment added: ${formatComment(comment)}` }],
       };
     } catch (error) {
       return handleAppError(error, 'Error adding comment', pollsStatusMap);
@@ -616,10 +610,7 @@ export const addPollShareTool = {
       .string()
       .optional()
       .describe('Nextcloud user ID (for type=user) or email address (for type=email)'),
-    displayName: z
-      .string()
-      .optional()
-      .describe('Display name (required for type=email)'),
+    displayName: z.string().optional().describe('Display name (required for type=email)'),
   }),
   handler: async (args: {
     pollId: number;
@@ -632,9 +623,7 @@ export const addPollShareTool = {
       if (args.type === 'user') {
         if (!args.userId) {
           return {
-            content: [
-              { type: 'text' as const, text: 'userId is required for type="user".' },
-            ],
+            content: [{ type: 'text' as const, text: 'userId is required for type="user".' }],
             isError: true,
           };
         }
@@ -675,7 +664,8 @@ export const addPollShareTool = {
 
 export const deletePollShareTool = {
   name: 'delete_poll_share',
-  description: 'Revoke a poll share by its token (obtained from list_poll_shares or add_poll_share).',
+  description:
+    'Revoke a poll share by its token (obtained from list_poll_shares or add_poll_share).',
   inputSchema: z.object({
     token: z.string().describe('Share token'),
   }),
