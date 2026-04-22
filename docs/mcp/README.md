@@ -36,6 +36,7 @@ Nextcloud apps and administration:
 - **Maps** — Favorites, GPS devices/tracks, photo geotagging, custom maps, import/export
 - **Notes** — Markdown notes with categories and search
 - **Polls** — Create text/date polls, vote, comment, and share
+- **Forms** — Build surveys, collect responses, and export results
 - **Cookbook** — Recipe management with schema.org format
 - **Assistant** — Nextcloud AI task processing and image generation
 - **Shares** — File share CRUD and auditing
@@ -222,6 +223,35 @@ Nextcloud apps and administration:
 | `add_poll_share` | Share via link/user/email | [Polls](tools/apps/polls.md#add_poll_share) |
 | `delete_poll_share` | Revoke a share | [Polls](tools/apps/polls.md#delete_poll_share) |
 | `set_poll_subscription` | Subscribe/unsubscribe to updates | [Polls](tools/apps/polls.md#set_poll_subscription) |
+
+#### Forms (25 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_forms` | List owned/shared/partial forms | [Forms](tools/apps/forms.md#list_forms) |
+| `get_form` | Get a form with questions and shares | [Forms](tools/apps/forms.md#get_form) |
+| `create_form` | Create a new empty form | [Forms](tools/apps/forms.md#create_form) |
+| `clone_form` | Clone an existing form | [Forms](tools/apps/forms.md#clone_form) |
+| `update_form` | Update form title, state, expiration, flags | [Forms](tools/apps/forms.md#update_form) |
+| `transfer_form_owner` | Transfer form ownership | [Forms](tools/apps/forms.md#transfer_form_owner) |
+| `delete_form` | Delete a form | [Forms](tools/apps/forms.md#delete_form) |
+| `list_form_questions` | List questions on a form | [Forms](tools/apps/forms.md#list_form_questions) |
+| `create_form_question` | Add a question | [Forms](tools/apps/forms.md#create_form_question) |
+| `update_form_question` | Update a question | [Forms](tools/apps/forms.md#update_form_question) |
+| `reorder_form_questions` | Reorder questions | [Forms](tools/apps/forms.md#reorder_form_questions) |
+| `delete_form_question` | Delete a question | [Forms](tools/apps/forms.md#delete_form_question) |
+| `create_form_options` | Add options to a choice question | [Forms](tools/apps/forms.md#create_form_options) |
+| `update_form_option` | Update an option | [Forms](tools/apps/forms.md#update_form_option) |
+| `reorder_form_options` | Reorder options | [Forms](tools/apps/forms.md#reorder_form_options) |
+| `delete_form_option` | Delete an option | [Forms](tools/apps/forms.md#delete_form_option) |
+| `create_form_share` | Share with a user, group, or public link | [Forms](tools/apps/forms.md#create_form_share) |
+| `update_form_share` | Change share permissions | [Forms](tools/apps/forms.md#update_form_share) |
+| `delete_form_share` | Revoke a share | [Forms](tools/apps/forms.md#delete_form_share) |
+| `list_form_submissions` | List submissions (search/paginate) | [Forms](tools/apps/forms.md#list_form_submissions) |
+| `get_form_submission` | Get a single submission | [Forms](tools/apps/forms.md#get_form_submission) |
+| `create_form_submission` | Submit answers to a form | [Forms](tools/apps/forms.md#create_form_submission) |
+| `delete_form_submission` | Delete a submission | [Forms](tools/apps/forms.md#delete_form_submission) |
+| `delete_all_form_submissions` | Delete all submissions | [Forms](tools/apps/forms.md#delete_all_form_submissions) |
+| `export_form_submissions` | Export submissions to Nextcloud storage | [Forms](tools/apps/forms.md#export_form_submissions) |
 
 #### Cookbook (6 tools)
 | Tool | Description | Documentation |
