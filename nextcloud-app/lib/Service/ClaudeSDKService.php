@@ -320,6 +320,31 @@ class ClaudeSDKService {
     }
 
     /**
+     * Extract citations from text blocks in a Message response.
+     * Returns a flat list of citation entries in API-native shape; an empty
+     * list when no document had citations enabled or no citations were emitted.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function extractCitations(Message $response): array {
+        $out = [];
+        foreach ($response->content as $block) {
+            if ($block->type !== 'text') {
+                continue;
+            }
+            $citations = $block->citations ?? null;
+            if (!is_array($citations) || $citations === []) {
+                continue;
+            }
+            foreach ($citations as $c) {
+                // SDK exposes citation entries as objects; normalise to array.
+                $out[] = is_object($c) ? json_decode(json_encode($c), true) : $c;
+            }
+        }
+        return $out;
+    }
+
+    /**
      * Extract usage data from a Message response, including cache tokens.
      *
      * @return array{input_tokens: int, output_tokens: int, cache_creation_tokens: int|null, cache_read_tokens: int|null}
@@ -448,7 +473,11 @@ class ClaudeSDKService {
 
             $this->logResponseMetadata($response);
 
-            return ['response' => $this->extractText($response), 'usage' => $usage];
+            return [
+                'response' => $this->extractText($response),
+                'usage' => $usage,
+                'citations' => $this->extractCitations($response),
+            ];
 
         } catch (\Throwable $e) {
             return $this->handleException($e, 'ask');
@@ -499,6 +528,7 @@ class ClaudeSDKService {
             return [
                 'response' => $this->extractText($response),
                 'usage' => $usage,
+                'citations' => $this->extractCitations($response),
             ];
 
         } catch (\Throwable $e) {
@@ -544,6 +574,7 @@ class ClaudeSDKService {
         $totalOutputTokens = 0;
         $totalCacheCreationTokens = 0;
         $totalCacheReadTokens = 0;
+        $allCitations = [];
 
         for ($i = 0; $i < $maxIterations; $i++) {
             try {
@@ -557,6 +588,7 @@ class ClaudeSDKService {
             $totalOutputTokens += $response->usage->outputTokens ?? 0;
             $totalCacheCreationTokens += $response->usage->cacheCreationInputTokens ?? 0;
             $totalCacheReadTokens += $response->usage->cacheReadInputTokens ?? 0;
+            $allCitations = array_merge($allCitations, $this->extractCitations($response));
 
             $this->logResponseMetadata($response);
 
@@ -582,6 +614,7 @@ class ClaudeSDKService {
                             'cache_creation_tokens' => $totalCacheCreationTokens ?: null,
                             'cache_read_tokens' => $totalCacheReadTokens ?: null,
                         ],
+                        'citations' => $allCitations,
                     ];
                 }
             }
@@ -652,6 +685,7 @@ class ClaudeSDKService {
                 'cache_creation_tokens' => $totalCacheCreationTokens ?: null,
                 'cache_read_tokens' => $totalCacheReadTokens ?: null,
             ],
+            'citations' => $allCitations,
         ];
     }
 
@@ -675,15 +709,17 @@ class ClaudeSDKService {
      * @param string $title Optional document title
      * @param string|null $userId User ID for API key resolution
      * @param bool $cacheDoc Add cache_control to the document block (default true — documents are large and benefit from cache reuse)
-     * @return array ['response' => string] or ['error' => string]
+     * @param bool $citations Enable citations on the document block (default true). Cited text spans are returned alongside the response.
+     * @return array ['response' => string, 'usage' => [...], 'citations' => [...]] or ['error' => string]
      */
     public function askWithDocument(
         string  $prompt,
         string  $documentData,
         string  $mediaType,
-        string  $title    = '',
-        ?string $userId   = null,
-        bool    $cacheDoc = true
+        string  $title     = '',
+        ?string $userId    = null,
+        bool    $cacheDoc  = true,
+        bool    $citations = true
     ): array {
         try {
             $client = $this->getClient($userId);
@@ -711,6 +747,9 @@ class ClaudeSDKService {
             if ($title !== '') {
                 $docBlock['title'] = $title;
             }
+            if ($citations) {
+                $docBlock['citations'] = ['enabled' => true];
+            }
 
             $messages = [
                 [
@@ -734,7 +773,11 @@ class ClaudeSDKService {
 
             $this->logResponseMetadata($response);
 
-            return ['response' => $this->extractText($response), 'usage' => $usage];
+            return [
+                'response' => $this->extractText($response),
+                'usage' => $usage,
+                'citations' => $this->extractCitations($response),
+            ];
 
         } catch (\Throwable $e) {
             return $this->handleException($e, 'askWithDocument');

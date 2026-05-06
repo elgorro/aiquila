@@ -345,6 +345,9 @@ class ConversationController extends Controller {
         $assistantMsg->setCacheCreationTokens($result['usage']['cache_creation_tokens'] ?? null);
         $assistantMsg->setCacheReadTokens($result['usage']['cache_read_tokens'] ?? null);
         $assistantMsg->setLatencyMs($latencyMs);
+        if (!empty($result['citations'])) {
+            $assistantMsg->setCitations(json_encode($result['citations']));
+        }
         $assistantMsg->setCreatedAt(time());
         $assistantMsg = $this->messageMapper->insert($assistantMsg);
 
@@ -411,6 +414,7 @@ class ConversationController extends Controller {
             $newMsg->setCacheCreationTokens($msg->getCacheCreationTokens());
             $newMsg->setCacheReadTokens($msg->getCacheReadTokens());
             $newMsg->setLatencyMs($msg->getLatencyMs());
+            $newMsg->setCitations($msg->getCitations());
             $newMsg->setCreatedAt($msg->getCreatedAt());
             $newMsg = $this->messageMapper->insert($newMsg);
 
@@ -501,6 +505,7 @@ class ConversationController extends Controller {
                             'data' => $fileData['content'],
                         ],
                         'title' => $fileData['name'],
+                        'citations' => ['enabled' => true],
                     ];
                 } else {
                     $blocks[] = [

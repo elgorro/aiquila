@@ -12,6 +12,16 @@
 		<div v-else class="message-content">
 			{{ messageContent }}
 		</div>
+		<div v-if="citations.length > 0" class="message-citations">
+			<span class="citations-label">{{ t('aiquila', 'Sources') }}:</span>
+			<span v-for="(c, idx) in citations"
+				:key="idx"
+				class="citation-chip"
+				:title="citationTooltip(c)">
+				<sup>[{{ idx + 1 }}]</sup>
+				{{ citationLabel(c) }}
+			</span>
+		</div>
 		<div v-if="message.files && message.files.length > 0" class="message-files">
 			<!-- Image previews -->
 			<div v-if="imageFiles.length > 0" class="message-images">
@@ -139,6 +149,9 @@ export default {
 			if (!this.message.files) return []
 			return this.message.files.filter(f => !isImageMime(f.mimeType))
 		},
+		citations() {
+			return Array.isArray(this.message.citations) ? this.message.citations : []
+		},
 	},
 	mounted() {
 		this.loadPreviews()
@@ -162,6 +175,22 @@ export default {
 		formatNum(n) {
 			if (n == null) return '—'
 			return n.toLocaleString()
+		},
+		citationLabel(c) {
+			const title = c.document_title || t('aiquila', 'Document')
+			if (c.type === 'page_location') {
+				const start = c.start_page_number
+				const end = c.end_page_number
+				const range = (start && end && start !== end) ? `${start}–${end}` : (start || '?')
+				return `${title} p.${range}`
+			}
+			if (c.type === 'char_location') {
+				return `${title}`
+			}
+			return title
+		},
+		citationTooltip(c) {
+			return c.cited_text || ''
 		},
 	},
 }
@@ -198,6 +227,36 @@ export default {
 
 .message-content.markdown-body {
 	white-space: normal;
+}
+
+.message-citations {
+	margin-top: 8px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: center;
+	font-size: 12px;
+	color: var(--color-text-lighter);
+}
+
+.citations-label {
+	font-weight: 600;
+}
+
+.citation-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	padding: 2px 8px;
+	background: var(--color-background-hover);
+	border: 1px solid var(--color-border);
+	border-radius: 12px;
+	cursor: help;
+}
+
+.citation-chip sup {
+	color: var(--color-primary);
+	font-weight: 600;
 }
 
 .message-files {

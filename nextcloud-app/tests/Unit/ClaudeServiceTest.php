@@ -45,6 +45,9 @@ class TestableClaudeSDKService extends ClaudeSDKService {
     /** Optional stub text to return from makeStubMessage */
     public string $stubResponseText = '';
 
+    /** Optional citations to attach to the stub text block */
+    public array $stubCitations = [];
+
     public function throwOnCreate(\Exception $e): void {
         $this->createException = $e;
     }
@@ -110,6 +113,9 @@ class TestableClaudeSDKService extends ClaudeSDKService {
             $textObj = new \stdClass();
             $textObj->type = 'text';
             $textObj->text = $text;
+            if ($this->stubCitations !== []) {
+                $textObj->citations = $this->stubCitations;
+            }
             $contentItems[] = $textObj;
         }
 
@@ -595,6 +601,60 @@ class ClaudeServiceTest extends TestCase {
 
         $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
         $this->assertArrayNotHasKey('cache_control', $docBlock['source']);
+    }
+
+    public function testAskWithDocumentEnablesCitationsByDefault(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithDocument('Summarize', 'text content', 'text/plain', '', 'testuser');
+
+        $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertArrayHasKey('citations', $docBlock);
+        $this->assertTrue($docBlock['citations']['enabled']);
+    }
+
+    public function testAskWithDocumentOmitsCitationsWhenOptedOut(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithDocument('Summarize', 'text content', 'text/plain', '', 'testuser', true, false);
+
+        $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertArrayNotHasKey('citations', $docBlock);
+    }
+
+    public function testAskWithDocumentReturnsCitationsFromResponse(): void {
+        $this->configWithApiKey();
+
+        $this->testable->stubResponseText = 'According to the document, X holds.';
+        $this->testable->stubCitations = [
+            [
+                'type' => 'page_location',
+                'cited_text' => 'X holds in all cases.',
+                'document_index' => 0,
+                'document_title' => 'doc.pdf',
+                'start_page_number' => 3,
+                'end_page_number' => 3,
+            ],
+        ];
+
+        $result = $this->testable->askWithDocument('Q', 'data', 'application/pdf', 'doc.pdf', 'testuser');
+
+        $this->assertArrayHasKey('citations', $result);
+        $this->assertCount(1, $result['citations']);
+        $this->assertSame('page_location', $result['citations'][0]['type']);
+        $this->assertSame(3, $result['citations'][0]['start_page_number']);
+        $this->assertSame('X holds in all cases.', $result['citations'][0]['cited_text']);
+    }
+
+    public function testAskWithDocumentReturnsEmptyCitationsWhenNoneEmitted(): void {
+        $this->configWithApiKey();
+
+        $this->testable->stubResponseText = 'Plain answer.';
+
+        $result = $this->testable->askWithDocument('Q', 'data', 'text/plain', '', 'testuser');
+
+        $this->assertArrayHasKey('citations', $result);
+        $this->assertSame([], $result['citations']);
     }
 
     public function testAskWithDocumentOmitsTitleWhenEmpty(): void {
