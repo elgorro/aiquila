@@ -10,6 +10,7 @@ return [
         ['name' => 'conversation#update',  'url' => '/api/conversations/{id}',          'verb' => 'PUT'],
         ['name' => 'conversation#destroy', 'url' => '/api/conversations/{id}',          'verb' => 'DELETE'],
         ['name' => 'conversation#message',   'url' => '/api/conversations/{id}/messages',  'verb' => 'POST'],
+        ['name' => 'conversation#messageStream', 'url' => '/api/conversations/{id}/messages/stream', 'verb' => 'POST'],
         ['name' => 'conversation#duplicate', 'url' => '/api/conversations/{id}/duplicate', 'verb' => 'POST'],
         ['name' => 'conversation#search',    'url' => '/api/conversations/search',         'verb' => 'GET'],
 

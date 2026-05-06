@@ -13,6 +13,7 @@ use OCA\AIquila\Db\MessageFileMapper;
 use OCA\AIquila\Db\MessageMapper;
 use OCA\AIquila\Db\ProjectMapper;
 use OCA\AIquila\Db\ProjectPathMapper;
+use OCA\AIquila\Http\SSEResponse;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
@@ -23,6 +24,7 @@ use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\AppFramework\Http\Response;
 use OCP\IRequest;
 
 class ConversationController extends Controller {
@@ -372,6 +374,208 @@ class ConversationController extends Controller {
             'assistantMessage' => $assistantMsg->jsonSerialize(),
             'conversation' => $conversation->jsonSerialize(),
         ]);
+    }
+
+    /**
+     * Streaming variant of message(): sends the same conversation turn but
+     * returns an SSE stream so the assistant text reaches the UI as it is
+     * generated. Event types yielded over the stream:
+     *
+     *   user_message   — once at the start: persisted user message + files
+     *   text_delta     — assistant text chunk
+     *   tool_use       — finalized tool invocation (name + input)
+     *   tool_result    — locally-executed tool output
+     *   done           — terminal: usage totals + accumulated citations
+     *   persisted      — final: persisted assistant message + conversation
+     *   error          — terminal on failure (still followed by persisted
+     *                    so the user sees what was streamed before the
+     *                    error in their conversation history)
+     *
+     * Same precondition rules and error handling as message().
+     *
+     * @NoCSRFRequired
+     */
+    #[NoAdminRequired]
+    #[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]
+    public function messageStream(int $id, string $prompt = '', array $files = []): Response {
+        if (!$prompt && empty($files)) {
+            return new JSONResponse(['error' => 'No prompt provided'], 400);
+        }
+        try {
+            $this->conversationMapper->findByIdAndUser($id, $this->userId);
+        } catch (DoesNotExistException $e) {
+            return new JSONResponse(['error' => 'Conversation not found'], 404);
+        }
+        return new SSEResponse($this->streamConversationReply($id, $prompt, $files));
+    }
+
+    /**
+     * The generator that drives messageStream(). Persists the user message
+     * up front, runs chatWithToolsStream(), accumulates text/citations as
+     * events flow through, and persists the assistant message on stream
+     * completion (or on error, with whatever text streamed before failure).
+     *
+     * @return \Generator<int, array<string, mixed>>
+     */
+    private function streamConversationReply(int $id, string $prompt, array $files): \Generator {
+        $now = time();
+
+        try {
+            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->userId);
+        } catch (DoesNotExistException $e) {
+            yield ['type' => 'error', 'error' => 'Conversation not found'];
+            return;
+        }
+
+        // 1. Persist user message + files (mirrors message()).
+        $userMsg = new MessageEntity();
+        $userMsg->setConversationId($id);
+        $userMsg->setRole('user');
+        $userMsg->setContent($prompt);
+        $userMsg->setCreatedAt($now);
+        $userMsg = $this->messageMapper->insert($userMsg);
+
+        $fileEntities = [];
+        foreach ($files as $filePath) {
+            try {
+                $info = $this->fileService->getInfo($filePath, $this->userId);
+            } catch (\Exception $e) {
+                $info = ['name' => basename($filePath), 'mimeType' => 'application/octet-stream'];
+            }
+            $mf = new MessageFile();
+            $mf->setMessageId($userMsg->getId());
+            $mf->setFilePath($filePath);
+            $mf->setFileName($info['name'] ?? basename($filePath));
+            $mf->setMimeType($info['mimeType'] ?? null);
+            $mf->setCreatedAt($now);
+            $mf = $this->messageFileMapper->insert($mf);
+            $fileEntities[] = $mf;
+        }
+
+        yield ['type' => 'user_message', 'userMessage' => $this->serializeMessage($userMsg, $fileEntities)];
+
+        // 2. Build messages + system prompt (mirrors message()).
+        $allMessages = $this->messageMapper->findByConversation($id);
+        $claudeMessages = [];
+        foreach ($allMessages as $msg) {
+            $claudeMessages[] = ['role' => $msg->getRole(), 'content' => $msg->getContent()];
+        }
+        if (!empty($files)) {
+            $contentBlocks = $this->buildFileContentBlocks($files);
+            if (!empty($contentBlocks)) {
+                $lastIdx = count($claudeMessages) - 1;
+                $userText = $claudeMessages[$lastIdx]['content'];
+                $claudeMessages[$lastIdx]['content'] = array_merge(
+                    $contentBlocks,
+                    [['type' => 'text', 'text' => $userText]]
+                );
+            }
+        }
+
+        $systemPrompt = null;
+        if ($conversation->getProjectId() !== null) {
+            try {
+                $project = $this->projectMapper->findByIdAndUser($conversation->getProjectId(), $this->userId);
+                $systemPrompt = $project->getSystemPrompt();
+                $paths = $this->projectPathMapper->findByProject($project->getId());
+                if (!empty($paths)) {
+                    $contextLines = ['Project: ' . $project->getTitle()];
+                    foreach ($paths as $projectPath) {
+                        $contextLines[] = '- [' . $projectPath->getPathType() . '] ' . $projectPath->getPath();
+                    }
+                    $systemPrompt = ($systemPrompt ? $systemPrompt . "\n\n" : '') . implode("\n", $contextLines);
+                }
+            } catch (DoesNotExistException $e) {
+                // Project deleted — proceed without project context.
+            }
+        }
+
+        // 3. Resolve MCP tools (best-effort; same fallback as callClaude()).
+        try {
+            $allTools = $this->mcpClient->getAllTools();
+        } catch (\Throwable $e) {
+            $allTools = ['tools' => [], 'mapping' => []];
+        }
+        $tools = $allTools['tools'] ?? [];
+        $mapping = $allTools['mapping'] ?? [];
+        $mcpClient = $this->mcpClient;
+        $toolExecutor = function (string $name, array $input) use ($mcpClient, $mapping): array {
+            return $mcpClient->executeTool($name, $input, $mapping);
+        };
+
+        // 4. Drive the streaming generator, accumulating final state.
+        $accumulatedText = '';
+        $finalCitations = [];
+        $finalUsage = ['input_tokens' => 0, 'output_tokens' => 0, 'cache_creation_tokens' => null, 'cache_read_tokens' => null];
+        $errorMessage = null;
+        $startMs = (int)(microtime(true) * 1000);
+
+        foreach ($this->claudeService->chatWithToolsStream(
+            $claudeMessages,
+            $tools,
+            $toolExecutor,
+            $systemPrompt,
+            $this->userId,
+        ) as $event) {
+            switch ($event['type'] ?? null) {
+                case 'text_delta':
+                    $accumulatedText .= $event['text'] ?? '';
+                    break;
+                case 'done':
+                    $finalCitations = $event['citations'] ?? [];
+                    $finalUsage = $event['usage'] ?? $finalUsage;
+                    break;
+                case 'error':
+                    $errorMessage = $event['error'] ?? 'Stream error';
+                    if (isset($event['usage']) && is_array($event['usage'])) {
+                        $finalUsage = $event['usage'];
+                    }
+                    break;
+            }
+            yield $event;
+        }
+
+        $latencyMs = (int)(microtime(true) * 1000) - $startMs;
+
+        // 5. Persist assistant message — even on error, so partial output is preserved.
+        $assistantContent = $accumulatedText !== ''
+            ? $accumulatedText
+            : ($errorMessage !== null ? 'Error: ' . $errorMessage : '');
+        if ($errorMessage !== null && $accumulatedText !== '') {
+            $assistantContent .= "\n\n_(stream interrupted: " . $errorMessage . ')_';
+        }
+
+        $assistantMsg = new MessageEntity();
+        $assistantMsg->setConversationId($id);
+        $assistantMsg->setRole('assistant');
+        $assistantMsg->setContent($assistantContent);
+        $assistantMsg->setInputTokens($finalUsage['input_tokens'] ?? null);
+        $assistantMsg->setOutputTokens($finalUsage['output_tokens'] ?? null);
+        $assistantMsg->setCacheCreationTokens($finalUsage['cache_creation_tokens'] ?? null);
+        $assistantMsg->setCacheReadTokens($finalUsage['cache_read_tokens'] ?? null);
+        $assistantMsg->setLatencyMs($latencyMs);
+        if (!empty($finalCitations)) {
+            $assistantMsg->setCitations(json_encode($finalCitations));
+        }
+        $assistantMsg->setCreatedAt(time());
+        $assistantMsg = $this->messageMapper->insert($assistantMsg);
+
+        // 6. Auto-title (mirrors message()).
+        if ($conversation->getTitle() === null || $conversation->getTitle() === '') {
+            $title = mb_substr($prompt, 0, 50);
+            if (mb_strlen($prompt) > 50) {
+                $title .= '…';
+            }
+            $conversation->setTitle($title);
+        }
+        $conversation->setUpdatedAt(time());
+        $this->conversationMapper->update($conversation);
+
+        yield [
+            'type' => 'persisted',
+            'assistantMessage' => $assistantMsg->jsonSerialize(),
+            'conversation' => $conversation->jsonSerialize(),
+        ];
     }
 
     /**

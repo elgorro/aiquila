@@ -20,7 +20,27 @@
 				:message="msg"
 				:verbose="verbose"
 				:model="conversation.model" />
-			<div v-if="sending" class="chat-loading">
+			<MessageBubble v-if="draft.userMessage"
+				:key="'draft-user'"
+				:message="draft.userMessage"
+				:verbose="verbose"
+				:model="conversation.model" />
+			<div v-if="draft.active" class="message-bubble message-assistant">
+				<div class="message-header"><strong>{{ t('aiquila', 'Claude') }}</strong></div>
+				<div v-if="draft.toolEvents.length > 0" class="draft-tool-events">
+					<div v-for="(ev, i) in draft.toolEvents" :key="i" class="draft-tool-line">
+						<span v-if="ev.kind === 'use'">↪ {{ t('aiquila', 'Using tool: {name}', { name: ev.name }) }}</span>
+						<span v-else>← {{ t('aiquila', 'Tool result received') }}</span>
+					</div>
+				</div>
+				<div v-if="draft.assistantText" class="message-content" style="white-space: pre-wrap;">{{ draft.assistantText }}</div>
+				<div v-else class="chat-loading-inline">
+					<NcLoadingIcon :size="20" />
+					<span>{{ t('aiquila', 'Thinking…') }}</span>
+				</div>
+				<div v-if="draft.error" class="draft-error">{{ draft.error }}</div>
+			</div>
+			<div v-if="sending && !draft.active" class="chat-loading">
 				<NcLoadingIcon :size="32" />
 				<span>{{ t('aiquila', 'Thinking…') }}</span>
 			</div>
@@ -58,7 +78,7 @@ import NcSelect from '@nextcloud/vue/components/NcSelect'
 
 import MessageBubble from './MessageBubble.vue'
 import ChatInput from './ChatInput.vue'
-import { sendMessage, updateConversation } from '../api.js'
+import { sendMessage, sendMessageStream, updateConversation } from '../api.js'
 
 const DOT_PATTERNS = ['·····', '··●··', '·●●●·', '●●●●●', '·●●●·', '··●··']
 
@@ -91,6 +111,7 @@ export default {
 			showSearch: false,
 			searchQuery: '',
 			showProjectPicker: false,
+			draft: { active: false, userMessage: null, assistantText: '', toolEvents: [], error: null },
 		}
 	},
 	watch: {
@@ -162,18 +183,72 @@ export default {
 				container.scrollTop = container.scrollHeight
 			}
 		},
+		resetDraft() {
+			this.draft = { active: false, userMessage: null, assistantText: '', toolEvents: [], error: null }
+		},
 		async onSend({ prompt, files }) {
 			this.sending = true
+			const filePaths = files.map(f => f.path)
+			let userMessage = null
+			let assistantMessage = null
+			let conversationUpdate = null
+
+			this.draft = { active: true, userMessage: null, assistantText: '', toolEvents: [], error: null }
+
 			try {
-				const filePaths = files.map(f => f.path)
-				const { data } = await sendMessage(this.conversation.id, prompt, filePaths)
-				this.$emit('message-sent', data)
-				this.$emit('conversation-updated', data.conversation)
+				await sendMessageStream(this.conversation.id, prompt, filePaths, (event) => {
+					switch (event.type) {
+					case 'user_message':
+						this.draft.userMessage = event.userMessage
+						userMessage = event.userMessage
+						break
+					case 'text_delta':
+						this.draft.assistantText += event.text || ''
+						break
+					case 'tool_use':
+						this.draft.toolEvents.push({ kind: 'use', name: event.name })
+						break
+					case 'tool_result':
+						this.draft.toolEvents.push({ kind: 'result', toolUseId: event.tool_use_id })
+						break
+					case 'error':
+						this.draft.error = event.error || 'Stream error'
+						break
+					case 'persisted':
+						assistantMessage = event.assistantMessage
+						conversationUpdate = event.conversation
+						break
+					}
+				})
+
+				if (userMessage && assistantMessage) {
+					this.$emit('message-sent', { userMessage, assistantMessage, conversation: conversationUpdate })
+					if (conversationUpdate) {
+						this.$emit('conversation-updated', conversationUpdate)
+					}
+				} else {
+					// Stream returned without a persisted assistant message — fall back.
+					console.warn('aiquila: stream completed without persisted message; falling back')
+					await this.sendNonStreaming(prompt, filePaths)
+				}
 			} catch (err) {
-				console.error('Failed to send message:', err)
+				// Initial fetch / parse failure → fall back to non-streaming so the
+				// user still gets a reply rather than a silent dead end.
+				console.error('aiquila: streaming failed, falling back to non-streaming', err)
+				try {
+					await this.sendNonStreaming(prompt, filePaths)
+				} catch (err2) {
+					console.error('aiquila: non-streaming fallback also failed', err2)
+				}
 			} finally {
+				this.resetDraft()
 				this.sending = false
 			}
+		},
+		async sendNonStreaming(prompt, filePaths) {
+			const { data } = await sendMessage(this.conversation.id, prompt, filePaths)
+			this.$emit('message-sent', data)
+			this.$emit('conversation-updated', data.conversation)
 		},
 		onCommand({ type, args, path }) {
 			switch (type) {
@@ -284,6 +359,35 @@ export default {
 	gap: 8px;
 	padding: 12px;
 	color: var(--color-text-lighter);
+}
+
+.chat-loading-inline {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 0;
+	color: var(--color-text-lighter);
+	font-size: 12px;
+}
+
+.draft-tool-events {
+	margin: 4px 0 6px 0;
+	font-size: 12px;
+	color: var(--color-text-lighter);
+	font-style: italic;
+}
+
+.draft-tool-line {
+	padding: 1px 0;
+}
+
+.draft-error {
+	margin-top: 6px;
+	padding: 6px 8px;
+	background: var(--color-warning-text, rgba(255, 0, 0, 0.05));
+	border-left: 3px solid var(--color-error);
+	font-size: 12px;
+	color: var(--color-error);
 }
 
 /* Empty state with ASCII art */
