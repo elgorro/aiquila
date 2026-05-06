@@ -162,10 +162,13 @@ class ClaudeSDKService {
             $params['outputConfig'] = ['effort' => ClaudeModels::getEffortLevel($model)];
         }
 
-        // System prompt
+        // System prompt — cache by default; caller can opt out with cache_system: false.
+        // The API silently skips caching for prompts under the model minimum, so it is safe
+        // to always mark; large reusable system prompts are the common case.
         if (!empty($options['system'])) {
             $systemBlock = ['type' => 'text', 'text' => $options['system']];
-            if (!empty($options['cache_system'])) {
+            $cacheSystem = $options['cache_system'] ?? true;
+            if ($cacheSystem) {
                 $systemBlock['cache_control'] = ['type' => 'ephemeral'];
             }
             $params['system'] = [$systemBlock];
@@ -178,9 +181,17 @@ class ClaudeSDKService {
             }
         }
 
-        // Tools
+        // Tools — mark the last tool with cache_control so the entire tool block
+        // (typically large and reused across turns) becomes a cache breakpoint.
+        // Caller can opt out with cache_tools: false.
         if (!empty($options['tools'])) {
-            $params['tools'] = $options['tools'];
+            $tools = $options['tools'];
+            $cacheTools = $options['cache_tools'] ?? true;
+            if ($cacheTools && is_array($tools) && $tools !== []) {
+                $lastIdx = array_key_last($tools);
+                $tools[$lastIdx]['cache_control'] = ['type' => 'ephemeral'];
+            }
+            $params['tools'] = $tools;
         }
 
         return $params;
@@ -663,7 +674,7 @@ class ClaudeSDKService {
      * @param string $mediaType 'application/pdf' | 'text/plain'
      * @param string $title Optional document title
      * @param string|null $userId User ID for API key resolution
-     * @param bool $cacheDoc Add cache_control to the document block
+     * @param bool $cacheDoc Add cache_control to the document block (default true — documents are large and benefit from cache reuse)
      * @return array ['response' => string] or ['error' => string]
      */
     public function askWithDocument(
@@ -672,7 +683,7 @@ class ClaudeSDKService {
         string  $mediaType,
         string  $title    = '',
         ?string $userId   = null,
-        bool    $cacheDoc = false
+        bool    $cacheDoc = true
     ): array {
         try {
             $client = $this->getClient($userId);
@@ -828,6 +839,7 @@ class ClaudeSDKService {
                                 'media_type' => $mimeType,
                                 'data' => $base64Image,
                             ],
+                            'cache_control' => ['type' => 'ephemeral'],
                         ],
                         [
                             'type' => 'text',
@@ -888,6 +900,8 @@ class ClaudeSDKService {
                     ],
                 ];
             }
+            $lastImageIdx = count($content) - 1;
+            $content[$lastImageIdx]['cache_control'] = ['type' => 'ephemeral'];
             $content[] = [
                 'type' => 'text',
                 'text' => $prompt,

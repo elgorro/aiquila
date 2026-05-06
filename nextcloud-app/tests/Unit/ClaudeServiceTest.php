@@ -419,13 +419,57 @@ class ClaudeServiceTest extends TestCase {
         $this->assertSame('ephemeral', $systemBlock['cache_control']['type']);
     }
 
-    public function testBuildRequestParamsWithoutCacheSystemOmitsCacheControl(): void {
+    public function testBuildRequestParamsCachesSystemPromptByDefault(): void {
         $this->configWithApiKey();
 
         $this->testable->ask('Hi', '', 'testuser', ['system' => 'You are a helpful assistant.']);
 
         $params = $this->testable->lastCreateParams;
+        $systemBlock = $params['system'][0];
+        $this->assertArrayHasKey('cache_control', $systemBlock);
+        $this->assertSame('ephemeral', $systemBlock['cache_control']['type']);
+    }
+
+    public function testBuildRequestParamsWithCacheSystemFalseOmitsCacheControl(): void {
+        $this->configWithApiKey();
+
+        $this->testable->ask('Hi', '', 'testuser', [
+            'system'       => 'You are a helpful assistant.',
+            'cache_system' => false,
+        ]);
+
+        $params = $this->testable->lastCreateParams;
         $this->assertArrayNotHasKey('cache_control', $params['system'][0]);
+    }
+
+    public function testBuildRequestParamsAddsCacheControlToLastToolByDefault(): void {
+        $this->configWithApiKey();
+
+        $tools = [
+            ['name' => 'tool_a', 'description' => 'A', 'input_schema' => []],
+            ['name' => 'tool_b', 'description' => 'B', 'input_schema' => []],
+            ['name' => 'tool_c', 'description' => 'C', 'input_schema' => []],
+        ];
+
+        $this->testable->ask('Hi', '', 'testuser', ['tools' => $tools]);
+
+        $params = $this->testable->lastCreateParams;
+        $this->assertArrayHasKey('tools', $params);
+        $this->assertCount(3, $params['tools']);
+        $this->assertArrayNotHasKey('cache_control', $params['tools'][0]);
+        $this->assertArrayNotHasKey('cache_control', $params['tools'][1]);
+        $this->assertArrayHasKey('cache_control', $params['tools'][2]);
+        $this->assertSame('ephemeral', $params['tools'][2]['cache_control']['type']);
+    }
+
+    public function testBuildRequestParamsWithCacheToolsFalseOmitsToolCacheControl(): void {
+        $this->configWithApiKey();
+
+        $tools = [['name' => 'tool_a', 'description' => 'A', 'input_schema' => []]];
+        $this->testable->ask('Hi', '', 'testuser', ['tools' => $tools, 'cache_tools' => false]);
+
+        $params = $this->testable->lastCreateParams;
+        $this->assertArrayNotHasKey('cache_control', $params['tools'][0]);
     }
 
     // ── chat() ────────────────────────────────────────────────────────────
@@ -534,14 +578,23 @@ class ClaudeServiceTest extends TestCase {
         $this->assertSame(base64_encode($pdfBytes), $docBlock['source']['data']);
     }
 
-    public function testAskWithDocumentAddsCacheControlWhenRequested(): void {
+    public function testAskWithDocumentAddsCacheControlByDefault(): void {
         $this->configWithApiKey();
 
-        $this->testable->askWithDocument('Summarize', 'text content', 'text/plain', '', 'testuser', true);
+        $this->testable->askWithDocument('Summarize', 'text content', 'text/plain', '', 'testuser');
 
         $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
         $this->assertArrayHasKey('cache_control', $docBlock['source']);
         $this->assertSame('ephemeral', $docBlock['source']['cache_control']['type']);
+    }
+
+    public function testAskWithDocumentOmitsCacheControlWhenOptedOut(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithDocument('Summarize', 'text content', 'text/plain', '', 'testuser', false);
+
+        $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertArrayNotHasKey('cache_control', $docBlock['source']);
     }
 
     public function testAskWithDocumentOmitsTitleWhenEmpty(): void {
@@ -681,6 +734,38 @@ class ClaudeServiceTest extends TestCase {
 
         $result = $this->service->summarize('Long text here...', 'testuser');
         $this->assertArrayHasKey('error', $result);
+    }
+
+    // ── askWithImage(): cache_control ──────────────────────────────────────
+
+    public function testAskWithImageAddsCacheControlToImageBlock(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithImage('Describe', 'base64data', 'image/png', 'testuser');
+
+        $imageBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertSame('image', $imageBlock['type']);
+        $this->assertArrayHasKey('cache_control', $imageBlock);
+        $this->assertSame('ephemeral', $imageBlock['cache_control']['type']);
+    }
+
+    public function testAskWithImagesAddsCacheControlOnlyToLastImage(): void {
+        $this->configWithApiKey();
+
+        $images = [
+            ['base64' => 'aaa', 'mimeType' => 'image/png'],
+            ['base64' => 'bbb', 'mimeType' => 'image/jpeg'],
+            ['base64' => 'ccc', 'mimeType' => 'image/png'],
+        ];
+        $this->testable->askWithImages('Compare', $images, 'testuser');
+
+        $content = $this->testable->lastCreateParams['messages'][0]['content'];
+        $this->assertArrayNotHasKey('cache_control', $content[0]);
+        $this->assertArrayNotHasKey('cache_control', $content[1]);
+        $this->assertArrayHasKey('cache_control', $content[2]);
+        $this->assertSame('ephemeral', $content[2]['cache_control']['type']);
+        // Final block is the prompt text, not an image.
+        $this->assertSame('text', $content[3]['type']);
     }
 
     // ── askWithImage(): typed exception handling ───────────────────────────
