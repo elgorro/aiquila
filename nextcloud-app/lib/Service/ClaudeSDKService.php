@@ -1109,4 +1109,260 @@ class ClaudeSDKService {
             throw new \Exception('Stream error: ' . $e->getMessage());
         }
     }
+
+    /**
+     * Streaming variant of chatWithTools(). Yields a sequence of event arrays
+     * the caller can re-encode (e.g. as Server-Sent Events) for incremental
+     * delivery to the UI. Event shapes:
+     *
+     *   ['type' => 'text_delta',  'text' => string]
+     *   ['type' => 'tool_use',    'id' => string, 'name' => string, 'input' => array]
+     *   ['type' => 'tool_result', 'tool_use_id' => string, 'output' => string, 'is_error' => bool]
+     *   ['type' => 'done',        'usage' => [...], 'citations' => [...]]
+     *   ['type' => 'error',       'error' => string, 'usage' => [...]]
+     *
+     * The internal loop accumulates streamed content blocks into text and
+     * tool_use blocks; tool execution still happens locally, and the loop
+     * re-enters with tool_result messages until the model emits end_turn or
+     * $maxIterations is reached.
+     *
+     * @param array $messages
+     * @param array $tools
+     * @param callable $toolExecutor fn(string $name, array $input): array
+     * @param string|null $system
+     * @param string|null $userId
+     * @param array $options
+     * @param int $maxIterations
+     */
+    public function chatWithToolsStream(
+        array    $messages,
+        array    $tools,
+        callable $toolExecutor,
+        ?string  $system = null,
+        ?string  $userId = null,
+        array    $options = [],
+        int      $maxIterations = 10
+    ): \Generator {
+        try {
+            $client = $this->getClient($userId);
+        } catch (\Throwable $e) {
+            yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];
+            return;
+        }
+
+        if ($system !== null) {
+            $options['system'] = $system;
+        }
+        $options['tools'] = $tools;
+
+        $totalInput = 0;
+        $totalOutput = 0;
+        $totalCacheCreate = 0;
+        $totalCacheRead = 0;
+        $allCitations = [];
+
+        for ($i = 0; $i < $maxIterations; $i++) {
+            $params = $this->buildRequestParams($messages, $userId, $options);
+            try {
+                $stream = $this->callCreateStream($client, $params);
+            } catch (\Throwable $e) {
+                $this->logger->error('AIquila SDK: chatWithToolsStream open failed', $this->buildErrorLogContext($e));
+                yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];
+                return;
+            }
+
+            // Per-block accumulators, keyed by content-block index.
+            /** @var array<int, array<string, mixed>> $blocks */
+            $blocks = [];
+            /** @var array<int, string> $jsonBuffers */
+            $jsonBuffers = [];
+            $stopReason = null;
+
+            try {
+                foreach ($stream as $event) {
+                    $type = $event->type ?? null;
+                    switch ($type) {
+                        case 'message_start':
+                            if (isset($event->message->usage)) {
+                                $totalInput += $event->message->usage->inputTokens ?? 0;
+                                $totalCacheCreate += $event->message->usage->cacheCreationInputTokens ?? 0;
+                                $totalCacheRead += $event->message->usage->cacheReadInputTokens ?? 0;
+                            }
+                            break;
+
+                        case 'content_block_start':
+                            $idx = $event->index;
+                            $cb = $event->contentBlock;
+                            $cbType = $cb->type ?? null;
+                            if ($cbType === 'text') {
+                                $blocks[$idx] = ['type' => 'text', 'text' => '', 'citations' => []];
+                            } elseif ($cbType === 'tool_use') {
+                                $blocks[$idx] = [
+                                    'type' => 'tool_use',
+                                    'id' => $cb->id ?? '',
+                                    'name' => $cb->name ?? '',
+                                    'input' => null,
+                                ];
+                                $jsonBuffers[$idx] = '';
+                            } else {
+                                // thinking, server tools etc. — preserve type so downstream may handle.
+                                $blocks[$idx] = ['type' => $cbType ?? 'unknown'];
+                            }
+                            break;
+
+                        case 'content_block_delta':
+                            $idx = $event->index;
+                            $delta = $event->delta;
+                            $deltaType = $delta->type ?? null;
+                            if ($deltaType === 'text_delta') {
+                                $text = $delta->text ?? '';
+                                if (isset($blocks[$idx])) {
+                                    $blocks[$idx]['text'] = ($blocks[$idx]['text'] ?? '') . $text;
+                                }
+                                if ($text !== '') {
+                                    yield ['type' => 'text_delta', 'text' => $text];
+                                }
+                            } elseif ($deltaType === 'input_json_delta') {
+                                $jsonBuffers[$idx] = ($jsonBuffers[$idx] ?? '') . ($delta->partialJSON ?? '');
+                            } elseif ($deltaType === 'citations_delta') {
+                                $citation = $delta->citation ?? null;
+                                if ($citation !== null) {
+                                    $normalized = is_object($citation) ? json_decode(json_encode($citation), true) : $citation;
+                                    if (isset($blocks[$idx])) {
+                                        $blocks[$idx]['citations'][] = $normalized;
+                                    }
+                                }
+                            }
+                            // thinking/signature deltas: ignore for now.
+                            break;
+
+                        case 'content_block_stop':
+                            $idx = $event->index;
+                            if (isset($blocks[$idx]) && $blocks[$idx]['type'] === 'tool_use') {
+                                $json = $jsonBuffers[$idx] ?? '';
+                                $blocks[$idx]['input'] = $json !== '' ? (json_decode($json, true) ?? []) : [];
+                            }
+                            break;
+
+                        case 'message_delta':
+                            $stopReason = $event->delta->stopReason ?? null;
+                            if (isset($event->usage)) {
+                                $totalOutput += $event->usage->outputTokens ?? 0;
+                            }
+                            break;
+
+                        case 'message_stop':
+                        default:
+                            // No-op.
+                            break;
+                    }
+                }
+            } catch (\Throwable $e) {
+                $this->logger->error('AIquila SDK: chatWithToolsStream stream failed', $this->buildErrorLogContext($e));
+                yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => [
+                    'input_tokens' => $totalInput,
+                    'output_tokens' => $totalOutput,
+                    'cache_creation_tokens' => $totalCacheCreate ?: null,
+                    'cache_read_tokens' => $totalCacheRead ?: null,
+                ]];
+                return;
+            }
+
+            // Collect any per-text-block citations seen during this iteration.
+            foreach ($blocks as $b) {
+                if (($b['type'] ?? null) === 'text' && !empty($b['citations'])) {
+                    $allCitations = array_merge($allCitations, $b['citations']);
+                }
+            }
+
+            $toolUseBlocks = array_values(array_filter($blocks, fn($b) => ($b['type'] ?? null) === 'tool_use'));
+
+            if ($toolUseBlocks === [] || $stopReason === 'end_turn') {
+                yield [
+                    'type' => 'done',
+                    'usage' => [
+                        'input_tokens' => $totalInput,
+                        'output_tokens' => $totalOutput,
+                        'cache_creation_tokens' => $totalCacheCreate ?: null,
+                        'cache_read_tokens' => $totalCacheRead ?: null,
+                    ],
+                    'citations' => $allCitations,
+                ];
+                return;
+            }
+
+            // Build assistant message reflecting the full streamed turn.
+            $assistantContent = [];
+            foreach ($blocks as $b) {
+                if (($b['type'] ?? null) === 'text') {
+                    $assistantContent[] = ['type' => 'text', 'text' => $b['text'] ?? ''];
+                } elseif (($b['type'] ?? null) === 'tool_use') {
+                    $assistantContent[] = [
+                        'type' => 'tool_use',
+                        'id' => $b['id'],
+                        'name' => $b['name'],
+                        'input' => $b['input'] ?? [],
+                    ];
+                    yield [
+                        'type' => 'tool_use',
+                        'id' => $b['id'],
+                        'name' => $b['name'],
+                        'input' => $b['input'] ?? [],
+                    ];
+                }
+            }
+            $messages[] = ['role' => 'assistant', 'content' => $assistantContent];
+
+            // Execute tools and feed results back into the next iteration.
+            $toolResults = [];
+            foreach ($toolUseBlocks as $b) {
+                $input = is_array($b['input'] ?? null) ? $b['input'] : [];
+                $result = $toolExecutor($b['name'], $input);
+
+                $resultContent = '';
+                if (isset($result['content']) && is_array($result['content'])) {
+                    foreach ($result['content'] as $part) {
+                        if (($part['type'] ?? '') === 'text') {
+                            $resultContent .= $part['text'] ?? '';
+                        }
+                    }
+                } else {
+                    $resultContent = json_encode($result);
+                }
+
+                $tr = [
+                    'type' => 'tool_result',
+                    'tool_use_id' => $b['id'],
+                    'content' => $resultContent,
+                ];
+                if (!empty($result['isError'])) {
+                    $tr['is_error'] = true;
+                }
+                $toolResults[] = $tr;
+
+                yield [
+                    'type' => 'tool_result',
+                    'tool_use_id' => $b['id'],
+                    'output' => $resultContent,
+                    'is_error' => !empty($result['isError']),
+                ];
+            }
+
+            $messages[] = ['role' => 'user', 'content' => $toolResults];
+        }
+
+        $this->logger->warning('AIquila SDK: chatWithToolsStream reached max iterations', [
+            'maxIterations' => $maxIterations,
+        ]);
+        yield [
+            'type' => 'error',
+            'error' => 'Max tool-use iterations reached',
+            'usage' => [
+                'input_tokens' => $totalInput,
+                'output_tokens' => $totalOutput,
+                'cache_creation_tokens' => $totalCacheCreate ?: null,
+                'cache_read_tokens' => $totalCacheRead ?: null,
+            ],
+        ];
+    }
 }

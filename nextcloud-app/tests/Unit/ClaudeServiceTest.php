@@ -51,6 +51,12 @@ class TestableClaudeSDKService extends ClaudeSDKService {
     /** Optional citations to attach to the stub text block */
     public array $stubCitations = [];
 
+    /** Optional pre-built event list for callCreateStream() to iterate */
+    public ?array $stubStreamEvents = null;
+
+    /** Captured params from the last callCreateStream() call */
+    public ?array $lastStreamParams = null;
+
     public function throwOnCreate(\Exception $e): void {
         $this->createException = $e;
     }
@@ -74,10 +80,13 @@ class TestableClaudeSDKService extends ClaudeSDKService {
     }
 
     protected function callCreateStream(Client $client, array $params): BaseStream {
+        $this->lastStreamParams = $params;
         if ($this->streamException !== null) {
             throw $this->streamException;
         }
-        return new class implements BaseStream {
+        $events = $this->stubStreamEvents ?? [];
+        $stream = new class implements BaseStream {
+            public array $events = [];
             public function __construct(
                 \Anthropic\Core\Conversion\Contracts\Converter|\Anthropic\Core\Conversion\Contracts\ConverterSource|string $convert = '',
                 ?\Psr\Http\Message\RequestInterface $request = null,
@@ -85,8 +94,23 @@ class TestableClaudeSDKService extends ClaudeSDKService {
                 mixed $parsedBody = null,
             ) {}
             public function close(): void {}
-            public function getIterator(): \Traversable { return new \ArrayIterator([]); }
+            public function getIterator(): \Traversable { return new \ArrayIterator($this->events); }
         };
+        $stream->events = $events;
+        return $stream;
+    }
+
+    /**
+     * Helper for tests: build a fake stream event object as a stdClass with
+     * the event-specific fields the streaming loop reads.
+     */
+    public static function streamEvent(string $type, array $extras = []): \stdClass {
+        $e = new \stdClass();
+        $e->type = $type;
+        foreach ($extras as $k => $v) {
+            $e->$k = $v;
+        }
+        return $e;
     }
 
     protected function callListModels(Client $client, array $params): array {
@@ -1010,5 +1034,200 @@ class ClaudeServiceTest extends TestCase {
         $result = $this->testable->retrieveModel('unknown-model', 'testuser');
 
         $this->assertNull($result);
+    }
+
+    // ── chatWithToolsStream() ──────────────────────────────────────────────
+
+    /**
+     * Build a fake content-block-start event for a text block.
+     */
+    private function evText(int $idx): \stdClass {
+        $cb = (object)['type' => 'text'];
+        return TestableClaudeSDKService::streamEvent('content_block_start', ['index' => $idx, 'contentBlock' => $cb]);
+    }
+
+    /**
+     * Build a fake content-block-start event for a tool_use block.
+     */
+    private function evToolUse(int $idx, string $id, string $name): \stdClass {
+        $cb = (object)['type' => 'tool_use', 'id' => $id, 'name' => $name];
+        return TestableClaudeSDKService::streamEvent('content_block_start', ['index' => $idx, 'contentBlock' => $cb]);
+    }
+
+    private function evTextDelta(int $idx, string $text): \stdClass {
+        $delta = (object)['type' => 'text_delta', 'text' => $text];
+        return TestableClaudeSDKService::streamEvent('content_block_delta', ['index' => $idx, 'delta' => $delta]);
+    }
+
+    private function evJsonDelta(int $idx, string $partial): \stdClass {
+        $delta = (object)['type' => 'input_json_delta', 'partialJSON' => $partial];
+        return TestableClaudeSDKService::streamEvent('content_block_delta', ['index' => $idx, 'delta' => $delta]);
+    }
+
+    private function evCitationDelta(int $idx, array $citation): \stdClass {
+        $delta = (object)['type' => 'citations_delta', 'citation' => (object)$citation];
+        return TestableClaudeSDKService::streamEvent('content_block_delta', ['index' => $idx, 'delta' => $delta]);
+    }
+
+    private function evBlockStop(int $idx): \stdClass {
+        return TestableClaudeSDKService::streamEvent('content_block_stop', ['index' => $idx]);
+    }
+
+    private function evMessageStart(int $inputTokens = 0): \stdClass {
+        $usage = (object)['inputTokens' => $inputTokens, 'cacheCreationInputTokens' => 0, 'cacheReadInputTokens' => 0];
+        $message = (object)['usage' => $usage];
+        return TestableClaudeSDKService::streamEvent('message_start', ['message' => $message]);
+    }
+
+    private function evMessageDelta(string $stopReason, int $outputTokens = 0): \stdClass {
+        $delta = (object)['stopReason' => $stopReason];
+        $usage = (object)['outputTokens' => $outputTokens];
+        return TestableClaudeSDKService::streamEvent('message_delta', ['delta' => $delta, 'usage' => $usage]);
+    }
+
+    public function testChatWithToolsStreamYieldsTextDeltasAndDoneOnEndTurn(): void {
+        $this->configWithApiKey();
+
+        $this->testable->stubStreamEvents = [
+            $this->evMessageStart(5),
+            $this->evText(0),
+            $this->evTextDelta(0, 'Hello '),
+            $this->evTextDelta(0, 'world.'),
+            $this->evBlockStop(0),
+            $this->evMessageDelta('end_turn', 4),
+        ];
+
+        $events = iterator_to_array(
+            $this->testable->chatWithToolsStream(
+                [['role' => 'user', 'content' => 'Hi']],
+                [],
+                fn($n, $i) => ['content' => [['type' => 'text', 'text' => 'unused']]],
+                null,
+                'testuser',
+            ),
+            false,
+        );
+
+        $this->assertSame(['type' => 'text_delta', 'text' => 'Hello '], $events[0]);
+        $this->assertSame(['type' => 'text_delta', 'text' => 'world.'], $events[1]);
+        $this->assertSame('done', $events[2]['type']);
+        $this->assertSame(5, $events[2]['usage']['input_tokens']);
+        $this->assertSame(4, $events[2]['usage']['output_tokens']);
+        $this->assertSame([], $events[2]['citations']);
+    }
+
+    public function testChatWithToolsStreamRunsToolLoopAcrossIterations(): void {
+        $this->configWithApiKey();
+
+        // Iteration 1: model emits text + a tool_use, ending with stop_reason: tool_use
+        // Iteration 2: model emits text and ends with end_turn.
+        $this->testable->stubStreamEvents = [
+            // iteration 1
+            $this->evMessageStart(),
+            $this->evText(0),
+            $this->evTextDelta(0, 'Let me look that up. '),
+            $this->evBlockStop(0),
+            $this->evToolUse(1, 'tu_1', 'search_files'),
+            $this->evJsonDelta(1, '{"query":'),
+            $this->evJsonDelta(1, '"foo"}'),
+            $this->evBlockStop(1),
+            $this->evMessageDelta('tool_use'),
+        ];
+
+        // After iteration 1, the loop will call callCreateStream again. We need
+        // to swap the stub events to simulate iteration 2. Use a wrapper executor
+        // that mutates stubStreamEvents on the way out.
+        $service = $this->testable;
+        $toolExecutor = function (string $name, array $input) use ($service) {
+            $service->stubStreamEvents = [
+                $service::streamEvent('message_start', ['message' => (object)['usage' => (object)['inputTokens' => 1]]]),
+                $this->evText(0),
+                $this->evTextDelta(0, 'Found three results.'),
+                $this->evBlockStop(0),
+                $this->evMessageDelta('end_turn', 2),
+            ];
+            return ['content' => [['type' => 'text', 'text' => 'r1\nr2\nr3']]];
+        };
+
+        $events = iterator_to_array(
+            $this->testable->chatWithToolsStream(
+                [['role' => 'user', 'content' => 'find foo']],
+                [['name' => 'search_files', 'description' => 's', 'input_schema' => []]],
+                $toolExecutor,
+                null,
+                'testuser',
+            ),
+            false,
+        );
+
+        // Expected event sequence: text_delta, tool_use, tool_result, text_delta, done
+        $types = array_map(fn($e) => $e['type'], $events);
+        $this->assertSame(['text_delta', 'tool_use', 'tool_result', 'text_delta', 'done'], $types);
+
+        $this->assertSame('search_files', $events[1]['name']);
+        $this->assertSame(['query' => 'foo'], $events[1]['input']);
+        $this->assertSame('tu_1', $events[2]['tool_use_id']);
+        $this->assertStringContainsString('r1', $events[2]['output']);
+        $this->assertFalse($events[2]['is_error']);
+        $this->assertSame('Found three results.', $events[3]['text']);
+        $this->assertSame('done', $events[4]['type']);
+    }
+
+    public function testChatWithToolsStreamCollectsCitationsFromTextBlocks(): void {
+        $this->configWithApiKey();
+
+        $this->testable->stubStreamEvents = [
+            $this->evMessageStart(),
+            $this->evText(0),
+            $this->evTextDelta(0, 'Per the doc, '),
+            $this->evCitationDelta(0, [
+                'type' => 'page_location',
+                'cited_text' => 'X is true',
+                'document_index' => 0,
+                'document_title' => 'doc.pdf',
+                'start_page_number' => 2,
+                'end_page_number' => 2,
+            ]),
+            $this->evTextDelta(0, 'X holds.'),
+            $this->evBlockStop(0),
+            $this->evMessageDelta('end_turn'),
+        ];
+
+        $events = iterator_to_array(
+            $this->testable->chatWithToolsStream(
+                [['role' => 'user', 'content' => 'q']],
+                [],
+                fn($n, $i) => [],
+                null,
+                'testuser',
+            ),
+            false,
+        );
+
+        $done = end($events);
+        $this->assertSame('done', $done['type']);
+        $this->assertCount(1, $done['citations']);
+        $this->assertSame('page_location', $done['citations'][0]['type']);
+        $this->assertSame(2, $done['citations'][0]['start_page_number']);
+    }
+
+    public function testChatWithToolsStreamYieldsErrorOnStreamFailure(): void {
+        $this->configWithApiKey();
+        $this->testable->throwOnStream(new \RuntimeException('boom'));
+
+        $events = iterator_to_array(
+            $this->testable->chatWithToolsStream(
+                [['role' => 'user', 'content' => 'Hi']],
+                [],
+                fn($n, $i) => [],
+                null,
+                'testuser',
+            ),
+            false,
+        );
+
+        $this->assertCount(1, $events);
+        $this->assertSame('error', $events[0]['type']);
+        $this->assertStringContainsString('boom', $events[0]['error']);
     }
 }
