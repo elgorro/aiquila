@@ -3,6 +3,8 @@
 
 namespace OCA\AIquila\Service;
 
+use Anthropic\Beta\AnthropicBeta;
+use Anthropic\Beta\Files\FileMetadata;
 use Anthropic\Client;
 use Anthropic\Core\Contracts\BaseStream;
 use Anthropic\Core\Exceptions\APIConnectionException;
@@ -12,6 +14,7 @@ use Anthropic\Core\Exceptions\AuthenticationException;
 use Anthropic\Core\Exceptions\InternalServerException;
 use Anthropic\Core\Exceptions\PermissionDeniedException;
 use Anthropic\Core\Exceptions\RateLimitException;
+use Anthropic\Core\FileParam;
 use Anthropic\Messages\Message;
 use Anthropic\Models\ModelInfo;
 use OCP\ICache;
@@ -198,6 +201,70 @@ class ClaudeSDKService {
     }
 
     /**
+     * Upload bytes to Anthropic's beta Files API and return the resulting
+     * FileMetadata. Overridable for testing.
+     */
+    protected function callFilesUpload(Client $client, FileParam $file): FileMetadata {
+        return $client->beta->files->upload(
+            file: $file,
+            betas: [AnthropicBeta::FILES_API_2025_04_14],
+        );
+    }
+
+    /**
+     * Upload a file to Anthropic's Files API. The returned id can be passed
+     * as `source: { type: 'file', file_id: ... }` on document/image content
+     * blocks instead of inlining base64.
+     *
+     * @return string Anthropic file_id
+     */
+    public function uploadFile(string $bytes, string $filename, string $mimeType, ?string $userId = null): string {
+        $client = $this->getClient($userId);
+        $param = FileParam::fromString($bytes, $filename, $mimeType);
+        $meta = $this->callFilesUpload($client, $param);
+        return $meta->id;
+    }
+
+    /**
+     * Build per-request options (extra headers etc.). Returns null when none
+     * are needed. Today this only enables the Files API beta header when the
+     * messages reference an uploaded file_id.
+     */
+    protected function requestOptionsForMessages(array $params): ?array {
+        if ($this->messagesReferenceFileId($params['messages'] ?? [])) {
+            return [
+                'extraHeaders' => [
+                    'anthropic-beta' => AnthropicBeta::FILES_API_2025_04_14->value,
+                ],
+            ];
+        }
+        return null;
+    }
+
+    /**
+     * Walk message content blocks to detect any `source.type === 'file'`
+     * reference, which signals the Files API beta is in use.
+     */
+    private function messagesReferenceFileId(array $messages): bool {
+        foreach ($messages as $msg) {
+            $content = $msg['content'] ?? null;
+            if (!is_array($content)) {
+                continue;
+            }
+            foreach ($content as $block) {
+                if (!is_array($block)) {
+                    continue;
+                }
+                $source = $block['source'] ?? null;
+                if (is_array($source) && ($source['type'] ?? null) === 'file') {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Dispatch a non-streaming create call. Overridable for testing.
      */
     protected function callCreate(Client $client, array $params): Message {
@@ -213,6 +280,7 @@ class ClaudeSDKService {
             topK: $params['top_k'] ?? null,
             stopSequences: $params['stop_sequences'] ?? null,
             tools: $params['tools'] ?? null,
+            requestOptions: $this->requestOptionsForMessages($params),
         );
     }
 
@@ -232,6 +300,7 @@ class ClaudeSDKService {
             topK: $params['top_k'] ?? null,
             stopSequences: $params['stop_sequences'] ?? null,
             tools: $params['tools'] ?? null,
+            requestOptions: $this->requestOptionsForMessages($params),
         );
     }
 

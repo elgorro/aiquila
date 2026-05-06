@@ -42,6 +42,9 @@ class TestableClaudeSDKService extends ClaudeSDKService {
     /** Captured params from the last callCreate() call */
     public ?array $lastCreateParams = null;
 
+    /** Captured requestOptions array from the last callCreate() call */
+    public ?array $lastRequestOptions = null;
+
     /** Optional stub text to return from makeStubMessage */
     public string $stubResponseText = '';
 
@@ -63,6 +66,7 @@ class TestableClaudeSDKService extends ClaudeSDKService {
 
     protected function callCreate(Client $client, array $params): Message {
         $this->lastCreateParams = $params;
+        $this->lastRequestOptions = $this->requestOptionsForMessages($params);
         if ($this->createException !== null) {
             throw $this->createException;
         }
@@ -476,6 +480,36 @@ class ClaudeServiceTest extends TestCase {
 
         $params = $this->testable->lastCreateParams;
         $this->assertArrayNotHasKey('cache_control', $params['tools'][0]);
+    }
+
+    // ── Files API beta header detection ────────────────────────────────────
+
+    public function testRequestOptionsOmitFilesBetaWhenNoFileIdSource(): void {
+        $this->configWithApiKey();
+
+        $this->testable->ask('Hi', '', 'testuser');
+
+        $this->assertNull($this->testable->lastRequestOptions);
+    }
+
+    public function testRequestOptionsCarryFilesBetaWhenContentReferencesFileId(): void {
+        $this->configWithApiKey();
+
+        $messages = [
+            [
+                'role' => 'user',
+                'content' => [
+                    ['type' => 'document', 'source' => ['type' => 'file', 'file_id' => 'file_abc']],
+                    ['type' => 'text', 'text' => 'Summarize.'],
+                ],
+            ],
+        ];
+        $this->testable->chat($messages, null, 'testuser');
+
+        $opts = $this->testable->lastRequestOptions;
+        $this->assertIsArray($opts);
+        $this->assertArrayHasKey('extraHeaders', $opts);
+        $this->assertSame('files-api-2025-04-14', $opts['extraHeaders']['anthropic-beta']);
     }
 
     // ── chat() ────────────────────────────────────────────────────────────

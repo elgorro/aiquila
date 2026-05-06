@@ -15,6 +15,7 @@ use OCA\AIquila\Db\ProjectMapper;
 use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
+use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\McpClientService;
 use OCP\AppFramework\Controller;
@@ -32,6 +33,7 @@ class ConversationController extends Controller {
     private ProjectPathMapper $projectPathMapper;
     private ClaudeSDKService $claudeService;
     private FileService $fileService;
+    private FilesService $filesService;
     private ImageOptimizer $imageOptimizer;
     private McpClientService $mcpClient;
     private ?string $userId;
@@ -46,6 +48,7 @@ class ConversationController extends Controller {
         ProjectPathMapper $projectPathMapper,
         ClaudeSDKService $claudeService,
         FileService $fileService,
+        FilesService $filesService,
         ImageOptimizer $imageOptimizer,
         McpClientService $mcpClient,
         ?string $userId
@@ -58,6 +61,7 @@ class ConversationController extends Controller {
         $this->projectPathMapper = $projectPathMapper;
         $this->claudeService = $claudeService;
         $this->fileService = $fileService;
+        $this->filesService = $filesService;
         $this->imageOptimizer = $imageOptimizer;
         $this->mcpClient = $mcpClient;
         $this->userId = $userId;
@@ -488,7 +492,7 @@ class ConversationController extends Controller {
                         base64_decode($fileData['content']),
                         $mimeType
                     );
-                    $blocks[] = [
+                    $imageBlock = [
                         'type' => 'image',
                         'source' => [
                             'type' => 'base64',
@@ -496,8 +500,16 @@ class ConversationController extends Controller {
                             'data' => $optimized['data'],
                         ],
                     ];
+                    $rawBytes = base64_decode($optimized['data']);
+                    $fileId = $this->userId !== null
+                        ? $this->filesService->getOrUploadFileId($rawBytes, $fileData['name'], $optimized['mimeType'], $this->userId)
+                        : null;
+                    if ($fileId !== null) {
+                        $imageBlock['source'] = ['type' => 'file', 'file_id' => $fileId];
+                    }
+                    $blocks[] = $imageBlock;
                 } elseif ($mimeType === 'application/pdf') {
-                    $blocks[] = [
+                    $docBlock = [
                         'type' => 'document',
                         'source' => [
                             'type' => 'base64',
@@ -507,6 +519,14 @@ class ConversationController extends Controller {
                         'title' => $fileData['name'],
                         'citations' => ['enabled' => true],
                     ];
+                    $rawBytes = base64_decode($fileData['content']);
+                    $fileId = $this->userId !== null
+                        ? $this->filesService->getOrUploadFileId($rawBytes, $fileData['name'], 'application/pdf', $this->userId)
+                        : null;
+                    if ($fileId !== null) {
+                        $docBlock['source'] = ['type' => 'file', 'file_id' => $fileId];
+                    }
+                    $blocks[] = $docBlock;
                 } else {
                     $blocks[] = [
                         'type' => 'text',
