@@ -39,6 +39,7 @@ import { versionsTools } from './tools/apps/versions.js';
 import { projectsTools } from './tools/apps/projects.js';
 import { pollsTools } from './tools/apps/polls.js';
 import { formsTools } from './tools/apps/forms.js';
+import { textTools } from './tools/apps/text.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolArray = Array<{
@@ -99,6 +100,7 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
   { category: 'bookmarks', appIds: ['bookmarks'], tools: bookmarksTools },
   { category: 'polls', appIds: ['polls'], tools: pollsTools },
   { category: 'forms', appIds: ['forms'], tools: formsTools },
+  { category: 'text', appIds: ['text'], tools: textTools },
   { category: 'assistant', appIds: ['assistant'], tools: assistantTools },
   { category: 'translate', appIds: ['text_translate', 'translate'], tools: translateTools },
   { category: 'user_status', appIds: ['user_status'], tools: userStatusTools },
