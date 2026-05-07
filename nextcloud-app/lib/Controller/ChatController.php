@@ -12,6 +12,7 @@ use OCP\ICache;
 use OCP\ICacheFactory;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
+use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\McpClientService;
 use OCA\AIquila\Service\NativeMcpService;
@@ -19,6 +20,7 @@ use OCA\AIquila\Service\NativeMcpService;
 class ChatController extends Controller {
     private ClaudeSDKService $claudeService;
     private FileService $fileService;
+    private FilesService $filesService;
     private ImageOptimizer $imageOptimizer;
     private McpClientService $mcpClient;
     private NativeMcpService $nativeMcp;
@@ -35,6 +37,7 @@ class ChatController extends Controller {
         IRequest $request,
         ClaudeSDKService $claudeService,
         FileService $fileService,
+        FilesService $filesService,
         ImageOptimizer $imageOptimizer,
         McpClientService $mcpClient,
         NativeMcpService $nativeMcp,
@@ -44,6 +47,7 @@ class ChatController extends Controller {
         parent::__construct($appName, $request);
         $this->claudeService = $claudeService;
         $this->fileService = $fileService;
+        $this->filesService = $filesService;
         $this->imageOptimizer = $imageOptimizer;
         $this->mcpClient = $mcpClient;
         $this->nativeMcp = $nativeMcp;
@@ -152,7 +156,11 @@ class ChatController extends Controller {
                     base64_decode($f['content']),
                     $f['mimeType']
                 );
-                $images[] = ['base64' => $optimized['data'], 'mimeType' => $optimized['mimeType']];
+                $images[] = [
+                    'base64' => $optimized['data'],
+                    'mimeType' => $optimized['mimeType'],
+                    'name' => $f['name'] ?? 'image',
+                ];
             } elseif ($f['mimeType'] === 'application/pdf') {
                 $documents[] = $f;
             } else {
@@ -169,14 +177,31 @@ class ChatController extends Controller {
         // Images only (no other file types)
         if (!empty($images) && empty($documents) && empty($textParts)) {
             if (count($images) === 1) {
+                $rawBytes = base64_decode($images[0]['base64']);
+                $fileId = $this->userId !== null
+                    ? $this->filesService->getOrUploadFileId($rawBytes, $images[0]['name'], $images[0]['mimeType'], $this->userId)
+                    : null;
                 $result = $this->claudeService->askWithImage(
                     $prompt,
                     $images[0]['base64'],
                     $images[0]['mimeType'],
                     $this->userId,
+                    $fileId,
                 );
             } else {
-                $result = $this->claudeService->askWithImages($prompt, $images, $this->userId);
+                $fileIds = null;
+                if ($this->userId !== null) {
+                    $fileIds = [];
+                    foreach ($images as $img) {
+                        $fileIds[] = $this->filesService->getOrUploadFileId(
+                            base64_decode($img['base64']),
+                            $img['name'],
+                            $img['mimeType'],
+                            $this->userId,
+                        );
+                    }
+                }
+                $result = $this->claudeService->askWithImages($prompt, $images, $this->userId, $fileIds);
             }
             return new JSONResponse($result);
         }
@@ -185,12 +210,18 @@ class ChatController extends Controller {
         if (empty($images) && count($documents) === 1 && empty($textParts)) {
             $f = $documents[0];
             $rawBytes = base64_decode($f['content']);
+            $fileId = $this->userId !== null
+                ? $this->filesService->getOrUploadFileId($rawBytes, $f['name'], 'application/pdf', $this->userId)
+                : null;
             $result = $this->claudeService->askWithDocument(
                 $prompt,
                 $rawBytes,
                 'application/pdf',
                 $f['name'],
                 $this->userId,
+                true,
+                true,
+                $fileId,
             );
             return new JSONResponse($result);
         }
@@ -438,20 +469,33 @@ class ChatController extends Controller {
                 base64_decode($fileData['content']),
                 $mimeType
             );
+            $rawBytes = base64_decode($optimized['data']);
+            $imageName = $fileData['name'] ?? basename($filePath);
+            $fileId = $this->userId !== null
+                ? $this->filesService->getOrUploadFileId($rawBytes, $imageName, $optimized['mimeType'], $this->userId)
+                : null;
             $result = $this->claudeService->askWithImage(
                 $prompt,
                 $optimized['data'],
                 $optimized['mimeType'],
-                $this->userId
+                $this->userId,
+                $fileId,
             );
         } elseif ($mimeType === 'application/pdf') {
             $rawBytes = base64_decode($fileData['content']);
+            $docName = $fileData['name'] ?? basename($filePath);
+            $fileId = $this->userId !== null
+                ? $this->filesService->getOrUploadFileId($rawBytes, $docName, 'application/pdf', $this->userId)
+                : null;
             $result = $this->claudeService->askWithDocument(
                 $prompt,
                 $rawBytes,
                 'application/pdf',
-                $fileData['name'] ?? basename($filePath),
-                $this->userId
+                $docName,
+                $this->userId,
+                true,
+                true,
+                $fileId,
             );
         } else {
             $context = "File: {$fileData['name']} ({$mimeType}, {$fileData['size']} bytes)\n\n"

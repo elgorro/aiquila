@@ -5,6 +5,7 @@ namespace OCA\AIquila\Tests\Unit;
 use OCA\AIquila\Controller\ChatController;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
+use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\McpClientService;
 use OCP\ICache;
@@ -17,6 +18,7 @@ class ChatControllerTest extends TestCase {
     private $cacheFactory;
     private $claude;
     private $fileService;
+    private $filesService;
     private $imageOptimizer;
     private $mcpClient;
     private $request;
@@ -28,6 +30,9 @@ class ChatControllerTest extends TestCase {
         $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
         $this->claude      = $this->createMock(ClaudeSDKService::class);
         $this->fileService = $this->createMock(FileService::class);
+        $this->filesService = $this->createMock(FilesService::class);
+        // By default no Files API dedup — tests get null and the existing base64 path
+        $this->filesService->method('getOrUploadFileId')->willReturn(null);
         $this->imageOptimizer = $this->createMock(ImageOptimizer::class);
         // By default, optimizer passes through images unchanged
         $this->imageOptimizer->method('isSupported')->willReturn(true);
@@ -43,6 +48,7 @@ class ChatControllerTest extends TestCase {
             $this->request,
             $this->claude,
             $this->fileService,
+            $this->filesService,
             $this->imageOptimizer,
             $this->mcpClient,
             $this->nativeMcp,

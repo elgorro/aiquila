@@ -953,6 +953,7 @@ class ClaudeSDKService {
      * @param string|null $userId User ID for API key resolution
      * @param bool $cacheDoc Add cache_control to the document block (default true — documents are large and benefit from cache reuse)
      * @param bool $citations Enable citations on the document block (default true). Cited text spans are returned alongside the response.
+     * @param string|null $fileId Optional Anthropic Files API file_id. When provided, the document source is `{type:'file', file_id}` instead of inline base64/text.
      * @return array ['response' => string, 'usage' => [...], 'citations' => [...]] or ['error' => string]
      */
     public function askWithDocument(
@@ -962,12 +963,18 @@ class ClaudeSDKService {
         string  $title     = '',
         ?string $userId    = null,
         bool    $cacheDoc  = true,
-        bool    $citations = true
+        bool    $citations = true,
+        ?string $fileId    = null
     ): array {
         try {
             $client = $this->getClient($userId);
 
-            if ($mediaType === 'application/pdf') {
+            if ($fileId !== null) {
+                $source = [
+                    'type'    => 'file',
+                    'file_id' => $fileId,
+                ];
+            } elseif ($mediaType === 'application/pdf') {
                 $source = [
                     'type'       => 'base64',
                     'media_type' => 'application/pdf',
@@ -1108,11 +1115,16 @@ class ClaudeSDKService {
      * @param string $base64Image Base64-encoded image data
      * @param string $mimeType Image mime type (image/jpeg, image/png, image/gif, image/webp)
      * @param string|null $userId User ID for API key
+     * @param string|null $fileId Optional Anthropic Files API file_id. When provided, the image source is `{type:'file', file_id}` instead of inline base64.
      * @return array ['response' => string] or ['error' => string]
      */
-    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null): array {
+    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null): array {
         try {
             $client = $this->getClient($userId);
+
+            $imageSource = $fileId !== null
+                ? ['type' => 'file', 'file_id' => $fileId]
+                : ['type' => 'base64', 'media_type' => $mimeType, 'data' => $base64Image];
 
             $messages = [
                 [
@@ -1120,11 +1132,7 @@ class ClaudeSDKService {
                     'content' => [
                         [
                             'type' => 'image',
-                            'source' => [
-                                'type' => 'base64',
-                                'media_type' => $mimeType,
-                                'data' => $base64Image,
-                            ],
+                            'source' => $imageSource,
                             'cache_control' => ['type' => 'ephemeral'],
                         ],
                         [
@@ -1161,9 +1169,10 @@ class ClaudeSDKService {
      * @param string $prompt What to ask about the images
      * @param array<array{base64: string, mimeType: string}> $images Image data array
      * @param string|null $userId User ID for API key
+     * @param array<int, string|null>|null $fileIds Optional per-image Anthropic Files API file_ids, indexed parallel to $images. A non-null entry triggers a `{type:'file', file_id}` source for that image; null entries fall back to inline base64.
      * @return array ['response' => string, 'usage' => array] or ['error' => string]
      */
-    public function askWithImages(string $prompt, array $images, ?string $userId = null): array {
+    public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null): array {
         if (empty($images)) {
             return ['error' => 'No images provided'];
         }
@@ -1176,14 +1185,14 @@ class ClaudeSDKService {
             $client = $this->getClient($userId);
 
             $content = [];
-            foreach ($images as $img) {
+            foreach (array_values($images) as $i => $img) {
+                $fid = $fileIds[$i] ?? null;
+                $source = $fid !== null
+                    ? ['type' => 'file', 'file_id' => $fid]
+                    : ['type' => 'base64', 'media_type' => $img['mimeType'], 'data' => $img['base64']];
                 $content[] = [
                     'type' => 'image',
-                    'source' => [
-                        'type' => 'base64',
-                        'media_type' => $img['mimeType'],
-                        'data' => $img['base64'],
-                    ],
+                    'source' => $source,
                 ];
             }
             $lastImageIdx = count($content) - 1;

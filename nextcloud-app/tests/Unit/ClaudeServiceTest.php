@@ -982,6 +982,114 @@ class ClaudeServiceTest extends TestCase {
         $this->assertStringContainsString('Connection to Claude API failed', $result['error']);
     }
 
+    // ── askWith* (Files API file_id sources) ──────────────────────────────
+
+    public function testAskWithDocumentUsesFileIdSourceWhenProvided(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithDocument(
+            'Summarize',
+            'PDF BYTES',
+            'application/pdf',
+            'doc.pdf',
+            'testuser',
+            true,
+            true,
+            'file_xyz',
+        );
+
+        $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertSame('document', $docBlock['type']);
+        $this->assertSame('file', $docBlock['source']['type']);
+        $this->assertSame('file_xyz', $docBlock['source']['file_id']);
+        $this->assertArrayNotHasKey('data', $docBlock['source']);
+        $this->assertArrayNotHasKey('media_type', $docBlock['source']);
+        // cache_control still applies
+        $this->assertSame('ephemeral', $docBlock['source']['cache_control']['type']);
+        // citations remain enabled at the block level
+        $this->assertTrue($docBlock['citations']['enabled']);
+    }
+
+    public function testAskWithDocumentFallsBackToBase64WhenFileIdNull(): void {
+        $this->configWithApiKey();
+        $pdfBytes = '%PDF-1.4 fallback';
+
+        $this->testable->askWithDocument(
+            'Summarize',
+            $pdfBytes,
+            'application/pdf',
+            'doc.pdf',
+            'testuser',
+            true,
+            true,
+            null,
+        );
+
+        $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertSame('base64', $docBlock['source']['type']);
+        $this->assertSame(base64_encode($pdfBytes), $docBlock['source']['data']);
+    }
+
+    public function testAskWithImageUsesFileIdSourceWhenProvided(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithImage('Describe', 'BASE64DATA', 'image/png', 'testuser', 'file_img1');
+
+        $imageBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertSame('image', $imageBlock['type']);
+        $this->assertSame('file', $imageBlock['source']['type']);
+        $this->assertSame('file_img1', $imageBlock['source']['file_id']);
+        $this->assertArrayNotHasKey('data', $imageBlock['source']);
+        // cache_control stays on the image block (not source)
+        $this->assertSame('ephemeral', $imageBlock['cache_control']['type']);
+    }
+
+    public function testAskWithImageFallsBackToBase64WhenFileIdNull(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithImage('Describe', 'BASE64DATA', 'image/png', 'testuser', null);
+
+        $imageBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertSame('base64', $imageBlock['source']['type']);
+        $this->assertSame('image/png', $imageBlock['source']['media_type']);
+        $this->assertSame('BASE64DATA', $imageBlock['source']['data']);
+    }
+
+    public function testAskWithImagesUsesPerImageFileIds(): void {
+        $this->configWithApiKey();
+
+        $images = [
+            ['base64' => 'aaa', 'mimeType' => 'image/png'],
+            ['base64' => 'bbb', 'mimeType' => 'image/jpeg'],
+        ];
+        $this->testable->askWithImages('Compare', $images, 'testuser', [null, 'file_b']);
+
+        $content = $this->testable->lastCreateParams['messages'][0]['content'];
+        // Image 0: base64 fallback
+        $this->assertSame('base64', $content[0]['source']['type']);
+        $this->assertSame('aaa', $content[0]['source']['data']);
+        // Image 1: file_id source
+        $this->assertSame('file', $content[1]['source']['type']);
+        $this->assertSame('file_b', $content[1]['source']['file_id']);
+        // Last image (index 1) carries cache_control regardless of source type
+        $this->assertSame('ephemeral', $content[1]['cache_control']['type']);
+        $this->assertArrayNotHasKey('cache_control', $content[0]);
+    }
+
+    public function testAskWithImagesFallsBackToBase64WhenFileIdsNull(): void {
+        $this->configWithApiKey();
+
+        $images = [
+            ['base64' => 'aaa', 'mimeType' => 'image/png'],
+            ['base64' => 'bbb', 'mimeType' => 'image/jpeg'],
+        ];
+        $this->testable->askWithImages('Compare', $images, 'testuser', null);
+
+        $content = $this->testable->lastCreateParams['messages'][0]['content'];
+        $this->assertSame('base64', $content[0]['source']['type']);
+        $this->assertSame('base64', $content[1]['source']['type']);
+    }
+
     // ── listModels() ──────────────────────────────────────────────────────
 
     public function testListModelsReturnsIds(): void {
