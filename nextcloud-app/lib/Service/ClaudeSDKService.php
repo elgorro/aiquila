@@ -15,6 +15,12 @@ use Anthropic\Core\Exceptions\InternalServerException;
 use Anthropic\Core\Exceptions\PermissionDeniedException;
 use Anthropic\Core\Exceptions\RateLimitException;
 use Anthropic\Core\FileParam;
+use Anthropic\Messages\Batches\MessageBatch;
+use Anthropic\Messages\Batches\MessageBatchCanceledResult;
+use Anthropic\Messages\Batches\MessageBatchErroredResult;
+use Anthropic\Messages\Batches\MessageBatchExpiredResult;
+use Anthropic\Messages\Batches\MessageBatchIndividualResponse;
+use Anthropic\Messages\Batches\MessageBatchSucceededResult;
 use Anthropic\Messages\Message;
 use Anthropic\Models\ModelInfo;
 use OCP\ICache;
@@ -767,6 +773,174 @@ class ClaudeSDKService {
      */
     public function summarize(string $content, ?string $userId = null): array {
         return $this->ask("Summarize the following content concisely:\n\n$content", '', $userId);
+    }
+
+    /**
+     * Summarize via the Anthropic Batches API (50% input/output token discount).
+     *
+     * Submits a single-request batch, polls until ended, then fetches and
+     * unpacks the result. Same return shape as ask()/summarize() so it is a
+     * drop-in for non-interactive callers (TaskProcessing summary provider).
+     *
+     * Holds the calling worker open for the lifetime of the batch — only suitable
+     * for non-interactive paths (`TaskProcessing` runs `process()` from a
+     * background job already). Do not use from HTTP request handlers.
+     *
+     * @return array{response: string, usage: array, citations: array}|array{error: string}
+     */
+    public function summarizeViaBatch(string $content, ?string $userId = null, ?callable $reportProgress = null): array {
+        try {
+            $client = $this->getClient($userId);
+
+            $messages = [['role' => 'user', 'content' => "Summarize the following content concisely:\n\n$content"]];
+            $batchParams = $this->toBatchParams($this->buildRequestParams($messages, $userId));
+
+            $customId = 'aiquila-summary-' . bin2hex(random_bytes(8));
+            $batch = $this->callBatchCreate($client, [['custom_id' => $customId, 'params' => $batchParams]]);
+
+            $this->logger->info('AIquila SDK: batch submitted', [
+                'batch_id' => $batch->id,
+                'custom_id' => $customId,
+            ]);
+            if ($reportProgress !== null) {
+                $reportProgress(0.1);
+            }
+
+            $batch = $this->waitForBatch($client, $batch->id, $reportProgress);
+
+            if ($batch->processingStatus !== 'ended') {
+                throw new \RuntimeException("Batch did not complete: status={$batch->processingStatus}");
+            }
+
+            foreach ($this->callBatchResults($client, $batch->id) as $entry) {
+                if ($entry->customID !== $customId) {
+                    continue;
+                }
+                $result = $this->convertBatchResult($entry);
+                if (isset($result['response'])) {
+                    $this->logger->info('AIquila SDK: batch summary completed', [
+                        'batch_id' => $batch->id,
+                        'usage' => $result['usage'] ?? null,
+                    ]);
+                }
+                return $result;
+            }
+            throw new \RuntimeException("Batch result for custom_id $customId not found");
+        } catch (\Throwable $e) {
+            return $this->handleException($e, 'summarizeViaBatch');
+        }
+    }
+
+    /**
+     * Convert the snake_case Messages API params shape produced by
+     * buildRequestParams() into the camelCase shape required by
+     * BatchCreateParams\Request\Params.
+     */
+    private function toBatchParams(array $params): array {
+        $out = [
+            'maxTokens' => $params['max_tokens'],
+            'messages'  => $params['messages'],
+            'model'     => $params['model'],
+        ];
+        foreach (['system', 'thinking', 'outputConfig', 'temperature', 'tools'] as $k) {
+            if (isset($params[$k])) {
+                $out[$k] = $params[$k];
+            }
+        }
+        if (isset($params['top_p'])) {
+            $out['topP'] = $params['top_p'];
+        }
+        if (isset($params['top_k'])) {
+            $out['topK'] = $params['top_k'];
+        }
+        if (isset($params['stop_sequences'])) {
+            $out['stopSequences'] = $params['stop_sequences'];
+        }
+        return $out;
+    }
+
+    /**
+     * Poll a batch until processingStatus === 'ended', reporting progress.
+     *
+     * Polls every 5 s up to ~20 min. The Anthropic API guarantees batches
+     * complete within 24 h; for one-request summaries the typical end-to-end
+     * latency is single-digit seconds.
+     */
+    private function waitForBatch(Client $client, string $batchId, ?callable $reportProgress): MessageBatch {
+        $maxAttempts = 240;
+        for ($i = 0; $i < $maxAttempts; $i++) {
+            $batch = $this->callBatchRetrieve($client, $batchId);
+            if ($batch->processingStatus === 'ended') {
+                if ($reportProgress !== null) {
+                    $reportProgress(0.95);
+                }
+                return $batch;
+            }
+            if ($reportProgress !== null) {
+                $progress = min(0.9, 0.1 + ($i / $maxAttempts) * 0.8);
+                $reportProgress($progress);
+            }
+            $this->sleepBetweenBatchPolls();
+        }
+        throw new \RuntimeException("Batch $batchId did not complete within poll window");
+    }
+
+    /**
+     * Convert one MessageBatchIndividualResponse into the array shape used by
+     * other ClaudeSDKService entry points.
+     */
+    private function convertBatchResult(MessageBatchIndividualResponse $entry): array {
+        $r = $entry->result;
+        if ($r instanceof MessageBatchSucceededResult) {
+            return [
+                'response'  => $this->extractText($r->message),
+                'usage'     => $this->extractUsage($r->message),
+                'citations' => $this->extractCitations($r->message),
+            ];
+        }
+        if ($r instanceof MessageBatchErroredResult) {
+            $message = $r->error->error->message ?? 'Batch request errored';
+            return ['error' => $message];
+        }
+        if ($r instanceof MessageBatchCanceledResult) {
+            return ['error' => 'Batch request canceled'];
+        }
+        if ($r instanceof MessageBatchExpiredResult) {
+            return ['error' => 'Batch request expired before processing'];
+        }
+        return ['error' => 'Unknown batch result type'];
+    }
+
+    /**
+     * Sleep between batch poll attempts. Overridable for tests.
+     */
+    protected function sleepBetweenBatchPolls(): void {
+        sleep(5);
+    }
+
+    /**
+     * Dispatch a batches->create. Overridable for testing.
+     *
+     * @param list<array{custom_id: string, params: array}> $requests
+     */
+    protected function callBatchCreate(Client $client, array $requests): MessageBatch {
+        return $client->messages->batches->create($requests);
+    }
+
+    /**
+     * Dispatch a batches->retrieve. Overridable for testing.
+     */
+    protected function callBatchRetrieve(Client $client, string $batchId): MessageBatch {
+        return $client->messages->batches->retrieve($batchId);
+    }
+
+    /**
+     * Dispatch a batches->resultsStream. Overridable for testing.
+     *
+     * @return iterable<MessageBatchIndividualResponse>
+     */
+    protected function callBatchResults(Client $client, string $batchId): iterable {
+        return $client->messages->batches->resultsStream($batchId);
     }
 
     /**

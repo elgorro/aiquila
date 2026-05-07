@@ -33,7 +33,9 @@ class ClaudeSummaryProvider implements ISynchronousProvider {
     }
 
     public function getExpectedRuntime(): int {
-        return 30;
+        // Batch round-trip: typically a few seconds, can stretch to a few minutes
+        // under load. The framework uses this to size its job-runner timeout.
+        return 120;
     }
 
     public function getOptionalInputShape(): array {
@@ -74,9 +76,7 @@ class ClaudeSummaryProvider implements ISynchronousProvider {
             throw new \RuntimeException('No input text provided');
         }
 
-        $reportProgress(0.1);
-
-        $result = $this->claudeService->summarize($text, $userId);
+        $result = $this->claudeService->summarizeViaBatch($text, $userId, $reportProgress);
 
         if (isset($result['error'])) {
             throw new \RuntimeException($result['error']);
