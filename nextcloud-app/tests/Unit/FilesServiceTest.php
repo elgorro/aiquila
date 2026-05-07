@@ -79,6 +79,36 @@ class FilesServiceTest extends TestCase {
         $this->assertNull($id);
     }
 
+    public function testEvictByFileIdRemovesRow(): void {
+        $this->mapper->expects($this->once())
+            ->method('deleteByFileId')
+            ->with('file_stale_42')
+            ->willReturn(1);
+
+        $this->assertTrue($this->service->evictByFileId('file_stale_42'));
+    }
+
+    public function testEvictByFileIdReturnsFalseWhenAbsent(): void {
+        $this->mapper->method('deleteByFileId')->willReturn(0);
+        $this->assertFalse($this->service->evictByFileId('file_missing'));
+    }
+
+    public function testEvictByFileIdSwallowsAndLogsErrors(): void {
+        $this->mapper->method('deleteByFileId')->willThrowException(new \RuntimeException('db down'));
+        $this->logger->expects($this->once())->method('debug');
+        $this->assertFalse($this->service->evictByFileId('file_x'));
+    }
+
+    public function testExtractStaleFileIdMatchesAnthropicMessage(): void {
+        $e = new \RuntimeException("file_id 'file_abc123_XYZ' not found");
+        $this->assertSame('file_abc123_XYZ', $this->service->extractStaleFileIdFromError($e));
+    }
+
+    public function testExtractStaleFileIdReturnsNullWhenAbsent(): void {
+        $e = new \RuntimeException('rate limited');
+        $this->assertNull($this->service->extractStaleFileIdFromError($e));
+    }
+
     public function testStillReturnsFileIdWhenInsertRaces(): void {
         $this->mapper->method('findByHash')->willReturn(null);
         $this->claudeService->method('uploadFile')->willReturn('file_raced_999');

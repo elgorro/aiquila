@@ -47,4 +47,16 @@ class FileUploadMapper extends QBMapper {
             ->where($qb->expr()->lt('uploaded_at', $qb->createNamedParameter($olderThan, IQueryBuilder::PARAM_INT)));
         return $qb->executeStatement();
     }
+
+    /**
+     * Delete the cache row for a specific Anthropic file_id. Used by the
+     * lazy-fallback path when the API rejects a cached file_id (the file
+     * was evicted Anthropic-side before our daily cleanup ran).
+     */
+    public function deleteByFileId(string $fileId): int {
+        $qb = $this->db->getQueryBuilder();
+        $qb->delete($this->getTableName())
+            ->where($qb->expr()->eq('anthropic_file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_STR)));
+        return $qb->executeStatement();
+    }
 }

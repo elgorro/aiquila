@@ -320,9 +320,32 @@ class ConversationController extends Controller {
             }
         }
 
-        // 6. Call Claude (with MCP tools if available)
+        // 6. Call Claude (with MCP tools if available). If the call fails because
+        //    a cached Anthropic file_id was evicted server-side, drop the row,
+        //    rebuild content blocks (re-uploading), and retry once.
         $startMs = (int)(microtime(true) * 1000);
         $result = $this->callClaude($claudeMessages, $systemPrompt);
+        if (
+            !empty($files)
+            && isset($result['error'])
+            && ($staleId = $this->filesService->extractStaleFileIdFromError(new \RuntimeException((string)$result['error']))) !== null
+            && $this->filesService->evictByFileId($staleId)
+        ) {
+            $rebuilt = $this->buildFileContentBlocks($files);
+            if (!empty($rebuilt)) {
+                $lastIdx = count($claudeMessages) - 1;
+                $userText = $claudeMessages[$lastIdx]['content'];
+                if (is_array($userText)) {
+                    $textBlock = end($userText) ?: ['type' => 'text', 'text' => ''];
+                    $userText = is_array($textBlock) ? ($textBlock['text'] ?? '') : '';
+                }
+                $claudeMessages[$lastIdx]['content'] = array_merge(
+                    $rebuilt,
+                    [['type' => 'text', 'text' => $userText]]
+                );
+            }
+            $result = $this->callClaude($claudeMessages, $systemPrompt);
+        }
         $latencyMs = (int)(microtime(true) * 1000) - $startMs;
 
         if (isset($result['error'])) {

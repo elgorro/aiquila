@@ -73,6 +73,9 @@ Made possible by [Claude](https://www.anthropic.com/claude) from [Anthropic](htt
         <command>OCA\AIquila\Command\McpAddCommand</command>
         <command>OCA\AIquila\Command\DoctorCommand</command>
     </commands>
+    <background-jobs>
+        <job>OCA\AIquila\BackgroundJob\CleanupAnthropicFilesJob</job>
+    </background-jobs>
     <navigations>
         <navigation>
             <id>aiquila</id>

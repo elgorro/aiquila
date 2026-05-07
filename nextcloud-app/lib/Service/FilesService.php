@@ -65,4 +65,45 @@ class FilesService {
 
         return $fileId;
     }
+
+    /**
+     * Drop the cache row for $fileId so the next request re-uploads.
+     * Returns true if a row was removed.
+     */
+    public function evictByFileId(string $fileId): bool {
+        try {
+            return $this->mapper->deleteByFileId($fileId) > 0;
+        } catch (\Throwable $e) {
+            $this->logger->debug('AIquila Files: eviction failed', [
+                'file_id' => $fileId,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * If $e looks like a "file not found" rejection from Anthropic, return
+     * the offending file_id so the caller can evict and retry. Returns null
+     * when the error doesn't reference a known cached file_id.
+     *
+     * Anthropic surfaces these as 404 APIStatusException with the file_id
+     * embedded in the message (e.g. "file_id 'file_abc' not found"). We
+     * match conservatively against ids of the form `file_*`.
+     */
+    public function extractStaleFileIdFromError(\Throwable $e): ?string {
+        $msg = $e->getMessage();
+        if ($msg === '' || stripos($msg, 'file') === false) {
+            return null;
+        }
+        if (!preg_match_all('/\b(file_[A-Za-z0-9_-]+)\b/', $msg, $matches)) {
+            return null;
+        }
+        foreach ($matches[1] as $candidate) {
+            if ($candidate !== 'file_id') {
+                return $candidate;
+            }
+        }
+        return null;
+    }
 }
