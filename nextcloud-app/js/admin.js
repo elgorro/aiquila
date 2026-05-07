@@ -326,4 +326,87 @@ document.addEventListener('DOMContentLoaded', function() {
             testButton.textContent = 'Test Configuration';
         }
     });
+
+    // ── Native MCP connector ───────────────────────────────────────────
+    const nativeEnabled = document.getElementById('aiquila-native-mcp-enabled');
+    const nativeExtraUrl = document.getElementById('aiquila-native-mcp-extra-url');
+    const nativeExtraToken = document.getElementById('aiquila-native-mcp-extra-token');
+    const nativeSaveBtn = document.getElementById('aiquila-native-mcp-save');
+    const nativeRefreshBtn = document.getElementById('aiquila-native-mcp-refresh');
+    const nativeStatus = document.getElementById('aiquila-native-mcp-status');
+    const nativeServersBox = document.getElementById('aiquila-native-mcp-servers');
+
+    async function loadNativeMcpStatus() {
+        try {
+            const response = await fetch(OC.generateUrl('/apps/aiquila/api/admin/native-mcp/status'), {
+                headers: { 'requesttoken': OC.requestToken },
+            });
+            if (!response.ok) {
+                nativeStatus.textContent = 'Failed to load native MCP status';
+                return;
+            }
+            const data = await response.json();
+            nativeEnabled.checked = !!data.enabled;
+            nativeExtraUrl.value = data.extraUrl || '';
+            nativeExtraToken.placeholder = data.hasExtraToken ? 'Token configured (leave blank to keep)' : 'Bearer token for the URL above';
+            renderServers(data.servers || []);
+        } catch (err) {
+            nativeStatus.textContent = 'Error: ' + err.message;
+        }
+    }
+
+    function renderServers(servers) {
+        if (!nativeServersBox) return;
+        if (servers.length === 0) {
+            nativeServersBox.innerHTML = '<p class="hint">No MCP servers configured. Add one above to forward it via the native connector.</p>';
+            return;
+        }
+        const rows = servers.map(s => {
+            const dot = s.reachable ? '🟢' : (s.scheme_ok ? '🟡' : '🔴');
+            const detail = s.reachable
+                ? 'reachable (HTTP ' + (s.http_status ?? '?') + ')'
+                : (s.scheme_ok ? 'HTTPS but not reachable: ' + (s.message || '?') : 'not HTTPS — Anthropic cannot reach this URL');
+            return '<li>' + dot + ' <code>' + escapeHtml(s.url) + '</code> — ' + escapeHtml(s.name) + ' — ' + escapeHtml(detail) + '</li>';
+        }).join('');
+        nativeServersBox.innerHTML = '<ul>' + rows + '</ul>';
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    if (nativeSaveBtn) {
+        nativeSaveBtn.addEventListener('click', async function() {
+            nativeStatus.textContent = 'Saving...';
+            const body = {
+                native_mcp_enabled: nativeEnabled.checked ? '1' : '0',
+                native_mcp_extra_url: nativeExtraUrl.value,
+            };
+            if (nativeExtraToken.value !== '') {
+                body.native_mcp_extra_token = nativeExtraToken.value;
+            }
+            try {
+                const response = await fetch(OC.generateUrl('/apps/aiquila/api/admin/settings'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'requesttoken': OC.requestToken },
+                    body: JSON.stringify(body),
+                });
+                if (response.ok) {
+                    nativeStatus.textContent = 'Saved!';
+                    nativeExtraToken.value = '';
+                    loadNativeMcpStatus();
+                } else {
+                    nativeStatus.textContent = 'Error saving';
+                }
+            } catch (err) {
+                nativeStatus.textContent = 'Error: ' + err.message;
+            }
+        });
+    }
+    if (nativeRefreshBtn) {
+        nativeRefreshBtn.addEventListener('click', loadNativeMcpStatus);
+    }
+    if (nativeEnabled) {
+        loadNativeMcpStatus();
+    }
 });

@@ -1365,4 +1365,294 @@ class ClaudeSDKService {
             ],
         ];
     }
+
+    /**
+     * Dispatch a beta streaming create call with mcp_servers attached. Overridable for testing.
+     *
+     * @param list<array<string, mixed>> $mcpServers
+     */
+    protected function callBetaCreateStreamWithMcp(Client $client, array $params, array $mcpServers): BaseStream {
+        return $client->beta->messages->createStream(
+            maxTokens: $params['max_tokens'],
+            messages: $params['messages'],
+            model: $params['model'],
+            mcpServers: $mcpServers,
+            outputConfig: $params['outputConfig'] ?? null,
+            stopSequences: $params['stop_sequences'] ?? null,
+            system: $params['system'] ?? null,
+            temperature: $params['temperature'] ?? null,
+            thinking: $params['thinking'] ?? null,
+            tools: $params['tools'] ?? null,
+            topK: $params['top_k'] ?? null,
+            topP: $params['top_p'] ?? null,
+            betas: [AnthropicBeta::MCP_CLIENT_2025_11_20],
+        );
+    }
+
+    /**
+     * Native MCP connector path. Hands the conversation to Anthropic's beta
+     * messages endpoint with `mcp_servers` set; Anthropic calls each server
+     * directly over HTTPS and returns mcp_tool_use / mcp_tool_result blocks
+     * inline, so no PHP-side agentic loop is required.
+     *
+     * Yields the same event shape as chatWithToolsStream() so controllers can
+     * persist/render either path interchangeably:
+     *
+     *   ['type' => 'text_delta',  'text' => string]
+     *   ['type' => 'tool_use',    'id' => string, 'name' => string, 'input' => array, 'server' => string]
+     *   ['type' => 'tool_result', 'tool_use_id' => string, 'output' => string, 'is_error' => bool]
+     *   ['type' => 'done',        'usage' => [...], 'citations' => [...]]
+     *   ['type' => 'error',       'error' => string, 'usage' => [...]]
+     *
+     * @param list<array<string, mixed>> $mcpServers Server descriptors per BetaRequestMCPServerURLDefinition
+     */
+    public function chatWithNativeMcp(
+        array    $messages,
+        array    $mcpServers,
+        ?string  $system = null,
+        ?string  $userId = null,
+        array    $options = []
+    ): \Generator {
+        try {
+            $client = $this->getClient($userId);
+        } catch (\Throwable $e) {
+            yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];
+            return;
+        }
+
+        if ($mcpServers === []) {
+            yield ['type' => 'error', 'error' => 'Native MCP connector enabled but no reachable HTTPS MCP servers are configured.', 'usage' => null];
+            return;
+        }
+
+        if ($system !== null) {
+            $options['system'] = $system;
+        }
+        // Tools are advertised by the MCP servers themselves under the
+        // beta connector; do not pre-merge user-defined tool schemas.
+        unset($options['tools']);
+
+        $params = $this->buildRequestParams($messages, $userId, $options);
+
+        try {
+            $stream = $this->callBetaCreateStreamWithMcp($client, $params, $mcpServers);
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila SDK: chatWithNativeMcp open failed', $this->buildErrorLogContext($e));
+            yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];
+            return;
+        }
+
+        $totalInput = 0;
+        $totalOutput = 0;
+        $totalCacheCreate = 0;
+        $totalCacheRead = 0;
+        $allCitations = [];
+
+        // Per-block accumulators, keyed by content-block index.
+        /** @var array<int, array<string, mixed>> $blocks */
+        $blocks = [];
+        /** @var array<int, string> $jsonBuffers */
+        $jsonBuffers = [];
+
+        try {
+            foreach ($stream as $event) {
+                $type = $event->type ?? null;
+                switch ($type) {
+                    case 'message_start':
+                        if (isset($event->message->usage)) {
+                            $totalInput += $event->message->usage->inputTokens ?? 0;
+                            $totalCacheCreate += $event->message->usage->cacheCreationInputTokens ?? 0;
+                            $totalCacheRead += $event->message->usage->cacheReadInputTokens ?? 0;
+                        }
+                        break;
+
+                    case 'content_block_start':
+                        $idx = $event->index;
+                        $cb = $event->contentBlock;
+                        $cbType = $cb->type ?? null;
+                        if ($cbType === 'text') {
+                            $blocks[$idx] = ['type' => 'text', 'text' => '', 'citations' => []];
+                        } elseif ($cbType === 'mcp_tool_use') {
+                            $blocks[$idx] = [
+                                'type' => 'mcp_tool_use',
+                                'id' => $cb->id ?? '',
+                                'name' => $cb->name ?? '',
+                                'server' => $cb->serverName ?? '',
+                                'input' => null,
+                            ];
+                            $jsonBuffers[$idx] = '';
+                        } elseif ($cbType === 'mcp_tool_result') {
+                            // Anthropic returns the full result inline in content_block_start
+                            // (no streaming deltas), so we can yield immediately.
+                            $output = $this->stringifyMcpResultContent($cb->content ?? null);
+                            yield [
+                                'type' => 'tool_result',
+                                'tool_use_id' => $cb->toolUseID ?? '',
+                                'output' => $output,
+                                'is_error' => (bool)($cb->isError ?? false),
+                            ];
+                            $blocks[$idx] = ['type' => 'mcp_tool_result'];
+                        } else {
+                            $blocks[$idx] = ['type' => $cbType ?? 'unknown'];
+                        }
+                        break;
+
+                    case 'content_block_delta':
+                        $idx = $event->index;
+                        $delta = $event->delta;
+                        $deltaType = $delta->type ?? null;
+                        if ($deltaType === 'text_delta') {
+                            $text = $delta->text ?? '';
+                            if (isset($blocks[$idx])) {
+                                $blocks[$idx]['text'] = ($blocks[$idx]['text'] ?? '') . $text;
+                            }
+                            if ($text !== '') {
+                                yield ['type' => 'text_delta', 'text' => $text];
+                            }
+                        } elseif ($deltaType === 'input_json_delta') {
+                            $jsonBuffers[$idx] = ($jsonBuffers[$idx] ?? '') . ($delta->partialJSON ?? '');
+                        } elseif ($deltaType === 'citations_delta') {
+                            $citation = $delta->citation ?? null;
+                            if ($citation !== null) {
+                                $normalized = is_object($citation) ? json_decode(json_encode($citation), true) : $citation;
+                                if (isset($blocks[$idx])) {
+                                    $blocks[$idx]['citations'][] = $normalized;
+                                }
+                            }
+                        }
+                        break;
+
+                    case 'content_block_stop':
+                        $idx = $event->index;
+                        if (isset($blocks[$idx]) && ($blocks[$idx]['type'] ?? null) === 'mcp_tool_use') {
+                            $json = $jsonBuffers[$idx] ?? '';
+                            $blocks[$idx]['input'] = $json !== '' ? (json_decode($json, true) ?? []) : [];
+                            yield [
+                                'type' => 'tool_use',
+                                'id' => $blocks[$idx]['id'],
+                                'name' => $blocks[$idx]['name'],
+                                'input' => $blocks[$idx]['input'],
+                                'server' => $blocks[$idx]['server'] ?? '',
+                            ];
+                        }
+                        break;
+
+                    case 'message_delta':
+                        if (isset($event->usage)) {
+                            $totalOutput += $event->usage->outputTokens ?? 0;
+                        }
+                        break;
+
+                    case 'message_stop':
+                    default:
+                        break;
+                }
+            }
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila SDK: chatWithNativeMcp stream failed', $this->buildErrorLogContext($e));
+            yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => [
+                'input_tokens' => $totalInput,
+                'output_tokens' => $totalOutput,
+                'cache_creation_tokens' => $totalCacheCreate ?: null,
+                'cache_read_tokens' => $totalCacheRead ?: null,
+            ]];
+            return;
+        }
+
+        foreach ($blocks as $b) {
+            if (($b['type'] ?? null) === 'text' && !empty($b['citations'])) {
+                $allCitations = array_merge($allCitations, $b['citations']);
+            }
+        }
+
+        yield [
+            'type' => 'done',
+            'usage' => [
+                'input_tokens' => $totalInput,
+                'output_tokens' => $totalOutput,
+                'cache_creation_tokens' => $totalCacheCreate ?: null,
+                'cache_read_tokens' => $totalCacheRead ?: null,
+            ],
+            'citations' => $allCitations,
+        ];
+    }
+
+    /**
+     * Flatten an mcp_tool_result content payload (string or array of text blocks)
+     * into a single string suitable for yielding to clients and persisting in
+     * the conversation log.
+     *
+     * @param mixed $content
+     */
+    private function stringifyMcpResultContent($content): string {
+        if (is_string($content)) {
+            return $content;
+        }
+        if (is_array($content)) {
+            $out = '';
+            foreach ($content as $part) {
+                if (is_object($part)) {
+                    if (($part->type ?? null) === 'text') {
+                        $out .= $part->text ?? '';
+                    }
+                } elseif (is_array($part)) {
+                    if (($part['type'] ?? null) === 'text') {
+                        $out .= $part['text'] ?? '';
+                    }
+                }
+            }
+            return $out !== '' ? $out : json_encode($content);
+        }
+        if (is_object($content)) {
+            return json_encode($content) ?: '';
+        }
+        return '';
+    }
+
+    /**
+     * Non-streaming convenience: drive chatWithNativeMcp() to completion and
+     * return a flat result array compatible with the legacy chat()/chatWithTools()
+     * shape (response/model/usage/citations).
+     */
+    public function chatWithNativeMcpCollect(
+        array $messages,
+        array $mcpServers,
+        ?string $system = null,
+        ?string $userId = null,
+        array $options = []
+    ): array {
+        $text = '';
+        $citations = [];
+        $usage = ['input_tokens' => 0, 'output_tokens' => 0];
+        $error = null;
+
+        foreach ($this->chatWithNativeMcp($messages, $mcpServers, $system, $userId, $options) as $event) {
+            switch ($event['type'] ?? null) {
+                case 'text_delta':
+                    $text .= $event['text'] ?? '';
+                    break;
+                case 'done':
+                    $usage = $event['usage'] ?? $usage;
+                    $citations = $event['citations'] ?? [];
+                    break;
+                case 'error':
+                    $error = $event['error'] ?? 'Unknown error';
+                    if (isset($event['usage']) && is_array($event['usage'])) {
+                        $usage = $event['usage'];
+                    }
+                    break;
+            }
+        }
+
+        if ($error !== null && $text === '') {
+            return ['error' => $error, 'model' => $this->getModel($userId), 'usage' => $usage];
+        }
+
+        return [
+            'response' => $text,
+            'model' => $this->getModel($userId),
+            'usage' => $usage,
+            'citations' => $citations,
+        ];
+    }
 }

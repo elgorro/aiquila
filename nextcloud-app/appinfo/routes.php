@@ -31,6 +31,7 @@ return [
         ['name' => 'settings#get', 'url' => '/api/settings', 'verb' => 'GET'],
         ['name' => 'settings#saveAdmin', 'url' => '/api/admin/settings', 'verb' => 'POST'],
         ['name' => 'settings#testConfig', 'url' => '/api/admin/test', 'verb' => 'POST'],
+        ['name' => 'settings#nativeMcpStatus', 'url' => '/api/admin/native-mcp/status', 'verb' => 'GET'],
         ['name' => 'occ#execute', 'url' => '/api/occ', 'verb' => 'POST'],
 
         // MCP Server Admin API

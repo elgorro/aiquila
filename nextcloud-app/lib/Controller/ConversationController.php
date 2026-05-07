@@ -19,6 +19,7 @@ use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\McpClientService;
+use OCA\AIquila\Service\NativeMcpService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -38,6 +39,7 @@ class ConversationController extends Controller {
     private FilesService $filesService;
     private ImageOptimizer $imageOptimizer;
     private McpClientService $mcpClient;
+    private NativeMcpService $nativeMcp;
     private ?string $userId;
 
     public function __construct(
@@ -53,6 +55,7 @@ class ConversationController extends Controller {
         FilesService $filesService,
         ImageOptimizer $imageOptimizer,
         McpClientService $mcpClient,
+        NativeMcpService $nativeMcp,
         ?string $userId
     ) {
         parent::__construct($appName, $request);
@@ -66,6 +69,7 @@ class ConversationController extends Controller {
         $this->filesService = $filesService;
         $this->imageOptimizer = $imageOptimizer;
         $this->mcpClient = $mcpClient;
+        $this->nativeMcp = $nativeMcp;
         $this->userId = $userId;
     }
 
@@ -490,18 +494,32 @@ class ConversationController extends Controller {
             }
         }
 
-        // 3. Resolve MCP tools (best-effort; same fallback as callClaude()).
-        try {
-            $allTools = $this->mcpClient->getAllTools();
-        } catch (\Throwable $e) {
-            $allTools = ['tools' => [], 'mapping' => []];
+        // 3. Pick the path: native MCP connector (Anthropic calls servers directly)
+        //    or local agentic loop (PHP dispatches tools per turn). Native is
+        //    only used when the flag is on AND we can offer at least one
+        //    HTTPS-reachable server descriptor; otherwise we fall back.
+        $useNativeMcp = false;
+        $nativeMcpServers = [];
+        if ($this->nativeMcp->isEnabledForUser($this->userId)) {
+            $nativeMcpServers = $this->nativeMcp->buildServerDefinitions();
+            if (!empty($nativeMcpServers)) {
+                $useNativeMcp = true;
+            }
         }
-        $tools = $allTools['tools'] ?? [];
-        $mapping = $allTools['mapping'] ?? [];
-        $mcpClient = $this->mcpClient;
-        $toolExecutor = function (string $name, array $input) use ($mcpClient, $mapping): array {
-            return $mcpClient->executeTool($name, $input, $mapping);
-        };
+
+        if (!$useNativeMcp) {
+            try {
+                $allTools = $this->mcpClient->getAllTools();
+            } catch (\Throwable $e) {
+                $allTools = ['tools' => [], 'mapping' => []];
+            }
+            $tools = $allTools['tools'] ?? [];
+            $mapping = $allTools['mapping'] ?? [];
+            $mcpClient = $this->mcpClient;
+            $toolExecutor = function (string $name, array $input) use ($mcpClient, $mapping): array {
+                return $mcpClient->executeTool($name, $input, $mapping);
+            };
+        }
 
         // 4. Drive the streaming generator, accumulating final state.
         $accumulatedText = '';
@@ -510,13 +528,22 @@ class ConversationController extends Controller {
         $errorMessage = null;
         $startMs = (int)(microtime(true) * 1000);
 
-        foreach ($this->claudeService->chatWithToolsStream(
-            $claudeMessages,
-            $tools,
-            $toolExecutor,
-            $systemPrompt,
-            $this->userId,
-        ) as $event) {
+        $eventStream = $useNativeMcp
+            ? $this->claudeService->chatWithNativeMcp(
+                $claudeMessages,
+                $nativeMcpServers,
+                $systemPrompt,
+                $this->userId,
+            )
+            : $this->claudeService->chatWithToolsStream(
+                $claudeMessages,
+                $tools,
+                $toolExecutor,
+                $systemPrompt,
+                $this->userId,
+            );
+
+        foreach ($eventStream as $event) {
             switch ($event['type'] ?? null) {
                 case 'text_delta':
                     $accumulatedText .= $event['text'] ?? '';
@@ -751,6 +778,18 @@ class ConversationController extends Controller {
      * Call Claude with MCP tool support if available
      */
     private function callClaude(array $messages, ?string $systemPrompt = null): array {
+        if ($this->nativeMcp->isEnabledForUser($this->userId)) {
+            $mcpServers = $this->nativeMcp->buildServerDefinitions();
+            if (!empty($mcpServers)) {
+                return $this->claudeService->chatWithNativeMcpCollect(
+                    $messages,
+                    $mcpServers,
+                    $systemPrompt,
+                    $this->userId,
+                );
+            }
+        }
+
         try {
             $allTools = $this->mcpClient->getAllTools();
         } catch (\Throwable $e) {

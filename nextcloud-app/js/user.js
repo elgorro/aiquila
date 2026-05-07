@@ -40,6 +40,37 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // ── Native MCP override ────────────────────────────────────────────
+    const nativeForm = document.getElementById('aiquila-native-mcp-user-form');
+    const nativeStatus = document.getElementById('aiquila-native-mcp-user-status');
+    if (nativeForm) {
+        // Load current setting and select the matching radio.
+        fetch(OC.generateUrl('/apps/aiquila/api/settings'), {
+            headers: { 'requesttoken': OC.requestToken },
+        }).then(r => r.json()).then(d => {
+            const v = d && typeof d.nativeMcpUserOverride === 'string' ? d.nativeMcpUserOverride : '';
+            const radio = nativeForm.querySelector('input[name="native_mcp_enabled"][value="' + v + '"]');
+            if (radio) radio.checked = true;
+        }).catch(() => {});
+
+        nativeForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const selected = nativeForm.querySelector('input[name="native_mcp_enabled"]:checked');
+            const value = selected ? selected.value : '';
+            nativeStatus.textContent = 'Saving...';
+            try {
+                const response = await fetch(OC.generateUrl('/apps/aiquila/api/settings'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'requesttoken': OC.requestToken },
+                    body: JSON.stringify({ native_mcp_enabled: value }),
+                });
+                nativeStatus.textContent = response.ok ? 'Saved!' : 'Error saving';
+            } catch (err) {
+                nativeStatus.textContent = 'Error: ' + err.message;
+            }
+        });
+    }
+
     clearBtn.addEventListener('click', async function() {
         if (!confirm('Are you sure you want to clear your personal API key?')) {
             return;

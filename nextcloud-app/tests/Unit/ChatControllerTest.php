@@ -35,6 +35,8 @@ class ChatControllerTest extends TestCase {
             fn(string $raw, string $mime) => ['data' => base64_encode($raw), 'mimeType' => $mime, 'resized' => false]
         );
         $this->mcpClient   = $this->createMock(McpClientService::class);
+        $this->nativeMcp   = $this->createMock(\OCA\AIquila\Service\NativeMcpService::class);
+        $this->nativeMcp->method('isEnabledForUser')->willReturn(false);
         $this->request     = $this->createMock(IRequest::class);
         $this->ctrl        = new ChatController(
             'aiquila',
@@ -43,6 +45,7 @@ class ChatControllerTest extends TestCase {
             $this->fileService,
             $this->imageOptimizer,
             $this->mcpClient,
+            $this->nativeMcp,
             'testuser',
             $this->cacheFactory
         );

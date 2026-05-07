@@ -14,12 +14,14 @@ use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\McpClientService;
+use OCA\AIquila\Service\NativeMcpService;
 
 class ChatController extends Controller {
     private ClaudeSDKService $claudeService;
     private FileService $fileService;
     private ImageOptimizer $imageOptimizer;
     private McpClientService $mcpClient;
+    private NativeMcpService $nativeMcp;
     private ?string $userId;
     private ICache $cache;
 
@@ -35,6 +37,7 @@ class ChatController extends Controller {
         FileService $fileService,
         ImageOptimizer $imageOptimizer,
         McpClientService $mcpClient,
+        NativeMcpService $nativeMcp,
         ?string $userId,
         ICacheFactory $cacheFactory
     ) {
@@ -43,6 +46,7 @@ class ChatController extends Controller {
         $this->fileService = $fileService;
         $this->imageOptimizer = $imageOptimizer;
         $this->mcpClient = $mcpClient;
+        $this->nativeMcp = $nativeMcp;
         $this->userId = $userId;
         $this->cache = $cacheFactory->createDistributed('aiquila_ratelimit');
     }
@@ -288,6 +292,24 @@ class ChatController extends Controller {
             return new JSONResponse([
                 'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
             ], 413);
+        }
+
+        // Native MCP connector path: hand the conversation to Anthropic and
+        // let it call MCP servers directly. Only takes effect when the flag
+        // is on AND we can produce at least one HTTPS-public-reachable server
+        // descriptor. Otherwise fall through to the local agentic loop below.
+        if ($this->nativeMcp->isEnabledForUser($this->userId)) {
+            $mcpServers = $this->nativeMcp->buildServerDefinitions();
+            if (!empty($mcpServers)) {
+                $result = $this->claudeService->chatWithNativeMcpCollect(
+                    $messages,
+                    $mcpServers,
+                    $system,
+                    $this->userId,
+                    $options,
+                );
+                return new JSONResponse($result);
+            }
         }
 
         // Check for enabled MCP servers and use agentic tool loop if available

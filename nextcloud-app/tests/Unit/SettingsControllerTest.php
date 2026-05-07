@@ -15,6 +15,7 @@ class SettingsControllerTest extends TestCase {
     private $request;
     private $claude;
     private $credentials;
+    private $nativeMcp;
     private SettingsController $ctrl;
 
     protected function setUp(): void {
@@ -22,13 +23,17 @@ class SettingsControllerTest extends TestCase {
         $this->request     = $this->createMock(IRequest::class);
         $this->claude      = $this->createMock(ClaudeSDKService::class);
         $this->credentials = $this->createMock(CredentialService::class);
+        $this->nativeMcp   = $this->createMock(\OCA\AIquila\Service\NativeMcpService::class);
+        $this->nativeMcp->method('isEnabledForUser')->willReturn(false);
+        $this->nativeMcp->method('probeAll')->willReturn([]);
         $this->ctrl        = new SettingsController(
             'aiquila',
             $this->request,
             $this->config,
             'testuser',
             $this->claude,
-            $this->credentials
+            $this->credentials,
+            $this->nativeMcp
         );
     }
 
@@ -50,6 +55,7 @@ class SettingsControllerTest extends TestCase {
                 ['testuser', 'aiquila', 'user_model', '', ''],
                 ['testuser', 'aiquila', 'default_system_prompt', '', ''],
                 ['testuser', 'aiquila', 'default_verbose', '0', '0'],
+                ['testuser', 'aiquila', 'native_mcp_enabled', '', ''],
             ]);
         $this->claude->method('listModels')->willReturn(null);
 
@@ -66,6 +72,7 @@ class SettingsControllerTest extends TestCase {
                 ['testuser', 'aiquila', 'user_model', '', ClaudeModels::HAIKU_4_5],
                 ['testuser', 'aiquila', 'default_system_prompt', '', ''],
                 ['testuser', 'aiquila', 'default_verbose', '0', '0'],
+                ['testuser', 'aiquila', 'native_mcp_enabled', '', ''],
             ]);
         $this->claude->method('listModels')->willReturn(null);
 

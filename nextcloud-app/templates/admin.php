@@ -88,6 +88,47 @@ style('aiquila', 'admin');
         </div>
     </div>
 
+    <div id="aiquila-native-mcp" class="section">
+        <h3>Native MCP connector (beta)</h3>
+        <p class="settings-hint">
+            When enabled, Claude calls each MCP server <strong>directly</strong> over HTTPS instead of routing tool calls through this Nextcloud instance. Anthropic's API takes the place of AIquila's PHP-side agentic loop and returns
+            <code>mcp_tool_use</code> / <code>mcp_tool_result</code> blocks.
+            Reads the SDK 0.20 beta header <code>mcp-client-2025-11-20</code>; only feasible if your MCP servers are publicly reachable over HTTPS from Anthropic's infrastructure. Not eligible for Zero Data Retention deployments. Read the
+            <a href="https://github.com/elgorro/aiquila/tree/main/docs/dev/native-mcp-connector.md" target="_blank" rel="noopener noreferrer">native MCP connector notes</a>
+            before flipping this on.
+        </p>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="aiquila-native-mcp-enabled">
+                Enable native MCP connector
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label for="aiquila-native-mcp-extra-url">Extra MCP URL (optional)</label>
+            <input type="text"
+                   id="aiquila-native-mcp-extra-url"
+                   placeholder="https://mcp.example.com/mcp"
+                   style="min-width: 26rem;">
+            <p class="hint">Forwarded in addition to the per-user MCP servers above. Use only if the URL is publicly reachable over HTTPS.</p>
+        </div>
+        <div class="form-group">
+            <label for="aiquila-native-mcp-extra-token">Extra MCP bearer token (optional)</label>
+            <input type="password"
+                   id="aiquila-native-mcp-extra-token"
+                   placeholder="Bearer token for the URL above"
+                   style="min-width: 26rem;">
+            <p class="hint">Leave blank to keep the existing token. Submit an empty save with this row cleared to remove it.</p>
+        </div>
+
+        <button type="button" id="aiquila-native-mcp-save" class="primary">Save native MCP settings</button>
+        <button type="button" id="aiquila-native-mcp-refresh" class="secondary">Refresh reachability</button>
+        <span id="aiquila-native-mcp-status"></span>
+
+        <div id="aiquila-native-mcp-servers" style="margin-top: 0.75rem;"></div>
+    </div>
+
     <div class="aiquila-resources section">
         <h3>Resources</h3>
         <ul>
