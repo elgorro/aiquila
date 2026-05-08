@@ -285,8 +285,11 @@ class ConversationController extends Controller {
 
         // 4. If files are attached to THIS message, build structured content blocks
         //    so images go through Claude Vision and PDFs through document understanding
+        $documentsIndex = [];
         if (!empty($files)) {
-            $contentBlocks = $this->buildFileContentBlocks($files);
+            $built = $this->buildFileContentBlocks($files);
+            $contentBlocks = $built['blocks'];
+            $documentsIndex = $built['documents'];
             if (!empty($contentBlocks)) {
                 $lastIdx = count($claudeMessages) - 1;
                 $userText = $claudeMessages[$lastIdx]['content'];
@@ -332,7 +335,8 @@ class ConversationController extends Controller {
             && $this->filesService->evictByFileId($staleId)
         ) {
             $rebuilt = $this->buildFileContentBlocks($files);
-            if (!empty($rebuilt)) {
+            if (!empty($rebuilt['blocks'])) {
+                $documentsIndex = $rebuilt['documents'];
                 $lastIdx = count($claudeMessages) - 1;
                 $userText = $claudeMessages[$lastIdx]['content'];
                 if (is_array($userText)) {
@@ -340,7 +344,7 @@ class ConversationController extends Controller {
                     $userText = is_array($textBlock) ? ($textBlock['text'] ?? '') : '';
                 }
                 $claudeMessages[$lastIdx]['content'] = array_merge(
-                    $rebuilt,
+                    $rebuilt['blocks'],
                     [['type' => 'text', 'text' => $userText]]
                 );
             }
@@ -380,6 +384,9 @@ class ConversationController extends Controller {
         $assistantMsg->setLatencyMs($latencyMs);
         if (!empty($result['citations'])) {
             $assistantMsg->setCitations(json_encode($result['citations']));
+            if (!empty($documentsIndex)) {
+                $assistantMsg->setDocuments(json_encode($documentsIndex));
+            }
         }
         $assistantMsg->setCreatedAt(time());
         $assistantMsg = $this->messageMapper->insert($assistantMsg);
@@ -487,8 +494,11 @@ class ConversationController extends Controller {
         foreach ($allMessages as $msg) {
             $claudeMessages[] = ['role' => $msg->getRole(), 'content' => $msg->getContent()];
         }
+        $documentsIndex = [];
         if (!empty($files)) {
-            $contentBlocks = $this->buildFileContentBlocks($files);
+            $built = $this->buildFileContentBlocks($files);
+            $contentBlocks = $built['blocks'];
+            $documentsIndex = $built['documents'];
             if (!empty($contentBlocks)) {
                 $lastIdx = count($claudeMessages) - 1;
                 $userText = $claudeMessages[$lastIdx]['content'];
@@ -606,6 +616,9 @@ class ConversationController extends Controller {
         $assistantMsg->setLatencyMs($latencyMs);
         if (!empty($finalCitations)) {
             $assistantMsg->setCitations(json_encode($finalCitations));
+            if (!empty($documentsIndex)) {
+                $assistantMsg->setDocuments(json_encode($documentsIndex));
+            }
         }
         $assistantMsg->setCreatedAt(time());
         $assistantMsg = $this->messageMapper->insert($assistantMsg);
@@ -673,6 +686,7 @@ class ConversationController extends Controller {
             $newMsg->setCacheReadTokens($msg->getCacheReadTokens());
             $newMsg->setLatencyMs($msg->getLatencyMs());
             $newMsg->setCitations($msg->getCitations());
+            $newMsg->setDocuments($msg->getDocuments());
             $newMsg->setCreatedAt($msg->getCreatedAt());
             $newMsg = $this->messageMapper->insert($newMsg);
 
@@ -734,8 +748,20 @@ class ConversationController extends Controller {
      * @param string[] $files File paths
      * @return array Claude API content blocks (image/document/text)
      */
+    /**
+     * Build Anthropic content blocks for the given Nextcloud file paths.
+     *
+     * Returns the blocks alongside a documents index — one entry per `type:document`
+     * block in the order Anthropic sees them. The documents index is what citation
+     * `document_index` values resolve against, so the frontend can map a citation
+     * back to a Nextcloud file path and open it.
+     *
+     * @param string[] $files
+     * @return array{blocks: array<int, array<string, mixed>>, documents: array<int, array{index:int,path:string,title:string,mimeType:string,fileId?:string}>}
+     */
     private function buildFileContentBlocks(array $files): array {
         $blocks = [];
+        $documents = [];
         foreach ($files as $filePath) {
             try {
                 $fileData = $this->fileService->getContent($filePath, $this->userId);
@@ -780,6 +806,16 @@ class ConversationController extends Controller {
                     if ($fileId !== null) {
                         $docBlock['source'] = ['type' => 'file', 'file_id' => $fileId];
                     }
+                    $entry = [
+                        'index' => count($documents),
+                        'path' => $filePath,
+                        'title' => $fileData['name'],
+                        'mimeType' => 'application/pdf',
+                    ];
+                    if ($fileId !== null) {
+                        $entry['fileId'] = $fileId;
+                    }
+                    $documents[] = $entry;
                     $blocks[] = $docBlock;
                 } else {
                     $blocks[] = [
@@ -794,7 +830,7 @@ class ConversationController extends Controller {
                 ];
             }
         }
-        return $blocks;
+        return ['blocks' => $blocks, 'documents' => $documents];
     }
 
     /**

@@ -99,6 +99,24 @@ class EntitiesTest extends TestCase {
         $this->assertEquals('integer', $types['inputTokens']);
         $this->assertEquals('integer', $types['outputTokens']);
         $this->assertEquals('integer', $types['createdAt']);
+        $this->assertEquals('string',  $types['citations']);
+        $this->assertEquals('string',  $types['documents']);
+    }
+
+    public function testMessageJsonSerializeDecodesDocuments(): void {
+        $m = new Message();
+        $docs = [['index' => 0, 'path' => '/Files/foo.pdf', 'title' => 'foo.pdf', 'mimeType' => 'application/pdf']];
+        $m->setDocuments(json_encode($docs));
+        $m->setCitations(json_encode([['type' => 'page_location', 'document_index' => 0]]));
+
+        $serialized = $m->jsonSerialize();
+        $this->assertSame($docs, $serialized['documents']);
+        $this->assertSame([['type' => 'page_location', 'document_index' => 0]], $serialized['citations']);
+    }
+
+    public function testMessageJsonSerializeNullDocumentsWhenUnset(): void {
+        $m = new Message();
+        $this->assertNull($m->jsonSerialize()['documents']);
     }
 
     // ── MessageFile ───────────────────────────────────────────────────────

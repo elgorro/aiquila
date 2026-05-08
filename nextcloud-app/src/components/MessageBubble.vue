@@ -12,14 +12,20 @@
 		<div v-else class="message-content">
 			{{ messageContent }}
 		</div>
-		<div v-if="citations.length > 0" class="message-citations">
+		<div v-if="citationGroups.length > 0" class="message-citations">
 			<span class="citations-label">{{ t('aiquila', 'Sources') }}:</span>
-			<span v-for="(c, idx) in citations"
+			<span v-for="(group, idx) in citationGroups"
 				:key="idx"
-				class="citation-chip"
-				:title="citationTooltip(c)">
+				:class="['citation-chip', { 'citation-chip--clickable': isClickable(group) }]"
+				:title="groupTooltip(group)"
+				:role="isClickable(group) ? 'button' : undefined"
+				:tabindex="isClickable(group) ? 0 : undefined"
+				@click="onCitationClick(group)"
+				@keydown.enter.prevent="onCitationClick(group)"
+				@keydown.space.prevent="onCitationClick(group)">
 				<sup>[{{ idx + 1 }}]</sup>
-				{{ citationLabel(c) }}
+				{{ groupLabel(group, t) }}
+				<span v-if="isClickable(group)" class="citation-chip__icon" aria-hidden="true">↗</span>
 			</span>
 		</div>
 		<div v-if="message.files && message.files.length > 0" class="message-files">
@@ -82,6 +88,7 @@ import NcProgressBar from '@nextcloud/vue/components/NcProgressBar'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { isImageMime, getFilePreview } from '../api.js'
 import { renderMarkdown, attachCopyHandlers } from '../utils/markdown.js'
+import { groupCitations, groupLabel, groupTooltip, openCitationSource } from '../utils/citations.js'
 import '../styles/markdown.css'
 
 export default {
@@ -152,6 +159,17 @@ export default {
 		citations() {
 			return Array.isArray(this.message.citations) ? this.message.citations : []
 		},
+		documentsByIndex() {
+			const docs = Array.isArray(this.message.documents) ? this.message.documents : []
+			const map = {}
+			for (const d of docs) {
+				if (d && Number.isFinite(d.index)) map[d.index] = d
+			}
+			return map
+		},
+		citationGroups() {
+			return groupCitations(this.citations, this.documentsByIndex)
+		},
 	},
 	mounted() {
 		this.loadPreviews()
@@ -176,21 +194,14 @@ export default {
 			if (n == null) return '—'
 			return n.toLocaleString()
 		},
-		citationLabel(c) {
-			const title = c.document_title || t('aiquila', 'Document')
-			if (c.type === 'page_location') {
-				const start = c.start_page_number
-				const end = c.end_page_number
-				const range = (start && end && start !== end) ? `${start}–${end}` : (start || '?')
-				return `${title} p.${range}`
-			}
-			if (c.type === 'char_location') {
-				return `${title}`
-			}
-			return title
+		groupLabel,
+		groupTooltip,
+		isClickable(group) {
+			return !!group.document?.path
 		},
-		citationTooltip(c) {
-			return c.cited_text || ''
+		onCitationClick(group) {
+			if (!this.isClickable(group)) return
+			openCitationSource(group)
 		},
 	},
 }
@@ -252,6 +263,22 @@ export default {
 	border: 1px solid var(--color-border);
 	border-radius: 12px;
 	cursor: help;
+}
+
+.citation-chip--clickable {
+	cursor: pointer;
+}
+
+.citation-chip--clickable:hover,
+.citation-chip--clickable:focus-visible {
+	background: var(--color-primary-element-light);
+	border-color: var(--color-primary-element);
+}
+
+.citation-chip__icon {
+	margin-left: 4px;
+	font-size: 11px;
+	color: var(--color-primary);
 }
 
 .citation-chip sup {
