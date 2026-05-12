@@ -441,6 +441,120 @@ END:VCALENDAR</c:calendar-data>
       expect(putCall[1].body).toContain('RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR');
     });
 
+    it('should emit VTIMEZONE and TZID when tzid is provided (DST zone)', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(verifyResponse),
+        });
+
+      const { createEventTool } = await import('../tools/apps/calendar.js');
+      await createEventTool.handler({
+        summary: 'Testeintrag',
+        calendarName: 'personal',
+        dtstart: '20260512T130000Z',
+        dtend: '20260512T133000Z',
+        tzid: 'Europe/Berlin',
+      });
+
+      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
+      const body: string = putCall[1].body;
+      // VTIMEZONE block with both STANDARD and DAYLIGHT
+      expect(body).toContain('BEGIN:VTIMEZONE');
+      expect(body).toContain('TZID:Europe/Berlin');
+      expect(body).toContain('BEGIN:STANDARD');
+      expect(body).toContain('BEGIN:DAYLIGHT');
+      expect(body).toContain('TZOFFSETFROM:+0100');
+      expect(body).toContain('TZOFFSETTO:+0200');
+      expect(body).toContain('END:VTIMEZONE');
+      // 13:00Z in May is 15:00 Europe/Berlin (CEST)
+      expect(body).toContain('DTSTART;TZID=Europe/Berlin:20260512T150000');
+      expect(body).toContain('DTEND;TZID=Europe/Berlin:20260512T153000');
+      // No trailing Z on the TZID'd properties
+      expect(body).not.toMatch(/DTSTART;TZID=Europe\/Berlin:[^\r\n]*Z/);
+    });
+
+    it('should emit single STANDARD block for fixed-offset zone', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(verifyResponse),
+        });
+
+      const { createEventTool } = await import('../tools/apps/calendar.js');
+      await createEventTool.handler({
+        summary: 'Tokyo meeting',
+        calendarName: 'personal',
+        dtstart: '20260512T010000Z',
+        tzid: 'Asia/Tokyo',
+      });
+
+      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
+      const body: string = putCall[1].body;
+      expect(body).toContain('BEGIN:VTIMEZONE');
+      expect(body).toContain('TZID:Asia/Tokyo');
+      expect(body).toContain('TZOFFSETTO:+0900');
+      expect(body).not.toContain('BEGIN:DAYLIGHT');
+      // 01:00 UTC -> 10:00 JST same day; default dtend = +1h -> 11:00 JST
+      expect(body).toContain('DTSTART;TZID=Asia/Tokyo:20260512T100000');
+      expect(body).toContain('DTEND;TZID=Asia/Tokyo:20260512T110000');
+    });
+
+    it('should accept floating local dtstart when tzid is set', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(verifyResponse),
+        });
+
+      const { createEventTool } = await import('../tools/apps/calendar.js');
+      await createEventTool.handler({
+        summary: 'Local lunch',
+        calendarName: 'personal',
+        dtstart: '20260512T150000',
+        tzid: 'Europe/Berlin',
+      });
+
+      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
+      const body: string = putCall[1].body;
+      expect(body).toContain('DTSTART;TZID=Europe/Berlin:20260512T150000');
+      expect(body).toContain('DTEND;TZID=Europe/Berlin:20260512T160000');
+    });
+
+    it('should ignore tzid for all-day events', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(verifyResponse),
+        });
+
+      const { createEventTool } = await import('../tools/apps/calendar.js');
+      await createEventTool.handler({
+        summary: 'Holiday',
+        calendarName: 'personal',
+        dtstart: '20260401',
+        tzid: 'Europe/Berlin',
+      });
+
+      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
+      const body: string = putCall[1].body;
+      expect(body).toContain('DTSTART;VALUE=DATE:20260401');
+      expect(body).not.toContain('BEGIN:VTIMEZONE');
+      expect(body).not.toContain('TZID=');
+    });
+
     it('should handle create failure', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: false,

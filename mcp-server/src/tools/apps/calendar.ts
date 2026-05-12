@@ -115,16 +115,152 @@ function setICalProperty(icalData: string, propName: string, value: string | nul
   return icalData.replace(/END:VEVENT/, `${propName}:${value}\r\nEND:VEVENT`);
 }
 
-function setICalDateProperty(icalData: string, propName: string, value: string | null): string {
+function setICalDateProperty(
+  icalData: string,
+  propName: string,
+  value: string | null,
+  tzid?: string
+): string {
   const regex = new RegExp(`^${propName}(;[^:]*)?:.*$`, 'm');
   if (value === null) {
     return icalData.replace(regex, '').replace(/(\r?\n){2,}/g, '\r\n');
   }
-  const formatted = value.length === 8 ? `${propName};VALUE=DATE:${value}` : `${propName}:${value}`;
+  let formatted: string;
+  if (value.length === 8) {
+    formatted = `${propName};VALUE=DATE:${value}`;
+  } else if (tzid) {
+    formatted = `${propName};TZID=${tzid}:${normalizeLocalICal(value, tzid)}`;
+  } else {
+    formatted = `${propName}:${value}`;
+  }
   if (regex.test(icalData)) {
     return icalData.replace(regex, formatted);
   }
   return icalData.replace(/END:VEVENT/, `${formatted}\r\nEND:VEVENT`);
+}
+
+/**
+ * Format the UTC offset for a given IANA zone at a specific instant.
+ * Returns "+HHMM" or "-HHMM" (e.g. "+0200", "-0500", "+0000").
+ */
+function getTimezoneOffset(tzid: string, date: Date): string {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: tzid,
+    timeZoneName: 'longOffset',
+  });
+  const tzPart = fmt.formatToParts(date).find((p) => p.type === 'timeZoneName')?.value || 'GMT';
+  // tzPart is "GMT", "GMT+02:00", "GMT-05:30", or "GMT+5:45" depending on engine
+  const m = tzPart.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  if (!m) return '+0000';
+  const sign = m[1];
+  const hh = m[2].padStart(2, '0');
+  const mm = m[3] ?? '00';
+  return `${sign}${hh}${mm}`;
+}
+
+/**
+ * Build a minimal but RFC 5545-conformant VTIMEZONE component for the given
+ * IANA zone. Uses two reference instants in the current year to detect DST.
+ * No external tzdata required — sufficient for iOS / Thunderbird to accept
+ * the event and apply the TZID correctly to upcoming occurrences.
+ */
+export function buildVTimezone(tzid: string): string {
+  const year = new Date().getUTCFullYear();
+  const janOffset = getTimezoneOffset(tzid, new Date(Date.UTC(year, 0, 15)));
+  const julOffset = getTimezoneOffset(tzid, new Date(Date.UTC(year, 6, 15)));
+  const lines: string[] = ['BEGIN:VTIMEZONE', `TZID:${tzid}`];
+  if (janOffset === julOffset) {
+    lines.push(
+      'BEGIN:STANDARD',
+      'DTSTART:19700101T000000',
+      `TZOFFSETFROM:${janOffset}`,
+      `TZOFFSETTO:${janOffset}`,
+      `TZNAME:${tzid}`,
+      'END:STANDARD'
+    );
+  } else {
+    // Higher numeric offset = daylight, lower = standard (works for both hemispheres)
+    const standardOffset = janOffset < julOffset ? janOffset : julOffset;
+    const daylightOffset = janOffset < julOffset ? julOffset : janOffset;
+    lines.push(
+      'BEGIN:STANDARD',
+      'DTSTART:19701101T000000',
+      `TZOFFSETFROM:${daylightOffset}`,
+      `TZOFFSETTO:${standardOffset}`,
+      `TZNAME:${tzid}`,
+      'END:STANDARD',
+      'BEGIN:DAYLIGHT',
+      'DTSTART:19700301T000000',
+      `TZOFFSETFROM:${standardOffset}`,
+      `TZOFFSETTO:${daylightOffset}`,
+      `TZNAME:${tzid}`,
+      'END:DAYLIGHT'
+    );
+  }
+  lines.push('END:VTIMEZONE');
+  return lines.join('\r\n');
+}
+
+/**
+ * Convert a UTC iCal datetime ("YYYYMMDDTHHmmssZ") to wall-clock time in the
+ * given IANA zone, returning "YYYYMMDDTHHmmss" (no Z).
+ */
+function convertUtcICalToLocalICal(utcICal: string, tzid: string): string {
+  const m = utcICal.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  if (!m) return utcICal.replace(/Z$/, '');
+  const [, y, mo, d, h, mi, s] = m;
+  const instant = new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s));
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tzid,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(instant);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '00';
+  let hour = get('hour');
+  if (hour === '24') hour = '00';
+  return `${get('year')}${get('month')}${get('day')}T${hour}${get('minute')}${get('second')}`;
+}
+
+/**
+ * If `value` ends in Z, convert it to wall-clock time in `tzid`. Otherwise
+ * assume it is already a floating local datetime in that zone.
+ */
+function normalizeLocalICal(value: string, tzid: string): string {
+  if (/Z$/.test(value)) return convertUtcICalToLocalICal(value, tzid);
+  return value;
+}
+
+/**
+ * Add `hours` to a floating "YYYYMMDDTHHmmss" string, returning the same form.
+ */
+function addHoursToLocalICal(local: string, hours: number): string {
+  const m = local.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/);
+  if (!m) return local;
+  const [, y, mo, d, h, mi, s] = m;
+  const dt = new Date(Date.UTC(+y, +mo - 1, +d, +h + hours, +mi, +s));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${dt.getUTCFullYear()}${pad(dt.getUTCMonth() + 1)}${pad(dt.getUTCDate())}` +
+    `T${pad(dt.getUTCHours())}${pad(dt.getUTCMinutes())}${pad(dt.getUTCSeconds())}`
+  );
+}
+
+/**
+ * Ensure the VCALENDAR contains a VTIMEZONE with the requested TZID. Insert
+ * one before the first VEVENT if not already present.
+ */
+function ensureVTimezone(icalData: string, tzid: string): string {
+  const escaped = tzid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const existing = new RegExp(`BEGIN:VTIMEZONE[\\s\\S]*?TZID:${escaped}[\\s\\S]*?END:VTIMEZONE`);
+  if (existing.test(icalData)) return icalData;
+  const vtz = buildVTimezone(tzid);
+  return icalData.replace(/BEGIN:VEVENT/, `${vtz}\r\nBEGIN:VEVENT`);
 }
 
 // ---------------------------------------------------------------------------
@@ -851,6 +987,12 @@ export const createEventTool = {
       .number()
       .optional()
       .describe('Reminder in minutes before the event (e.g. 15 for 15 min before)'),
+    tzid: z
+      .string()
+      .optional()
+      .describe(
+        'IANA time zone (e.g. "Europe/Berlin"). When set, a VTIMEZONE block is emitted and dtstart/dtend use TZID instead of UTC. Required for reliable iOS Calendar and Thunderbird CalDAV sync of timed events. UTC inputs (trailing Z) are converted to wall-clock time in this zone.'
+      ),
   }),
   handler: async (args: {
     summary: string;
@@ -871,6 +1013,7 @@ export const createEventTool = {
     rrule?: string;
     accessClass?: string;
     alarm?: number;
+    tzid?: string;
   }) => {
     try {
       const config = getNextcloudConfig();
@@ -883,6 +1026,9 @@ export const createEventTool = {
       const now = icalNow();
       const isAllDay = args.dtstart.length === 8;
 
+      const tzid = !isAllDay ? args.tzid : undefined;
+      const localDtstart = tzid ? normalizeLocalICal(args.dtstart, tzid) : args.dtstart;
+
       // Calculate default end
       let dtend = args.dtend;
       if (!dtend) {
@@ -894,8 +1040,11 @@ export const createEventTool = {
             parseInt(args.dtstart.slice(6, 8)) + 1
           );
           dtend = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+        } else if (tzid) {
+          // Timed with TZID: 1 hour after local wall time
+          dtend = addHoursToLocalICal(localDtstart, 1);
         } else {
-          // Timed: 1 hour later
+          // Timed: 1 hour later (UTC)
           const startDate = new Date(
             parseInt(args.dtstart.slice(0, 4)),
             parseInt(args.dtstart.slice(4, 6)) - 1,
@@ -908,13 +1057,23 @@ export const createEventTool = {
           dtend = startDate.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
         }
       }
+      const localDtend = tzid ? normalizeLocalICal(dtend, tzid) : dtend;
 
-      const dtstartProp = isAllDay
-        ? `DTSTART;VALUE=DATE:${args.dtstart}`
-        : `DTSTART:${args.dtstart}`;
-      const dtendProp = isAllDay ? `DTEND;VALUE=DATE:${dtend}` : `DTEND:${dtend}`;
+      let dtstartProp: string;
+      let dtendProp: string;
+      if (isAllDay) {
+        dtstartProp = `DTSTART;VALUE=DATE:${args.dtstart}`;
+        dtendProp = `DTEND;VALUE=DATE:${dtend}`;
+      } else if (tzid) {
+        dtstartProp = `DTSTART;TZID=${tzid}:${localDtstart}`;
+        dtendProp = `DTEND;TZID=${tzid}:${localDtend}`;
+      } else {
+        dtstartProp = `DTSTART:${args.dtstart}`;
+        dtendProp = `DTEND:${dtend}`;
+      }
 
-      let vevent = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//AIquila//MCP Server//EN\r\nBEGIN:VEVENT\r\nUID:${eventUid}\r\nDTSTAMP:${now}\r\nCREATED:${now}\r\nLAST-MODIFIED:${now}\r\n${dtstartProp}\r\n${dtendProp}\r\nSUMMARY:${escapeICalValue(args.summary)}`;
+      const vtimezoneBlock = tzid ? `${buildVTimezone(tzid)}\r\n` : '';
+      let vevent = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//AIquila//MCP Server//EN\r\n${vtimezoneBlock}BEGIN:VEVENT\r\nUID:${eventUid}\r\nDTSTAMP:${now}\r\nCREATED:${now}\r\nLAST-MODIFIED:${now}\r\n${dtstartProp}\r\n${dtendProp}\r\nSUMMARY:${escapeICalValue(args.summary)}`;
 
       if (args.location) {
         vevent += `\r\nLOCATION:${escapeICalValue(args.location)}`;
@@ -1064,6 +1223,12 @@ export const updateEventTool = {
       .nullable()
       .optional()
       .describe('Replace attendees list, or null to remove all attendees'),
+    tzid: z
+      .string()
+      .optional()
+      .describe(
+        'IANA time zone (e.g. "Europe/Berlin") for the updated dtstart/dtend. When set, a VTIMEZONE block is added (if missing) and DTSTART/DTEND use TZID instead of UTC. Required for iOS/Thunderbird CalDAV sync.'
+      ),
   }),
   handler: async (args: {
     uid: string;
@@ -1085,6 +1250,7 @@ export const updateEventTool = {
       role?: string;
       rsvp?: boolean;
     }> | null;
+    tzid?: string;
   }) => {
     try {
       const config = getNextcloudConfig();
@@ -1095,11 +1261,18 @@ export const updateEventTool = {
       if (args.summary !== undefined) {
         modified = setICalProperty(modified, 'SUMMARY', escapeICalValue(args.summary));
       }
+      // Only timed datetimes carry a TZID; all-day (length 8) values are dates.
+      const dtstartTz =
+        args.tzid && args.dtstart && args.dtstart.length > 8 ? args.tzid : undefined;
+      const dtendTz = args.tzid && args.dtend && args.dtend.length > 8 ? args.tzid : undefined;
       if (args.dtstart !== undefined) {
-        modified = setICalDateProperty(modified, 'DTSTART', args.dtstart);
+        modified = setICalDateProperty(modified, 'DTSTART', args.dtstart, dtstartTz);
       }
       if (args.dtend !== undefined) {
-        modified = setICalDateProperty(modified, 'DTEND', args.dtend);
+        modified = setICalDateProperty(modified, 'DTEND', args.dtend, dtendTz);
+      }
+      if (args.tzid && (dtstartTz || dtendTz)) {
+        modified = ensureVTimezone(modified, args.tzid);
       }
       if (args.location !== undefined) {
         modified = setICalProperty(

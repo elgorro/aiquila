@@ -1,6 +1,6 @@
 {
   "name": "aiquila",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Claude AI Integration for Nextcloud",
   "type": "module",
   "main": "src/main.js",
