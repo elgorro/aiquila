@@ -66,9 +66,11 @@ class ClaudeSDKService {
     public function getModel(?string $userId = null): string {
         if ($userId) {
             $userModel = $this->config->getUserValue($userId, $this->appName, 'user_model', '');
-            if ($userModel) return $userModel;
+            if ($userModel) return ClaudeModels::resolveModel($userModel);
         }
-        return $this->config->getAppValue($this->appName, 'model', ClaudeModels::DEFAULT_MODEL);
+        return ClaudeModels::resolveModel(
+            $this->config->getAppValue($this->appName, 'model', ClaudeModels::DEFAULT_MODEL)
+        );
     }
 
     /**

@@ -58,14 +58,14 @@ class AIquilaCapabilityTest extends TestCase {
         $this->appManager->method('getAppVersion')->willReturn('1.0.0');
         $this->config->method('getAppValue')
             ->willReturnMap([
-                ['aiquila', 'model', ClaudeModels::DEFAULT_MODEL, 'claude-opus-4-20250514'],
+                ['aiquila', 'model', ClaudeModels::DEFAULT_MODEL, ClaudeModels::OPUS_4_7],
                 ['aiquila', 'search_enabled', '1', '1'],
             ]);
         $this->credentialService->method('getApiKey')->willReturn('');
 
         $result = $this->capability->getCapabilities();
 
-        $this->assertEquals('claude-opus-4-20250514', $result['aiquila']['model']);
+        $this->assertEquals(ClaudeModels::OPUS_4_7, $result['aiquila']['model']);
     }
 
     public function testApiConfiguredTrueWhenKeyExists(): void {

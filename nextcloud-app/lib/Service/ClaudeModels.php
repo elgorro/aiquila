@@ -32,11 +32,27 @@ class ClaudeModels {
     /** Opus 4.5 */
     public const OPUS_4_5   = 'claude-opus-4-5-20251101';
 
-    /** Sonnet 4 — deprecated by Anthropic (SDK 0.15.0 dropped from typed Model enum). Constant kept so existing user_model preferences continue to resolve. */
+    /** Sonnet 4 — retired June 15 2026; resolveModel() transparently maps this to SONNET_4_6. */
     public const SONNET_4   = 'claude-sonnet-4-20250514';
 
-    /** Opus 4 — deprecated by Anthropic (SDK 0.15.0 dropped from typed Model enum). Constant kept so existing user_model preferences continue to resolve. */
+    /** Opus 4 — retired June 15 2026; resolveModel() transparently maps this to OPUS_4_7. */
     public const OPUS_4     = 'claude-opus-4-20250514';
+
+    // ── Deprecated-model migration map ────────────────────────────────────
+
+    private const DEPRECATED_MAP = [
+        self::SONNET_4 => self::SONNET_4_6,
+        self::OPUS_4   => self::OPUS_4_7,
+    ];
+
+    /**
+     * Return the active replacement for a deprecated model ID, or the model
+     * itself if it is already active. Call this whenever a model ID is read
+     * from stored user/admin config before it is used in an API request.
+     */
+    public static function resolveModel(string $model): string {
+        return self::DEPRECATED_MAP[$model] ?? $model;
+    }
 
     // ── Application defaults ───────────────────────────────────────────────
 
