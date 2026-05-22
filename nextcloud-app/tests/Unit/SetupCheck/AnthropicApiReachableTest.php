@@ -40,7 +40,7 @@ class AnthropicApiReachableTest extends TestCase {
 
     public function testSuccessWhenApiReachable(): void {
         $this->credentials->method('hasApiKey')->with(null)->willReturn(true);
-        $this->sdk->method('listModels')->with(null)->willReturn(['claude-sonnet-4-20250514']);
+        $this->sdk->method('listModels')->with(null)->willReturn(['claude-sonnet-4-6']);
         $result = $this->check->run();
         $this->assertSame('success', $result->getSeverity());
     }
