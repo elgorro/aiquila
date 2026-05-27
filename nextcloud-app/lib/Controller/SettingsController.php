@@ -83,6 +83,7 @@ class SettingsController extends Controller {
      * @param string $model   Preferred Claude model ID (leave empty to use admin default)
      * @param string|null $default_system_prompt Default system prompt (null to keep unchanged)
      * @param string|null $default_verbose Enable verbose mode by default ('1' or null to keep unchanged)
+     * @param string|null $native_mcp_enabled User override for native-MCP ('1' opt in, '0' opt out, '' clears override, null keeps unchanged)
      *
      * 200: Settings saved successfully
      *
@@ -141,6 +142,9 @@ class SettingsController extends Controller {
      * Model, max_tokens, and api_timeout are now managed by Declarative Settings.
      *
      * @param string $api_key Anthropic API key for the instance
+     * @param string|null $native_mcp_enabled Instance default for native-MCP ('1' enabled, '0' disabled, null keeps unchanged)
+     * @param string|null $native_mcp_extra_url Optional extra MCP server URL (trimmed; null keeps unchanged)
+     * @param string|null $native_mcp_extra_token Bearer token for the extra MCP server ('' clears, null keeps unchanged)
      *
      * 200: Admin settings saved successfully
      *
@@ -176,7 +180,7 @@ class SettingsController extends Controller {
     }
 
     /**
-     * Get admin native-MCP config + per-server reachability snapshot.
+     * Get admin native-MCP config + per-server reachability snapshot
      *
      * 200: Admin native MCP settings
      *
