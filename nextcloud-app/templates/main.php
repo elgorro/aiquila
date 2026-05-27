@@ -1,6 +1,15 @@
 <?php
 $appId = OCA\AIquila\AppInfo\Application::APP_ID;
-\OCP\Util::addScript($appId, $appId . '-main');
+
+// Load the Vite entry as an ES module so its emitted chunk imports work.
+// `Util::addScript` emits a classic <script> tag and cannot load modules.
+$scriptUrl = \OC::$server->getURLGenerator()->linkTo($appId, 'js/aiquila-main.js')
+    . '?v=' . \OCP\App::getAppVersion($appId);
+\OCP\Util::addHeader('script', [
+    'type' => 'module',
+    'src' => $scriptUrl,
+    'nonce' => \OC::$server->getContentSecurityPolicyNonceManager()->getNonce(),
+]);
 ?>
 
 <div id="content"></div>

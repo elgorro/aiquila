@@ -12,7 +12,6 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IRequest;
-use OCP\Util;
 
 /**
  * Page Controller for AIquila main interface
@@ -60,9 +59,7 @@ class PageController extends Controller {
             )
         );
 
-        // Load main script
-        Util::addScript('aiquila', 'aiquila-main');
-
+        // Entry script is loaded as an ES module from templates/main.php.
         return new TemplateResponse('aiquila', 'main');
     }
 }

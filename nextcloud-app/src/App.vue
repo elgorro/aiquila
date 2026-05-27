@@ -93,6 +93,7 @@
 </template>
 
 <script>
+import { defineAsyncComponent } from 'vue'
 import { loadState } from '@nextcloud/initial-state'
 import { translate as t } from '@nextcloud/l10n'
 import NcContent from '@nextcloud/vue/components/NcContent'
@@ -105,13 +106,15 @@ import NcDialog from '@nextcloud/vue/components/NcDialog'
 import ChatIcon from 'vue-material-design-icons/Chat.vue'
 
 import TabSelector from './components/TabSelector.vue'
-import ChatSidebar from './components/ChatSidebar.vue'
-import ChatView from './components/ChatView.vue'
-import ProjectSidebar from './components/ProjectSidebar.vue'
-import ProjectEditor from './components/ProjectEditor.vue'
-import CoworkSidebar from './components/CoworkSidebar.vue'
-import CoworkView from './components/CoworkView.vue'
-import NavigationSettings from './components/NavigationSettings.vue'
+
+// Heavy tab/dialog components are lazy-loaded so each ships as its own chunk.
+const ChatSidebar = defineAsyncComponent(() => import('./components/ChatSidebar.vue'))
+const ChatView = defineAsyncComponent(() => import('./components/ChatView.vue'))
+const ProjectSidebar = defineAsyncComponent(() => import('./components/ProjectSidebar.vue'))
+const ProjectEditor = defineAsyncComponent(() => import('./components/ProjectEditor.vue'))
+const CoworkSidebar = defineAsyncComponent(() => import('./components/CoworkSidebar.vue'))
+const CoworkView = defineAsyncComponent(() => import('./components/CoworkView.vue'))
+const NavigationSettings = defineAsyncComponent(() => import('./components/NavigationSettings.vue'))
 import {
 	createConversation,
 	getConversation,
