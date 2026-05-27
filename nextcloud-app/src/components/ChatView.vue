@@ -1,6 +1,17 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <template>
-	<div class="chat-view">
+	<NcEmptyContent v-if="!conversation" :name="t('aiquila', 'Ask Claude')">
+		<template #icon>
+			<ChatIcon :size="64" />
+		</template>
+		<template #action>
+			<NcButton type="primary" @click="$emit('new-chat')">
+				{{ t('aiquila', 'New chat') }}
+			</NcButton>
+		</template>
+		{{ t('aiquila', 'Select a conversation or start a new chat') }}
+	</NcEmptyContent>
+	<div v-else class="chat-view">
 		<div v-if="conversation.projectId && projectName" class="project-badge">
 			<span class="badge-icon">📦</span>
 			<span class="badge-label">{{ projectName }}</span>
@@ -75,6 +86,9 @@
 import { translate as t } from '@nextcloud/l10n'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
+import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import ChatIcon from 'vue-material-design-icons/Chat.vue'
 
 import MessageBubble from './MessageBubble.vue'
 import ChatInput from './ChatInput.vue'
@@ -87,20 +101,23 @@ export default {
 	components: {
 		NcLoadingIcon,
 		NcSelect,
+		NcEmptyContent,
+		NcButton,
+		ChatIcon,
 		MessageBubble,
 		ChatInput,
 	},
 	props: {
 		conversation: {
 			type: Object,
-			required: true,
+			default: null,
 		},
 		projects: {
 			type: Array,
 			default: () => [],
 		},
 	},
-	emits: ['conversation-updated', 'message-sent'],
+	emits: ['conversation-updated', 'message-sent', 'new-chat'],
 	data() {
 		return {
 			sending: false,

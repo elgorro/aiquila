@@ -1,26 +1,20 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <template>
 	<div class="tab-selector">
-		<button v-for="tab in tabs"
+		<router-link v-for="tab in tabs"
 			:key="tab.id"
-			:class="['tab-btn', { active: modelValue === tab.id }]"
-			@click="$emit('update:modelValue', tab.id)">
+			:to="{ name: tab.id }"
+			class="tab-btn"
+			active-class="active">
 			<span class="tab-icon">{{ tab.icon }}</span>
 			<span class="tab-label">{{ tab.label }}</span>
-		</button>
+		</router-link>
 	</div>
 </template>
 
 <script>
 export default {
 	name: 'TabSelector',
-	props: {
-		modelValue: {
-			type: String,
-			required: true,
-		},
-	},
-	emits: ['update:modelValue'],
 	data() {
 		return {
 			tabs: [
@@ -56,6 +50,7 @@ export default {
 	cursor: pointer;
 	transition: all 0.15s ease;
 	white-space: nowrap;
+	text-decoration: none;
 }
 
 .tab-btn:hover {
