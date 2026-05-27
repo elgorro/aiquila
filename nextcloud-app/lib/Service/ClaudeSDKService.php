@@ -3,6 +3,8 @@
 
 namespace OCA\AIquila\Service;
 
+use Anthropic\Beta\AnthropicBeta;
+use Anthropic\Beta\Files\FileMetadata;
 use Anthropic\Client;
 use Anthropic\Core\Contracts\BaseStream;
 use Anthropic\Core\Exceptions\APIConnectionException;
@@ -12,6 +14,13 @@ use Anthropic\Core\Exceptions\AuthenticationException;
 use Anthropic\Core\Exceptions\InternalServerException;
 use Anthropic\Core\Exceptions\PermissionDeniedException;
 use Anthropic\Core\Exceptions\RateLimitException;
+use Anthropic\Core\FileParam;
+use Anthropic\Messages\Batches\MessageBatch;
+use Anthropic\Messages\Batches\MessageBatchCanceledResult;
+use Anthropic\Messages\Batches\MessageBatchErroredResult;
+use Anthropic\Messages\Batches\MessageBatchExpiredResult;
+use Anthropic\Messages\Batches\MessageBatchIndividualResponse;
+use Anthropic\Messages\Batches\MessageBatchSucceededResult;
 use Anthropic\Messages\Message;
 use Anthropic\Models\ModelInfo;
 use OCP\ICache;
@@ -162,10 +171,13 @@ class ClaudeSDKService {
             $params['outputConfig'] = ['effort' => ClaudeModels::getEffortLevel($model)];
         }
 
-        // System prompt
+        // System prompt — cache by default; caller can opt out with cache_system: false.
+        // The API silently skips caching for prompts under the model minimum, so it is safe
+        // to always mark; large reusable system prompts are the common case.
         if (!empty($options['system'])) {
             $systemBlock = ['type' => 'text', 'text' => $options['system']];
-            if (!empty($options['cache_system'])) {
+            $cacheSystem = $options['cache_system'] ?? true;
+            if ($cacheSystem) {
                 $systemBlock['cache_control'] = ['type' => 'ephemeral'];
             }
             $params['system'] = [$systemBlock];
@@ -178,12 +190,84 @@ class ClaudeSDKService {
             }
         }
 
-        // Tools
+        // Tools — mark the last tool with cache_control so the entire tool block
+        // (typically large and reused across turns) becomes a cache breakpoint.
+        // Caller can opt out with cache_tools: false.
         if (!empty($options['tools'])) {
-            $params['tools'] = $options['tools'];
+            $tools = $options['tools'];
+            $cacheTools = $options['cache_tools'] ?? true;
+            if ($cacheTools && is_array($tools) && $tools !== []) {
+                $lastIdx = array_key_last($tools);
+                $tools[$lastIdx]['cache_control'] = ['type' => 'ephemeral'];
+            }
+            $params['tools'] = $tools;
         }
 
         return $params;
+    }
+
+    /**
+     * Upload bytes to Anthropic's beta Files API and return the resulting
+     * FileMetadata. Overridable for testing.
+     */
+    protected function callFilesUpload(Client $client, FileParam $file): FileMetadata {
+        return $client->beta->files->upload(
+            file: $file,
+            betas: [AnthropicBeta::FILES_API_2025_04_14],
+        );
+    }
+
+    /**
+     * Upload a file to Anthropic's Files API. The returned id can be passed
+     * as `source: { type: 'file', file_id: ... }` on document/image content
+     * blocks instead of inlining base64.
+     *
+     * @return string Anthropic file_id
+     */
+    public function uploadFile(string $bytes, string $filename, string $mimeType, ?string $userId = null): string {
+        $client = $this->getClient($userId);
+        $param = FileParam::fromString($bytes, $filename, $mimeType);
+        $meta = $this->callFilesUpload($client, $param);
+        return $meta->id;
+    }
+
+    /**
+     * Build per-request options (extra headers etc.). Returns null when none
+     * are needed. Today this only enables the Files API beta header when the
+     * messages reference an uploaded file_id.
+     */
+    protected function requestOptionsForMessages(array $params): ?array {
+        if ($this->messagesReferenceFileId($params['messages'] ?? [])) {
+            return [
+                'extraHeaders' => [
+                    'anthropic-beta' => AnthropicBeta::FILES_API_2025_04_14->value,
+                ],
+            ];
+        }
+        return null;
+    }
+
+    /**
+     * Walk message content blocks to detect any `source.type === 'file'`
+     * reference, which signals the Files API beta is in use.
+     */
+    private function messagesReferenceFileId(array $messages): bool {
+        foreach ($messages as $msg) {
+            $content = $msg['content'] ?? null;
+            if (!is_array($content)) {
+                continue;
+            }
+            foreach ($content as $block) {
+                if (!is_array($block)) {
+                    continue;
+                }
+                $source = $block['source'] ?? null;
+                if (is_array($source) && ($source['type'] ?? null) === 'file') {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -202,6 +286,7 @@ class ClaudeSDKService {
             topK: $params['top_k'] ?? null,
             stopSequences: $params['stop_sequences'] ?? null,
             tools: $params['tools'] ?? null,
+            requestOptions: $this->requestOptionsForMessages($params),
         );
     }
 
@@ -221,6 +306,7 @@ class ClaudeSDKService {
             topK: $params['top_k'] ?? null,
             stopSequences: $params['stop_sequences'] ?? null,
             tools: $params['tools'] ?? null,
+            requestOptions: $this->requestOptionsForMessages($params),
         );
     }
 
@@ -306,6 +392,31 @@ class ClaudeSDKService {
             }
         }
         return $text;
+    }
+
+    /**
+     * Extract citations from text blocks in a Message response.
+     * Returns a flat list of citation entries in API-native shape; an empty
+     * list when no document had citations enabled or no citations were emitted.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function extractCitations(Message $response): array {
+        $out = [];
+        foreach ($response->content as $block) {
+            if ($block->type !== 'text') {
+                continue;
+            }
+            $citations = $block->citations ?? null;
+            if (!is_array($citations) || $citations === []) {
+                continue;
+            }
+            foreach ($citations as $c) {
+                // SDK exposes citation entries as objects; normalise to array.
+                $out[] = is_object($c) ? json_decode(json_encode($c), true) : $c;
+            }
+        }
+        return $out;
     }
 
     /**
@@ -437,7 +548,11 @@ class ClaudeSDKService {
 
             $this->logResponseMetadata($response);
 
-            return ['response' => $this->extractText($response), 'usage' => $usage];
+            return [
+                'response' => $this->extractText($response),
+                'usage' => $usage,
+                'citations' => $this->extractCitations($response),
+            ];
 
         } catch (\Throwable $e) {
             return $this->handleException($e, 'ask');
@@ -488,6 +603,7 @@ class ClaudeSDKService {
             return [
                 'response' => $this->extractText($response),
                 'usage' => $usage,
+                'citations' => $this->extractCitations($response),
             ];
 
         } catch (\Throwable $e) {
@@ -533,6 +649,7 @@ class ClaudeSDKService {
         $totalOutputTokens = 0;
         $totalCacheCreationTokens = 0;
         $totalCacheReadTokens = 0;
+        $allCitations = [];
 
         for ($i = 0; $i < $maxIterations; $i++) {
             try {
@@ -546,6 +663,7 @@ class ClaudeSDKService {
             $totalOutputTokens += $response->usage->outputTokens ?? 0;
             $totalCacheCreationTokens += $response->usage->cacheCreationInputTokens ?? 0;
             $totalCacheReadTokens += $response->usage->cacheReadInputTokens ?? 0;
+            $allCitations = array_merge($allCitations, $this->extractCitations($response));
 
             $this->logResponseMetadata($response);
 
@@ -571,6 +689,7 @@ class ClaudeSDKService {
                             'cache_creation_tokens' => $totalCacheCreationTokens ?: null,
                             'cache_read_tokens' => $totalCacheReadTokens ?: null,
                         ],
+                        'citations' => $allCitations,
                     ];
                 }
             }
@@ -641,6 +760,7 @@ class ClaudeSDKService {
                 'cache_creation_tokens' => $totalCacheCreationTokens ?: null,
                 'cache_read_tokens' => $totalCacheReadTokens ?: null,
             ],
+            'citations' => $allCitations,
         ];
     }
 
@@ -656,6 +776,174 @@ class ClaudeSDKService {
     }
 
     /**
+     * Summarize via the Anthropic Batches API (50% input/output token discount).
+     *
+     * Submits a single-request batch, polls until ended, then fetches and
+     * unpacks the result. Same return shape as ask()/summarize() so it is a
+     * drop-in for non-interactive callers (TaskProcessing summary provider).
+     *
+     * Holds the calling worker open for the lifetime of the batch — only suitable
+     * for non-interactive paths (`TaskProcessing` runs `process()` from a
+     * background job already). Do not use from HTTP request handlers.
+     *
+     * @return array{response: string, usage: array, citations: array}|array{error: string}
+     */
+    public function summarizeViaBatch(string $content, ?string $userId = null, ?callable $reportProgress = null): array {
+        try {
+            $client = $this->getClient($userId);
+
+            $messages = [['role' => 'user', 'content' => "Summarize the following content concisely:\n\n$content"]];
+            $batchParams = $this->toBatchParams($this->buildRequestParams($messages, $userId));
+
+            $customId = 'aiquila-summary-' . bin2hex(random_bytes(8));
+            $batch = $this->callBatchCreate($client, [['custom_id' => $customId, 'params' => $batchParams]]);
+
+            $this->logger->info('AIquila SDK: batch submitted', [
+                'batch_id' => $batch->id,
+                'custom_id' => $customId,
+            ]);
+            if ($reportProgress !== null) {
+                $reportProgress(0.1);
+            }
+
+            $batch = $this->waitForBatch($client, $batch->id, $reportProgress);
+
+            if ($batch->processingStatus !== 'ended') {
+                throw new \RuntimeException("Batch did not complete: status={$batch->processingStatus}");
+            }
+
+            foreach ($this->callBatchResults($client, $batch->id) as $entry) {
+                if ($entry->customID !== $customId) {
+                    continue;
+                }
+                $result = $this->convertBatchResult($entry);
+                if (isset($result['response'])) {
+                    $this->logger->info('AIquila SDK: batch summary completed', [
+                        'batch_id' => $batch->id,
+                        'usage' => $result['usage'] ?? null,
+                    ]);
+                }
+                return $result;
+            }
+            throw new \RuntimeException("Batch result for custom_id $customId not found");
+        } catch (\Throwable $e) {
+            return $this->handleException($e, 'summarizeViaBatch');
+        }
+    }
+
+    /**
+     * Convert the snake_case Messages API params shape produced by
+     * buildRequestParams() into the camelCase shape required by
+     * BatchCreateParams\Request\Params.
+     */
+    private function toBatchParams(array $params): array {
+        $out = [
+            'maxTokens' => $params['max_tokens'],
+            'messages'  => $params['messages'],
+            'model'     => $params['model'],
+        ];
+        foreach (['system', 'thinking', 'outputConfig', 'temperature', 'tools'] as $k) {
+            if (isset($params[$k])) {
+                $out[$k] = $params[$k];
+            }
+        }
+        if (isset($params['top_p'])) {
+            $out['topP'] = $params['top_p'];
+        }
+        if (isset($params['top_k'])) {
+            $out['topK'] = $params['top_k'];
+        }
+        if (isset($params['stop_sequences'])) {
+            $out['stopSequences'] = $params['stop_sequences'];
+        }
+        return $out;
+    }
+
+    /**
+     * Poll a batch until processingStatus === 'ended', reporting progress.
+     *
+     * Polls every 5 s up to ~20 min. The Anthropic API guarantees batches
+     * complete within 24 h; for one-request summaries the typical end-to-end
+     * latency is single-digit seconds.
+     */
+    private function waitForBatch(Client $client, string $batchId, ?callable $reportProgress): MessageBatch {
+        $maxAttempts = 240;
+        for ($i = 0; $i < $maxAttempts; $i++) {
+            $batch = $this->callBatchRetrieve($client, $batchId);
+            if ($batch->processingStatus === 'ended') {
+                if ($reportProgress !== null) {
+                    $reportProgress(0.95);
+                }
+                return $batch;
+            }
+            if ($reportProgress !== null) {
+                $progress = min(0.9, 0.1 + ($i / $maxAttempts) * 0.8);
+                $reportProgress($progress);
+            }
+            $this->sleepBetweenBatchPolls();
+        }
+        throw new \RuntimeException("Batch $batchId did not complete within poll window");
+    }
+
+    /**
+     * Convert one MessageBatchIndividualResponse into the array shape used by
+     * other ClaudeSDKService entry points.
+     */
+    private function convertBatchResult(MessageBatchIndividualResponse $entry): array {
+        $r = $entry->result;
+        if ($r instanceof MessageBatchSucceededResult) {
+            return [
+                'response'  => $this->extractText($r->message),
+                'usage'     => $this->extractUsage($r->message),
+                'citations' => $this->extractCitations($r->message),
+            ];
+        }
+        if ($r instanceof MessageBatchErroredResult) {
+            $message = $r->error->error->message ?? 'Batch request errored';
+            return ['error' => $message];
+        }
+        if ($r instanceof MessageBatchCanceledResult) {
+            return ['error' => 'Batch request canceled'];
+        }
+        if ($r instanceof MessageBatchExpiredResult) {
+            return ['error' => 'Batch request expired before processing'];
+        }
+        return ['error' => 'Unknown batch result type'];
+    }
+
+    /**
+     * Sleep between batch poll attempts. Overridable for tests.
+     */
+    protected function sleepBetweenBatchPolls(): void {
+        sleep(5);
+    }
+
+    /**
+     * Dispatch a batches->create. Overridable for testing.
+     *
+     * @param list<array{custom_id: string, params: array}> $requests
+     */
+    protected function callBatchCreate(Client $client, array $requests): MessageBatch {
+        return $client->messages->batches->create($requests);
+    }
+
+    /**
+     * Dispatch a batches->retrieve. Overridable for testing.
+     */
+    protected function callBatchRetrieve(Client $client, string $batchId): MessageBatch {
+        return $client->messages->batches->retrieve($batchId);
+    }
+
+    /**
+     * Dispatch a batches->resultsStream. Overridable for testing.
+     *
+     * @return iterable<MessageBatchIndividualResponse>
+     */
+    protected function callBatchResults(Client $client, string $batchId): iterable {
+        return $client->messages->batches->resultsStream($batchId);
+    }
+
+    /**
      * Ask Claude about a document (PDF or plain text).
      *
      * @param string $prompt What to ask about the document
@@ -663,21 +951,30 @@ class ClaudeSDKService {
      * @param string $mediaType 'application/pdf' | 'text/plain'
      * @param string $title Optional document title
      * @param string|null $userId User ID for API key resolution
-     * @param bool $cacheDoc Add cache_control to the document block
-     * @return array ['response' => string] or ['error' => string]
+     * @param bool $cacheDoc Add cache_control to the document block (default true — documents are large and benefit from cache reuse)
+     * @param bool $citations Enable citations on the document block (default true). Cited text spans are returned alongside the response.
+     * @param string|null $fileId Optional Anthropic Files API file_id. When provided, the document source is `{type:'file', file_id}` instead of inline base64/text.
+     * @return array ['response' => string, 'usage' => [...], 'citations' => [...]] or ['error' => string]
      */
     public function askWithDocument(
         string  $prompt,
         string  $documentData,
         string  $mediaType,
-        string  $title    = '',
-        ?string $userId   = null,
-        bool    $cacheDoc = false
+        string  $title     = '',
+        ?string $userId    = null,
+        bool    $cacheDoc  = true,
+        bool    $citations = true,
+        ?string $fileId    = null
     ): array {
         try {
             $client = $this->getClient($userId);
 
-            if ($mediaType === 'application/pdf') {
+            if ($fileId !== null) {
+                $source = [
+                    'type'    => 'file',
+                    'file_id' => $fileId,
+                ];
+            } elseif ($mediaType === 'application/pdf') {
                 $source = [
                     'type'       => 'base64',
                     'media_type' => 'application/pdf',
@@ -699,6 +996,9 @@ class ClaudeSDKService {
             $docBlock = ['type' => 'document', 'source' => $source];
             if ($title !== '') {
                 $docBlock['title'] = $title;
+            }
+            if ($citations) {
+                $docBlock['citations'] = ['enabled' => true];
             }
 
             $messages = [
@@ -723,7 +1023,11 @@ class ClaudeSDKService {
 
             $this->logResponseMetadata($response);
 
-            return ['response' => $this->extractText($response), 'usage' => $usage];
+            return [
+                'response' => $this->extractText($response),
+                'usage' => $usage,
+                'citations' => $this->extractCitations($response),
+            ];
 
         } catch (\Throwable $e) {
             return $this->handleException($e, 'askWithDocument');
@@ -811,11 +1115,16 @@ class ClaudeSDKService {
      * @param string $base64Image Base64-encoded image data
      * @param string $mimeType Image mime type (image/jpeg, image/png, image/gif, image/webp)
      * @param string|null $userId User ID for API key
+     * @param string|null $fileId Optional Anthropic Files API file_id. When provided, the image source is `{type:'file', file_id}` instead of inline base64.
      * @return array ['response' => string] or ['error' => string]
      */
-    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null): array {
+    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null): array {
         try {
             $client = $this->getClient($userId);
+
+            $imageSource = $fileId !== null
+                ? ['type' => 'file', 'file_id' => $fileId]
+                : ['type' => 'base64', 'media_type' => $mimeType, 'data' => $base64Image];
 
             $messages = [
                 [
@@ -823,11 +1132,8 @@ class ClaudeSDKService {
                     'content' => [
                         [
                             'type' => 'image',
-                            'source' => [
-                                'type' => 'base64',
-                                'media_type' => $mimeType,
-                                'data' => $base64Image,
-                            ],
+                            'source' => $imageSource,
+                            'cache_control' => ['type' => 'ephemeral'],
                         ],
                         [
                             'type' => 'text',
@@ -863,9 +1169,10 @@ class ClaudeSDKService {
      * @param string $prompt What to ask about the images
      * @param array<array{base64: string, mimeType: string}> $images Image data array
      * @param string|null $userId User ID for API key
+     * @param array<int, string|null>|null $fileIds Optional per-image Anthropic Files API file_ids, indexed parallel to $images. A non-null entry triggers a `{type:'file', file_id}` source for that image; null entries fall back to inline base64.
      * @return array ['response' => string, 'usage' => array] or ['error' => string]
      */
-    public function askWithImages(string $prompt, array $images, ?string $userId = null): array {
+    public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null): array {
         if (empty($images)) {
             return ['error' => 'No images provided'];
         }
@@ -878,16 +1185,18 @@ class ClaudeSDKService {
             $client = $this->getClient($userId);
 
             $content = [];
-            foreach ($images as $img) {
+            foreach (array_values($images) as $i => $img) {
+                $fid = $fileIds[$i] ?? null;
+                $source = $fid !== null
+                    ? ['type' => 'file', 'file_id' => $fid]
+                    : ['type' => 'base64', 'media_type' => $img['mimeType'], 'data' => $img['base64']];
                 $content[] = [
                     'type' => 'image',
-                    'source' => [
-                        'type' => 'base64',
-                        'media_type' => $img['mimeType'],
-                        'data' => $img['base64'],
-                    ],
+                    'source' => $source,
                 ];
             }
+            $lastImageIdx = count($content) - 1;
+            $content[$lastImageIdx]['cache_control'] = ['type' => 'ephemeral'];
             $content[] = [
                 'type' => 'text',
                 'text' => $prompt,
@@ -982,5 +1291,551 @@ class ClaudeSDKService {
             $this->logger->error('AIquila SDK: Stream error', $this->buildErrorLogContext($e) + ['class' => get_class($e)]);
             throw new \Exception('Stream error: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Streaming variant of chatWithTools(). Yields a sequence of event arrays
+     * the caller can re-encode (e.g. as Server-Sent Events) for incremental
+     * delivery to the UI. Event shapes:
+     *
+     *   ['type' => 'text_delta',  'text' => string]
+     *   ['type' => 'tool_use',    'id' => string, 'name' => string, 'input' => array]
+     *   ['type' => 'tool_result', 'tool_use_id' => string, 'output' => string, 'is_error' => bool]
+     *   ['type' => 'done',        'usage' => [...], 'citations' => [...]]
+     *   ['type' => 'error',       'error' => string, 'usage' => [...]]
+     *
+     * The internal loop accumulates streamed content blocks into text and
+     * tool_use blocks; tool execution still happens locally, and the loop
+     * re-enters with tool_result messages until the model emits end_turn or
+     * $maxIterations is reached.
+     *
+     * @param array $messages
+     * @param array $tools
+     * @param callable $toolExecutor fn(string $name, array $input): array
+     * @param string|null $system
+     * @param string|null $userId
+     * @param array $options
+     * @param int $maxIterations
+     */
+    public function chatWithToolsStream(
+        array    $messages,
+        array    $tools,
+        callable $toolExecutor,
+        ?string  $system = null,
+        ?string  $userId = null,
+        array    $options = [],
+        int      $maxIterations = 10
+    ): \Generator {
+        try {
+            $client = $this->getClient($userId);
+        } catch (\Throwable $e) {
+            yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];
+            return;
+        }
+
+        if ($system !== null) {
+            $options['system'] = $system;
+        }
+        $options['tools'] = $tools;
+
+        $totalInput = 0;
+        $totalOutput = 0;
+        $totalCacheCreate = 0;
+        $totalCacheRead = 0;
+        $allCitations = [];
+
+        for ($i = 0; $i < $maxIterations; $i++) {
+            $params = $this->buildRequestParams($messages, $userId, $options);
+            try {
+                $stream = $this->callCreateStream($client, $params);
+            } catch (\Throwable $e) {
+                $this->logger->error('AIquila SDK: chatWithToolsStream open failed', $this->buildErrorLogContext($e));
+                yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];
+                return;
+            }
+
+            // Per-block accumulators, keyed by content-block index.
+            /** @var array<int, array<string, mixed>> $blocks */
+            $blocks = [];
+            /** @var array<int, string> $jsonBuffers */
+            $jsonBuffers = [];
+            $stopReason = null;
+
+            try {
+                foreach ($stream as $event) {
+                    $type = $event->type ?? null;
+                    switch ($type) {
+                        case 'message_start':
+                            if (isset($event->message->usage)) {
+                                $totalInput += $event->message->usage->inputTokens ?? 0;
+                                $totalCacheCreate += $event->message->usage->cacheCreationInputTokens ?? 0;
+                                $totalCacheRead += $event->message->usage->cacheReadInputTokens ?? 0;
+                            }
+                            break;
+
+                        case 'content_block_start':
+                            $idx = $event->index;
+                            $cb = $event->contentBlock;
+                            $cbType = $cb->type ?? null;
+                            if ($cbType === 'text') {
+                                $blocks[$idx] = ['type' => 'text', 'text' => '', 'citations' => []];
+                            } elseif ($cbType === 'tool_use') {
+                                $blocks[$idx] = [
+                                    'type' => 'tool_use',
+                                    'id' => $cb->id ?? '',
+                                    'name' => $cb->name ?? '',
+                                    'input' => null,
+                                ];
+                                $jsonBuffers[$idx] = '';
+                            } else {
+                                // thinking, server tools etc. — preserve type so downstream may handle.
+                                $blocks[$idx] = ['type' => $cbType ?? 'unknown'];
+                            }
+                            break;
+
+                        case 'content_block_delta':
+                            $idx = $event->index;
+                            $delta = $event->delta;
+                            $deltaType = $delta->type ?? null;
+                            if ($deltaType === 'text_delta') {
+                                $text = $delta->text ?? '';
+                                if (isset($blocks[$idx])) {
+                                    $blocks[$idx]['text'] = ($blocks[$idx]['text'] ?? '') . $text;
+                                }
+                                if ($text !== '') {
+                                    yield ['type' => 'text_delta', 'text' => $text];
+                                }
+                            } elseif ($deltaType === 'input_json_delta') {
+                                $jsonBuffers[$idx] = ($jsonBuffers[$idx] ?? '') . ($delta->partialJSON ?? '');
+                            } elseif ($deltaType === 'citations_delta') {
+                                $citation = $delta->citation ?? null;
+                                if ($citation !== null) {
+                                    $normalized = is_object($citation) ? json_decode(json_encode($citation), true) : $citation;
+                                    if (isset($blocks[$idx])) {
+                                        $blocks[$idx]['citations'][] = $normalized;
+                                    }
+                                }
+                            }
+                            // thinking/signature deltas: ignore for now.
+                            break;
+
+                        case 'content_block_stop':
+                            $idx = $event->index;
+                            if (isset($blocks[$idx]) && $blocks[$idx]['type'] === 'tool_use') {
+                                $json = $jsonBuffers[$idx] ?? '';
+                                $blocks[$idx]['input'] = $json !== '' ? (json_decode($json, true) ?? []) : [];
+                            }
+                            break;
+
+                        case 'message_delta':
+                            $stopReason = $event->delta->stopReason ?? null;
+                            if (isset($event->usage)) {
+                                $totalOutput += $event->usage->outputTokens ?? 0;
+                            }
+                            break;
+
+                        case 'message_stop':
+                        default:
+                            // No-op.
+                            break;
+                    }
+                }
+            } catch (\Throwable $e) {
+                $this->logger->error('AIquila SDK: chatWithToolsStream stream failed', $this->buildErrorLogContext($e));
+                yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => [
+                    'input_tokens' => $totalInput,
+                    'output_tokens' => $totalOutput,
+                    'cache_creation_tokens' => $totalCacheCreate ?: null,
+                    'cache_read_tokens' => $totalCacheRead ?: null,
+                ]];
+                return;
+            }
+
+            // Collect any per-text-block citations seen during this iteration.
+            foreach ($blocks as $b) {
+                if (($b['type'] ?? null) === 'text' && !empty($b['citations'])) {
+                    $allCitations = array_merge($allCitations, $b['citations']);
+                }
+            }
+
+            $toolUseBlocks = array_values(array_filter($blocks, fn($b) => ($b['type'] ?? null) === 'tool_use'));
+
+            if ($toolUseBlocks === [] || $stopReason === 'end_turn') {
+                yield [
+                    'type' => 'done',
+                    'usage' => [
+                        'input_tokens' => $totalInput,
+                        'output_tokens' => $totalOutput,
+                        'cache_creation_tokens' => $totalCacheCreate ?: null,
+                        'cache_read_tokens' => $totalCacheRead ?: null,
+                    ],
+                    'citations' => $allCitations,
+                ];
+                return;
+            }
+
+            // Build assistant message reflecting the full streamed turn.
+            $assistantContent = [];
+            foreach ($blocks as $b) {
+                if (($b['type'] ?? null) === 'text') {
+                    $assistantContent[] = ['type' => 'text', 'text' => $b['text'] ?? ''];
+                } elseif (($b['type'] ?? null) === 'tool_use') {
+                    $assistantContent[] = [
+                        'type' => 'tool_use',
+                        'id' => $b['id'],
+                        'name' => $b['name'],
+                        'input' => $b['input'] ?? [],
+                    ];
+                    yield [
+                        'type' => 'tool_use',
+                        'id' => $b['id'],
+                        'name' => $b['name'],
+                        'input' => $b['input'] ?? [],
+                    ];
+                }
+            }
+            $messages[] = ['role' => 'assistant', 'content' => $assistantContent];
+
+            // Execute tools and feed results back into the next iteration.
+            $toolResults = [];
+            foreach ($toolUseBlocks as $b) {
+                $input = is_array($b['input'] ?? null) ? $b['input'] : [];
+                $result = $toolExecutor($b['name'], $input);
+
+                $resultContent = '';
+                if (isset($result['content']) && is_array($result['content'])) {
+                    foreach ($result['content'] as $part) {
+                        if (($part['type'] ?? '') === 'text') {
+                            $resultContent .= $part['text'] ?? '';
+                        }
+                    }
+                } else {
+                    $resultContent = json_encode($result);
+                }
+
+                $tr = [
+                    'type' => 'tool_result',
+                    'tool_use_id' => $b['id'],
+                    'content' => $resultContent,
+                ];
+                if (!empty($result['isError'])) {
+                    $tr['is_error'] = true;
+                }
+                $toolResults[] = $tr;
+
+                yield [
+                    'type' => 'tool_result',
+                    'tool_use_id' => $b['id'],
+                    'output' => $resultContent,
+                    'is_error' => !empty($result['isError']),
+                ];
+            }
+
+            $messages[] = ['role' => 'user', 'content' => $toolResults];
+        }
+
+        $this->logger->warning('AIquila SDK: chatWithToolsStream reached max iterations', [
+            'maxIterations' => $maxIterations,
+        ]);
+        yield [
+            'type' => 'error',
+            'error' => 'Max tool-use iterations reached',
+            'usage' => [
+                'input_tokens' => $totalInput,
+                'output_tokens' => $totalOutput,
+                'cache_creation_tokens' => $totalCacheCreate ?: null,
+                'cache_read_tokens' => $totalCacheRead ?: null,
+            ],
+        ];
+    }
+
+    /**
+     * Dispatch a beta streaming create call with mcp_servers attached. Overridable for testing.
+     *
+     * @param list<array<string, mixed>> $mcpServers
+     */
+    protected function callBetaCreateStreamWithMcp(Client $client, array $params, array $mcpServers): BaseStream {
+        return $client->beta->messages->createStream(
+            maxTokens: $params['max_tokens'],
+            messages: $params['messages'],
+            model: $params['model'],
+            mcpServers: $mcpServers,
+            outputConfig: $params['outputConfig'] ?? null,
+            stopSequences: $params['stop_sequences'] ?? null,
+            system: $params['system'] ?? null,
+            temperature: $params['temperature'] ?? null,
+            thinking: $params['thinking'] ?? null,
+            tools: $params['tools'] ?? null,
+            topK: $params['top_k'] ?? null,
+            topP: $params['top_p'] ?? null,
+            betas: [AnthropicBeta::MCP_CLIENT_2025_11_20],
+        );
+    }
+
+    /**
+     * Native MCP connector path. Hands the conversation to Anthropic's beta
+     * messages endpoint with `mcp_servers` set; Anthropic calls each server
+     * directly over HTTPS and returns mcp_tool_use / mcp_tool_result blocks
+     * inline, so no PHP-side agentic loop is required.
+     *
+     * Yields the same event shape as chatWithToolsStream() so controllers can
+     * persist/render either path interchangeably:
+     *
+     *   ['type' => 'text_delta',  'text' => string]
+     *   ['type' => 'tool_use',    'id' => string, 'name' => string, 'input' => array, 'server' => string]
+     *   ['type' => 'tool_result', 'tool_use_id' => string, 'output' => string, 'is_error' => bool]
+     *   ['type' => 'done',        'usage' => [...], 'citations' => [...]]
+     *   ['type' => 'error',       'error' => string, 'usage' => [...]]
+     *
+     * @param list<array<string, mixed>> $mcpServers Server descriptors per BetaRequestMCPServerURLDefinition
+     */
+    public function chatWithNativeMcp(
+        array    $messages,
+        array    $mcpServers,
+        ?string  $system = null,
+        ?string  $userId = null,
+        array    $options = []
+    ): \Generator {
+        try {
+            $client = $this->getClient($userId);
+        } catch (\Throwable $e) {
+            yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];
+            return;
+        }
+
+        if ($mcpServers === []) {
+            yield ['type' => 'error', 'error' => 'Native MCP connector enabled but no reachable HTTPS MCP servers are configured.', 'usage' => null];
+            return;
+        }
+
+        if ($system !== null) {
+            $options['system'] = $system;
+        }
+        // Tools are advertised by the MCP servers themselves under the
+        // beta connector; do not pre-merge user-defined tool schemas.
+        unset($options['tools']);
+
+        $params = $this->buildRequestParams($messages, $userId, $options);
+
+        try {
+            $stream = $this->callBetaCreateStreamWithMcp($client, $params, $mcpServers);
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila SDK: chatWithNativeMcp open failed', $this->buildErrorLogContext($e));
+            yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];
+            return;
+        }
+
+        $totalInput = 0;
+        $totalOutput = 0;
+        $totalCacheCreate = 0;
+        $totalCacheRead = 0;
+        $allCitations = [];
+
+        // Per-block accumulators, keyed by content-block index.
+        /** @var array<int, array<string, mixed>> $blocks */
+        $blocks = [];
+        /** @var array<int, string> $jsonBuffers */
+        $jsonBuffers = [];
+
+        try {
+            foreach ($stream as $event) {
+                $type = $event->type ?? null;
+                switch ($type) {
+                    case 'message_start':
+                        if (isset($event->message->usage)) {
+                            $totalInput += $event->message->usage->inputTokens ?? 0;
+                            $totalCacheCreate += $event->message->usage->cacheCreationInputTokens ?? 0;
+                            $totalCacheRead += $event->message->usage->cacheReadInputTokens ?? 0;
+                        }
+                        break;
+
+                    case 'content_block_start':
+                        $idx = $event->index;
+                        $cb = $event->contentBlock;
+                        $cbType = $cb->type ?? null;
+                        if ($cbType === 'text') {
+                            $blocks[$idx] = ['type' => 'text', 'text' => '', 'citations' => []];
+                        } elseif ($cbType === 'mcp_tool_use') {
+                            $blocks[$idx] = [
+                                'type' => 'mcp_tool_use',
+                                'id' => $cb->id ?? '',
+                                'name' => $cb->name ?? '',
+                                'server' => $cb->serverName ?? '',
+                                'input' => null,
+                            ];
+                            $jsonBuffers[$idx] = '';
+                        } elseif ($cbType === 'mcp_tool_result') {
+                            // Anthropic returns the full result inline in content_block_start
+                            // (no streaming deltas), so we can yield immediately.
+                            $output = $this->stringifyMcpResultContent($cb->content ?? null);
+                            yield [
+                                'type' => 'tool_result',
+                                'tool_use_id' => $cb->toolUseID ?? '',
+                                'output' => $output,
+                                'is_error' => (bool)($cb->isError ?? false),
+                            ];
+                            $blocks[$idx] = ['type' => 'mcp_tool_result'];
+                        } else {
+                            $blocks[$idx] = ['type' => $cbType ?? 'unknown'];
+                        }
+                        break;
+
+                    case 'content_block_delta':
+                        $idx = $event->index;
+                        $delta = $event->delta;
+                        $deltaType = $delta->type ?? null;
+                        if ($deltaType === 'text_delta') {
+                            $text = $delta->text ?? '';
+                            if (isset($blocks[$idx])) {
+                                $blocks[$idx]['text'] = ($blocks[$idx]['text'] ?? '') . $text;
+                            }
+                            if ($text !== '') {
+                                yield ['type' => 'text_delta', 'text' => $text];
+                            }
+                        } elseif ($deltaType === 'input_json_delta') {
+                            $jsonBuffers[$idx] = ($jsonBuffers[$idx] ?? '') . ($delta->partialJSON ?? '');
+                        } elseif ($deltaType === 'citations_delta') {
+                            $citation = $delta->citation ?? null;
+                            if ($citation !== null) {
+                                $normalized = is_object($citation) ? json_decode(json_encode($citation), true) : $citation;
+                                if (isset($blocks[$idx])) {
+                                    $blocks[$idx]['citations'][] = $normalized;
+                                }
+                            }
+                        }
+                        break;
+
+                    case 'content_block_stop':
+                        $idx = $event->index;
+                        if (isset($blocks[$idx]) && ($blocks[$idx]['type'] ?? null) === 'mcp_tool_use') {
+                            $json = $jsonBuffers[$idx] ?? '';
+                            $blocks[$idx]['input'] = $json !== '' ? (json_decode($json, true) ?? []) : [];
+                            yield [
+                                'type' => 'tool_use',
+                                'id' => $blocks[$idx]['id'],
+                                'name' => $blocks[$idx]['name'],
+                                'input' => $blocks[$idx]['input'],
+                                'server' => $blocks[$idx]['server'] ?? '',
+                            ];
+                        }
+                        break;
+
+                    case 'message_delta':
+                        if (isset($event->usage)) {
+                            $totalOutput += $event->usage->outputTokens ?? 0;
+                        }
+                        break;
+
+                    case 'message_stop':
+                    default:
+                        break;
+                }
+            }
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila SDK: chatWithNativeMcp stream failed', $this->buildErrorLogContext($e));
+            yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => [
+                'input_tokens' => $totalInput,
+                'output_tokens' => $totalOutput,
+                'cache_creation_tokens' => $totalCacheCreate ?: null,
+                'cache_read_tokens' => $totalCacheRead ?: null,
+            ]];
+            return;
+        }
+
+        foreach ($blocks as $b) {
+            if (($b['type'] ?? null) === 'text' && !empty($b['citations'])) {
+                $allCitations = array_merge($allCitations, $b['citations']);
+            }
+        }
+
+        yield [
+            'type' => 'done',
+            'usage' => [
+                'input_tokens' => $totalInput,
+                'output_tokens' => $totalOutput,
+                'cache_creation_tokens' => $totalCacheCreate ?: null,
+                'cache_read_tokens' => $totalCacheRead ?: null,
+            ],
+            'citations' => $allCitations,
+        ];
+    }
+
+    /**
+     * Flatten an mcp_tool_result content payload (string or array of text blocks)
+     * into a single string suitable for yielding to clients and persisting in
+     * the conversation log.
+     *
+     * @param mixed $content
+     */
+    private function stringifyMcpResultContent($content): string {
+        if (is_string($content)) {
+            return $content;
+        }
+        if (is_array($content)) {
+            $out = '';
+            foreach ($content as $part) {
+                if (is_object($part)) {
+                    if (($part->type ?? null) === 'text') {
+                        $out .= $part->text ?? '';
+                    }
+                } elseif (is_array($part)) {
+                    if (($part['type'] ?? null) === 'text') {
+                        $out .= $part['text'] ?? '';
+                    }
+                }
+            }
+            return $out !== '' ? $out : json_encode($content);
+        }
+        if (is_object($content)) {
+            return json_encode($content) ?: '';
+        }
+        return '';
+    }
+
+    /**
+     * Non-streaming convenience: drive chatWithNativeMcp() to completion and
+     * return a flat result array compatible with the legacy chat()/chatWithTools()
+     * shape (response/model/usage/citations).
+     */
+    public function chatWithNativeMcpCollect(
+        array $messages,
+        array $mcpServers,
+        ?string $system = null,
+        ?string $userId = null,
+        array $options = []
+    ): array {
+        $text = '';
+        $citations = [];
+        $usage = ['input_tokens' => 0, 'output_tokens' => 0];
+        $error = null;
+
+        foreach ($this->chatWithNativeMcp($messages, $mcpServers, $system, $userId, $options) as $event) {
+            switch ($event['type'] ?? null) {
+                case 'text_delta':
+                    $text .= $event['text'] ?? '';
+                    break;
+                case 'done':
+                    $usage = $event['usage'] ?? $usage;
+                    $citations = $event['citations'] ?? [];
+                    break;
+                case 'error':
+                    $error = $event['error'] ?? 'Unknown error';
+                    if (isset($event['usage']) && is_array($event['usage'])) {
+                        $usage = $event['usage'];
+                    }
+                    break;
+            }
+        }
+
+        if ($error !== null && $text === '') {
+            return ['error' => $error, 'model' => $this->getModel($userId), 'usage' => $usage];
+        }
+
+        return [
+            'response' => $text,
+            'model' => $this->getModel($userId),
+            'usage' => $usage,
+            'citations' => $citations,
+        ];
     }
 }

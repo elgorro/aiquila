@@ -42,8 +42,20 @@ class TestableClaudeSDKService extends ClaudeSDKService {
     /** Captured params from the last callCreate() call */
     public ?array $lastCreateParams = null;
 
+    /** Captured requestOptions array from the last callCreate() call */
+    public ?array $lastRequestOptions = null;
+
     /** Optional stub text to return from makeStubMessage */
     public string $stubResponseText = '';
+
+    /** Optional citations to attach to the stub text block */
+    public array $stubCitations = [];
+
+    /** Optional pre-built event list for callCreateStream() to iterate */
+    public ?array $stubStreamEvents = null;
+
+    /** Captured params from the last callCreateStream() call */
+    public ?array $lastStreamParams = null;
 
     public function throwOnCreate(\Exception $e): void {
         $this->createException = $e;
@@ -60,6 +72,7 @@ class TestableClaudeSDKService extends ClaudeSDKService {
 
     protected function callCreate(Client $client, array $params): Message {
         $this->lastCreateParams = $params;
+        $this->lastRequestOptions = $this->requestOptionsForMessages($params);
         if ($this->createException !== null) {
             throw $this->createException;
         }
@@ -67,10 +80,13 @@ class TestableClaudeSDKService extends ClaudeSDKService {
     }
 
     protected function callCreateStream(Client $client, array $params): BaseStream {
+        $this->lastStreamParams = $params;
         if ($this->streamException !== null) {
             throw $this->streamException;
         }
-        return new class implements BaseStream {
+        $events = $this->stubStreamEvents ?? [];
+        $stream = new class implements BaseStream {
+            public array $events = [];
             public function __construct(
                 \Anthropic\Core\Conversion\Contracts\Converter|\Anthropic\Core\Conversion\Contracts\ConverterSource|string $convert = '',
                 ?\Psr\Http\Message\RequestInterface $request = null,
@@ -78,8 +94,23 @@ class TestableClaudeSDKService extends ClaudeSDKService {
                 mixed $parsedBody = null,
             ) {}
             public function close(): void {}
-            public function getIterator(): \Traversable { return new \ArrayIterator([]); }
+            public function getIterator(): \Traversable { return new \ArrayIterator($this->events); }
         };
+        $stream->events = $events;
+        return $stream;
+    }
+
+    /**
+     * Helper for tests: build a fake stream event object as a stdClass with
+     * the event-specific fields the streaming loop reads.
+     */
+    public static function streamEvent(string $type, array $extras = []): \stdClass {
+        $e = new \stdClass();
+        $e->type = $type;
+        foreach ($extras as $k => $v) {
+            $e->$k = $v;
+        }
+        return $e;
     }
 
     protected function callListModels(Client $client, array $params): array {
@@ -110,6 +141,9 @@ class TestableClaudeSDKService extends ClaudeSDKService {
             $textObj = new \stdClass();
             $textObj->type = 'text';
             $textObj->text = $text;
+            if ($this->stubCitations !== []) {
+                $textObj->citations = $this->stubCitations;
+            }
             $contentItems[] = $textObj;
         }
 
@@ -419,13 +453,87 @@ class ClaudeServiceTest extends TestCase {
         $this->assertSame('ephemeral', $systemBlock['cache_control']['type']);
     }
 
-    public function testBuildRequestParamsWithoutCacheSystemOmitsCacheControl(): void {
+    public function testBuildRequestParamsCachesSystemPromptByDefault(): void {
         $this->configWithApiKey();
 
         $this->testable->ask('Hi', '', 'testuser', ['system' => 'You are a helpful assistant.']);
 
         $params = $this->testable->lastCreateParams;
+        $systemBlock = $params['system'][0];
+        $this->assertArrayHasKey('cache_control', $systemBlock);
+        $this->assertSame('ephemeral', $systemBlock['cache_control']['type']);
+    }
+
+    public function testBuildRequestParamsWithCacheSystemFalseOmitsCacheControl(): void {
+        $this->configWithApiKey();
+
+        $this->testable->ask('Hi', '', 'testuser', [
+            'system'       => 'You are a helpful assistant.',
+            'cache_system' => false,
+        ]);
+
+        $params = $this->testable->lastCreateParams;
         $this->assertArrayNotHasKey('cache_control', $params['system'][0]);
+    }
+
+    public function testBuildRequestParamsAddsCacheControlToLastToolByDefault(): void {
+        $this->configWithApiKey();
+
+        $tools = [
+            ['name' => 'tool_a', 'description' => 'A', 'input_schema' => []],
+            ['name' => 'tool_b', 'description' => 'B', 'input_schema' => []],
+            ['name' => 'tool_c', 'description' => 'C', 'input_schema' => []],
+        ];
+
+        $this->testable->ask('Hi', '', 'testuser', ['tools' => $tools]);
+
+        $params = $this->testable->lastCreateParams;
+        $this->assertArrayHasKey('tools', $params);
+        $this->assertCount(3, $params['tools']);
+        $this->assertArrayNotHasKey('cache_control', $params['tools'][0]);
+        $this->assertArrayNotHasKey('cache_control', $params['tools'][1]);
+        $this->assertArrayHasKey('cache_control', $params['tools'][2]);
+        $this->assertSame('ephemeral', $params['tools'][2]['cache_control']['type']);
+    }
+
+    public function testBuildRequestParamsWithCacheToolsFalseOmitsToolCacheControl(): void {
+        $this->configWithApiKey();
+
+        $tools = [['name' => 'tool_a', 'description' => 'A', 'input_schema' => []]];
+        $this->testable->ask('Hi', '', 'testuser', ['tools' => $tools, 'cache_tools' => false]);
+
+        $params = $this->testable->lastCreateParams;
+        $this->assertArrayNotHasKey('cache_control', $params['tools'][0]);
+    }
+
+    // ── Files API beta header detection ────────────────────────────────────
+
+    public function testRequestOptionsOmitFilesBetaWhenNoFileIdSource(): void {
+        $this->configWithApiKey();
+
+        $this->testable->ask('Hi', '', 'testuser');
+
+        $this->assertNull($this->testable->lastRequestOptions);
+    }
+
+    public function testRequestOptionsCarryFilesBetaWhenContentReferencesFileId(): void {
+        $this->configWithApiKey();
+
+        $messages = [
+            [
+                'role' => 'user',
+                'content' => [
+                    ['type' => 'document', 'source' => ['type' => 'file', 'file_id' => 'file_abc']],
+                    ['type' => 'text', 'text' => 'Summarize.'],
+                ],
+            ],
+        ];
+        $this->testable->chat($messages, null, 'testuser');
+
+        $opts = $this->testable->lastRequestOptions;
+        $this->assertIsArray($opts);
+        $this->assertArrayHasKey('extraHeaders', $opts);
+        $this->assertSame('files-api-2025-04-14', $opts['extraHeaders']['anthropic-beta']);
     }
 
     // ── chat() ────────────────────────────────────────────────────────────
@@ -534,14 +642,77 @@ class ClaudeServiceTest extends TestCase {
         $this->assertSame(base64_encode($pdfBytes), $docBlock['source']['data']);
     }
 
-    public function testAskWithDocumentAddsCacheControlWhenRequested(): void {
+    public function testAskWithDocumentAddsCacheControlByDefault(): void {
         $this->configWithApiKey();
 
-        $this->testable->askWithDocument('Summarize', 'text content', 'text/plain', '', 'testuser', true);
+        $this->testable->askWithDocument('Summarize', 'text content', 'text/plain', '', 'testuser');
 
         $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
         $this->assertArrayHasKey('cache_control', $docBlock['source']);
         $this->assertSame('ephemeral', $docBlock['source']['cache_control']['type']);
+    }
+
+    public function testAskWithDocumentOmitsCacheControlWhenOptedOut(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithDocument('Summarize', 'text content', 'text/plain', '', 'testuser', false);
+
+        $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertArrayNotHasKey('cache_control', $docBlock['source']);
+    }
+
+    public function testAskWithDocumentEnablesCitationsByDefault(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithDocument('Summarize', 'text content', 'text/plain', '', 'testuser');
+
+        $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertArrayHasKey('citations', $docBlock);
+        $this->assertTrue($docBlock['citations']['enabled']);
+    }
+
+    public function testAskWithDocumentOmitsCitationsWhenOptedOut(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithDocument('Summarize', 'text content', 'text/plain', '', 'testuser', true, false);
+
+        $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertArrayNotHasKey('citations', $docBlock);
+    }
+
+    public function testAskWithDocumentReturnsCitationsFromResponse(): void {
+        $this->configWithApiKey();
+
+        $this->testable->stubResponseText = 'According to the document, X holds.';
+        $this->testable->stubCitations = [
+            [
+                'type' => 'page_location',
+                'cited_text' => 'X holds in all cases.',
+                'document_index' => 0,
+                'document_title' => 'doc.pdf',
+                'start_page_number' => 3,
+                'end_page_number' => 3,
+            ],
+        ];
+
+        $result = $this->testable->askWithDocument('Q', 'data', 'application/pdf', 'doc.pdf', 'testuser');
+
+        $this->assertArrayHasKey('citations', $result);
+        $this->assertCount(1, $result['citations']);
+        $this->assertSame('page_location', $result['citations'][0]['type']);
+        $this->assertSame(3, $result['citations'][0]['start_page_number']);
+        $this->assertSame('X holds in all cases.', $result['citations'][0]['cited_text']);
+    }
+
+    public function testAskWithDocumentReturnsEmptyCitationsWhenNoneEmitted(): void {
+        $this->configWithApiKey();
+
+        $this->testable->stubResponseText = 'Plain answer.';
+
+        $result = $this->testable->askWithDocument('Q', 'data', 'text/plain', '', 'testuser');
+
+        $this->assertArrayHasKey('citations', $result);
+        $this->assertSame([], $result['citations']);
     }
 
     public function testAskWithDocumentOmitsTitleWhenEmpty(): void {
@@ -683,6 +854,38 @@ class ClaudeServiceTest extends TestCase {
         $this->assertArrayHasKey('error', $result);
     }
 
+    // ── askWithImage(): cache_control ──────────────────────────────────────
+
+    public function testAskWithImageAddsCacheControlToImageBlock(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithImage('Describe', 'base64data', 'image/png', 'testuser');
+
+        $imageBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertSame('image', $imageBlock['type']);
+        $this->assertArrayHasKey('cache_control', $imageBlock);
+        $this->assertSame('ephemeral', $imageBlock['cache_control']['type']);
+    }
+
+    public function testAskWithImagesAddsCacheControlOnlyToLastImage(): void {
+        $this->configWithApiKey();
+
+        $images = [
+            ['base64' => 'aaa', 'mimeType' => 'image/png'],
+            ['base64' => 'bbb', 'mimeType' => 'image/jpeg'],
+            ['base64' => 'ccc', 'mimeType' => 'image/png'],
+        ];
+        $this->testable->askWithImages('Compare', $images, 'testuser');
+
+        $content = $this->testable->lastCreateParams['messages'][0]['content'];
+        $this->assertArrayNotHasKey('cache_control', $content[0]);
+        $this->assertArrayNotHasKey('cache_control', $content[1]);
+        $this->assertArrayHasKey('cache_control', $content[2]);
+        $this->assertSame('ephemeral', $content[2]['cache_control']['type']);
+        // Final block is the prompt text, not an image.
+        $this->assertSame('text', $content[3]['type']);
+    }
+
     // ── askWithImage(): typed exception handling ───────────────────────────
 
     public function testAskWithImageReturnsInvalidApiKeyOnAuthenticationException(): void {
@@ -779,6 +982,114 @@ class ClaudeServiceTest extends TestCase {
         $this->assertStringContainsString('Connection to Claude API failed', $result['error']);
     }
 
+    // ── askWith* (Files API file_id sources) ──────────────────────────────
+
+    public function testAskWithDocumentUsesFileIdSourceWhenProvided(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithDocument(
+            'Summarize',
+            'PDF BYTES',
+            'application/pdf',
+            'doc.pdf',
+            'testuser',
+            true,
+            true,
+            'file_xyz',
+        );
+
+        $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertSame('document', $docBlock['type']);
+        $this->assertSame('file', $docBlock['source']['type']);
+        $this->assertSame('file_xyz', $docBlock['source']['file_id']);
+        $this->assertArrayNotHasKey('data', $docBlock['source']);
+        $this->assertArrayNotHasKey('media_type', $docBlock['source']);
+        // cache_control still applies
+        $this->assertSame('ephemeral', $docBlock['source']['cache_control']['type']);
+        // citations remain enabled at the block level
+        $this->assertTrue($docBlock['citations']['enabled']);
+    }
+
+    public function testAskWithDocumentFallsBackToBase64WhenFileIdNull(): void {
+        $this->configWithApiKey();
+        $pdfBytes = '%PDF-1.4 fallback';
+
+        $this->testable->askWithDocument(
+            'Summarize',
+            $pdfBytes,
+            'application/pdf',
+            'doc.pdf',
+            'testuser',
+            true,
+            true,
+            null,
+        );
+
+        $docBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertSame('base64', $docBlock['source']['type']);
+        $this->assertSame(base64_encode($pdfBytes), $docBlock['source']['data']);
+    }
+
+    public function testAskWithImageUsesFileIdSourceWhenProvided(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithImage('Describe', 'BASE64DATA', 'image/png', 'testuser', 'file_img1');
+
+        $imageBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertSame('image', $imageBlock['type']);
+        $this->assertSame('file', $imageBlock['source']['type']);
+        $this->assertSame('file_img1', $imageBlock['source']['file_id']);
+        $this->assertArrayNotHasKey('data', $imageBlock['source']);
+        // cache_control stays on the image block (not source)
+        $this->assertSame('ephemeral', $imageBlock['cache_control']['type']);
+    }
+
+    public function testAskWithImageFallsBackToBase64WhenFileIdNull(): void {
+        $this->configWithApiKey();
+
+        $this->testable->askWithImage('Describe', 'BASE64DATA', 'image/png', 'testuser', null);
+
+        $imageBlock = $this->testable->lastCreateParams['messages'][0]['content'][0];
+        $this->assertSame('base64', $imageBlock['source']['type']);
+        $this->assertSame('image/png', $imageBlock['source']['media_type']);
+        $this->assertSame('BASE64DATA', $imageBlock['source']['data']);
+    }
+
+    public function testAskWithImagesUsesPerImageFileIds(): void {
+        $this->configWithApiKey();
+
+        $images = [
+            ['base64' => 'aaa', 'mimeType' => 'image/png'],
+            ['base64' => 'bbb', 'mimeType' => 'image/jpeg'],
+        ];
+        $this->testable->askWithImages('Compare', $images, 'testuser', [null, 'file_b']);
+
+        $content = $this->testable->lastCreateParams['messages'][0]['content'];
+        // Image 0: base64 fallback
+        $this->assertSame('base64', $content[0]['source']['type']);
+        $this->assertSame('aaa', $content[0]['source']['data']);
+        // Image 1: file_id source
+        $this->assertSame('file', $content[1]['source']['type']);
+        $this->assertSame('file_b', $content[1]['source']['file_id']);
+        // Last image (index 1) carries cache_control regardless of source type
+        $this->assertSame('ephemeral', $content[1]['cache_control']['type']);
+        $this->assertArrayNotHasKey('cache_control', $content[0]);
+    }
+
+    public function testAskWithImagesFallsBackToBase64WhenFileIdsNull(): void {
+        $this->configWithApiKey();
+
+        $images = [
+            ['base64' => 'aaa', 'mimeType' => 'image/png'],
+            ['base64' => 'bbb', 'mimeType' => 'image/jpeg'],
+        ];
+        $this->testable->askWithImages('Compare', $images, 'testuser', null);
+
+        $content = $this->testable->lastCreateParams['messages'][0]['content'];
+        $this->assertSame('base64', $content[0]['source']['type']);
+        $this->assertSame('base64', $content[1]['source']['type']);
+    }
+
     // ── listModels() ──────────────────────────────────────────────────────
 
     public function testListModelsReturnsIds(): void {
@@ -831,5 +1142,200 @@ class ClaudeServiceTest extends TestCase {
         $result = $this->testable->retrieveModel('unknown-model', 'testuser');
 
         $this->assertNull($result);
+    }
+
+    // ── chatWithToolsStream() ──────────────────────────────────────────────
+
+    /**
+     * Build a fake content-block-start event for a text block.
+     */
+    private function evText(int $idx): \stdClass {
+        $cb = (object)['type' => 'text'];
+        return TestableClaudeSDKService::streamEvent('content_block_start', ['index' => $idx, 'contentBlock' => $cb]);
+    }
+
+    /**
+     * Build a fake content-block-start event for a tool_use block.
+     */
+    private function evToolUse(int $idx, string $id, string $name): \stdClass {
+        $cb = (object)['type' => 'tool_use', 'id' => $id, 'name' => $name];
+        return TestableClaudeSDKService::streamEvent('content_block_start', ['index' => $idx, 'contentBlock' => $cb]);
+    }
+
+    private function evTextDelta(int $idx, string $text): \stdClass {
+        $delta = (object)['type' => 'text_delta', 'text' => $text];
+        return TestableClaudeSDKService::streamEvent('content_block_delta', ['index' => $idx, 'delta' => $delta]);
+    }
+
+    private function evJsonDelta(int $idx, string $partial): \stdClass {
+        $delta = (object)['type' => 'input_json_delta', 'partialJSON' => $partial];
+        return TestableClaudeSDKService::streamEvent('content_block_delta', ['index' => $idx, 'delta' => $delta]);
+    }
+
+    private function evCitationDelta(int $idx, array $citation): \stdClass {
+        $delta = (object)['type' => 'citations_delta', 'citation' => (object)$citation];
+        return TestableClaudeSDKService::streamEvent('content_block_delta', ['index' => $idx, 'delta' => $delta]);
+    }
+
+    private function evBlockStop(int $idx): \stdClass {
+        return TestableClaudeSDKService::streamEvent('content_block_stop', ['index' => $idx]);
+    }
+
+    private function evMessageStart(int $inputTokens = 0): \stdClass {
+        $usage = (object)['inputTokens' => $inputTokens, 'cacheCreationInputTokens' => 0, 'cacheReadInputTokens' => 0];
+        $message = (object)['usage' => $usage];
+        return TestableClaudeSDKService::streamEvent('message_start', ['message' => $message]);
+    }
+
+    private function evMessageDelta(string $stopReason, int $outputTokens = 0): \stdClass {
+        $delta = (object)['stopReason' => $stopReason];
+        $usage = (object)['outputTokens' => $outputTokens];
+        return TestableClaudeSDKService::streamEvent('message_delta', ['delta' => $delta, 'usage' => $usage]);
+    }
+
+    public function testChatWithToolsStreamYieldsTextDeltasAndDoneOnEndTurn(): void {
+        $this->configWithApiKey();
+
+        $this->testable->stubStreamEvents = [
+            $this->evMessageStart(5),
+            $this->evText(0),
+            $this->evTextDelta(0, 'Hello '),
+            $this->evTextDelta(0, 'world.'),
+            $this->evBlockStop(0),
+            $this->evMessageDelta('end_turn', 4),
+        ];
+
+        $events = iterator_to_array(
+            $this->testable->chatWithToolsStream(
+                [['role' => 'user', 'content' => 'Hi']],
+                [],
+                fn($n, $i) => ['content' => [['type' => 'text', 'text' => 'unused']]],
+                null,
+                'testuser',
+            ),
+            false,
+        );
+
+        $this->assertSame(['type' => 'text_delta', 'text' => 'Hello '], $events[0]);
+        $this->assertSame(['type' => 'text_delta', 'text' => 'world.'], $events[1]);
+        $this->assertSame('done', $events[2]['type']);
+        $this->assertSame(5, $events[2]['usage']['input_tokens']);
+        $this->assertSame(4, $events[2]['usage']['output_tokens']);
+        $this->assertSame([], $events[2]['citations']);
+    }
+
+    public function testChatWithToolsStreamRunsToolLoopAcrossIterations(): void {
+        $this->configWithApiKey();
+
+        // Iteration 1: model emits text + a tool_use, ending with stop_reason: tool_use
+        // Iteration 2: model emits text and ends with end_turn.
+        $this->testable->stubStreamEvents = [
+            // iteration 1
+            $this->evMessageStart(),
+            $this->evText(0),
+            $this->evTextDelta(0, 'Let me look that up. '),
+            $this->evBlockStop(0),
+            $this->evToolUse(1, 'tu_1', 'search_files'),
+            $this->evJsonDelta(1, '{"query":'),
+            $this->evJsonDelta(1, '"foo"}'),
+            $this->evBlockStop(1),
+            $this->evMessageDelta('tool_use'),
+        ];
+
+        // After iteration 1, the loop will call callCreateStream again. We need
+        // to swap the stub events to simulate iteration 2. Use a wrapper executor
+        // that mutates stubStreamEvents on the way out.
+        $service = $this->testable;
+        $toolExecutor = function (string $name, array $input) use ($service) {
+            $service->stubStreamEvents = [
+                $service::streamEvent('message_start', ['message' => (object)['usage' => (object)['inputTokens' => 1]]]),
+                $this->evText(0),
+                $this->evTextDelta(0, 'Found three results.'),
+                $this->evBlockStop(0),
+                $this->evMessageDelta('end_turn', 2),
+            ];
+            return ['content' => [['type' => 'text', 'text' => 'r1\nr2\nr3']]];
+        };
+
+        $events = iterator_to_array(
+            $this->testable->chatWithToolsStream(
+                [['role' => 'user', 'content' => 'find foo']],
+                [['name' => 'search_files', 'description' => 's', 'input_schema' => []]],
+                $toolExecutor,
+                null,
+                'testuser',
+            ),
+            false,
+        );
+
+        // Expected event sequence: text_delta, tool_use, tool_result, text_delta, done
+        $types = array_map(fn($e) => $e['type'], $events);
+        $this->assertSame(['text_delta', 'tool_use', 'tool_result', 'text_delta', 'done'], $types);
+
+        $this->assertSame('search_files', $events[1]['name']);
+        $this->assertSame(['query' => 'foo'], $events[1]['input']);
+        $this->assertSame('tu_1', $events[2]['tool_use_id']);
+        $this->assertStringContainsString('r1', $events[2]['output']);
+        $this->assertFalse($events[2]['is_error']);
+        $this->assertSame('Found three results.', $events[3]['text']);
+        $this->assertSame('done', $events[4]['type']);
+    }
+
+    public function testChatWithToolsStreamCollectsCitationsFromTextBlocks(): void {
+        $this->configWithApiKey();
+
+        $this->testable->stubStreamEvents = [
+            $this->evMessageStart(),
+            $this->evText(0),
+            $this->evTextDelta(0, 'Per the doc, '),
+            $this->evCitationDelta(0, [
+                'type' => 'page_location',
+                'cited_text' => 'X is true',
+                'document_index' => 0,
+                'document_title' => 'doc.pdf',
+                'start_page_number' => 2,
+                'end_page_number' => 2,
+            ]),
+            $this->evTextDelta(0, 'X holds.'),
+            $this->evBlockStop(0),
+            $this->evMessageDelta('end_turn'),
+        ];
+
+        $events = iterator_to_array(
+            $this->testable->chatWithToolsStream(
+                [['role' => 'user', 'content' => 'q']],
+                [],
+                fn($n, $i) => [],
+                null,
+                'testuser',
+            ),
+            false,
+        );
+
+        $done = end($events);
+        $this->assertSame('done', $done['type']);
+        $this->assertCount(1, $done['citations']);
+        $this->assertSame('page_location', $done['citations'][0]['type']);
+        $this->assertSame(2, $done['citations'][0]['start_page_number']);
+    }
+
+    public function testChatWithToolsStreamYieldsErrorOnStreamFailure(): void {
+        $this->configWithApiKey();
+        $this->testable->throwOnStream(new \RuntimeException('boom'));
+
+        $events = iterator_to_array(
+            $this->testable->chatWithToolsStream(
+                [['role' => 'user', 'content' => 'Hi']],
+                [],
+                fn($n, $i) => [],
+                null,
+                'testuser',
+            ),
+            false,
+        );
+
+        $this->assertCount(1, $events);
+        $this->assertSame('error', $events[0]['type']);
+        $this->assertStringContainsString('boom', $events[0]['error']);
     }
 }

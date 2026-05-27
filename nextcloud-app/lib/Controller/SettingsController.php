@@ -6,6 +6,8 @@ namespace OCA\AIquila\Controller;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\McpClientService;
+use OCA\AIquila\Service\NativeMcpService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
@@ -18,6 +20,7 @@ class SettingsController extends Controller {
     private ?string $userId;
     private ClaudeSDKService $claudeService;
     private CredentialService $credentials;
+    private NativeMcpService $nativeMcp;
 
     public function __construct(
         string $appName,
@@ -25,13 +28,15 @@ class SettingsController extends Controller {
         IConfig $config,
         ?string $userId,
         ClaudeSDKService $claudeService,
-        CredentialService $credentials
+        CredentialService $credentials,
+        NativeMcpService $nativeMcp
     ) {
         parent::__construct($appName, $request);
         $this->config = $config;
         $this->userId = $userId;
         $this->claudeService = $claudeService;
         $this->credentials = $credentials;
+        $this->nativeMcp = $nativeMcp;
     }
 
     /**
@@ -55,12 +60,19 @@ class SettingsController extends Controller {
         $defaultSystemPrompt = $this->config->getUserValue($this->userId, $this->appName, 'default_system_prompt', '');
         $defaultVerbose = $this->config->getUserValue($this->userId, $this->appName, 'default_verbose', '0') === '1';
 
+        // Native MCP connector toggle. User value is '1', '0', or '' (inherit admin).
+        $userNativeMcp = $this->config->getUserValue($this->userId, $this->appName, 'native_mcp_enabled', '');
+        $adminNativeMcp = $this->config->getAppValue($this->appName, 'native_mcp_enabled', '0') === '1';
+
         return new JSONResponse([
             'hasUserKey'          => $hasUserKey,
             'userModel'           => $userModel,
             'availableModels'     => $availableModels,
             'defaultSystemPrompt' => $defaultSystemPrompt,
             'defaultVerbose'      => $defaultVerbose,
+            'nativeMcpUserOverride' => $userNativeMcp,         // '', '1', or '0'
+            'nativeMcpAdminDefault' => $adminNativeMcp,
+            'nativeMcpEffective'    => $this->nativeMcp->isEnabledForUser($this->userId),
         ]);
     }
 
@@ -71,6 +83,7 @@ class SettingsController extends Controller {
      * @param string $model   Preferred Claude model ID (leave empty to use admin default)
      * @param string|null $default_system_prompt Default system prompt (null to keep unchanged)
      * @param string|null $default_verbose Enable verbose mode by default ('1' or null to keep unchanged)
+     * @param string|null $native_mcp_enabled User override for native-MCP ('1' opt in, '0' opt out, '' clears override, null keeps unchanged)
      *
      * 200: Settings saved successfully
      *
@@ -84,7 +97,8 @@ class SettingsController extends Controller {
         string $api_key = '',
         string $model = '',
         ?string $default_system_prompt = null,
-        ?string $default_verbose = null
+        ?string $default_verbose = null,
+        ?string $native_mcp_enabled = null
     ): JSONResponse {
         if ($api_key !== '') {
             $this->credentials->setApiKey($this->userId, $api_key);
@@ -110,6 +124,15 @@ class SettingsController extends Controller {
             $this->config->setUserValue($this->userId, $this->appName, 'default_verbose', $default_verbose === '1' ? '1' : '0');
         }
 
+        if ($native_mcp_enabled !== null) {
+            // '' clears the override (inherit admin); '1' / '0' explicitly opt in/out.
+            if ($native_mcp_enabled === '') {
+                $this->config->deleteUserValue($this->userId, $this->appName, 'native_mcp_enabled');
+            } else {
+                $this->config->setUserValue($this->userId, $this->appName, 'native_mcp_enabled', $native_mcp_enabled === '1' ? '1' : '0');
+            }
+        }
+
         return new JSONResponse(['status' => 'ok']);
     }
 
@@ -119,18 +142,64 @@ class SettingsController extends Controller {
      * Model, max_tokens, and api_timeout are now managed by Declarative Settings.
      *
      * @param string $api_key Anthropic API key for the instance
+     * @param string|null $native_mcp_enabled Instance default for native-MCP ('1' enabled, '0' disabled, null keeps unchanged)
+     * @param string|null $native_mcp_extra_url Optional extra MCP server URL (trimmed; null keeps unchanged)
+     * @param string|null $native_mcp_extra_token Bearer token for the extra MCP server ('' clears, null keeps unchanged)
      *
      * 200: Admin settings saved successfully
      *
      * @return JSONResponse<Http::STATUS_OK, array{status: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
-    public function saveAdmin(string $api_key = ''): JSONResponse {
+    public function saveAdmin(
+        string $api_key = '',
+        ?string $native_mcp_enabled = null,
+        ?string $native_mcp_extra_url = null,
+        ?string $native_mcp_extra_token = null
+    ): JSONResponse {
         if (!empty($api_key)) {
             $this->credentials->setApiKey(null, $api_key);
         }
 
+        if ($native_mcp_enabled !== null) {
+            $this->config->setAppValue($this->appName, 'native_mcp_enabled', $native_mcp_enabled === '1' ? '1' : '0');
+        }
+        if ($native_mcp_extra_url !== null) {
+            $this->config->setAppValue($this->appName, 'native_mcp_extra_url', trim($native_mcp_extra_url));
+        }
+        if ($native_mcp_extra_token !== null) {
+            // Store via credential manager so it's encrypted at rest like the API key.
+            if ($native_mcp_extra_token === '') {
+                $this->credentials->deleteNativeMcpExtraToken();
+            } else {
+                $this->credentials->setNativeMcpExtraToken($native_mcp_extra_token);
+            }
+        }
+
         return new JSONResponse(['status' => 'ok']);
+    }
+
+    /**
+     * Get admin native-MCP config + per-server reachability snapshot
+     *
+     * 200: Admin native MCP settings
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{enabled: bool, extraUrl: string, hasExtraToken: bool, servers: list<array{id: int|null, name: string, url: string, scheme_ok: bool, http_status: int|null, reachable: bool, message: string}>}, array{}>
+     */
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function nativeMcpStatus(): JSONResponse {
+        $enabled = $this->config->getAppValue($this->appName, 'native_mcp_enabled', '0') === '1';
+        $extraUrl = $this->config->getAppValue($this->appName, 'native_mcp_extra_url', '');
+        $hasExtraToken = $this->credentials->hasNativeMcpExtraToken();
+
+        $servers = $this->nativeMcp->probeAll();
+
+        return new JSONResponse([
+            'enabled' => $enabled,
+            'extraUrl' => $extraUrl,
+            'hasExtraToken' => $hasExtraToken,
+            'servers' => $servers,
+        ]);
     }
 
     /**

@@ -2368,6 +2368,12 @@
                                         "nullable": true,
                                         "default": null,
                                         "description": "Enable verbose mode by default ('1' or null to keep unchanged)"
+                                    },
+                                    "native_mcp_enabled": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "User override for native-MCP ('1' opt in, '0' opt out, '' clears override, null keeps unchanged)"
                                     }
                                 }
                             }
@@ -3195,6 +3201,24 @@
                                         "type": "string",
                                         "default": "",
                                         "description": "Anthropic API key for the instance"
+                                    },
+                                    "native_mcp_enabled": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Instance default for native-MCP ('1' enabled, '0' disabled, null keeps unchanged)"
+                                    },
+                                    "native_mcp_extra_url": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Optional extra MCP server URL (trimmed; null keeps unchanged)"
+                                    },
+                                    "native_mcp_extra_token": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Bearer token for the extra MCP server ('' clears, null keeps unchanged)"
                                     }
                                 }
                             }
@@ -3377,6 +3401,143 @@
                                         },
                                         "message": {
                                             "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/admin/native-mcp/status": {
+            "get": {
+                "operationId": "settings-native-mcp-status",
+                "summary": "Get admin native-MCP config + per-server reachability snapshot",
+                "description": "This endpoint requires admin access",
+                "tags": [
+                    "settings"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Admin native MCP settings",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "enabled",
+                                        "extraUrl",
+                                        "hasExtraToken",
+                                        "servers"
+                                    ],
+                                    "properties": {
+                                        "enabled": {
+                                            "type": "boolean"
+                                        },
+                                        "extraUrl": {
+                                            "type": "string"
+                                        },
+                                        "hasExtraToken": {
+                                            "type": "boolean"
+                                        },
+                                        "servers": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": [
+                                                    "id",
+                                                    "name",
+                                                    "url",
+                                                    "scheme_ok",
+                                                    "http_status",
+                                                    "reachable",
+                                                    "message"
+                                                ],
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "nullable": true
+                                                    },
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "url": {
+                                                        "type": "string"
+                                                    },
+                                                    "scheme_ok": {
+                                                        "type": "boolean"
+                                                    },
+                                                    "http_status": {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "nullable": true
+                                                    },
+                                                    "reachable": {
+                                                        "type": "boolean"
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }

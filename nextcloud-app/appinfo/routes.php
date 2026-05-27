@@ -10,6 +10,7 @@ return [
         ['name' => 'conversation#update',  'url' => '/api/conversations/{id}',          'verb' => 'PUT'],
         ['name' => 'conversation#destroy', 'url' => '/api/conversations/{id}',          'verb' => 'DELETE'],
         ['name' => 'conversation#message',   'url' => '/api/conversations/{id}/messages',  'verb' => 'POST'],
+        ['name' => 'conversation#messageStream', 'url' => '/api/conversations/{id}/messages/stream', 'verb' => 'POST'],
         ['name' => 'conversation#duplicate', 'url' => '/api/conversations/{id}/duplicate', 'verb' => 'POST'],
         ['name' => 'conversation#search',    'url' => '/api/conversations/search',         'verb' => 'GET'],
 
@@ -30,6 +31,7 @@ return [
         ['name' => 'settings#get', 'url' => '/api/settings', 'verb' => 'GET'],
         ['name' => 'settings#saveAdmin', 'url' => '/api/admin/settings', 'verb' => 'POST'],
         ['name' => 'settings#testConfig', 'url' => '/api/admin/test', 'verb' => 'POST'],
+        ['name' => 'settings#nativeMcpStatus', 'url' => '/api/admin/native-mcp/status', 'verb' => 'GET'],
         ['name' => 'occ#execute', 'url' => '/api/occ', 'verb' => 'POST'],
 
         // MCP Server Admin API

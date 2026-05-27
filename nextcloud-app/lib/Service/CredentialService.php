@@ -13,6 +13,7 @@ use Psr\Log\LoggerInterface;
 class CredentialService {
     private const APP_NAME = 'aiquila';
     private const CREDENTIAL_KEY = 'aiquila/api_key';
+    private const NATIVE_MCP_EXTRA_TOKEN_KEY = 'aiquila/native_mcp_extra_token';
 
     public function __construct(
         private ICredentialsManager $credentialsManager,
@@ -110,6 +111,27 @@ class CredentialService {
             return $this->config->getUserValue($userId, self::APP_NAME, 'api_key', '') !== '';
         }
         return $this->config->getAppValue(self::APP_NAME, 'api_key', '') !== '';
+    }
+
+    /**
+     * Store the optional admin-defined bearer token used to authorize
+     * Anthropic against the extra MCP URL configured for the native connector.
+     */
+    public function setNativeMcpExtraToken(string $token): void {
+        $this->credentialsManager->store('', self::NATIVE_MCP_EXTRA_TOKEN_KEY, $token);
+    }
+
+    public function deleteNativeMcpExtraToken(): void {
+        $this->credentialsManager->delete('', self::NATIVE_MCP_EXTRA_TOKEN_KEY);
+    }
+
+    public function getNativeMcpExtraToken(): string {
+        $tok = $this->credentialsManager->retrieve('', self::NATIVE_MCP_EXTRA_TOKEN_KEY);
+        return is_string($tok) ? $tok : '';
+    }
+
+    public function hasNativeMcpExtraToken(): bool {
+        return $this->getNativeMcpExtraToken() !== '';
     }
 
     /**

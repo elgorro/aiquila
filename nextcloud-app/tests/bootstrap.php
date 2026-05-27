@@ -538,3 +538,38 @@ if (!class_exists('OCP\SetupCheck\SetupResult')) {
     }
     class_alias('OCP_SetupCheck_SetupResult', 'OCP\SetupCheck\SetupResult');
 }
+
+if (!interface_exists('OCP\AppFramework\Utility\ITimeFactory')) {
+    interface OCP_AppFramework_Utility_ITimeFactory {
+        public function getTime(): int;
+        public function getDateTime(string $time = 'now', ?\DateTimeZone $timezone = null): \DateTime;
+    }
+    class_alias('OCP_AppFramework_Utility_ITimeFactory', 'OCP\AppFramework\Utility\ITimeFactory');
+}
+
+if (!class_exists('OCP\BackgroundJob\Job')) {
+    abstract class OCP_BackgroundJob_Job {
+        protected $time;
+        public function __construct($time) {
+            $this->time = $time;
+        }
+        abstract protected function run($argument);
+    }
+    class_alias('OCP_BackgroundJob_Job', 'OCP\BackgroundJob\Job');
+}
+
+if (!class_exists('OCP\BackgroundJob\TimedJob')) {
+    abstract class OCP_BackgroundJob_TimedJob extends \OCP\BackgroundJob\Job {
+        protected int $interval = 0;
+        public function setInterval(int $interval): void {
+            $this->interval = $interval;
+        }
+        public function getInterval(): int {
+            return $this->interval;
+        }
+        public function execute($argument = null): void {
+            $this->run($argument);
+        }
+    }
+    class_alias('OCP_BackgroundJob_TimedJob', 'OCP\BackgroundJob\TimedJob');
+}

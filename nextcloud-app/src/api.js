@@ -2,6 +2,7 @@
 
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
+import { getRequestToken } from '@nextcloud/auth'
 
 const base = '/apps/aiquila'
 
@@ -34,6 +35,64 @@ export function sendMessage(conversationId, prompt, files = []) {
 		prompt,
 		files,
 	})
+}
+
+/**
+ * Streaming variant of sendMessage. POSTs to the SSE endpoint and invokes
+ * onEvent for each parsed event ({ type, ...payload }). Returns a promise
+ * that resolves when the stream completes (after the `persisted` event).
+ *
+ * Caller is responsible for state — typical pattern:
+ *   - on `user_message`: replace optimistic user msg with persisted one
+ *   - on `text_delta`: append to a draft assistant bubble
+ *   - on `tool_use` / `tool_result`: render an inline tool indicator
+ *   - on `done`: capture usage / citations
+ *   - on `persisted`: replace draft bubble with the persisted message
+ *   - on `error`: surface to user; persisted will still arrive
+ */
+export async function sendMessageStream(conversationId, prompt, files = [], onEvent) {
+	const res = await fetch(url(`/api/conversations/${conversationId}/messages/stream`), {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			Accept: 'text/event-stream',
+			requesttoken: getRequestToken(),
+		},
+		credentials: 'include',
+		body: JSON.stringify({ prompt, files }),
+	})
+
+	if (!res.ok || !res.body) {
+		throw new Error(`stream failed: HTTP ${res.status}`)
+	}
+
+	const reader = res.body.getReader()
+	const decoder = new TextDecoder('utf-8')
+	let buffer = ''
+
+	// eslint-disable-next-line no-constant-condition
+	while (true) {
+		const { done, value } = await reader.read()
+		if (done) break
+		buffer += decoder.decode(value, { stream: true })
+
+		let blockEnd
+		while ((blockEnd = buffer.indexOf('\n\n')) !== -1) {
+			const block = buffer.slice(0, blockEnd)
+			buffer = buffer.slice(blockEnd + 2)
+			let data = ''
+			for (const line of block.split('\n')) {
+				if (line.startsWith('data: ')) data += line.slice(6)
+			}
+			if (data === '') continue
+			try {
+				onEvent(JSON.parse(data))
+			} catch (e) {
+				// malformed event — log and continue
+				console.warn('aiquila: malformed SSE event', e, data)
+			}
+		}
+	}
 }
 
 export function getSettings() {
