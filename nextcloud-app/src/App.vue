@@ -3,26 +3,25 @@
 	<NcContent app-name="aiquila">
 		<NcAppNavigation>
 			<template #list>
-				<ChatSidebar v-if="activeTab === 'chat'"
-					:conversations="conversations"
-					:active-conversation-id="activeConversationId"
-					:projects="projects"
-					:active-project-filter="activeProjectFilter"
-					@new-chat="onNewChat"
-					@select-conversation="onSelectConversation"
-					@delete-conversation="confirmDeleteConversation"
-					@duplicate-conversation="onDuplicateConversation"
-					@conversation-renamed="onConversationUpdated"
-					@update-project-filter="activeProjectFilter = $event" />
-				<ProjectSidebar v-if="activeTab === 'projects'"
-					:projects="projects"
-					:active-project-id="activeProjectIdForEditor"
-					@new-project="onNewProject"
-					@select-project="onSelectProject"
-					@delete-project="confirmDeleteProject"
-					@duplicate-project="onDuplicateProject"
-					@project-renamed="onProjectRenamed" />
-				<CoworkSidebar v-if="activeTab === 'cowork'" />
+				<router-view name="sidebar" v-slot="{ Component }">
+					<component :is="Component"
+						:conversations="conversations"
+						:active-conversation-id="activeConversationId"
+						:projects="projects"
+						:active-project-filter="activeProjectFilter"
+						:active-project-id="activeProjectIdForEditor"
+						@new-chat="onNewChat"
+						@select-conversation="onSelectConversation"
+						@delete-conversation="confirmDeleteConversation"
+						@duplicate-conversation="onDuplicateConversation"
+						@conversation-renamed="onConversationUpdated"
+						@update-project-filter="activeProjectFilter = $event"
+						@new-project="onNewProject"
+						@select-project="onSelectProject"
+						@delete-project="confirmDeleteProject"
+						@duplicate-project="onDuplicateProject"
+						@project-renamed="onProjectRenamed" />
+				</router-view>
 			</template>
 			<template #footer>
 				<NcAppNavigationSettings :name="t('aiquila', 'Settings')">
@@ -32,38 +31,22 @@
 		</NcAppNavigation>
 		<NcAppContent>
 			<div class="app-content-inner">
-				<TabSelector v-model="activeTab" />
+				<TabSelector />
 				<div class="tab-content">
-					<!-- Chat tab -->
-					<ChatView v-if="activeTab === 'chat' && activeConversation"
-						:conversation="activeConversation"
-						:projects="projects"
-						@conversation-updated="onConversationUpdated"
-						@message-sent="onMessageSent" />
-					<NcEmptyContent v-else-if="activeTab === 'chat'"
-						:name="t('aiquila', 'Ask Claude')">
-						<template #icon>
-							<ChatIcon :size="64" />
-						</template>
-						<template #action>
-							<NcButton type="primary" @click="onNewChat">
-								{{ t('aiquila', 'New chat') }}
-							</NcButton>
-						</template>
-						{{ t('aiquila', 'Select a conversation or start a new chat') }}
-					</NcEmptyContent>
-
-					<!-- Projects tab -->
-					<ProjectEditor v-if="activeTab === 'projects'"
-						:project="activeProject"
-						:conversations="conversations"
-						@project-updated="onProjectUpdated"
-						@create-project="onNewProject"
-						@navigate-to-chat="onNavigateToChat"
-						@new-project-chat="onNewProjectChat" />
-
-					<!-- Cowork tab -->
-					<CoworkView v-if="activeTab === 'cowork'" />
+					<router-view v-slot="{ Component }">
+						<component :is="Component"
+							:conversation="activeConversation"
+							:project="activeProject"
+							:conversations="conversations"
+							:projects="projects"
+							@new-chat="onNewChat"
+							@conversation-updated="onConversationUpdated"
+							@message-sent="onMessageSent"
+							@project-updated="onProjectUpdated"
+							@create-project="onNewProject"
+							@navigate-to-chat="onNavigateToChat"
+							@new-project-chat="onNewProjectChat" />
+					</router-view>
 				</div>
 			</div>
 		</NcAppContent>
@@ -100,20 +83,11 @@ import NcContent from '@nextcloud/vue/components/NcContent'
 import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
 import NcAppNavigationSettings from '@nextcloud/vue/components/NcAppNavigationSettings'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
-import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
-import ChatIcon from 'vue-material-design-icons/Chat.vue'
 
 import TabSelector from './components/TabSelector.vue'
 
-// Heavy tab/dialog components are lazy-loaded so each ships as its own chunk.
-const ChatSidebar = defineAsyncComponent(() => import('./components/ChatSidebar.vue'))
-const ChatView = defineAsyncComponent(() => import('./components/ChatView.vue'))
-const ProjectSidebar = defineAsyncComponent(() => import('./components/ProjectSidebar.vue'))
-const ProjectEditor = defineAsyncComponent(() => import('./components/ProjectEditor.vue'))
-const CoworkSidebar = defineAsyncComponent(() => import('./components/CoworkSidebar.vue'))
-const CoworkView = defineAsyncComponent(() => import('./components/CoworkView.vue'))
 const NavigationSettings = defineAsyncComponent(() => import('./components/NavigationSettings.vue'))
 import {
 	createConversation,
@@ -134,32 +108,68 @@ export default {
 		NcAppNavigation,
 		NcAppNavigationSettings,
 		NcAppContent,
-		NcEmptyContent,
 		NcButton,
 		NcDialog,
-		ChatIcon,
 		TabSelector,
-		ChatSidebar,
-		ChatView,
-		ProjectSidebar,
-		ProjectEditor,
-		CoworkSidebar,
-		CoworkView,
 		NavigationSettings,
 	},
 	data() {
 		return {
-			activeTab: 'chat',
 			conversations: loadState('aiquila', 'conversations', []),
-			activeConversationId: null,
 			activeConversation: null,
 			loading: false,
 			projects: [],
 			activeProjectFilter: null,
-			activeProjectIdForEditor: null,
 			activeProject: null,
 			deleteConfirm: { id: null, type: null },
 		}
+	},
+	computed: {
+		activeConversationId() {
+			const id = this.$route.params.conversationId
+			return id ? Number(id) : null
+		},
+		activeProjectIdForEditor() {
+			const id = this.$route.params.projectId
+			return id ? Number(id) : null
+		},
+	},
+	watch: {
+		activeConversationId: {
+			immediate: true,
+			async handler(id) {
+				if (!id) {
+					this.activeConversation = null
+					return
+				}
+				this.loading = true
+				try {
+					const { data } = await getConversation(id)
+					this.activeConversation = data
+				} catch (err) {
+					console.error('Failed to load conversation:', err)
+					this.activeConversation = null
+				} finally {
+					this.loading = false
+				}
+			},
+		},
+		activeProjectIdForEditor: {
+			immediate: true,
+			async handler(id) {
+				if (!id) {
+					this.activeProject = null
+					return
+				}
+				try {
+					const { data } = await getProject(id)
+					this.activeProject = data
+				} catch (err) {
+					console.error('Failed to load project:', err)
+					this.activeProject = null
+				}
+			},
+		},
 	},
 	async mounted() {
 		await this.loadProjects()
@@ -177,16 +187,9 @@ export default {
 				console.error('Failed to load projects:', err)
 			}
 		},
-		async onSelectProject(id) {
+		onSelectProject(id) {
 			if (this.activeProjectIdForEditor === id) return
-			this.activeProjectIdForEditor = id
-			try {
-				const { data } = await getProject(id)
-				this.activeProject = data
-			} catch (err) {
-				console.error('Failed to load project:', err)
-				this.activeProject = null
-			}
+			this.$router.push({ name: 'projects', params: { projectId: String(id) } })
 		},
 		async onNewProject() {
 			try {
@@ -196,7 +199,7 @@ export default {
 					systemPrompt: '',
 				})
 				this.projects.unshift(data)
-				await this.onSelectProject(data.id)
+				this.$router.push({ name: 'projects', params: { projectId: String(data.id) } })
 			} catch (err) {
 				console.error('Failed to create project:', err)
 			}
@@ -211,7 +214,7 @@ export default {
 					systemPrompt: original.systemPrompt || '',
 				})
 				this.projects.unshift(data)
-				await this.onSelectProject(data.id)
+				this.$router.push({ name: 'projects', params: { projectId: String(data.id) } })
 			} catch (err) {
 				console.error('Failed to duplicate project:', err)
 			}
@@ -239,8 +242,7 @@ export default {
 				await deleteProject(id)
 				this.projects = this.projects.filter(p => p.id !== id)
 				if (this.activeProjectIdForEditor === id) {
-					this.activeProjectIdForEditor = null
-					this.activeProject = null
+					this.$router.push({ name: 'projects' })
 				}
 			} catch (err) {
 				console.error('Failed to delete project:', err)
@@ -250,8 +252,7 @@ export default {
 		// ── Cross-tab navigation ──────────────────────────────
 
 		onNavigateToChat(conversationId) {
-			this.activeTab = 'chat'
-			this.onSelectConversation(conversationId)
+			this.$router.push({ name: 'chat', params: { conversationId: String(conversationId) } })
 		},
 		async onNewProjectChat(projectId) {
 			try {
@@ -259,8 +260,7 @@ export default {
 				const { data: updated } = await updateConversation(newConv.id, { projectId })
 				const merged = { ...newConv, ...updated }
 				this.conversations.unshift(merged)
-				this.activeTab = 'chat'
-				await this.onSelectConversation(merged.id)
+				this.$router.push({ name: 'chat', params: { conversationId: String(merged.id) } })
 			} catch (err) {
 				console.error('Failed to create project chat:', err)
 			}
@@ -269,28 +269,17 @@ export default {
 		// ── Conversations ─────────────────────────────────────
 
 		async onNewChat() {
-			this.activeTab = 'chat'
 			try {
 				const { data } = await createConversation()
 				this.conversations.unshift(data)
-				await this.onSelectConversation(data.id)
+				this.$router.push({ name: 'chat', params: { conversationId: String(data.id) } })
 			} catch (err) {
 				console.error('Failed to create conversation:', err)
 			}
 		},
-		async onSelectConversation(id) {
+		onSelectConversation(id) {
 			if (this.activeConversationId === id) return
-			this.activeConversationId = id
-			this.loading = true
-			try {
-				const { data } = await getConversation(id)
-				this.activeConversation = data
-			} catch (err) {
-				console.error('Failed to load conversation:', err)
-				this.activeConversation = null
-			} finally {
-				this.loading = false
-			}
+			this.$router.push({ name: 'chat', params: { conversationId: String(id) } })
 		},
 		confirmDeleteConversation(id) {
 			this.deleteConfirm = { id, type: 'conversation' }
@@ -300,8 +289,7 @@ export default {
 				await deleteConversation(id)
 				this.conversations = this.conversations.filter(c => c.id !== id)
 				if (this.activeConversationId === id) {
-					this.activeConversationId = null
-					this.activeConversation = null
+					this.$router.push({ name: 'chat' })
 				}
 			} catch (err) {
 				console.error('Failed to delete conversation:', err)
@@ -311,7 +299,7 @@ export default {
 			try {
 				const { data } = await duplicateConversation(id)
 				this.conversations.unshift(data)
-				await this.onSelectConversation(data.id)
+				this.$router.push({ name: 'chat', params: { conversationId: String(data.id) } })
 			} catch (err) {
 				console.error('Duplicate failed:', err)
 			}
