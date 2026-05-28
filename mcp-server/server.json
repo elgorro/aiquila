@@ -18,13 +18,13 @@
       ]
     }
   ],
-  "version": "0.3.8",
+  "version": "0.3.9",
   "websiteUrl": "https://github.com/elgorro/aiquila",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "aiquila-mcp",
-      "version": "0.3.8",
+      "version": "0.3.9",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -52,7 +52,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.3.8",
+      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.3.9",
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"
