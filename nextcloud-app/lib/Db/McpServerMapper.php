@@ -49,7 +49,7 @@ class McpServerMapper extends QBMapper {
         $qb = $this->db->getQueryBuilder();
         $qb->select('*')
             ->from($this->getTableName())
-            ->where($qb->expr()->eq('is_enabled', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
+            ->where($qb->expr()->eq('is_enabled', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
             ->orderBy('display_name', 'ASC');
 
         return $this->findEntities($qb);

@@ -16,8 +16,6 @@ use OCP\AppFramework\Db\Entity;
  * @method void setAuthType(string $authType)
  * @method string|null getAuthToken()
  * @method void setAuthToken(?string $authToken)
- * @method bool getIsEnabled()
- * @method void setIsEnabled(bool $isEnabled)
  * @method string|null getLastStatus()
  * @method void setLastStatus(?string $lastStatus)
  * @method string|null getLastError()
@@ -50,7 +48,7 @@ class McpServer extends Entity {
     protected string $url = '';
     protected string $authType = 'none';
     protected ?string $authToken = null;
-    protected bool $isEnabled = true;
+    protected int $isEnabled = 1;
     protected ?string $lastStatus = null;
     protected ?string $lastError = null;
     protected ?int $toolCount = null;
@@ -70,7 +68,7 @@ class McpServer extends Entity {
         $this->addType('url', 'string');
         $this->addType('authType', 'string');
         $this->addType('authToken', 'string');
-        $this->addType('isEnabled', 'boolean');
+        $this->addType('isEnabled', 'integer');
         $this->addType('lastStatus', 'string');
         $this->addType('lastError', 'string');
         $this->addType('toolCount', 'integer');
@@ -84,5 +82,17 @@ class McpServer extends Entity {
         $this->addType('oauthCodeVerifier', 'string');
         $this->addType('oauthState', 'string');
         $this->addType('oauthMetadata', 'string');
+    }
+
+    public function getIsEnabled(): bool {
+        return (int)$this->isEnabled === 1;
+    }
+
+    public function setIsEnabled(bool $isEnabled): void {
+        $intValue = $isEnabled ? 1 : 0;
+        if ($this->isEnabled !== $intValue) {
+            $this->isEnabled = $intValue;
+            $this->markFieldUpdated('isEnabled');
+        }
     }
 }
