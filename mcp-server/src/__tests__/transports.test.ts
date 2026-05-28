@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // Mock createServer to avoid pulling in all tool dependencies
 const mockConnect = vi.fn();
@@ -189,19 +192,23 @@ describe('http transport', () => {
 
 describe('http transport with auth enabled', () => {
   const savedEnv = process.env;
+  let stateDir: string;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    stateDir = mkdtempSync(join(tmpdir(), 'aiquila-transports-'));
     process.env = {
       ...savedEnv,
       MCP_AUTH_ENABLED: 'true',
       MCP_AUTH_SECRET: 'test-secret-min-32-chars-required!!',
       MCP_AUTH_ISSUER: 'https://mcp.example.com',
+      MCP_AUTH_STATE_DIR: stateDir,
     };
   });
 
   afterEach(() => {
     process.env = savedEnv;
+    rmSync(stateDir, { recursive: true, force: true });
   });
 
   it('throws when MCP_AUTH_ISSUER is missing', async () => {

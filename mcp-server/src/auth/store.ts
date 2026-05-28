@@ -37,7 +37,9 @@ function ensureDir(dir: string): void {
   try {
     mkdirSync(dir, { recursive: true });
   } catch (err) {
-    logger.warn({ dir, err }, '[state] Failed to create state directory');
+    // Best-effort: probeStateDir() (called from startup) is the authoritative
+    // check. Logging here would spam non-HTTP transports that never persist.
+    logger.debug({ dir, err }, '[state] mkdir failed (probe will report fatal if writes break)');
   }
 }
 
@@ -63,12 +65,53 @@ function saveJson(filePath: string, data: unknown): void {
     writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
     renameSync(tmp, filePath);
   } catch (err) {
-    logger.warn({ file: filePath, err }, '[state] Failed to save state file');
     try {
       unlinkSync(tmp);
     } catch {
       // ignore cleanup failure
     }
+    throw err;
+  }
+}
+
+export class StateDirNotWritableError extends Error {
+  constructor(
+    public readonly dir: string,
+    public readonly cause: NodeJS.ErrnoException
+  ) {
+    super(
+      `State directory ${dir} is not writable (${cause.code}). ` +
+        `Fix volume ownership, then restart. For Docker named volumes:\n` +
+        `  docker compose exec -u 0 mcp chown -R node:node ${dir}\n` +
+        `  docker compose restart mcp`
+    );
+    this.name = 'StateDirNotWritableError';
+  }
+}
+
+/**
+ * Verifies the state directory is usable before the server starts accepting
+ * requests. Writes and removes a sentinel file. Throws StateDirNotWritableError
+ * on any filesystem permission / read-only / out-of-space failure so the
+ * caller can log a fatal-level remediation message and exit.
+ */
+export function probeStateDir(dir: string = stateDir()): void {
+  try {
+    mkdirSync(dir, { recursive: true });
+    const probe = join(dir, '.write-probe');
+    writeFileSync(probe, String(process.pid), 'utf8');
+    unlinkSync(probe);
+  } catch (err) {
+    const errno = err as NodeJS.ErrnoException;
+    if (
+      errno.code === 'EACCES' ||
+      errno.code === 'EPERM' ||
+      errno.code === 'EROFS' ||
+      errno.code === 'ENOSPC'
+    ) {
+      throw new StateDirNotWritableError(dir, errno);
+    }
+    throw err;
   }
 }
 

@@ -8,6 +8,7 @@ import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
 import { createServer, SERVER_VERSION } from '../server.js';
 import { NextcloudOAuthProvider } from '../auth/provider.js';
+import { probeStateDir, StateDirNotWritableError } from '../auth/store.js';
 import { loginHandler } from '../auth/login.js';
 import { logger } from '../logger.js';
 import { fetchStatus } from '../client/ocs.js';
@@ -205,6 +206,20 @@ export async function startHttp(): Promise<void> {
 
     if (!registrationEnabled && !hasStaticClient) {
       logger.warn('No clients configured. Set MCP_CLIENT_ID or MCP_REGISTRATION_ENABLED=true');
+    }
+
+    try {
+      probeStateDir();
+    } catch (err) {
+      if (err instanceof StateDirNotWritableError) {
+        logger.fatal(
+          { dir: err.dir, code: err.cause.code },
+          `[startup] State directory is not writable — refresh tokens cannot be persisted. ` +
+            `Fix volume ownership and restart:\n  docker compose exec -u 0 mcp chown -R node:node ${err.dir}\n  docker compose restart mcp`
+        );
+        process.exit(1);
+      }
+      throw err;
     }
 
     const provider = new NextcloudOAuthProvider();

@@ -488,21 +488,17 @@ describe('RefreshStore — persistence', () => {
     expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
-  it('handles writeFileSync error gracefully — logger.warn called, no throw', () => {
+  it('writeFileSync error propagates so the token endpoint can return 500', () => {
     const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
     mockWriteFileSync.mockImplementation(() => {
       throw new Error('disk full');
     });
 
     const store = new RefreshStore(stateFile);
-    expect(() => store.store({ userId: 'alice', clientId: 'c1', scopes: [] })).not.toThrow();
-    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
-      expect.objectContaining({ file: stateFile }),
-      expect.stringContaining('[state]')
-    );
+    expect(() => store.store({ userId: 'alice', clientId: 'c1', scopes: [] })).toThrow('disk full');
   });
 
-  it('renameSync throws — logger.warn called, unlinkSync called for cleanup', () => {
+  it('renameSync error propagates and cleans up the .tmp file', () => {
     const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
     mockRenameSync.mockImplementation(() => {
       throw new Error('cross-device link');
@@ -510,10 +506,8 @@ describe('RefreshStore — persistence', () => {
     mockUnlinkSync.mockReturnValue(undefined);
 
     const store = new RefreshStore(stateFile);
-    expect(() => store.store({ userId: 'alice', clientId: 'c1', scopes: [] })).not.toThrow();
-    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
-      expect.objectContaining({ file: stateFile }),
-      expect.stringContaining('[state]')
+    expect(() => store.store({ userId: 'alice', clientId: 'c1', scopes: [] })).toThrow(
+      'cross-device link'
     );
     expect(mockUnlinkSync).toHaveBeenCalledWith(stateFile + '.tmp');
   });
