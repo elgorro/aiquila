@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { NextcloudOAuthProvider, renderLoginForm } from '../../auth/provider.js';
 
 const TEST_SECRET = 'super-secret-32-char-key-for-testing!!';
@@ -87,19 +90,23 @@ describe('renderLoginForm', () => {
 
 describe('NextcloudOAuthProvider', () => {
   let provider: NextcloudOAuthProvider;
+  let stateDir: string;
   const savedEnv = process.env;
 
   beforeEach(() => {
+    stateDir = mkdtempSync(join(tmpdir(), 'aiquila-provider-'));
     process.env = {
       ...savedEnv,
       MCP_AUTH_SECRET: TEST_SECRET,
       MCP_AUTH_ISSUER: 'https://test.example.com',
+      MCP_AUTH_STATE_DIR: stateDir,
     };
     provider = new NextcloudOAuthProvider();
   });
 
   afterEach(() => {
     process.env = savedEnv;
+    rmSync(stateDir, { recursive: true, force: true });
   });
 
   // ---- clientsStore ----

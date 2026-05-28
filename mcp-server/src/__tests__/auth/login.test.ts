@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { NextcloudOAuthProvider } from '../../auth/provider.js';
 import { loginHandler } from '../../auth/login.js';
 
@@ -28,9 +31,11 @@ function makeRes() {
 
 describe('loginHandler', () => {
   let provider: NextcloudOAuthProvider;
+  let stateDir: string;
   const savedEnv = process.env;
 
   beforeEach(() => {
+    stateDir = mkdtempSync(join(tmpdir(), 'aiquila-login-'));
     process.env = {
       ...savedEnv,
       NEXTCLOUD_URL: 'https://cloud.example.com',
@@ -38,6 +43,7 @@ describe('loginHandler', () => {
       MCP_AUTH_ISSUER: 'https://test.example.com',
       MCP_CLIENT_ID: 'c1',
       MCP_CLIENT_REDIRECT_URIS: 'https://example.com/callback',
+      MCP_AUTH_STATE_DIR: stateDir,
     };
     provider = new NextcloudOAuthProvider();
     vi.clearAllMocks();
@@ -45,6 +51,7 @@ describe('loginHandler', () => {
 
   afterEach(() => {
     process.env = savedEnv;
+    rmSync(stateDir, { recursive: true, force: true });
   });
 
   it('redirects with ?code= on successful Nextcloud auth', async () => {
