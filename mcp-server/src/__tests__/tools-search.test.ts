@@ -130,6 +130,114 @@ describe('Search Tools', () => {
       expect(parsed[0].provider).toBe('files');
     });
 
+    it('should always include priority providers (files/mail/calendar/notes) regardless of order', async () => {
+      // Providers list: low-order non-priority ones come "first" by order,
+      // but mail (order 20) and calendar (order 30) must still be queried.
+      mockFetchOCS.mockResolvedValueOnce({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: [
+            {
+              id: 'files',
+              appId: 'files',
+              name: 'Files',
+              icon: '',
+              order: 5,
+              triggers: [],
+              filters: {},
+            },
+            {
+              id: 'comments',
+              appId: 'comments',
+              name: 'Comments',
+              icon: '',
+              order: 1,
+              triggers: [],
+              filters: {},
+            },
+            {
+              id: 'deck',
+              appId: 'deck',
+              name: 'Deck',
+              icon: '',
+              order: 2,
+              triggers: [],
+              filters: {},
+            },
+            {
+              id: 'talk',
+              appId: 'talk',
+              name: 'Talk',
+              icon: '',
+              order: 3,
+              triggers: [],
+              filters: {},
+            },
+            {
+              id: 'contacts',
+              appId: 'contacts',
+              name: 'Contacts',
+              icon: '',
+              order: 4,
+              triggers: [],
+              filters: {},
+            },
+            {
+              id: 'mail',
+              appId: 'mail',
+              name: 'Mail',
+              icon: '',
+              order: 20,
+              triggers: [],
+              filters: {},
+            },
+            {
+              id: 'calendar',
+              appId: 'calendar',
+              name: 'Calendar',
+              icon: '',
+              order: 30,
+              triggers: [],
+              filters: {},
+            },
+            {
+              id: 'notes',
+              appId: 'notes',
+              name: 'Notes',
+              icon: '',
+              order: 40,
+              triggers: [],
+              filters: {},
+            },
+          ],
+        },
+      });
+      // Stub every subsequent search call with an empty result.
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: { name: '', isPaginated: false, entries: [], cursor: null },
+        },
+      });
+
+      const { unifiedSearchTool } = await import('../tools/system/search.js');
+      await unifiedSearchTool.handler({ query: 'x', limit: 5 });
+
+      const searchedIds = mockFetchOCS.mock.calls
+        .slice(1)
+        .map((call) => call[0] as string)
+        .filter((url) => url.startsWith('/ocs/v2.php/search/providers/'))
+        .map((url) => decodeURIComponent(url.split('/')[5]));
+
+      // Priority providers must all appear.
+      expect(searchedIds).toContain('files');
+      expect(searchedIds).toContain('mail');
+      expect(searchedIds).toContain('calendar');
+      expect(searchedIds).toContain('notes');
+      // Total capped at 6.
+      expect(searchedIds.length).toBeLessThanOrEqual(6);
+    });
+
     it('should return message when no results found', async () => {
       mockFetchOCS.mockResolvedValueOnce({
         ocs: {

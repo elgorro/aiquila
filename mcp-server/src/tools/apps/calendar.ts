@@ -579,6 +579,43 @@ function formatCalendar(cal: ParsedCalendar): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * Resolve a calendar identifier (display name or URL slug) to its URL slug.
+ * Falls back to the input unchanged when no match is found or PROPFIND fails,
+ * so existing slug-based callers keep working.
+ */
+async function resolveCalendarSlug(nameOrSlug: string): Promise<string> {
+  const config = getNextcloudConfig();
+  const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/`;
+  const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:prop><d:resourcetype /><d:displayname /></d:prop>
+</d:propfind>`;
+  try {
+    const response = await fetchCalDAV(calDavUrl, {
+      method: 'PROPFIND',
+      body: propfindBody,
+      headers: { Depth: '1' },
+    });
+    if (!response.ok) return nameOrSlug;
+    const text = await response.text();
+    const calendars = parseCalendars(text);
+    for (const cal of calendars) {
+      const slug = cal.url.split('/').filter(Boolean).pop() ?? '';
+      if (slug === nameOrSlug) return nameOrSlug;
+    }
+    const lower = nameOrSlug.toLowerCase();
+    for (const cal of calendars) {
+      if (cal.displayName.toLowerCase() === lower) {
+        return cal.url.split('/').filter(Boolean).pop() ?? nameOrSlug;
+      }
+    }
+  } catch {
+    /* fall through — keep original input */
+  }
+  return nameOrSlug;
+}
+
+/**
  * Assert that a calendar supports VEVENT. Throws a descriptive error if not,
  * so create_event fails early with a useful message instead of a 403 from the server.
  */
@@ -600,9 +637,11 @@ async function assertCalendarSupportsEvents(
   });
 
   if (response.status === 404) {
-    throw new Error(
+    const err = new Error(
       `Calendar "${calendarName}" not found. Use list_calendars to find available calendar names.`
-    );
+    ) as Error & { code?: string };
+    err.code = 'CALENDAR_NOT_FOUND';
+    throw err;
   }
   if (!response.ok) return; // Can't check — let the server reject if needed
 
@@ -630,7 +669,8 @@ async function resolveEventByUid(
   uid: string
 ): Promise<{ href: string; etag: string; icalData: string }> {
   const config = getNextcloudConfig();
-  const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/${calendarName}/`;
+  let slug = calendarName;
+  const buildUrl = () => `${config.url}/remote.php/dav/calendars/${config.user}/${slug}/`;
 
   const reportBody = `<?xml version="1.0" encoding="UTF-8"?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
@@ -649,11 +689,23 @@ async function resolveEventByUid(
   </c:filter>
 </c:calendar-query>`;
 
-  const response = await fetchCalDAV(calDavUrl, {
+  let response = await fetchCalDAV(buildUrl(), {
     method: 'REPORT',
     body: reportBody,
     headers: { Depth: '1' },
   });
+
+  if (response.status === 404) {
+    const resolved = await resolveCalendarSlug(calendarName);
+    if (resolved !== calendarName) {
+      slug = resolved;
+      response = await fetchCalDAV(buildUrl(), {
+        method: 'REPORT',
+        body: reportBody,
+        headers: { Depth: '1' },
+      });
+    }
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -788,7 +840,8 @@ export const listEventsTool = {
   handler: async (args: { calendarName: string; from?: string; to?: string; limit?: number }) => {
     try {
       const config = getNextcloudConfig();
-      const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/${args.calendarName}/`;
+      let slug = args.calendarName;
+      const buildUrl = () => `${config.url}/remote.php/dav/calendars/${config.user}/${slug}/`;
       const limit = args.limit || 50;
 
       // Default time range: today to 30 days from now
@@ -816,11 +869,23 @@ export const listEventsTool = {
   </c:filter>
 </c:calendar-query>`;
 
-      const response = await fetchCalDAV(calDavUrl, {
+      let response = await fetchCalDAV(buildUrl(), {
         method: 'REPORT',
         body: reportBody,
         headers: { Depth: '1' },
       });
+
+      if (response.status === 404) {
+        const resolved = await resolveCalendarSlug(args.calendarName);
+        if (resolved !== args.calendarName) {
+          slug = resolved;
+          response = await fetchCalDAV(buildUrl(), {
+            method: 'REPORT',
+            body: reportBody,
+            headers: { Depth: '1' },
+          });
+        }
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -1018,11 +1083,28 @@ export const createEventTool = {
     try {
       const config = getNextcloudConfig();
       const eventUid = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
-      const calendarBaseUrl = `${config.url}/remote.php/dav/calendars/${config.user}/${args.calendarName}/`;
-      const calDavUrl = `${calendarBaseUrl}${eventUid}.ics`;
+      let slug = args.calendarName;
+      const baseUrl = () => `${config.url}/remote.php/dav/calendars/${config.user}/${slug}/`;
 
-      // Validate the calendar supports VEVENT before building and sending the iCal payload
-      await assertCalendarSupportsEvents(calendarBaseUrl, args.calendarName);
+      // Validate the calendar supports VEVENT before building and sending the iCal payload.
+      // If the original name is a display name (not a slug), retry once after resolving.
+      try {
+        await assertCalendarSupportsEvents(baseUrl(), args.calendarName);
+      } catch (err) {
+        if ((err as { code?: string }).code === 'CALENDAR_NOT_FOUND') {
+          const resolved = await resolveCalendarSlug(args.calendarName);
+          if (resolved !== args.calendarName) {
+            slug = resolved;
+            await assertCalendarSupportsEvents(baseUrl(), args.calendarName);
+          } else {
+            throw err;
+          }
+        } else {
+          throw err;
+        }
+      }
+      const calendarBaseUrl = baseUrl();
+      const calDavUrl = `${calendarBaseUrl}${eventUid}.ics`;
       const now = icalNow();
       const isAllDay = args.dtstart.length === 8;
 
@@ -1144,7 +1226,7 @@ export const createEventTool = {
 
       // Verify the event was actually persisted
       try {
-        await resolveEventByUid(args.calendarName, eventUid);
+        await resolveEventByUid(slug, eventUid);
       } catch {
         throw new Error(
           `Event creation appeared to succeed (HTTP ${response.status}) but the event ` +

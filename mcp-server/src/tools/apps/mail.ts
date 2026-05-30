@@ -4,6 +4,10 @@ import { z } from 'zod';
 import { fetchMailAPI } from '../../client/mail.js';
 import { fetchOCS } from '../../client/ocs.js';
 
+// Invisible padding characters used in newsletter preheaders
+// (U+034F, U+00AD, U+200B–U+200D, U+FEFF)
+const INVISIBLE_CHARS_RE = /[\u034F\u00AD\u200B-\u200D\uFEFF]/g;
+
 // ── Types ────────────────────────────────────────────────────────────
 
 interface MailAccount {
@@ -14,8 +18,10 @@ interface MailAccount {
 
 interface Mailbox {
   id: number;
+  databaseId?: number;
   accountId: number;
   name: string;
+  displayName?: string;
   specialUse: string[];
   unread: number;
   total: number;
@@ -29,6 +35,7 @@ interface MailRecipient {
 
 interface MailMessageSummary {
   id: number;
+  databaseId?: number;
   uid: number;
   mailboxId: number;
   subject: string;
@@ -44,8 +51,9 @@ interface MailMessageSummary {
     draft: boolean;
     important: boolean;
     junk: boolean;
+    hasAttachments?: boolean;
   };
-  hasAttachments: boolean;
+  hasAttachments?: boolean;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -55,7 +63,15 @@ function stripHtml(html: string): string {
   // Remove style and script blocks
   text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
   text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-  // Convert line-break tags to newlines
+  // Image-based newsletters carry content in alt attributes
+  text = text.replace(/<img[^>]+alt="([^"]{2,})"[^>]*\/?>/gi, (_, alt) => `\n${alt.trim()}\n`);
+  text = text.replace(/<img[^>]+alt='([^']{2,})'[^>]*\/?>/gi, (_, alt) => `\n${alt.trim()}\n`);
+  text = text.replace(/<img[^>]*\/?>/gi, '');
+  // Block-level structure
+  text = text.replace(/<\/h[1-6]>/gi, '\n\n');
+  text = text.replace(/<\/tr>/gi, '\n');
+  text = text.replace(/<td[^>]*>/gi, ' ');
+  text = text.replace(/<th[^>]*>/gi, ' ');
   text = text.replace(/<br\s*\/?>/gi, '\n');
   text = text.replace(/<\/p>/gi, '\n\n');
   text = text.replace(/<\/div>/gi, '\n');
@@ -70,7 +86,15 @@ function stripHtml(html: string): string {
   text = text.replace(/&quot;/g, '"');
   text = text.replace(/&#39;/g, "'");
   text = text.replace(/&nbsp;/g, ' ');
-  // Collapse multiple blank lines
+  text = text.replace(/&#\d+;/g, '');
+  // Strip invisible preheader padding
+  text = text.replace(INVISIBLE_CHARS_RE, '');
+  // Trim per-line and drop blanks before collapsing
+  text = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join('\n');
   text = text.replace(/\n{3,}/g, '\n\n');
   return text.trim();
 }
@@ -134,19 +158,22 @@ const listMailboxesTool = {
   }),
   handler: async (args: { accountId: number }) => {
     try {
-      const response = await fetchMailAPI(`/accounts/${args.accountId}/mailboxes`);
+      const response = await fetchMailAPI(`/mailboxes?accountId=${args.accountId}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${await response.text()}`);
       }
-      const mailboxes = (await response.json()) as Mailbox[];
+      const data = (await response.json()) as Mailbox[] | { mailboxes?: Mailbox[] };
+      const mailboxes = Array.isArray(data) ? data : (data.mailboxes ?? []);
 
       if (mailboxes.length === 0) {
         return { content: [{ type: 'text' as const, text: 'No mailboxes found.' }] };
       }
 
       const lines = mailboxes.map((m) => {
+        const id = m.databaseId ?? m.id;
+        const name = m.displayName ?? m.name;
         const unread = m.unread > 0 ? ` (${m.unread} unread)` : '';
-        return `• ${m.name}${unread} — ID: ${m.id}`;
+        return `• ${name}${unread} — ID: ${id}`;
       });
       return {
         content: [{ type: 'text' as const, text: `Mailboxes:\n${lines.join('\n')}` }],
@@ -190,35 +217,40 @@ const listMessagesTool = {
     filter?: string;
   }) => {
     try {
-      const queryParams: Record<string, string> = {};
-      if (args.limit) queryParams.limit = String(args.limit);
-      if (args.cursor) queryParams.cursor = String(args.cursor);
-      if (args.filter && args.filter !== 'all') queryParams.filter = args.filter;
+      const queryParts = [`mailboxId=${args.mailboxId}`];
+      if (args.limit) queryParts.push(`limit=${args.limit}`);
+      if (args.cursor) queryParts.push(`cursor=${args.cursor}`);
+      if (args.filter && args.filter !== 'all') queryParts.push(`filter=${args.filter}`);
 
-      const response = await fetchOCS<MailMessageSummary[]>(
-        `/ocs/v2.php/apps/mail/api/v1/mailboxes/${args.mailboxId}/messages`,
-        { queryParams }
-      );
+      const response = await fetchMailAPI(`/messages?${queryParts.join('&')}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      const data = (await response.json()) as
+        | MailMessageSummary[]
+        | { messages?: MailMessageSummary[]; data?: MailMessageSummary[] };
+      const messages = Array.isArray(data) ? data : (data.messages ?? data.data ?? []);
 
-      const messages = response.ocs.data;
       if (!messages || messages.length === 0) {
         return { content: [{ type: 'text' as const, text: 'No messages found.' }] };
       }
 
       const lines = messages.map((msg) => {
+        const id = msg.databaseId ?? msg.id;
         const flags: string[] = [];
         if (!msg.flags.seen) flags.push('UNREAD');
         if (msg.flags.flagged) flags.push('starred');
         if (msg.flags.answered) flags.push('replied');
-        if (msg.hasAttachments) flags.push('attachment');
+        if (msg.flags?.hasAttachments ?? msg.hasAttachments) flags.push('attachment');
         const flagStr = flags.length > 0 ? ` [${flags.join(', ')}]` : '';
         const from = formatRecipients(msg.from);
-        return `• ${msg.subject}${flagStr}\n  From: ${from} | ${formatDate(msg.dateInt)} | ID: ${msg.id}`;
+        return `• ${msg.subject}${flagStr}\n  From: ${from} | ${formatDate(msg.dateInt)} | ID: ${id}`;
       });
 
       let text = `Messages (${messages.length}):\n${lines.join('\n')}`;
       if (messages.length >= (args.limit || 20)) {
-        const lastId = messages[messages.length - 1].id;
+        const last = messages[messages.length - 1];
+        const lastId = last.databaseId ?? last.id;
         text += `\n\nMore messages available. Use cursor: ${lastId} to load next page.`;
       }
 
@@ -246,34 +278,27 @@ const readMessageTool = {
   }),
   handler: async (args: { messageId: number }) => {
     try {
-      // Fetch metadata via OCS
-      const metaResponse = await fetchOCS<Record<string, unknown>>(
-        `/ocs/v2.php/apps/mail/api/v1/message/${args.messageId}`
-      );
-      const meta = metaResponse.ocs.data;
-
-      // Fetch body via Mail REST API
+      // Mail 5.x: /messages/{id}/body returns both metadata and body in one call.
       const bodyResponse = await fetchMailAPI(`/messages/${args.messageId}/body`);
-      let bodyText = '';
-      if (bodyResponse.ok) {
-        const bodyData = (await bodyResponse.json()) as Record<string, unknown>;
-        const rawBody = (bodyData.body as string) || (bodyData.data as string) || '';
-        bodyText = stripHtml(rawBody);
+      if (!bodyResponse.ok) {
+        throw new Error(`HTTP ${bodyResponse.status}: ${await bodyResponse.text()}`);
       }
+      const data = (await bodyResponse.json()) as Record<string, unknown>;
+      const rawBody = (data.body as string) || '';
+      const bodyText = rawBody ? stripHtml(rawBody) : '(no body)';
 
-      // Format output
-      const from = formatRecipients(meta.from as MailRecipient[]);
-      const to = formatRecipients(meta.to as MailRecipient[]);
-      const cc = formatRecipients((meta.cc as MailRecipient[]) || []);
-      const date = meta.dateInt ? formatDate(meta.dateInt as number) : 'Unknown';
-      const subject = (meta.subject as string) || '(No subject)';
+      const from = formatRecipients(data.from as MailRecipient[]);
+      const to = formatRecipients(data.to as MailRecipient[]);
+      const cc = formatRecipients((data.cc as MailRecipient[]) || []);
+      const date = data.dateInt ? formatDate(data.dateInt as number) : 'Unknown';
+      const subject = (data.subject as string) || '(No subject)';
 
       let text = `Subject: ${subject}\nFrom: ${from}\nTo: ${to}`;
       if (cc) text += `\nCc: ${cc}`;
       text += `\nDate: ${date}`;
       text += `\n${'─'.repeat(60)}\n${bodyText}`;
 
-      const attachments = meta.attachments as Array<{ fileName: string; size: number }> | undefined;
+      const attachments = data.attachments as Array<{ fileName: string; size: number }> | undefined;
       if (attachments && attachments.length > 0) {
         text += `\n${'─'.repeat(60)}\nAttachments:`;
         for (const att of attachments) {
@@ -290,6 +315,83 @@ const readMessageTool = {
           {
             type: 'text' as const,
             text: `Error reading message: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+};
+
+const searchMessagesTool = {
+  name: 'mail_search_messages',
+  description:
+    'Search email messages across all mailboxes by subject or sender. ' +
+    'Returns matches with message IDs usable in mail_read_message. ' +
+    'For threaded conversations all message IDs in the thread are returned.',
+  inputSchema: z.object({
+    query: z.string().describe('Search query (matches subject and sender name)'),
+    limit: z.number().min(1).max(20).optional().describe('Max results (default: 10)'),
+  }),
+  handler: async (args: { query: string; limit?: number }) => {
+    try {
+      const response = await fetchOCS<{
+        entries: Array<{ title: string; subline: string; resourceUrl?: string }>;
+        isPaginated: boolean;
+        cursor?: string;
+      }>('/ocs/v2.php/search/providers/mail/search', {
+        queryParams: {
+          term: args.query,
+          limit: String(args.limit ?? 10),
+          format: 'json',
+        },
+      });
+      const results = response.ocs.data;
+      if (!results.entries?.length) {
+        return {
+          content: [{ type: 'text' as const, text: `No messages found for "${args.query}".` }],
+        };
+      }
+
+      const lines = await Promise.all(
+        results.entries.map(async (entry) => {
+          const match = entry.resourceUrl?.match(/\/box\/(\d+)\/thread\/(\d+)/);
+          if (!match) return `• ${entry.title}\n  ${entry.subline}`;
+          const msgId = parseInt(match[2], 10);
+          try {
+            const threadResp = await fetchMailAPI(`/messages/${msgId}/thread`);
+            if (!threadResp.ok) throw new Error('thread fetch failed');
+            const threadData = (await threadResp.json()) as unknown;
+            const msgs = (
+              Array.isArray(threadData)
+                ? threadData
+                : ((threadData as Record<string, unknown>).messages ?? [])
+            ) as Array<Record<string, unknown>>;
+            const sorted = msgs.sort(
+              (a, b) => ((a.dateInt as number) ?? 0) - ((b.dateInt as number) ?? 0)
+            );
+            if (sorted.length <= 1) {
+              return `• ${entry.title}\n  ${entry.subline} | ID: ${msgId}`;
+            }
+            const idList = sorted.map((m) => (m.databaseId ?? m.id) as number).join(', ');
+            return `• ${entry.title}\n  ${entry.subline} | Thread (${sorted.length} messages) IDs: ${idList}`;
+          } catch {
+            return `• ${entry.title}\n  ${entry.subline} | ID: ${msgId}`;
+          }
+        })
+      );
+
+      let text = `Search results for "${args.query}" (${results.entries.length}):\n${lines.join('\n')}`;
+      if (results.isPaginated && results.cursor) {
+        text += `\n\nMore results available.`;
+      }
+      return { content: [{ type: 'text' as const, text }] };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error searching messages: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
         isError: true,
@@ -504,6 +606,7 @@ export const mailTools = [
   listMailboxesTool,
   listMessagesTool,
   readMessageTool,
+  searchMessagesTool,
   sendMessageTool,
   deleteMessageTool,
   moveMessageTool,
