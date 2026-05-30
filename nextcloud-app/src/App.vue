@@ -3,6 +3,7 @@
 	<NcContent app-name="aiquila">
 		<NcAppNavigation>
 			<template #list>
+				<SectionNav />
 				<router-view name="sidebar" v-slot="{ Component }">
 					<component :is="Component"
 						:conversations="conversations"
@@ -31,7 +32,6 @@
 		</NcAppNavigation>
 		<NcAppContent>
 			<div class="app-content-inner">
-				<TabSelector />
 				<div class="tab-content">
 					<router-view v-slot="{ Component }">
 						<component :is="Component"
@@ -86,7 +86,7 @@ import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 
-import TabSelector from './components/TabSelector.vue'
+import SectionNav from './components/SectionNav.vue'
 
 const NavigationSettings = defineAsyncComponent(() => import('./components/NavigationSettings.vue'))
 import {
@@ -110,7 +110,7 @@ export default {
 		NcAppContent,
 		NcButton,
 		NcDialog,
-		TabSelector,
+		SectionNav,
 		NavigationSettings,
 	},
 	data() {
