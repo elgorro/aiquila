@@ -488,17 +488,26 @@ describe('RefreshStore — persistence', () => {
     expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
-  it('writeFileSync error propagates so the token endpoint can return 500', () => {
+  it('writeFileSync error degrades gracefully — does not throw, warns with #342 guidance', () => {
     const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
+    const err = new Error('permission denied') as NodeJS.ErrnoException;
+    err.code = 'EACCES';
     mockWriteFileSync.mockImplementation(() => {
-      throw new Error('disk full');
+      throw err;
     });
 
     const store = new RefreshStore(stateFile);
-    expect(() => store.store({ userId: 'alice', clientId: 'c1', scopes: [] })).toThrow('disk full');
+    const token = store.store({ userId: 'alice', clientId: 'c1', scopes: [] });
+
+    // Token still works in-memory even though it couldn't be persisted.
+    expect(store.get(token)?.userId).toBe('alice');
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      expect.objectContaining({ dir: TEST_STATE_DIR, code: 'EACCES' }),
+      expect.stringContaining('discussions/342')
+    );
   });
 
-  it('renameSync error propagates and cleans up the .tmp file', () => {
+  it('renameSync error degrades gracefully — does not throw and cleans up the .tmp file', () => {
     const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
     mockRenameSync.mockImplementation(() => {
       throw new Error('cross-device link');
@@ -506,9 +515,7 @@ describe('RefreshStore — persistence', () => {
     mockUnlinkSync.mockReturnValue(undefined);
 
     const store = new RefreshStore(stateFile);
-    expect(() => store.store({ userId: 'alice', clientId: 'c1', scopes: [] })).toThrow(
-      'cross-device link'
-    );
+    expect(() => store.store({ userId: 'alice', clientId: 'c1', scopes: [] })).not.toThrow();
     expect(mockUnlinkSync).toHaveBeenCalledWith(stateFile + '.tmp');
   });
 
