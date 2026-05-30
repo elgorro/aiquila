@@ -81,7 +81,7 @@ describe('Mail Tools', () => {
   });
 
   describe('list_mailboxes', () => {
-    it('should return formatted mailbox list', async () => {
+    it('should return formatted mailbox list (legacy array shape)', async () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
         json: () =>
@@ -96,11 +96,41 @@ describe('Mail Tools', () => {
       const tool = mailTools.find((t) => t.name === 'list_mailboxes')!;
       const result = await tool.handler({ accountId: 1 });
 
+      expect(mockFetchMailAPI).toHaveBeenCalledWith('/mailboxes?accountId=1');
       expect(result.content[0].text).toContain('INBOX');
       expect(result.content[0].text).toContain('5 unread');
       expect(result.content[0].text).toContain('ID: 10');
       expect(result.content[0].text).toContain('Sent');
       expect(result.content[0].text).toContain('Drafts');
+    });
+
+    it('should handle Mail 5.x wrapped shape with displayName/databaseId', async () => {
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            mailboxes: [
+              {
+                id: 10,
+                databaseId: 42,
+                accountId: 1,
+                name: 'INBOX',
+                displayName: 'Inbox',
+                unread: 3,
+                total: 99,
+                delimiter: '/',
+              },
+            ],
+          }),
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'list_mailboxes')!;
+      const result = await tool.handler({ accountId: 1 });
+
+      expect(result.content[0].text).toContain('Inbox');
+      expect(result.content[0].text).toContain('ID: 42');
+      expect(result.content[0].text).not.toContain('ID: 10');
     });
 
     it('should handle errors', async () => {
@@ -120,11 +150,11 @@ describe('Mail Tools', () => {
   });
 
   describe('mail_list_messages', () => {
-    it('should return formatted message summaries', async () => {
-      mockFetchOCS.mockResolvedValue({
-        ocs: {
-          meta: { status: 'ok', statuscode: 200, message: 'OK' },
-          data: [
+    it('should return formatted message summaries (legacy shape)', async () => {
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve([
             {
               id: 100,
               uid: 1,
@@ -165,14 +195,15 @@ describe('Mail Tools', () => {
               },
               hasAttachments: false,
             },
-          ],
-        },
+          ]),
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
       const tool = mailTools.find((t) => t.name === 'mail_list_messages')!;
       const result = await tool.handler({ mailboxId: 10 });
 
+      expect(mockFetchOCS).not.toHaveBeenCalled();
+      expect(mockFetchMailAPI).toHaveBeenCalledWith('/messages?mailboxId=10');
       expect(result.content[0].text).toContain('Hello World');
       expect(result.content[0].text).toContain('UNREAD');
       expect(result.content[0].text).toContain('starred');
@@ -184,12 +215,52 @@ describe('Mail Tools', () => {
       expect(result.content[0].text).toContain('Messages (2)');
     });
 
+    it('should pick up databaseId and flags.hasAttachments (Mail 5.x shape)', async () => {
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            messages: [
+              {
+                id: 1,
+                databaseId: 555,
+                uid: 1,
+                mailboxId: 10,
+                subject: 'New shape',
+                from: [{ label: '', email: 'x@example.com' }],
+                to: [],
+                cc: [],
+                dateInt: 1700000000,
+                flags: {
+                  seen: true,
+                  flagged: false,
+                  answered: false,
+                  deleted: false,
+                  draft: false,
+                  important: false,
+                  junk: false,
+                  hasAttachments: true,
+                },
+              },
+            ],
+          }),
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_list_messages')!;
+      const result = await tool.handler({ mailboxId: 10, limit: 5, cursor: 99, filter: 'unread' });
+
+      expect(mockFetchMailAPI).toHaveBeenCalledWith(
+        '/messages?mailboxId=10&limit=5&cursor=99&filter=unread'
+      );
+      expect(result.content[0].text).toContain('ID: 555');
+      expect(result.content[0].text).toContain('attachment');
+    });
+
     it('should handle empty results', async () => {
-      mockFetchOCS.mockResolvedValue({
-        ocs: {
-          meta: { status: 'ok', statuscode: 200, message: 'OK' },
-          data: [],
-        },
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve([]),
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
@@ -200,7 +271,11 @@ describe('Mail Tools', () => {
     });
 
     it('should handle errors', async () => {
-      mockFetchOCS.mockRejectedValue(new Error('OCS API error: 404 Not Found'));
+      mockFetchMailAPI.mockResolvedValue({
+        ok: false,
+        status: 404,
+        text: () => Promise.resolve('Not found'),
+      });
 
       const { mailTools } = await import('../tools/apps/mail.js');
       const tool = mailTools.find((t) => t.name === 'mail_list_messages')!;
@@ -212,31 +287,28 @@ describe('Mail Tools', () => {
   });
 
   describe('mail_read_message', () => {
-    it('should return full message content', async () => {
-      mockFetchOCS.mockResolvedValue({
-        ocs: {
-          meta: { status: 'ok', statuscode: 200, message: 'OK' },
-          data: {
-            id: 100,
+    it('should return full message content from single /body call', async () => {
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
             subject: 'Test Subject',
             from: [{ label: 'Alice', email: 'alice@example.com' }],
             to: [{ label: 'Bob', email: 'bob@example.com' }],
             cc: [{ label: 'Carol', email: 'carol@example.com' }],
             dateInt: 1700000000,
             attachments: [{ fileName: 'report.pdf', size: 12345 }],
-          },
-        },
-      });
-
-      mockFetchMailAPI.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ body: '<p>Hello <b>World</b></p><br>Nice to meet you.' }),
+            body: '<p>Hello <b>World</b></p><br>Nice to meet you.',
+          }),
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
       const tool = mailTools.find((t) => t.name === 'mail_read_message')!;
       const result = await tool.handler({ messageId: 100 });
 
+      expect(mockFetchOCS).not.toHaveBeenCalled();
+      expect(mockFetchMailAPI).toHaveBeenCalledTimes(1);
+      expect(mockFetchMailAPI).toHaveBeenCalledWith('/messages/100/body');
       expect(result.content[0].text).toContain('Subject: Test Subject');
       expect(result.content[0].text).toContain('Alice <alice@example.com>');
       expect(result.content[0].text).toContain('Bob <bob@example.com>');
@@ -248,15 +320,113 @@ describe('Mail Tools', () => {
       expect(result.content[0].text).toContain('Message ID: 100');
     });
 
+    it('should extract <img alt=...> and strip invisible chars', async () => {
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            subject: 'Newsletter',
+            from: [{ label: 'News', email: 'n@example.com' }],
+            to: [],
+            dateInt: 1700000000,
+            // U+200B padding + alt-only image + table cells
+            body: '​​<table><tr><td>Left</td><td>Right</td></tr></table><img alt="Big Headline" src="x.png">',
+          }),
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_read_message')!;
+      const result = await tool.handler({ messageId: 7 });
+
+      expect(result.content[0].text).toContain('Big Headline');
+      expect(result.content[0].text).toContain('Left Right');
+      expect(result.content[0].text).not.toContain('​');
+    });
+
     it('should handle errors', async () => {
-      mockFetchOCS.mockRejectedValue(new Error('Message not found'));
+      mockFetchMailAPI.mockResolvedValue({
+        ok: false,
+        status: 404,
+        text: () => Promise.resolve('Message not found'),
+      });
 
       const { mailTools } = await import('../tools/apps/mail.js');
       const tool = mailTools.find((t) => t.name === 'mail_read_message')!;
       const result = await tool.handler({ messageId: 999 });
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Message not found');
+      expect(result.content[0].text).toContain('404');
+    });
+  });
+
+  describe('mail_search_messages', () => {
+    it('should return IDs and resolve multi-message threads', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: {
+            entries: [
+              {
+                title: 'Re: Project',
+                subline: 'alice@example.com',
+                resourceUrl: '/apps/mail/box/3/thread/42',
+              },
+              {
+                title: 'Single message',
+                subline: 'bob@example.com',
+                resourceUrl: '/apps/mail/box/3/thread/77',
+              },
+            ],
+            isPaginated: false,
+          },
+        },
+      });
+
+      mockFetchMailAPI.mockImplementation((url: string) => {
+        if (url === '/messages/42/thread') {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve([
+                { databaseId: 42, dateInt: 1700000200 },
+                { databaseId: 41, dateInt: 1700000100 },
+              ]),
+          });
+        }
+        if (url === '/messages/77/thread') {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve([{ databaseId: 77, dateInt: 1700000300 }]),
+          });
+        }
+        return Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve('') });
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_search_messages')!;
+      const result = await tool.handler({ query: 'project' });
+
+      expect(result.content[0].text).toContain('Re: Project');
+      // Multi-message thread: sorted ascending by dateInt → 41, 42
+      expect(result.content[0].text).toContain('Thread (2 messages) IDs: 41, 42');
+      // Single-message thread
+      expect(result.content[0].text).toContain('Single message');
+      expect(result.content[0].text).toContain('ID: 77');
+    });
+
+    it('should report no results', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: { entries: [], isPaginated: false },
+        },
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_search_messages')!;
+      const result = await tool.handler({ query: 'nothing' });
+
+      expect(result.content[0].text).toContain('No messages found');
     });
   });
 

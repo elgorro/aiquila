@@ -122,8 +122,17 @@ export const unifiedSearchTool = {
         };
       }
 
-      // Sort by order and take top providers (max 5 to avoid flooding)
-      const topProviders = [...providers].sort((a, b) => a.order - b.order).slice(0, 5);
+      // Always include the most useful providers; fill remaining slots by order.
+      // Without this, mail (order 20) and calendar (order 30) fall outside the
+      // top 5 on a typical install and are silently never searched.
+      const PRIORITY_IDS = ['files', 'mail', 'calendar', 'notes'];
+      const prioritized = PRIORITY_IDS.map((id) => providers.find((p) => p.id === id)).filter(
+        (p): p is SearchProvider => p !== undefined
+      );
+      const rest = providers
+        .filter((p) => !PRIORITY_IDS.includes(p.id))
+        .sort((a, b) => a.order - b.order);
+      const topProviders = [...prioritized, ...rest].slice(0, 6);
 
       const searches = await Promise.allSettled(
         topProviders.map((p) => searchProvider(p.id, args.query, args.limit))
