@@ -12,4 +12,4 @@ $scriptUrl = \OC::$server->getURLGenerator()->linkTo($appId, 'js/aiquila-main.js
 ]);
 ?>
 
-<div id="content"></div>
+<div id="aiquila-app"></div>
