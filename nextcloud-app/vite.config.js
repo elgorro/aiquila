@@ -12,6 +12,10 @@ export default defineConfig({
 		appName: JSON.stringify(pkg.name),
 		appVersion: JSON.stringify(pkg.version),
 	},
+	// `base: ''` makes Vite's preload helper resolve dynamic chunks and their
+	// CSS deps via `import.meta.url` instead of the document root, so the bundle
+	// works regardless of where NC mounts the app (e.g. /custom_apps/aiquila/js/).
+	base: '',
 	build: {
 		outDir: 'js',
 		emptyOutDir: false,

@@ -9,7 +9,7 @@ $scriptUrl = \OC::$server->getURLGenerator()->linkTo($appId, 'js/aiquila-main.js
     'type' => 'module',
     'src' => $scriptUrl,
     'nonce' => \OC::$server->getContentSecurityPolicyNonceManager()->getNonce(),
-]);
+], '');
 ?>
 
 <div id="aiquila-app"></div>
