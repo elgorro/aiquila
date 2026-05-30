@@ -897,4 +897,186 @@ END:VCALENDAR</c:calendar-data>
       expect(result.content[0].text).toContain('ETag mismatch');
     });
   });
+
+  describe('calendar display-name resolution (issue #339)', () => {
+    // Calendar list PROPFIND response mapping displayName "Persönlich" → slug "personal"
+    const calendarListXml = `<?xml version="1.0" encoding="UTF-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/</d:href>
+    <d:propstat><d:prop>
+      <d:resourcetype><d:collection/><cal:calendar xmlns:cal="urn:ietf:params:xml:ns:caldav"/></d:resourcetype>
+      <d:displayname>Persönlich</d:displayname>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+    const eventReportXml = `<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/event-1.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"etag-ev1"</d:getetag>
+      <c:calendar-data>BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:event-1
+SUMMARY:Meeting
+DTSTART:20240315T090000Z
+DTEND:20240315T093000Z
+END:VEVENT
+END:VCALENDAR</c:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+    it('list_events: first attempt uses input, retry uses resolved slug', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: false, status: 404, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(calendarListXml),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(eventReportXml),
+        });
+
+      const { listEventsTool } = await import('../tools/apps/calendar.js');
+      await listEventsTool.handler({ calendarName: 'Persönlich' });
+
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+      // 1st: REPORT against display name (404)
+      expect(calls[0][1].method).toBe('REPORT');
+      expect(decodeURI(calls[0][0])).toContain('/Persönlich/');
+      // 2nd: PROPFIND for calendar list
+      expect(calls[1][1].method).toBe('PROPFIND');
+      // 3rd: REPORT against resolved slug
+      expect(calls[2][1].method).toBe('REPORT');
+      expect(calls[2][0]).toContain('/personal/');
+    });
+
+    it('list_events: matches display name case-insensitively', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: false, status: 404, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(calendarListXml),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(eventReportXml),
+        });
+
+      const { listEventsTool } = await import('../tools/apps/calendar.js');
+      const result = await listEventsTool.handler({ calendarName: 'PERSÖNLICH' });
+
+      expect(result.isError).toBeUndefined();
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls[2][0]).toContain('/personal/');
+    });
+
+    it('list_events: when no match found, surfaces original 404', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: false, status: 404, text: () => Promise.resolve('Not found') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(calendarListXml),
+        });
+
+      const { listEventsTool } = await import('../tools/apps/calendar.js');
+      const result = await listEventsTool.handler({ calendarName: 'Unknown' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('404');
+    });
+
+    it('get_event: resolves display name and retries REPORT', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: false, status: 404, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(calendarListXml),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(eventReportXml),
+        });
+
+      const { getEventTool } = await import('../tools/apps/calendar.js');
+      const result = await getEventTool.handler({ uid: 'event-1', calendarName: 'Persönlich' });
+
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain('Meeting');
+
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls[2][0]).toContain('/personal/');
+    });
+
+    it('create_event: resolves display name when assertCalendarSupportsEvents 404s', async () => {
+      const propfindVeventOk = {
+        ok: true,
+        status: 207,
+        text: () =>
+          Promise.resolve(
+            '<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">' +
+              '<d:response><d:propstat><d:prop>' +
+              '<c:supported-calendar-component-set><c:comp name="VEVENT"/></c:supported-calendar-component-set>' +
+              '</d:prop></d:propstat></d:response></d:multistatus>'
+          ),
+      };
+      const verifyXml = `<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/event.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"x"</d:getetag>
+      <c:calendar-data>BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:any
+SUMMARY:Test
+DTSTART:20240315T120000Z
+END:VEVENT
+END:VCALENDAR</c:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>)
+        // 1st PROPFIND: assertCalendarSupportsEvents on display name → 404
+        .mockResolvedValueOnce({ ok: false, status: 404, text: () => Promise.resolve('') })
+        // 2nd PROPFIND: calendar list for slug resolution
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(calendarListXml),
+        })
+        // 3rd PROPFIND: assertCalendarSupportsEvents on resolved slug → ok
+        .mockResolvedValueOnce(propfindVeventOk)
+        // 4th: PUT
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        // 5th: verification REPORT
+        .mockResolvedValueOnce({ ok: true, status: 207, text: () => Promise.resolve(verifyXml) });
+
+      const { createEventTool } = await import('../tools/apps/calendar.js');
+      const result = await createEventTool.handler({
+        summary: 'Test',
+        calendarName: 'Persönlich',
+        dtstart: '20240315T120000Z',
+      });
+
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain('created successfully');
+
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+      // PUT URL must use resolved slug, not display name
+      const putCall = calls.find((c) => c[1].method === 'PUT');
+      expect(putCall![0]).toContain('/personal/');
+      expect(putCall![0]).not.toContain('Persönlich');
+    });
+  });
 });
