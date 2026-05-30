@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/server/auth/clients.js';
 import { logger } from '../logger.js';
@@ -31,6 +31,45 @@ const DEFAULT_STATE_DIR = '/app/state';
 
 function stateDir(): string {
   return (process.env.MCP_AUTH_STATE_DIR ?? DEFAULT_STATE_DIR).replace(/\/+$/, '');
+}
+
+// True once we've emitted the loud "state dir not writable" warning, so the
+// startup probe and the first failed persist warn at most once between them —
+// subsequent persist failures drop to debug to avoid flooding the logs.
+let warnedUnwritable = false;
+
+/**
+ * Operator-facing remediation for an unwritable state directory. The fix is to
+ * recreate the (root-owned) Docker named volume so a fresh one inherits the
+ * image's node ownership — `docker compose exec ... chown` cannot be used here
+ * because the container would otherwise be in a crash loop. See discussion #342.
+ */
+export function stateUnwritableMessage(dir: string, code?: string): string {
+  return (
+    `State directory ${dir} is not writable${code ? ` (${code})` : ''} — ` +
+    `OAuth tokens will NOT persist; clients must re-authenticate after every restart. ` +
+    `To restore persistence, recreate the state volume (this clears existing tokens; ` +
+    `clients re-authenticate once):\n` +
+    `  docker compose down mcp && docker volume rm <project>_mcp_state && docker compose up -d mcp\n` +
+    `See https://github.com/elgorro/aiquila/discussions/342`
+  );
+}
+
+/**
+ * Marks the unwritable-state warning as already emitted (called by the startup
+ * probe in the HTTP transport) so the first failed persist does not warn twice.
+ */
+export function markStateUnwritableWarned(): void {
+  warnedUnwritable = true;
+}
+
+function warnPersistFailed(dir: string, code: string | undefined, err: unknown): void {
+  if (warnedUnwritable) {
+    logger.debug({ dir, code, err }, '[state] persist failed — state dir not writable');
+    return;
+  }
+  warnedUnwritable = true;
+  logger.warn({ dir, code }, stateUnwritableMessage(dir, code));
 }
 
 function ensureDir(dir: string): void {
@@ -70,7 +109,10 @@ function saveJson(filePath: string, data: unknown): void {
     } catch {
       // ignore cleanup failure
     }
-    throw err;
+    // Graceful degradation: a persist failure must never crash a request or the
+    // process. The server keeps running with in-memory state (tokens just won't
+    // survive a restart) and warns the operator how to fix it. See discussion #342.
+    warnPersistFailed(dirname(filePath), (err as NodeJS.ErrnoException).code, err);
   }
 }
 
