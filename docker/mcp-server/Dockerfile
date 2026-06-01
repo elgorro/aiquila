@@ -11,6 +11,8 @@ FROM node:24-alpine AS runner
 LABEL io.modelcontextprotocol.server.name="io.github.elgorro/aiquila-mcp"
 WORKDIR /app
 ENV NODE_ENV=production
+# poppler-utils provides pdftotext, used by mail_get_attachment for PDF text extraction
+RUN apk add --no-cache poppler-utils
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist

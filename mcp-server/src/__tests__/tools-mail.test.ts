@@ -297,7 +297,7 @@ describe('Mail Tools', () => {
             to: [{ label: 'Bob', email: 'bob@example.com' }],
             cc: [{ label: 'Carol', email: 'carol@example.com' }],
             dateInt: 1700000000,
-            attachments: [{ fileName: 'report.pdf', size: 12345 }],
+            attachments: [{ id: '2', fileName: 'report.pdf', size: 12345 }],
             body: '<p>Hello <b>World</b></p><br>Nice to meet you.',
           }),
       });
@@ -317,6 +317,7 @@ describe('Mail Tools', () => {
       expect(result.content[0].text).toContain('Nice to meet you');
       expect(result.content[0].text).toContain('report.pdf');
       expect(result.content[0].text).toContain('12345 bytes');
+      expect(result.content[0].text).toContain('[id: 2]');
       expect(result.content[0].text).toContain('Message ID: 100');
     });
 
@@ -353,6 +354,95 @@ describe('Mail Tools', () => {
       const { mailTools } = await import('../tools/apps/mail.js');
       const tool = mailTools.find((t) => t.name === 'mail_read_message')!;
       const result = await tool.handler({ messageId: 999 });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('404');
+    });
+  });
+
+  describe('mail_get_attachment', () => {
+    it('should return text content for text attachments', async () => {
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'text/plain; charset=utf-8' },
+        text: () => Promise.resolve('hello attachment'),
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_get_attachment')!;
+      const result = await tool.handler({ messageId: 100, attachmentId: '2' });
+
+      expect(mockFetchMailAPI).toHaveBeenCalledWith('/messages/100/attachment/2');
+      expect(result.content[0].type).toBe('text');
+      expect(result.content[0].text).toBe('hello attachment');
+    });
+
+    it('should return an image block for image attachments', async () => {
+      const bytes = Buffer.from('fakepng');
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'image/png' },
+        arrayBuffer: () => Promise.resolve(bytes.buffer.slice(0, bytes.length)),
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_get_attachment')!;
+      const result = await tool.handler({ messageId: 100, attachmentId: '3' });
+
+      expect(result.content[0].type).toBe('image');
+      expect(result.content[0]).toHaveProperty('mimeType', 'image/png');
+      expect(result.content[0]).toHaveProperty('data');
+      expect((result.content[0] as { data: string }).data.length).toBeGreaterThan(0);
+    });
+
+    it('should fall back gracefully for PDFs when pdftotext yields no text', async () => {
+      const bytes = Buffer.from('%PDF-1.4 not-real');
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'application/pdf' },
+        arrayBuffer: () => Promise.resolve(bytes.buffer.slice(0, bytes.length)),
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_get_attachment')!;
+      const result = await tool.handler({ messageId: 100, attachmentId: '4' });
+
+      // Either extracted text (UNTRUSTED marker) or graceful fallback — never an error.
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].type).toBe('text');
+      const text = result.content[0].text;
+      expect(text.includes('UNTRUSTED EXTERNAL CONTENT') || text.includes('application/pdf')).toBe(
+        true
+      );
+    });
+
+    it('should return type + size for other binary attachments', async () => {
+      const bytes = Buffer.alloc(2048);
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'application/octet-stream' },
+        arrayBuffer: () => Promise.resolve(bytes.buffer.slice(0, bytes.length)),
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_get_attachment')!;
+      const result = await tool.handler({ messageId: 100, attachmentId: '5' });
+
+      expect(result.content[0].text).toContain('application/octet-stream');
+      expect(result.content[0].text).toContain('2.0 KB');
+      expect(result.content[0].text).toContain('Cannot be read inline');
+    });
+
+    it('should handle errors', async () => {
+      mockFetchMailAPI.mockResolvedValue({
+        ok: false,
+        status: 404,
+        text: () => Promise.resolve('Not found'),
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_get_attachment')!;
+      const result = await tool.handler({ messageId: 999, attachmentId: '1' });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('404');
