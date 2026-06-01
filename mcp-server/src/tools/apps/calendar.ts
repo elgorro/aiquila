@@ -263,6 +263,29 @@ function ensureVTimezone(icalData: string, tzid: string): string {
   return icalData.replace(/BEGIN:VEVENT/, `${vtz}\r\nBEGIN:VEVENT`);
 }
 
+/**
+ * Build a DISPLAY VALARM block firing `minutes` before the event. Returns an
+ * empty string for non-positive values (those are skipped, not emitted).
+ */
+function buildVAlarm(minutes: number): string {
+  if (minutes <= 0) return '';
+  const totalSeconds = minutes * 60;
+  const hours = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const durationStr = `-PT${hours > 0 ? hours + 'H' : ''}${mins > 0 ? mins + 'M' : ''}`;
+  return `BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Reminder\r\nTRIGGER:${durationStr}\r\nEND:VALARM`;
+}
+
+/**
+ * Merge the single `alarm` and the `alarms` array into one list of reminder
+ * minutes. `alarms` entries come first, then `alarm` (if a positive number).
+ * The MCP-client-friendly split exists because a union type's anyOf JSON Schema
+ * is not reliably honored, so a dedicated array parameter is needed.
+ */
+function collectAlarmMinutes(alarm: number | null | undefined, alarms?: number[]): number[] {
+  return [...(alarms ?? []), ...(alarm !== undefined && alarm !== null ? [alarm] : [])];
+}
+
 // ---------------------------------------------------------------------------
 // Parsing
 // ---------------------------------------------------------------------------
@@ -1051,7 +1074,15 @@ export const createEventTool = {
     alarm: z
       .number()
       .optional()
-      .describe('Reminder in minutes before the event (e.g. 15 for 15 min before)'),
+      .describe(
+        'Single reminder in minutes before the event (e.g. 15 for 15 min before). For multiple reminders use alarms[].'
+      ),
+    alarms: z
+      .array(z.number())
+      .optional()
+      .describe(
+        'Multiple reminders in minutes before the event (e.g. [1440, 60] for 1 day and 1 hour before). Combined with alarm if both are set.'
+      ),
     tzid: z
       .string()
       .optional()
@@ -1078,6 +1109,7 @@ export const createEventTool = {
     rrule?: string;
     accessClass?: string;
     alarm?: number;
+    alarms?: number[];
     tzid?: string;
   }) => {
     try {
@@ -1195,14 +1227,10 @@ export const createEventTool = {
         }
       }
 
-      // Add alarm
-      if (args.alarm !== undefined && args.alarm > 0) {
-        const sign = '-';
-        const totalSeconds = args.alarm * 60;
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const durationStr = `${sign}PT${hours > 0 ? hours + 'H' : ''}${minutes > 0 ? minutes + 'M' : ''}`;
-        vevent += `\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Reminder\r\nTRIGGER:${durationStr}\r\nEND:VALARM`;
+      // Add alarms — one VALARM block per reminder (alarm + alarms merged)
+      for (const mins of collectAlarmMinutes(args.alarm, args.alarms)) {
+        const valarm = buildVAlarm(mins);
+        if (valarm) vevent += `\r\n${valarm}`;
       }
 
       vevent += `\r\nEND:VEVENT\r\nEND:VCALENDAR`;
@@ -1289,7 +1317,15 @@ export const updateEventTool = {
       .number()
       .nullable()
       .optional()
-      .describe('Reminder in minutes before the event, or null to remove existing alarm'),
+      .describe(
+        'Single reminder in minutes before the event, or null to remove all existing alarms. For multiple reminders use alarms[].'
+      ),
+    alarms: z
+      .array(z.number())
+      .optional()
+      .describe(
+        'Multiple reminders in minutes before the event (e.g. [1440, 60]). Replaces existing alarms; combined with alarm if both are set.'
+      ),
     attendees: z
       .array(
         z.object({
@@ -1326,6 +1362,7 @@ export const updateEventTool = {
     accessClass?: string;
     rrule?: string | null;
     alarm?: number | null;
+    alarms?: number[];
     attendees?: Array<{
       email: string;
       cn?: string;
@@ -1392,20 +1429,17 @@ export const updateEventTool = {
         }
       }
 
-      // Handle alarm (VALARM)
-      if (args.alarm !== undefined) {
-        // Remove existing VALARM block
+      // Handle alarms (VALARM). Any alarm/alarms input replaces all existing
+      // VALARM blocks; alarm:null clears them without adding new ones.
+      if (args.alarm !== undefined || args.alarms !== undefined) {
         modified = modified.replace(/BEGIN:VALARM[\s\S]*?END:VALARM\r?\n?/g, '');
-        if (args.alarm !== null && args.alarm > 0) {
-          const sign = '-';
-          const totalSeconds = args.alarm * 60;
-          const hours = Math.floor(totalSeconds / 3600);
-          const minutes = Math.floor((totalSeconds % 3600) / 60);
-          const durationStr = `${sign}PT${hours > 0 ? hours + 'H' : ''}${minutes > 0 ? minutes + 'M' : ''}`;
-          modified = modified.replace(
-            /END:VEVENT/,
-            `BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Reminder\r\nTRIGGER:${durationStr}\r\nEND:VALARM\r\nEND:VEVENT`
-          );
+        if (args.alarm !== null) {
+          for (const mins of collectAlarmMinutes(args.alarm, args.alarms)) {
+            const valarm = buildVAlarm(mins);
+            if (valarm) {
+              modified = modified.replace(/END:VEVENT/, `${valarm}\r\nEND:VEVENT`);
+            }
+          }
         }
       }
 

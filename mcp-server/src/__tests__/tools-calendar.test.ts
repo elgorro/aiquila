@@ -419,6 +419,33 @@ END:VCALENDAR</c:calendar-data>
       expect(putCall[1].body).toContain('END:VALARM');
     });
 
+    it('should create event with multiple alarms via alarms[] (and merge with alarm)', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(verifyResponse),
+        });
+
+      const { createEventTool } = await import('../tools/apps/calendar.js');
+      await createEventTool.handler({
+        summary: 'Release',
+        calendarName: 'personal',
+        dtstart: '20240315T100000Z',
+        alarm: 15,
+        alarms: [1440, 60],
+      });
+
+      const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body;
+      // One VALARM block per reminder: alarms[] first, then alarm
+      expect(putBody.match(/BEGIN:VALARM/g)).toHaveLength(3);
+      expect(putBody).toContain('TRIGGER:-PT24H'); // 1440 min = 1 day
+      expect(putBody).toContain('TRIGGER:-PT1H'); // 60 min
+      expect(putBody).toContain('TRIGGER:-PT15M'); // 15 min
+    });
+
     it('should create event with recurrence rule', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce(propfindVeventOk)
@@ -724,6 +751,25 @@ END:VCALENDAR</C:calendar-data>
       expect(putBody).toContain('TRIGGER:-PT15M');
       expect(putBody).toContain('ACTION:DISPLAY');
       expect(putBody).toContain('END:VALARM');
+    });
+
+    it('should set multiple alarms via alarms[]', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(resolveResponse) })
+        .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+
+      const { updateEventTool } = await import('../tools/apps/calendar.js');
+      const result = await updateEventTool.handler({
+        uid: 'event-1',
+        calendarName: 'personal',
+        alarms: [1440, 60],
+      });
+
+      expect(result.content[0].text).toContain('updated successfully');
+      const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body;
+      expect(putBody.match(/BEGIN:VALARM/g)).toHaveLength(2);
+      expect(putBody).toContain('TRIGGER:-PT24H');
+      expect(putBody).toContain('TRIGGER:-PT1H');
     });
 
     it('should remove alarm when set to null', async () => {

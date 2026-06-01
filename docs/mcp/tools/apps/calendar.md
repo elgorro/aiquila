@@ -96,7 +96,8 @@ Create a new calendar event with date/time, location, description, attendees, an
 - `attendees` (object[], optional): Attendees with email, display name, role, RSVP
 - `rrule` (string, optional): Recurrence rule (e.g. `FREQ=WEEKLY;BYDAY=MO,WE,FR`)
 - `accessClass` (enum, optional): `PUBLIC`, `PRIVATE`, `CONFIDENTIAL`
-- `alarm` (number, optional): Reminder in minutes before the event
+- `alarm` (number, optional): Single reminder in minutes before the event
+- `alarms` (number[], optional): Multiple reminders in minutes before the event (e.g. `[1440, 60]` for 1 day and 1 hour before). Combined with `alarm` if both are set.
 
 **Returns:**
 Confirmation with event UID.
@@ -143,6 +144,8 @@ Update an existing calendar event's fields by UID. Uses CalDAV ETag-based optimi
 - `categories` (string[], optional): Replace all tags
 - `accessClass` (enum, optional): New classification
 - `rrule` (string|null, optional): New recurrence rule, or `null` to remove
+- `alarm` (number|null, optional): Single reminder in minutes before the event, or `null` to remove all existing alarms
+- `alarms` (number[], optional): Multiple reminders in minutes before the event (e.g. `[1440, 60]`). Replaces existing alarms; combined with `alarm` if both are set.
 
 **Returns:**
 Confirmation message.
