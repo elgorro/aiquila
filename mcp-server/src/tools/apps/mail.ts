@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+import { spawnSync } from 'node:child_process';
+import { writeFileSync, unlinkSync } from 'node:fs';
 import { z } from 'zod';
 import { fetchMailAPI } from '../../client/mail.js';
 import { fetchOCS } from '../../client/ocs.js';
@@ -298,12 +300,16 @@ const readMessageTool = {
       text += `\nDate: ${date}`;
       text += `\n${'─'.repeat(60)}\n${bodyText}`;
 
-      const attachments = data.attachments as Array<{ fileName: string; size: number }> | undefined;
+      const attachments = data.attachments as
+        | Array<{ id?: string | number; fileName: string; size: number }>
+        | undefined;
       if (attachments && attachments.length > 0) {
         text += `\n${'─'.repeat(60)}\nAttachments:`;
         for (const att of attachments) {
-          text += `\n  • ${att.fileName} (${att.size} bytes)`;
+          const idPart = att.id !== undefined ? `[id: ${att.id}] ` : '';
+          text += `\n  • ${idPart}${att.fileName} (${att.size} bytes)`;
         }
+        text += `\n(Use mail_get_attachment with the message ID and an attachment id to read one.)`;
       }
 
       text += `\n\nMessage ID: ${args.messageId}`;
@@ -315,6 +321,105 @@ const readMessageTool = {
           {
             type: 'text' as const,
             text: `Error reading message: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+};
+
+const getAttachmentTool = {
+  name: 'mail_get_attachment',
+  description:
+    'Download an email attachment by message ID and attachment ID. ' +
+    'Returns text for text files and calendar invites (ICS), image data for images, ' +
+    'extracted text for PDFs (requires pdftotext). ' +
+    'Attachment IDs are shown in mail_read_message output.',
+  inputSchema: z.object({
+    messageId: z.number().describe('Message ID (from mail_read_message)'),
+    attachmentId: z.string().describe('Attachment ID shown in mail_read_message (e.g. "2")'),
+  }),
+  handler: async (args: { messageId: number; attachmentId: string }) => {
+    try {
+      const response = await fetchMailAPI(
+        `/messages/${args.messageId}/attachment/${args.attachmentId}`
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+
+      const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
+      const mimeType = contentType.split(';')[0].trim();
+
+      if (
+        mimeType.startsWith('text/') ||
+        mimeType === 'application/json' ||
+        mimeType === 'application/ics'
+      ) {
+        const text = await response.text();
+        return { content: [{ type: 'text' as const, text }] };
+      }
+
+      if (mimeType.startsWith('image/')) {
+        const buffer = await response.arrayBuffer();
+        const base64 = Buffer.from(buffer).toString('base64');
+        return { content: [{ type: 'image' as const, data: base64, mimeType }] };
+      }
+
+      if (mimeType === 'application/pdf') {
+        const buffer = await response.arrayBuffer();
+        const safeId =
+          String(args.messageId).replace(/[^a-zA-Z0-9_-]/g, '') +
+          '_' +
+          String(args.attachmentId).replace(/[^a-zA-Z0-9_-]/g, '');
+        const tmpFile = `/tmp/mcp_att_${safeId}.pdf`;
+        try {
+          writeFileSync(tmpFile, Buffer.from(buffer));
+          const result = spawnSync('pdftotext', [tmpFile, '-'], { encoding: 'utf8' });
+          unlinkSync(tmpFile);
+          if (result.status === 0 && result.stdout.trim().length > 0) {
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `[UNTRUSTED EXTERNAL CONTENT - PDF ATTACHMENT]\n${result.stdout}\n[END EXTERNAL CONTENT]`,
+                },
+              ],
+            };
+          }
+        } catch {
+          try {
+            unlinkSync(tmpFile);
+          } catch {
+            /* ignore */
+          }
+        }
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Attachment: ${mimeType}, ${(buffer.byteLength / 1024).toFixed(1)} KB. Could not extract text (pdftotext unavailable or empty).`,
+            },
+          ],
+        };
+      }
+
+      const buffer = await response.arrayBuffer();
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Attachment: ${mimeType}, ${(buffer.byteLength / 1024).toFixed(1)} KB. Cannot be read inline.`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error downloading attachment: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
         isError: true,
@@ -606,6 +711,7 @@ export const mailTools = [
   listMailboxesTool,
   listMessagesTool,
   readMessageTool,
+  getAttachmentTool,
   searchMessagesTool,
   sendMessageTool,
   deleteMessageTool,

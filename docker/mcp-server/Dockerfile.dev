@@ -1,9 +1,11 @@
 FROM node:24-alpine
 
 # Install development dependencies
+# poppler-utils provides pdftotext, used by mail_get_attachment for PDF text extraction
 RUN apk add --no-cache \
     git \
-    curl
+    curl \
+    poppler-utils
 
 WORKDIR /app
 
