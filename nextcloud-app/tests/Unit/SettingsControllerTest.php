@@ -4,8 +4,9 @@ namespace OCA\AIquila\Tests\Unit;
 
 use OCA\AIquila\Controller\SettingsController;
 use OCA\AIquila\Service\ClaudeModels;
-use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\Provider\LLMProviderFactory;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\IConfig;
 use OCP\IRequest;
 use PHPUnit\Framework\TestCase;
@@ -13,7 +14,8 @@ use PHPUnit\Framework\TestCase;
 class SettingsControllerTest extends TestCase {
     private $config;
     private $request;
-    private $claude;
+    private $factory;
+    private $provider;
     private $credentials;
     private $nativeMcp;
     private SettingsController $ctrl;
@@ -21,26 +23,37 @@ class SettingsControllerTest extends TestCase {
     protected function setUp(): void {
         $this->config      = $this->createMock(IConfig::class);
         $this->request     = $this->createMock(IRequest::class);
-        $this->claude      = $this->createMock(ClaudeSDKService::class);
+        $this->factory     = $this->createMock(LLMProviderFactory::class);
+        $this->provider    = $this->createMock(LLMProviderInterface::class);
         $this->credentials = $this->createMock(CredentialService::class);
         $this->nativeMcp   = $this->createMock(\OCA\AIquila\Service\NativeMcpService::class);
         $this->nativeMcp->method('isEnabledForUser')->willReturn(false);
         $this->nativeMcp->method('probeAll')->willReturn([]);
-        $this->ctrl        = new SettingsController(
+
+        // Single-provider (anthropic) world for these tests.
+        $this->provider->method('getId')->willReturn('anthropic');
+        $this->provider->method('getLabel')->willReturn('Claude (Anthropic)');
+        $this->provider->method('isConfigured')->willReturn(false);
+        $this->factory->method('getActiveProviderId')->willReturn('anthropic');
+        $this->factory->method('getProviderIds')->willReturn(['anthropic']);
+        $this->factory->method('getProviderById')->willReturn($this->provider);
+        $this->factory->method('getProvider')->willReturn($this->provider);
+
+        $this->ctrl = new SettingsController(
             'aiquila',
             $this->request,
             $this->config,
             'testuser',
-            $this->claude,
+            $this->factory,
             $this->credentials,
             $this->nativeMcp
         );
     }
 
     public function testGetReturnsHasUserKeyFalse(): void {
-        $this->credentials->method('hasApiKey')->with('testuser')->willReturn(false);
+        $this->credentials->method('hasApiKey')->willReturn(false);
         $this->config->method('getUserValue')->willReturn('');
-        $this->claude->method('listModels')->willReturn(null);
+        $this->provider->method('listModels')->willReturn(null);
 
         $response = $this->ctrl->get();
         $data = $response->getData();
@@ -49,15 +62,9 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testGetReturnsHasUserKeyTrue(): void {
-        $this->credentials->method('hasApiKey')->with('testuser')->willReturn(true);
-        $this->config->method('getUserValue')
-            ->willReturnMap([
-                ['testuser', 'aiquila', 'user_model', '', ''],
-                ['testuser', 'aiquila', 'default_system_prompt', '', ''],
-                ['testuser', 'aiquila', 'default_verbose', '0', '0'],
-                ['testuser', 'aiquila', 'native_mcp_enabled', '', ''],
-            ]);
-        $this->claude->method('listModels')->willReturn(null);
+        $this->credentials->method('hasApiKey')->willReturn(true);
+        $this->config->method('getUserValue')->willReturn('');
+        $this->provider->method('listModels')->willReturn(null);
 
         $response = $this->ctrl->get();
         $data = $response->getData();
@@ -69,12 +76,13 @@ class SettingsControllerTest extends TestCase {
         $this->credentials->method('hasApiKey')->willReturn(false);
         $this->config->method('getUserValue')
             ->willReturnMap([
+                ['testuser', 'aiquila', 'user_provider', '', ''],
                 ['testuser', 'aiquila', 'user_model', '', ClaudeModels::HAIKU_4_5],
                 ['testuser', 'aiquila', 'default_system_prompt', '', ''],
                 ['testuser', 'aiquila', 'default_verbose', '0', '0'],
                 ['testuser', 'aiquila', 'native_mcp_enabled', '', ''],
             ]);
-        $this->claude->method('listModels')->willReturn(null);
+        $this->provider->method('listModels')->willReturn(null);
 
         $response = $this->ctrl->get();
         $data = $response->getData();
@@ -86,7 +94,7 @@ class SettingsControllerTest extends TestCase {
     public function testGetUsesLiveModelsWhenAvailable(): void {
         $this->credentials->method('hasApiKey')->willReturn(false);
         $this->config->method('getUserValue')->willReturn('');
-        $this->claude->method('listModels')->with('testuser')->willReturn(['claude-test-model']);
+        $this->provider->method('listModels')->willReturn(['claude-test-model']);
 
         $response = $this->ctrl->get();
         $data = $response->getData();
@@ -97,7 +105,7 @@ class SettingsControllerTest extends TestCase {
     public function testGetFallsBackToStaticModelsWhenListFails(): void {
         $this->credentials->method('hasApiKey')->willReturn(false);
         $this->config->method('getUserValue')->willReturn('');
-        $this->claude->method('listModels')->with('testuser')->willReturn(null);
+        $this->provider->method('listModels')->willReturn(null);
 
         $response = $this->ctrl->get();
         $data = $response->getData();
@@ -105,10 +113,23 @@ class SettingsControllerTest extends TestCase {
         $this->assertEquals(ClaudeModels::getAllModels(), $data['availableModels']);
     }
 
+    public function testGetExposesProvidersList(): void {
+        $this->credentials->method('hasApiKey')->willReturn(false);
+        $this->config->method('getUserValue')->willReturn('');
+        $this->provider->method('listModels')->willReturn(null);
+
+        $data = $this->ctrl->get()->getData();
+
+        $this->assertSame('anthropic', $data['provider']);
+        $this->assertCount(1, $data['providers']);
+        $this->assertSame('anthropic', $data['providers'][0]['id']);
+        $this->assertSame('Claude (Anthropic)', $data['providers'][0]['label']);
+    }
+
     public function testSaveStoresApiKeyAndModel(): void {
         $this->credentials->expects($this->once())
             ->method('setApiKey')
-            ->with('testuser', 'my-api-key');
+            ->with('testuser', 'my-api-key', 'anthropic');
 
         $this->config->expects($this->once())
             ->method('setUserValue')
@@ -123,7 +144,7 @@ class SettingsControllerTest extends TestCase {
     public function testSaveWithEmptyModelDeletesUserValue(): void {
         $this->credentials->expects($this->once())
             ->method('setApiKey')
-            ->with('testuser', 'some-key');
+            ->with('testuser', 'some-key', 'anthropic');
 
         $this->config->expects($this->once())
             ->method('deleteUserValue')
@@ -136,8 +157,21 @@ class SettingsControllerTest extends TestCase {
     public function testSaveWithEmptyApiKeyDeletesKey(): void {
         $this->credentials->expects($this->once())
             ->method('deleteApiKey')
-            ->with('testuser');
+            ->with('testuser', 'anthropic');
 
         $this->ctrl->save('', ClaudeModels::SONNET_4_5);
+    }
+
+    public function testSaveStoresProviderOverrideAndScopesKey(): void {
+        $this->config->expects($this->once())
+            ->method('setUserValue')
+            ->with('testuser', 'aiquila', 'user_provider', 'mistral');
+
+        $this->credentials->expects($this->once())
+            ->method('setApiKey')
+            ->with('testuser', 'mistral-key', 'mistral');
+
+        $response = $this->ctrl->save('mistral-key', '', 'mistral');
+        $this->assertEquals('ok', $response->getData()['status']);
     }
 }

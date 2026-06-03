@@ -48,6 +48,7 @@ if (!interface_exists('OCP\Http\Client\IClientService')) {
 if (!interface_exists('OCP\Http\Client\IClient')) {
     interface OCP_Http_Client_IClient {
         public function post(string $uri, array $options = []);
+        public function get(string $uri, array $options = []);
     }
     class_alias('OCP_Http_Client_IClient', 'OCP\Http\Client\IClient');
 }

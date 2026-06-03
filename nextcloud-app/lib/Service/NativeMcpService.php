@@ -96,6 +96,27 @@ class NativeMcpService {
     }
 
     /**
+     * Build the connector tool entries to attach to a Mistral Conversations
+     * request. Mistral connectors are pre-registered in the admin's Mistral
+     * workspace; AIquila only stores their IDs (admin-configured, comma- or
+     * newline-separated in `mistral_connector_ids`). Each becomes a
+     * `{type:'connector', connector_id}` entry consumed by MistralProvider.
+     *
+     * @return list<array{type: string, connector_id: string}>
+     */
+    public function buildMistralConnectorTools(): array {
+        $raw = $this->config->getAppValue(self::APP_NAME, 'mistral_connector_ids', '');
+        $tools = [];
+        foreach (preg_split('/[\s,]+/', $raw) ?: [] as $id) {
+            $id = trim($id);
+            if ($id !== '') {
+                $tools[] = ['type' => 'connector', 'connector_id' => $id];
+            }
+        }
+        return $tools;
+    }
+
+    /**
      * Probe each candidate MCP server URL for HTTPS reachability and return a
      * reporting structure for the admin settings page. This is best-effort:
      * we issue a HEAD from this Nextcloud instance, which proves the URL

@@ -14,12 +14,12 @@ use OCA\AIquila\Db\MessageMapper;
 use OCA\AIquila\Db\ProjectMapper;
 use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Http\SSEResponse;
-use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\McpClientService;
 use OCA\AIquila\Service\NativeMcpService;
+use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -34,7 +34,7 @@ class ConversationController extends Controller {
     private MessageFileMapper $messageFileMapper;
     private ProjectMapper $projectMapper;
     private ProjectPathMapper $projectPathMapper;
-    private ClaudeSDKService $claudeService;
+    private LLMProviderFactory $providerFactory;
     private FileService $fileService;
     private FilesService $filesService;
     private ImageOptimizer $imageOptimizer;
@@ -50,7 +50,7 @@ class ConversationController extends Controller {
         MessageFileMapper $messageFileMapper,
         ProjectMapper $projectMapper,
         ProjectPathMapper $projectPathMapper,
-        ClaudeSDKService $claudeService,
+        LLMProviderFactory $providerFactory,
         FileService $fileService,
         FilesService $filesService,
         ImageOptimizer $imageOptimizer,
@@ -64,7 +64,7 @@ class ConversationController extends Controller {
         $this->messageFileMapper = $messageFileMapper;
         $this->projectMapper = $projectMapper;
         $this->projectPathMapper = $projectPathMapper;
-        $this->claudeService = $claudeService;
+        $this->providerFactory = $providerFactory;
         $this->fileService = $fileService;
         $this->filesService = $filesService;
         $this->imageOptimizer = $imageOptimizer;
@@ -103,7 +103,7 @@ class ConversationController extends Controller {
         $now = time();
         $conversation = new Conversation();
         $conversation->setUserId($this->userId);
-        $conversation->setModel($this->claudeService->getModel($this->userId));
+        $conversation->setModel($this->providerFactory->getProvider($this->userId)->getModel($this->userId));
         $conversation->setCreatedAt($now);
         $conversation->setUpdatedAt($now);
 
@@ -529,12 +529,16 @@ class ConversationController extends Controller {
 
         // 3. Pick the path: native MCP connector (Anthropic calls servers directly)
         //    or local agentic loop (PHP dispatches tools per turn). Native is
-        //    only used when the flag is on AND we can offer at least one
-        //    HTTPS-reachable server descriptor; otherwise we fall back.
+        //    only used when the active provider supports it AND the flag is on
+        //    AND we can offer at least one HTTPS-reachable server descriptor;
+        //    otherwise we fall back to the provider-agnostic local loop.
+        $provider = $this->providerFactory->getProvider($this->userId);
         $useNativeMcp = false;
         $nativeMcpServers = [];
-        if ($this->nativeMcp->isEnabledForUser($this->userId)) {
-            $nativeMcpServers = $this->nativeMcp->buildServerDefinitions();
+        if ($provider->supportsNativeMcp() && $this->nativeMcp->isEnabledForUser($this->userId)) {
+            $nativeMcpServers = $provider->getId() === 'mistral'
+                ? $this->nativeMcp->buildMistralConnectorTools()
+                : $this->nativeMcp->buildServerDefinitions();
             if (!empty($nativeMcpServers)) {
                 $useNativeMcp = true;
             }
@@ -562,13 +566,13 @@ class ConversationController extends Controller {
         $startMs = (int)(microtime(true) * 1000);
 
         $eventStream = $useNativeMcp
-            ? $this->claudeService->chatWithNativeMcp(
+            ? $provider->chatWithNativeMcp(
                 $claudeMessages,
                 $nativeMcpServers,
                 $systemPrompt,
                 $this->userId,
             )
-            : $this->claudeService->chatWithToolsStream(
+            : $provider->chatWithToolsStream(
                 $claudeMessages,
                 $tools,
                 $toolExecutor,
@@ -834,13 +838,17 @@ class ConversationController extends Controller {
     }
 
     /**
-     * Call Claude with MCP tool support if available
+     * Call the active LLM provider with MCP tool support if available
      */
     private function callClaude(array $messages, ?string $systemPrompt = null): array {
-        if ($this->nativeMcp->isEnabledForUser($this->userId)) {
-            $mcpServers = $this->nativeMcp->buildServerDefinitions();
+        $provider = $this->providerFactory->getProvider($this->userId);
+
+        if ($provider->supportsNativeMcp() && $this->nativeMcp->isEnabledForUser($this->userId)) {
+            $mcpServers = $provider->getId() === 'mistral'
+                ? $this->nativeMcp->buildMistralConnectorTools()
+                : $this->nativeMcp->buildServerDefinitions();
             if (!empty($mcpServers)) {
-                return $this->claudeService->chatWithNativeMcpCollect(
+                return $provider->chatWithNativeMcpCollect(
                     $messages,
                     $mcpServers,
                     $systemPrompt,
@@ -858,7 +866,7 @@ class ConversationController extends Controller {
         if (!empty($allTools['tools'])) {
             $mapping = $allTools['mapping'];
             $mcpClient = $this->mcpClient;
-            return $this->claudeService->chatWithTools(
+            return $provider->chatWithTools(
                 $messages,
                 $allTools['tools'],
                 function (string $name, array $input) use ($mcpClient, $mapping): array {
@@ -869,7 +877,7 @@ class ConversationController extends Controller {
             );
         }
 
-        return $this->claudeService->chat($messages, $systemPrompt, $this->userId);
+        return $provider->chat($messages, $systemPrompt, $this->userId);
     }
 
     /**

@@ -5,31 +5,60 @@ document.addEventListener('DOMContentLoaded', function() {
     const testResult = document.getElementById('aiquila-test-result');
     const testOutput = document.getElementById('aiquila-test-output');
 
+    const providerSelect = document.getElementById('aiquila-provider');
+    const apiKeyInput = document.getElementById('aiquila-api-key');
+
+    // Per-provider key-presence map, so the placeholder reflects the picked provider.
+    let hasKeyMap = {};
+    try {
+        hasKeyMap = JSON.parse(form.getAttribute('data-haskey-map') || '{}');
+    } catch (e) {
+        hasKeyMap = {};
+    }
+
+    function currentProvider() {
+        return providerSelect ? providerSelect.value : 'anthropic';
+    }
+
+    function refreshKeyPlaceholder() {
+        if (!apiKeyInput) return;
+        apiKeyInput.placeholder = hasKeyMap[currentProvider()] ? 'API key configured' : 'Enter API key…';
+    }
+
+    if (providerSelect) {
+        providerSelect.addEventListener('change', function() {
+            apiKeyInput.value = '';
+            refreshKeyPlaceholder();
+        });
+    }
+
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
-        const apiKey = document.getElementById('aiquila-api-key').value;
-
-        if (!apiKey) {
-            status.textContent = 'Enter an API key to save.';
-            return;
-        }
+        const apiKey = apiKeyInput.value;
+        const provider = currentProvider();
 
         status.textContent = 'Saving...';
 
         try {
+            // Only send the key when one was entered; switching provider alone
+            // must not clear an existing key.
+            const body = { provider };
+            if (apiKey) body.api_key = apiKey;
+
             const response = await fetch(OC.generateUrl('/apps/aiquila/api/admin/settings'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'requesttoken': OC.requestToken,
                 },
-                body: JSON.stringify({ api_key: apiKey }),
+                body: JSON.stringify(body),
             });
 
             if (response.ok) {
                 status.textContent = 'Saved!';
-                document.getElementById('aiquila-api-key').value = '';
-                document.getElementById('aiquila-api-key').placeholder = 'API key configured';
+                if (apiKey) hasKeyMap[provider] = true;
+                apiKeyInput.value = '';
+                refreshKeyPlaceholder();
             } else {
                 status.textContent = 'Error saving';
             }
@@ -292,6 +321,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     testButton.addEventListener('click', async function() {
         const apiKey = document.getElementById('aiquila-api-key').value;
+        const provider = currentProvider();
 
         testButton.disabled = true;
         testButton.textContent = 'Testing...';
@@ -304,7 +334,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json',
                     'requesttoken': OC.requestToken,
                 },
-                body: JSON.stringify({ api_key: apiKey }),
+                body: JSON.stringify({ api_key: apiKey, provider }),
             });
 
             const result = await response.json();
@@ -331,6 +361,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const nativeEnabled = document.getElementById('aiquila-native-mcp-enabled');
     const nativeExtraUrl = document.getElementById('aiquila-native-mcp-extra-url');
     const nativeExtraToken = document.getElementById('aiquila-native-mcp-extra-token');
+    const mistralConnectorIds = document.getElementById('aiquila-mistral-connector-ids');
     const nativeSaveBtn = document.getElementById('aiquila-native-mcp-save');
     const nativeRefreshBtn = document.getElementById('aiquila-native-mcp-refresh');
     const nativeStatus = document.getElementById('aiquila-native-mcp-status');
@@ -349,6 +380,9 @@ document.addEventListener('DOMContentLoaded', function() {
             nativeEnabled.checked = !!data.enabled;
             nativeExtraUrl.value = data.extraUrl || '';
             nativeExtraToken.placeholder = data.hasExtraToken ? 'Token configured (leave blank to keep)' : 'Bearer token for the URL above';
+            if (mistralConnectorIds) {
+                mistralConnectorIds.value = data.mistralConnectorIds || '';
+            }
             renderServers(data.servers || []);
         } catch (err) {
             nativeStatus.textContent = 'Error: ' + err.message;
@@ -384,6 +418,9 @@ document.addEventListener('DOMContentLoaded', function() {
             };
             if (nativeExtraToken.value !== '') {
                 body.native_mcp_extra_token = nativeExtraToken.value;
+            }
+            if (mistralConnectorIds) {
+                body.mistral_connector_ids = mistralConnectorIds.value;
             }
             try {
                 const response = await fetch(OC.generateUrl('/apps/aiquila/api/admin/settings'), {

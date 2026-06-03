@@ -23,6 +23,7 @@ use Anthropic\Messages\Batches\MessageBatchIndividualResponse;
 use Anthropic\Messages\Batches\MessageBatchSucceededResult;
 use Anthropic\Messages\Message;
 use Anthropic\Models\ModelInfo;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
@@ -34,7 +35,7 @@ use Psr\Log\LoggerInterface;
  * This is the new implementation using the official SDK.
  * Provides better error handling, type safety, and streaming support.
  */
-class ClaudeSDKService {
+class ClaudeSDKService implements LLMProviderInterface {
     private IConfig $config;
     private LoggerInterface $logger;
     private CredentialService $credentials;
@@ -48,6 +49,22 @@ class ClaudeSDKService {
         $this->logger = $logger;
         $this->credentials = $credentials;
         $this->cache = $cacheFactory->createDistributed('aiquila_model_caps');
+    }
+
+    public function getId(): string {
+        return 'anthropic';
+    }
+
+    public function getLabel(): string {
+        return 'Claude (Anthropic)';
+    }
+
+    public function supportsNativeMcp(): bool {
+        return true;
+    }
+
+    public function isConfigured(?string $userId = null): bool {
+        return $this->getApiKey($userId) !== '';
     }
 
     /**

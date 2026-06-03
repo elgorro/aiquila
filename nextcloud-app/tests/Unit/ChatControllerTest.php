@@ -4,6 +4,7 @@ namespace OCA\AIquila\Tests\Unit;
 
 use OCA\AIquila\Controller\ChatController;
 use OCA\AIquila\Service\ClaudeSDKService;
+use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
@@ -29,6 +30,8 @@ class ChatControllerTest extends TestCase {
         $this->cacheFactory = $this->createMock(ICacheFactory::class);
         $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
         $this->claude      = $this->createMock(ClaudeSDKService::class);
+        $this->factory     = $this->createMock(LLMProviderFactory::class);
+        $this->factory->method('getProvider')->willReturn($this->claude);
         $this->fileService = $this->createMock(FileService::class);
         $this->filesService = $this->createMock(FilesService::class);
         // By default no Files API dedup — tests get null and the existing base64 path
@@ -46,7 +49,7 @@ class ChatControllerTest extends TestCase {
         $this->ctrl        = new ChatController(
             'aiquila',
             $this->request,
-            $this->claude,
+            $this->factory,
             $this->fileService,
             $this->filesService,
             $this->imageOptimizer,

@@ -5,7 +5,8 @@ namespace OCA\AIquila\Tests\Unit;
 use OCA\AIquila\Controller\PageController;
 use OCA\AIquila\Db\ConversationMapper;
 use OCA\AIquila\Service\ClaudeModels;
-use OCA\AIquila\Service\ClaudeSDKService;
+use OCA\AIquila\Service\Provider\LLMProviderFactory;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IRequest;
@@ -13,42 +14,49 @@ use PHPUnit\Framework\TestCase;
 
 class PageControllerTest extends TestCase {
     private $initialState;
-    private $claude;
+    private $factory;
+    private $provider;
     private $conversationMapper;
     private $request;
     private PageController $ctrl;
 
     protected function setUp(): void {
         $this->initialState       = $this->createMock(IInitialState::class);
-        $this->claude             = $this->createMock(ClaudeSDKService::class);
+        $this->factory            = $this->createMock(LLMProviderFactory::class);
+        $this->provider           = $this->createMock(LLMProviderInterface::class);
         $this->conversationMapper = $this->createMock(ConversationMapper::class);
         $this->request            = $this->createMock(IRequest::class);
 
         $this->conversationMapper->method('findAllByUser')->willReturn([]);
+        $this->provider->method('getId')->willReturn('anthropic');
+        $this->factory->method('getProvider')->willReturn($this->provider);
 
         $this->ctrl = new PageController(
             'aiquila',
             $this->request,
             $this->initialState,
-            $this->claude,
+            $this->factory,
             $this->conversationMapper,
             'testuser'
         );
     }
 
-    public function testIndexProvidesInitialStateWithUserEffectiveModel(): void {
-        $this->claude->expects($this->atLeastOnce())
-            ->method('getModel')
-            ->with('testuser')
-            ->willReturn(ClaudeModels::HAIKU_4_5);
-
-        $this->claude->method('getConfiguration')
+    private function stubConfiguration(): void {
+        $this->provider->method('getConfiguration')
             ->willReturn([
-                'api_key'    => 'some-key',
-                'model'      => ClaudeModels::HAIKU_4_5,
+                'api_key'    => '',
+                'model'      => ClaudeModels::DEFAULT_MODEL,
                 'max_tokens' => 4096,
                 'timeout'    => 30,
             ]);
+    }
+
+    public function testIndexProvidesInitialStateWithUserEffectiveModel(): void {
+        $this->provider->expects($this->atLeastOnce())
+            ->method('getModel')
+            ->with('testuser')
+            ->willReturn(ClaudeModels::HAIKU_4_5);
+        $this->stubConfiguration();
 
         $captured = [];
         $this->initialState->method('provideInitialState')
@@ -64,14 +72,9 @@ class PageControllerTest extends TestCase {
     }
 
     public function testIndexProvidesHasApiKeyTrue(): void {
-        $this->claude->method('getModel')->willReturn(ClaudeModels::DEFAULT_MODEL);
-        $this->claude->method('getConfiguration')
-            ->willReturn([
-                'api_key'    => 'my-secret-key',
-                'model'      => ClaudeModels::DEFAULT_MODEL,
-                'max_tokens' => 4096,
-                'timeout'    => 30,
-            ]);
+        $this->provider->method('getModel')->willReturn(ClaudeModels::DEFAULT_MODEL);
+        $this->provider->method('isConfigured')->willReturn(true);
+        $this->stubConfiguration();
 
         $captured = [];
         $this->initialState->method('provideInitialState')
@@ -85,14 +88,9 @@ class PageControllerTest extends TestCase {
     }
 
     public function testIndexProvidesHasApiKeyFalse(): void {
-        $this->claude->method('getModel')->willReturn(ClaudeModels::DEFAULT_MODEL);
-        $this->claude->method('getConfiguration')
-            ->willReturn([
-                'api_key'    => '',
-                'model'      => ClaudeModels::DEFAULT_MODEL,
-                'max_tokens' => 4096,
-                'timeout'    => 30,
-            ]);
+        $this->provider->method('getModel')->willReturn(ClaudeModels::DEFAULT_MODEL);
+        $this->provider->method('isConfigured')->willReturn(false);
+        $this->stubConfiguration();
 
         $captured = [];
         $this->initialState->method('provideInitialState')
@@ -106,15 +104,10 @@ class PageControllerTest extends TestCase {
     }
 
     public function testIndexReturnsTemplateResponse(): void {
-        $this->claude->method('getModel')->willReturn(ClaudeModels::DEFAULT_MODEL);
-        $this->claude->method('getConfiguration')
-            ->willReturn([
-                'api_key'    => '',
-                'model'      => ClaudeModels::DEFAULT_MODEL,
-                'max_tokens' => 4096,
-                'timeout'    => 30,
-            ]);
-        $this->initialState->method('provideInitialState')->willReturnCallback(function() {});
+        $this->provider->method('getModel')->willReturn(ClaudeModels::DEFAULT_MODEL);
+        $this->provider->method('isConfigured')->willReturn(false);
+        $this->stubConfiguration();
+        $this->initialState->method('provideInitialState')->willReturnCallback(function () {});
 
         $response = $this->ctrl->index();
 

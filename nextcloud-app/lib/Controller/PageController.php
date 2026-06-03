@@ -7,7 +7,7 @@ namespace OCA\AIquila\Controller;
 
 use OCA\AIquila\Db\Conversation;
 use OCA\AIquila\Db\ConversationMapper;
-use OCA\AIquila\Service\ClaudeSDKService;
+use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
@@ -19,7 +19,7 @@ use OCP\IRequest;
 class PageController extends Controller {
 
     private IInitialState $initialState;
-    private ClaudeSDKService $claudeService;
+    private LLMProviderFactory $providerFactory;
     private ConversationMapper $conversationMapper;
     private ?string $userId;
 
@@ -27,13 +27,13 @@ class PageController extends Controller {
         string $appName,
         IRequest $request,
         IInitialState $initialState,
-        ClaudeSDKService $claudeService,
+        LLMProviderFactory $providerFactory,
         ConversationMapper $conversationMapper,
         ?string $userId
     ) {
         parent::__construct($appName, $request);
         $this->initialState = $initialState;
-        $this->claudeService = $claudeService;
+        $this->providerFactory = $providerFactory;
         $this->conversationMapper = $conversationMapper;
         $this->userId = $userId;
     }
@@ -43,13 +43,15 @@ class PageController extends Controller {
      * @NoCSRFRequired
      */
     public function index(): TemplateResponse {
-        // Inject initial state for JavaScript
-        $config = $this->claudeService->getConfiguration();
+        // Inject initial state for JavaScript, reflecting the active provider.
+        $provider = $this->providerFactory->getProvider($this->userId);
+        $config = $provider->getConfiguration();
 
         $this->initialState->provideInitialState('config', [
-            'model'       => $this->claudeService->getModel($this->userId),
+            'provider'    => $provider->getId(),
+            'model'       => $provider->getModel($this->userId),
             'max_tokens'  => $config['max_tokens'],
-            'has_api_key' => !empty($config['api_key']),
+            'has_api_key' => $provider->isConfigured($this->userId),
         ]);
 
         $this->initialState->provideInitialState('conversations',
