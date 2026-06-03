@@ -7,24 +7,46 @@ style('aiquila', 'admin');
 <div id="aiquila-admin" class="section">
     <h2>AIquila</h2>
     <p class="settings-hint">
-        AIquila connects Nextcloud to Anthropic's Claude models so your users can chat, summarise, translate and more directly inside Nextcloud. You need an Anthropic API key to get started; model and request tuning live in the cards further down this page.
+        AIquila connects Nextcloud to large language models so your users can chat, summarise, translate and more directly inside Nextcloud. Pick a provider, paste its API key to get started; model and request tuning live in the cards further down this page.
     </p>
 
     <div class="section">
-        <h3>Claude API key</h3>
+        <h3>AI provider &amp; API key</h3>
         <p class="settings-hint">
-            Paste your Anthropic API key below. Get one from
-            <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>.
-            The key is stored encrypted in Nextcloud's credential manager and used for every request unless a user provides their own in personal settings. Use <em>Test Configuration</em> after saving to confirm the key actually reaches Anthropic.
+            Choose the default provider for this instance and paste its API key below. Anthropic keys come from
+            <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>;
+            Mistral keys from
+            <a href="https://console.mistral.ai/" target="_blank" rel="noopener noreferrer">console.mistral.ai</a>.
+            Keys are stored encrypted in Nextcloud's credential manager. Users may override both provider and key in personal settings. Use <em>Test Configuration</em> after saving to confirm the key reaches the provider.
         </p>
 
-        <form id="aiquila-admin-form">
+        <?php
+            $providers = $_['providers'] ?? [];
+            $activeProvider = $_['provider'] ?? 'anthropic';
+            $hasKeyMap = [];
+            foreach ($providers as $p) {
+                $hasKeyMap[$p['id']] = (bool)$p['has_key'];
+            }
+        ?>
+
+        <form id="aiquila-admin-form" data-haskey-map='<?php echo htmlspecialchars(json_encode($hasKeyMap), ENT_QUOTES); ?>'>
             <div class="form-group">
-                <label for="aiquila-api-key">Claude API Key</label>
+                <label for="aiquila-provider">Default provider</label>
+                <select id="aiquila-provider" name="provider">
+                    <?php foreach ($providers as $p): ?>
+                        <option value="<?php echo htmlspecialchars($p['id']); ?>" <?php echo $p['id'] === $activeProvider ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($p['label']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="aiquila-api-key">API Key for selected provider</label>
                 <input type="password"
                        id="aiquila-api-key"
                        name="api_key"
-                       placeholder="<?php echo $_['has_key'] ? 'API key configured' : 'sk-ant-...'; ?>"
+                       placeholder="<?php echo ($hasKeyMap[$activeProvider] ?? false) ? 'API key configured' : 'Enter API key…'; ?>"
                        value="">
             </div>
 
@@ -120,6 +142,17 @@ style('aiquila', 'admin');
                    placeholder="Bearer token for the URL above"
                    style="min-width: 26rem;">
             <p class="hint">Leave blank to keep the existing token. Submit an empty save with this row cleared to remove it.</p>
+        </div>
+
+        <div class="form-group">
+            <label for="aiquila-mistral-connector-ids">Mistral connector ID(s) (provider: Mistral)</label>
+            <input type="text"
+                   id="aiquila-mistral-connector-ids"
+                   placeholder="connector-id-or-name, another-id"
+                   style="min-width: 26rem;">
+            <p class="hint">Used only when the active provider is <strong>Mistral</strong>. Register the AIquila MCP server as a connector in the
+                <a href="https://console.mistral.ai/" target="_blank" rel="noopener noreferrer">Mistral console</a>
+                (put its auth in the connector's headers), then paste the connector ID(s) here, comma- or space-separated. The native-MCP path then runs via Mistral's Conversations API using the admin Mistral API key.</p>
         </div>
 
         <button type="button" id="aiquila-native-mcp-save" class="primary">Save native MCP settings</button>

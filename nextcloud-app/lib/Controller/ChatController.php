@@ -10,15 +10,16 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCP\ICache;
 use OCP\ICacheFactory;
-use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\McpClientService;
 use OCA\AIquila\Service\NativeMcpService;
+use OCA\AIquila\Service\Provider\LLMProviderFactory;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 
 class ChatController extends Controller {
-    private ClaudeSDKService $claudeService;
+    private LLMProviderFactory $providerFactory;
     private FileService $fileService;
     private FilesService $filesService;
     private ImageOptimizer $imageOptimizer;
@@ -35,7 +36,7 @@ class ChatController extends Controller {
     public function __construct(
         string $appName,
         IRequest $request,
-        ClaudeSDKService $claudeService,
+        LLMProviderFactory $providerFactory,
         FileService $fileService,
         FilesService $filesService,
         ImageOptimizer $imageOptimizer,
@@ -45,7 +46,7 @@ class ChatController extends Controller {
         ICacheFactory $cacheFactory
     ) {
         parent::__construct($appName, $request);
-        $this->claudeService = $claudeService;
+        $this->providerFactory = $providerFactory;
         $this->fileService = $fileService;
         $this->filesService = $filesService;
         $this->imageOptimizer = $imageOptimizer;
@@ -53,6 +54,11 @@ class ChatController extends Controller {
         $this->nativeMcp = $nativeMcp;
         $this->userId = $userId;
         $this->cache = $cacheFactory->createDistributed('aiquila_ratelimit');
+    }
+
+    /** The LLM provider active for the current user. */
+    private function provider(): LLMProviderInterface {
+        return $this->providerFactory->getProvider($this->userId);
     }
 
     /**
@@ -122,7 +128,7 @@ class ChatController extends Controller {
             ], 413);
         }
 
-        $result = $this->claudeService->ask($prompt, $context, $this->userId);
+        $result = $this->provider()->ask($prompt, $context, $this->userId);
         return new JSONResponse($result);
     }
 
@@ -181,7 +187,7 @@ class ChatController extends Controller {
                 $fileId = $this->userId !== null
                     ? $this->filesService->getOrUploadFileId($rawBytes, $images[0]['name'], $images[0]['mimeType'], $this->userId)
                     : null;
-                $result = $this->claudeService->askWithImage(
+                $result = $this->provider()->askWithImage(
                     $prompt,
                     $images[0]['base64'],
                     $images[0]['mimeType'],
@@ -201,7 +207,7 @@ class ChatController extends Controller {
                         );
                     }
                 }
-                $result = $this->claudeService->askWithImages($prompt, $images, $this->userId, $fileIds);
+                $result = $this->provider()->askWithImages($prompt, $images, $this->userId, $fileIds);
             }
             return new JSONResponse($result);
         }
@@ -213,7 +219,7 @@ class ChatController extends Controller {
             $fileId = $this->userId !== null
                 ? $this->filesService->getOrUploadFileId($rawBytes, $f['name'], 'application/pdf', $this->userId)
                 : null;
-            $result = $this->claudeService->askWithDocument(
+            $result = $this->provider()->askWithDocument(
                 $prompt,
                 $rawBytes,
                 'application/pdf',
@@ -264,7 +270,7 @@ class ChatController extends Controller {
             $content[] = ['type' => 'text', 'text' => $promptWithContext];
 
             $messages = [['role' => 'user', 'content' => $content]];
-            $result = $this->claudeService->chat($messages, null, $this->userId);
+            $result = $this->provider()->chat($messages, null, $this->userId);
             return new JSONResponse($result);
         }
 
@@ -277,7 +283,7 @@ class ChatController extends Controller {
             ], 413);
         }
 
-        $result = $this->claudeService->ask($prompt, $context, $this->userId);
+        $result = $this->provider()->ask($prompt, $context, $this->userId);
         return new JSONResponse($result);
     }
 
@@ -325,14 +331,18 @@ class ChatController extends Controller {
             ], 413);
         }
 
-        // Native MCP connector path: hand the conversation to Anthropic and
-        // let it call MCP servers directly. Only takes effect when the flag
-        // is on AND we can produce at least one HTTPS-public-reachable server
-        // descriptor. Otherwise fall through to the local agentic loop below.
-        if ($this->nativeMcp->isEnabledForUser($this->userId)) {
-            $mcpServers = $this->nativeMcp->buildServerDefinitions();
+        // Native MCP connector path: hand the conversation to the provider's
+        // cloud and let it call MCP servers directly. Only takes effect when the
+        // flag is on AND we can produce at least one server descriptor. The
+        // descriptor source differs per provider — Anthropic consumes inline
+        // HTTPS URL definitions, Mistral consumes pre-registered connector IDs.
+        // Otherwise fall through to the local agentic loop below.
+        if ($this->provider()->supportsNativeMcp() && $this->nativeMcp->isEnabledForUser($this->userId)) {
+            $mcpServers = $this->provider()->getId() === 'mistral'
+                ? $this->nativeMcp->buildMistralConnectorTools()
+                : $this->nativeMcp->buildServerDefinitions();
             if (!empty($mcpServers)) {
-                $result = $this->claudeService->chatWithNativeMcpCollect(
+                $result = $this->provider()->chatWithNativeMcpCollect(
                     $messages,
                     $mcpServers,
                     $system,
@@ -353,7 +363,7 @@ class ChatController extends Controller {
         if (!empty($allTools['tools'])) {
             $mapping = $allTools['mapping'];
             $mcpClient = $this->mcpClient;
-            $result = $this->claudeService->chatWithTools(
+            $result = $this->provider()->chatWithTools(
                 $messages,
                 $allTools['tools'],
                 function (string $name, array $input) use ($mcpClient, $mapping): array {
@@ -364,7 +374,7 @@ class ChatController extends Controller {
                 $options,
             );
         } else {
-            $result = $this->claudeService->chat($messages, $system, $this->userId, $options);
+            $result = $this->provider()->chat($messages, $system, $this->userId, $options);
         }
 
         return new JSONResponse($result);
@@ -406,7 +416,7 @@ class ChatController extends Controller {
             ], 413);
         }
 
-        $result = $this->claudeService->summarize($content, $this->userId);
+        $result = $this->provider()->summarize($content, $this->userId);
         return new JSONResponse($result);
     }
 
@@ -474,7 +484,7 @@ class ChatController extends Controller {
             $fileId = $this->userId !== null
                 ? $this->filesService->getOrUploadFileId($rawBytes, $imageName, $optimized['mimeType'], $this->userId)
                 : null;
-            $result = $this->claudeService->askWithImage(
+            $result = $this->provider()->askWithImage(
                 $prompt,
                 $optimized['data'],
                 $optimized['mimeType'],
@@ -487,7 +497,7 @@ class ChatController extends Controller {
             $fileId = $this->userId !== null
                 ? $this->filesService->getOrUploadFileId($rawBytes, $docName, 'application/pdf', $this->userId)
                 : null;
-            $result = $this->claudeService->askWithDocument(
+            $result = $this->provider()->askWithDocument(
                 $prompt,
                 $rawBytes,
                 'application/pdf',
@@ -500,7 +510,7 @@ class ChatController extends Controller {
         } else {
             $context = "File: {$fileData['name']} ({$mimeType}, {$fileData['size']} bytes)\n\n"
                      . $fileData['content'];
-            $result = $this->claudeService->ask($prompt, $context, $this->userId);
+            $result = $this->provider()->ask($prompt, $context, $this->userId);
         }
 
         return new JSONResponse($result);

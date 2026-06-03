@@ -4,21 +4,32 @@
 namespace OCA\AIquila\Settings;
 
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\Settings\ISettings;
 
 class AdminSettings implements ISettings {
-    private CredentialService $credentials;
-
-    public function __construct(CredentialService $credentials) {
-        $this->credentials = $credentials;
+    public function __construct(
+        private CredentialService $credentials,
+        private LLMProviderFactory $providerFactory,
+    ) {
     }
 
     public function getForm(): TemplateResponse {
-        $hasKey = $this->credentials->hasApiKey(null);
+        $providers = [];
+        foreach ($this->providerFactory->getProviderIds() as $id) {
+            $provider = $this->providerFactory->getProviderById($id);
+            $providers[] = [
+                'id' => $id,
+                'label' => $provider->getLabel(),
+                'has_key' => $this->credentials->hasApiKey(null, $id),
+            ];
+        }
 
         return new TemplateResponse('aiquila', 'admin', [
-            'has_key' => $hasKey,
+            'has_key' => $this->credentials->hasApiKey(null), // anthropic, back-compat
+            'provider' => $this->providerFactory->getActiveProviderId(null),
+            'providers' => $providers,
         ], '');
     }
 

@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@anthropic-ai/sdk": "latest"
+    "@anthropic-ai/sdk": "latest",
+    "@mistralai/mistralai": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",

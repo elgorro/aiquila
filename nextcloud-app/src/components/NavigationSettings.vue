@@ -4,6 +4,16 @@
 		<details class="settings-section" open>
 			<summary>{{ t('aiquila', 'Model & API') }}</summary>
 			<div class="section-content">
+				<div v-if="providerOptions.length > 1" class="setting-group">
+					<label for="settings-provider">{{ t('aiquila', 'AI provider') }}</label>
+					<NcSelect v-model="selectedProvider"
+						input-id="settings-provider"
+						:options="providerOptions"
+						:placeholder="t('aiquila', '(admin default)')"
+						:clearable="false"
+						@input="onProviderChange" />
+				</div>
+
 				<div class="setting-group">
 					<label for="settings-model">{{ t('aiquila', 'Model preference') }}</label>
 					<NcSelect v-model="selectedModel"
@@ -42,7 +52,7 @@
 						v-model="defaultSystemPrompt"
 						class="system-prompt-input"
 						rows="3"
-						:placeholder="t('aiquila', 'Custom instructions for Claude…')"
+						:placeholder="t('aiquila', 'Custom instructions for the model…')"
 						@input="dirty = true" />
 				</div>
 
@@ -90,10 +100,12 @@ export default {
 	emits: [],
 	data() {
 		return {
-			modelOptions: [],
-			selectedModel: null,
+			// providers: [{ id, label, configured, hasUserKey, userModel, availableModels }]
+			providers: [],
+			selectedProvider: null, // { id, label } option object
+			// Per-provider chosen model, keyed by provider id.
+			userModels: {},
 			apiKey: '',
-			hasUserKey: false,
 			clearKey: false,
 			defaultSystemPrompt: '',
 			defaultVerbose: false,
@@ -105,10 +117,33 @@ export default {
 		}
 	},
 	computed: {
+		providerOptions() {
+			return this.providers.map(p => ({ id: p.id, label: p.label }))
+		},
+		currentProvider() {
+			const id = this.selectedProvider?.id
+			return this.providers.find(p => p.id === id) || null
+		},
+		modelOptions() {
+			return this.currentProvider?.availableModels || []
+		},
+		selectedModel: {
+			get() {
+				const id = this.selectedProvider?.id
+				return id ? (this.userModels[id] || null) : null
+			},
+			set(val) {
+				const id = this.selectedProvider?.id
+				if (id) this.userModels = { ...this.userModels, [id]: val }
+			},
+		},
+		currentHasUserKey() {
+			return !!this.currentProvider?.hasUserKey
+		},
 		keyPlaceholder() {
 			if (this.clearKey) return t('aiquila', 'Key will be cleared on save')
-			if (this.hasUserKey) return t('aiquila', 'Personal key configured — enter new to replace')
-			return t('aiquila', 'sk-ant-… (leave blank to keep admin key)')
+			if (this.currentHasUserKey) return t('aiquila', 'Personal key configured — enter new to replace')
+			return t('aiquila', 'Enter a personal API key (leave blank to keep admin key)')
 		},
 	},
 	async mounted() {
@@ -119,9 +154,28 @@ export default {
 		async loadSettings() {
 			try {
 				const { data } = await getSettings()
-				this.modelOptions = (data.availableModels || [])
-				this.selectedModel = data.userModel || null
-				this.hasUserKey = !!data.hasUserKey
+				this.providers = (data.providers || []).map(p => ({
+					id: p.id,
+					label: p.label,
+					configured: !!p.configured,
+					hasUserKey: !!p.hasUserKey,
+					userModel: p.userModel || null,
+					availableModels: p.availableModels || [],
+				}))
+				// Fallback for older backends without a providers array.
+				if (this.providers.length === 0) {
+					this.providers = [{
+						id: data.provider || 'anthropic',
+						label: data.provider || 'anthropic',
+						configured: !!data.hasUserKey,
+						hasUserKey: !!data.hasUserKey,
+						userModel: data.userModel || null,
+						availableModels: data.availableModels || [],
+					}]
+				}
+				const activeId = data.provider || this.providers[0].id
+				this.selectedProvider = this.providerOptions.find(o => o.id === activeId) || this.providerOptions[0]
+				this.userModels = Object.fromEntries(this.providers.map(p => [p.id, p.userModel]))
 				this.defaultSystemPrompt = data.defaultSystemPrompt || ''
 				this.defaultVerbose = !!data.defaultVerbose
 				this.loaded = true
@@ -129,6 +183,12 @@ export default {
 				this.status = t('aiquila', 'Failed to load settings: ') + err.message
 				this.statusType = 'error'
 			}
+		},
+		onProviderChange() {
+			// Switching provider scopes the key field; clear any pending entry.
+			this.apiKey = ''
+			this.clearKey = false
+			this.dirty = true
 		},
 		onClearKey() {
 			this.apiKey = ''
@@ -145,20 +205,30 @@ export default {
 		async onSave() {
 			this.saving = true
 			this.status = ''
+			const providerId = this.selectedProvider?.id || ''
 			try {
-				await saveSettings({
+				const payload = {
+					provider: providerId,
 					model: this.selectedModel || '',
-					api_key: this.clearKey ? '' : this.apiKey,
 					default_system_prompt: this.defaultSystemPrompt,
 					default_verbose: this.defaultVerbose ? '1' : '0',
-				})
+				}
+				// Only touch the key when the user cleared it or typed a new one;
+				// otherwise leave the scoped provider's key untouched.
+				if (this.clearKey) {
+					payload.api_key = ''
+				} else if (this.apiKey) {
+					payload.api_key = this.apiKey
+				}
+				await saveSettings(payload)
 				this.status = t('aiquila', 'Saved!')
 				this.statusType = 'success'
 				this.dirty = false
-				if (this.clearKey) {
-					this.hasUserKey = false
-				} else if (this.apiKey) {
-					this.hasUserKey = true
+				// Reflect key state for the edited provider in the local cache.
+				const entry = this.currentProvider
+				if (entry) {
+					if (this.clearKey) entry.hasUserKey = false
+					else if (this.apiKey) entry.hasUserKey = true
 				}
 				this.apiKey = ''
 				this.clearKey = false

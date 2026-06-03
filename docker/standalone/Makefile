@@ -1,4 +1,4 @@
-.PHONY: help up down restart logs logs-follow status shell build clean test test-oauth test-tools test-mcp-connector
+.PHONY: help up down restart logs logs-follow status shell build clean test test-oauth test-tools test-mcp-connector test-mistral
 
 COMPOSE := docker compose
 
@@ -28,6 +28,7 @@ help:
 	@echo "  make test-oauth   - Full OAuth PKCE flow test (auth enabled)"
 	@echo "  make test-tools   - Functional tool test (file CRUD, search, status)"
 	@echo "  make test-mcp-connector - MCP-Connector integration test (Messages API beta)"
+	@echo "  make test-mistral - Mistral × MCP test (Mistral function-calling drives AIquila tools)"
 	@echo ""
 	@echo "Access points:"
 	@echo "  HTTPS: https://localhost:3340/mcp (self-signed cert)"
@@ -102,6 +103,13 @@ test-mcp-connector:
 	@set -a; . ./.env; set +a; \
 	cd ../../mcp-server/scripts && npm install --silent && \
 	NODE_TLS_REJECT_UNAUTHORIZED=0 MCP_URL=https://localhost:3340 tsx test-mcp-connector.ts
+
+# Mistral × MCP test: OAuth PKCE → MCP tools/list → Mistral function-calling drives AIquila tools
+# Requires: MCP_AUTH_ENABLED=true, MISTRAL_API_KEY, NEXTCLOUD_USER, NEXTCLOUD_PASSWORD in .env
+test-mistral:
+	@set -a; . ./.env; set +a; \
+	cd ../../mcp-server/scripts && npm install --silent && \
+	NODE_TLS_REJECT_UNAUTHORIZED=0 MCP_URL=https://localhost:3340 tsx test-mistral-mcp.ts
 
 # Test MCP server connectivity
 test:
