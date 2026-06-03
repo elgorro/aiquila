@@ -277,6 +277,7 @@ class SettingsController extends Controller {
      * Optionally accepts an API key override for testing before saving.
      *
      * @param string $api_key API key to test (uses saved key if empty)
+     * @param string|null $provider Provider to test ('anthropic'/'mistral'; null uses the active provider). Also scopes the api_key override.
      *
      * 200: Test request completed; see success field for result
      * 400: No API key available or the test request failed

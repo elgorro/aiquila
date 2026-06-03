@@ -48,7 +48,13 @@
                                     "api_key": {
                                         "type": "string",
                                         "default": "",
-                                        "description": "Anthropic API key for the instance"
+                                        "description": "API key for the instance, scoped to $provider (default 'anthropic')"
+                                    },
+                                    "provider": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Instance default provider ('anthropic'/'mistral', null keeps unchanged). Also scopes api_key in this call."
                                     },
                                     "native_mcp_enabled": {
                                         "type": "string",
@@ -67,6 +73,12 @@
                                         "nullable": true,
                                         "default": null,
                                         "description": "Bearer token for the extra MCP server ('' clears, null keeps unchanged)"
+                                    },
+                                    "mistral_connector_ids": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Comma/space-separated Mistral connector IDs for the native-MCP path (trimmed; null keeps unchanged)"
                                     }
                                 }
                             }
@@ -170,6 +182,12 @@
                                         "type": "string",
                                         "default": "",
                                         "description": "API key to test (uses saved key if empty)"
+                                    },
+                                    "provider": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Provider to test ('anthropic'/'mistral'; null uses the active provider). Also scopes the api_key override."
                                     }
                                 }
                             }
@@ -333,6 +351,7 @@
                                         "enabled",
                                         "extraUrl",
                                         "hasExtraToken",
+                                        "mistralConnectorIds",
                                         "servers"
                                     ],
                                     "properties": {
@@ -344,6 +363,9 @@
                                         },
                                         "hasExtraToken": {
                                             "type": "boolean"
+                                        },
+                                        "mistralConnectorIds": {
+                                            "type": "string"
                                         },
                                         "servers": {
                                             "type": "array",

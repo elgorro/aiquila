@@ -2349,13 +2349,19 @@
                                 "properties": {
                                     "api_key": {
                                         "type": "string",
-                                        "default": "",
-                                        "description": "Personal Anthropic API key (leave empty to clear)"
+                                        "default": null,
+                                        "description": "Personal API key for the scoped provider (leave empty to clear)"
                                     },
                                     "model": {
                                         "type": "string",
                                         "default": "",
-                                        "description": "Preferred Claude model ID (leave empty to use admin default)"
+                                        "description": "Preferred model ID for the scoped provider (leave empty to use admin default)"
+                                    },
+                                    "provider": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Active provider override ('' clears, e.g. 'anthropic'/'mistral', null keeps unchanged). Also scopes api_key/model in this call."
                                     },
                                     "default_system_prompt": {
                                         "type": "string",
