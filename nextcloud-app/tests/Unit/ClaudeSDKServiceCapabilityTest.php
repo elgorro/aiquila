@@ -51,7 +51,7 @@ class CapabilityTestableService extends ClaudeSDKService {
             $p->setAccessible(true);
             $p->setValue($stub, $val);
         }
-        $usage = \Anthropic\Messages\Usage::with(null, null, null, null, 10, 20, null, null);
+        $usage = \Anthropic\Messages\Usage::with(null, null, null, null, 10, 20, null, null, null);
         $p = $ref->getProperty('usage');
         $p->setValue($stub, $usage);
         return $stub;
@@ -358,7 +358,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                     $p->setAccessible(true);
                     $p->setValue($stub, $val);
                 }
-                $usage = \Anthropic\Messages\Usage::with(null, null, null, null, 10, 5, null, null);
+                $usage = \Anthropic\Messages\Usage::with(null, null, null, null, 10, 5, null, null, null);
                 $p = $ref->getProperty('usage');
                 $p->setValue($stub, $usage);
                 return $stub;
@@ -404,7 +404,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                     $p->setAccessible(true);
                     $p->setValue($stub, $val);
                 }
-                $usage = \Anthropic\Messages\Usage::with(null, 50, 200, 'us', 100, 30, null, 'standard');
+                $usage = \Anthropic\Messages\Usage::with(null, 50, 200, 'us', 100, 30, null, null, 'standard');
                 $p = $ref->getProperty('usage');
                 $p->setValue($stub, $usage);
                 return $stub;

@@ -200,8 +200,11 @@ class ClaudeSDKService implements LLMProviderInterface {
             $params['system'] = [$systemBlock];
         }
 
-        // Sampling parameters
-        foreach (['temperature', 'top_p', 'top_k', 'stop_sequences'] as $key) {
+        // Sampling parameters — Fable 5 and Opus 4.7+ reject temperature/top_p/top_k with a 400
+        $samplingKeys = ClaudeModels::supportsSamplingParams($model)
+            ? ['temperature', 'top_p', 'top_k', 'stop_sequences']
+            : ['stop_sequences'];
+        foreach ($samplingKeys as $key) {
             if (array_key_exists($key, $options)) {
                 $params[$key] = $options[$key];
             }

@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4a31e9533b11b84e28d30e1f9c5c141e",
+    "content-hash": "df6ddc1c7b9ccd594093e45de777541f",
     "packages": [
         {
             "name": "anthropic-ai/sdk",
-            "version": "v0.24.0",
+            "version": "v0.28.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/anthropics/anthropic-sdk-php.git",
-                "reference": "3e8f09ec37eb709a76d52479ba84a01f9b0f8442"
+                "reference": "5116de361fde853f122dfac349842512d15da57e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/anthropics/anthropic-sdk-php/zipball/3e8f09ec37eb709a76d52479ba84a01f9b0f8442",
-                "reference": "3e8f09ec37eb709a76d52479ba84a01f9b0f8442",
+                "url": "https://api.github.com/repos/anthropics/anthropic-sdk-php/zipball/5116de361fde853f122dfac349842512d15da57e",
+                "reference": "5116de361fde853f122dfac349842512d15da57e",
                 "shasum": ""
             },
             "require": {
@@ -39,7 +39,7 @@
                 "pestphp/pest": "^3",
                 "php-http/mock-client": "^1",
                 "phpstan/extension-installer": "^1",
-                "phpstan/phpstan": "^2",
+                "phpstan/phpstan": "2.2.1",
                 "phpstan/phpstan-phpunit": "^2",
                 "phpunit/phpunit": "^11",
                 "symfony/http-client": "^7"
@@ -65,9 +65,9 @@
             "description": "Anthropic PHP SDK",
             "support": {
                 "issues": "https://github.com/anthropics/anthropic-sdk-php/issues",
-                "source": "https://github.com/anthropics/anthropic-sdk-php/tree/v0.24.0"
+                "source": "https://github.com/anthropics/anthropic-sdk-php/tree/v0.28.0"
             },
-            "time": "2026-05-21T20:01:10+00:00"
+            "time": "2026-06-09T16:46:52+00:00"
         },
         {
             "name": "nyholm/psr7",

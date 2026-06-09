@@ -13,7 +13,9 @@ class ClaudeModelsTest extends TestCase {
 
     public function testGetAllModelsReturnsCurrentModelsOnly(): void {
         $models = ClaudeModels::getAllModels();
-        $this->assertCount(6, $models);
+        $this->assertCount(8, $models);
+        $this->assertContains(ClaudeModels::FABLE_5,    $models);
+        $this->assertContains(ClaudeModels::OPUS_4_8,   $models);
         $this->assertContains(ClaudeModels::OPUS_4_7,   $models);
         $this->assertContains(ClaudeModels::OPUS_4_6,   $models);
         $this->assertContains(ClaudeModels::SONNET_4_6, $models);
@@ -26,7 +28,7 @@ class ClaudeModelsTest extends TestCase {
         $this->assertNotContains(ClaudeModels::SONNET_4, $models);
         $this->assertNotContains(ClaudeModels::OPUS_4,   $models);
         // Most capable first
-        $this->assertSame(ClaudeModels::OPUS_4_7, $models[0]);
+        $this->assertSame(ClaudeModels::FABLE_5, $models[0]);
     }
 
     public function testGetMaxTokenCeilingForOpus47(): void {
@@ -49,6 +51,8 @@ class ClaudeModelsTest extends TestCase {
     }
 
     public function testSupportsThinkingForAdaptiveModels(): void {
+        $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::FABLE_5));
+        $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::OPUS_4_8));
         $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::OPUS_4_7));
         $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::OPUS_4_6));
         $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::SONNET_4_6));
@@ -57,6 +61,8 @@ class ClaudeModelsTest extends TestCase {
     }
 
     public function testSupportsEffortForAdaptiveModels(): void {
+        $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::FABLE_5));
+        $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::OPUS_4_8));
         $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::OPUS_4_7));
         $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::OPUS_4_6));
         $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::SONNET_4_6));
@@ -66,6 +72,19 @@ class ClaudeModelsTest extends TestCase {
 
     public function testGetEffortLevelForOpus47(): void {
         $this->assertEquals('xhigh', ClaudeModels::getEffortLevel(ClaudeModels::OPUS_4_7));
+    }
+
+    public function testGetEffortLevelForFable5AndOpus48(): void {
+        $this->assertEquals('xhigh', ClaudeModels::getEffortLevel(ClaudeModels::FABLE_5));
+        $this->assertEquals('xhigh', ClaudeModels::getEffortLevel(ClaudeModels::OPUS_4_8));
+    }
+
+    public function testSupportsSamplingParams(): void {
+        $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::FABLE_5));
+        $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::OPUS_4_8));
+        $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::OPUS_4_7));
+        $this->assertTrue(ClaudeModels::supportsSamplingParams(ClaudeModels::SONNET_4_6));
+        $this->assertTrue(ClaudeModels::supportsSamplingParams(ClaudeModels::HAIKU_4_5));
     }
 
     public function testGetEffortLevelForOpus46(): void {
