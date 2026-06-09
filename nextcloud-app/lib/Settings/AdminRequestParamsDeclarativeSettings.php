@@ -24,7 +24,7 @@ class AdminRequestParamsDeclarativeSettings implements IDeclarativeSettingsForm 
 				[
 					'id' => 'max_tokens',
 					'title' => 'Max response tokens',
-					'description' => 'Upper bound on how long a single reply can be. Higher = longer answers at higher cost and latency. Automatically clamped to the selected model\'s ceiling (64K for Sonnet 4.6, 128K for Opus 4.x). Range 1–100 000.',
+					'description' => 'Upper bound on how long a single reply can be. Higher = longer answers at higher cost and latency. Automatically clamped to the selected model\'s ceiling (64K for Sonnet 4.6, 128K for Opus 4.x and Fable 5). Range 1–128 000.',
 					'type' => DeclarativeSettingsTypes::TEXT,
 					'placeholder' => '16384',
 					'default' => (string)ClaudeModels::DEFAULT_MAX_TOKENS,
@@ -32,7 +32,7 @@ class AdminRequestParamsDeclarativeSettings implements IDeclarativeSettingsForm 
 				[
 					'id' => 'api_timeout',
 					'title' => 'API timeout (seconds)',
-					'description' => 'How long to wait for Claude\'s reply before giving up. Requests that run longer than this fail with a timeout error. Range 10–1 800; 30–60 seconds is typical.',
+					'description' => 'How long to wait for Claude\'s reply before giving up. Chat replies are streamed and not affected; this mainly applies to non-streaming calls (connection test, background tasks). Range 10–1 800; 30–60 seconds is typical.',
 					'type' => DeclarativeSettingsTypes::TEXT,
 					'placeholder' => '30',
 					'default' => '30',

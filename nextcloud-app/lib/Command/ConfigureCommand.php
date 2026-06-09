@@ -42,7 +42,7 @@ class ConfigureCommand extends Base {
                 'max-tokens',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Set maximum tokens (1-100000, default: 4096)'
+                'Set maximum tokens (1-128000, default: 4096)'
             )
             ->addOption(
                 'timeout',
@@ -94,8 +94,8 @@ class ConfigureCommand extends Base {
         $maxTokens = $input->getOption('max-tokens');
         if ($maxTokens !== null) {
             $maxTokensInt = (int)$maxTokens;
-            if ($maxTokensInt < 1 || $maxTokensInt > 100000) {
-                $output->writeln('<error>Max tokens must be between 1 and 100000</error>');
+            if ($maxTokensInt < 1 || $maxTokensInt > 128000) {
+                $output->writeln('<error>Max tokens must be between 1 and 128000</error>');
                 return 1;
             }
             $this->config->setAppValue(self::APP_NAME, 'max_tokens', (string)$maxTokensInt);

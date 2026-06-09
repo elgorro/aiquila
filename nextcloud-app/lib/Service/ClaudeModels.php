@@ -75,6 +75,19 @@ class ClaudeModels {
         self::SONNET_4_6 => 64000,
     ];
 
+    // ── Per-model context windows (input side) ─────────────────────────────
+
+    /** Default context window for models not listed in CONTEXT_WINDOW. */
+    public const DEFAULT_CONTEXT_WINDOW = 200000;
+
+    private const CONTEXT_WINDOW = [
+        self::FABLE_5    => 1000000,
+        self::OPUS_4_8   => 1000000,
+        self::OPUS_4_7   => 1000000,
+        self::OPUS_4_6   => 1000000,
+        self::SONNET_4_6 => 1000000,
+    ];
+
     // ── Capability flags ───────────────────────────────────────────────────
 
     private const SUPPORTS_THINKING = [
@@ -101,6 +114,14 @@ class ClaudeModels {
      */
     public static function getMaxTokenCeiling(string $model): int {
         return self::MAX_TOKENS_CEILING[$model] ?? self::DEFAULT_MAX_TOKENS;
+    }
+
+    /**
+     * Context window (max input tokens) for a model. The window is enforced
+     * API-side; this value is informational (UI, capability reporting).
+     */
+    public static function getContextWindow(string $model): int {
+        return self::CONTEXT_WINDOW[$model] ?? self::DEFAULT_CONTEXT_WINDOW;
     }
 
     public static function supportsThinking(string $model): bool {

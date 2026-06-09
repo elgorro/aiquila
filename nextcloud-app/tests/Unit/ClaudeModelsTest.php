@@ -50,6 +50,27 @@ class ClaudeModelsTest extends TestCase {
         );
     }
 
+    public function testGetContextWindowFor1MModels(): void {
+        $this->assertEquals(1000000, ClaudeModels::getContextWindow(ClaudeModels::FABLE_5));
+        $this->assertEquals(1000000, ClaudeModels::getContextWindow(ClaudeModels::OPUS_4_8));
+        $this->assertEquals(1000000, ClaudeModels::getContextWindow(ClaudeModels::OPUS_4_7));
+        $this->assertEquals(1000000, ClaudeModels::getContextWindow(ClaudeModels::OPUS_4_6));
+        $this->assertEquals(1000000, ClaudeModels::getContextWindow(ClaudeModels::SONNET_4_6));
+    }
+
+    public function testGetContextWindowFor200KModels(): void {
+        $this->assertEquals(200000, ClaudeModels::getContextWindow(ClaudeModels::HAIKU_4_5));
+        $this->assertEquals(200000, ClaudeModels::getContextWindow(ClaudeModels::SONNET_4_5));
+        $this->assertEquals(200000, ClaudeModels::getContextWindow(ClaudeModels::OPUS_4_5));
+    }
+
+    public function testGetContextWindowForUnknownModelReturnsDefault(): void {
+        $this->assertEquals(
+            ClaudeModels::DEFAULT_CONTEXT_WINDOW,
+            ClaudeModels::getContextWindow('claude-unknown-model')
+        );
+    }
+
     public function testSupportsThinkingForAdaptiveModels(): void {
         $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::FABLE_5));
         $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::OPUS_4_8));

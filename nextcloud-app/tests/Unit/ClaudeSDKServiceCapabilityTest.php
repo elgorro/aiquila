@@ -133,6 +133,47 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $this->assertEquals('high', $params['outputConfig']['effort']);
     }
 
+    public function testContextWindowResolvedFromModelInfo(): void {
+        $this->cache->method('get')->willReturn(null);
+        $capturedCaps = null;
+        $this->cache->method('set')->willReturnCallback(function ($key, $value) use (&$capturedCaps) {
+            $capturedCaps = $value;
+            return true;
+        });
+
+        $info = ModelInfo::with(
+            ClaudeModels::OPUS_4_6,
+            [
+                'batch' => ['supported' => true],
+                'citations' => ['supported' => false],
+                'code_execution' => ['supported' => false],
+                'context_management' => ['supported' => false, 'strategies' => []],
+                'effort' => [
+                    'supported' => true,
+                    'high' => ['supported' => true],
+                    'low' => ['supported' => true],
+                    'max' => ['supported' => true],
+                    'medium' => ['supported' => true],
+                ],
+                'image_input' => ['supported' => true],
+                'pdf_input' => ['supported' => true],
+                'structured_outputs' => ['supported' => false],
+                'thinking' => ['supported' => true, 'types' => ['adaptive' => ['supported' => true]]],
+            ],
+            new \DateTime(),
+            'Claude Opus 4.6',
+            1000000,
+            128000
+        );
+
+        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service->setRetrieveModelInfo($info);
+        $service->ask('test', '', 'testuser');
+
+        $this->assertIsArray($capturedCaps);
+        $this->assertEquals(1000000, $capturedCaps['context_window']);
+    }
+
     public function testCacheHitSkipsApiCall(): void {
         $cached = [
             'max_tokens' => 64000,
