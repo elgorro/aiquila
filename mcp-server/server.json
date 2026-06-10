@@ -18,13 +18,25 @@
       ]
     }
   ],
-  "version": "0.3.16",
+  "version": "0.3.17",
   "websiteUrl": "https://github.com/elgorro/aiquila",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://{hostname}/mcp",
+      "variables": {
+        "hostname": {
+          "description": "Hostname of your self-hosted AIquila MCP server (e.g. mcp.example.com). Authenticates via OAuth 2.0 (PKCE); clients discover the flow via the server's protected-resource metadata.",
+          "isRequired": true
+        }
+      }
+    }
+  ],
   "packages": [
     {
       "registryType": "npm",
       "identifier": "aiquila-mcp",
-      "version": "0.3.16",
+      "version": "0.3.17",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -52,7 +64,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.3.16",
+      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.3.17",
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"
