@@ -167,6 +167,33 @@ class ClaudeModels {
         return self::EFFORT_LEVEL[$model] ?? 'medium';
     }
 
+    // ── Allowed effort values per model (API-enforced) ───────────────────
+
+    /** Every effort value any model accepts; used for settings validation. */
+    public const ALL_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+    /** `xhigh` requires Fable 5 / Opus 4.7+; older models reject it with a 400. */
+    private const ALLOWED_EFFORTS = [
+        self::FABLE_5    => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::OPUS_4_8   => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::OPUS_4_7   => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::OPUS_4_6   => ['low', 'medium', 'high', 'max'],
+        self::SONNET_4_6 => ['low', 'medium', 'high', 'max'],
+    ];
+
+    /**
+     * Effort values the API accepts for a model; empty if effort is unsupported.
+     *
+     * @return string[]
+     */
+    public static function getAllowedEfforts(string $model): array {
+        return self::ALLOWED_EFFORTS[$model] ?? [];
+    }
+
+    public static function isAllowedEffort(string $model, string $effort): bool {
+        return in_array($effort, self::getAllowedEfforts($model), true);
+    }
+
     // ── Sampling parameter support ────────────────────────────────────────
 
     /** Models that reject temperature/top_p/top_k with a 400. */

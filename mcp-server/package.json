@@ -1,6 +1,6 @@
 {
   "name": "aiquila-mcp",
-  "version": "0.3.15",
+  "version": "0.3.16",
   "description": "AIquila - MCP server for Nextcloud integration",
   "type": "module",
   "main": "dist/index.js",

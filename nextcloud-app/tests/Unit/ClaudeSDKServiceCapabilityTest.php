@@ -127,8 +127,8 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $result = $service->ask('test', '', 'testuser');
         $params = $service->lastCreateParams;
 
-        $this->assertArrayHasKey('thinking', $params);
-        $this->assertEquals(['type' => 'adaptive'], $params['thinking']);
+        // Thinking is opt-in (default off) — must be omitted without an override
+        $this->assertArrayNotHasKey('thinking', $params);
         $this->assertArrayHasKey('outputConfig', $params);
         $this->assertEquals('high', $params['outputConfig']['effort']);
     }
@@ -201,8 +201,8 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $result = $service->ask('test', '', 'testuser');
         $params = $service->lastCreateParams;
 
-        // Static fallback: Opus 4.6 supports thinking and effort
-        $this->assertArrayHasKey('thinking', $params);
+        // Static fallback: Opus 4.6 supports effort; thinking stays opt-in
+        $this->assertArrayNotHasKey('thinking', $params);
         $this->assertArrayHasKey('outputConfig', $params);
     }
 
@@ -250,7 +250,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $service->ask('test', '', 'testuser');
         $params = $service->lastCreateParams;
 
-        $this->assertEquals(['type' => 'adaptive'], $params['thinking']);
+        $this->assertArrayNotHasKey('thinking', $params);
         $this->assertEquals('xhigh', $params['outputConfig']['effort']);
     }
 
@@ -300,6 +300,71 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
 
         $this->assertArrayNotHasKey('thinking', $params);
         $this->assertArrayNotHasKey('outputConfig', $params);
+    }
+
+    /** Build a service for a given model with cached caps and optional admin config. */
+    private function makeServiceForModel(string $model, array $appConfig = []): CapabilityTestableService {
+        $config = $this->createMock(IConfig::class);
+        $config->method('getUserValue')->willReturn('');
+        $config->method('getAppValue')
+            ->willReturnCallback(fn($app, $key, $default) => match (true) {
+                $key === 'model' => $model,
+                $key === 'max_tokens' => '4096',
+                array_key_exists($key, $appConfig) => $appConfig[$key],
+                default => $default,
+            });
+
+        $this->cache->method('get')->willReturn([
+            'max_tokens' => 64000,
+            'context_window' => 200000,
+            'supports_thinking' => true,
+            'supports_effort' => true,
+        ]);
+
+        return new CapabilityTestableService($config, $this->logger, $this->credentials, $this->cacheFactory);
+    }
+
+    public function testEffortConversationOverrideWins(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_4_6, ['effort' => 'max']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['effort' => 'low']);
+        $this->assertEquals('low', $service->lastCreateParams['outputConfig']['effort']);
+    }
+
+    public function testAdminEffortDefaultUsedWithoutOverride(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_4_6, ['effort' => 'max']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertEquals('max', $service->lastCreateParams['outputConfig']['effort']);
+    }
+
+    public function testInvalidAdminEffortFallsBackToModelDefault(): void {
+        // xhigh is not allowed on Sonnet 4.6 → falls back to model default 'medium'
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_4_6, ['effort' => 'xhigh']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertEquals('medium', $service->lastCreateParams['outputConfig']['effort']);
+    }
+
+    public function testInvalidEffortOverrideFallsThroughToAdminDefault(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_4_6, ['effort' => 'high']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['effort' => 'xhigh']);
+        $this->assertEquals('high', $service->lastCreateParams['outputConfig']['effort']);
+    }
+
+    public function testThinkingEnabledByAdminDefault(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5, ['thinking' => 'true']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertEquals(['type' => 'adaptive'], $service->lastCreateParams['thinking']);
+    }
+
+    public function testThinkingConversationOverrideBeatsAdminDefault(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5, ['thinking' => 'true']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking' => false]);
+        $this->assertArrayNotHasKey('thinking', $service->lastCreateParams);
+    }
+
+    public function testThinkingEnabledViaConversationOverride(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking' => true]);
+        $this->assertEquals(['type' => 'adaptive'], $service->lastCreateParams['thinking']);
     }
 
     public function testCallCreateStreamForwardsTools(): void {

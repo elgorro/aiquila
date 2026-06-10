@@ -175,6 +175,8 @@ class ClaudeSDKService implements LLMProviderInterface {
      *   top_k         (int)
      *   stop_sequences (array)
      *   tools          (array)  – Anthropic-format tool definitions
+     *   effort         (string) – per-conversation effort override (low…max)
+     *   thinking       (bool)   – per-conversation adaptive-thinking override
      */
     private function buildRequestParams(
         array   $messages,
@@ -190,12 +192,15 @@ class ClaudeSDKService implements LLMProviderInterface {
             'messages'   => $messages,
         ];
 
-        if ($caps['supports_thinking']) {
+        // Adaptive thinking is opt-in (conversation override or admin default).
+        // "Off" means omitting the param entirely — an explicit
+        // {type: 'disabled'} is rejected with a 400 on Fable 5.
+        if ($caps['supports_thinking'] && $this->resolveThinking($options['thinking'] ?? null)) {
             $params['thinking'] = ['type' => 'adaptive'];
         }
 
         if ($caps['supports_effort']) {
-            $params['outputConfig'] = ['effort' => ClaudeModels::getEffortLevel($model)];
+            $params['outputConfig'] = ['effort' => $this->resolveEffort($model, $options['effort'] ?? null)];
         }
 
         // System prompt — cache by default; caller can opt out with cache_system: false.
@@ -234,6 +239,34 @@ class ClaudeSDKService implements LLMProviderInterface {
         }
 
         return $params;
+    }
+
+    /**
+     * Resolve the effort level for a request: conversation override →
+     * admin default (app config `effort`) → model default. Values not
+     * allowed for the model fall through to the next level.
+     */
+    private function resolveEffort(string $model, ?string $override): string {
+        if ($override !== null && ClaudeModels::isAllowedEffort($model, $override)) {
+            return $override;
+        }
+        $adminDefault = $this->config->getAppValue($this->appName, 'effort', '');
+        if ($adminDefault !== '' && ClaudeModels::isAllowedEffort($model, $adminDefault)) {
+            return $adminDefault;
+        }
+        return ClaudeModels::getEffortLevel($model);
+    }
+
+    /**
+     * Whether adaptive thinking should be enabled: conversation override →
+     * admin default (app config `thinking`, default off).
+     */
+    private function resolveThinking(?bool $override): bool {
+        if ($override !== null) {
+            return $override;
+        }
+        // Declarative-settings checkboxes may persist as 'true' or '1'.
+        return in_array($this->config->getAppValue($this->appName, 'thinking', 'false'), ['true', '1'], true);
     }
 
     /**

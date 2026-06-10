@@ -45,6 +45,18 @@ class ConfigureCommand extends Base {
                 'Set maximum tokens (1-128000, default: 4096)'
             )
             ->addOption(
+                'effort',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Set default effort level (low|medium|high|xhigh|max, empty string to reset to model default)'
+            )
+            ->addOption(
+                'thinking',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Enable adaptive thinking by default (on|off)'
+            )
+            ->addOption(
                 'timeout',
                 null,
                 InputOption::VALUE_REQUIRED,
@@ -103,6 +115,30 @@ class ConfigureCommand extends Base {
             $updated = true;
         }
 
+        // Set default effort level
+        $effort = $input->getOption('effort');
+        if ($effort !== null) {
+            if ($effort !== '' && !in_array($effort, ClaudeModels::ALL_EFFORTS, true)) {
+                $output->writeln('<error>Effort must be one of: ' . implode(', ', ClaudeModels::ALL_EFFORTS) . ' (or empty to reset)</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'effort', $effort);
+            $output->writeln('<info>✓ Default effort ' . ($effort === '' ? 'reset to model default' : 'updated to: ' . $effort) . '</info>');
+            $updated = true;
+        }
+
+        // Set adaptive thinking default
+        $thinking = $input->getOption('thinking');
+        if ($thinking !== null) {
+            if (!in_array($thinking, ['on', 'off'], true)) {
+                $output->writeln('<error>Thinking must be "on" or "off"</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'thinking', $thinking === 'on' ? 'true' : 'false');
+            $output->writeln('<info>✓ Adaptive thinking default updated to: ' . $thinking . '</info>');
+            $updated = true;
+        }
+
         // Set timeout
         $timeout = $input->getOption('timeout');
         if ($timeout !== null) {
@@ -130,6 +166,8 @@ class ConfigureCommand extends Base {
         $hasKey = $this->credentials->hasApiKey(null);
         $model = $this->config->getAppValue(self::APP_NAME, 'model', ClaudeModels::DEFAULT_MODEL);
         $maxTokens = $this->config->getAppValue(self::APP_NAME, 'max_tokens', '4096');
+        $effort = $this->config->getAppValue(self::APP_NAME, 'effort', '');
+        $thinking = in_array($this->config->getAppValue(self::APP_NAME, 'thinking', 'false'), ['true', '1'], true);
         $timeout = $this->config->getAppValue(self::APP_NAME, 'api_timeout', '30');
 
         $output->writeln('');
@@ -144,6 +182,8 @@ class ConfigureCommand extends Base {
 
         $output->writeln('  Model:      <comment>' . $model . '</comment>');
         $output->writeln('  Max Tokens: <comment>' . $maxTokens . '</comment>');
+        $output->writeln('  Effort:     <comment>' . ($effort !== '' ? $effort : '(model default)') . '</comment>');
+        $output->writeln('  Thinking:   <comment>' . ($thinking ? 'on' : 'off') . '</comment>');
         $output->writeln('  Timeout:    <comment>' . $timeout . ' seconds</comment>');
         $output->writeln('');
 

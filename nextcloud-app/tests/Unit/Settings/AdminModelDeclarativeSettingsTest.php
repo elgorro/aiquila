@@ -23,7 +23,26 @@ class AdminModelDeclarativeSettingsTest extends TestCase {
 		$this->assertSame(DeclarativeSettingsTypes::STORAGE_TYPE_INTERNAL, $schema['storage_type']);
 		$this->assertNotEmpty($schema['title']);
 		$this->assertIsArray($schema['fields']);
-		$this->assertCount(1, $schema['fields']);
+		$this->assertCount(3, $schema['fields']);
+	}
+
+	public function testEffortField(): void {
+		$fields = $this->settings->getSchema()['fields'];
+		$effort = $this->findField($fields, 'effort');
+
+		$this->assertNotNull($effort, 'effort field should exist');
+		$this->assertSame(DeclarativeSettingsTypes::SELECT, $effort['type']);
+		$this->assertSame('', $effort['default'], 'default must be empty = model default');
+		$this->assertSame(array_merge([''], ClaudeModels::ALL_EFFORTS), $effort['options']);
+	}
+
+	public function testThinkingField(): void {
+		$fields = $this->settings->getSchema()['fields'];
+		$thinking = $this->findField($fields, 'thinking');
+
+		$this->assertNotNull($thinking, 'thinking field should exist');
+		$this->assertSame(DeclarativeSettingsTypes::CHECKBOX, $thinking['type']);
+		$this->assertFalse($thinking['default'], 'adaptive thinking must default to off');
 	}
 
 	public function testModelField(): void {

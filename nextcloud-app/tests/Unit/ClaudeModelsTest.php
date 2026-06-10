@@ -120,6 +120,38 @@ class ClaudeModelsTest extends TestCase {
         $this->assertEquals('medium', ClaudeModels::getEffortLevel('claude-unknown-model'));
     }
 
+    public function testAllowedEffortsIncludeXhighOnlyOnOpus47Plus(): void {
+        foreach ([ClaudeModels::FABLE_5, ClaudeModels::OPUS_4_8, ClaudeModels::OPUS_4_7] as $model) {
+            $this->assertEquals(['low', 'medium', 'high', 'xhigh', 'max'], ClaudeModels::getAllowedEfforts($model));
+        }
+        foreach ([ClaudeModels::OPUS_4_6, ClaudeModels::SONNET_4_6] as $model) {
+            $this->assertEquals(['low', 'medium', 'high', 'max'], ClaudeModels::getAllowedEfforts($model));
+        }
+    }
+
+    public function testAllowedEffortsEmptyOnUnsupportedModels(): void {
+        $this->assertEquals([], ClaudeModels::getAllowedEfforts(ClaudeModels::HAIKU_4_5));
+        $this->assertEquals([], ClaudeModels::getAllowedEfforts(ClaudeModels::SONNET_4_5));
+        $this->assertEquals([], ClaudeModels::getAllowedEfforts('claude-unknown-model'));
+    }
+
+    public function testIsAllowedEffort(): void {
+        $this->assertTrue(ClaudeModels::isAllowedEffort(ClaudeModels::FABLE_5, 'xhigh'));
+        $this->assertFalse(ClaudeModels::isAllowedEffort(ClaudeModels::SONNET_4_6, 'xhigh'));
+        $this->assertTrue(ClaudeModels::isAllowedEffort(ClaudeModels::SONNET_4_6, 'max'));
+        $this->assertFalse(ClaudeModels::isAllowedEffort(ClaudeModels::HAIKU_4_5, 'medium'));
+        $this->assertFalse(ClaudeModels::isAllowedEffort(ClaudeModels::FABLE_5, 'bogus'));
+    }
+
+    public function testDefaultEffortLevelsAreAllowedForTheirModel(): void {
+        foreach (ClaudeModels::EFFORT_LEVEL as $model => $effort) {
+            $this->assertTrue(
+                ClaudeModels::isAllowedEffort($model, $effort),
+                "Default effort '$effort' must be allowed on $model"
+            );
+        }
+    }
+
     public function testEffortLevelConstantsArePublic(): void {
         $this->assertIsArray(ClaudeModels::EFFORT_LEVEL);
         $this->assertArrayHasKey(ClaudeModels::OPUS_4_7, ClaudeModels::EFFORT_LEVEL);

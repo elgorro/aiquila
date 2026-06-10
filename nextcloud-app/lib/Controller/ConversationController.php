@@ -14,6 +14,7 @@ use OCA\AIquila\Db\MessageMapper;
 use OCA\AIquila\Db\ProjectMapper;
 use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Http\SSEResponse;
+use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
@@ -148,21 +149,25 @@ class ConversationController extends Controller {
     }
 
     /**
-     * Update a conversation (title and/or project link)
+     * Update a conversation (title, project link, effort and/or thinking override)
      *
      * @param int $id Conversation ID
      * @param string $title New title
      * @param int|null $projectId Project ID to link (null to clear)
+     * @param string|null $effort Effort override (low…max; empty string clears)
+     * @param string|null $thinking Adaptive-thinking override ('on'/'off'; empty string clears)
      *
      * 200: Updated conversation
+     * 400: Invalid effort or thinking value
      * 404: Conversation not found
      *
      * @return JSONResponse<Http::STATUS_OK, array{id: int, title: ?string, model: string}, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, allowed?: list<string>}, array{}>
      *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
-    public function update(int $id, string $title = '', ?int $projectId = null): JSONResponse {
+    public function update(int $id, string $title = '', ?int $projectId = null, ?string $effort = null, ?string $thinking = null): JSONResponse {
         try {
             $conversation = $this->conversationMapper->findByIdAndUser($id, $this->userId);
         } catch (DoesNotExistException $e) {
@@ -177,6 +182,27 @@ class ConversationController extends Controller {
         $requestParams = $this->request->getParams();
         if (array_key_exists('projectId', $requestParams)) {
             $conversation->setProjectId($projectId);
+        }
+
+        if ($effort !== null) {
+            $model = ClaudeModels::resolveModel($conversation->getModel());
+            if ($effort !== '' && !ClaudeModels::isAllowedEffort($model, $effort)) {
+                $allowed = ClaudeModels::getAllowedEfforts($model);
+                return new JSONResponse([
+                    'error' => $allowed === []
+                        ? 'Model ' . $model . ' does not support effort'
+                        : 'Invalid effort for ' . $model . '. Allowed: ' . implode(', ', $allowed),
+                    'allowed' => $allowed,
+                ], 400);
+            }
+            $conversation->setEffort($effort === '' ? null : $effort);
+        }
+
+        if ($thinking !== null) {
+            if (!in_array($thinking, ['on', 'off', ''], true)) {
+                return new JSONResponse(['error' => 'Thinking must be "on", "off" or empty'], 400);
+            }
+            $conversation->setThinking($thinking === '' ? null : $thinking === 'on');
         }
 
         $conversation->setUpdatedAt(time());
@@ -327,7 +353,8 @@ class ConversationController extends Controller {
         //    a cached Anthropic file_id was evicted server-side, drop the row,
         //    rebuild content blocks (re-uploading), and retry once.
         $startMs = (int)(microtime(true) * 1000);
-        $result = $this->callClaude($claudeMessages, $systemPrompt);
+        $options = $this->conversationOptions($conversation);
+        $result = $this->callClaude($claudeMessages, $systemPrompt, $options);
         if (
             !empty($files)
             && isset($result['error'])
@@ -348,7 +375,7 @@ class ConversationController extends Controller {
                     [['type' => 'text', 'text' => $userText]]
                 );
             }
-            $result = $this->callClaude($claudeMessages, $systemPrompt);
+            $result = $this->callClaude($claudeMessages, $systemPrompt, $options);
         }
         $latencyMs = (int)(microtime(true) * 1000) - $startMs;
 
@@ -564,6 +591,7 @@ class ConversationController extends Controller {
         $finalUsage = ['input_tokens' => 0, 'output_tokens' => 0, 'cache_creation_tokens' => null, 'cache_read_tokens' => null];
         $errorMessage = null;
         $startMs = (int)(microtime(true) * 1000);
+        $options = $this->conversationOptions($conversation);
 
         $eventStream = $useNativeMcp
             ? $provider->chatWithNativeMcp(
@@ -571,6 +599,7 @@ class ConversationController extends Controller {
                 $nativeMcpServers,
                 $systemPrompt,
                 $this->userId,
+                $options,
             )
             : $provider->chatWithToolsStream(
                 $claudeMessages,
@@ -578,6 +607,7 @@ class ConversationController extends Controller {
                 $toolExecutor,
                 $systemPrompt,
                 $this->userId,
+                $options,
             );
 
         foreach ($eventStream as $event) {
@@ -838,9 +868,24 @@ class ConversationController extends Controller {
     }
 
     /**
+     * Per-conversation request options (effort / thinking overrides).
+     * Unset overrides are omitted so provider-side defaults apply.
+     */
+    private function conversationOptions(Conversation $conversation): array {
+        $options = [];
+        if ($conversation->getEffort() !== null) {
+            $options['effort'] = $conversation->getEffort();
+        }
+        if ($conversation->getThinking() !== null) {
+            $options['thinking'] = $conversation->getThinking();
+        }
+        return $options;
+    }
+
+    /**
      * Call the active LLM provider with MCP tool support if available
      */
-    private function callClaude(array $messages, ?string $systemPrompt = null): array {
+    private function callClaude(array $messages, ?string $systemPrompt = null, array $options = []): array {
         $provider = $this->providerFactory->getProvider($this->userId);
 
         if ($provider->supportsNativeMcp() && $this->nativeMcp->isEnabledForUser($this->userId)) {
@@ -853,6 +898,7 @@ class ConversationController extends Controller {
                     $mcpServers,
                     $systemPrompt,
                     $this->userId,
+                    $options,
                 );
             }
         }
@@ -874,10 +920,11 @@ class ConversationController extends Controller {
                 },
                 $systemPrompt,
                 $this->userId,
+                $options,
             );
         }
 
-        return $provider->chat($messages, $systemPrompt, $this->userId);
+        return $provider->chat($messages, $systemPrompt, $this->userId, $options);
     }
 
     /**

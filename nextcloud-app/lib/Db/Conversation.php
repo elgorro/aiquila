@@ -21,6 +21,10 @@ use OCP\AppFramework\Db\Entity;
  * @method void setUpdatedAt(int $updatedAt)
  * @method int|null getProjectId()
  * @method void setProjectId(?int $projectId)
+ * @method string|null getEffort()
+ * @method void setEffort(?string $effort)
+ * @method bool|null getThinking()
+ * @method void setThinking(?bool $thinking)
  */
 class Conversation extends Entity implements \JsonSerializable {
     protected string $userId = '';
@@ -29,6 +33,8 @@ class Conversation extends Entity implements \JsonSerializable {
     protected int $createdAt = 0;
     protected int $updatedAt = 0;
     protected ?int $projectId = null;
+    protected ?string $effort = null;
+    protected ?bool $thinking = null;
 
     public function __construct() {
         $this->addType('userId', 'string');
@@ -37,6 +43,8 @@ class Conversation extends Entity implements \JsonSerializable {
         $this->addType('createdAt', 'integer');
         $this->addType('updatedAt', 'integer');
         $this->addType('projectId', 'integer');
+        $this->addType('effort', 'string');
+        $this->addType('thinking', 'boolean');
     }
 
     public function jsonSerialize(): array {
@@ -48,6 +56,8 @@ class Conversation extends Entity implements \JsonSerializable {
             'createdAt' => $this->getCreatedAt(),
             'updatedAt' => $this->getUpdatedAt(),
             'projectId' => $this->getProjectId(),
+            'effort' => $this->getEffort(),
+            'thinking' => $this->getThinking(),
         ];
     }
 }
