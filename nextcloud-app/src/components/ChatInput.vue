@@ -112,6 +112,18 @@ const SLASH_COMMANDS = [
 		icon: '🔎',
 		description: 'Search across conversation messages',
 	},
+	{
+		id: 'effort',
+		label: '/effort',
+		icon: '⚡',
+		description: 'Set effort for this conversation (low, medium, high, xhigh, max — e.g. /effort:high; no value resets to default)',
+	},
+	{
+		id: 'thinking',
+		label: '/thinking',
+		icon: '🧠',
+		description: 'Toggle adaptive thinking for this conversation (/thinking:on or /thinking:off; no value resets to default)',
+	},
 ]
 
 export default {
@@ -221,6 +233,12 @@ export default {
 				break
 			case 'search':
 				this.$emit('command', { type: 'search', args })
+				break
+			case 'effort':
+				this.$emit('command', { type: 'set-effort', args })
+				break
+			case 'thinking':
+				this.$emit('command', { type: 'set-thinking', args })
 				break
 			}
 		},

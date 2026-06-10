@@ -36,13 +36,25 @@ class ConfigureCommand extends Base {
                 'model',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Set Claude model (e.g., claude-opus-4-7, claude-sonnet-4-6, claude-sonnet-4-5-20250929)'
+                'Set Claude model (e.g., claude-fable-5, claude-opus-4-8, claude-sonnet-4-6)'
             )
             ->addOption(
                 'max-tokens',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Set maximum tokens (1-100000, default: 4096)'
+                'Set maximum tokens (1-128000, default: 4096)'
+            )
+            ->addOption(
+                'effort',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Set default effort level (low|medium|high|xhigh|max, empty string to reset to model default)'
+            )
+            ->addOption(
+                'thinking',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Enable adaptive thinking by default (on|off)'
             )
             ->addOption(
                 'timeout',
@@ -94,12 +106,36 @@ class ConfigureCommand extends Base {
         $maxTokens = $input->getOption('max-tokens');
         if ($maxTokens !== null) {
             $maxTokensInt = (int)$maxTokens;
-            if ($maxTokensInt < 1 || $maxTokensInt > 100000) {
-                $output->writeln('<error>Max tokens must be between 1 and 100000</error>');
+            if ($maxTokensInt < 1 || $maxTokensInt > 128000) {
+                $output->writeln('<error>Max tokens must be between 1 and 128000</error>');
                 return 1;
             }
             $this->config->setAppValue(self::APP_NAME, 'max_tokens', (string)$maxTokensInt);
             $output->writeln('<info>✓ Max tokens updated to: ' . $maxTokensInt . '</info>');
+            $updated = true;
+        }
+
+        // Set default effort level
+        $effort = $input->getOption('effort');
+        if ($effort !== null) {
+            if ($effort !== '' && !in_array($effort, ClaudeModels::ALL_EFFORTS, true)) {
+                $output->writeln('<error>Effort must be one of: ' . implode(', ', ClaudeModels::ALL_EFFORTS) . ' (or empty to reset)</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'effort', $effort);
+            $output->writeln('<info>✓ Default effort ' . ($effort === '' ? 'reset to model default' : 'updated to: ' . $effort) . '</info>');
+            $updated = true;
+        }
+
+        // Set adaptive thinking default
+        $thinking = $input->getOption('thinking');
+        if ($thinking !== null) {
+            if (!in_array($thinking, ['on', 'off'], true)) {
+                $output->writeln('<error>Thinking must be "on" or "off"</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'thinking', $thinking === 'on' ? 'true' : 'false');
+            $output->writeln('<info>✓ Adaptive thinking default updated to: ' . $thinking . '</info>');
             $updated = true;
         }
 
@@ -130,6 +166,8 @@ class ConfigureCommand extends Base {
         $hasKey = $this->credentials->hasApiKey(null);
         $model = $this->config->getAppValue(self::APP_NAME, 'model', ClaudeModels::DEFAULT_MODEL);
         $maxTokens = $this->config->getAppValue(self::APP_NAME, 'max_tokens', '4096');
+        $effort = $this->config->getAppValue(self::APP_NAME, 'effort', '');
+        $thinking = in_array($this->config->getAppValue(self::APP_NAME, 'thinking', 'false'), ['true', '1'], true);
         $timeout = $this->config->getAppValue(self::APP_NAME, 'api_timeout', '30');
 
         $output->writeln('');
@@ -144,6 +182,8 @@ class ConfigureCommand extends Base {
 
         $output->writeln('  Model:      <comment>' . $model . '</comment>');
         $output->writeln('  Max Tokens: <comment>' . $maxTokens . '</comment>');
+        $output->writeln('  Effort:     <comment>' . ($effort !== '' ? $effort : '(model default)') . '</comment>');
+        $output->writeln('  Thinking:   <comment>' . ($thinking ? 'on' : 'off') . '</comment>');
         $output->writeln('  Timeout:    <comment>' . $timeout . ' seconds</comment>');
         $output->writeln('');
 

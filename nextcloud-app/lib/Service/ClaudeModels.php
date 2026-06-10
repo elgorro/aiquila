@@ -14,7 +14,13 @@ class ClaudeModels {
 
     // ── Model ID constants ─────────────────────────────────────────────────
 
-    /** Opus 4.7 – most capable frontier model (adaptive thinking, 128K output, 1M context, xhigh effort) */
+    /** Fable 5 – most powerful model, new tier above Opus (adaptive thinking, 128K output, 1M context, xhigh effort) */
+    public const FABLE_5    = 'claude-fable-5';
+
+    /** Opus 4.8 – most capable Opus-tier model (adaptive thinking, 128K output, 1M context, xhigh effort) */
+    public const OPUS_4_8   = 'claude-opus-4-8';
+
+    /** Opus 4.7 – previous-generation Opus (adaptive thinking, 128K output, 1M context, xhigh effort) */
     public const OPUS_4_7   = 'claude-opus-4-7';
 
     /** Opus 4.6 – frontier model (adaptive thinking, 128K output) */
@@ -62,20 +68,39 @@ class ClaudeModels {
     // ── Per-model output token ceilings ────────────────────────────────────
 
     private const MAX_TOKENS_CEILING = [
+        self::FABLE_5    => 128000,
+        self::OPUS_4_8   => 128000,
         self::OPUS_4_7   => 128000,
         self::OPUS_4_6   => 128000,
         self::SONNET_4_6 => 64000,
     ];
 
+    // ── Per-model context windows (input side) ─────────────────────────────
+
+    /** Default context window for models not listed in CONTEXT_WINDOW. */
+    public const DEFAULT_CONTEXT_WINDOW = 200000;
+
+    private const CONTEXT_WINDOW = [
+        self::FABLE_5    => 1000000,
+        self::OPUS_4_8   => 1000000,
+        self::OPUS_4_7   => 1000000,
+        self::OPUS_4_6   => 1000000,
+        self::SONNET_4_6 => 1000000,
+    ];
+
     // ── Capability flags ───────────────────────────────────────────────────
 
     private const SUPPORTS_THINKING = [
+        self::FABLE_5    => true,
+        self::OPUS_4_8   => true,
         self::OPUS_4_7   => true,
         self::OPUS_4_6   => true,
         self::SONNET_4_6 => true,
     ];
 
     private const SUPPORTS_EFFORT = [
+        self::FABLE_5    => true,
+        self::OPUS_4_8   => true,
         self::OPUS_4_7   => true,
         self::OPUS_4_6   => true,
         self::SONNET_4_6 => true,
@@ -89,6 +114,14 @@ class ClaudeModels {
      */
     public static function getMaxTokenCeiling(string $model): int {
         return self::MAX_TOKENS_CEILING[$model] ?? self::DEFAULT_MAX_TOKENS;
+    }
+
+    /**
+     * Context window (max input tokens) for a model. The window is enforced
+     * API-side; this value is informational (UI, capability reporting).
+     */
+    public static function getContextWindow(string $model): int {
+        return self::CONTEXT_WINDOW[$model] ?? self::DEFAULT_CONTEXT_WINDOW;
     }
 
     public static function supportsThinking(string $model): bool {
@@ -106,6 +139,8 @@ class ClaudeModels {
      */
     public static function getAllModels(): array {
         return [
+            self::FABLE_5,
+            self::OPUS_4_8,
             self::OPUS_4_7,
             self::OPUS_4_6,
             self::SONNET_4_6,
@@ -118,6 +153,8 @@ class ClaudeModels {
     // ── Per-model effort level (app-level policy) ────────────────────────
 
     public const EFFORT_LEVEL = [
+        self::FABLE_5    => 'xhigh',
+        self::OPUS_4_8   => 'xhigh',
         self::OPUS_4_7   => 'xhigh',
         self::OPUS_4_6   => 'high',
         self::SONNET_4_6 => 'medium',
@@ -128,5 +165,49 @@ class ClaudeModels {
      */
     public static function getEffortLevel(string $model): string {
         return self::EFFORT_LEVEL[$model] ?? 'medium';
+    }
+
+    // ── Allowed effort values per model (API-enforced) ───────────────────
+
+    /** Every effort value any model accepts; used for settings validation. */
+    public const ALL_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+    /** `xhigh` requires Fable 5 / Opus 4.7+; older models reject it with a 400. */
+    private const ALLOWED_EFFORTS = [
+        self::FABLE_5    => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::OPUS_4_8   => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::OPUS_4_7   => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::OPUS_4_6   => ['low', 'medium', 'high', 'max'],
+        self::SONNET_4_6 => ['low', 'medium', 'high', 'max'],
+    ];
+
+    /**
+     * Effort values the API accepts for a model; empty if effort is unsupported.
+     *
+     * @return string[]
+     */
+    public static function getAllowedEfforts(string $model): array {
+        return self::ALLOWED_EFFORTS[$model] ?? [];
+    }
+
+    public static function isAllowedEffort(string $model, string $effort): bool {
+        return in_array($effort, self::getAllowedEfforts($model), true);
+    }
+
+    // ── Sampling parameter support ────────────────────────────────────────
+
+    /** Models that reject temperature/top_p/top_k with a 400. */
+    private const NO_SAMPLING_PARAMS = [
+        self::FABLE_5  => true,
+        self::OPUS_4_8 => true,
+        self::OPUS_4_7 => true,
+    ];
+
+    /**
+     * Whether a model accepts the temperature/top_p/top_k sampling
+     * parameters. Fable 5 and Opus 4.7+ removed them entirely.
+     */
+    public static function supportsSamplingParams(string $model): bool {
+        return !isset(self::NO_SAMPLING_PARAMS[$model]);
     }
 }

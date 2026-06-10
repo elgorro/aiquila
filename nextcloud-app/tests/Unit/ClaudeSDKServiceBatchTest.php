@@ -89,7 +89,7 @@ class BatchTestableService extends ClaudeSDKService {
             $p->setAccessible(true);
             $p->setValue($msg, $val);
         }
-        $usage = Usage::with(null, null, null, null, 5, 7, null, null);
+        $usage = Usage::with(null, null, null, null, 5, 7, null, null, null);
         $up = $ref->getProperty('usage');
         $up->setAccessible(true);
         $up->setValue($msg, $usage);

@@ -22,6 +22,7 @@ use Anthropic\Messages\Batches\MessageBatchExpiredResult;
 use Anthropic\Messages\Batches\MessageBatchIndividualResponse;
 use Anthropic\Messages\Batches\MessageBatchSucceededResult;
 use Anthropic\Messages\Message;
+use Anthropic\Messages\Usage;
 use Anthropic\Models\ModelInfo;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\ICache;
@@ -43,6 +44,13 @@ class ClaudeSDKService implements LLMProviderInterface {
     private string $appName = 'aiquila';
 
     private const CAPABILITY_CACHE_TTL = 3600; // 1 hour
+
+    /**
+     * Above this max_tokens value, non-streaming requests risk HTTP timeouts
+     * (Anthropic recommends streaming for outputs over ~16K tokens), so
+     * createMessage() transparently switches to the streaming transport.
+     */
+    private const STREAMING_THRESHOLD = 16384;
 
     public function __construct(IConfig $config, LoggerInterface $logger, CredentialService $credentials, ICacheFactory $cacheFactory) {
         $this->config = $config;
@@ -111,7 +119,7 @@ class ClaudeSDKService implements LLMProviderInterface {
     /**
      * Resolve model capabilities dynamically via the SDK, with caching and static fallback.
      *
-     * @return array{max_tokens: int, supports_thinking: bool, supports_effort: bool}
+     * @return array{max_tokens: int, context_window: int, supports_thinking: bool, supports_effort: bool}
      */
     private function resolveModelCapabilities(string $model, ?string $userId = null): array {
         $cacheKey = $model;
@@ -126,6 +134,7 @@ class ClaudeSDKService implements LLMProviderInterface {
 
             $caps = [
                 'max_tokens' => $info->maxTokens ?? ClaudeModels::getMaxTokenCeiling($model),
+                'context_window' => $info->maxInputTokens ?? ClaudeModels::getContextWindow($model),
                 'supports_thinking' => $info->capabilities->thinking->supported ?? false,
                 'supports_effort' => $info->capabilities->effort->supported ?? false,
             ];
@@ -146,6 +155,7 @@ class ClaudeSDKService implements LLMProviderInterface {
 
             return [
                 'max_tokens' => ClaudeModels::getMaxTokenCeiling($model),
+                'context_window' => ClaudeModels::getContextWindow($model),
                 'supports_thinking' => ClaudeModels::supportsThinking($model),
                 'supports_effort' => ClaudeModels::supportsEffort($model),
             ];
@@ -165,6 +175,8 @@ class ClaudeSDKService implements LLMProviderInterface {
      *   top_k         (int)
      *   stop_sequences (array)
      *   tools          (array)  – Anthropic-format tool definitions
+     *   effort         (string) – per-conversation effort override (low…max)
+     *   thinking       (bool)   – per-conversation adaptive-thinking override
      */
     private function buildRequestParams(
         array   $messages,
@@ -180,12 +192,15 @@ class ClaudeSDKService implements LLMProviderInterface {
             'messages'   => $messages,
         ];
 
-        if ($caps['supports_thinking']) {
+        // Adaptive thinking is opt-in (conversation override or admin default).
+        // "Off" means omitting the param entirely — an explicit
+        // {type: 'disabled'} is rejected with a 400 on Fable 5.
+        if ($caps['supports_thinking'] && $this->resolveThinking($options['thinking'] ?? null)) {
             $params['thinking'] = ['type' => 'adaptive'];
         }
 
         if ($caps['supports_effort']) {
-            $params['outputConfig'] = ['effort' => ClaudeModels::getEffortLevel($model)];
+            $params['outputConfig'] = ['effort' => $this->resolveEffort($model, $options['effort'] ?? null)];
         }
 
         // System prompt — cache by default; caller can opt out with cache_system: false.
@@ -200,8 +215,11 @@ class ClaudeSDKService implements LLMProviderInterface {
             $params['system'] = [$systemBlock];
         }
 
-        // Sampling parameters
-        foreach (['temperature', 'top_p', 'top_k', 'stop_sequences'] as $key) {
+        // Sampling parameters — Fable 5 and Opus 4.7+ reject temperature/top_p/top_k with a 400
+        $samplingKeys = ClaudeModels::supportsSamplingParams($model)
+            ? ['temperature', 'top_p', 'top_k', 'stop_sequences']
+            : ['stop_sequences'];
+        foreach ($samplingKeys as $key) {
             if (array_key_exists($key, $options)) {
                 $params[$key] = $options[$key];
             }
@@ -221,6 +239,34 @@ class ClaudeSDKService implements LLMProviderInterface {
         }
 
         return $params;
+    }
+
+    /**
+     * Resolve the effort level for a request: conversation override →
+     * admin default (app config `effort`) → model default. Values not
+     * allowed for the model fall through to the next level.
+     */
+    private function resolveEffort(string $model, ?string $override): string {
+        if ($override !== null && ClaudeModels::isAllowedEffort($model, $override)) {
+            return $override;
+        }
+        $adminDefault = $this->config->getAppValue($this->appName, 'effort', '');
+        if ($adminDefault !== '' && ClaudeModels::isAllowedEffort($model, $adminDefault)) {
+            return $adminDefault;
+        }
+        return ClaudeModels::getEffortLevel($model);
+    }
+
+    /**
+     * Whether adaptive thinking should be enabled: conversation override →
+     * admin default (app config `thinking`, default off).
+     */
+    private function resolveThinking(?bool $override): bool {
+        if ($override !== null) {
+            return $override;
+        }
+        // Declarative-settings checkboxes may persist as 'true' or '1'.
+        return in_array($this->config->getAppValue($this->appName, 'thinking', 'false'), ['true', '1'], true);
     }
 
     /**
@@ -304,6 +350,120 @@ class ClaudeSDKService implements LLMProviderInterface {
             stopSequences: $params['stop_sequences'] ?? null,
             tools: $params['tools'] ?? null,
             requestOptions: $this->requestOptionsForMessages($params),
+        );
+    }
+
+    /**
+     * Create a message, transparently using the streaming transport when the
+     * requested max_tokens is large enough to risk an HTTP timeout on a plain
+     * create call. Callers receive the same Message shape either way.
+     */
+    protected function createMessage(Client $client, array $params): Message {
+        if (($params['max_tokens'] ?? 0) > self::STREAMING_THRESHOLD) {
+            return $this->createViaStream($client, $params);
+        }
+        return $this->callCreate($client, $params);
+    }
+
+    /**
+     * Run a streaming create call and aggregate the events into a final
+     * Message equivalent to what a non-streaming create would have returned.
+     */
+    private function createViaStream(Client $client, array $params): Message {
+        $stream = $this->callCreateStream($client, $params);
+
+        /** @var Message|null $base */
+        $base = null;
+        /** @var array<int, \stdClass> $blocks */
+        $blocks = [];
+        /** @var array<int, string> $jsonBuffers */
+        $jsonBuffers = [];
+        $stopReason = null;
+        $stopSequence = null;
+        $stopDetails = null;
+        $outputTokens = 0;
+
+        foreach ($stream as $event) {
+            switch ($event->type ?? null) {
+                case 'message_start':
+                    $base = $event->message;
+                    break;
+
+                case 'content_block_start':
+                    $idx = $event->index;
+                    $cb = $event->contentBlock;
+                    $block = new \stdClass();
+                    $block->type = $cb->type ?? 'unknown';
+                    if ($block->type === 'text') {
+                        $block->text = '';
+                        $block->citations = [];
+                    } elseif ($block->type === 'tool_use') {
+                        $block->id = $cb->id ?? '';
+                        $block->name = $cb->name ?? '';
+                        $block->input = [];
+                        $jsonBuffers[$idx] = '';
+                    }
+                    $blocks[$idx] = $block;
+                    break;
+
+                case 'content_block_delta':
+                    $idx = $event->index;
+                    $delta = $event->delta;
+                    $deltaType = $delta->type ?? null;
+                    if ($deltaType === 'text_delta' && isset($blocks[$idx])) {
+                        $blocks[$idx]->text = ($blocks[$idx]->text ?? '') . ($delta->text ?? '');
+                    } elseif ($deltaType === 'input_json_delta') {
+                        $jsonBuffers[$idx] = ($jsonBuffers[$idx] ?? '') . ($delta->partialJSON ?? '');
+                    } elseif ($deltaType === 'citations_delta' && isset($blocks[$idx])) {
+                        $citation = $delta->citation ?? null;
+                        if ($citation !== null) {
+                            $blocks[$idx]->citations[] = $citation;
+                        }
+                    }
+                    break;
+
+                case 'content_block_stop':
+                    $idx = $event->index;
+                    if (isset($blocks[$idx], $jsonBuffers[$idx]) && $blocks[$idx]->type === 'tool_use') {
+                        $blocks[$idx]->input = json_decode($jsonBuffers[$idx], true) ?? [];
+                    }
+                    break;
+
+                case 'message_delta':
+                    $stopReason = $event->delta->stopReason ?? $stopReason;
+                    $stopSequence = $event->delta->stopSequence ?? $stopSequence;
+                    $stopDetails = $event->delta->stopDetails ?? $stopDetails;
+                    $outputTokens = $event->usage->outputTokens ?? $outputTokens;
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        ksort($blocks);
+
+        $usage = Usage::with(
+            null,
+            $base?->usage->cacheCreationInputTokens ?? null,
+            $base?->usage->cacheReadInputTokens ?? null,
+            $base?->usage->inferenceGeo ?? null,
+            $base?->usage->inputTokens ?? 0,
+            $outputTokens,
+            null,
+            null,
+            $base?->usage->serviceTier ?? null,
+        );
+
+        return Message::with(
+            $base?->id ?? '',
+            null,
+            array_values($blocks),
+            $params['model'],
+            $stopDetails,
+            $stopReason,
+            $stopSequence,
+            $usage,
         );
     }
 
@@ -554,7 +714,7 @@ class ClaudeSDKService implements LLMProviderInterface {
                 'user' => $userId
             ]);
 
-            $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId, $options));
+            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId, $options));
 
             $usage = $this->extractUsage($response);
 
@@ -606,7 +766,7 @@ class ClaudeSDKService implements LLMProviderInterface {
                 'user'         => $userId,
             ]);
 
-            $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId, $options));
+            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId, $options));
 
             $usage = $this->extractUsage($response);
 
@@ -671,7 +831,7 @@ class ClaudeSDKService implements LLMProviderInterface {
         for ($i = 0; $i < $maxIterations; $i++) {
             try {
                 $params = $this->buildRequestParams($messages, $userId, $options);
-                $response = $this->callCreate($client, $params);
+                $response = $this->createMessage($client, $params);
             } catch (\Throwable $e) {
                 return $this->handleException($e, 'chatWithTools');
             }
@@ -1028,7 +1188,7 @@ class ClaudeSDKService implements LLMProviderInterface {
                 ],
             ];
 
-            $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId));
+            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId));
 
             $usage = $this->extractUsage($response);
 
@@ -1159,7 +1319,7 @@ class ClaudeSDKService implements LLMProviderInterface {
                     ],
                 ],
             ];
-            $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId));
+            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId));
 
             $usage = $this->extractUsage($response);
 
@@ -1225,7 +1385,7 @@ class ClaudeSDKService implements LLMProviderInterface {
                     'content' => $content,
                 ],
             ];
-            $response = $this->callCreate($client, $this->buildRequestParams($messages, $userId));
+            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId));
 
             $usage = $this->extractUsage($response);
 

@@ -313,7 +313,7 @@
             },
             "put": {
                 "operationId": "conversation-update",
-                "summary": "Update a conversation (title and/or project link)",
+                "summary": "Update a conversation (title, project link, effort and/or thinking override)",
                 "tags": [
                     "conversation"
                 ],
@@ -343,6 +343,18 @@
                                         "nullable": true,
                                         "default": null,
                                         "description": "Project ID to link (null to clear)"
+                                    },
+                                    "effort": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Effort override (low…max; empty string clears)"
+                                    },
+                                    "thinking": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Adaptive-thinking override ('on'/'off'; empty string clears)"
                                     }
                                 }
                             }
@@ -394,6 +406,30 @@
                                         },
                                         "model": {
                                             "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid effort or thinking value",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "allowed": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
                                         }
                                     }
                                 }

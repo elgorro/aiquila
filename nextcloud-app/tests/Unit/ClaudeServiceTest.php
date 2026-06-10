@@ -152,7 +152,7 @@ class TestableClaudeSDKService extends ClaudeSDKService {
             $p->setAccessible(true);
             $p->setValue($stub, $val);
         }
-        $usage = Usage::with(null, null, null, null, 10, 20, null, null);
+        $usage = Usage::with(null, null, null, null, 10, 20, null, null, null);
         $p = $ref->getProperty('usage');
         $p->setValue($stub, $usage);
         return $stub;

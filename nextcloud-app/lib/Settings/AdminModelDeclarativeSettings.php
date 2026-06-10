@@ -29,6 +29,21 @@ class AdminModelDeclarativeSettings implements IDeclarativeSettingsForm {
 					'options' => ClaudeModels::getAllModels(),
 					'default' => ClaudeModels::DEFAULT_MODEL,
 				],
+				[
+					'id' => 'effort',
+					'title' => 'Default effort level',
+					'description' => 'How much work Claude puts into each response. "Model default" picks a sensible level per model. "xhigh" is only accepted by Fable 5 and Opus 4.7+; on other models the value falls back to the model default. Users can override this per conversation with /effort.',
+					'type' => DeclarativeSettingsTypes::SELECT,
+					'options' => array_merge([''], ClaudeModels::ALL_EFFORTS),
+					'default' => '',
+				],
+				[
+					'id' => 'thinking',
+					'title' => 'Enable adaptive thinking by default',
+					'description' => 'Lets Claude reason before answering on models that support it. Off by default; users can override this per conversation with /thinking.',
+					'type' => DeclarativeSettingsTypes::CHECKBOX,
+					'default' => false,
+				],
 			],
 		];
 	}

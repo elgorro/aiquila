@@ -55,6 +55,10 @@
 				<NcLoadingIcon :size="32" />
 				<span>{{ t('aiquila', 'Thinking…') }}</span>
 			</div>
+			<div v-if="notice" class="chat-notice" :class="{ 'chat-notice-error': noticeIsError }">
+				<span>{{ notice }}</span>
+				<button class="notice-close" @click="notice = null">✕</button>
+			</div>
 		</div>
 		<div v-if="verbose && conversationTokens.total > 0" class="token-summary">
 			{{ t('aiquila', 'Total: {total} tokens ({input} in / {output} out)', conversationTokens) }}
@@ -128,6 +132,8 @@ export default {
 			showSearch: false,
 			searchQuery: '',
 			showProjectPicker: false,
+			notice: null,
+			noticeIsError: false,
 			draft: { active: false, userMessage: null, assistantText: '', toolEvents: [], error: null },
 		}
 	},
@@ -279,6 +285,12 @@ export default {
 			case 'remove-project':
 				this.detachProject()
 				break
+			case 'set-effort':
+				this.setEffort(args || '')
+				break
+			case 'set-thinking':
+				this.setThinking(args || '')
+				break
 			case 'add-project':
 				if (args) {
 					const id = parseInt(args, 10)
@@ -305,6 +317,37 @@ export default {
 				this.showProjectPicker = false
 			}
 		},
+		async setEffort(effort) {
+			try {
+				const { data } = await updateConversation(this.conversation.id, { effort })
+				this.$emit('conversation-updated', data)
+				this.noticeIsError = false
+				this.notice = effort === ''
+					? t('aiquila', 'Effort reset to default for this conversation — applies to new messages only')
+					: t('aiquila', 'Effort set to {effort} for this conversation — applies to new messages only', { effort })
+			} catch (err) {
+				this.noticeIsError = true
+				this.notice = err.response?.data?.error || t('aiquila', 'Failed to set effort')
+			}
+		},
+		async setThinking(value) {
+			if (!['on', 'off', ''].includes(value)) {
+				this.noticeIsError = true
+				this.notice = t('aiquila', 'Usage: /thinking:on or /thinking:off')
+				return
+			}
+			try {
+				const { data } = await updateConversation(this.conversation.id, { thinking: value })
+				this.$emit('conversation-updated', data)
+				this.noticeIsError = false
+				this.notice = value === ''
+					? t('aiquila', 'Adaptive thinking reset to default for this conversation — applies to new messages only')
+					: t('aiquila', 'Adaptive thinking turned {value} for this conversation — applies to new messages only', { value })
+			} catch (err) {
+				this.noticeIsError = true
+				this.notice = err.response?.data?.error || t('aiquila', 'Failed to set thinking')
+			}
+		},
 		async detachProject() {
 			try {
 				const { data } = await updateConversation(this.conversation.id, { projectId: null })
@@ -322,6 +365,28 @@ export default {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
+}
+
+.chat-notice {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 8px 16px;
+	padding: 8px 12px;
+	border-radius: var(--border-radius);
+	background: var(--color-primary-element-light);
+	font-size: 13px;
+}
+
+.chat-notice-error {
+	background: var(--color-error-hover, #fdd);
+}
+
+.notice-close {
+	margin-left: auto;
+	background: none;
+	border: none;
+	cursor: pointer;
 }
 
 .project-badge {
