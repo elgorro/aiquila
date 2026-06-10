@@ -1,7 +1,7 @@
 {
   "name": "aiquila-mcp",
-  "version": "0.3.16",
-  "description": "AIquila - MCP server for Nextcloud integration",
+  "version": "0.3.17",
+  "description": "Nextcloud MCP server — files, calendar, contacts, mail, maps, notes, tasks & 120+ more tools",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -21,10 +21,15 @@
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "nextcloud",
     "claude",
     "ai",
-    "aiquila"
+    "aiquila",
+    "webdav",
+    "caldav",
+    "carddav",
+    "self-hosted"
   ],
   "author": "sirgorro",
   "license": "MIT",
