@@ -64,7 +64,7 @@ jobs:
       RUN_INFRA_TEST: ${{ inputs.run_infra_test }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Mask sensitive inputs
         run: |
@@ -73,12 +73,12 @@ jobs:
           echo "::add-mask::${{ inputs.dns_zone }}"
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: hetzner/go.mod
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
 

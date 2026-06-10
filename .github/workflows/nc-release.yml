@@ -18,7 +18,7 @@ jobs:
       previous-version: ${{ steps.check.outputs.previous }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -56,7 +56,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -67,7 +67,7 @@ jobs:
           tools: composer
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
 
@@ -231,7 +231,7 @@ jobs:
           sed -i 's/^          //' /tmp/release-body.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: nc-v${{ needs.check-version.outputs.version }}
           name: Nextcloud App v${{ needs.check-version.outputs.version }}
@@ -313,7 +313,7 @@ jobs:
           APPSTORE_TOKEN: ${{ secrets.NEXTCLOUD_APPSTORE_TOKEN }}
 
       - name: Download release artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: aiquila.tar.gz
         continue-on-error: true
