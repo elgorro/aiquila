@@ -31,6 +31,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 | Bookmarks, folders, tags | 13 | [Bookmarks](mcp/tools/apps/bookmarks.md) |
 | Maps, GPS, tracks, photos | 26 | [Maps](mcp/tools/apps/maps.md) |
 | Notes | 5 | [Notes](mcp/tools/apps/notes.md) |
+| News (RSS feeds) | 17 | [News](mcp/tools/apps/news.md) |
 | Recipes | 6 | [Cookbook](mcp/tools/apps/cookbook.md) |
 | NC AI tasks & image gen | 4 | [Assistant](mcp/tools/apps/assistant.md) |
 | File shares | 4 | [Shares](mcp/tools/apps/shares.md) |

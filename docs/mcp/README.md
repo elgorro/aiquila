@@ -35,6 +35,7 @@ Nextcloud apps and administration:
 - **Bookmarks** — Bookmark CRUD, folder hierarchy, and tag management
 - **Maps** — Favorites, GPS devices/tracks, photo geotagging, custom maps, import/export
 - **Notes** — Markdown notes with categories and search
+- **News** — RSS/Atom feed subscriptions, folders, and article reading/triage
 - **Polls** — Create text/date polls, vote, comment, and share
 - **Forms** — Build surveys, collect responses, and export results
 - **Cookbook** — Recipe management with schema.org format
@@ -198,6 +199,27 @@ Nextcloud apps and administration:
 | `create_note` | Create a note | [Notes](tools/apps/notes.md#create_note) |
 | `update_note` | Update a note | [Notes](tools/apps/notes.md#update_note) |
 | `delete_note` | Delete a note | [Notes](tools/apps/notes.md#delete_note) |
+
+#### News (17 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_feeds` | List subscribed RSS feeds | [News](tools/apps/news.md#list_feeds) |
+| `add_feed` | Subscribe to a feed | [News](tools/apps/news.md#add_feed) |
+| `delete_feed` | Delete a feed | [News](tools/apps/news.md#delete_feed) |
+| `move_feed` | Move a feed to a folder | [News](tools/apps/news.md#move_feed) |
+| `rename_feed` | Rename a feed | [News](tools/apps/news.md#rename_feed) |
+| `mark_feed_read` | Mark a feed's items read | [News](tools/apps/news.md#mark_feed_read) |
+| `list_news_folders` | List feed folders | [News](tools/apps/news.md#list_news_folders) |
+| `create_news_folder` | Create a folder | [News](tools/apps/news.md#create_news_folder) |
+| `rename_news_folder` | Rename a folder | [News](tools/apps/news.md#rename_news_folder) |
+| `delete_news_folder` | Delete a folder | [News](tools/apps/news.md#delete_news_folder) |
+| `mark_news_folder_read` | Mark a folder's items read | [News](tools/apps/news.md#mark_news_folder_read) |
+| `list_news_items` | List/filter articles | [News](tools/apps/news.md#list_news_items) |
+| `mark_item_read` | Mark an article read | [News](tools/apps/news.md#mark_item_read) |
+| `mark_item_unread` | Mark an article unread | [News](tools/apps/news.md#mark_item_unread) |
+| `star_item` | Star an article | [News](tools/apps/news.md#star_item) |
+| `unstar_item` | Unstar an article | [News](tools/apps/news.md#unstar_item) |
+| `mark_items_read` | Mark multiple articles read | [News](tools/apps/news.md#mark_items_read) |
 
 #### Polls (21 tools)
 | Tool | Description | Documentation |
