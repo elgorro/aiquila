@@ -5,8 +5,8 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\ImageOptimizer;
+use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\ShapeDescriptor;
@@ -25,7 +25,7 @@ use Psr\Log\LoggerInterface;
 class ClaudeImageToTextProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ClaudeSDKService $claudeService,
+        private LLMProviderFactory $providerFactory,
         private ImageOptimizer $imageOptimizer,
         private LoggerInterface $logger,
     ) {
@@ -36,7 +36,7 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
     }
 
     public function getName(): string {
-        return 'Claude Vision (AIquila)';
+        return 'AIquila Vision';
     }
 
     public function getTaskTypeId(): string {
@@ -52,6 +52,11 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
             'prompt' => new ShapeDescriptor(
                 'Prompt',
                 'Optional question or instruction about the image',
+                EShapeType::Text
+            ),
+            'provider' => new ShapeDescriptor(
+                'Provider',
+                'Optional LLM provider id override (e.g. anthropic, mistral)',
                 EShapeType::Text
             ),
         ];
@@ -113,7 +118,12 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
 
         $reportProgress(0.5);
 
-        $result = $this->claudeService->askWithImage(
+        $providerId = !empty($input['provider']) && is_string($input['provider'])
+            ? $input['provider']
+            : $this->providerFactory->getActiveProviderId($userId);
+        $provider = $this->providerFactory->getProviderById($providerId);
+
+        $result = $provider->askWithImage(
             $prompt,
             $base64,
             $mimeType,
@@ -121,7 +131,7 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
         );
 
         if (isset($result['error'])) {
-            $this->logger->error('Claude ImageToText: Error', ['error' => $result['error']]);
+            $this->logger->error('AIquila ImageToText: Error', ['error' => $result['error'], 'provider' => $providerId]);
             throw new \RuntimeException($result['error']);
         }
 

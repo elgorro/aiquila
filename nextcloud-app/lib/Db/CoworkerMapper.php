@@ -45,7 +45,9 @@ class CoworkerMapper extends QBMapper {
     }
 
     /**
-     * Returns all active coworkers due for execution (next_run_at <= now).
+     * Returns all active, non-paused coworkers due for execution. A NULL
+     * next_run_at never satisfies the `<= now` comparison, so paused/disabled
+     * coworkers (whose next_run_at is cleared) are excluded automatically.
      *
      * @return Coworker[]
      */
@@ -54,6 +56,7 @@ class CoworkerMapper extends QBMapper {
         $qb->select('*')
             ->from($this->getTableName())
             ->where($qb->expr()->eq('is_active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
+            ->andWhere($qb->expr()->eq('paused', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
             ->andWhere($qb->expr()->lte('next_run_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT)));
 
         return $this->findEntities($qb);

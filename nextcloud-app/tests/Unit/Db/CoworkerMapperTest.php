@@ -71,9 +71,9 @@ class CoworkerMapperTest extends MapperTestCase {
     }
 
     public function testFindDueForRunAppliesIsActiveFilter(): void {
-        // is_active filter via where(), next_run_at filter via andWhere()
+        // is_active filter via where(); paused + next_run_at filters via andWhere()
         $this->qb->expects($this->once())->method('where')->willReturnSelf();
-        $this->qb->expects($this->once())->method('andWhere')->willReturnSelf();
+        $this->qb->expects($this->exactly(2))->method('andWhere')->willReturnSelf();
 
         $mapper = $this->makeMapper();
         $mapper->method('findEntities')->willReturn([]);

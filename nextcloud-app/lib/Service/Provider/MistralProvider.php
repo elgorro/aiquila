@@ -125,7 +125,7 @@ class MistralProvider implements LLMProviderInterface {
                 ['type' => 'text', 'text' => $prompt],
             ],
         ]];
-        return $this->chat($messages, null, $userId);
+        return $this->chat($messages, null, $userId, $this->visionOptions($userId));
     }
 
     public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null): array {
@@ -137,7 +137,19 @@ class MistralProvider implements LLMProviderInterface {
             $content[] = ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $img['mimeType'], 'data' => $img['base64']]];
         }
         $content[] = ['type' => 'text', 'text' => $prompt];
-        return $this->chat([['role' => 'user', 'content' => $content]], null, $userId);
+        return $this->chat([['role' => 'user', 'content' => $content]], null, $userId, $this->visionOptions($userId));
+    }
+
+    /**
+     * Force a vision-capable model when the user's configured model cannot
+     * accept image input (e.g. the default mistral-small).
+     *
+     * @return array{model?: string}
+     */
+    private function visionOptions(?string $userId): array {
+        return MistralModels::supportsVision($this->getModel($userId))
+            ? []
+            : ['model' => MistralModels::PIXTRAL];
     }
 
     public function askWithDocument(string $prompt, string $documentData, string $mediaType, string $title = '', ?string $userId = null, bool $cacheDoc = true, bool $citations = true, ?string $fileId = null): array {
@@ -642,8 +654,11 @@ class MistralProvider implements LLMProviderInterface {
      * Build a Mistral chat-completions request body from app-format messages.
      */
     private function buildBody(array $messages, ?string $system, ?string $userId, array $options, bool $stream = false): array {
+        $model = isset($options['model']) && is_string($options['model']) && $options['model'] !== ''
+            ? $options['model']
+            : $this->getModel($userId);
         $body = [
-            'model' => $this->getModel($userId),
+            'model' => $model,
             'max_tokens' => $this->getMaxTokens($userId),
             'messages' => $this->toMistralMessages($messages, $system),
         ];

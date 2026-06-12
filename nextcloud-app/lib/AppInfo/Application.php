@@ -3,6 +3,8 @@
 
 namespace OCA\AIquila\AppInfo;
 
+use OCA\AIquila\Cowork\CoworkerTaskRegistry;
+use OCA\AIquila\Cowork\VisionClassifyImagesTaskType;
 use OCA\AIquila\Public\IAIquila;
 use OCA\AIquila\Service\AIquilaService;
 use OCP\AppFramework\App;
@@ -36,6 +38,13 @@ class Application extends App implements IBootstrap {
 
         // Expose app capabilities via /ocs/v2.php/cloud/capabilities
         $context->registerCapability(\OCA\AIquila\Capabilities\AIquilaCapability::class);
+
+        // Cowork task-type registry — the set of jobs coworkers can run
+        $context->registerService(CoworkerTaskRegistry::class, function ($c) {
+            return new CoworkerTaskRegistry([
+                $c->get(VisionClassifyImagesTaskType::class),
+            ]);
+        });
 
         // Register Claude TaskProcessing Providers for Nextcloud Assistant integration
         // Vision providers

@@ -44,6 +44,21 @@ return [
         ['name' => 'mcp_server#authorize',     'url' => '/api/admin/mcp-servers/{id}/oauth/authorize', 'verb' => 'POST'],
         ['name' => 'mcp_server#oauthCallback', 'url' => '/api/admin/mcp-servers/{id}/oauth/callback',  'verb' => 'GET'],
 
+        // Cowork API (persistent scheduled AI tasks)
+        ['name' => 'coworker#index',              'url' => '/api/coworkers',                       'verb' => 'GET'],
+        ['name' => 'coworker#create',             'url' => '/api/coworkers',                       'verb' => 'POST'],
+        ['name' => 'coworker#templates',          'url' => '/api/coworkers/templates',             'verb' => 'GET'],
+        ['name' => 'coworker#createFromTemplate', 'url' => '/api/coworkers/templates',             'verb' => 'POST'],
+        ['name' => 'coworker#show',               'url' => '/api/coworkers/{id}',                  'verb' => 'GET'],
+        ['name' => 'coworker#update',             'url' => '/api/coworkers/{id}',                  'verb' => 'PUT'],
+        ['name' => 'coworker#destroy',            'url' => '/api/coworkers/{id}',                  'verb' => 'DELETE'],
+        ['name' => 'coworker#pause',              'url' => '/api/coworkers/{id}/pause',            'verb' => 'POST'],
+        ['name' => 'coworker#resume',             'url' => '/api/coworkers/{id}/resume',           'verb' => 'POST'],
+        ['name' => 'coworker#enable',             'url' => '/api/coworkers/{id}/enable',           'verb' => 'POST'],
+        ['name' => 'coworker#disable',            'url' => '/api/coworkers/{id}/disable',          'verb' => 'POST'],
+        ['name' => 'coworker#run',                'url' => '/api/coworkers/{id}/run',              'verb' => 'POST'],
+        ['name' => 'coworker#runs',               'url' => '/api/coworkers/{id}/runs',             'verb' => 'GET'],
+
         // File API
         ['name' => 'file#info',     'url' => '/api/files/info',     'verb' => 'GET'],
         ['name' => 'file#listDir',  'url' => '/api/files/list',     'verb' => 'GET'],
