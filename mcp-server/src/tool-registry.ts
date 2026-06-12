@@ -18,6 +18,7 @@ import { calendarTools } from './tools/apps/calendar.js';
 import { cookbookTools } from './tools/apps/cookbook.js';
 import { deckTools } from './tools/apps/deck.js';
 import { notesTools } from './tools/apps/notes.js';
+import { newsTools } from './tools/apps/news.js';
 import { aiquilaTools } from './tools/apps/aiquila.js';
 import { usersTools } from './tools/apps/users.js';
 import { groupsTools } from './tools/apps/groups.js';
@@ -90,6 +91,7 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
   { category: 'tasks', appIds: ['tasks'], tools: tasksTools },
   { category: 'contacts', appIds: ['contacts'], tools: contactsTools },
   { category: 'notes', appIds: ['notes'], tools: notesTools },
+  { category: 'news', appIds: ['news'], tools: newsTools },
   { category: 'mail', appIds: ['mail'], tools: mailTools },
   { category: 'deck', appIds: ['deck'], tools: deckTools },
   { category: 'cookbook', appIds: ['cookbook'], tools: cookbookTools },
