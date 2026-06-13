@@ -11,6 +11,7 @@ use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Service\CoworkerService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
@@ -35,6 +36,13 @@ class CoworkerController extends Controller {
         parent::__construct($appName, $request);
     }
 
+    /**
+     * List all coworkers for the current user
+     *
+     * 200: List of coworkers
+     *
+     * @return JSONResponse<Http::STATUS_OK, list<array<string, mixed>>, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]
@@ -43,6 +51,17 @@ class CoworkerController extends Controller {
         return new JSONResponse(array_map(fn(Coworker $c) => $c->jsonSerialize(), $coworkers));
     }
 
+    /**
+     * Get a single coworker
+     *
+     * @param int $id Coworker ID
+     *
+     * 200: The coworker
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]
@@ -55,6 +74,15 @@ class CoworkerController extends Controller {
         return new JSONResponse($coworker->jsonSerialize());
     }
 
+    /**
+     * Create a new coworker
+     *
+     * 200: The created coworker
+     * 400: Invalid coworker configuration
+     *
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]
@@ -67,6 +95,19 @@ class CoworkerController extends Controller {
         return new JSONResponse($coworker->jsonSerialize());
     }
 
+    /**
+     * Update a coworker
+     *
+     * @param int $id Coworker ID
+     *
+     * 200: The updated coworker
+     * 400: Invalid coworker configuration
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]
@@ -81,6 +122,17 @@ class CoworkerController extends Controller {
         return new JSONResponse($coworker->jsonSerialize());
     }
 
+    /**
+     * Delete a coworker and its run history
+     *
+     * @param int $id Coworker ID
+     *
+     * 200: Coworker deleted
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{deleted: bool}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]
@@ -93,6 +145,17 @@ class CoworkerController extends Controller {
         return new JSONResponse(['deleted' => true]);
     }
 
+    /**
+     * Pause a coworker
+     *
+     * @param int $id Coworker ID
+     *
+     * 200: The updated coworker
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]
@@ -100,6 +163,17 @@ class CoworkerController extends Controller {
         return $this->togglePaused($id, true);
     }
 
+    /**
+     * Resume a paused coworker
+     *
+     * @param int $id Coworker ID
+     *
+     * 200: The updated coworker
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]
@@ -107,6 +181,17 @@ class CoworkerController extends Controller {
         return $this->togglePaused($id, false);
     }
 
+    /**
+     * Enable a coworker
+     *
+     * @param int $id Coworker ID
+     *
+     * 200: The updated coworker
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]
@@ -114,6 +199,17 @@ class CoworkerController extends Controller {
         return $this->toggleActive($id, true);
     }
 
+    /**
+     * Disable a coworker
+     *
+     * @param int $id Coworker ID
+     *
+     * 200: The updated coworker
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]
@@ -121,6 +217,17 @@ class CoworkerController extends Controller {
         return $this->toggleActive($id, false);
     }
 
+    /**
+     * Run a coworker now
+     *
+     * @param int $id Coworker ID
+     *
+     * 200: The completed run
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]
@@ -133,6 +240,18 @@ class CoworkerController extends Controller {
         return new JSONResponse($run->jsonSerialize());
     }
 
+    /**
+     * Get the run history for a coworker
+     *
+     * @param int $id Coworker ID
+     * @param int $limit Maximum number of runs to return
+     *
+     * 200: List of runs, newest first
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, list<array<string, mixed>>, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]
@@ -145,6 +264,13 @@ class CoworkerController extends Controller {
         return new JSONResponse(array_map(fn(CoworkerRun $r) => $r->jsonSerialize(), $runs));
     }
 
+    /**
+     * List built-in coworker templates and available task types
+     *
+     * 200: Templates and task types
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{templates: list<array<string, mixed>>, taskTypes: list<array{id: string, label: string, family: string}>}, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]
@@ -155,6 +281,19 @@ class CoworkerController extends Controller {
         ]);
     }
 
+    /**
+     * Create a coworker from a built-in template
+     *
+     * @param string $templateId Template identifier
+     *
+     * 200: The created coworker
+     * 400: Invalid coworker configuration
+     * 404: Unknown template
+     *
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
     #[NoAdminRequired]
     #[NoCSRFRequired]
     #[OpenAPI]

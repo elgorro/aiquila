@@ -1537,6 +1537,10 @@
         {
             "name": "page",
             "description": "Page Controller for AIquila main interface"
+        },
+        {
+            "name": "coworker",
+            "description": "REST API for cowork tasks — persistent scheduled AI jobs. Consumed by the Cowork UI and by the MCP server (Basic Auth), hence NoCSRFRequired alongside NoAdminRequired."
         }
     ]
 }
