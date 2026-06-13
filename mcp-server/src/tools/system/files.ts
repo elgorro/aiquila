@@ -533,6 +533,127 @@ export const bulkFileOperationsTool = {
 };
 
 /**
+ * Create a zip archive from one or more files/folders
+ */
+export const createArchiveTool = {
+  name: 'create_archive',
+  description:
+    'Create a zip archive in Nextcloud from one or more files and/or folders. Runs server-side; not bound by MCP file-size limits.',
+  inputSchema: z.object({
+    sources: z
+      .array(z.string())
+      .min(1)
+      .describe("Paths of files/folders to include (e.g., ['/Documents/a.txt', '/Photos'])"),
+    destination: z
+      .string()
+      .describe("Path for the resulting .zip file (e.g., '/Documents/backup.zip')"),
+    overwrite: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Whether to overwrite the destination if it already exists'),
+  }),
+  handler: async (args: { sources: string[]; destination: string; overwrite: boolean }) => {
+    try {
+      const result = await fetchAiquilaAPI<Record<string, unknown>>('/files/zip', {
+        method: 'POST',
+        body: {
+          sources: args.sources,
+          destination: args.destination,
+          overwrite: args.overwrite,
+        },
+      });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error creating archive: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+};
+
+/**
+ * Extract a zip archive into a destination folder
+ */
+export const extractArchiveTool = {
+  name: 'extract_archive',
+  description: 'Extract a zip archive in Nextcloud into a destination folder. Runs server-side.',
+  inputSchema: z.object({
+    archive: z.string().describe("Path to the .zip file (e.g., '/Documents/backup.zip')"),
+    destination: z.string().describe("Folder to extract into (e.g., '/Documents/restored')"),
+    overwrite: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Whether to overwrite entries that already exist'),
+  }),
+  handler: async (args: { archive: string; destination: string; overwrite: boolean }) => {
+    try {
+      const result = await fetchAiquilaAPI<Record<string, unknown>>('/files/unzip', {
+        method: 'POST',
+        body: {
+          archive: args.archive,
+          destination: args.destination,
+          overwrite: args.overwrite,
+        },
+      });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error extracting archive: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+};
+
+/**
+ * List the contents of a zip archive without extracting
+ */
+export const listArchiveTool = {
+  name: 'list_archive',
+  description: 'List the contents of a zip archive in Nextcloud without extracting it.',
+  inputSchema: z.object({
+    archive: z.string().describe("Path to the .zip file (e.g., '/Documents/backup.zip')"),
+  }),
+  handler: async (args: { archive: string }) => {
+    try {
+      const result = await fetchAiquilaAPI<Record<string, unknown>>('/files/zip/list', {
+        queryParams: { archive: args.archive },
+      });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error listing archive: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+};
+
+/**
  * Export all file system tools
  */
 export const fileSystemTools = [
@@ -548,4 +669,7 @@ export const fileSystemTools = [
   getFileContentTool,
   analyzeImageTool,
   bulkFileOperationsTool,
+  createArchiveTool,
+  extractArchiveTool,
+  listArchiveTool,
 ];

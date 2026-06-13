@@ -36,6 +36,15 @@ make logs-follow
 make test
 ```
 
+## Nextcloud app — OpenAPI spec
+
+After editing a controller annotated with `#[OpenAPI]`, regenerate and commit the spec
+(CI fails on a mismatch):
+
+```bash
+cd nextcloud-app && vendor/bin/generate-spec   # updates openapi.json + openapi-full.json
+```
+
 ## Workflow
 
 **Always work on a branch — never commit directly to main.**

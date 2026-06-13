@@ -66,5 +66,8 @@ return [
         ['name' => 'file#download', 'url' => '/api/files/download', 'verb' => 'GET'],
         ['name' => 'file#search',   'url' => '/api/files/search',   'verb' => 'GET'],
         ['name' => 'file#preview',  'url' => '/api/files/preview',  'verb' => 'GET'],
+        ['name' => 'file#compress',    'url' => '/api/files/zip',      'verb' => 'POST'],
+        ['name' => 'file#extract',     'url' => '/api/files/unzip',    'verb' => 'POST'],
+        ['name' => 'file#listArchive', 'url' => '/api/files/zip/list', 'verb' => 'GET'],
     ],
 ];

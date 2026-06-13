@@ -255,4 +255,115 @@ describe('File Tools (AIquila API)', () => {
       expect(result.content[0].text).toContain('File not found');
     });
   });
+
+  describe('create_archive', () => {
+    it('should POST sources and destination to /files/zip', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue({
+        archive: '/admin/files/backup.zip',
+        entries: 3,
+        size: 2048,
+      });
+
+      const { createArchiveTool } = await import('../tools/system/files.js');
+      const result = await createArchiveTool.handler({
+        sources: ['/Documents/a.txt', '/Photos'],
+        destination: '/backup.zip',
+        overwrite: false,
+      });
+
+      expect(result).not.toHaveProperty('isError');
+      expect(result.content[0].text).toContain('backup.zip');
+      expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/files/zip', {
+        method: 'POST',
+        body: {
+          sources: ['/Documents/a.txt', '/Photos'],
+          destination: '/backup.zip',
+          overwrite: false,
+        },
+      });
+    });
+
+    it('should handle errors', async () => {
+      mockFetchAiquilaAPI.mockRejectedValue(new Error('Destination already exists'));
+
+      const { createArchiveTool } = await import('../tools/system/files.js');
+      const result = await createArchiveTool.handler({
+        sources: ['/a.txt'],
+        destination: '/exists.zip',
+        overwrite: false,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Destination already exists');
+    });
+  });
+
+  describe('extract_archive', () => {
+    it('should POST archive and destination to /files/unzip', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue({
+        destination: '/admin/files/restored',
+        extracted: 5,
+      });
+
+      const { extractArchiveTool } = await import('../tools/system/files.js');
+      const result = await extractArchiveTool.handler({
+        archive: '/backup.zip',
+        destination: '/restored',
+        overwrite: true,
+      });
+
+      expect(result).not.toHaveProperty('isError');
+      expect(result.content[0].text).toContain('extracted');
+      expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/files/unzip', {
+        method: 'POST',
+        body: { archive: '/backup.zip', destination: '/restored', overwrite: true },
+      });
+    });
+
+    it('should handle errors', async () => {
+      mockFetchAiquilaAPI.mockRejectedValue(new Error('Unsafe path traversal in archive'));
+
+      const { extractArchiveTool } = await import('../tools/system/files.js');
+      const result = await extractArchiveTool.handler({
+        archive: '/evil.zip',
+        destination: '/out',
+        overwrite: false,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Unsafe path traversal');
+    });
+  });
+
+  describe('list_archive', () => {
+    it('should GET archive entries via query params', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue({
+        archive: '/admin/files/backup.zip',
+        count: 2,
+        entries: [
+          { name: 'a.txt', size: 10, compressedSize: 8, isDirectory: false },
+          { name: 'sub/', size: 0, compressedSize: 0, isDirectory: true },
+        ],
+      });
+
+      const { listArchiveTool } = await import('../tools/system/files.js');
+      const result = await listArchiveTool.handler({ archive: '/backup.zip' });
+
+      expect(result).not.toHaveProperty('isError');
+      expect(result.content[0].text).toContain('a.txt');
+      expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/files/zip/list', {
+        queryParams: { archive: '/backup.zip' },
+      });
+    });
+
+    it('should handle errors', async () => {
+      mockFetchAiquilaAPI.mockRejectedValue(new Error('not a valid zip file'));
+
+      const { listArchiveTool } = await import('../tools/system/files.js');
+      const result = await listArchiveTool.handler({ archive: '/bad.zip' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not a valid zip file');
+    });
+  });
 });

@@ -234,4 +234,129 @@ class FileController extends Controller {
             return new JSONResponse(['error' => $e->getMessage()], 500);
         }
     }
+
+    /**
+     * Create a zip archive from one or more files/folders
+     *
+     * @param list<string> $sources   Paths to include in the archive
+     * @param string       $destination Path for the resulting .zip file
+     * @param bool         $overwrite Whether to overwrite an existing destination
+     *
+     * 200: Archive created
+     * 400: No sources provided or a path is invalid
+     * 404: A source path was not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{archive: string, entries: int, size: int}, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     *
+     * @NoAdminRequired
+     * @NoCSRFRequired
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[OpenAPI]
+    public function compress(array $sources = [], string $destination = '', bool $overwrite = false): JSONResponse {
+        if (empty($sources)) {
+            return new JSONResponse(['error' => 'No source paths provided'], 400);
+        }
+        if (empty($destination)) {
+            return new JSONResponse(['error' => 'No destination provided'], 400);
+        }
+        try {
+            return new JSONResponse($this->fileService->compress($sources, $destination, $this->userId, $overwrite));
+        } catch (NotFoundException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], 404);
+        } catch (\InvalidArgumentException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], 400);
+        } catch (\RuntimeException $e) {
+            $code = str_contains($e->getMessage(), 'already exists') ? 409
+                : (str_contains($e->getMessage(), 'maximum size') ? 413 : 500);
+            return new JSONResponse(['error' => $e->getMessage()], $code);
+        } catch (\Exception $e) {
+            $this->logger->error('FileController::compress error', ['exception' => $e->getMessage()]);
+            return new JSONResponse(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Extract a zip archive into a destination folder
+     *
+     * @param string $archive     Path to the .zip file
+     * @param string $destination Folder to extract into
+     * @param bool   $overwrite   Whether to overwrite existing entries
+     *
+     * 200: Archive extracted
+     * 400: Invalid path or unsafe archive entry
+     * 404: Archive not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{destination: string, extracted: int}, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     *
+     * @NoAdminRequired
+     * @NoCSRFRequired
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[OpenAPI]
+    public function extract(string $archive = '', string $destination = '', bool $overwrite = false): JSONResponse {
+        if (empty($archive)) {
+            return new JSONResponse(['error' => 'No archive path provided'], 400);
+        }
+        if (empty($destination)) {
+            return new JSONResponse(['error' => 'No destination provided'], 400);
+        }
+        try {
+            return new JSONResponse($this->fileService->extract($archive, $destination, $this->userId, $overwrite));
+        } catch (NotFoundException $e) {
+            return new JSONResponse(['error' => 'Archive not found: ' . $archive], 404);
+        } catch (\InvalidArgumentException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], 400);
+        } catch (\RuntimeException $e) {
+            $code = str_contains($e->getMessage(), 'already exists') ? 409
+                : (str_contains($e->getMessage(), 'maximum size') ? 413 : 400);
+            return new JSONResponse(['error' => $e->getMessage()], $code);
+        } catch (\Exception $e) {
+            $this->logger->error('FileController::extract error', ['exception' => $e->getMessage()]);
+            return new JSONResponse(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * List the contents of a zip archive without extracting
+     *
+     * @param string $archive Path to the .zip file
+     *
+     * 200: Archive entries
+     * 400: No path provided or path is not a file
+     * 404: Archive not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{archive: string, count: int, entries: list<array{name: string, size: int, compressedSize: int, isDirectory: bool}>}, array{}>
+     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     *
+     * @NoAdminRequired
+     * @NoCSRFRequired
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[OpenAPI]
+    public function listArchive(string $archive = ''): JSONResponse {
+        if (empty($archive)) {
+            return new JSONResponse(['error' => 'No archive path provided'], 400);
+        }
+        try {
+            return new JSONResponse($this->fileService->listArchive($archive, $this->userId));
+        } catch (NotFoundException $e) {
+            return new JSONResponse(['error' => 'Archive not found: ' . $archive], 404);
+        } catch (\InvalidArgumentException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], 400);
+        } catch (\RuntimeException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], 400);
+        } catch (\Exception $e) {
+            $this->logger->error('FileController::listArchive error', ['exception' => $e->getMessage()]);
+            return new JSONResponse(['error' => $e->getMessage()], 500);
+        }
+    }
 }
