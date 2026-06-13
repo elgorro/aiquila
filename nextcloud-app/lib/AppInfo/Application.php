@@ -3,8 +3,12 @@
 
 namespace OCA\AIquila\AppInfo;
 
+use OCA\AIquila\Cowork\CoworkerTaskRegistry;
+use OCA\AIquila\Cowork\VisionClassifyImagesTaskType;
 use OCA\AIquila\Public\IAIquila;
+use OCA\AIquila\Public\ICoworkManager;
 use OCA\AIquila\Service\AIquilaService;
+use OCA\AIquila\Service\CoworkManager;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -28,6 +32,11 @@ class Application extends App implements IBootstrap {
             return $c->get(AIquilaService::class);
         });
 
+        // Public Cowork management API for other Nextcloud apps
+        $context->registerService(ICoworkManager::class, function ($c) {
+            return $c->get(CoworkManager::class);
+        });
+
         // Declarative Settings — admin page split into model / request params / search cards
         $context->registerDeclarativeSettings(\OCA\AIquila\Settings\AdminModelDeclarativeSettings::class);
         $context->registerDeclarativeSettings(\OCA\AIquila\Settings\AdminRequestParamsDeclarativeSettings::class);
@@ -36,6 +45,13 @@ class Application extends App implements IBootstrap {
 
         // Expose app capabilities via /ocs/v2.php/cloud/capabilities
         $context->registerCapability(\OCA\AIquila\Capabilities\AIquilaCapability::class);
+
+        // Cowork task-type registry — the set of jobs coworkers can run
+        $context->registerService(CoworkerTaskRegistry::class, function ($c) {
+            return new CoworkerTaskRegistry([
+                $c->get(VisionClassifyImagesTaskType::class),
+            ]);
+        });
 
         // Register Claude TaskProcessing Providers for Nextcloud Assistant integration
         // Vision providers

@@ -145,6 +145,20 @@ if (!class_exists('OCP\Files\NotFoundException')) {
     class_alias('OCP_Files_NotFoundException', 'OCP\Files\NotFoundException');
 }
 
+if (!interface_exists('OCP\Files\Folder')) {
+    interface OCP_Files_Folder {
+        public function nodeExists(string $path): bool;
+    }
+    class_alias('OCP_Files_Folder', 'OCP\Files\Folder');
+}
+
+if (!interface_exists('OCP\Files\IRootFolder')) {
+    interface OCP_Files_IRootFolder {
+        public function getUserFolder(string $userId): \OCP\Files\Folder;
+    }
+    class_alias('OCP_Files_IRootFolder', 'OCP\Files\IRootFolder');
+}
+
 // ── OCP\AppFramework\Db layer ──────────────────────────────────────────────
 
 if (!class_exists('OCP\AppFramework\Db\DoesNotExistException')) {
@@ -164,6 +178,14 @@ if (!class_exists('OCP\AppFramework\Db\Entity')) {
         }
 
         public function getFieldTypes(): array { return $this->_types; }
+
+        public function jsonSerialize(): array {
+            $out = ['id' => $this->id];
+            foreach (array_keys($this->_types) as $field) {
+                $out[$field] = $this->$field ?? null;
+            }
+            return $out;
+        }
 
         public function __call(string $name, array $args): mixed {
             if (strncmp('get', $name, 3) === 0) {
@@ -187,6 +209,7 @@ if (!interface_exists('OCP\DB\QueryBuilder\IExpressionBuilder')) {
     interface OCP_DB_QueryBuilder_IExpressionBuilder {
         public function eq(string $x, mixed $y): string;
         public function lte(string $x, mixed $y): string;
+        public function isNull(string $x): string;
     }
     class_alias('OCP_DB_QueryBuilder_IExpressionBuilder', 'OCP\DB\QueryBuilder\IExpressionBuilder');
 }

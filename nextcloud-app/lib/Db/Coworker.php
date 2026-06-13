@@ -21,6 +21,14 @@ use OCP\AppFramework\Db\Entity;
  * @method void setCustomPrompt(?string $customPrompt)
  * @method string|null getModel()
  * @method void setModel(?string $model)
+ * @method string|null getOwnerApp()
+ * @method void setOwnerApp(?string $ownerApp)
+ * @method string getTaskType()
+ * @method void setTaskType(string $taskType)
+ * @method bool getPaused()
+ * @method void setPaused(bool $paused)
+ * @method string|null getOptions()
+ * @method void setOptions(?string $options)
  * @method string getCronSchedule()
  * @method void setCronSchedule(string $cronSchedule)
  * @method string getInputType()
@@ -53,6 +61,10 @@ class Coworker extends Entity {
     protected ?int $promptId = null;
     protected ?string $customPrompt = null;
     protected ?string $model = null;
+    protected ?string $ownerApp = null;
+    protected string $taskType = 'vision:classify';
+    protected bool $paused = false;
+    protected ?string $options = null;
     protected string $cronSchedule = '';
     protected string $inputType = '';
     protected ?string $inputPath = null;
@@ -73,6 +85,10 @@ class Coworker extends Entity {
         $this->addType('promptId', 'integer');
         $this->addType('customPrompt', 'string');
         $this->addType('model', 'string');
+        $this->addType('ownerApp', 'string');
+        $this->addType('taskType', 'string');
+        $this->addType('paused', 'boolean');
+        $this->addType('options', 'string');
         $this->addType('cronSchedule', 'string');
         $this->addType('inputType', 'string');
         $this->addType('inputPath', 'string');

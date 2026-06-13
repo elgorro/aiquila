@@ -163,3 +163,56 @@ export function removeProjectPath(id, pathId) {
 export function listDirectory(path) {
 	return axios.get(url('/api/files/list'), { params: { path } })
 }
+
+// Cowork API (persistent scheduled AI tasks)
+export function listCoworkers() {
+	return axios.get(url('/api/coworkers'))
+}
+
+export function getCoworker(id) {
+	return axios.get(url(`/api/coworkers/${id}`))
+}
+
+export function createCoworker(data) {
+	return axios.post(url('/api/coworkers'), data)
+}
+
+export function updateCoworker(id, data) {
+	return axios.put(url(`/api/coworkers/${id}`), data)
+}
+
+export function deleteCoworker(id) {
+	return axios.delete(url(`/api/coworkers/${id}`))
+}
+
+export function pauseCoworker(id) {
+	return axios.post(url(`/api/coworkers/${id}/pause`))
+}
+
+export function resumeCoworker(id) {
+	return axios.post(url(`/api/coworkers/${id}/resume`))
+}
+
+export function enableCoworker(id) {
+	return axios.post(url(`/api/coworkers/${id}/enable`))
+}
+
+export function disableCoworker(id) {
+	return axios.post(url(`/api/coworkers/${id}/disable`))
+}
+
+export function runCoworker(id) {
+	return axios.post(url(`/api/coworkers/${id}/run`))
+}
+
+export function getCoworkerRuns(id, limit = 20) {
+	return axios.get(url(`/api/coworkers/${id}/runs`), { params: { limit } })
+}
+
+export function listCoworkerTemplates() {
+	return axios.get(url('/api/coworkers/templates'))
+}
+
+export function createCoworkerFromTemplate(templateId, overrides = {}) {
+	return axios.post(url('/api/coworkers/templates'), { templateId, ...overrides })
+}

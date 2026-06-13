@@ -20,6 +20,7 @@ import { deckTools } from './tools/apps/deck.js';
 import { notesTools } from './tools/apps/notes.js';
 import { newsTools } from './tools/apps/news.js';
 import { aiquilaTools } from './tools/apps/aiquila.js';
+import { coworkTools } from './tools/apps/cowork.js';
 import { usersTools } from './tools/apps/users.js';
 import { groupsTools } from './tools/apps/groups.js';
 import { circlesTools } from './tools/apps/circles.js';
@@ -85,6 +86,7 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
   { category: 'security', appIds: ['aiquila'], tools: securityTools },
   { category: 'occ', appIds: ['aiquila'], tools: occTools },
   { category: 'projects', appIds: ['aiquila'], tools: projectsTools },
+  { category: 'cowork', appIds: ['aiquila'], tools: coworkTools },
 
   // Requires specific Nextcloud apps
   { category: 'calendar', appIds: ['calendar'], tools: calendarTools },
