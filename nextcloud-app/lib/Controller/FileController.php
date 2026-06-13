@@ -245,8 +245,6 @@ class FileController extends Controller {
      * 200: Archive created
      * 400: No sources provided or a path is invalid
      * 404: A source path was not found
-     * 409: Destination already exists and overwrite is false
-     * 413: Archive contents exceed the size limit
      *
      * @return JSONResponse<Http::STATUS_OK, array{archive: string, entries: int, size: int}, array{}>
      *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
@@ -291,8 +289,6 @@ class FileController extends Controller {
      * 200: Archive extracted
      * 400: Invalid path or unsafe archive entry
      * 404: Archive not found
-     * 409: An entry already exists and overwrite is false
-     * 413: Extracted contents exceed the size limit
      *
      * @return JSONResponse<Http::STATUS_OK, array{destination: string, extracted: int}, array{}>
      *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
