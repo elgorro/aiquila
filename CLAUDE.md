@@ -36,6 +36,20 @@ make logs-follow
 make test
 ```
 
+## Nextcloud app — OpenAPI spec
+
+Controllers annotated with `#[OpenAPI]` feed a generated spec. After editing any such
+controller, regenerate it (CI runs this and fails on a mismatch):
+
+```bash
+cd nextcloud-app && vendor/bin/generate-spec   # updates openapi.json + openapi-full.json
+```
+
+Each status code described in a method's docblock (`409: ...`) **must** have a matching
+`JSONResponse<Http::STATUS_*, ...>` entry in the `@return` annotation, or generation fails
+with "Unused descriptions for status codes". Only document codes you also declare as return
+types. Commit the regenerated `openapi*.json` files.
+
 ## Workflow
 
 **Always work on a branch — never commit directly to main.**
