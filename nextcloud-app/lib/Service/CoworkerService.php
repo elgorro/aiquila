@@ -78,11 +78,14 @@ class CoworkerService {
 
     /**
      * @param array<string, mixed> $data
+     * @param string|null $ownerApp App id when created by another app via the
+     *   public ICoworkManager; null for user-owned (UI / MCP) coworkers.
      */
-    public function create(string $userId, array $data): Coworker {
+    public function create(string $userId, array $data, ?string $ownerApp = null): Coworker {
         $now = $this->timeFactory->getTime();
         $coworker = new Coworker();
         $coworker->setUserId($userId);
+        $coworker->setOwnerApp($ownerApp);
         $coworker->setCreatedAt($now);
         $this->applyData($coworker, $data);
         $coworker->setUpdatedAt($now);
@@ -95,20 +98,14 @@ class CoworkerService {
      * @throws DoesNotExistException
      */
     public function update(int $id, string $userId, array $data): Coworker {
-        $coworker = $this->mapper->findByIdAndUser($id, $userId);
-        $this->applyData($coworker, $data);
-        $coworker->setUpdatedAt($this->timeFactory->getTime());
-        $this->refreshNextRun($coworker);
-        return $this->mapper->update($coworker);
+        return $this->applyUpdate($this->mapper->findByIdAndUser($id, $userId), $data);
     }
 
     /**
      * @throws DoesNotExistException
      */
     public function delete(int $id, string $userId): void {
-        $coworker = $this->mapper->findByIdAndUser($id, $userId);
-        $this->runMapper->deleteByCoworker($coworker->getId());
-        $this->mapper->delete($coworker);
+        $this->deleteEntity($this->mapper->findByIdAndUser($id, $userId));
     }
 
     /**
@@ -117,9 +114,7 @@ class CoworkerService {
     public function setPaused(int $id, string $userId, bool $paused): Coworker {
         $coworker = $this->mapper->findByIdAndUser($id, $userId);
         $coworker->setPaused($paused);
-        $coworker->setUpdatedAt($this->timeFactory->getTime());
-        $this->refreshNextRun($coworker);
-        return $this->mapper->update($coworker);
+        return $this->persistScheduled($coworker);
     }
 
     /**
@@ -128,9 +123,7 @@ class CoworkerService {
     public function setActive(int $id, string $userId, bool $active): Coworker {
         $coworker = $this->mapper->findByIdAndUser($id, $userId);
         $coworker->setIsActive($active);
-        $coworker->setUpdatedAt($this->timeFactory->getTime());
-        $this->refreshNextRun($coworker);
-        return $this->mapper->update($coworker);
+        return $this->persistScheduled($coworker);
     }
 
     /**
@@ -150,6 +143,34 @@ class CoworkerService {
     public function runNow(int $id, string $userId): CoworkerRun {
         $coworker = $this->mapper->findByIdAndUser($id, $userId);
         return $this->execute($coworker);
+    }
+
+    /**
+     * Apply a partial update to a resolved coworker, refresh its schedule and
+     * persist. Shared by user- and app-scoped callers.
+     *
+     * @param array<string, mixed> $data
+     */
+    public function applyUpdate(Coworker $coworker, array $data): Coworker {
+        $this->applyData($coworker, $data);
+        return $this->persistScheduled($coworker);
+    }
+
+    /**
+     * Delete a resolved coworker and its run history.
+     */
+    public function deleteEntity(Coworker $coworker): void {
+        $this->runMapper->deleteByCoworker($coworker->getId());
+        $this->mapper->delete($coworker);
+    }
+
+    /**
+     * Stamp updated_at, recompute next_run_at and persist a resolved coworker.
+     */
+    public function persistScheduled(Coworker $coworker): Coworker {
+        $coworker->setUpdatedAt($this->timeFactory->getTime());
+        $this->refreshNextRun($coworker);
+        return $this->mapper->update($coworker);
     }
 
     /**

@@ -42,6 +42,52 @@ class CoworkerMapperTest extends MapperTestCase {
         $mapper->findAllByUser('frank');
     }
 
+    public function testFindAllByUserExcludesAppOwned(): void {
+        // user filter via where(); owner_app IS NULL via andWhere()
+        $this->expr->expects($this->once())->method('isNull')->with('owner_app')->willReturn('owner_app IS NULL');
+
+        $mapper = $this->makeMapper();
+        $mapper->method('findEntities')->willReturn([]);
+        $mapper->findAllByUser('frank');
+    }
+
+    public function testFindByIdAndAppCallsFindEntity(): void {
+        $cw = new Coworker();
+        $cw->setOwnerApp('myapp');
+
+        $mapper = $this->makeMapper();
+        $mapper->expects($this->once())
+            ->method('findEntity')
+            ->willReturn($cw);
+
+        $result = $mapper->findByIdAndApp(9, 'myapp');
+        $this->assertSame($cw, $result);
+    }
+
+    public function testFindAllByAppCallsFindEntities(): void {
+        $cw = new Coworker();
+        $cw->setOwnerApp('myapp');
+
+        $mapper = $this->makeMapper();
+        $mapper->expects($this->once())
+            ->method('findEntities')
+            ->willReturn([$cw]);
+
+        $result = $mapper->findAllByApp('myapp');
+
+        $this->assertCount(1, $result);
+        $this->assertSame($cw, $result[0]);
+    }
+
+    public function testFindAllByAppWithUserAddsUserFilter(): void {
+        // owner_app via where(); user_id + orderBy not via andWhere count is 1
+        $this->qb->expects($this->once())->method('andWhere')->willReturnSelf();
+
+        $mapper = $this->makeMapper();
+        $mapper->method('findEntities')->willReturn([]);
+        $mapper->findAllByApp('myapp', 'frank');
+    }
+
     public function testFindByIdAndUserCallsFindEntity(): void {
         $cw = new Coworker();
 

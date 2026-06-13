@@ -6,7 +6,9 @@ namespace OCA\AIquila\AppInfo;
 use OCA\AIquila\Cowork\CoworkerTaskRegistry;
 use OCA\AIquila\Cowork\VisionClassifyImagesTaskType;
 use OCA\AIquila\Public\IAIquila;
+use OCA\AIquila\Public\ICoworkManager;
 use OCA\AIquila\Service\AIquilaService;
+use OCA\AIquila\Service\CoworkManager;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -28,6 +30,11 @@ class Application extends App implements IBootstrap {
         // Register AIquila service for use by other apps
         $context->registerService(IAIquila::class, function ($c) {
             return $c->get(AIquilaService::class);
+        });
+
+        // Public Cowork management API for other Nextcloud apps
+        $context->registerService(ICoworkManager::class, function ($c) {
+            return $c->get(CoworkManager::class);
         });
 
         // Declarative Settings — admin page split into model / request params / search cards
