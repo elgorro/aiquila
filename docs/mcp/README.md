@@ -221,6 +221,12 @@ Nextcloud apps and administration:
 | `unstar_item` | Unstar an article | [News](tools/apps/news.md#unstar_item) |
 | `mark_items_read` | Mark multiple articles read | [News](tools/apps/news.md#mark_items_read) |
 
+#### Activity (2 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_activity` | List recent activity feed entries | [Activity](tools/apps/activity.md#list_activity) |
+| `get_object_activity` | List activity history for one object | [Activity](tools/apps/activity.md#get_object_activity) |
+
 #### Polls (21 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|

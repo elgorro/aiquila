@@ -36,6 +36,7 @@ import { talkTools } from './tools/apps/talk.js';
 import { userStatusTools } from './tools/apps/user-status.js';
 import { absenceTools } from './tools/apps/absence.js';
 import { notificationsTools } from './tools/apps/notifications.js';
+import { activityTools } from './tools/apps/activity.js';
 import { trashTools } from './tools/apps/trash.js';
 import { versionsTools } from './tools/apps/versions.js';
 import { projectsTools } from './tools/apps/projects.js';
@@ -109,6 +110,7 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
   { category: 'translate', appIds: ['text_translate', 'translate'], tools: translateTools },
   { category: 'user_status', appIds: ['user_status'], tools: userStatusTools },
   { category: 'notifications', appIds: ['notifications'], tools: notificationsTools },
+  { category: 'activity', appIds: ['activity'], tools: activityTools },
 ];
 
 const ALL_CATEGORIES = new Set(TOOL_REGISTRY.map((e) => e.category));
