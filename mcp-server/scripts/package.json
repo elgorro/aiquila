@@ -9,5 +9,8 @@
   "devDependencies": {
     "@types/node": "latest",
     "tsx": "latest"
+  },
+  "overrides": {
+    "esbuild": ">=0.28.1"
   }
 }
