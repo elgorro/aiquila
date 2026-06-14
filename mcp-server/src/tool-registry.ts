@@ -38,6 +38,7 @@ import { absenceTools } from './tools/apps/absence.js';
 import { notificationsTools } from './tools/apps/notifications.js';
 import { activityTools } from './tools/apps/activity.js';
 import { announcementTools } from './tools/apps/announcements.js';
+import { registrationTools } from './tools/apps/registration.js';
 import { trashTools } from './tools/apps/trash.js';
 import { versionsTools } from './tools/apps/versions.js';
 import { projectsTools } from './tools/apps/projects.js';
@@ -113,6 +114,7 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
   { category: 'notifications', appIds: ['notifications'], tools: notificationsTools },
   { category: 'activity', appIds: ['activity'], tools: activityTools },
   { category: 'announcements', appIds: ['announcementcenter'], tools: announcementTools },
+  { category: 'registration', appIds: ['registration'], tools: registrationTools },
 ];
 
 const ALL_CATEGORIES = new Set(TOOL_REGISTRY.map((e) => e.category));
