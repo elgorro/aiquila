@@ -197,7 +197,7 @@ class EntitiesTest extends TestCase {
         $this->assertEquals('', $p->getTitle());
         $this->assertNull($p->getDescription());
         $this->assertEquals('', $p->getContent());
-        $this->assertTrue($p->getIsActive());
+        $this->assertSame(1, $p->getIsActive());
         $this->assertEquals(0, $p->getCreatedAt());
         $this->assertEquals(0, $p->getUpdatedAt());
     }
@@ -208,13 +208,13 @@ class EntitiesTest extends TestCase {
         $p->setTitle('Summarizer');
         $p->setDescription('Summarizes text');
         $p->setContent('Summarize: {input}');
-        $p->setIsActive(false);
+        $p->setIsActive(0);
 
         $this->assertEquals('charlie', $p->getUserId());
         $this->assertEquals('Summarizer', $p->getTitle());
         $this->assertEquals('Summarizes text', $p->getDescription());
         $this->assertEquals('Summarize: {input}', $p->getContent());
-        $this->assertFalse($p->getIsActive());
+        $this->assertSame(0, $p->getIsActive());
     }
 
     public function testPromptRegistersTypes(): void {
@@ -223,7 +223,7 @@ class EntitiesTest extends TestCase {
         $this->assertEquals('string',  $types['title']);
         $this->assertEquals('string',  $types['description']);
         $this->assertEquals('string',  $types['content']);
-        $this->assertEquals('boolean', $types['isActive']);
+        $this->assertEquals('integer', $types['isActive']);
         $this->assertEquals('integer', $types['createdAt']);
         $this->assertEquals('integer', $types['updatedAt']);
     }
@@ -243,7 +243,7 @@ class EntitiesTest extends TestCase {
         $this->assertNull($cw->getInputPath());
         $this->assertEquals('', $cw->getOutputType());
         $this->assertNull($cw->getOutputPath());
-        $this->assertTrue($cw->getIsActive());
+        $this->assertSame(1, $cw->getIsActive());
         $this->assertNull($cw->getLastRunAt());
         $this->assertNull($cw->getNextRunAt());
         $this->assertNull($cw->getLastStatus());
@@ -258,7 +258,7 @@ class EntitiesTest extends TestCase {
         $cw->setInputType('file');
         $cw->setInputPath('/reports/input.txt');
         $cw->setOutputType('email');
-        $cw->setIsActive(false);
+        $cw->setIsActive(0);
         $cw->setNextRunAt(9999);
         $cw->setLastStatus('ok');
 
@@ -268,14 +268,14 @@ class EntitiesTest extends TestCase {
         $this->assertEquals('file', $cw->getInputType());
         $this->assertEquals('/reports/input.txt', $cw->getInputPath());
         $this->assertEquals('email', $cw->getOutputType());
-        $this->assertFalse($cw->getIsActive());
+        $this->assertSame(0, $cw->getIsActive());
         $this->assertEquals(9999, $cw->getNextRunAt());
         $this->assertEquals('ok', $cw->getLastStatus());
     }
 
     public function testCoworkerRegistersTypes(): void {
         $types = (new Coworker())->getFieldTypes();
-        $this->assertEquals('boolean', $types['isActive']);
+        $this->assertEquals('integer', $types['isActive']);
         $this->assertEquals('integer', $types['promptId']);
         $this->assertEquals('integer', $types['lastRunAt']);
         $this->assertEquals('integer', $types['nextRunAt']);

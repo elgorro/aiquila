@@ -27,7 +27,7 @@ use OCP\AppFramework\Db\Entity;
  * @method int|null getFinishedAt()
  * @method void setFinishedAt(?int $finishedAt)
  */
-class CoworkerRun extends Entity {
+class CoworkerRun extends Entity implements \JsonSerializable {
     protected int $coworkerId = 0;
     protected string $userId = '';
     protected string $status = 'running';
@@ -48,5 +48,20 @@ class CoworkerRun extends Entity {
         $this->addType('error', 'string');
         $this->addType('startedAt', 'integer');
         $this->addType('finishedAt', 'integer');
+    }
+
+    public function jsonSerialize(): array {
+        return [
+            'id' => $this->getId(),
+            'coworkerId' => $this->getCoworkerId(),
+            'userId' => $this->getUserId(),
+            'status' => $this->getStatus(),
+            'itemsTotal' => $this->getItemsTotal(),
+            'itemsProcessed' => $this->getItemsProcessed(),
+            'summary' => $this->getSummary(),
+            'error' => $this->getError(),
+            'startedAt' => $this->getStartedAt(),
+            'finishedAt' => $this->getFinishedAt(),
+        ];
     }
 }

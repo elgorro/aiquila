@@ -94,8 +94,8 @@ class CoworkerMapper extends QBMapper {
         $qb = $this->db->getQueryBuilder();
         $qb->select('*')
             ->from($this->getTableName())
-            ->where($qb->expr()->eq('is_active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
-            ->andWhere($qb->expr()->eq('paused', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
+            ->where($qb->expr()->eq('is_active', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->eq('paused', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
             ->andWhere($qb->expr()->lte('next_run_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT)));
 
         return $this->findEntities($qb);

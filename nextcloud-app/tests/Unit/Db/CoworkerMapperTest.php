@@ -102,7 +102,7 @@ class CoworkerMapperTest extends MapperTestCase {
 
     public function testFindDueForRunCallsFindEntities(): void {
         $cw = new Coworker();
-        $cw->setIsActive(true);
+        $cw->setIsActive(1);
         $cw->setNextRunAt(1000);
 
         $mapper = $this->makeMapper();

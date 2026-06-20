@@ -53,13 +53,13 @@ class CoworkManager implements ICoworkManager {
 
     public function setPaused(string $appId, int $id, bool $paused): array {
         $coworker = $this->mapper->findByIdAndApp($id, $appId);
-        $coworker->setPaused($paused);
+        $coworker->setPaused($paused ? 1 : 0);
         return $this->service->persistScheduled($coworker)->jsonSerialize();
     }
 
     public function setActive(string $appId, int $id, bool $active): array {
         $coworker = $this->mapper->findByIdAndApp($id, $appId);
-        $coworker->setIsActive($active);
+        $coworker->setIsActive($active ? 1 : 0);
         return $this->service->persistScheduled($coworker)->jsonSerialize();
     }
 

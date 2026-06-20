@@ -113,7 +113,7 @@ class CoworkerService {
      */
     public function setPaused(int $id, string $userId, bool $paused): Coworker {
         $coworker = $this->mapper->findByIdAndUser($id, $userId);
-        $coworker->setPaused($paused);
+        $coworker->setPaused($paused ? 1 : 0);
         return $this->persistScheduled($coworker);
     }
 
@@ -122,7 +122,7 @@ class CoworkerService {
      */
     public function setActive(int $id, string $userId, bool $active): Coworker {
         $coworker = $this->mapper->findByIdAndUser($id, $userId);
-        $coworker->setIsActive($active);
+        $coworker->setIsActive($active ? 1 : 0);
         return $this->persistScheduled($coworker);
     }
 
@@ -289,10 +289,10 @@ class CoworkerService {
             $coworker->setOutputPath($data['output_path'] !== null ? (string)$data['output_path'] : null);
         }
         if (array_key_exists('is_active', $data)) {
-            $coworker->setIsActive((bool)$data['is_active']);
+            $coworker->setIsActive(!empty($data['is_active']) ? 1 : 0);
         }
         if (array_key_exists('paused', $data)) {
-            $coworker->setPaused((bool)$data['paused']);
+            $coworker->setPaused(!empty($data['paused']) ? 1 : 0);
         }
         if (array_key_exists('options', $data)) {
             $options = $data['options'];
