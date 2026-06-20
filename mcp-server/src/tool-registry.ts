@@ -46,6 +46,7 @@ import { projectsTools } from './tools/apps/projects.js';
 import { pollsTools } from './tools/apps/polls.js';
 import { formsTools } from './tools/apps/forms.js';
 import { textTools } from './tools/apps/text.js';
+import { recommendationsTools } from './tools/apps/recommendations.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolArray = Array<{
@@ -121,6 +122,7 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
     appIds: ['terms_of_service'],
     tools: termsOfServiceTools,
   },
+  { category: 'recommendations', appIds: ['recommendations'], tools: recommendationsTools },
 ];
 
 const ALL_CATEGORIES = new Set(TOOL_REGISTRY.map((e) => e.category));
