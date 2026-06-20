@@ -39,6 +39,7 @@ import { notificationsTools } from './tools/apps/notifications.js';
 import { activityTools } from './tools/apps/activity.js';
 import { announcementTools } from './tools/apps/announcements.js';
 import { registrationTools } from './tools/apps/registration.js';
+import { termsOfServiceTools } from './tools/apps/terms-of-service.js';
 import { trashTools } from './tools/apps/trash.js';
 import { versionsTools } from './tools/apps/versions.js';
 import { projectsTools } from './tools/apps/projects.js';
@@ -115,6 +116,11 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
   { category: 'activity', appIds: ['activity'], tools: activityTools },
   { category: 'announcements', appIds: ['announcementcenter'], tools: announcementTools },
   { category: 'registration', appIds: ['registration'], tools: registrationTools },
+  {
+    category: 'terms_of_service',
+    appIds: ['terms_of_service'],
+    tools: termsOfServiceTools,
+  },
 ];
 
 const ALL_CATEGORIES = new Set(TOOL_REGISTRY.map((e) => e.category));
