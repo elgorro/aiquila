@@ -17,8 +17,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setDescription(?string $description)
  * @method string|null getSystemPrompt()
  * @method void setSystemPrompt(?string $systemPrompt)
- * @method bool getIsActive()
- * @method void setIsActive(bool $isActive)
+ * @method int getIsActive()
+ * @method void setIsActive(int $isActive)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
  * @method int getUpdatedAt()
@@ -29,7 +29,7 @@ class Project extends Entity implements \JsonSerializable {
     protected string $title = '';
     protected ?string $description = null;
     protected ?string $systemPrompt = null;
-    protected bool $isActive = true;
+    protected int $isActive = 1;
     protected int $createdAt = 0;
     protected int $updatedAt = 0;
 
@@ -38,7 +38,7 @@ class Project extends Entity implements \JsonSerializable {
         $this->addType('title', 'string');
         $this->addType('description', 'string');
         $this->addType('systemPrompt', 'string');
-        $this->addType('isActive', 'boolean');
+        $this->addType('isActive', 'integer');
         $this->addType('createdAt', 'integer');
         $this->addType('updatedAt', 'integer');
     }
@@ -50,7 +50,7 @@ class Project extends Entity implements \JsonSerializable {
             'title' => $this->getTitle(),
             'description' => $this->getDescription(),
             'systemPrompt' => $this->getSystemPrompt(),
-            'isActive' => $this->getIsActive(),
+            'isActive' => (bool)$this->getIsActive(),
             'createdAt' => $this->getCreatedAt(),
             'updatedAt' => $this->getUpdatedAt(),
         ];

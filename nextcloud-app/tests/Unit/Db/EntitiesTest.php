@@ -197,7 +197,7 @@ class EntitiesTest extends TestCase {
         $this->assertEquals('', $p->getTitle());
         $this->assertNull($p->getDescription());
         $this->assertEquals('', $p->getContent());
-        $this->assertTrue($p->getIsActive());
+        $this->assertSame(1, $p->getIsActive());
         $this->assertEquals(0, $p->getCreatedAt());
         $this->assertEquals(0, $p->getUpdatedAt());
     }
@@ -208,13 +208,13 @@ class EntitiesTest extends TestCase {
         $p->setTitle('Summarizer');
         $p->setDescription('Summarizes text');
         $p->setContent('Summarize: {input}');
-        $p->setIsActive(false);
+        $p->setIsActive(0);
 
         $this->assertEquals('charlie', $p->getUserId());
         $this->assertEquals('Summarizer', $p->getTitle());
         $this->assertEquals('Summarizes text', $p->getDescription());
         $this->assertEquals('Summarize: {input}', $p->getContent());
-        $this->assertFalse($p->getIsActive());
+        $this->assertSame(0, $p->getIsActive());
     }
 
     public function testPromptRegistersTypes(): void {
@@ -223,7 +223,7 @@ class EntitiesTest extends TestCase {
         $this->assertEquals('string',  $types['title']);
         $this->assertEquals('string',  $types['description']);
         $this->assertEquals('string',  $types['content']);
-        $this->assertEquals('boolean', $types['isActive']);
+        $this->assertEquals('integer', $types['isActive']);
         $this->assertEquals('integer', $types['createdAt']);
         $this->assertEquals('integer', $types['updatedAt']);
     }
