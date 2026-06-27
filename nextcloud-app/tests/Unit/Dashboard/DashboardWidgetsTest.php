@@ -4,6 +4,7 @@
 namespace OCA\AIquila\Tests\Unit\Dashboard;
 
 use OCA\AIquila\Dashboard\ConversationsWidget;
+use OCA\AIquila\Dashboard\CoworkerOutputWidget;
 use OCA\AIquila\Dashboard\CoworkersWidget;
 use OCA\AIquila\Dashboard\UsageWidget;
 use OCA\AIquila\Db\Conversation;
@@ -138,6 +139,15 @@ class DashboardWidgetsTest extends TestCase {
         $this->assertSame('Today', $items[0]->getTitle());
         $this->assertStringContainsString('15', $items[0]->getSubtitle());
         $this->assertStringContainsString('150', $items[2]->getSubtitle());
+    }
+
+    public function testCoworkerOutputWidgetMetadata(): void {
+        $widget = new CoworkerOutputWidget($this->l10n, $this->urlGenerator, $this->userSession);
+
+        $this->assertSame('aiquila_coworker_output', $widget->getId());
+        $this->assertSame(40, $widget->getOrder());
+        $this->assertSame('icon-aiquila', $widget->getIconClass());
+        $this->assertStringContainsString('#/cowork', $widget->getUrl());
     }
 
     private function conversation(int $id, string $title, int $updatedAt): Conversation {

@@ -209,6 +209,14 @@ export function getCoworkerRuns(id, limit = 20) {
 	return axios.get(url(`/api/coworkers/${id}/runs`), { params: { limit } })
 }
 
+export function getDashboardCoworker() {
+	return axios.get(url('/api/dashboard/coworker-output'))
+}
+
+export function setDashboardCoworker(coworkerId) {
+	return axios.put(url('/api/dashboard/coworker-output'), { coworkerId })
+}
+
 export function listCoworkerTemplates() {
 	return axios.get(url('/api/coworkers/templates'))
 }

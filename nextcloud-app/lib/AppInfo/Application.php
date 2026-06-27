@@ -50,6 +50,7 @@ class Application extends App implements IBootstrap {
         $context->registerDashboardWidget(\OCA\AIquila\Dashboard\ConversationsWidget::class);
         $context->registerDashboardWidget(\OCA\AIquila\Dashboard\CoworkersWidget::class);
         $context->registerDashboardWidget(\OCA\AIquila\Dashboard\UsageWidget::class);
+        $context->registerDashboardWidget(\OCA\AIquila\Dashboard\CoworkerOutputWidget::class);
 
         // Cowork task-type registry — the set of jobs coworkers can run
         $context->registerService(CoworkerTaskRegistry::class, function ($c) {

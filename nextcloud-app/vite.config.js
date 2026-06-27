@@ -26,6 +26,7 @@ export default defineConfig({
 		rollupOptions: {
 			input: {
 				'aiquila-main': path.resolve(__dirname, 'src/main.js'),
+				'aiquila-dashboard': path.resolve(__dirname, 'src/dashboard.js'),
 			},
 			output: {
 				format: 'es',
