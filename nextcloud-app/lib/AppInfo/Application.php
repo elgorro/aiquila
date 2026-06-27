@@ -46,6 +46,11 @@ class Application extends App implements IBootstrap {
         // Expose app capabilities via /ocs/v2.php/cloud/capabilities
         $context->registerCapability(\OCA\AIquila\Capabilities\AIquilaCapability::class);
 
+        // Dashboard widgets — conversations, coworkers, and token usage
+        $context->registerDashboardWidget(\OCA\AIquila\Dashboard\ConversationsWidget::class);
+        $context->registerDashboardWidget(\OCA\AIquila\Dashboard\CoworkersWidget::class);
+        $context->registerDashboardWidget(\OCA\AIquila\Dashboard\UsageWidget::class);
+
         // Cowork task-type registry — the set of jobs coworkers can run
         $context->registerService(CoworkerTaskRegistry::class, function ($c) {
             return new CoworkerTaskRegistry([

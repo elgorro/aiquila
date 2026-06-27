@@ -209,6 +209,7 @@ if (!interface_exists('OCP\DB\QueryBuilder\IExpressionBuilder')) {
     interface OCP_DB_QueryBuilder_IExpressionBuilder {
         public function eq(string $x, mixed $y): string;
         public function lte(string $x, mixed $y): string;
+        public function gte(string $x, mixed $y): string;
         public function isNull(string $x): string;
     }
     class_alias('OCP_DB_QueryBuilder_IExpressionBuilder', 'OCP\DB\QueryBuilder\IExpressionBuilder');
@@ -596,4 +597,118 @@ if (!class_exists('OCP\BackgroundJob\TimedJob')) {
         }
     }
     class_alias('OCP_BackgroundJob_TimedJob', 'OCP\BackgroundJob\TimedJob');
+}
+
+// ── OCP\IUser / IUserSession ──────────────────────────────────────────────
+
+if (!interface_exists('OCP\IUser')) {
+    interface OCP_IUser {
+        public function getUID(): string;
+        public function getDisplayName(): string;
+    }
+    class_alias('OCP_IUser', 'OCP\IUser');
+}
+
+if (!interface_exists('OCP\IUserSession')) {
+    interface OCP_IUserSession {
+        public function getUser(): ?\OCP\IUser;
+    }
+    class_alias('OCP_IUserSession', 'OCP\IUserSession');
+}
+
+// ── OCP\IDateTimeFormatter ────────────────────────────────────────────────
+
+if (!interface_exists('OCP\IDateTimeFormatter')) {
+    interface OCP_IDateTimeFormatter {
+        public function formatTimeSpan($timestamp, $baseTimestamp = null, $l = null): string;
+    }
+    class_alias('OCP_IDateTimeFormatter', 'OCP\IDateTimeFormatter');
+}
+
+// ── OCP\Dashboard ─────────────────────────────────────────────────────────
+
+if (!interface_exists('OCP\Dashboard\IWidget')) {
+    interface OCP_Dashboard_IWidget {
+        public function getId(): string;
+        public function getTitle(): string;
+        public function getOrder(): int;
+        public function getIconClass(): string;
+        public function getUrl(): ?string;
+        public function load(): void;
+    }
+    class_alias('OCP_Dashboard_IWidget', 'OCP\Dashboard\IWidget');
+}
+
+if (!interface_exists('OCP\Dashboard\IIconWidget')) {
+    interface OCP_Dashboard_IIconWidget extends \OCP\Dashboard\IWidget {
+        public function getIconUrl(): string;
+    }
+    class_alias('OCP_Dashboard_IIconWidget', 'OCP\Dashboard\IIconWidget');
+}
+
+if (!class_exists('OCP\Dashboard\Model\WidgetItem')) {
+    class OCP_Dashboard_Model_WidgetItem {
+        public function __construct(
+            private string $title = '',
+            private string $subtitle = '',
+            private string $link = '',
+            private string $iconUrl = '',
+            private string $sinceId = '',
+            private string $overlayIconUrl = '',
+        ) {
+        }
+        public function getTitle(): string { return $this->title; }
+        public function getSubtitle(): string { return $this->subtitle; }
+        public function getLink(): string { return $this->link; }
+        public function getIconUrl(): string { return $this->iconUrl; }
+        public function getSinceId(): string { return $this->sinceId; }
+    }
+    class_alias('OCP_Dashboard_Model_WidgetItem', 'OCP\Dashboard\Model\WidgetItem');
+}
+
+if (!class_exists('OCP\Dashboard\Model\WidgetItems')) {
+    class OCP_Dashboard_Model_WidgetItems {
+        public function __construct(
+            private array $items = [],
+            private string $emptyContentMessage = '',
+            private string $halfEmptyContentMessage = '',
+        ) {
+        }
+        /** @return \OCP\Dashboard\Model\WidgetItem[] */
+        public function getItems(): array { return $this->items; }
+        public function getEmptyContentMessage(): string { return $this->emptyContentMessage; }
+    }
+    class_alias('OCP_Dashboard_Model_WidgetItems', 'OCP\Dashboard\Model\WidgetItems');
+}
+
+if (!class_exists('OCP\Dashboard\Model\WidgetButton')) {
+    class OCP_Dashboard_Model_WidgetButton {
+        public const TYPE_NEW = 'new';
+        public const TYPE_MORE = 'more';
+        public const TYPE_SETUP = 'setup';
+        public function __construct(
+            private string $type,
+            private string $link,
+            private string $text,
+        ) {
+        }
+        public function getType(): string { return $this->type; }
+        public function getLink(): string { return $this->link; }
+        public function getText(): string { return $this->text; }
+    }
+    class_alias('OCP_Dashboard_Model_WidgetButton', 'OCP\Dashboard\Model\WidgetButton');
+}
+
+if (!interface_exists('OCP\Dashboard\IAPIWidgetV2')) {
+    interface OCP_Dashboard_IAPIWidgetV2 extends \OCP\Dashboard\IWidget {
+        public function getItemsV2(string $userId, ?string $since = null, int $limit = 7): \OCP\Dashboard\Model\WidgetItems;
+    }
+    class_alias('OCP_Dashboard_IAPIWidgetV2', 'OCP\Dashboard\IAPIWidgetV2');
+}
+
+if (!interface_exists('OCP\Dashboard\IButtonWidget')) {
+    interface OCP_Dashboard_IButtonWidget extends \OCP\Dashboard\IWidget {
+        public function getWidgetButtons(string $userId): array;
+    }
+    class_alias('OCP_Dashboard_IButtonWidget', 'OCP\Dashboard\IButtonWidget');
 }
