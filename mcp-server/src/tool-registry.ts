@@ -48,6 +48,7 @@ import { formsTools } from './tools/apps/forms.js';
 import { textTools } from './tools/apps/text.js';
 import { recommendationsTools } from './tools/apps/recommendations.js';
 import { socialSharingTools } from './tools/apps/social-sharing.js';
+import { passmanTools } from './tools/apps/passman.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolArray = Array<{
@@ -102,6 +103,7 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
   { category: 'news', appIds: ['news'], tools: newsTools },
   { category: 'mail', appIds: ['mail'], tools: mailTools },
   { category: 'deck', appIds: ['deck'], tools: deckTools },
+  { category: 'passman', appIds: ['passman'], tools: passmanTools },
   { category: 'cookbook', appIds: ['cookbook'], tools: cookbookTools },
   { category: 'maps', appIds: ['maps'], tools: mapsTools },
   { category: 'photos', appIds: ['photos'], tools: photosTools },
