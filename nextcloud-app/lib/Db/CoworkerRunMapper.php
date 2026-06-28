@@ -49,6 +49,29 @@ class CoworkerRunMapper extends QBMapper {
     }
 
     /**
+     * Count all coworker runs grouped by status, across all users.
+     * Used for the server-global OpenMetrics export.
+     *
+     * @return array<string, int> status => count
+     */
+    public function countByStatus(): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('status')
+            ->selectAlias($qb->func()->count('*'), 'run_count')
+            ->from($this->getTableName())
+            ->groupBy('status');
+
+        $result = $qb->executeQuery();
+        $counts = [];
+        while ($row = $result->fetch()) {
+            $counts[(string)($row['status'] ?? '')] = (int)($row['run_count'] ?? 0);
+        }
+        $result->closeCursor();
+
+        return $counts;
+    }
+
+    /**
      * Delete all run history for a coworker (used when the coworker is removed).
      */
     public function deleteByCoworker(int $coworkerId): void {

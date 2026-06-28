@@ -36,7 +36,7 @@ AIquila includes a [Model Context Protocol](https://modelcontextprotocol.io) ser
 
 Made possible by [Claude](https://www.anthropic.com/claude) from [Anthropic](https://www.anthropic.com) and the [Nextcloud](https://nextcloud.com) open-source community.
     ]]></description>
-    <version>0.3.25</version>
+    <version>0.3.26</version>
     <licence>AGPL-3.0-or-later</licence>
     <author mail="aiquila@mailbox.org">elgorro</author>
     <documentation>
@@ -73,6 +73,12 @@ Made possible by [Claude](https://www.anthropic.com/claude) from [Anthropic](htt
         <command>OCA\AIquila\Command\McpAddCommand</command>
         <command>OCA\AIquila\Command\DoctorCommand</command>
     </commands>
+    <openmetrics>
+        <exporter>OCA\AIquila\OpenMetrics\TokensUsedExporter</exporter>
+        <exporter>OCA\AIquila\OpenMetrics\TasksExporter</exporter>
+        <exporter>OCA\AIquila\OpenMetrics\ConversationsExporter</exporter>
+        <exporter>OCA\AIquila\OpenMetrics\McpServerStatusExporter</exporter>
+    </openmetrics>
     <background-jobs>
         <job>OCA\AIquila\BackgroundJob\CleanupAnthropicFilesJob</job>
         <job>OCA\AIquila\BackgroundJob\CoworkerRunJob</job>

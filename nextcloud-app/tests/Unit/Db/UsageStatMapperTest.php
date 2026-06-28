@@ -97,6 +97,33 @@ class UsageStatMapperTest extends MapperTestCase {
         $this->assertEquals(['input_tokens' => 0, 'output_tokens' => 0, 'cache_creation_tokens' => 0, 'cache_read_tokens' => 0], $totals);
     }
 
+    public function testSumTokensByModelAndTypeAggregatesRows(): void {
+        $this->qb->method('executeQuery')->willReturn($this->result);
+        $this->result->method('fetch')->willReturnOnConsecutiveCalls(
+            ['model' => 'claude-opus-4-8', 'request_type' => 'chat', 'total_input' => '1000', 'total_output' => '500'],
+            ['model' => 'claude-haiku-4-5', 'request_type' => 'summary', 'total_input' => '20', 'total_output' => '10'],
+            false,
+        );
+        $this->result->method('closeCursor')->willReturn(true);
+
+        $mapper = new UsageStatMapper($this->db);
+        $rows = $mapper->sumTokensByModelAndType();
+
+        $this->assertSame([
+            ['model' => 'claude-opus-4-8', 'request_type' => 'chat', 'input_tokens' => 1000, 'output_tokens' => 500],
+            ['model' => 'claude-haiku-4-5', 'request_type' => 'summary', 'input_tokens' => 20, 'output_tokens' => 10],
+        ], $rows);
+    }
+
+    public function testSumTokensByModelAndTypeEmpty(): void {
+        $this->qb->method('executeQuery')->willReturn($this->result);
+        $this->result->method('fetch')->willReturn(false);
+        $this->result->method('closeCursor')->willReturn(true);
+
+        $mapper = new UsageStatMapper($this->db);
+        $this->assertSame([], $mapper->sumTokensByModelAndType());
+    }
+
     public function testTableName(): void {
         $this->qb->expects($this->once())
             ->method('from')
