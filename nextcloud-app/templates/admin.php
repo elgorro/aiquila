@@ -16,7 +16,9 @@ style('aiquila', 'admin');
             Choose the default provider for this instance and paste its API key below. Anthropic keys come from
             <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>;
             Mistral keys from
-            <a href="https://console.mistral.ai/" target="_blank" rel="noopener noreferrer">console.mistral.ai</a>.
+            <a href="https://console.mistral.ai/" target="_blank" rel="noopener noreferrer">console.mistral.ai</a>;
+            DeepSeek keys from
+            <a href="https://platform.deepseek.com/" target="_blank" rel="noopener noreferrer">platform.deepseek.com</a>.
             Keys are stored encrypted in Nextcloud's credential manager. Users may override both provider and key in personal settings. Use <em>Test Configuration</em> after saving to confirm the key reaches the provider.
         </p>
 

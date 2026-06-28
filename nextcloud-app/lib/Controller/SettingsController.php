@@ -5,6 +5,7 @@ namespace OCA\AIquila\Controller;
 
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\DeepSeekModels;
 use OCA\AIquila\Service\MistralModels;
 use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
@@ -46,7 +47,11 @@ class SettingsController extends Controller {
 
     /** Static fallback model list for a provider id. */
     private function staticModels(string $providerId): array {
-        return $providerId === 'mistral' ? MistralModels::getAllModels() : ClaudeModels::getAllModels();
+        return match ($providerId) {
+            'mistral' => MistralModels::getAllModels(),
+            'deepseek' => DeepSeekModels::getAllModels(),
+            default => ClaudeModels::getAllModels(),
+        };
     }
 
     /**
