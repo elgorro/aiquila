@@ -35,8 +35,8 @@ abstract class MapperTestCase extends TestCase {
         $this->db->method('getQueryBuilder')->willReturn($this->qb);
 
         // Stub the entire fluent IQueryBuilder chain
-        foreach (['select', 'from', 'where', 'andWhere', 'orderBy',
-                  'setMaxResults', 'setFirstResult', 'delete'] as $method) {
+        foreach (['select', 'selectAlias', 'from', 'where', 'andWhere', 'orderBy',
+                  'groupBy', 'setMaxResults', 'setFirstResult', 'delete'] as $method) {
             $this->qb->method($method)->willReturnSelf();
         }
 
@@ -47,6 +47,8 @@ abstract class MapperTestCase extends TestCase {
 
         $this->expr->method('eq')->willReturn('1=1');
         $this->expr->method('lte')->willReturn('1<=1');
-        $this->func->method('sum')->willReturnArgument(1); // returns alias
+        $this->expr->method('gte')->willReturn('1>=1');
+        $this->func->method('sum')->willReturnArgument(0); // returns expression
+        $this->func->method('count')->willReturnArgument(0); // returns expression
     }
 }

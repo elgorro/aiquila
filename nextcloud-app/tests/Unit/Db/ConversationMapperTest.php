@@ -74,4 +74,22 @@ class ConversationMapperTest extends MapperTestCase {
         $mapper->method('findEntities')->willReturn([]);
         $mapper->findAllByUser('alice');
     }
+
+    public function testCountAllReturnsCount(): void {
+        $this->qb->method('executeQuery')->willReturn($this->result);
+        $this->result->method('fetch')->willReturn(['conversation_count' => '42']);
+        $this->result->method('closeCursor')->willReturn(true);
+
+        $mapper = new ConversationMapper($this->db);
+        $this->assertSame(42, $mapper->countAll());
+    }
+
+    public function testCountAllReturnsZeroWhenNoRow(): void {
+        $this->qb->method('executeQuery')->willReturn($this->result);
+        $this->result->method('fetch')->willReturn(false);
+        $this->result->method('closeCursor')->willReturn(true);
+
+        $mapper = new ConversationMapper($this->db);
+        $this->assertSame(0, $mapper->countAll());
+    }
 }

@@ -82,4 +82,33 @@ class UsageStatMapper extends QBMapper {
             'output_tokens' => (int)($row['total_output'] ?? 0),
         ];
     }
+
+    /**
+     * Aggregate token usage across all users, grouped by model and request type.
+     * Used for the server-global OpenMetrics export (no per-user breakdown).
+     *
+     * @return list<array{model: string, request_type: string, input_tokens: int, output_tokens: int}>
+     */
+    public function sumTokensByModelAndType(): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('model', 'request_type')
+            ->selectAlias($qb->func()->sum('input_tokens'), 'total_input')
+            ->selectAlias($qb->func()->sum('output_tokens'), 'total_output')
+            ->from($this->getTableName())
+            ->groupBy('model', 'request_type');
+
+        $result = $qb->executeQuery();
+        $rows = [];
+        while ($row = $result->fetch()) {
+            $rows[] = [
+                'model' => (string)($row['model'] ?? ''),
+                'request_type' => (string)($row['request_type'] ?? ''),
+                'input_tokens' => (int)($row['total_input'] ?? 0),
+                'output_tokens' => (int)($row['total_output'] ?? 0),
+            ];
+        }
+        $result->closeCursor();
+
+        return $rows;
+    }
 }

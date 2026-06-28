@@ -179,6 +179,8 @@ if (!class_exists('OCP\AppFramework\Db\Entity')) {
 
         public function getFieldTypes(): array { return $this->_types; }
 
+        protected function markFieldUpdated(string $attribute): void {}
+
         public function jsonSerialize(): array {
             $out = ['id' => $this->id];
             foreach (array_keys($this->_types) as $field) {
@@ -217,7 +219,8 @@ if (!interface_exists('OCP\DB\QueryBuilder\IExpressionBuilder')) {
 
 if (!interface_exists('OCP\DB\QueryBuilder\IFunctionBuilder')) {
     interface OCP_DB_QueryBuilder_IFunctionBuilder {
-        public function sum(string $column, string $alias): string;
+        public function sum(string $column, ?string $alias = null): string;
+        public function count(string $column, ?string $alias = null): string;
     }
     class_alias('OCP_DB_QueryBuilder_IFunctionBuilder', 'OCP\DB\QueryBuilder\IFunctionBuilder');
 }
@@ -238,6 +241,8 @@ if (!interface_exists('OCP\DB\QueryBuilder\IQueryBuilder')) {
         const PARAM_BOOL = 5;
 
         public function select(mixed ...$selects): static;
+        public function selectAlias(mixed $select, string $alias): static;
+        public function groupBy(mixed ...$groupBy): static;
         public function from(string $from, ?string $alias = null): static;
         public function where(mixed $predicate): static;
         public function andWhere(mixed $predicate): static;
@@ -711,4 +716,61 @@ if (!interface_exists('OCP\Dashboard\IButtonWidget')) {
         public function getWidgetButtons(string $userId): array;
     }
     class_alias('OCP_Dashboard_IButtonWidget', 'OCP\Dashboard\IButtonWidget');
+}
+
+// ── OCP\OpenMetrics (Nextcloud 33+) ───────────────────────────────────────
+
+if (!enum_exists('OCP\OpenMetrics\MetricType')) {
+    enum OCP_OpenMetrics_MetricType {
+        case counter;
+        case gauge;
+        case histogram;
+        case gaugehistogram;
+        case stateset;
+        case info;
+        case summary;
+        case unknown;
+    }
+    class_alias('OCP_OpenMetrics_MetricType', 'OCP\OpenMetrics\MetricType');
+}
+
+if (!enum_exists('OCP\OpenMetrics\MetricValue')) {
+    enum OCP_OpenMetrics_MetricValue: string {
+        case NOT_A_NUMBER = 'NaN';
+        case POSITIVE_INFINITY = '+Inf';
+        case NEGATIVE_INFINITY = '-Inf';
+    }
+    class_alias('OCP_OpenMetrics_MetricValue', 'OCP\OpenMetrics\MetricValue');
+}
+
+if (!class_exists('OCP\OpenMetrics\Metric')) {
+    final readonly class OCP_OpenMetrics_Metric {
+        public function __construct(
+            public int|float|bool|\OCP\OpenMetrics\MetricValue $value = false,
+            public array $labels = [],
+            public int|float|null $timestamp = null,
+        ) {
+            foreach (array_keys($this->labels) as $label) {
+                if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', (string)$label) !== 1) {
+                    throw new \InvalidArgumentException('Invalid OpenMetrics label name: "' . $label . '"');
+                }
+            }
+        }
+
+        public function label(string $name): ?string {
+            return $this->labels[$name] ?? null;
+        }
+    }
+    class_alias('OCP_OpenMetrics_Metric', 'OCP\OpenMetrics\Metric');
+}
+
+if (!interface_exists('OCP\OpenMetrics\IMetricFamily')) {
+    interface OCP_OpenMetrics_IMetricFamily {
+        public function name(): string;
+        public function type(): \OCP\OpenMetrics\MetricType;
+        public function unit(): string;
+        public function help(): string;
+        public function metrics(): \Generator;
+    }
+    class_alias('OCP_OpenMetrics_IMetricFamily', 'OCP\OpenMetrics\IMetricFamily');
 }

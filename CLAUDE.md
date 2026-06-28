@@ -92,6 +92,10 @@ Commit messages follow **Conventional Commits** with scope:
 - `feat(nextcloud):` / `fix(nextcloud):` — Nextcloud app changes
 - `docs:` / `chore:` — cross-cutting changes
 
+To auto-close the issue a PR resolves, put a **closing keyword** in the PR description —
+`Closes #184` (or `Fixes #184` / `Resolves #184`). A bare mention like `(#184)` or
+`Implements GH #184` links the issue but does **not** close it on merge.
+
 ## Version Bumps
 
 All locations that must be updated on each release:

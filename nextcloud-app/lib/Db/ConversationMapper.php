@@ -50,4 +50,20 @@ class ConversationMapper extends QBMapper {
             ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)));
         $qb->executeStatement();
     }
+
+    /**
+     * Count all conversations across all users.
+     * Used for the server-global OpenMetrics export.
+     */
+    public function countAll(): int {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select($qb->func()->count('*', 'conversation_count'))
+            ->from($this->getTableName());
+
+        $result = $qb->executeQuery();
+        $row = $result->fetch();
+        $result->closeCursor();
+
+        return (int)($row['conversation_count'] ?? 0);
+    }
 }
