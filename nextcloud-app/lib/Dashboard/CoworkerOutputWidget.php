@@ -6,7 +6,6 @@ declare(strict_types=1);
 namespace OCA\AIquila\Dashboard;
 
 use OCP\App\IAppManager;
-use OCP\Security\CSP\IContentSecurityPolicyNonceManager;
 use OCP\Server;
 use OCP\Util;
 
@@ -48,7 +47,7 @@ class CoworkerOutputWidget extends AbstractAIquilaWidget {
         Util::addHeader('script', [
             'type' => 'module',
             'src' => $src,
-            'nonce' => Server::get(IContentSecurityPolicyNonceManager::class)->getNonce(),
+            'nonce' => \OC::$server->getContentSecurityPolicyNonceManager()->getNonce(),
         ], '');
     }
 }

@@ -45,6 +45,36 @@ After editing a controller annotated with `#[OpenAPI]`, regenerate and commit th
 cd nextcloud-app && vendor/bin/generate-spec   # updates openapi.json + openapi-full.json
 ```
 
+## Nextcloud app — local dev testing
+
+To test working-tree changes in the dev stack (`docker/installation/`) and check for
+runtime errors:
+
+```bash
+cd docker/installation
+make build-tarball            # repackage nextcloud-app/ from the working tree
+make up                       # IMPORTANT: rebuilds the image with the new tarball
+# The post-install hook only runs on first install, so re-extract manually after a recreate:
+docker compose exec -T nextcloud bash /docker-entrypoint-hooks.d/post-installation/aiquila-install.sh
+docker compose exec -T nextcloud su -p www-data -s /bin/sh -c "php /var/www/html/occ upgrade"   # if migrations changed
+```
+
+Gotchas:
+- `make build-tarball` alone does **not** update the container — the install hook extracts
+  `/tmp/aiquila.tar.gz` which is baked into the image, so `make up` (image rebuild) is required.
+- `make build-tarball` strips dev deps from `nextcloud-app/vendor/`; run `composer install`
+  again before `vendor/bin/phpunit`.
+
+Check logs / status codes (level 3 = ERROR, 4 = FATAL; `serverDI` level-0 lines are noise):
+
+```bash
+make nc-log                   # tail data/nextcloud.log
+docker compose exec -T nextcloud sh -c "grep '\"level\":[34]' /var/www/html/data/nextcloud.log | tail"
+# Exercise dashboard widgets (server-rendered get_items):
+curl -s -u testuser:'AIquila2026!dev' -H 'OCS-APIRequest: true' \
+  "http://localhost:8080/ocs/v2.php/apps/dashboard/api/v2/widget-items?widgets[]=aiquila_usage"
+```
+
 ## Workflow
 
 **Always work on a branch — never commit directly to main.**
