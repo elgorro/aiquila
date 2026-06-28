@@ -42,7 +42,7 @@ class CoworkerOutputWidget extends AbstractAIquilaWidget {
         // <script> tag that cannot resolve the chunk imports. Mirror the SPA
         // bootstrap in templates/main.php and inject a module header instead.
         $version = Server::get(IAppManager::class)->getAppVersion(self::APP_ID);
-        $src = $this->urlGenerator->linkTo(self::APP_ID, 'js/' . self::APP_ID . '-dashboard.js')
+        $src = $this->urlGenerator->linkTo(self::APP_ID, 'js/dist/' . self::APP_ID . '-dashboard.js')
             . '?v=' . $version;
         Util::addHeader('script', [
             'type' => 'module',

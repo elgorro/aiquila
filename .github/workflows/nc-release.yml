@@ -85,7 +85,7 @@ jobs:
 
       - name: Verify build output
         run: |
-          if [ ! -f "nextcloud-app/js/aiquila-main.js" ]; then
+          if [ ! -f "nextcloud-app/js/dist/aiquila-main.js" ]; then
             echo "Error: Frontend build output not found"
             exit 1
           fi
