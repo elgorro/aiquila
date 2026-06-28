@@ -96,6 +96,13 @@ class Application extends App implements IBootstrap {
 
         // Register Unified Search provider for AIquila chat conversations
         $context->registerSearchProvider(\OCA\AIquila\Search\AiquilaSearchProvider::class);
+
+        // Feed conversations into Context Chat (optional app) for the Assistant.
+        // The event only fires when Context Chat is installed, so this is inert otherwise.
+        $context->registerEventListener(
+            \OCP\ContextChat\Events\ContentProviderRegisterEvent::class,
+            \OCA\AIquila\Listener\ContextChatProviderListener::class
+        );
     }
 
     public function boot(IBootContext $context): void {

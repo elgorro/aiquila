@@ -246,3 +246,31 @@ Some variables cannot be changed by simply editing `.env` and restarting:
   docker compose exec aiq-nc php occ user:generate-app-password <nc-mcp-user>
   # Copy the output, then update NC_MCP_PASSWORD in .env and restart
   ```
+
+## Upgrading PostgreSQL to 18
+
+The Nextcloud and full stacks ship **`postgres:18`**. A PostgreSQL *major* upgrade does
+not happen automatically — the on-disk data format changes between majors, so starting the
+new image against a data volume created by an older major (e.g. `postgres:16`) will fail.
+
+**Fresh deployments need no action.** To migrate an existing `postgres:16` volume, dump
+before bumping the image and restore afterwards:
+
+```bash
+# 1. While still on the old image, dump the database:
+docker compose exec -T nc-db pg_dump -U nextcloud -Fc nextcloud > nextcloud.dump
+
+# 2. Stop the stack, remove the old data volume, then start only the DB on the new image:
+docker compose down
+docker volume rm aiq-nc_db_data        # Hetzner nextcloud/full stack volume name
+docker compose up -d nc-db
+
+# 3. Restore into the fresh PostgreSQL 18 cluster:
+docker compose exec -T nc-db pg_restore -U nextcloud -d nextcloud --clean < nextcloud.dump
+
+# 4. Bring the rest of the stack back up:
+docker compose up -d
+```
+
+For the local dev stack (`docker/installation/`) the service is `db` and the volume is
+`aiquila_postgres_data`; adjust the names accordingly.

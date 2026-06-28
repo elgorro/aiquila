@@ -32,6 +32,34 @@ class ConversationMapper extends QBMapper {
     }
 
     /**
+     * Look up a conversation by id alone (no user scoping).
+     * Used by background indexing jobs that only carry the conversation id.
+     *
+     * @throws DoesNotExistException
+     */
+    public function findById(int $id): Conversation {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
+
+        return $this->findEntity($qb);
+    }
+
+    /**
+     * All conversations across all users, used for full Context Chat re-imports.
+     *
+     * @return Conversation[]
+     */
+    public function findAll(): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName());
+
+        return $this->findEntities($qb);
+    }
+
+    /**
      * @return Conversation[]
      */
     public function findAllByUser(string $userId): array {

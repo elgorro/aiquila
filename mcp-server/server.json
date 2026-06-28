@@ -18,7 +18,7 @@
       ]
     }
   ],
-  "version": "0.3.27",
+  "version": "0.3.28",
   "websiteUrl": "https://github.com/elgorro/aiquila",
   "remotes": [
     {
@@ -36,7 +36,7 @@
     {
       "registryType": "npm",
       "identifier": "aiquila-mcp",
-      "version": "0.3.27",
+      "version": "0.3.28",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -64,7 +64,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.3.27",
+      "identifier": "ghcr.io/elgorro/aiquila-mcp:0.3.28",
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"

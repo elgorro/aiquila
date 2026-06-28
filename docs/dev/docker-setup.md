@@ -7,7 +7,7 @@ Complete guide for setting up and using the AIquila Docker development environme
 The Docker environment provides a complete, isolated development setup with:
 
 - **Caddy 2** - Reverse proxy with automatic HTTPS (self-signed certs for dev)
-- **PostgreSQL 16** - Production-grade database
+- **PostgreSQL 18** - Production-grade database
 - **Nextcloud 33** - Test instance with AIquila pre-installed from tarball
 - **Redis 7** - Caching and performance
 - **MCP Server** - Development container with hot reload (HTTP transport on port 3339)
@@ -230,6 +230,10 @@ cat backup.sql | docker compose exec -T db psql -U nextcloud nextcloud
 # Full reset (DESTRUCTIVE — deletes all data)
 make reset
 ```
+
+> **Upgrading PostgreSQL major versions:** the stack ships `postgres:18`. A major upgrade
+> won't read an older major's data volume automatically — dump before bumping the image and
+> restore afterwards. See [Upgrading PostgreSQL to 18](../hetzner/advanced.md#upgrading-postgresql-to-18).
 
 ## Architecture
 

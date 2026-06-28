@@ -25,8 +25,11 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
+use OCA\AIquila\BackgroundJob\IndexConversationJob;
+use OCA\AIquila\Service\ContextChatService;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
+use OCP\BackgroundJob\IJobList;
 use OCP\IRequest;
 
 class ConversationController extends Controller {
@@ -41,6 +44,8 @@ class ConversationController extends Controller {
     private ImageOptimizer $imageOptimizer;
     private McpClientService $mcpClient;
     private NativeMcpService $nativeMcp;
+    private IJobList $jobList;
+    private ContextChatService $contextChat;
     private ?string $userId;
 
     public function __construct(
@@ -57,6 +62,8 @@ class ConversationController extends Controller {
         ImageOptimizer $imageOptimizer,
         McpClientService $mcpClient,
         NativeMcpService $nativeMcp,
+        IJobList $jobList,
+        ContextChatService $contextChat,
         ?string $userId
     ) {
         parent::__construct($appName, $request);
@@ -71,7 +78,17 @@ class ConversationController extends Controller {
         $this->imageOptimizer = $imageOptimizer;
         $this->mcpClient = $mcpClient;
         $this->nativeMcp = $nativeMcp;
+        $this->jobList = $jobList;
+        $this->contextChat = $contextChat;
         $this->userId = $userId;
+    }
+
+    /**
+     * Queue a best-effort Context Chat re-index for a conversation, off the
+     * request path. No-op downstream when Context Chat is not installed.
+     */
+    private function queueContextChatIndex(int $conversationId): void {
+        $this->jobList->add(IndexConversationJob::class, ['id' => $conversationId]);
     }
 
     /**
@@ -238,6 +255,9 @@ class ConversationController extends Controller {
         }
         $this->messageMapper->deleteByConversation($id);
         $this->conversationMapper->delete($conversation);
+
+        // Drop the conversation from Context Chat (no-op when not installed).
+        $this->contextChat->removeConversation($id);
 
         return new JSONResponse(['deleted' => true]);
     }
@@ -429,6 +449,8 @@ class ConversationController extends Controller {
 
         $conversation->setUpdatedAt(time());
         $this->conversationMapper->update($conversation);
+
+        $this->queueContextChatIndex($id);
 
         return new JSONResponse([
             'userMessage' => $this->serializeMessage($userMsg, $fileEntities),
@@ -668,6 +690,8 @@ class ConversationController extends Controller {
         $conversation->setUpdatedAt(time());
         $this->conversationMapper->update($conversation);
 
+        $this->queueContextChatIndex($id);
+
         yield [
             'type' => 'persisted',
             'assistantMessage' => $assistantMsg->jsonSerialize(),
@@ -735,6 +759,8 @@ class ConversationController extends Controller {
                 $this->messageFileMapper->insert($newFile);
             }
         }
+
+        $this->queueContextChatIndex($newConv->getId());
 
         return new JSONResponse($newConv->jsonSerialize());
     }
