@@ -90,6 +90,31 @@ if (!interface_exists('OCP\AppFramework\Services\IInitialState')) {
     class_alias('OCP_AppFramework_Services_IInitialState', 'OCP\AppFramework\Services\IInitialState');
 }
 
+if (!class_exists('OCP\AppFramework\App')) {
+    abstract class OCP_AppFramework_App {
+        public function __construct(string $appName, array $urlParams = []) {}
+    }
+    class_alias('OCP_AppFramework_App', 'OCP\AppFramework\App');
+}
+
+if (!interface_exists('OCP\AppFramework\Bootstrap\IBootstrap')) {
+    interface OCP_AppFramework_Bootstrap_IBootstrap {
+        public function register(\OCP\AppFramework\Bootstrap\IRegistrationContext $context): void;
+        public function boot(\OCP\AppFramework\Bootstrap\IBootContext $context): void;
+    }
+    class_alias('OCP_AppFramework_Bootstrap_IBootstrap', 'OCP\AppFramework\Bootstrap\IBootstrap');
+}
+
+if (!interface_exists('OCP\AppFramework\Bootstrap\IRegistrationContext')) {
+    interface OCP_AppFramework_Bootstrap_IRegistrationContext {}
+    class_alias('OCP_AppFramework_Bootstrap_IRegistrationContext', 'OCP\AppFramework\Bootstrap\IRegistrationContext');
+}
+
+if (!interface_exists('OCP\AppFramework\Bootstrap\IBootContext')) {
+    interface OCP_AppFramework_Bootstrap_IBootContext {}
+    class_alias('OCP_AppFramework_Bootstrap_IBootContext', 'OCP\AppFramework\Bootstrap\IBootContext');
+}
+
 if (!class_exists('OCP\AppFramework\Controller')) {
     abstract class OCP_AppFramework_Controller {
         protected string $appName;
@@ -586,6 +611,66 @@ if (!class_exists('OCP\BackgroundJob\Job')) {
         abstract protected function run($argument);
     }
     class_alias('OCP_BackgroundJob_Job', 'OCP\BackgroundJob\Job');
+}
+
+if (!class_exists('OCP\BackgroundJob\QueuedJob')) {
+    abstract class OCP_BackgroundJob_QueuedJob extends \OCP\BackgroundJob\Job {
+        public function execute($argument = null): void {
+            $this->run($argument);
+        }
+    }
+    class_alias('OCP_BackgroundJob_QueuedJob', 'OCP\BackgroundJob\QueuedJob');
+}
+
+if (!interface_exists('OCP\BackgroundJob\IJobList')) {
+    interface OCP_BackgroundJob_IJobList {
+        public function add($job, $argument = null): void;
+    }
+    class_alias('OCP_BackgroundJob_IJobList', 'OCP\BackgroundJob\IJobList');
+}
+
+if (!interface_exists('OCP\IServerContainer')) {
+    interface OCP_IServerContainer {
+        public function get(string $id);
+    }
+    class_alias('OCP_IServerContainer', 'OCP\IServerContainer');
+}
+
+// ── OCP\ContextChat (optional app; stubbed for unit tests) ─────────────────
+
+if (!interface_exists('OCP\ContextChat\IContentManager')) {
+    interface OCP_ContextChat_IContentManager {
+        public function isContextChatAvailable(): bool;
+        public function submitContent(string $appId, array $items): void;
+        public function deleteContent(string $appId, string $providerId, array $itemIds): void;
+    }
+    class_alias('OCP_ContextChat_IContentManager', 'OCP\ContextChat\IContentManager');
+}
+
+if (!interface_exists('OCP\ContextChat\IContentProvider')) {
+    interface OCP_ContextChat_IContentProvider {
+        public function getId(): string;
+        public function getAppId(): string;
+        public function getItemUrl(string $id): string;
+        public function triggerInitialImport(): void;
+    }
+    class_alias('OCP_ContextChat_IContentProvider', 'OCP\ContextChat\IContentProvider');
+}
+
+if (!class_exists('OCP\ContextChat\ContentItem')) {
+    class OCP_ContextChat_ContentItem {
+        public function __construct(
+            public string $itemId,
+            public string $providerId,
+            public string $title,
+            public string $content,
+            public string $documentType,
+            public \DateTime $lastModified,
+            public array $users,
+        ) {
+        }
+    }
+    class_alias('OCP_ContextChat_ContentItem', 'OCP\ContextChat\ContentItem');
 }
 
 if (!class_exists('OCP\BackgroundJob\TimedJob')) {
