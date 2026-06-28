@@ -36,7 +36,7 @@ yarn.lock
 pnpm-lock.yaml
 
 # Nextcloud dev
-nextcloud-app/js/*.js.map
+nextcloud-app/js/dist/
 nextcloud-app/build/
 
 # Temp files

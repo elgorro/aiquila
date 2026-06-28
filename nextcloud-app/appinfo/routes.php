@@ -58,6 +58,8 @@ return [
         ['name' => 'coworker#disable',            'url' => '/api/coworkers/{id}/disable',          'verb' => 'POST'],
         ['name' => 'coworker#run',                'url' => '/api/coworkers/{id}/run',              'verb' => 'POST'],
         ['name' => 'coworker#runs',               'url' => '/api/coworkers/{id}/runs',             'verb' => 'GET'],
+        ['name' => 'coworker#getDashboardCoworker', 'url' => '/api/dashboard/coworker-output',     'verb' => 'GET'],
+        ['name' => 'coworker#setDashboardCoworker', 'url' => '/api/dashboard/coworker-output',     'verb' => 'PUT'],
 
         // File API
         ['name' => 'file#info',     'url' => '/api/files/info',     'verb' => 'GET'],

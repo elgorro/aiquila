@@ -17,8 +17,8 @@ export default defineConfig({
 	// works regardless of where NC mounts the app (e.g. /custom_apps/aiquila/js/).
 	base: '',
 	build: {
-		outDir: 'js',
-		emptyOutDir: false,
+		outDir: 'js/dist',
+		emptyOutDir: true,
 		// `vendor-nextcloud-vue` alone is ~800 KB and is the floor we can't shrink
 		// without dropping @nextcloud/vue; raise the warning so other regressions
 		// stay visible.
@@ -26,6 +26,7 @@ export default defineConfig({
 		rollupOptions: {
 			input: {
 				'aiquila-main': path.resolve(__dirname, 'src/main.js'),
+				'aiquila-dashboard': path.resolve(__dirname, 'src/dashboard.js'),
 			},
 			output: {
 				format: 'es',

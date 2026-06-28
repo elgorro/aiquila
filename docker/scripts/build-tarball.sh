@@ -60,7 +60,7 @@ docker run --rm \
         npm run build
 
         echo "--- [4/4] Verifying build ---"
-        test -f js/aiquila-main.js || { echo "ERROR: js/aiquila-main.js not found!"; exit 1; }
+        test -f js/dist/aiquila-main.js || { echo "ERROR: js/dist/aiquila-main.js not found!"; exit 1; }
         test -d vendor || { echo "ERROR: vendor/ not found!"; exit 1; }
         echo "Build verified."
 

@@ -57,4 +57,29 @@ class UsageStatMapper extends QBMapper {
             'cache_read_tokens' => (int)($row['total_cache_read'] ?? 0),
         ];
     }
+
+    /**
+     * Sum input/output tokens for a user since a given Unix timestamp (inclusive).
+     *
+     * @return array{input_tokens: int, output_tokens: int}
+     */
+    public function sumTokensByUserSince(string $userId, int $since): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select(
+            $qb->func()->sum('input_tokens', 'total_input'),
+            $qb->func()->sum('output_tokens', 'total_output')
+        )
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->gte('created_at', $qb->createNamedParameter($since, IQueryBuilder::PARAM_INT)));
+
+        $result = $qb->executeQuery();
+        $row = $result->fetch();
+        $result->closeCursor();
+
+        return [
+            'input_tokens' => (int)($row['total_input'] ?? 0),
+            'output_tokens' => (int)($row['total_output'] ?? 0),
+        ];
+    }
 }

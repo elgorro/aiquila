@@ -16,6 +16,7 @@ use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\IConfig;
 use OCP\IRequest;
 
 /**
@@ -31,6 +32,7 @@ class CoworkerController extends Controller {
         IRequest $request,
         private readonly CoworkerService $service,
         private readonly CoworkerTaskRegistry $registry,
+        private readonly IConfig $config,
         private readonly ?string $userId,
     ) {
         parent::__construct($appName, $request);
@@ -318,6 +320,49 @@ class CoworkerController extends Controller {
             return new JSONResponse(['error' => $e->getMessage()], 400);
         }
         return new JSONResponse($coworker->jsonSerialize());
+    }
+
+    /**
+     * Get the coworker selected for the dashboard output widget
+     *
+     * 200: The selected coworker id (null when none chosen)
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{coworkerId: int|null}, array{}>
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[OpenAPI]
+    public function getDashboardCoworker(): JSONResponse {
+        $value = $this->config->getUserValue((string)$this->userId, 'aiquila', 'dashboard_coworker', '');
+        return new JSONResponse(['coworkerId' => $value === '' ? null : (int)$value]);
+    }
+
+    /**
+     * Set the coworker shown by the dashboard output widget
+     *
+     * @param int|null $coworkerId Coworker to display, or null to clear
+     *
+     * 200: The stored selection
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{coworkerId: int|null}, array{}>
+     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[OpenAPI]
+    public function setDashboardCoworker(?int $coworkerId = null): JSONResponse {
+        if ($coworkerId === null) {
+            $this->config->deleteUserValue((string)$this->userId, 'aiquila', 'dashboard_coworker');
+            return new JSONResponse(['coworkerId' => null]);
+        }
+        try {
+            $this->service->findForUser($coworkerId, (string)$this->userId);
+        } catch (DoesNotExistException) {
+            return new JSONResponse(['error' => 'Coworker not found'], 404);
+        }
+        $this->config->setUserValue((string)$this->userId, 'aiquila', 'dashboard_coworker', (string)$coworkerId);
+        return new JSONResponse(['coworkerId' => $coworkerId]);
     }
 
     private function togglePaused(int $id, bool $paused): JSONResponse {
