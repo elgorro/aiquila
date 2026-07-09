@@ -27,6 +27,13 @@ async function runOCC(command: string, args: string[] = []): Promise<string> {
  */
 export const showConfigTool = {
   name: 'aiquila_show_config',
+  title: 'Show AIquila Configuration',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Show current AIquila configuration',
   inputSchema: z.object({}),
   handler: async () => {
@@ -58,6 +65,13 @@ export const showConfigTool = {
  */
 export const configureTool = {
   name: 'aiquila_configure',
+  title: 'Configure AIquila',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Configure AIquila settings (API key, model, tokens, timeout)',
   inputSchema: z.object({
     apiKey: z.string().optional().describe('Anthropic API key'),
@@ -119,6 +133,13 @@ export const configureTool = {
  */
 export const testTool = {
   name: 'aiquila_test',
+  title: 'Test AIquila Claude Integration',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description: 'Test AIquila Claude API integration with a simple prompt',
   inputSchema: z.object({
     prompt: z.string().default('Hello, Claude!').describe('Test prompt to send to Claude API'),

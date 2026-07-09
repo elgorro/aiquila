@@ -44,6 +44,13 @@ function formatProject(p: Project): string {
 
 export const listProjectsTool = {
   name: 'list_projects',
+  title: 'List Projects',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all AIquila projects for the current user. Projects bundle files/directories with an optional system prompt.',
   inputSchema: z.object({}),
@@ -77,6 +84,13 @@ export const listProjectsTool = {
 
 export const createProjectTool = {
   name: 'create_project',
+  title: 'Create Project',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Create a new AIquila project. Projects bundle files/directories with an optional system prompt that gets injected into conversations.',
   inputSchema: z.object({
@@ -117,6 +131,13 @@ export const createProjectTool = {
 
 export const getProjectTool = {
   name: 'get_project',
+  title: 'Get Project',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get details of an AIquila project including its file/directory paths.',
   inputSchema: z.object({
     id: z.number().describe('Project ID'),
@@ -144,6 +165,13 @@ export const getProjectTool = {
 
 export const updateProjectTool = {
   name: 'update_project',
+  title: 'Update Project',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Update an AIquila project. Only provided fields are updated.',
   inputSchema: z.object({
     id: z.number().describe('Project ID'),
@@ -190,6 +218,13 @@ export const updateProjectTool = {
 
 export const deleteProjectTool = {
   name: 'delete_project',
+  title: 'Delete Project',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Delete an AIquila project. Associated paths are removed and conversations referencing it are unlinked.',
   inputSchema: z.object({
@@ -218,6 +253,13 @@ export const deleteProjectTool = {
 
 export const addProjectPathTool = {
   name: 'add_project_path',
+  title: 'Add Project Path',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Add a file or directory path to an AIquila project.',
   inputSchema: z.object({
     id: z.number().describe('Project ID'),
@@ -258,6 +300,13 @@ export const addProjectPathTool = {
 
 export const removeProjectPathTool = {
   name: 'remove_project_path',
+  title: 'Remove Project Path',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Remove a file or directory path from an AIquila project.',
   inputSchema: z.object({
     id: z.number().describe('Project ID'),

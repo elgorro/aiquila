@@ -13,6 +13,13 @@ import { executeOCC, formatOccError } from '../../client/aiquila.js';
  */
 export const checkCoreIntegrityTool = {
   name: 'check_core_integrity',
+  title: 'Check Core Integrity',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Verify Nextcloud core system integrity by checking file signatures against the official release',
   inputSchema: z.object({}),
@@ -62,6 +69,13 @@ export const checkCoreIntegrityTool = {
  */
 export const checkAppIntegrityTool = {
   name: 'check_app_integrity',
+  title: 'Check App Integrity',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Verify integrity of a specific Nextcloud app by checking file signatures against its official release',
   inputSchema: z.object({

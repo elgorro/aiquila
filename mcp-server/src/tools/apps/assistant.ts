@@ -52,6 +52,13 @@ const STATUS_LABELS: Record<number, string> = {
 
 export const listTextTasksTool = {
   name: 'list_text_tasks',
+  title: 'List Text Tasks',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "List AI task types available in Nextcloud's TaskProcessing framework (summarize, headline, image-to-text, text-to-image, …). Shows which task types have at least one provider configured.",
   inputSchema: z.object({}),
@@ -97,6 +104,13 @@ export const listTextTasksTool = {
 
 export const processTextTool = {
   name: 'process_text',
+  title: 'Process Text with AI',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Submit a text-processing task to Nextcloud's AI framework and return the task ID. Use get_task_result to poll until it completes. Common task types: 'core:text2text' (free prompt), 'core:summarize' (summary), 'core:headline' (headline), 'core:extract_topics' (topics).",
   inputSchema: z.object({
@@ -155,6 +169,13 @@ export const processTextTool = {
 
 export const getTaskResultTool = {
   name: 'get_task_result',
+  title: 'Get AI Task Result',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get the status and result of a Nextcloud AI task previously created by process_text or generate_image. Status: 1=scheduled, 2=running, 3=successful, 4=failed.',
   inputSchema: z.object({
@@ -222,6 +243,13 @@ export const getTaskResultTool = {
 
 export const generateImageTool = {
   name: 'generate_image',
+  title: 'Generate Image',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Generate an image from a text prompt using Nextcloud's text-to-image AI provider (e.g. Stable Diffusion via LocalAI). Returns the task ID; use get_task_result to check completion.",
   inputSchema: z.object({

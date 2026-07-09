@@ -350,6 +350,13 @@ async function resolveTaskByUid(
  */
 export const listTaskListsTool = {
   name: 'list_task_lists',
+  title: 'List Task Lists',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all task lists in Nextcloud Tasks',
   inputSchema: z.object({}),
   handler: async () => {
@@ -391,6 +398,13 @@ export const listTaskListsTool = {
  */
 export const listTasksTool = {
   name: 'list_tasks',
+  title: 'List Tasks',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List tasks from a Nextcloud Tasks calendar. Returns task details including status, priority, dates, tags, and UIDs.',
   inputSchema: z.object({
@@ -482,6 +496,13 @@ export const listTasksTool = {
  */
 export const createTaskTool = {
   name: 'create_task',
+  title: 'Create Task',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Create a new task in Nextcloud Tasks with optional due date, start date, tags, location, and subtask relationships.',
   inputSchema: z.object({
@@ -609,6 +630,13 @@ export const createTaskTool = {
  */
 export const updateTaskTool = {
   name: 'update_task',
+  title: 'Update Task',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "Update an existing task's fields by UID. Uses CalDAV ETag-based optimistic concurrency.",
   inputSchema: z.object({
@@ -786,6 +814,13 @@ export const updateTaskTool = {
  */
 export const deleteTaskTool = {
   name: 'delete_task',
+  title: 'Delete Task',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a task from Nextcloud Tasks by UID. This action is irreversible.',
   inputSchema: z.object({
     uid: z.string().describe('The UID of the task to delete'),
@@ -838,6 +873,13 @@ export const deleteTaskTool = {
  */
 export const completeTaskTool = {
   name: 'complete_task',
+  title: 'Complete Task',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Mark a task as completed or reopen it. Sets STATUS, PERCENT-COMPLETE, and COMPLETED date atomically.',
   inputSchema: z.object({

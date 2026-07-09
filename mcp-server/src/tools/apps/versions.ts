@@ -15,6 +15,13 @@ import { getNextcloudConfig } from '../types.js';
 
 export const listFileVersionsTool = {
   name: 'list_file_versions',
+  title: 'List File Versions',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List previous versions of a file (use get_file_info to find the fileId)',
   inputSchema: z.object({
     fileId: z.number().describe('The Nextcloud internal file ID (from get_file_info)'),
@@ -106,6 +113,13 @@ export const listFileVersionsTool = {
 
 export const restoreFileVersionTool = {
   name: 'restore_file_version',
+  title: 'Restore File Version',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Restore a previous version of a file (creates a new current version from the old one)',
   inputSchema: z.object({

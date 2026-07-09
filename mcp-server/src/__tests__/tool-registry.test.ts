@@ -272,4 +272,56 @@ describe('tool-registry', () => {
       }
     });
   });
+
+  describe('tool annotations', () => {
+    const allTools = TOOL_REGISTRY.flatMap((e) => e.tools);
+
+    it('should register at least one tool', () => {
+      expect(allTools.length).toBeGreaterThan(0);
+    });
+
+    it('should have globally unique tool names', () => {
+      const names = allTools.map((t) => t.name);
+      const duplicates = names.filter((n, i) => names.indexOf(n) !== i);
+      expect(duplicates).toEqual([]);
+    });
+
+    // Anthropic's connector pre-submission checklist caps tool names at 64 chars.
+    it('should keep every tool name within 64 characters', () => {
+      const tooLong = allTools.filter((t) => t.name.length > 64).map((t) => t.name);
+      expect(tooLong).toEqual([]);
+    });
+
+    it('should give every tool a distinct, non-empty title', () => {
+      const bad = allTools
+        .filter((t) => !t.title || t.title.trim() === '' || t.title === t.name)
+        .map((t) => t.name);
+      expect(bad).toEqual([]);
+    });
+
+    it('should never mark a tool both read-only and destructive', () => {
+      const bad = allTools
+        .filter((t) => t.annotations.readOnlyHint && t.annotations.destructiveHint)
+        .map((t) => t.name);
+      expect(bad).toEqual([]);
+    });
+
+    it('should mark every read-only tool as idempotent', () => {
+      const bad = allTools
+        .filter((t) => t.annotations.readOnlyHint && !t.annotations.idempotentHint)
+        .map((t) => t.name);
+      expect(bad).toEqual([]);
+    });
+
+    it('should mark obvious readers read-only and obvious deleters destructive', () => {
+      const byName = new Map(allTools.map((t) => [t.name, t]));
+      for (const name of ['list_files', 'get_file_info', 'system_status', 'read_file']) {
+        expect(byName.get(name)?.annotations.readOnlyHint, name).toBe(true);
+      }
+      for (const name of ['delete', 'run_occ', 'write_file', 'empty_trash']) {
+        expect(byName.get(name)?.annotations.readOnlyHint, name).toBe(false);
+        expect(byName.get(name)?.annotations.destructiveHint, name).toBe(true);
+      }
+    });
+  });
 });

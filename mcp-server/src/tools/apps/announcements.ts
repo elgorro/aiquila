@@ -43,6 +43,13 @@ function formatAnnouncements(items: Announcement[]): string {
 
 export const listAnnouncementsTool = {
   name: 'list_announcements',
+  title: 'List Announcements',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List announcements from the Nextcloud Announcement Center (org-wide notices such as ' +
     'maintenance windows, events, or news). Returns newest first.',
@@ -101,6 +108,13 @@ export const listAnnouncementsTool = {
 
 export const createAnnouncementTool = {
   name: 'create_announcement',
+  title: 'Create Announcement',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Create a new announcement in the Announcement Center. This is visible to all or ' +
     'selected groups and can trigger notifications/emails — use deliberately. Requires the ' +
@@ -189,6 +203,13 @@ export const createAnnouncementTool = {
 
 export const deleteAnnouncementTool = {
   name: 'delete_announcement',
+  title: 'Delete Announcement',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Delete an announcement by its ID. Requires the configured Nextcloud user to be an admin.',
   inputSchema: z.object({

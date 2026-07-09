@@ -114,6 +114,13 @@ const METADATA_PROPFIND = `<?xml version="1.0"?>
 
 export const photosListAlbumsTool = {
   name: 'photos_list_albums',
+  title: 'List Photo Albums',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all photo albums owned by the current user. Returns album names, item counts, locations, and date ranges.',
   inputSchema: z.object({}),
@@ -173,6 +180,13 @@ export const photosListAlbumsTool = {
 
 export const photosGetAlbumTool = {
   name: 'photos_get_album',
+  title: 'Get Photo Album',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get details of a photo album including its files. Returns file IDs (needed for photos_remove_from_album), names, types, and sizes.',
   inputSchema: z.object({
@@ -232,6 +246,13 @@ export const photosGetAlbumTool = {
 
 export const photosCreateAlbumTool = {
   name: 'photos_create_album',
+  title: 'Create Photo Album',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Create a new photo album.',
   inputSchema: z.object({
     name: z.string().describe('Name for the new album'),
@@ -263,6 +284,13 @@ export const photosCreateAlbumTool = {
 
 export const photosDeleteAlbumTool = {
   name: 'photos_delete_album',
+  title: 'Delete Photo Album',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Delete a photo album. This only removes the album — the underlying files are not deleted.',
   inputSchema: z.object({
@@ -295,6 +323,13 @@ export const photosDeleteAlbumTool = {
 
 export const photosRenameAlbumTool = {
   name: 'photos_rename_album',
+  title: 'Rename Photo Album',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Rename a photo album.',
   inputSchema: z.object({
     name: z.string().describe('Current album name'),
@@ -334,6 +369,13 @@ export const photosRenameAlbumTool = {
 
 export const photosAddToAlbumTool = {
   name: 'photos_add_to_album',
+  title: 'Add Photos to Album',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Add one or more files to a photo album. Files are referenced by their Nextcloud path. The files themselves are not moved — only an album association is created.',
   inputSchema: z.object({
@@ -408,6 +450,13 @@ export const photosAddToAlbumTool = {
 
 export const photosRemoveFromAlbumTool = {
   name: 'photos_remove_from_album',
+  title: 'Remove Photos from Album',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Remove one or more files from a photo album by file ID (use photos_get_album to find IDs). This only removes the album association — the files are not deleted.',
   inputSchema: z.object({
@@ -478,6 +527,13 @@ export const photosRemoveFromAlbumTool = {
 
 export const photosGetMetadataTool = {
   name: 'photos_get_metadata',
+  title: 'Get Photo Metadata',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get photo/video metadata (EXIF) for a file. Returns camera, lens, ISO, aperture, shutter speed, focal length, GPS coordinates, dimensions, and date taken when available.',
   inputSchema: z.object({
@@ -602,6 +658,13 @@ export const photosGetMetadataTool = {
 
 export const photosSetFavoriteTool = {
   name: 'photos_set_favorite',
+  title: 'Set Photo Favorite',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Mark or unmark a file as favorite.',
   inputSchema: z.object({
     path: z.string().describe('File path in Nextcloud (e.g., "/Photos/sunset.jpg")'),
@@ -650,6 +713,13 @@ export const photosSetFavoriteTool = {
 
 export const photosSetAlbumLocationTool = {
   name: 'photos_set_album_location',
+  title: 'Set Photo Album Location',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Set or update the location metadata on a photo album.',
   inputSchema: z.object({
     name: z.string().describe('Album name'),
@@ -696,6 +766,13 @@ export const photosSetAlbumLocationTool = {
 
 export const photosAddCollaboratorsTool = {
   name: 'photos_add_collaborators',
+  title: 'Add Photo Album Collaborators',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Add collaborators (users or groups) to a photo album. Collaborators can view and add photos to the album.',
   inputSchema: z.object({

@@ -109,6 +109,13 @@ async function resolvePublicShare(args: { share_id?: number; path?: string }): P
 
 export const generateSocialShareLinksTool = {
   name: 'generate_social_share_links',
+  title: 'Generate Social Share Links',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Generate social-network share URLs (email, X/Twitter, Facebook, Telegram, WhatsApp, ' +
     'Bluesky, Diaspora) for an existing Nextcloud public-link share. Only networks whose ' +

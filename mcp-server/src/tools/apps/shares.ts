@@ -39,6 +39,13 @@ const SHARE_TYPE_LABELS: Record<number, string> = {
  */
 export const listSharesTool = {
   name: 'list_shares',
+  title: 'List Shares',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List file shares in Nextcloud (for diagnostics and security auditing)',
   inputSchema: z.object({
     path: z.string().optional().describe('Filter shares for a specific file/folder path'),
@@ -106,6 +113,13 @@ export const listSharesTool = {
  */
 export const createShareTool = {
   name: 'create_share',
+  title: 'Create Share',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Create a file or folder share in Nextcloud',
   inputSchema: z.object({
     path: z.string().describe('File or folder path to share'),
@@ -183,6 +197,13 @@ export const createShareTool = {
  */
 export const updateShareTool = {
   name: 'update_share',
+  title: 'Update Share',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Update an existing share in Nextcloud',
   inputSchema: z.object({
     shareId: z.number().describe('The share ID to update'),
@@ -248,6 +269,13 @@ export const updateShareTool = {
  */
 export const deleteShareTool = {
   name: 'delete_share',
+  title: 'Delete Share',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a share in Nextcloud',
   inputSchema: z.object({
     shareId: z.number().describe('The share ID to delete'),
@@ -285,6 +313,13 @@ export const deleteShareTool = {
  */
 export const getShareTool = {
   name: 'get_share',
+  title: 'Get Share',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get detailed information about a specific share by its ID',
   inputSchema: z.object({
     shareId: z.number().describe('The share ID to retrieve'),
@@ -317,6 +352,13 @@ export const getShareTool = {
  */
 export const listSharesWithMeTool = {
   name: 'list_shares_with_me',
+  title: 'List Shares With Me',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all files and folders shared with the current user',
   inputSchema: z.object({}),
   handler: async () => {
@@ -364,6 +406,13 @@ export const listSharesWithMeTool = {
  */
 export const searchShareesTool = {
   name: 'search_sharees',
+  title: 'Search Share Recipients',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Search for valid share recipients (users, groups, emails, federated users, circles, rooms)',
   inputSchema: z.object({
@@ -412,6 +461,13 @@ export const searchShareesTool = {
  */
 export const listPendingSharesTool = {
   name: 'list_pending_shares',
+  title: 'List Pending Shares',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List pending federated/remote shares waiting to be accepted or declined',
   inputSchema: z.object({}),
   handler: async () => {
@@ -449,6 +505,13 @@ export const listPendingSharesTool = {
  */
 export const acceptPendingShareTool = {
   name: 'accept_pending_share',
+  title: 'Accept Pending Share',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Accept a pending federated/remote share',
   inputSchema: z.object({
     shareId: z.number().describe('The pending share ID to accept'),
@@ -482,6 +545,13 @@ export const acceptPendingShareTool = {
  */
 export const declinePendingShareTool = {
   name: 'decline_pending_share',
+  title: 'Decline Pending Share',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Decline a pending federated/remote share',
   inputSchema: z.object({
     shareId: z.number().describe('The pending share ID to decline'),

@@ -62,6 +62,13 @@ function formatCredential(cred: PassmanCredential): string {
 
 export const listVaultsTool = {
   name: 'passman_list_vaults',
+  title: 'List Password Vaults',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: `List all Passman password vaults. Returns name, guid, creation/last-access time and credential count. ${E2E_NOTE}`,
   inputSchema: z.object({}),
   handler: async () => {
@@ -88,6 +95,13 @@ export const listVaultsTool = {
 
 export const listCredentialsTool = {
   name: 'passman_list_credentials',
+  title: 'List Vault Credentials',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: `List credentials (metadata only) in a Passman vault. Returns each credential's label, id, guid and non-secret flags. ${E2E_NOTE}`,
   inputSchema: z.object({
     vault_guid: z.string().describe('Vault GUID (from passman_list_vaults)'),
@@ -121,6 +135,13 @@ export const listCredentialsTool = {
 
 export const getCredentialInfoTool = {
   name: 'passman_get_credential_info',
+  title: 'Get Credential Info',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: `Get non-secret metadata for a single Passman credential (label, id, timestamps, flags). ${E2E_NOTE}`,
   inputSchema: z.object({
     vault_guid: z.string().describe('Vault GUID (from passman_list_vaults)'),

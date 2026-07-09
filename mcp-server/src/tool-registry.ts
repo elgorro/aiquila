@@ -2,6 +2,7 @@
 
 import { fetchOCS } from './client/ocs.js';
 import { logger } from './logger.js';
+import type { Tool } from './tools/types.js';
 
 // System tools (always available)
 import { fileSystemTools } from './tools/system/files.js';
@@ -50,13 +51,7 @@ import { recommendationsTools } from './tools/apps/recommendations.js';
 import { socialSharingTools } from './tools/apps/social-sharing.js';
 import { passmanTools } from './tools/apps/passman.js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ToolArray = Array<{
-  name: string;
-  description: string;
-  inputSchema: any;
-  handler: (...args: any[]) => any;
-}>;
+type ToolArray = Tool[];
 
 interface ToolSetEntry {
   /** Category name, usable in MCP_TOOLS */

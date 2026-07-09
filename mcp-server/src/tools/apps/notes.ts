@@ -28,6 +28,13 @@ function formatNote(note: Note): string {
 
 export const listNotesTool = {
   name: 'list_notes',
+  title: 'List Notes',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all notes in Nextcloud Notes. Returns id, title, category, favorite flag, and modification date.',
   inputSchema: z.object({
@@ -66,6 +73,13 @@ export const listNotesTool = {
 
 export const getNoteTool = {
   name: 'get_note',
+  title: 'Get Note',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get the full content of a note by its ID.',
   inputSchema: z.object({
     id: z.number().int().describe('Note ID (from list_notes)'),
@@ -89,6 +103,13 @@ export const getNoteTool = {
 
 export const createNoteTool = {
   name: 'create_note',
+  title: 'Create Note',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Create a new note in Nextcloud Notes.',
   inputSchema: z.object({
     title: z.string().describe('Title of the note'),
@@ -128,6 +149,13 @@ export const createNoteTool = {
 
 export const updateNoteTool = {
   name: 'update_note',
+  title: 'Update Note',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Update an existing note. Provide only the fields you want to change.',
   inputSchema: z.object({
     id: z.number().int().describe('Note ID (from list_notes)'),
@@ -172,6 +200,13 @@ export const updateNoteTool = {
 
 export const deleteNoteTool = {
   name: 'delete_note',
+  title: 'Delete Note',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a note by its ID.',
   inputSchema: z.object({
     id: z.number().int().describe('Note ID (from list_notes)'),

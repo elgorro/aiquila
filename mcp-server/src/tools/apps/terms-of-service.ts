@@ -45,6 +45,13 @@ function preview(body: string): string {
 
 export const getTermsOfServiceTool = {
   name: 'get_terms_of_service',
+  title: 'Get Terms of Service',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Read the Nextcloud Terms of Service admin configuration: all published terms (by ' +
     'country/language), the enforcement settings (tos_for_users, tos_on_public_shares), and ' +
@@ -100,6 +107,13 @@ export const getTermsOfServiceTool = {
 
 export const setTermsOfServiceTool = {
   name: 'set_terms_of_service',
+  title: 'Set Terms of Service',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Create or update the terms of service for a given country/language pair. If terms ' +
     'already exist for that pair they are replaced, otherwise new terms are created. Use ' +
@@ -154,6 +168,13 @@ export const setTermsOfServiceTool = {
 
 export const deleteTermsOfServiceTool = {
   name: 'delete_terms_of_service',
+  title: 'Delete Terms of Service',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Delete a single terms of service entry by its id (see get_terms_of_service). Requires ' +
     'the configured Nextcloud user to be an admin.',
@@ -187,6 +208,13 @@ export const deleteTermsOfServiceTool = {
 
 export const resetTermsSignaturesTool = {
   name: 'reset_terms_signatures',
+  title: 'Reset Terms Signatures',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "Reset ALL users' terms of service signatures org-wide, forcing every user to accept " +
     'the terms again on next login. This is destructive and cannot be undone. Requires the ' +
@@ -224,6 +252,13 @@ export const resetTermsSignaturesTool = {
 
 export const updateTermsSettingsTool = {
   name: 'update_terms_settings',
+  title: 'Update Terms Settings',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Update the Terms of Service enforcement settings: whether logged-in users must accept ' +
     'the terms (tos_for_users) and whether the terms apply to public shares ' +

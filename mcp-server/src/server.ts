@@ -32,7 +32,9 @@ export async function createServer(): Promise<McpServer> {
       server.registerTool(
         name,
         {
+          title: tool.title,
           description: tool.description,
+          annotations: tool.annotations,
           inputSchema: tool.inputSchema as any,
         },
         async (...args: unknown[]) => {

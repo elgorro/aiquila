@@ -38,6 +38,13 @@ function formatActivities(activities: Activity[]): string {
 
 export const listActivityTool = {
   name: 'list_activity',
+  title: 'List Activity',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List recent entries from the Nextcloud activity feed (file changes, shares, ' +
     'comments, calendar/contact edits, etc.) for the current user.',
@@ -115,6 +122,13 @@ export const listActivityTool = {
 
 export const getObjectActivityTool = {
   name: 'get_object_activity',
+  title: 'Get Object Activity',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List the activity history for a single object, e.g. one file. Use object_type ' +
     "'files' with a file ID to see what happened to that file.",

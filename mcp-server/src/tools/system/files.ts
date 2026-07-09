@@ -15,6 +15,13 @@ import { PathSchema, FilePathSchema, FileContentSchema, FolderPathSchema } from 
  */
 export const listFilesTool = {
   name: 'list_files',
+  title: 'List Files',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List files and folders in a Nextcloud directory',
   inputSchema: z.object({
     path: z.string().default('/').describe("The directory path to list (default: '/')"),
@@ -38,6 +45,13 @@ export const listFilesTool = {
  */
 export const readFileTool = {
   name: 'read_file',
+  title: 'Read File',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Read the contents of a file from Nextcloud',
   inputSchema: FilePathSchema,
   handler: async (args: { path: string }) => {
@@ -61,6 +75,13 @@ export const readFileTool = {
  */
 export const writeFileTool = {
   name: 'write_file',
+  title: 'Write File',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Create or update a file in Nextcloud. File size is limited (default 1 GB, configurable via MCP_MAX_FILE_SIZE).',
   inputSchema: FileContentSchema,
@@ -85,6 +106,13 @@ export const writeFileTool = {
  */
 export const createFolderTool = {
   name: 'create_folder',
+  title: 'Create Folder',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Create a folder in Nextcloud',
   inputSchema: FolderPathSchema,
   handler: async (args: { path: string }) => {
@@ -106,6 +134,13 @@ export const createFolderTool = {
  */
 export const deleteTool = {
   name: 'delete',
+  title: 'Delete File or Folder',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a file or folder from Nextcloud',
   inputSchema: PathSchema,
   handler: async (args: { path: string }) => {
@@ -127,6 +162,13 @@ export const deleteTool = {
  */
 export const getFileInfoTool = {
   name: 'get_file_info',
+  title: 'Get File Info',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get detailed file metadata from Nextcloud (name, size, mime type, modified date, permissions, etc.)',
   inputSchema: z.object({
@@ -161,6 +203,13 @@ export const getFileInfoTool = {
  */
 export const searchFilesTool = {
   name: 'search_files',
+  title: 'Search Files',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Search for files in Nextcloud by name pattern and/or mime type',
   inputSchema: z.object({
     query: z.string().describe('Search query (file name pattern)'),
@@ -201,6 +250,13 @@ export const searchFilesTool = {
  */
 export const getFileContentTool = {
   name: 'get_file_content',
+  title: 'Get File Content',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Read file content from Nextcloud with mime type info. Returns text for text files, base64 for binary files (images, PDFs, etc.). Images are returned as MCP image content for Claude vision.',
   inputSchema: z.object({
@@ -276,6 +332,13 @@ export const getFileContentTool = {
  */
 export const analyzeImageTool = {
   name: 'analyze_image',
+  title: 'Analyze Image',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     'Analyze one or more images stored in Nextcloud using Claude vision. Ask questions about image content, extract text (OCR), describe visuals, compare images, or analyse documents. Supports up to 20 images for multi-image comparison.',
   inputSchema: z.object({
@@ -386,6 +449,13 @@ export const analyzeImageTool = {
  */
 export const moveFileTool = {
   name: 'move_file',
+  title: 'Move File',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Move or rename a file or folder in Nextcloud',
   inputSchema: z.object({
     source: z.string().describe('The source path of the file or folder to move'),
@@ -427,6 +497,13 @@ export const moveFileTool = {
  */
 export const copyFileTool = {
   name: 'copy_file',
+  title: 'Copy File',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Copy a file or folder in Nextcloud',
   inputSchema: z.object({
     source: z.string().describe('The source path of the file or folder to copy'),
@@ -468,6 +545,13 @@ export const copyFileTool = {
  */
 export const bulkFileOperationsTool = {
   name: 'bulk_file_operations',
+  title: 'Bulk File Operations',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Execute multiple file operations (move, copy, delete) sequentially in a single call. Returns per-item results.',
   inputSchema: z.object({
@@ -537,6 +621,13 @@ export const bulkFileOperationsTool = {
  */
 export const createArchiveTool = {
   name: 'create_archive',
+  title: 'Create Archive',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Create a zip archive in Nextcloud from one or more files and/or folders. Runs server-side; not bound by MCP file-size limits.',
   inputSchema: z.object({
@@ -585,6 +676,13 @@ export const createArchiveTool = {
  */
 export const extractArchiveTool = {
   name: 'extract_archive',
+  title: 'Extract Archive',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Extract a zip archive in Nextcloud into a destination folder. Runs server-side.',
   inputSchema: z.object({
     archive: z.string().describe("Path to the .zip file (e.g., '/Documents/backup.zip')"),
@@ -627,6 +725,13 @@ export const extractArchiveTool = {
  */
 export const listArchiveTool = {
   name: 'list_archive',
+  title: 'List Archive Contents',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List the contents of a zip archive in Nextcloud without extracting it.',
   inputSchema: z.object({
     archive: z.string().describe("Path to the .zip file (e.g., '/Documents/backup.zip')"),

@@ -67,6 +67,13 @@ async function searchProvider(
  */
 export const unifiedSearchTool = {
   name: 'unified_search',
+  title: 'Unified Search',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Search across all Nextcloud apps (files, calendar, contacts, mail, notes, etc.) using Unified Search. ' +
     'Optionally filter by a specific provider ID. Without a provider, searches the top providers in parallel.',
@@ -196,6 +203,13 @@ export const unifiedSearchTool = {
  */
 export const listSearchProvidersTool = {
   name: 'list_search_providers',
+  title: 'List Search Providers',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all available Unified Search providers in Nextcloud. ' +
     'Use this to discover provider IDs for targeted searches with unified_search.',
