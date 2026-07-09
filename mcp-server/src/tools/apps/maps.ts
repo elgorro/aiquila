@@ -135,6 +135,13 @@ function formatMyMap(m: MyMap): string {
 
 export const listMapFavoritesTool = {
   name: 'list_map_favorites',
+  title: 'List Map Favorites',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List map favorites (saved locations/pins) from Nextcloud Maps. Optionally filter by modification time.',
   inputSchema: z.object({
@@ -176,6 +183,13 @@ export const listMapFavoritesTool = {
 
 export const createMapFavoriteTool = {
   name: 'create_map_favorite',
+  title: 'Create Map Favorite',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Create a new map favorite (saved location/pin) in Nextcloud Maps. Latitude and longitude are required.',
   inputSchema: z.object({
@@ -230,6 +244,13 @@ export const createMapFavoriteTool = {
 
 export const updateMapFavoriteTool = {
   name: 'update_map_favorite',
+  title: 'Update Map Favorite',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Update an existing map favorite. Only provided fields are changed.',
   inputSchema: z.object({
     id: z.number().describe('Favorite ID'),
@@ -287,6 +308,13 @@ export const updateMapFavoriteTool = {
 
 export const deleteMapFavoriteTool = {
   name: 'delete_map_favorite',
+  title: 'Delete Map Favorite',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a map favorite by its ID. This action is irreversible.',
   inputSchema: z.object({
     id: z.number().describe('Favorite ID to delete'),
@@ -315,6 +343,13 @@ export const deleteMapFavoriteTool = {
 
 export const listMapDevicesTool = {
   name: 'list_map_devices',
+  title: 'List Map Devices',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List GPS tracking devices registered in Nextcloud Maps.',
   inputSchema: z.object({}),
   handler: async () => {
@@ -347,6 +382,13 @@ export const listMapDevicesTool = {
 
 export const getMapDevicePointsTool = {
   name: 'get_map_device_points',
+  title: 'Get Map Device Points',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get GPS location points for a specific device. Supports time filtering and pagination.',
   inputSchema: z.object({
@@ -396,6 +438,13 @@ export const getMapDevicePointsTool = {
 
 export const addMapDevicePointTool = {
   name: 'add_map_device_point',
+  title: 'Add Map Device Point',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     "Log a GPS location point for a device. The device is auto-created by user_agent if it doesn't exist.",
   inputSchema: z.object({
@@ -453,6 +502,13 @@ export const addMapDevicePointTool = {
 
 export const updateMapDeviceTool = {
   name: 'update_map_device',
+  title: 'Update Map Device',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: "Update a device's display color.",
   inputSchema: z.object({
     id: z.number().describe('Device ID'),
@@ -486,6 +542,13 @@ export const updateMapDeviceTool = {
 
 export const deleteMapDeviceTool = {
   name: 'delete_map_device',
+  title: 'Delete Map Device',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Delete a GPS tracking device and all its location points. This action is irreversible.',
   inputSchema: z.object({
@@ -515,6 +578,13 @@ export const deleteMapDeviceTool = {
 
 export const listMapTracksTool = {
   name: 'list_map_tracks',
+  title: 'List Map Tracks',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List GPS tracks (GPX/KML files) from Nextcloud Maps.',
   inputSchema: z.object({
     myMapId: z.number().optional().describe('Custom map ID to scope to'),
@@ -550,6 +620,13 @@ export const listMapTracksTool = {
 
 export const getMapTrackTool = {
   name: 'get_map_track',
+  title: 'Get Map Track',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get full details and content of a track by its ID. Returns metadata and the raw GPX/KML file content.',
   inputSchema: z.object({
@@ -589,6 +666,13 @@ export const getMapTrackTool = {
 
 export const updateMapTrackTool = {
   name: 'update_map_track',
+  title: 'Update Map Track',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: "Update a track's color or metadata.",
   inputSchema: z.object({
     id: z.number().describe('Track ID'),
@@ -626,6 +710,13 @@ export const updateMapTrackTool = {
 
 export const listMapPhotosTool = {
   name: 'list_map_photos',
+  title: 'List Map Photos',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List geolocated photos (photos with GPS coordinates) from Nextcloud Maps.',
   inputSchema: z.object({
     myMapId: z.number().optional().describe('Custom map ID to scope to'),
@@ -663,6 +754,13 @@ export const listMapPhotosTool = {
 
 export const listMapPhotosNonlocalizedTool = {
   name: 'list_map_photos_nonlocalized',
+  title: 'List Non-Localized Map Photos',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "List photos that don't have GPS coordinates. Useful for finding photos that can be placed on the map.",
   inputSchema: z.object({
@@ -717,6 +815,13 @@ export const listMapPhotosNonlocalizedTool = {
 
 export const placeMapPhotosTool = {
   name: 'place_map_photos',
+  title: 'Place Map Photos',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Set GPS coordinates on one or more photos. Each photo path is paired with a lat/lng.',
   inputSchema: z.object({
@@ -757,6 +862,13 @@ export const placeMapPhotosTool = {
 
 export const resetMapPhotoCoordsTool = {
   name: 'reset_map_photo_coords',
+  title: 'Reset Map Photo Coordinates',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Remove GPS coordinates from one or more photos.',
   inputSchema: z.object({
     paths: z.array(z.string()).describe('File paths in Nextcloud storage'),
@@ -795,6 +907,13 @@ export const resetMapPhotoCoordsTool = {
 
 export const listMapsTool = {
   name: 'list_maps',
+  title: 'List Maps',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all custom maps created by the user in Nextcloud Maps.',
   inputSchema: z.object({}),
   handler: async () => {
@@ -827,6 +946,13 @@ export const listMapsTool = {
 
 export const createMapTool = {
   name: 'create_map',
+  title: 'Create Map',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Create a new custom map in Nextcloud Maps.',
   inputSchema: z.object({
     name: z.string().optional().describe("Map name (default: 'New Map')"),
@@ -861,6 +987,13 @@ export const createMapTool = {
 
 export const updateMapTool = {
   name: 'update_map',
+  title: 'Update Map',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: "Update a custom map's properties (e.g. rename).",
   inputSchema: z.object({
     id: z.number().describe('Map ID'),
@@ -896,6 +1029,13 @@ export const updateMapTool = {
 
 export const deleteMapTool = {
   name: 'delete_map',
+  title: 'Delete Map',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a custom map. This action is irreversible.',
   inputSchema: z.object({
     id: z.number().describe('Map ID to delete'),
@@ -924,6 +1064,13 @@ export const deleteMapTool = {
 
 export const exportMapRouteTool = {
   name: 'export_map_route',
+  title: 'Export Map Route',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: "Export a route or track as a GPX file to the user's Nextcloud /Maps folder.",
   inputSchema: z.object({
     name: z.string().describe('Route name (used as filename)'),
@@ -991,6 +1138,13 @@ export const exportMapRouteTool = {
 
 export const exportMapFavoritesTool = {
   name: 'export_map_favorites',
+  title: 'Export Map Favorites',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "Export favorites as a GPX file to the user's Nextcloud /Maps folder. Filter by categories and time range.",
   inputSchema: z.object({
@@ -1037,6 +1191,13 @@ export const exportMapFavoritesTool = {
 
 export const importMapFavoritesTool = {
   name: 'import_map_favorites',
+  title: 'Import Map Favorites',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Import favorites from a file in Nextcloud storage. Supports GPX, KML, KMZ, JSON, and GeoJSON.',
   inputSchema: z.object({
@@ -1075,6 +1236,13 @@ export const importMapFavoritesTool = {
 
 export const exportMapDevicesTool = {
   name: 'export_map_devices',
+  title: 'Export Map Devices',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: "Export device location data as a GPX file to the user's Nextcloud /Maps folder.",
   inputSchema: z.object({
     deviceIdList: z.array(z.number()).describe('Device IDs to export'),
@@ -1118,6 +1286,13 @@ export const exportMapDevicesTool = {
 
 export const importMapDevicesTool = {
   name: 'import_map_devices',
+  title: 'Import Map Devices',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Import device location data from a file in Nextcloud storage. Supports GPX, KML, and KMZ.',
   inputSchema: z.object({

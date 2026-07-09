@@ -14,6 +14,13 @@ import { executeOCC } from '../../client/aiquila.js';
  */
 export const listAppsTool = {
   name: 'list_apps',
+  title: 'List Apps',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all installed Nextcloud apps with their enabled/disabled status. Requires admin privileges',
   inputSchema: z.object({
@@ -63,6 +70,13 @@ export const listAppsTool = {
  */
 export const getAppInfoTool = {
   name: 'get_app_info',
+  title: 'Get App Info',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get detailed information about a specific Nextcloud app. Requires admin privileges',
   inputSchema: z.object({
     appId: z.string().describe('The app ID (e.g., "tasks", "deck", "photos")'),
@@ -100,6 +114,13 @@ export const getAppInfoTool = {
  */
 export const enableAppTool = {
   name: 'enable_app',
+  title: 'Enable App',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Enable a disabled Nextcloud app. Requires admin privileges',
   inputSchema: z.object({
     appId: z.string().describe('The app ID to enable (e.g., "tasks", "deck", "photos")'),
@@ -137,6 +158,13 @@ export const enableAppTool = {
  */
 export const disableAppTool = {
   name: 'disable_app',
+  title: 'Disable App',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Disable an enabled Nextcloud app (preserves data but removes functionality). Requires admin privileges',
   inputSchema: z.object({
@@ -175,6 +203,13 @@ export const disableAppTool = {
  */
 export const installAppTool = {
   name: 'install_app',
+  title: 'Install App',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description: 'Install a Nextcloud app from the App Store via occ app:install',
   inputSchema: z.object({
     appId: z.string().describe('App ID to install (e.g. "tasks", "calendar", "mail")'),
@@ -197,6 +232,13 @@ export const installAppTool = {
  */
 export const uninstallAppTool = {
   name: 'uninstall_app',
+  title: 'Uninstall App',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Remove a Nextcloud app via occ app:remove',
   inputSchema: z.object({
     appId: z.string().describe('App ID to remove (e.g. "tasks")'),

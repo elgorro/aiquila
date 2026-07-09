@@ -766,6 +766,13 @@ async function resolveEventByUid(
  */
 export const listCalendarsTool = {
   name: 'list_calendars',
+  title: 'List Calendars',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all calendars available to the current user, including their supported component types (events, tasks, journals) and metadata.',
   inputSchema: z.object({}),
@@ -835,6 +842,13 @@ export const listCalendarsTool = {
  */
 export const listEventsTool = {
   name: 'list_events',
+  title: 'List Calendar Events',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List events from a Nextcloud calendar within an optional time range. Returns event details including time, location, attendees, recurrence, and UIDs.',
   inputSchema: z.object({
@@ -967,6 +981,13 @@ export const listEventsTool = {
  */
 export const getEventTool = {
   name: 'get_event',
+  title: 'Get Calendar Event',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get detailed information about a single calendar event by its UID, including full description, attendees, and recurrence rules.',
   inputSchema: z.object({
@@ -1022,6 +1043,13 @@ export const getEventTool = {
  */
 export const createEventTool = {
   name: 'create_event',
+  title: 'Create Calendar Event',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Create a new calendar event in Nextcloud with date/time, location, description, attendees, and optional recurrence.',
   inputSchema: z.object({
@@ -1293,6 +1321,13 @@ export const createEventTool = {
  */
 export const updateEventTool = {
   name: 'update_event',
+  title: 'Update Calendar Event',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "Update an existing calendar event's fields by UID. Uses CalDAV ETag-based optimistic concurrency.",
   inputSchema: z.object({
@@ -1512,6 +1547,13 @@ export const updateEventTool = {
  */
 export const deleteEventTool = {
   name: 'delete_event',
+  title: 'Delete Calendar Event',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a calendar event from Nextcloud by UID. This action is irreversible.',
   inputSchema: z.object({
     uid: z.string().describe('The UID of the event to delete'),

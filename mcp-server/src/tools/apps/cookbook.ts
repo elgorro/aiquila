@@ -178,6 +178,13 @@ async function readAllRecipes(): Promise<{ folderName: string; recipe: Recipe }[
  */
 export const listRecipesTool = {
   name: 'list_recipes',
+  title: 'List Recipes',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all recipes in Nextcloud Cookbook. Optionally filter by name, category, or keyword.',
   inputSchema: z.object({
@@ -253,6 +260,13 @@ export const listRecipesTool = {
  */
 export const listRecipeCategoriesTool = {
   name: 'list_recipe_categories',
+  title: 'List Recipe Categories',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all unique recipe categories found across recipes in Nextcloud Cookbook.',
   inputSchema: z.object({}),
   handler: async () => {
@@ -295,6 +309,13 @@ export const listRecipeCategoriesTool = {
  */
 export const getRecipeTool = {
   name: 'get_recipe',
+  title: 'Get Recipe',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get full details of a recipe from Nextcloud Cookbook by its folder name.',
   inputSchema: z.object({
     folderName: z.string().describe('The recipe folder name (as shown in list_recipes)'),
@@ -345,6 +366,13 @@ const nutritionSchema = z
  */
 export const createRecipeTool = {
   name: 'create_recipe',
+  title: 'Create Recipe',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Create a new recipe in Nextcloud Cookbook with schema.org Recipe format.',
   inputSchema: z.object({
     name: z.string().describe('Recipe name'),
@@ -445,6 +473,13 @@ export const createRecipeTool = {
  */
 export const updateRecipeTool = {
   name: 'update_recipe',
+  title: 'Update Recipe',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Update an existing recipe in Nextcloud Cookbook. Only provided fields are changed.',
   inputSchema: z.object({
     folderName: z.string().describe('The recipe folder name'),
@@ -543,6 +578,13 @@ export const updateRecipeTool = {
  */
 export const deleteRecipeTool = {
   name: 'delete_recipe',
+  title: 'Delete Recipe',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Delete a recipe from Nextcloud Cookbook. This removes the entire recipe folder including images. This action is irreversible.',
   inputSchema: z.object({

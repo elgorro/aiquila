@@ -15,6 +15,13 @@ import { getNextcloudConfig } from '../types.js';
 
 export const listTrashTool = {
   name: 'list_trash',
+  title: 'List Trash',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List files in the trash / recycle bin',
   inputSchema: z.object({}),
   handler: async () => {
@@ -113,6 +120,13 @@ export const listTrashTool = {
 
 export const restoreFromTrashTool = {
   name: 'restore_from_trash',
+  title: 'Restore from Trash',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Restore a file from the trash to its original location (use the Key from list_trash)',
   inputSchema: z.object({
@@ -173,6 +187,13 @@ export const restoreFromTrashTool = {
 
 export const emptyTrashTool = {
   name: 'empty_trash',
+  title: 'Empty Trash',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Permanently delete all files in the trash (cannot be undone)',
   inputSchema: z.object({}),
   handler: async () => {

@@ -15,6 +15,13 @@ import { getNextcloudConfig } from '../types.js';
  */
 export const getFileTagsTool = {
   name: 'get_file_tags',
+  title: 'Get File Tags',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get the personal tags assigned to a file or folder in Nextcloud',
   inputSchema: z.object({
     path: z.string().describe("The file or folder path in Nextcloud (e.g., '/Photos/test.png')"),
@@ -85,6 +92,13 @@ export const getFileTagsTool = {
  */
 export const setFileTagsTool = {
   name: 'set_file_tags',
+  title: 'Set File Tags',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Set personal tags on a file or folder in Nextcloud. Replaces all existing personal tags. Use an empty array to clear all tags.',
   inputSchema: z.object({
@@ -162,6 +176,13 @@ export const setFileTagsTool = {
  */
 export const assignSystemTagTool = {
   name: 'assign_system_tag',
+  title: 'Assign System Tag',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Assign a system tag to a file by file ID and tag ID. Use get_file_info to obtain the file ID.',
   inputSchema: z.object({
@@ -220,6 +241,13 @@ export const assignSystemTagTool = {
  */
 export const removeSystemTagTool = {
   name: 'remove_system_tag',
+  title: 'Remove System Tag',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Remove a system tag from a file by file ID and tag ID',
   inputSchema: z.object({
     fileId: z.number().describe('The Nextcloud file ID'),
@@ -277,6 +305,13 @@ export const removeSystemTagTool = {
  */
 export const listSystemTagsTool = {
   name: 'list_system_tags',
+  title: 'List System Tags',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all available system tags in Nextcloud with their IDs, names, and properties. Use this to find tag IDs before assigning them to files.',
   inputSchema: z.object({}),
@@ -382,6 +417,13 @@ export const listSystemTagsTool = {
  */
 export const createSystemTagTool = {
   name: 'create_system_tag',
+  title: 'Create System Tag',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Create a new system tag in Nextcloud. Returns the created tag info.',
   inputSchema: z.object({
     name: z.string().describe('The name for the new system tag'),

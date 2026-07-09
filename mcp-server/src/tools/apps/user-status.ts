@@ -27,6 +27,13 @@ const STATUS_TYPES = ['online', 'away', 'dnd', 'invisible', 'offline'] as const;
 
 export const getUserStatusTool = {
   name: 'get_user_status',
+  title: 'Get User Status',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "Get the current user's presence status (online, away, DND, invisible, custom message)",
   inputSchema: z.object({
@@ -65,6 +72,13 @@ export const getUserStatusTool = {
 
 export const setUserStatusTool = {
   name: 'set_user_status',
+  title: 'Set User Status',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: "Set the current user's status type (online, away, dnd, invisible, offline)",
   inputSchema: z.object({
     statusType: z.enum(STATUS_TYPES).describe('Status type to set'),
@@ -99,6 +113,13 @@ export const setUserStatusTool = {
 
 export const setUserStatusMessageTool = {
   name: 'set_user_status_message',
+  title: 'Set User Status Message',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Set a custom status message with optional emoji icon and auto-clear time',
   inputSchema: z.object({
     message: z.string().describe('Custom status message text'),
@@ -147,6 +168,13 @@ export const setUserStatusMessageTool = {
 
 export const clearUserStatusMessageTool = {
   name: 'clear_user_status_message',
+  title: 'Clear User Status Message',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: "Clear the current user's custom status message",
   inputSchema: z.object({}),
   handler: async () => {
@@ -178,6 +206,13 @@ export const clearUserStatusMessageTool = {
 
 export const listUserStatusesTool = {
   name: 'list_user_statuses',
+  title: 'List User Statuses',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: "List all users' statuses for team presence visibility",
   inputSchema: z.object({
     limit: z.number().optional().describe('Maximum number of statuses to return'),

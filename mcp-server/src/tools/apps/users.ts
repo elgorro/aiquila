@@ -13,6 +13,13 @@ import { fetchOCS } from '../../client/ocs.js';
  */
 export const listUsersTool = {
   name: 'list_users',
+  title: 'List Users',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all users in the Nextcloud instance. Requires admin or sub-admin privileges',
   inputSchema: z.object({
     search: z.string().optional().describe('Search/filter string for user IDs'),
@@ -59,6 +66,13 @@ export const listUsersTool = {
  */
 export const getUserInfoTool = {
   name: 'get_user_info',
+  title: 'Get User Info',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get detailed information about a specific Nextcloud user. Non-admin users can only query their own user ID',
   inputSchema: z.object({
@@ -97,6 +111,13 @@ export const getUserInfoTool = {
  */
 export const enableUserTool = {
   name: 'enable_user',
+  title: 'Enable User',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Enable a disabled Nextcloud user account. Requires admin privileges',
   inputSchema: z.object({
     userId: z.string().describe('The user ID (login name) to enable'),
@@ -134,6 +155,13 @@ export const enableUserTool = {
  */
 export const disableUserTool = {
   name: 'disable_user',
+  title: 'Disable User',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Disable a Nextcloud user account (prevents login but preserves data). Requires admin privileges',
   inputSchema: z.object({

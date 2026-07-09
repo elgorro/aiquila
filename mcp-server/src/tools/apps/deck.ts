@@ -83,6 +83,13 @@ function formatCardDetail(card: DeckCard): string {
 
 export const listBoardsTool = {
   name: 'deck_list_boards',
+  title: 'List Deck Boards',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all Deck boards. Returns id, title, owner, and label count for each board.',
   inputSchema: z.object({}),
   handler: async () => {
@@ -109,6 +116,13 @@ export const listBoardsTool = {
 
 export const getBoardTool = {
   name: 'deck_get_board',
+  title: 'Get Deck Board',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get details of a Deck board including its labels and access control list (ACL). Use deck_list_stacks to see the columns and cards.',
   inputSchema: z.object({
@@ -158,6 +172,13 @@ export const getBoardTool = {
 
 export const createBoardTool = {
   name: 'deck_create_board',
+  title: 'Create Deck Board',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Create a new Deck board.',
   inputSchema: z.object({
     title: z.string().describe('Board title'),
@@ -184,6 +205,13 @@ export const createBoardTool = {
 
 export const listStacksTool = {
   name: 'deck_list_stacks',
+  title: 'List Deck Stacks',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all stacks (columns) of a Deck board, including the cards in each stack. This gives a full overview of the board layout.',
   inputSchema: z.object({
@@ -227,6 +255,13 @@ export const listStacksTool = {
 
 export const createStackTool = {
   name: 'deck_create_stack',
+  title: 'Create Deck Stack',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Create a new stack (column) on a Deck board.',
   inputSchema: z.object({
     boardId: z.number().int().describe('Board ID (from deck_list_boards)'),
@@ -251,6 +286,13 @@ export const createStackTool = {
 
 export const getCardTool = {
   name: 'deck_get_card',
+  title: 'Get Deck Card',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get full details of a Deck card including description, labels, and assigned users.',
   inputSchema: z.object({
     boardId: z.number().int().describe('Board ID'),
@@ -272,6 +314,13 @@ export const getCardTool = {
 
 export const createCardTool = {
   name: 'deck_create_card',
+  title: 'Create Deck Card',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Create a new card in a Deck stack.',
   inputSchema: z.object({
     boardId: z.number().int().describe('Board ID'),
@@ -312,6 +361,13 @@ export const createCardTool = {
 
 export const updateCardTool = {
   name: 'deck_update_card',
+  title: 'Update Deck Card',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Update an existing Deck card. Provide only the fields you want to change. Fetches the current card first to preserve unchanged fields.',
   inputSchema: z.object({
@@ -360,6 +416,13 @@ export const updateCardTool = {
 
 export const moveCardTool = {
   name: 'deck_move_card',
+  title: 'Move Deck Card',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Move a card to a different stack (column) on the same board. This is the core kanban action for changing card status.',
   inputSchema: z.object({
@@ -405,6 +468,13 @@ export const moveCardTool = {
 
 export const archiveCardTool = {
   name: 'deck_archive_card',
+  title: 'Archive Deck Card',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Archive or unarchive a Deck card.',
   inputSchema: z.object({
     boardId: z.number().int().describe('Board ID'),
@@ -440,6 +510,13 @@ export const archiveCardTool = {
 
 export const assignLabelTool = {
   name: 'deck_assign_label',
+  title: 'Assign Deck Label',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Assign a label to a Deck card. Use deck_get_board to see available labels and their IDs.',
   inputSchema: z.object({
@@ -471,6 +548,13 @@ export const assignLabelTool = {
 
 export const assignUserTool = {
   name: 'deck_assign_user',
+  title: 'Assign Deck User',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Assign a user to a Deck card.',
   inputSchema: z.object({
     boardId: z.number().int().describe('Board ID'),

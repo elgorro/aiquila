@@ -112,6 +112,13 @@ function wrapError(action: string, err: unknown) {
 
 export const listConversationsTool = {
   name: 'talk_list_conversations',
+  title: 'List Talk Conversations',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all Talk conversations the user has access to. Returns conversation tokens, names, types, and unread message counts.',
   inputSchema: z.object({
@@ -152,6 +159,13 @@ export const listConversationsTool = {
 
 export const listMessagesTool = {
   name: 'talk_list_messages',
+  title: 'List Talk Messages',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List recent messages in a Talk conversation. Returns message content with timestamps and authors.',
   inputSchema: z.object({
@@ -208,6 +222,13 @@ export const listMessagesTool = {
 
 export const sendMessageTool = {
   name: 'talk_send_message',
+  title: 'Send Talk Message',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Send a message to a Talk conversation. Supports replies and silent messages that do not trigger notifications.',
   inputSchema: z.object({
@@ -245,6 +266,13 @@ export const sendMessageTool = {
 
 export const createConversationTool = {
   name: 'talk_create_conversation',
+  title: 'Create Talk Conversation',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Create a new Talk conversation. One-on-one requires an invite user, group/public require a name.',
   inputSchema: z.object({
@@ -295,6 +323,13 @@ export const createConversationTool = {
 
 export const listParticipantsTool = {
   name: 'talk_list_participants',
+  title: 'List Talk Participants',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all participants in a Talk conversation with their roles.',
   inputSchema: z.object({
     token: z.string().describe('Conversation token'),
@@ -323,6 +358,13 @@ export const listParticipantsTool = {
 
 export const addParticipantTool = {
   name: 'talk_add_participant',
+  title: 'Add Talk Participant',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Add a user, group, or email participant to a Talk conversation.',
   inputSchema: z.object({
     token: z.string().describe('Conversation token'),
@@ -354,6 +396,13 @@ export const addParticipantTool = {
 
 export const removeParticipantTool = {
   name: 'talk_remove_participant',
+  title: 'Remove Talk Participant',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Remove a participant from a Talk conversation by their attendee ID (from list_participants).',
   inputSchema: z.object({
@@ -381,6 +430,13 @@ export const removeParticipantTool = {
 
 export const deleteMessageTool = {
   name: 'talk_delete_message',
+  title: 'Delete Talk Message',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a message from a Talk conversation.',
   inputSchema: z.object({
     token: z.string().describe('Conversation token'),
@@ -404,6 +460,13 @@ export const deleteMessageTool = {
 
 export const createPollTool = {
   name: 'talk_create_poll',
+  title: 'Create Talk Poll',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Create a poll in a Talk conversation. Requires at least 2 options.',
   inputSchema: z.object({
     token: z.string().describe('Conversation token'),
@@ -456,6 +519,13 @@ export const createPollTool = {
 
 export const reactToMessageTool = {
   name: 'talk_react_to_message',
+  title: 'React to Talk Message',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Add an emoji reaction to a message in a Talk conversation.',
   inputSchema: z.object({
     token: z.string().describe('Conversation token'),

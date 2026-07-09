@@ -27,6 +27,13 @@ interface Notification {
 
 export const listNotificationsTool = {
   name: 'list_notifications',
+  title: 'List Notifications',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all notifications for the current user',
   inputSchema: z.object({}),
   handler: async () => {
@@ -76,6 +83,13 @@ export const listNotificationsTool = {
 
 export const getNotificationTool = {
   name: 'get_notification',
+  title: 'Get Notification',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get details of a specific notification by ID',
   inputSchema: z.object({
     id: z.number().describe('The notification ID'),
@@ -109,6 +123,13 @@ export const getNotificationTool = {
 
 export const markNotificationReadTool = {
   name: 'mark_notification_read',
+  title: 'Mark Notification as Read',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Mark a notification as read (deletes it)',
   inputSchema: z.object({
     id: z.number().describe('The notification ID to mark as read'),
@@ -142,6 +163,13 @@ export const markNotificationReadTool = {
 
 export const deleteAllNotificationsTool = {
   name: 'delete_all_notifications',
+  title: 'Delete All Notifications',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete all notifications for the current user',
   inputSchema: z.object({}),
   handler: async () => {

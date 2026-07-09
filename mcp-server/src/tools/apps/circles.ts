@@ -107,6 +107,13 @@ function formatMember(m: CircleMember): string {
 
 export const circlesListTool = {
   name: 'circles_list',
+  title: 'List Circles',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all circles/teams accessible to the current user. Returns circle IDs, names, owners, and configuration.',
   inputSchema: z.object({
@@ -136,6 +143,13 @@ export const circlesListTool = {
 
 export const circlesGetTool = {
   name: 'circles_get',
+  title: 'Get Circle',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get detailed information about a specific circle/team, including its description, owner, and configuration flags.',
   inputSchema: z.object({
@@ -173,6 +187,13 @@ export const circlesGetTool = {
 
 export const circlesCreateTool = {
   name: 'circles_create',
+  title: 'Create Circle',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Create a new circle/team. The current user becomes the owner. Set personal=true for a private circle only visible to the owner.',
   inputSchema: z.object({
@@ -207,6 +228,13 @@ export const circlesCreateTool = {
 
 export const circlesDeleteTool = {
   name: 'circles_delete',
+  title: 'Delete Circle',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a circle/team. Requires owner privileges.',
   inputSchema: z.object({
     circleId: z.string().describe('The circle ID to delete'),
@@ -229,6 +257,13 @@ export const circlesDeleteTool = {
 
 export const circlesListMembersTool = {
   name: 'circles_list_members',
+  title: 'List Circle Members',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all members of a circle/team. Returns member IDs (needed for removal), user IDs, types, and permission levels.',
   inputSchema: z.object({
@@ -255,6 +290,13 @@ export const circlesListMembersTool = {
 
 export const circlesAddMemberTool = {
   name: 'circles_add_member',
+  title: 'Add Circle Member',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Add a member to a circle/team. Requires moderator privileges or higher. Member type: 1=user (default), 2=group, 4=mail, 16=circle.',
   inputSchema: z.object({
@@ -285,6 +327,13 @@ export const circlesAddMemberTool = {
 
 export const circlesRemoveMemberTool = {
   name: 'circles_remove_member',
+  title: 'Remove Circle Member',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Remove a member from a circle/team. Use circles_list_members to get the memberId. Requires moderator privileges or higher.',
   inputSchema: z.object({
@@ -310,6 +359,13 @@ export const circlesRemoveMemberTool = {
 
 export const circlesSearchTool = {
   name: 'circles_search',
+  title: 'Search Circles',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Search for circles/teams by name.',
   inputSchema: z.object({
     term: z.string().describe('Search term to match against circle names'),

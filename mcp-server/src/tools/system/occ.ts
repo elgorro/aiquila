@@ -47,6 +47,13 @@ export function getOccAllowlist(): string[] {
 
 export const runOccTool = {
   name: 'run_occ',
+  title: 'Run OCC Command',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Execute an allowlisted Nextcloud OCC command on the server and return the output. ' +
     'Only commands in the allowlist may be run (configurable via MCP_OCC_ALLOWLIST env var). ' +

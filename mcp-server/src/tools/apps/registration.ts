@@ -47,6 +47,13 @@ const KNOWN_KEYS = Object.keys(REGISTRATION_KEYS);
 
 export const getRegistrationSettingsTool = {
   name: 'get_registration_settings',
+  title: 'Get Registration Settings',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Read the Nextcloud Registration app settings (self-service signup configuration), such as ' +
     'allowed email domains, whether admin approval is required, and the default group for new ' +
@@ -88,6 +95,13 @@ export const getRegistrationSettingsTool = {
 
 export const updateRegistrationSettingsTool = {
   name: 'update_registration_settings',
+  title: 'Update Registration Settings',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Update one or more Nextcloud Registration app settings. Boolean settings use the strings ' +
     "'yes'/'no'; allowed_domains takes a JSON array string (e.g. '[\"example.com\"]'). Requires " +
@@ -144,6 +158,13 @@ export const updateRegistrationSettingsTool = {
 
 export const resetRegistrationSettingTool = {
   name: 'reset_registration_setting',
+  title: 'Reset Registration Setting',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Reset a Nextcloud Registration app setting to its default by deleting the stored value. ' +
     'Requires the configured Nextcloud user to be an admin.',

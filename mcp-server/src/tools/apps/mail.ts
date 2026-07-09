@@ -118,6 +118,13 @@ function formatRecipients(recipients: MailRecipient[]): string {
 
 const listMailAccountsTool = {
   name: 'list_mail_accounts',
+  title: 'List Mail Accounts',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all configured email accounts in Nextcloud Mail. Returns account IDs, names, and email addresses.',
   inputSchema: z.object({}),
@@ -153,6 +160,13 @@ const listMailAccountsTool = {
 
 const listMailboxesTool = {
   name: 'list_mailboxes',
+  title: 'List Mailboxes',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all mailboxes (folders) for a Nextcloud Mail account. Returns mailbox names, IDs, and unread counts.',
   inputSchema: z.object({
@@ -196,6 +210,13 @@ const listMailboxesTool = {
 
 const listMessagesTool = {
   name: 'mail_list_messages',
+  title: 'List Mail Messages',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List email messages in a Nextcloud Mail mailbox. Supports pagination via cursor. Returns subject, sender, date, and message IDs.',
   inputSchema: z.object({
@@ -273,6 +294,13 @@ const listMessagesTool = {
 
 const readMessageTool = {
   name: 'mail_read_message',
+  title: 'Read Mail Message',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Read the full content of an email message by ID. Returns headers, body text, and attachment list.',
   inputSchema: z.object({
@@ -331,6 +359,13 @@ const readMessageTool = {
 
 const getAttachmentTool = {
   name: 'mail_get_attachment',
+  title: 'Get Mail Attachment',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Download an email attachment by message ID and attachment ID. ' +
     'Returns text for text files and calendar invites (ICS), image data for images, ' +
@@ -430,6 +465,13 @@ const getAttachmentTool = {
 
 const searchMessagesTool = {
   name: 'mail_search_messages',
+  title: 'Search Mail Messages',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Search email messages across all mailboxes by subject or sender. ' +
     'Returns matches with message IDs usable in mail_read_message. ' +
@@ -507,6 +549,13 @@ const searchMessagesTool = {
 
 const sendMessageTool = {
   name: 'mail_send_message',
+  title: 'Send Mail Message',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     'Send an email message through Nextcloud Mail. Requires an account ID and recipient addresses.',
   inputSchema: z.object({
@@ -583,6 +632,13 @@ const sendMessageTool = {
 
 const deleteMessageTool = {
   name: 'mail_delete_message',
+  title: 'Delete Mail Message',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete an email message by ID. This typically moves it to trash.',
   inputSchema: z.object({
     messageId: z.number().describe('The message ID to delete'),
@@ -616,6 +672,13 @@ const deleteMessageTool = {
 
 const moveMessageTool = {
   name: 'mail_move_message',
+  title: 'Move Mail Message',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Move an email message to a different mailbox/folder.',
   inputSchema: z.object({
     messageId: z.number().describe('The message ID to move'),
@@ -656,6 +719,13 @@ const moveMessageTool = {
 
 const setMessageFlagsTool = {
   name: 'mail_set_message_flags',
+  title: 'Set Mail Message Flags',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Set flags on an email message (mark as read/unread, star/unstar, mark as important or junk).',
   inputSchema: z.object({

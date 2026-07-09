@@ -7,6 +7,41 @@ import { z } from 'zod';
  */
 
 /**
+ * MCP tool behaviour hints, surfaced to clients via `tools/list`.
+ *
+ * All four are required here (the MCP spec makes them optional) so that
+ * `tsc` rejects any tool that forgets to classify itself. Claude uses
+ * `readOnlyHint` and `destructiveHint` to decide whether a call needs
+ * per-invocation confirmation.
+ */
+export interface ToolAnnotations {
+  /** Tool only reads data; it never mutates Nextcloud state. */
+  readOnlyHint: boolean;
+  /** Tool overwrites or removes existing data (as opposed to purely additive). */
+  destructiveHint: boolean;
+  /** Repeating the call with identical arguments has no further effect. */
+  idempotentHint: boolean;
+  /** Tool reaches an unbounded external world rather than just this Nextcloud. */
+  openWorldHint: boolean;
+}
+
+/**
+ * The shape every entry in a `*Tools` array must satisfy. Enforced structurally
+ * where the arrays are placed into `TOOL_REGISTRY` in `../tool-registry.ts`.
+ */
+export interface Tool {
+  name: string;
+  /** Human-readable display name, e.g. 'Get Out-of-Office Status'. */
+  title: string;
+  description: string;
+  annotations: ToolAnnotations;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  inputSchema: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handler: (...args: any[]) => any;
+}
+
+/**
  * Zod schemas for common parameters
  */
 

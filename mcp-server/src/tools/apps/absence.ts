@@ -15,6 +15,13 @@ import { getNextcloudConfig } from '../types.js';
 
 export const getOutOfOfficeTool = {
   name: 'get_out_of_office',
+  title: 'Get Out-of-Office Status',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: "Get a user's current out-of-office / absence status (NC 28+)",
   inputSchema: z.object({
     userId: z
@@ -57,6 +64,13 @@ export const getOutOfOfficeTool = {
 
 export const setOutOfOfficeTool = {
   name: 'set_out_of_office',
+  title: 'Set Out-of-Office Status',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Set an out-of-office / absence period with status message (NC 28+)',
   inputSchema: z.object({
     firstDay: z.string().describe('First day of absence (YYYY-MM-DD)'),
@@ -126,6 +140,13 @@ export const setOutOfOfficeTool = {
 
 export const clearOutOfOfficeTool = {
   name: 'clear_out_of_office',
+  title: 'Clear Out-of-Office Status',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: "Clear a user's out-of-office / absence status (NC 28+)",
   inputSchema: z.object({
     userId: z

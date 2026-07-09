@@ -48,6 +48,13 @@ function formatRecommendations(items: RecommendedFile[]): string {
 
 export const listRecommendationsTool = {
   name: 'list_recommendations',
+  title: 'List Recommendations',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List files Nextcloud recommends for the configured user (e.g. recently or frequently ' +
     'accessed, recently shared, or files in active folders), including the reason each file ' +

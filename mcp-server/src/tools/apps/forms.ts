@@ -116,6 +116,13 @@ function formatSubmission(s: FormSubmission): string {
 
 export const listFormsTool = {
   name: 'list_forms',
+  title: 'List Forms',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List forms. type="owned" (default) returns forms the current user owns; "shared" returns forms shared with them; "partial" returns forms the user has an unfinished draft on.',
   inputSchema: z.object({
@@ -144,6 +151,13 @@ export const listFormsTool = {
 
 export const getFormTool = {
   name: 'get_form',
+  title: 'Get Form',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get full details for a form by ID, including questions, options, shares, and metadata.',
   inputSchema: z.object({
@@ -163,6 +177,13 @@ export const getFormTool = {
 
 export const createFormTool = {
   name: 'create_form',
+  title: 'Create Form',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Create a new empty form. Returns the new form ID. Use update_form to set title/description and create_form_question to add questions.',
   inputSchema: z.object({}),
@@ -180,6 +201,13 @@ export const createFormTool = {
 
 export const cloneFormTool = {
   name: 'clone_form',
+  title: 'Clone Form',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Clone an existing form (its questions, options, and settings) into a new form.',
   inputSchema: z.object({
     formId: z.number().int().describe('Form ID to clone'),
@@ -202,6 +230,13 @@ export const cloneFormTool = {
 
 export const updateFormTool = {
   name: 'update_form',
+  title: 'Update Form',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Update form properties. Only provided fields are changed. state: 0=active, 1=closed, 2=archived. expires=0 disables expiration.',
   inputSchema: z.object({
@@ -255,6 +290,13 @@ export const updateFormTool = {
 
 export const transferFormOwnerTool = {
   name: 'transfer_form_owner',
+  title: 'Transfer Form Ownership',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Transfer ownership of a form to another Nextcloud user. The new owner must have access to the Forms app.',
   inputSchema: z.object({
@@ -278,6 +320,13 @@ export const transferFormOwnerTool = {
 
 export const deleteFormTool = {
   name: 'delete_form',
+  title: 'Delete Form',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Permanently delete a form and all of its submissions. This cannot be undone.',
   inputSchema: z.object({
     formId: z.number().int().describe('Form ID'),
@@ -300,6 +349,13 @@ export const deleteFormTool = {
 
 export const listFormQuestionsTool = {
   name: 'list_form_questions',
+  title: 'List Form Questions',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all questions for a form, in display order.',
   inputSchema: z.object({
     formId: z.number().int().describe('Form ID'),
@@ -326,6 +382,13 @@ export const listFormQuestionsTool = {
 
 export const createFormQuestionTool = {
   name: 'create_form_question',
+  title: 'Create Form Question',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Add a question to a form. For choice questions use type "multiple" (checkbox), "multiple_unique" (radio), or "dropdown" — then call create_form_options.',
   inputSchema: z.object({
@@ -352,6 +415,13 @@ export const createFormQuestionTool = {
 
 export const updateFormQuestionTool = {
   name: 'update_form_question',
+  title: 'Update Form Question',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Update question properties (text, requirement, type, etc.). Only provided fields are changed.',
   inputSchema: z.object({
@@ -402,6 +472,13 @@ export const updateFormQuestionTool = {
 
 export const reorderFormQuestionsTool = {
   name: 'reorder_form_questions',
+  title: 'Reorder Form Questions',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Reorder all questions in a form. Pass the full list of question IDs in the desired order.',
   inputSchema: z.object({
@@ -428,6 +505,13 @@ export const reorderFormQuestionsTool = {
 
 export const deleteFormQuestionTool = {
   name: 'delete_form_question',
+  title: 'Delete Form Question',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a question from a form.',
   inputSchema: z.object({
     formId: z.number().int().describe('Form ID'),
@@ -453,6 +537,13 @@ export const deleteFormQuestionTool = {
 
 export const createFormOptionsTool = {
   name: 'create_form_options',
+  title: 'Create Form Options',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Add one or more options to a choice question (multiple/multiple_unique/dropdown). Pass an array of option texts.',
   inputSchema: z.object({
@@ -483,6 +574,13 @@ export const createFormOptionsTool = {
 
 export const updateFormOptionTool = {
   name: 'update_form_option',
+  title: 'Update Form Option',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: "Update a choice option's text (and optionally its order).",
   inputSchema: z.object({
     formId: z.number().int().describe('Form ID'),
@@ -525,6 +623,13 @@ export const updateFormOptionTool = {
 
 export const reorderFormOptionsTool = {
   name: 'reorder_form_options',
+  title: 'Reorder Form Options',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Reorder all options for a choice question. Pass the full list of option IDs in the desired order.',
   inputSchema: z.object({
@@ -549,6 +654,13 @@ export const reorderFormOptionsTool = {
 
 export const deleteFormOptionTool = {
   name: 'delete_form_option',
+  title: 'Delete Form Option',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete an option from a choice question.',
   inputSchema: z.object({
     formId: z.number().int().describe('Form ID'),
@@ -576,6 +688,13 @@ export const deleteFormOptionTool = {
 
 export const createFormShareTool = {
   name: 'create_form_share',
+  title: 'Create Form Share',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Share a form. type="user" shares with a Nextcloud user (shareWith=userId), "group" with a group (shareWith=groupId), "link" creates a public link (shareWith is the generated hash, omit it at creation).',
   inputSchema: z.object({
@@ -634,6 +753,13 @@ export const createFormShareTool = {
 
 export const updateFormShareTool = {
   name: 'update_form_share',
+  title: 'Update Form Share',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Update the permissions on an existing form share.',
   inputSchema: z.object({
     formId: z.number().int().describe('Form ID'),
@@ -657,6 +783,13 @@ export const updateFormShareTool = {
 
 export const deleteFormShareTool = {
   name: 'delete_form_share',
+  title: 'Delete Form Share',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Revoke a form share.',
   inputSchema: z.object({
     formId: z.number().int().describe('Form ID'),
@@ -682,6 +815,13 @@ export const deleteFormShareTool = {
 
 export const listFormSubmissionsTool = {
   name: 'list_form_submissions',
+  title: 'List Form Submissions',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List submissions for a form. Supports free-text search (query) and pagination (limit/offset). Only form owners/admins see all submissions.',
   inputSchema: z.object({
@@ -722,6 +862,13 @@ export const listFormSubmissionsTool = {
 
 export const getFormSubmissionTool = {
   name: 'get_form_submission',
+  title: 'Get Form Submission',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get a single submission with all of its answers.',
   inputSchema: z.object({
     formId: z.number().int().describe('Form ID'),
@@ -743,6 +890,13 @@ export const getFormSubmissionTool = {
 
 export const createFormSubmissionTool = {
   name: 'create_form_submission',
+  title: 'Create Form Submission',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Submit answers to a form. `answers` is an object keyed by question ID; values are always arrays. For text questions: ["My answer"]. For choice questions: [optionId1, optionId2] (numeric IDs). Public links require `shareHash`.',
   inputSchema: z.object({
@@ -778,6 +932,13 @@ export const createFormSubmissionTool = {
 
 export const deleteFormSubmissionTool = {
   name: 'delete_form_submission',
+  title: 'Delete Form Submission',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a single submission by ID.',
   inputSchema: z.object({
     formId: z.number().int().describe('Form ID'),
@@ -799,6 +960,13 @@ export const deleteFormSubmissionTool = {
 
 export const deleteAllFormSubmissionsTool = {
   name: 'delete_all_form_submissions',
+  title: 'Delete All Form Submissions',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Delete every submission for a form. The form itself is kept. This cannot be undone.',
   inputSchema: z.object({
@@ -823,6 +991,13 @@ export const deleteAllFormSubmissionsTool = {
 
 export const exportFormSubmissionsTool = {
   name: 'export_form_submissions',
+  title: 'Export Form Submissions',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "Export a form's submissions as a spreadsheet into the user's Nextcloud storage. Returns the destination path. Use read_file / get_file_info afterwards to work with the export.",
   inputSchema: z.object({

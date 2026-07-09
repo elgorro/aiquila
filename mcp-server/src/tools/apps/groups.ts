@@ -13,6 +13,13 @@ import { fetchOCS } from '../../client/ocs.js';
  */
 export const listGroupsTool = {
   name: 'list_groups',
+  title: 'List Groups',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all groups in the Nextcloud instance. Requires admin or sub-admin privileges',
   inputSchema: z.object({
     search: z.string().optional().describe('Search/filter string for group names'),
@@ -59,6 +66,13 @@ export const listGroupsTool = {
  */
 export const getGroupInfoTool = {
   name: 'get_group_info',
+  title: 'Get Group Info',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get detailed information about a specific Nextcloud group. Requires admin or sub-admin privileges',
   inputSchema: z.object({
@@ -99,6 +113,13 @@ export const getGroupInfoTool = {
  */
 export const addUserToGroupTool = {
   name: 'add_user_to_group',
+  title: 'Add User to Group',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Add a Nextcloud user to a group. Requires admin privileges',
   inputSchema: z.object({
     userId: z.string().describe('The user ID (login name) to add to the group'),
@@ -138,6 +159,13 @@ export const addUserToGroupTool = {
  */
 export const removeUserFromGroupTool = {
   name: 'remove_user_from_group',
+  title: 'Remove User from Group',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Remove a Nextcloud user from a group. Requires admin privileges',
   inputSchema: z.object({
     userId: z.string().describe('The user ID (login name) to remove from the group'),

@@ -75,6 +75,13 @@ function formatItem(i: Item): string {
 
 export const listFeedsTool = {
   name: 'list_feeds',
+  title: 'List News Feeds',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all RSS feeds subscribed in the Nextcloud News app, with unread counts.',
   inputSchema: z.object({}),
   handler: async () => {
@@ -93,6 +100,13 @@ export const listFeedsTool = {
 
 export const addFeedTool = {
   name: 'add_feed',
+  title: 'Add News Feed',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description: 'Subscribe to a new RSS feed by URL, optionally placing it in a folder.',
   inputSchema: z.object({
     url: z.string().describe('The RSS/Atom feed URL to subscribe to'),
@@ -117,6 +131,13 @@ export const addFeedTool = {
 
 export const deleteFeedTool = {
   name: 'delete_feed',
+  title: 'Delete News Feed',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete (unsubscribe from) a feed and all its items.',
   inputSchema: z.object({
     feedId: z.number().describe('The feed ID to delete'),
@@ -133,6 +154,13 @@ export const deleteFeedTool = {
 
 export const moveFeedTool = {
   name: 'move_feed',
+  title: 'Move News Feed',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Move a feed into a different folder.',
   inputSchema: z.object({
     feedId: z.number().describe('The feed ID to move'),
@@ -153,6 +181,13 @@ export const moveFeedTool = {
 
 export const renameFeedTool = {
   name: 'rename_feed',
+  title: 'Rename News Feed',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Rename a feed.',
   inputSchema: z.object({
     feedId: z.number().describe('The feed ID to rename'),
@@ -173,6 +208,13 @@ export const renameFeedTool = {
 
 export const markFeedReadTool = {
   name: 'mark_feed_read',
+  title: 'Mark Feed as Read',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Mark all items in a feed as read up to (and including) the given newest item ID.',
   inputSchema: z.object({
     feedId: z.number().describe('The feed ID'),
@@ -195,6 +237,13 @@ export const markFeedReadTool = {
 
 export const listNewsFoldersTool = {
   name: 'list_news_folders',
+  title: 'List News Folders',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all folders used to organize feeds in the Nextcloud News app.',
   inputSchema: z.object({}),
   handler: async () => {
@@ -213,6 +262,13 @@ export const listNewsFoldersTool = {
 
 export const createNewsFolderTool = {
   name: 'create_news_folder',
+  title: 'Create News Folder',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Create a new folder for organizing feeds in the News app.',
   inputSchema: z.object({
     name: z.string().describe('The folder name'),
@@ -237,6 +293,13 @@ export const createNewsFolderTool = {
 
 export const renameNewsFolderTool = {
   name: 'rename_news_folder',
+  title: 'Rename News Folder',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Rename a News folder.',
   inputSchema: z.object({
     folderId: z.number().describe('The folder ID to rename'),
@@ -257,6 +320,13 @@ export const renameNewsFolderTool = {
 
 export const deleteNewsFolderTool = {
   name: 'delete_news_folder',
+  title: 'Delete News Folder',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a News folder and all feeds it contains.',
   inputSchema: z.object({
     folderId: z.number().describe('The folder ID to delete'),
@@ -273,6 +343,13 @@ export const deleteNewsFolderTool = {
 
 export const markNewsFolderReadTool = {
   name: 'mark_news_folder_read',
+  title: 'Mark News Folder as Read',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Mark all items in a folder as read up to (and including) the given newest item ID.',
   inputSchema: z.object({
     folderId: z.number().describe('The folder ID'),
@@ -295,6 +372,13 @@ export const markNewsFolderReadTool = {
 
 export const listNewsItemsTool = {
   name: 'list_news_items',
+  title: 'List News Items',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List news articles (items). Filter by feed, folder, starred, or all; supports pagination and read/unread filtering.',
   inputSchema: z.object({
@@ -347,6 +431,13 @@ export const listNewsItemsTool = {
 
 export const markItemReadTool = {
   name: 'mark_item_read',
+  title: 'Mark News Item as Read',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Mark a single news item as read.',
   inputSchema: z.object({
     itemId: z.number().describe('The item ID'),
@@ -363,6 +454,13 @@ export const markItemReadTool = {
 
 export const markItemUnreadTool = {
   name: 'mark_item_unread',
+  title: 'Mark News Item as Unread',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Mark a single news item as unread.',
   inputSchema: z.object({
     itemId: z.number().describe('The item ID'),
@@ -379,6 +477,13 @@ export const markItemUnreadTool = {
 
 export const starItemTool = {
   name: 'star_item',
+  title: 'Star News Item',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Star (favorite) a single news item.',
   inputSchema: z.object({
     itemId: z.number().describe('The item ID'),
@@ -395,6 +500,13 @@ export const starItemTool = {
 
 export const unstarItemTool = {
   name: 'unstar_item',
+  title: 'Unstar News Item',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Remove the star from a single news item.',
   inputSchema: z.object({
     itemId: z.number().describe('The item ID'),
@@ -411,6 +523,13 @@ export const unstarItemTool = {
 
 export const markItemsReadTool = {
   name: 'mark_items_read',
+  title: 'Mark News Items as Read',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Mark multiple news items as read in one call.',
   inputSchema: z.object({
     itemIds: z.array(z.number()).describe('The item IDs to mark as read'),

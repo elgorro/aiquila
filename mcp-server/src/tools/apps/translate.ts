@@ -26,6 +26,13 @@ interface LanguagePair {
 
 export const translateTextTool = {
   name: 'translate_text',
+  title: 'Translate Text',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Translate text between languages using Nextcloud's configured translation provider. If called without text, returns available language pairs.",
   inputSchema: z.object({

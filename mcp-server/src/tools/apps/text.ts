@@ -59,6 +59,13 @@ async function resolveWorkspaceFile(folder: string): Promise<TextWorkspaceFile |
 
 export const getTextWorkspaceTool = {
   name: 'get_text_workspace',
+  title: 'Get Text Workspace',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "Get metadata of the Text workspace file (Readme.md) for a folder. Returns the file's id, name, mimetype and path, or reports that no workspace exists yet.",
   inputSchema: z.object({ path: FolderPathArg }),
@@ -86,6 +93,13 @@ export const getTextWorkspaceTool = {
 
 export const readTextWorkspaceTool = {
   name: 'read_text_workspace',
+  title: 'Read Text Workspace',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "Read the content of a folder's Text workspace file (Readme.md). Returns markdown text, or a 'no workspace' message if none exists.",
   inputSchema: z.object({ path: FolderPathArg }),
@@ -113,6 +127,13 @@ export const readTextWorkspaceTool = {
 
 export const writeTextWorkspaceTool = {
   name: 'write_text_workspace',
+  title: 'Write Text Workspace',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "Create or overwrite a folder's Text workspace file. If a workspace already exists, its existing filename is reused; otherwise Readme.md is created at the folder root.",
   inputSchema: z.object({
@@ -143,6 +164,13 @@ export const writeTextWorkspaceTool = {
 
 export const deleteTextWorkspaceTool = {
   name: 'delete_text_workspace',
+  title: 'Delete Text Workspace',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Delete the Text workspace file (Readme.md) for a folder. The folder itself is kept. No-op if the folder has no workspace.',
   inputSchema: z.object({ path: FolderPathArg }),
@@ -172,6 +200,13 @@ export const deleteTextWorkspaceTool = {
 
 export const getTextWorkspaceEditUrlTool = {
   name: 'get_text_workspace_edit_url',
+  title: 'Get Text Workspace Edit URL',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "Get a one-shot direct-edit URL for a folder's Text workspace. Opens the live collaborative editor in a browser. The Readme.md is created automatically if it does not exist yet. Hand the URL to a human collaborator — the MCP server does not participate in the editing session.",
   inputSchema: z.object({ path: FolderPathArg }),

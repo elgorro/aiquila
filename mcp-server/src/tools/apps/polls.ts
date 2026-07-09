@@ -101,6 +101,13 @@ function formatShare(s: PollShare): string {
 
 export const listPollsTool = {
   name: 'list_polls',
+  title: 'List Polls',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all polls the current user can access (own, shared, or public). Returns id, title, type, owner, and status.',
   inputSchema: z.object({}),
@@ -126,6 +133,13 @@ export const listPollsTool = {
 
 export const getPollTool = {
   name: 'get_poll',
+  title: 'Get Poll',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get full details of a poll by ID: configuration, owner, status, and current user state.',
   inputSchema: z.object({
@@ -145,6 +159,13 @@ export const getPollTool = {
 
 export const createPollTool = {
   name: 'create_poll',
+  title: 'Create Poll',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Create a new poll. Type "textPoll" for text options (e.g. lunch choices), "datePoll" for date/time options (e.g. meeting scheduling).',
   inputSchema: z.object({
@@ -168,6 +189,13 @@ export const createPollTool = {
 
 export const updatePollTool = {
   name: 'update_poll',
+  title: 'Update Poll',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Update a poll configuration. Only provided fields are changed. Set expire to 0 for no expiration, or a unix timestamp to auto-close on that date.',
   inputSchema: z.object({
@@ -235,6 +263,13 @@ export const updatePollTool = {
 
 export const deletePollTool = {
   name: 'delete_poll',
+  title: 'Delete Poll',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Permanently delete a poll. This cannot be undone.',
   inputSchema: z.object({
     pollId: z.number().int().describe('Poll ID'),
@@ -253,6 +288,13 @@ export const deletePollTool = {
 
 export const closePollTool = {
   name: 'close_poll',
+  title: 'Close Poll',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Close a poll immediately so no further votes are accepted.',
   inputSchema: z.object({
     pollId: z.number().int().describe('Poll ID'),
@@ -273,6 +315,13 @@ export const closePollTool = {
 
 export const reopenPollTool = {
   name: 'reopen_poll',
+  title: 'Reopen Poll',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Reopen a previously closed poll so voting can resume.',
   inputSchema: z.object({
     pollId: z.number().int().describe('Poll ID'),
@@ -293,6 +342,13 @@ export const reopenPollTool = {
 
 export const clonePollTool = {
   name: 'clone_poll',
+  title: 'Clone Poll',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Clone an existing poll, copying its configuration and options into a new poll.',
   inputSchema: z.object({
     pollId: z.number().int().describe('Poll ID to clone'),
@@ -317,6 +373,13 @@ export const clonePollTool = {
 
 export const listPollOptionsTool = {
   name: 'list_poll_options',
+  title: 'List Poll Options',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all options for a poll, with vote tallies per option.',
   inputSchema: z.object({
     pollId: z.number().int().describe('Poll ID'),
@@ -345,6 +408,13 @@ export const listPollOptionsTool = {
 
 export const addTextPollOptionTool = {
   name: 'add_text_poll_option',
+  title: 'Add Text Poll Option',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Add a text option to a textPoll (e.g. "Pizza", "Sushi"). Use add_date_poll_option for datePolls.',
   inputSchema: z.object({
@@ -371,6 +441,13 @@ export const addTextPollOptionTool = {
 
 export const addDatePollOptionTool = {
   name: 'add_date_poll_option',
+  title: 'Add Date Poll Option',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Add a date/time option to a datePoll. Provide startAt as ISO-8601 (e.g. "2026-05-12T14:00:00Z") and durationSeconds (e.g. 3600 for 1 hour).',
   inputSchema: z.object({
@@ -421,6 +498,13 @@ export const addDatePollOptionTool = {
 
 export const deletePollOptionTool = {
   name: 'delete_poll_option',
+  title: 'Delete Poll Option',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete an option from a poll by option ID.',
   inputSchema: z.object({
     optionId: z.number().int().describe('Option ID (from list_poll_options)'),
@@ -443,6 +527,13 @@ export const deletePollOptionTool = {
 
 export const listPollVotesTool = {
   name: 'list_poll_votes',
+  title: 'List Poll Votes',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: "List all votes for a poll. Anonymous polls redact voters' identities.",
   inputSchema: z.object({
     pollId: z.number().int().describe('Poll ID'),
@@ -469,6 +560,13 @@ export const listPollVotesTool = {
 
 export const voteOnPollTool = {
   name: 'vote_on_poll',
+  title: 'Vote on Poll',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Cast or change your vote on a poll option. setTo: "yes" to vote yes, "no" to vote no, "maybe" for a tentative yes (only if allowed).',
   inputSchema: z.object({
@@ -501,6 +599,13 @@ export const voteOnPollTool = {
 
 export const listPollCommentsTool = {
   name: 'list_poll_comments',
+  title: 'List Poll Comments',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all comments on a poll.',
   inputSchema: z.object({
     pollId: z.number().int().describe('Poll ID'),
@@ -529,6 +634,13 @@ export const listPollCommentsTool = {
 
 export const addPollCommentTool = {
   name: 'add_poll_comment',
+  title: 'Add Poll Comment',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Post a comment on a poll (requires comments to be enabled).',
   inputSchema: z.object({
     pollId: z.number().int().describe('Poll ID'),
@@ -551,6 +663,13 @@ export const addPollCommentTool = {
 
 export const deletePollCommentTool = {
   name: 'delete_poll_comment',
+  title: 'Delete Poll Comment',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete one of your poll comments by comment ID.',
   inputSchema: z.object({
     commentId: z.number().int().describe('Comment ID (from list_poll_comments)'),
@@ -573,6 +692,13 @@ export const deletePollCommentTool = {
 
 export const listPollSharesTool = {
   name: 'list_poll_shares',
+  title: 'List Poll Shares',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all shares (public link, user invitations, email invitations) for a poll.',
   inputSchema: z.object({
     pollId: z.number().int().describe('Poll ID'),
@@ -601,6 +727,13 @@ export const listPollSharesTool = {
 
 export const addPollShareTool = {
   name: 'add_poll_share',
+  title: 'Add Poll Share',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Share a poll. type="public" creates a public link (no extra fields). type="user" invites a Nextcloud user (requires userId). type="email" invites by email (requires userId=email address, displayName).',
   inputSchema: z.object({
@@ -664,6 +797,13 @@ export const addPollShareTool = {
 
 export const deletePollShareTool = {
   name: 'delete_poll_share',
+  title: 'Delete Poll Share',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Revoke a poll share by its token (obtained from list_poll_shares or add_poll_share).',
   inputSchema: z.object({
@@ -687,6 +827,13 @@ export const deletePollShareTool = {
 
 export const setPollSubscriptionTool = {
   name: 'set_poll_subscription',
+  title: 'Set Poll Subscription',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Subscribe or unsubscribe the current user to poll notifications (new votes, comments). Use subscribe=true to subscribe, false to unsubscribe.',
   inputSchema: z.object({

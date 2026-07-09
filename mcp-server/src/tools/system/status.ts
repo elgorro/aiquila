@@ -14,6 +14,13 @@ import { executeOCC, formatOccError } from '../../client/aiquila.js';
  */
 export const systemStatusTool = {
   name: 'system_status',
+  title: 'System Status',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get Nextcloud system status including version, installation path, and configuration',
   inputSchema: z.object({}),
@@ -56,6 +63,13 @@ export const systemStatusTool = {
  */
 export const setupChecksTool = {
   name: 'run_setup_checks',
+  title: 'Run Setup Checks',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Run Nextcloud setup checks to verify system configuration (security, performance, PHP modules, etc.). Requires admin privileges',
   inputSchema: z.object({}),
@@ -105,6 +119,13 @@ export const setupChecksTool = {
  */
 export const getLocalTimeTool = {
   name: 'get_local_time',
+  title: 'Get Local Time',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get the current local time and timezone of the MCP server. ' +
     'Call this to establish a time reference before creating or listing calendar events, ' +

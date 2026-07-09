@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { fetchAiquilaAPI } from '../../client/aiquila.js';
+import type { ToolAnnotations } from '../types.js';
 
 /**
  * AIquila Cowork Tools
@@ -86,6 +87,13 @@ function formatCoworker(c: Coworker): string {
 
 export const listCoworkersTool = {
   name: 'list_coworkers',
+  title: 'List Coworkers',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "List the current user's coworkers (persistent scheduled AI tasks) with their status, provider, schedule and last run.",
   inputSchema: z.object({}),
@@ -106,6 +114,13 @@ export const listCoworkersTool = {
 
 export const listCoworkerTemplatesTool = {
   name: 'list_coworker_templates',
+  title: 'List Coworker Templates',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List built-in coworker templates (e.g. image classification via Claude vision or Mistral Pixtral) and available task types.',
   inputSchema: z.object({}),
@@ -125,6 +140,13 @@ export const listCoworkerTemplatesTool = {
 
 export const getCoworkerTool = {
   name: 'get_coworker',
+  title: 'Get Coworker',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get a single coworker by ID, including its schedule and last run status.',
   inputSchema: z.object({ id: z.number().describe('Coworker ID') }),
   handler: async (args: { id: number }) => {
@@ -139,6 +161,13 @@ export const getCoworkerTool = {
 
 export const createCoworkerTool = {
   name: 'create_coworker',
+  title: 'Create Coworker',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Create a coworker. Provide templateId to start from a built-in template (e.g. "classify-images-claude" or "classify-images-pixtral"), and/or explicit fields to configure a custom one. Fields override template defaults.',
   inputSchema: z.object({
@@ -198,6 +227,13 @@ export const createCoworkerTool = {
 
 export const updateCoworkerTool = {
   name: 'update_coworker',
+  title: 'Update Coworker',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "Update a coworker's configuration (title, provider, input folder, schedule, options).",
   inputSchema: z.object({
@@ -242,6 +278,13 @@ export const updateCoworkerTool = {
 
 export const deleteCoworkerTool = {
   name: 'delete_coworker',
+  title: 'Delete Coworker',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a coworker and its run history.',
   inputSchema: z.object({ id: z.number().describe('Coworker ID') }),
   handler: async (args: { id: number }) => {
@@ -256,12 +299,16 @@ export const deleteCoworkerTool = {
 
 function stateTool(
   name: string,
+  title: string,
   description: string,
-  action: 'enable' | 'disable' | 'pause' | 'resume' | 'run'
+  action: 'enable' | 'disable' | 'pause' | 'resume' | 'run',
+  annotations: ToolAnnotations
 ) {
   return {
     name,
+    title,
     description,
+    annotations,
     inputSchema: z.object({ id: z.number().describe('Coworker ID') }),
     handler: async (args: { id: number }) => {
       try {
@@ -286,34 +333,61 @@ function stateTool(
   };
 }
 
+const STATE_CHANGE: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+/** Turning a coworker off removes its scheduled behaviour. */
+const STATE_STOP: ToolAnnotations = { ...STATE_CHANGE, destructiveHint: true };
+
 export const enableCoworkerTool = stateTool(
   'enable_coworker',
+  'Enable Coworker',
   'Enable a coworker so it runs on its schedule.',
-  'enable'
+  'enable',
+  STATE_CHANGE
 );
 export const disableCoworkerTool = stateTool(
   'disable_coworker',
+  'Disable Coworker',
   'Disable a coworker so it stops running on its schedule.',
-  'disable'
+  'disable',
+  STATE_STOP
 );
 export const pauseCoworkerTool = stateTool(
   'pause_coworker',
+  'Pause Coworker',
   'Temporarily pause a coworker without disabling it.',
-  'pause'
+  'pause',
+  STATE_STOP
 );
 export const resumeCoworkerTool = stateTool(
   'resume_coworker',
+  'Resume Coworker',
   'Resume a paused coworker.',
-  'resume'
+  'resume',
+  STATE_CHANGE
 );
 export const runCoworkerTool = stateTool(
   'run_coworker',
+  'Run Coworker',
   'Run a coworker immediately (synchronously) and return the run result.',
-  'run'
+  'run',
+  // executes the coworker's prompt against an AI backend; repeating it does more work
+  { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }
 );
 
 export const getCoworkerRunsTool = {
   name: 'get_coworker_runs',
+  title: 'Get Coworker Runs',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get recent run history (progress, status, summary) for a coworker.',
   inputSchema: z.object({
     id: z.number().describe('Coworker ID'),

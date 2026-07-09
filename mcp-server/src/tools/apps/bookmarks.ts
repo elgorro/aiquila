@@ -114,6 +114,13 @@ function formatFolderTree(folder: BookmarkFolder, indent = 0): string {
 
 export const listBookmarksTool = {
   name: 'list_bookmarks',
+  title: 'List Bookmarks',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List bookmarks from Nextcloud Bookmarks app. Supports search, tag filtering, folder filtering, sorting, and pagination.',
   inputSchema: z.object({
@@ -195,6 +202,13 @@ export const listBookmarksTool = {
 
 export const getBookmarkTool = {
   name: 'get_bookmark',
+  title: 'Get Bookmark',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get full details of a single bookmark by its ID.',
   inputSchema: z.object({
     id: z.number().describe('The bookmark ID'),
@@ -227,6 +241,13 @@ export const getBookmarkTool = {
 
 export const createBookmarkTool = {
   name: 'create_bookmark',
+  title: 'Create Bookmark',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Create a new bookmark in Nextcloud Bookmarks. URL is required; title, description, tags, and folders are optional.',
   inputSchema: z.object({
@@ -279,6 +300,13 @@ export const createBookmarkTool = {
 
 export const updateBookmarkTool = {
   name: 'update_bookmark',
+  title: 'Update Bookmark',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Update an existing bookmark. Only provided fields are changed.',
   inputSchema: z.object({
     id: z.number().describe('The bookmark ID to update'),
@@ -333,6 +361,13 @@ export const updateBookmarkTool = {
 
 export const deleteBookmarkTool = {
   name: 'delete_bookmark',
+  title: 'Delete Bookmark',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a bookmark by its ID. This action is irreversible.',
   inputSchema: z.object({
     id: z.number().describe('The bookmark ID to delete'),
@@ -367,6 +402,13 @@ export const deleteBookmarkTool = {
 
 export const listBookmarkFoldersTool = {
   name: 'list_bookmark_folders',
+  title: 'List Bookmark Folders',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List the bookmark folder hierarchy. Returns a tree structure of all folders.',
   inputSchema: z.object({
     root: z
@@ -415,6 +457,13 @@ export const listBookmarkFoldersTool = {
 
 export const getBookmarkFolderContentsTool = {
   name: 'get_bookmark_folder_contents',
+  title: 'Get Bookmark Folder Contents',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Get the contents of a bookmark folder (bookmarks and subfolders).',
   inputSchema: z.object({
     id: z.number().describe('The folder ID (-1 for root)'),
@@ -474,6 +523,13 @@ export const getBookmarkFolderContentsTool = {
 
 export const createBookmarkFolderTool = {
   name: 'create_bookmark_folder',
+  title: 'Create Bookmark Folder',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description: 'Create a new bookmark folder.',
   inputSchema: z.object({
     title: z.string().describe('Folder name'),
@@ -513,6 +569,13 @@ export const createBookmarkFolderTool = {
 
 export const updateBookmarkFolderTool = {
   name: 'update_bookmark_folder',
+  title: 'Update Bookmark Folder',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Update a bookmark folder (rename or move to a different parent).',
   inputSchema: z.object({
     id: z.number().describe('The folder ID to update'),
@@ -551,6 +614,13 @@ export const updateBookmarkFolderTool = {
 
 export const deleteBookmarkFolderTool = {
   name: 'delete_bookmark_folder',
+  title: 'Delete Bookmark Folder',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a bookmark folder and all its contents. This action is irreversible.',
   inputSchema: z.object({
     id: z.number().describe('The folder ID to delete'),
@@ -585,6 +655,13 @@ export const deleteBookmarkFolderTool = {
 
 export const listBookmarkTagsTool = {
   name: 'list_bookmark_tags',
+  title: 'List Bookmark Tags',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'List all tags used across bookmarks.',
   inputSchema: z.object({}),
   handler: async () => {
@@ -626,6 +703,13 @@ export const listBookmarkTagsTool = {
 
 export const renameBookmarkTagTool = {
   name: 'rename_bookmark_tag',
+  title: 'Rename Bookmark Tag',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Rename a bookmark tag. All bookmarks with the old tag will be updated.',
   inputSchema: z.object({
     old_name: z.string().describe('Current tag name'),
@@ -662,6 +746,13 @@ export const renameBookmarkTagTool = {
 
 export const deleteBookmarkTagTool = {
   name: 'delete_bookmark_tag',
+  title: 'Delete Bookmark Tag',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Delete a bookmark tag. The tag will be removed from all bookmarks.',
   inputSchema: z.object({
     name: z.string().describe('Tag name to delete'),

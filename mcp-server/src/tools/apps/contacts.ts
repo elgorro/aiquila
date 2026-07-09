@@ -425,6 +425,13 @@ async function resolveContactByUid(
  */
 export const listAddressBooksTool = {
   name: 'list_address_books',
+  title: 'List Address Books',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List all address books available to the current user, including their display names and metadata.',
   inputSchema: z.object({}),
@@ -490,6 +497,13 @@ export const listAddressBooksTool = {
  */
 export const listContactsTool = {
   name: 'list_contacts',
+  title: 'List Contacts',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'List contacts from a Nextcloud address book. Optionally search by name. Returns name, email, phone, organization, and UID for each contact.',
   inputSchema: z.object({
@@ -593,6 +607,13 @@ export const listContactsTool = {
  */
 export const getContactTool = {
   name: 'get_contact',
+  title: 'Get Contact',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Get detailed information about a single contact by its UID, including all properties like name, email, phone, address, organization, birthday, notes, and groups.',
   inputSchema: z.object({
@@ -638,6 +659,13 @@ export const getContactTool = {
  */
 export const createContactTool = {
   name: 'create_contact',
+  title: 'Create Contact',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
   description:
     'Create a new contact in a Nextcloud address book with name, email, phone, address, organization, and other properties.',
   inputSchema: z.object({
@@ -820,6 +848,13 @@ export const createContactTool = {
  */
 export const updateContactTool = {
   name: 'update_contact',
+  title: 'Update Contact',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     "Update an existing contact's fields by UID. Uses CardDAV ETag-based optimistic concurrency. Only provided fields are changed.",
   inputSchema: z.object({
@@ -1040,6 +1075,13 @@ export const updateContactTool = {
  */
 export const deleteContactTool = {
   name: 'delete_contact',
+  title: 'Delete Contact',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description:
     'Delete a contact from a Nextcloud address book by UID. This action is irreversible.',
   inputSchema: z.object({
