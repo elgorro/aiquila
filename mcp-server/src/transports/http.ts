@@ -15,11 +15,18 @@ import {
   markStateUnwritableWarned,
 } from '../auth/store.js';
 import { loginHandler } from '../auth/login.js';
+import { isPublicRequest } from './lazy-auth.js';
 import { logger } from '../logger.js';
 import { fetchStatus } from '../client/ocs.js';
 
 const DEFAULT_PORT = 3339;
 const MCP_PATH = '/mcp';
+const SCOPES_SUPPORTED = ['mcp:tools', 'mcp:resources', 'mcp:prompts'];
+
+// Scope advertised in the WWW-Authenticate challenge. Clients request exactly
+// this on authorisation; omitting it makes them fall back to the full
+// `scopes_supported` union, which produces an over-broad consent prompt.
+const CHALLENGE_SCOPE = 'mcp:tools';
 
 // TLS error codes that indicate a self-signed or untrusted certificate.
 // Network errors (ECONNREFUSED, ETIMEDOUT) are not included — they mean the
@@ -261,7 +268,7 @@ export async function startHttp(): Promise<void> {
         issuerUrl: new URL(issuerUrl),
         resourceServerUrl: new URL(MCP_PATH, issuerUrl),
         serviceDocumentationUrl: new URL('https://github.com/elgorro/aiquila'),
-        scopesSupported: ['mcp:tools', 'mcp:resources', 'mcp:prompts'],
+        scopesSupported: SCOPES_SUPPORTED,
       })
     );
 
@@ -272,7 +279,7 @@ export async function startHttp(): Promise<void> {
       res.json({
         resource: new URL(MCP_PATH, issuerUrl).href,
         authorization_servers: [issuerUrl],
-        scopes_supported: ['mcp:tools', 'mcp:resources', 'mcp:prompts'],
+        scopes_supported: SCOPES_SUPPORTED,
         resource_documentation: 'https://github.com/elgorro/aiquila',
       });
     });
@@ -315,9 +322,43 @@ export async function startHttp(): Promise<void> {
             );
           }
         });
+
+        // The SDK appends `scope="..."` to the challenge only when
+        // `requiredScopes` is set — but setting that would also *enforce* the
+        // scope, and 403 every token issued before scopes were requested (plus
+        // the internal service token, which carries none). Advertise the scope
+        // without enforcing it by decorating the header on its way out.
+        const setHeader = res.setHeader.bind(res);
+        res.setHeader = (name: string, value: any) => {
+          if (
+            typeof name === 'string' &&
+            name.toLowerCase() === 'www-authenticate' &&
+            typeof value === 'string' &&
+            !value.includes('scope=')
+          ) {
+            value = `${value}, scope="${CHALLENGE_SCOPE}"`;
+          }
+          return setHeader(name, value);
+        };
         next();
       },
-      requireBearerAuth({ verifier: provider }),
+
+      // Lazy-auth gate: the handshake, capability listings, and public tools are
+      // served anonymously so clients can inspect the connector before sign-in.
+      // Everything else falls through to requireBearerAuth below.
+      async (req: any, res: any, next: any) => {
+        if (!req.headers.authorization && isPublicRequest(req.body)) {
+          logger.debug({ rpcMethod: req.body?.method }, '[mcp] Public request (unauthenticated)');
+          await handleMcpRequest(req, res);
+          return;
+        }
+        next();
+      },
+
+      requireBearerAuth({
+        verifier: provider,
+        resourceMetadataUrl: new URL('/.well-known/oauth-protected-resource/mcp', issuerUrl).href,
+      }),
       async (req: any, res: any) => {
         logger.debug({ method: req.method, rpcMethod: req.body?.method }, '[mcp] Request received');
         await handleMcpRequest(req, res);

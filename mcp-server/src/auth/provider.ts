@@ -13,7 +13,10 @@ import type {
   OAuthTokens,
   OAuthTokenRevocationRequest,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
-import { InvalidGrantError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
+import {
+  InvalidGrantError,
+  InvalidTokenError,
+} from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import { ClientsStore, CodeStore, RefreshStore } from './store.js';
 import { logger } from '../logger.js';
 
@@ -290,7 +293,10 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     );
     if (!claims) {
       logger.warn('[auth] Access token verification failed: invalid or expired token');
-      throw new Error('Invalid or expired access token');
+      // InvalidTokenError (not a bare Error) so the SDK answers 401 with a
+      // WWW-Authenticate challenge. A bare Error becomes a 500, and clients
+      // treat that as a server fault rather than a cue to re-authenticate.
+      throw new InvalidTokenError('Invalid or expired access token');
     }
     return {
       token,
