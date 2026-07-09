@@ -137,6 +137,24 @@ describe('http transport', () => {
     expect(mockAll).toHaveBeenCalledWith('/mcp', expect.any(Function));
   });
 
+  // Stateless mode makes the SDK answer `GET /mcp` with 405, because it does not offer the
+  // optional server→client SSE stream. That is spec-compliant and the SDK *client* tolerates it
+  // (streamableHttp.js: "405 indicates that the server does not offer an SSE stream at GET
+  // endpoint"). Pinned so a future change doesn't add a session-backed GET stream in response to
+  // a 405 sighting in devtools — see #384, where that 405 was a red herring.
+  it('should construct the transport in stateless mode (no session id generator)', async () => {
+    const { StreamableHTTPServerTransport } =
+      await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+
+    const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
+    const handler = mcpCall?.[1] as (req: unknown, res: unknown) => Promise<void>;
+    await handler({ body: {} }, { on: vi.fn() });
+
+    expect(StreamableHTTPServerTransport).toHaveBeenCalledWith({ sessionIdGenerator: undefined });
+  });
+
   it('should listen on default port 3339', async () => {
     delete process.env.MCP_PORT;
     const { startHttp } = await import('../transports/http.js');
