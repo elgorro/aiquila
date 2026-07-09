@@ -24,7 +24,25 @@ vi.mock('../client/bookmarks.js', () => ({
   fetchBookmarksAPI: vi.fn(),
 }));
 
-import { getFilteredToolSets, _resetCache, TOOL_REGISTRY } from '../tool-registry.js';
+vi.mock('../logger.js', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
+import { logger } from '../logger.js';
+import {
+  getFilteredToolSets,
+  _resetCache,
+  TOOL_REGISTRY,
+  HIGH_TOOL_COUNT,
+} from '../tool-registry.js';
+
+/** Concatenated text of every logger.warn call, for message assertions. */
+function warnText(): string {
+  return vi
+    .mocked(logger.warn)
+    .mock.calls.map((call) => call.map((arg) => String(arg)).join(' '))
+    .join('\n');
+}
 
 function flatToolNames(toolSets: Array<Array<{ name: string }>>): string[] {
   return toolSets.flatMap((ts) => ts.map((t) => t.name));
@@ -41,6 +59,8 @@ describe('tool-registry', () => {
     delete process.env.MCP_TOOLS;
     _resetCache();
     mockFetchOCS.mockReset();
+    vi.mocked(logger.warn).mockClear();
+    vi.mocked(logger.info).mockClear();
   });
 
   afterEach(() => {
@@ -130,6 +150,66 @@ describe('tool-registry', () => {
       const names = flatToolNames(result);
       const allToolCount = TOOL_REGISTRY.reduce((sum, e) => sum + e.tools.length, 0);
       expect(names.length).toBe(allToolCount);
+    });
+
+    // /ocs/v2.php/cloud/apps is admin-only, so a non-admin NEXTCLOUD_USER always lands in the
+    // fallback and silently gets every tool. Regression guard for #384 / #385.
+    it.each([
+      ['403', 'OCS request failed: 403 Forbidden'],
+      ['401', 'OCS request failed: 401 Unauthorized'],
+    ])('should fall back to all tools when detection is rejected with %s', async (_label, msg) => {
+      mockFetchOCS.mockRejectedValue(new Error(msg));
+
+      const result = await getFilteredToolSets();
+      const allToolCount = TOOL_REGISTRY.reduce((sum, e) => sum + e.tools.length, 0);
+      expect(flatToolNames(result).length).toBe(allToolCount);
+    });
+
+    it('should warn actionably when detection fails', async () => {
+      mockFetchOCS.mockRejectedValue(new Error('OCS request failed: 403 Forbidden'));
+
+      await getFilteredToolSets();
+
+      const text = warnText();
+      expect(text).toMatch(/admin/i);
+      expect(text).toContain('MCP_TOOLS');
+    });
+
+    it('should warn when the registered tool count is high', async () => {
+      mockFetchOCS.mockRejectedValue(new Error('OCS request failed: 403 Forbidden'));
+
+      await getFilteredToolSets();
+
+      const highCountWarn = vi
+        .mocked(logger.warn)
+        .mock.calls.find((call) => (call[0] as { threshold?: number })?.threshold);
+      expect(highCountWarn).toBeDefined();
+      expect(highCountWarn?.[0]).toMatchObject({
+        threshold: HIGH_TOOL_COUNT,
+        source: 'all (fallback)',
+      });
+    });
+
+    it('should not warn about tool count for a small MCP_TOOLS whitelist', async () => {
+      process.env.MCP_TOOLS = 'files,status';
+
+      const result = await getFilteredToolSets();
+
+      expect(flatToolNames(result).length).toBeLessThanOrEqual(HIGH_TOOL_COUNT);
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    // MCP_TOOLS is the documented workaround for non-admin users: it short-circuits detection
+    // entirely, so a failing (or forbidden) /cloud/apps never matters.
+    it('should honour MCP_TOOLS without calling detection even when it would fail', async () => {
+      process.env.MCP_TOOLS = 'calendar';
+      mockFetchOCS.mockRejectedValue(new Error('OCS request failed: 403 Forbidden'));
+
+      const names = flatToolNames(await getFilteredToolSets());
+
+      expect(mockFetchOCS).not.toHaveBeenCalled();
+      expect(names).toContain('list_calendars');
+      expect(names).not.toContain('deck_list_boards');
     });
 
     it('should detect spreed app for talk tools', async () => {

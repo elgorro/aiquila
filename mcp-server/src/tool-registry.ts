@@ -183,7 +183,10 @@ async function detectEnabledApps(): Promise<Set<string> | null> {
   } catch (err) {
     logger.warn(
       { err: err instanceof Error ? err.message : String(err) },
-      '[startup] Could not detect enabled apps — registering all tools'
+      '[startup] Could not detect enabled apps — registering ALL tools as a fallback. ' +
+        '/ocs/v2.php/cloud/apps requires admin credentials; a non-admin NEXTCLOUD_USER always ' +
+        'lands here. Set MCP_TOOLS to an explicit category/tool whitelist, or use an admin app ' +
+        'password, to register only the tools you need.'
     );
     return null;
   }
@@ -228,6 +231,17 @@ function filterByEnabledApps(enabledApps: Set<string> | null): ToolArray[] {
 let cachedToolSets: ToolArray[] | null = null;
 
 /**
+ * Tool count above which we warn. Not a protocol limit — no MCP client documents one —
+ * but very large tool lists are worth flagging, and reaching this number usually means
+ * app-detection fell back to registering everything.
+ */
+export const HIGH_TOOL_COUNT = 100;
+
+function countTools(toolSets: ToolArray[]): number {
+  return toolSets.reduce((sum, ts) => sum + ts.length, 0);
+}
+
+/**
  * Returns filtered tool arrays based on MCP_TOOLS env var or auto-detection.
  * Result is cached after first call.
  */
@@ -235,18 +249,25 @@ export async function getFilteredToolSets(): Promise<ToolArray[]> {
   if (cachedToolSets) return cachedToolSets;
 
   const mcpToolsFilter = parseMcpTools();
+  let source: string;
 
   if (mcpToolsFilter) {
     cachedToolSets = filterByExplicitList(mcpToolsFilter);
-    const toolCount = cachedToolSets.reduce((sum, ts) => sum + ts.length, 0);
-    logger.info({ tools: toolCount, source: 'MCP_TOOLS' }, '[startup] Tool filtering applied');
+    source = 'MCP_TOOLS';
   } else {
     const enabledApps = await detectEnabledApps();
     cachedToolSets = filterByEnabledApps(enabledApps);
-    const toolCount = cachedToolSets.reduce((sum, ts) => sum + ts.length, 0);
-    logger.info(
-      { tools: toolCount, source: enabledApps ? 'app-detection' : 'all (fallback)' },
-      '[startup] Tool filtering applied'
+    source = enabledApps ? 'app-detection' : 'all (fallback)';
+  }
+
+  const toolCount = countTools(cachedToolSets);
+  logger.info({ tools: toolCount, source }, '[startup] Tool filtering applied');
+
+  if (toolCount > HIGH_TOOL_COUNT) {
+    logger.warn(
+      { tools: toolCount, threshold: HIGH_TOOL_COUNT, source },
+      `[startup] Registering ${toolCount} tools. Set MCP_TOOLS to a category/tool whitelist to ` +
+        'narrow this down — some clients degrade on very large tool lists.'
     );
   }
 
