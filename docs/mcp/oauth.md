@@ -33,8 +33,8 @@ header, which is the signal that makes a client pause, run the OAuth flow, and r
 same call. A JSON-RPC batch is a single HTTP request, so one protected message in a batch
 gates the whole batch.
 
-> **Behaviour change.** Previously *every* `/mcp` request required a token.
-> Anyone who can reach your `/mcp` endpoint can now enumerate tool names,
+> **Behaviour change (v0.3.30).** Before this release, *every* `/mcp` request required a
+> token. Anyone who can reach your `/mcp` endpoint can now enumerate tool names,
 > descriptions and input schemas, and read the server's timezone. No Nextcloud data is
 > reachable without a token. If you deliberately treat `/mcp` as a fully closed endpoint,
 > set `MCP_LAZY_AUTH=false` to restore the old behaviour.
