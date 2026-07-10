@@ -14,6 +14,41 @@ When OAuth is enabled, the standard flow looks like this:
 
 Your Nextcloud credentials are only used during login and are never stored by the MCP server.
 
+## Lazy authentication
+
+MCP clients need to inspect a connector before you sign in — they must complete the
+handshake and read the tool list to show you what the connector can do. So AIquila does
+not demand a token for every request. It serves a small set of methods anonymously and
+challenges only when a request would actually touch your Nextcloud instance.
+
+**Readable without a token:**
+
+- `initialize`, `notifications/initialized`, `ping`
+- `tools/list`, `resources/list`, `resources/templates/list`, `prompts/list`
+- the `get_local_time` tool, which reports the server's clock and timezone
+
+**Everything else requires a Bearer token** — every tool that reaches Nextcloud (files,
+calendar, contacts, Talk, …). Refusals are an HTTP `401` carrying a `WWW-Authenticate`
+header, which is the signal that makes a client pause, run the OAuth flow, and retry the
+same call. A JSON-RPC batch is a single HTTP request, so one protected message in a batch
+gates the whole batch.
+
+> **Behaviour change.** Previously *every* `/mcp` request required a token.
+> Anyone who can reach your `/mcp` endpoint can now enumerate tool names,
+> descriptions and input schemas, and read the server's timezone. No Nextcloud data is
+> reachable without a token. If you deliberately treat `/mcp` as a fully closed endpoint,
+> set `MCP_LAZY_AUTH=false` to restore the old behaviour.
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `MCP_LAZY_AUTH` | `true` | `false` requires a Bearer token on every JSON-RPC method, including `initialize` and `tools/list`. Clients that cannot pre-authenticate will not be able to inspect the connector. |
+
+The startup log tells you which mode you are in:
+
+```
+Lazy auth enabled — tools/list and public tools are readable without a token (set MCP_LAZY_AUTH=false to require one)
+```
+
 ## Prerequisites
 
 - AIquila MCP server running in HTTP transport mode (e.g. via [Standalone Docker](standalone-docker.md))
@@ -122,13 +157,37 @@ You should receive a JSON document similar to:
 }
 ```
 
-### 7. Confirm unauthenticated requests are rejected
+### 7. Confirm protected requests are rejected
+
+Listing the server's tools works without a token — see [Lazy authentication](#lazy-authentication):
 
 ```bash
-curl -i https://mcp.example.com/mcp
+curl -s -o /dev/null -w '%{http_code}\n' https://mcp.example.com/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+# 200
 ```
 
-You should get `401 Unauthorized`. Without a valid Bearer token, all `/mcp` requests are blocked.
+Calling a tool that touches Nextcloud does not:
+
+```bash
+curl -i https://mcp.example.com/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_files","arguments":{"path":"/"}}}'
+```
+
+You should get `401 Unauthorized` with a challenge header pointing at the protected
+resource metadata:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer error="invalid_token", error_description="Missing Authorization header", resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp", scope="mcp:tools"
+```
+
+That header is what makes an MCP client prompt you to sign in and then retry the same
+call. If you set `MCP_LAZY_AUTH=false`, the first request returns `401` too.
 
 ## Client-Specific Setup
 
@@ -183,12 +242,21 @@ Tokens are stored in memory only — restarting the container invalidates all ac
 - The MCP server validates Nextcloud credentials on every login by calling your Nextcloud instance's OCS API. If Nextcloud is unreachable, logins will fail.
 - Use a Nextcloud **app password** (not your main password) for the MCP login. This limits the blast radius if the credential is ever exposed. See [Security Best Practice: App Passwords](setup.md#security-best-practice-app-passwords).
 - The login form is served over HTTPS (enforced by your reverse proxy). Never run the auth-enabled server without TLS.
+- **Tool names, descriptions and input schemas are readable without a token** by default, along with the server's timezone. This is [lazy authentication](#lazy-authentication); no Nextcloud data is exposed. Set `MCP_LAZY_AUTH=false` if your threat model treats the tool inventory as sensitive.
 
 ## Troubleshooting
 
 ### `/.well-known/oauth-authorization-server` returns 404
 
 The OAuth router only mounts when `MCP_AUTH_ENABLED=true`. Check the container logs for the "OAuth 2.0 authentication enabled" line. If it's absent, the env var is not being read — verify your `.env` file and restart.
+
+### `/mcp` returns 500 instead of 401 for an expired token
+
+Fixed. Older versions raised a generic error when an access token was invalid or expired,
+which the MCP SDK turned into `500 Internal Server Error`. Clients read that as a server
+fault rather than a cue to re-authenticate, so the session appeared to hang after a token
+aged out. The server now answers `401` with a `WWW-Authenticate` challenge and the client
+silently refreshes. Upgrade if you see 500s correlated with the one-hour token lifetime.
 
 ### Client shows "unable to connect" or "invalid issuer"
 

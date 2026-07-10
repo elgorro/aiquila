@@ -271,6 +271,24 @@ describe('http transport with auth enabled', () => {
     );
   });
 
+  it('omits the lazy-auth gate when MCP_LAZY_AUTH=false', async () => {
+    process.env.MCP_LAZY_AUTH = 'false';
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+
+    // Chain collapses to logging + bearer + handler: every method needs a token.
+    expect(mockAll).toHaveBeenCalledWith(
+      '/mcp',
+      expect.any(Function),
+      mockBearerMiddleware,
+      expect.any(Function)
+    );
+
+    const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
+    expect(mcpCall).toHaveLength(4);
+    expect(mcpCall?.[2]).toBe(mockBearerMiddleware);
+  });
+
   it('points the 401 challenge at the protected resource metadata', async () => {
     const { requireBearerAuth } =
       await import('@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js');

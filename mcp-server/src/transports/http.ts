@@ -116,6 +116,11 @@ export async function startHttp(): Promise<void> {
   const host = process.env.MCP_HOST || '0.0.0.0';
   const authEnabled = process.env.MCP_AUTH_ENABLED === 'true';
 
+  // Lazy authentication is on by default: clients need to inspect a connector
+  // before signing in. Operators who treat /mcp as a fully closed endpoint can
+  // set MCP_LAZY_AUTH=false to require a bearer token on every JSON-RPC method.
+  const lazyAuthEnabled = process.env.MCP_LAZY_AUTH !== 'false';
+
   if (!authEnabled) {
     if (process.env.MCP_ALLOW_UNAUTHENTICATED !== 'true') {
       throw new Error(
@@ -346,14 +351,23 @@ export async function startHttp(): Promise<void> {
       // Lazy-auth gate: the handshake, capability listings, and public tools are
       // served anonymously so clients can inspect the connector before sign-in.
       // Everything else falls through to requireBearerAuth below.
-      async (req: any, res: any, next: any) => {
-        if (!req.headers.authorization && isPublicRequest(req.body)) {
-          logger.debug({ rpcMethod: req.body?.method }, '[mcp] Public request (unauthenticated)');
-          await handleMcpRequest(req, res);
-          return;
-        }
-        next();
-      },
+      // Omitted entirely when MCP_LAZY_AUTH=false, restoring a chain in which
+      // every JSON-RPC method requires a bearer token.
+      ...(lazyAuthEnabled
+        ? [
+            async (req: any, res: any, next: any) => {
+              if (!req.headers.authorization && isPublicRequest(req.body)) {
+                logger.debug(
+                  { rpcMethod: req.body?.method },
+                  '[mcp] Public request (unauthenticated)'
+                );
+                await handleMcpRequest(req, res);
+                return;
+              }
+              next();
+            },
+          ]
+        : []),
 
       requireBearerAuth({
         verifier: provider,
@@ -382,6 +396,12 @@ export async function startHttp(): Promise<void> {
     if (authEnabled) {
       const tp = process.env.MCP_TRUST_PROXY;
       logger.info({ issuer: process.env.MCP_AUTH_ISSUER }, 'OAuth 2.0 authentication enabled');
+      logger.info(
+        { lazyAuth: lazyAuthEnabled },
+        lazyAuthEnabled
+          ? 'Lazy auth enabled — tools/list and public tools are readable without a token (set MCP_LAZY_AUTH=false to require one)'
+          : 'Lazy auth disabled — every JSON-RPC method requires a bearer token'
+      );
       logger.info(
         { trustProxy: tp && tp !== 'false' ? tp : 'disabled' },
         'Trust proxy setting (set MCP_TRUST_PROXY=1 if behind a reverse proxy)'
