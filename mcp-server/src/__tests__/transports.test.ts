@@ -259,15 +259,84 @@ describe('http transport with auth enabled', () => {
     expect(mockPost).toHaveBeenCalledWith('/auth/login', expect.any(Function), mockLoginHandlerFn);
   });
 
-  it('mounts /mcp with bearer middleware and handler', async () => {
+  it('mounts /mcp with the lazy-auth gate ahead of the bearer middleware', async () => {
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
+    expect(mockAll).toHaveBeenCalledWith(
+      '/mcp',
+      expect.any(Function), // logging + challenge-scope decoration
+      expect.any(Function), // lazy-auth gate
+      mockBearerMiddleware,
+      expect.any(Function) // authenticated handler
+    );
+  });
+
+  it('omits the lazy-auth gate when MCP_LAZY_AUTH=false', async () => {
+    process.env.MCP_LAZY_AUTH = 'false';
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+
+    // Chain collapses to logging + bearer + handler: every method needs a token.
     expect(mockAll).toHaveBeenCalledWith(
       '/mcp',
       expect.any(Function),
       mockBearerMiddleware,
       expect.any(Function)
     );
+
+    const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
+    expect(mcpCall).toHaveLength(4);
+    expect(mcpCall?.[2]).toBe(mockBearerMiddleware);
+  });
+
+  it('points the 401 challenge at the protected resource metadata', async () => {
+    const { requireBearerAuth } =
+      await import('@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js');
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+
+    expect(requireBearerAuth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceMetadataUrl: expect.stringContaining(
+          '/.well-known/oauth-protected-resource/mcp'
+        ) as unknown as string,
+      })
+    );
+
+    // Scopes must not be enforced: tokens issued without them (and the internal
+    // service token) would otherwise start getting 403 insufficient_scope.
+    const opts = (requireBearerAuth as unknown as { mock: { calls: [Record<string, unknown>][] } })
+      .mock.calls[0][0];
+    expect(opts.requiredScopes).toBeUndefined();
+  });
+
+  it('serves public requests without a bearer token', async () => {
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+
+    const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
+    const gate = mcpCall?.[2] as (req: any, res: any, next: any) => Promise<void>;
+
+    const next = vi.fn();
+    const res = { on: vi.fn(), setHeader: vi.fn() };
+    await gate(
+      { headers: {}, body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } },
+      res as any,
+      next
+    );
+    expect(next).not.toHaveBeenCalled();
+
+    // ...but a protected tool falls through to the bearer middleware.
+    const next2 = vi.fn();
+    await gate(
+      {
+        headers: {},
+        body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_files' } },
+      },
+      res as any,
+      next2
+    );
+    expect(next2).toHaveBeenCalled();
   });
 
   it('still connects the MCP server to the transport', async () => {

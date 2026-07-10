@@ -329,6 +329,16 @@ describe('NextcloudOAuthProvider', () => {
       );
     });
 
+    // A bare Error would surface as a 500, which clients read as a server fault
+    // rather than a cue to re-authenticate. It must be an InvalidTokenError so
+    // the SDK answers 401 with a WWW-Authenticate challenge.
+    it('rejects an invalid token with InvalidTokenError (→ 401, not 500)', async () => {
+      const { InvalidTokenError } = await import('@modelcontextprotocol/sdk/server/auth/errors.js');
+      await expect(provider.verifyAccessToken('not-a-jwt')).rejects.toBeInstanceOf(
+        InvalidTokenError
+      );
+    });
+
     it('embeds correct aud claim (resource server URL)', async () => {
       const token = await issueToken();
       const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());

@@ -129,6 +129,7 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_AUTH_SECRET` | If auth | `openssl rand -hex 32` |
 | `MCP_AUTH_ISSUER` | If auth | public HTTPS URL of this server |
 | `MCP_AUTH_STATE_DIR` | No | Directory for persisted OAuth state (default `/app/state`) |
+| `MCP_LAZY_AUTH` | No | `false` requires a bearer token on every JSON-RPC method. Default `true`: `initialize`, `tools/list` and `get_local_time` are served without one |
 | `MCP_LOCALE` | No | BCP 47 locale tag for `localTime` in `get_local_time` (e.g. `sv-SE`); defaults to system locale |
 | `MCP_MAX_FILE_SIZE` | No | Max `write_file` content length in bytes (default `1073741824` = 1 GB) |
 | `MCP_ALLOWED_HOSTS` | No | Comma-separated extra hostnames for DNS rebinding protection (e.g. `mcp` for Docker service name) |
