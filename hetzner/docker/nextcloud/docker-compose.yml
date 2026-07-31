@@ -70,7 +70,9 @@ services:
       POSTGRES_USER: nextcloud
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
-      - nc_db_data:/var/lib/postgresql/data
+      # postgres:18+ stores data in a major-version subdirectory and refuses to
+      # start with a mount at /var/lib/postgresql/data.
+      - nc_db_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nextcloud"]
       interval: 10s
