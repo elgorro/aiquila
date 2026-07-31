@@ -6,6 +6,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('webdav', () => ({ createClient: vi.fn(() => ({})) }));
 global.fetch = vi.fn();
 
+/**
+ * Encode a vCard the way SabreDAV actually puts it on the wire inside
+ * <address-data>: CRLF line endings, with libxml escaping every CR as the
+ * numeric character reference `&#13;`.
+ *
+ * Fixtures used to be plain LF with no entities, which is precisely why GH #396
+ * — a 415 caused by those `&#13;` sequences surviving into the vCard we PUT
+ * back — was invisible to this suite.
+ */
+const sabreEncode = (vcard: string) => vcard.replace(/\n/g, '&#13;\n');
+
 describe('Contacts Tools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -87,7 +98,7 @@ describe('Contacts Tools', () => {
     <d:propstat>
       <d:prop>
         <d:getetag>&quot;etag-1&quot;</d:getetag>
-        <cr:address-data>BEGIN:VCARD
+        <cr:address-data>${sabreEncode(`BEGIN:VCARD
 VERSION:3.0
 UID:contact-1
 FN:John Doe
@@ -96,7 +107,7 @@ EMAIL;TYPE=WORK:john@example.com
 TEL;TYPE=CELL:+1234567890
 ORG:ACME Corp
 TITLE:Engineer
-END:VCARD</cr:address-data>
+END:VCARD`)}</cr:address-data>
       </d:prop>
     </d:propstat>
   </d:response>
@@ -105,13 +116,13 @@ END:VCARD</cr:address-data>
     <d:propstat>
       <d:prop>
         <d:getetag>&quot;etag-2&quot;</d:getetag>
-        <cr:address-data>BEGIN:VCARD
+        <cr:address-data>${sabreEncode(`BEGIN:VCARD
 VERSION:3.0
 UID:contact-2
 FN:Jane Smith
 N:Smith;Jane;;;
 EMAIL;TYPE=HOME:jane@example.com
-END:VCARD</cr:address-data>
+END:VCARD`)}</cr:address-data>
       </d:prop>
     </d:propstat>
   </d:response>
@@ -160,7 +171,7 @@ END:VCARD</cr:address-data>
     <d:propstat>
       <d:prop>
         <d:getetag>&quot;etag-1&quot;</d:getetag>
-        <cr:address-data>BEGIN:VCARD
+        <cr:address-data>${sabreEncode(`BEGIN:VCARD
 VERSION:3.0
 UID:contact-1
 FN:John Doe
@@ -176,7 +187,7 @@ NOTE:Important client contact
 BDAY:1990-06-15
 URL:https://johndoe.example.com
 CATEGORIES:Friends,Work
-END:VCARD</cr:address-data>
+END:VCARD`)}</cr:address-data>
       </d:prop>
     </d:propstat>
   </d:response>
@@ -304,14 +315,14 @@ END:VCARD</cr:address-data>
     <d:propstat>
       <d:prop>
         <d:getetag>&quot;etag-old&quot;</d:getetag>
-        <cr:address-data>BEGIN:VCARD
+        <cr:address-data>${sabreEncode(`BEGIN:VCARD
 VERSION:3.0
 UID:contact-1
 FN:John Doe
 N:Doe;John;;;
 EMAIL;TYPE=WORK:john@example.com
 ORG:Old Corp
-END:VCARD</cr:address-data>
+END:VCARD`)}</cr:address-data>
       </d:prop>
     </d:propstat>
   </d:response>
@@ -362,11 +373,11 @@ END:VCARD</cr:address-data>
     <d:propstat>
       <d:prop>
         <d:getetag>&quot;entity-encoded-etag&quot;</d:getetag>
-        <cr:address-data>BEGIN:VCARD
+        <cr:address-data>${sabreEncode(`BEGIN:VCARD
 VERSION:3.0
 UID:contact-1
 FN:Test
-END:VCARD</cr:address-data>
+END:VCARD`)}</cr:address-data>
       </d:prop>
     </d:propstat>
   </d:response>
@@ -402,6 +413,87 @@ END:VCARD</cr:address-data>
       expect(putCall[1].headers['If-Match']).toBe('"entity-encoded-etag"');
     });
 
+    it('should PUT a strictly parseable vCard (GH #396)', async () => {
+      // A card as the Nextcloud Contacts app writes it: vCard 4.0, a folded
+      // long NOTE, and a grouped/labelled phone number.
+      const resolveResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cr="urn:ietf:params:xml:ns:carddav">
+  <d:response>
+    <d:href>/remote.php/dav/addressbooks/users/testuser/contacts/contact-1.vcf</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:getetag>&quot;etag-old&quot;</d:getetag>
+        <cr:address-data>${sabreEncode(`BEGIN:VCARD
+VERSION:4.0
+UID:contact-1
+FN:Jörg Müller
+N:Müller;Jörg;;;
+NOTE:A note long enough that the server folded it across two content lines
+  before handing it back to us.
+item1.TEL;TYPE=voice:+41 79 111 22 33
+item1.X-ABLabel:Mobil
+TEL;TYPE=WORK:+41 44 000 00 00
+PHOTO:data:image/jpeg;base64\\,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGB
+ QgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgy
+REV:20260101T000000Z
+END:VCARD`)}</cr:address-data>
+      </d:prop>
+    </d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      let callCount = 0;
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({ ok: true, text: () => Promise.resolve(resolveResponse) });
+        }
+        return Promise.resolve({ ok: true, status: 204, text: () => Promise.resolve('') });
+      });
+
+      const { updateContactTool } = await import('../tools/apps/contacts.js');
+      const result = await updateContactTool.handler({
+        uid: 'contact-1',
+        addressBookName: 'contacts',
+        phones: [{ value: '+41 79 999 88 77', type: 'CELL' }],
+      });
+
+      expect(result.content[0].text).toContain('Contact updated successfully');
+
+      const body = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body as string;
+
+      // The 415 itself: undecoded numeric references corrupted every line
+      // ending, so SabreDAV saw `END:VCARD&#13;` and refused to parse.
+      expect(body).not.toContain('&#13;');
+      expect(body.startsWith('BEGIN:VCARD\r\n')).toBe(true);
+      expect(body.endsWith('END:VCARD\r\n')).toBe(true);
+      expect(body).not.toMatch(/(^|[^\r])\n/);
+
+      const lines = body.split('\r\n').filter(Boolean);
+      expect(lines.filter((l) => l.startsWith('VERSION:'))).toHaveLength(1);
+      expect(lines.filter((l) => l.startsWith('UID:'))).toHaveLength(1);
+      expect(lines.filter((l) => l.startsWith('REV:'))).toHaveLength(1);
+      expect(lines[1]).toBe('VERSION:4.0');
+      for (const line of lines) {
+        expect(Buffer.byteLength(line, 'utf8')).toBeLessThanOrEqual(75);
+      }
+
+      // The old phones are gone — including the grouped one the regex could
+      // not see — and the dangling label went with them.
+      expect(body).toContain('TEL;TYPE=CELL:+41 79 999 88 77');
+      expect(body).not.toContain('+41 79 111 22 33');
+      expect(body).not.toContain('+41 44 000 00 00');
+      expect(body).not.toContain('X-ABLabel');
+
+      // Untouched properties survive intact, parameters and all.
+      const unfolded = body.replace(/\r\n /g, '');
+      expect(unfolded).toContain('FN:Jörg Müller');
+      expect(unfolded).toContain('PHOTO:data:image/jpeg;base64\\,/9j/');
+      expect(unfolded).toContain(
+        'NOTE:A note long enough that the server folded it across two content lines before handing it back to us.'
+      );
+    });
+
     it('should handle ETag conflict', async () => {
       const resolveResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <d:multistatus xmlns:d="DAV:" xmlns:cr="urn:ietf:params:xml:ns:carddav">
@@ -410,11 +502,11 @@ END:VCARD</cr:address-data>
     <d:propstat>
       <d:prop>
         <d:getetag>&quot;etag-old&quot;</d:getetag>
-        <cr:address-data>BEGIN:VCARD
+        <cr:address-data>${sabreEncode(`BEGIN:VCARD
 VERSION:3.0
 UID:contact-1
 FN:John Doe
-END:VCARD</cr:address-data>
+END:VCARD`)}</cr:address-data>
       </d:prop>
     </d:propstat>
   </d:response>
@@ -457,11 +549,11 @@ END:VCARD</cr:address-data>
     <d:propstat>
       <d:prop>
         <d:getetag>&quot;etag-1&quot;</d:getetag>
-        <cr:address-data>BEGIN:VCARD
+        <cr:address-data>${sabreEncode(`BEGIN:VCARD
 VERSION:3.0
 UID:contact-1
 FN:John Doe
-END:VCARD</cr:address-data>
+END:VCARD`)}</cr:address-data>
       </d:prop>
     </d:propstat>
   </d:response>

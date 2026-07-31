@@ -17,12 +17,22 @@ export function nsTagContent(localName: string): RegExp {
  * Needed because we parse XML responses with regex instead of a DOM parser.
  */
 export function decodeXmlEntities(text: string): string {
-  return text
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&');
+  return (
+    text
+      // Numeric character references. SabreDAV serializes calendar-data and
+      // address-data through libxml, which escapes carriage returns as `&#13;`
+      // so they survive XML whitespace normalization. Leaving those undecoded
+      // corrupts every line ending of the iCalendar/vCard payload (GH #396).
+      .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+      .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(parseInt(dec, 10)))
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      // `&amp;` last, so an encoded `&amp;#13;` decodes to the literal text
+      // `&#13;` rather than being decoded twice into a carriage return.
+      .replace(/&amp;/g, '&')
+  );
 }
 
 /**
