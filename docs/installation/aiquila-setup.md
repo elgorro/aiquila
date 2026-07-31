@@ -2,6 +2,34 @@
 
 Complete guide to installing and configuring the AIquila Nextcloud app.
 
+## Upgrade notes
+
+### 0.3.32 — the default model changed
+
+The built-in default moved from `claude-sonnet-4-6` to **`claude-sonnet-5`**.
+
+This only affects installs that never picked a model explicitly. If an
+administrator or user has selected a model in the settings UI or via
+`occ aiquila:configure --model`, that choice is preserved.
+
+If you are on the default, two things change after upgrading:
+
+- **Token counts rise for identical work.** Sonnet 5 uses a newer tokenizer;
+  the same text produces roughly 30% more tokens than on Sonnet 4.6. Usage
+  figures in the admin dashboard and the `aiquila_usage` widget will step up
+  accordingly. This is a measurement change, not a fault.
+- **The output ceiling rises** from 64,000 to 128,000 tokens.
+
+Sonnet 5 also rejects the `temperature`, `top_p`, and `top_k` sampling
+parameters; AIquila omits them automatically for models that don't accept them,
+so no configuration change is needed.
+
+To stay on the previous model:
+
+```bash
+php occ aiquila:configure --model claude-sonnet-4-6
+```
+
 ## Prerequisites
 
 - Nextcloud 33 or higher
