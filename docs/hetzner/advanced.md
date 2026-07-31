@@ -274,3 +274,24 @@ docker compose up -d
 
 For the local dev stack (`docker/installation/`) the service is `db` and the volume is
 `aiquila_postgres_data`; adjust the names accordingly.
+
+### Where the data volume is mounted
+
+The database volume is mounted at **`/var/lib/postgresql`**, not at
+`/var/lib/postgresql/data`:
+
+```yaml
+volumes:
+  - nc_db_data:/var/lib/postgresql
+```
+
+`postgres:18` and newer keep their data in a major-version subdirectory
+(`/var/lib/postgresql/18/docker`) so that in-place `pg_upgrade` works. The image refuses to
+start when it finds a mount at the old `/var/lib/postgresql/data` path, reporting
+`there appears to be PostgreSQL data in: /var/lib/postgresql/data (unused mount/volume)`
+and entering a restart loop — which also blocks Nextcloud, the MCP server and Caddy, since
+they all wait for the database to become healthy.
+
+If you are running a stack that predates this change, its volume still holds a
+pre-18 layout and **cannot be reused in place**. Follow the dump/restore steps above; step
+2 removes the old volume, which is exactly what is needed here.
