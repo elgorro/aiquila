@@ -9,22 +9,30 @@
  */
 
 export function escapeDavValue(value: string): string {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/;/g, '\\;')
-    .replace(/,/g, '\\,')
-    .replace(/\n/g, '\\n');
+  return (
+    value
+      .replace(/\\/g, '\\\\')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
+      // A raw CR would terminate the content line and make the payload
+      // unparseable, so CRLF and lone CR both collapse to an escaped newline.
+      .replace(/\r\n|\r|\n/g, '\\n')
+  );
 }
 
 export function unescapeDavValue(
   value: string,
   options?: { caseInsensitiveNewline?: boolean }
 ): string {
-  return value
-    .replace(options?.caseInsensitiveNewline ? /\\n/gi : /\\n/g, '\n')
-    .replace(/\\,/g, ',')
-    .replace(/\\;/g, ';')
-    .replace(/\\\\/g, '\\');
+  // Single pass: a chained replace would rewrite the `\n` inside an escaped
+  // backslash sequence (`\\n` — a literal backslash followed by `n`) into a
+  // newline before the backslash itself was unescaped.
+  const newlinePattern = options?.caseInsensitiveNewline ? /n/i : /n/;
+  return value.replace(/\\(.)/g, (match, char: string) => {
+    if (newlinePattern.test(char)) return '\n';
+    if (char === ',' || char === ';' || char === '\\') return char;
+    return match;
+  });
 }
 
 /** Escape for iCalendar (VEVENT, VTODO) properties. */

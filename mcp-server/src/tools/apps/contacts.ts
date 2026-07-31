@@ -3,6 +3,16 @@
 import { z } from 'zod';
 import { decodeXmlEntities, fetchCalDAV, nsTagContent } from '../../client/caldav.js';
 import { escapeVCardValue, unescapeVCardValue } from '../dav-utils.js';
+import {
+  getParamValues,
+  getProperty,
+  parseVCard,
+  property,
+  replaceAll,
+  serializeVCard,
+  setProperty,
+  type VCardProperty,
+} from '../vcard.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -64,42 +74,40 @@ interface ParsedContact {
 // vCard helpers
 // ---------------------------------------------------------------------------
 
-function unfoldVCardLines(text: string): string {
-  return text.replace(/\r?\n[ \t]/g, '');
+/**
+ * Extract the TYPE parameter of a property, e.g. `WORK` from `TEL;TYPE=WORK:`.
+ * vCard 4.0 may repeat the parameter (`TYPE=voice;TYPE=cell`) or quote a list
+ * (`TYPE="voice,cell"`); both collapse to a single comma-joined string.
+ */
+function extractType(prop: VCardProperty): string | undefined {
+  const values = getParamValues(prop, 'TYPE');
+  return values.length > 0 ? values.join(',').toUpperCase() : undefined;
 }
 
-/**
- * Extract TYPE parameter from a vCard property line.
- * Handles TYPE=WORK, TYPE="WORK", type=work, etc.
- */
-function extractType(params: string): string | undefined {
-  const match = params.match(/TYPE="?([^";:]+)"?/i);
-  return match ? match[1].toUpperCase() : undefined;
+/** Build a property with an optional TYPE parameter. */
+function typedProperty(name: string, value: string, type?: string): VCardProperty {
+  return property(name, value, type ? [['TYPE', type]] : []);
 }
 
-/**
- * Replace, add, or remove a simple vCard property.
- * - value === null  -> remove the property
- * - property exists -> replace its value
- * - property absent -> insert before END:VCARD
- */
-function setVCardProperty(vcardData: string, propName: string, value: string | null): string {
-  const regex = new RegExp(`^${propName}(;[^:]*)?:.*$`, 'mi');
-  if (value === null) {
-    return vcardData.replace(regex, '').replace(/(\r?\n){2,}/g, '\r\n');
-  }
-  if (regex.test(vcardData)) {
-    return vcardData.replace(regex, `${propName}:${value}`);
-  }
-  return vcardData.replace(/END:VCARD/i, `${propName}:${value}\r\nEND:VCARD`);
-}
-
-/**
- * Remove all instances of a multi-valued property (e.g. EMAIL, TEL, ADR).
- */
-function removeAllVCardProperty(vcardData: string, propName: string): string {
-  const regex = new RegExp(`^${propName}(;[^:]*)?:.*\\r?\\n?`, 'gmi');
-  return vcardData.replace(regex, '');
+/** Serialize an ADR value from its structured parts, escaping each component. */
+function buildAdrValue(addr: {
+  street?: string;
+  city?: string;
+  region?: string;
+  postalCode?: string;
+  country?: string;
+}): string {
+  const part = (v?: string) => (v ? escapeVCardValue(v) : '');
+  // ADR:po-box;extended;street;locality;region;postal-code;country
+  return [
+    '',
+    '',
+    part(addr.street),
+    part(addr.city),
+    part(addr.region),
+    part(addr.postalCode),
+    part(addr.country),
+  ].join(';');
 }
 
 // ---------------------------------------------------------------------------
@@ -140,8 +148,7 @@ function parseAddressBooks(responseXml: string): ParsedAddressBook[] {
  * Parse a single vCard text block into a ParsedContact.
  */
 function parseVCardBlock(vcardText: string): ParsedContact | null {
-  const unfolded = unfoldVCardLines(vcardText);
-  const lines = unfolded.split(/\r?\n/);
+  const doc = parseVCard(vcardText);
 
   const contact: ParsedContact = {
     uid: '',
@@ -152,14 +159,8 @@ function parseVCardBlock(vcardText: string): ParsedContact | null {
     categories: [],
   };
 
-  for (const line of lines) {
-    const propMatch = line.match(/^([A-Za-z0-9-]+)(;[^:]*)?:(.*)/);
-    if (!propMatch) continue;
-
-    const [, rawName, params, rawValue] = propMatch;
-    const name = rawName.toUpperCase();
-    const value = rawValue || '';
-    const paramStr = params || '';
+  for (const prop of doc.properties) {
+    const { name, value } = prop;
 
     switch (name) {
       case 'UID':
@@ -180,13 +181,13 @@ function parseVCardBlock(vcardText: string): ParsedContact | null {
       case 'EMAIL':
         contact.emails.push({
           value: unescapeVCardValue(value),
-          type: extractType(paramStr),
+          type: extractType(prop),
         });
         break;
       case 'TEL':
         contact.phones.push({
           value: unescapeVCardValue(value),
-          type: extractType(paramStr),
+          type: extractType(prop),
         });
         break;
       case 'ADR': {
@@ -198,7 +199,7 @@ function parseVCardBlock(vcardText: string): ParsedContact | null {
           region: unescapeVCardValue(adrParts[4] || ''),
           postalCode: unescapeVCardValue(adrParts[5] || ''),
           country: unescapeVCardValue(adrParts[6] || ''),
-          type: extractType(paramStr),
+          type: extractType(prop),
         });
         break;
       }
@@ -212,10 +213,10 @@ function parseVCardBlock(vcardText: string): ParsedContact | null {
         contact.note = unescapeVCardValue(value);
         break;
       case 'BDAY':
-        contact.birthday = value;
+        contact.birthday = unescapeVCardValue(value);
         break;
       case 'URL':
-        contact.url = value;
+        contact.url = unescapeVCardValue(value);
         break;
       case 'CATEGORIES':
         contact.categories.push(
@@ -254,7 +255,7 @@ function parseVCards(responseXml: string): ParsedContact[] {
     );
     if (!cardDataMatch) continue;
 
-    const vcardText = cardDataMatch[1];
+    const vcardText = decodeXmlEntities(cardDataMatch[1]);
     const vcardBlocks = vcardText.match(/BEGIN:VCARD[\s\S]*?END:VCARD/gi);
     if (!vcardBlocks) continue;
 
@@ -412,7 +413,7 @@ async function resolveContactByUid(
   return {
     href: hrefMatch[1],
     etag,
-    vcardData: decodeXmlEntities(cardDataMatch[1]),
+    vcardData: decodeXmlEntities(cardDataMatch[1]).trim(),
   };
 }
 
@@ -627,7 +628,7 @@ export const getContactTool = {
     try {
       const { vcardData } = await resolveContactByUid(args.addressBookName, args.uid);
 
-      const contact = parseVCardBlock(unfoldVCardLines(vcardData));
+      const contact = parseVCardBlock(vcardData);
       if (!contact) {
         throw new Error(`Contact with UID "${args.uid}" could not be parsed`);
       }
@@ -755,54 +756,47 @@ export const createContactTool = {
       const prefix = args.prefix ? escapeVCardValue(args.prefix) : '';
       const suffix = args.suffix ? escapeVCardValue(args.suffix) : '';
 
-      let vcard = `BEGIN:VCARD\r\nVERSION:3.0\r\nPRODID:-//AIquila//MCP Server//EN\r\nUID:${contactUid}\r\nREV:${now}\r\nFN:${escapeVCardValue(args.fullName)}\r\nN:${family};${given};;${prefix};${suffix}`;
+      const properties: VCardProperty[] = [
+        property('VERSION', '3.0'),
+        property('PRODID', '-//AIquila//MCP Server//EN'),
+        property('UID', contactUid),
+        property('REV', now),
+        property('FN', escapeVCardValue(args.fullName)),
+        property('N', `${family};${given};;${prefix};${suffix}`),
+      ];
 
-      if (args.emails) {
-        for (const email of args.emails) {
-          const typeParam = email.type ? `;TYPE=${email.type}` : '';
-          vcard += `\r\nEMAIL${typeParam}:${email.value}`;
-        }
+      for (const email of args.emails ?? []) {
+        properties.push(typedProperty('EMAIL', escapeVCardValue(email.value), email.type));
       }
 
-      if (args.phones) {
-        for (const phone of args.phones) {
-          const typeParam = phone.type ? `;TYPE=${phone.type}` : '';
-          vcard += `\r\nTEL${typeParam}:${phone.value}`;
-        }
+      for (const phone of args.phones ?? []) {
+        properties.push(typedProperty('TEL', escapeVCardValue(phone.value), phone.type));
       }
 
-      if (args.addresses) {
-        for (const addr of args.addresses) {
-          const typeParam = addr.type ? `;TYPE=${addr.type}` : '';
-          const street = addr.street ? escapeVCardValue(addr.street) : '';
-          const city = addr.city ? escapeVCardValue(addr.city) : '';
-          const region = addr.region ? escapeVCardValue(addr.region) : '';
-          const postalCode = addr.postalCode ? escapeVCardValue(addr.postalCode) : '';
-          const country = addr.country ? escapeVCardValue(addr.country) : '';
-          vcard += `\r\nADR${typeParam}:;;${street};${city};${region};${postalCode};${country}`;
-        }
+      for (const addr of args.addresses ?? []) {
+        properties.push(typedProperty('ADR', buildAdrValue(addr), addr.type));
       }
 
       if (args.org) {
-        vcard += `\r\nORG:${escapeVCardValue(args.org)}`;
+        properties.push(property('ORG', escapeVCardValue(args.org)));
       }
       if (args.title) {
-        vcard += `\r\nTITLE:${escapeVCardValue(args.title)}`;
+        properties.push(property('TITLE', escapeVCardValue(args.title)));
       }
       if (args.note) {
-        vcard += `\r\nNOTE:${escapeVCardValue(args.note)}`;
+        properties.push(property('NOTE', escapeVCardValue(args.note)));
       }
       if (args.birthday) {
-        vcard += `\r\nBDAY:${args.birthday}`;
+        properties.push(property('BDAY', escapeVCardValue(args.birthday)));
       }
       if (args.url) {
-        vcard += `\r\nURL:${args.url}`;
+        properties.push(property('URL', escapeVCardValue(args.url)));
       }
       if (args.categories && args.categories.length > 0) {
-        vcard += `\r\nCATEGORIES:${args.categories.map(escapeVCardValue).join(',')}`;
+        properties.push(property('CATEGORIES', args.categories.map(escapeVCardValue).join(',')));
       }
 
-      vcard += `\r\nEND:VCARD`;
+      const vcard = serializeVCard({ properties });
 
       const response = await fetchCalDAV(cardDavUrl, {
         method: 'PUT',
@@ -938,98 +932,85 @@ export const updateContactTool = {
       const config = getNextcloudConfig();
       const { href, etag, vcardData } = await resolveContactByUid(args.addressBookName, args.uid);
 
-      let modified = unfoldVCardLines(vcardData);
+      const doc = parseVCard(vcardData);
 
       // Update FN
       if (args.fullName !== undefined) {
-        modified = setVCardProperty(modified, 'FN', escapeVCardValue(args.fullName));
+        setProperty(doc, 'FN', escapeVCardValue(args.fullName));
       }
 
-      // Update N (structured name)
+      // Update N (structured name), preserving the components we do not touch
       if (args.firstName !== undefined || args.lastName !== undefined) {
-        // Parse existing N property
-        const nMatch = modified.match(/^N(;[^:]*)?:(.*)/im);
-        const existingParts = nMatch ? nMatch[2].split(';') : ['', '', '', '', ''];
+        const existing = getProperty(doc, 'N');
+        const parts = existing ? existing.value.split(';') : ['', '', '', '', ''];
 
         if (args.lastName !== undefined) {
-          existingParts[0] = args.lastName ? escapeVCardValue(args.lastName) : '';
+          parts[0] = args.lastName ? escapeVCardValue(args.lastName) : '';
         }
         if (args.firstName !== undefined) {
-          existingParts[1] = args.firstName ? escapeVCardValue(args.firstName) : '';
+          parts[1] = args.firstName ? escapeVCardValue(args.firstName) : '';
         }
 
-        modified = setVCardProperty(modified, 'N', existingParts.slice(0, 5).join(';'));
+        setProperty(doc, 'N', parts.slice(0, 5).join(';'));
       }
 
       // Update simple properties
       if (args.org !== undefined) {
-        modified = setVCardProperty(modified, 'ORG', args.org ? escapeVCardValue(args.org) : null);
+        setProperty(doc, 'ORG', args.org ? escapeVCardValue(args.org) : null);
       }
       if (args.title !== undefined) {
-        modified = setVCardProperty(
-          modified,
-          'TITLE',
-          args.title ? escapeVCardValue(args.title) : null
-        );
+        setProperty(doc, 'TITLE', args.title ? escapeVCardValue(args.title) : null);
       }
       if (args.note !== undefined) {
-        modified = setVCardProperty(
-          modified,
-          'NOTE',
-          args.note ? escapeVCardValue(args.note) : null
-        );
+        setProperty(doc, 'NOTE', args.note ? escapeVCardValue(args.note) : null);
       }
       if (args.birthday !== undefined) {
-        modified = setVCardProperty(modified, 'BDAY', args.birthday);
+        setProperty(doc, 'BDAY', args.birthday ? escapeVCardValue(args.birthday) : null);
       }
       if (args.url !== undefined) {
-        modified = setVCardProperty(modified, 'URL', args.url);
+        setProperty(doc, 'URL', args.url ? escapeVCardValue(args.url) : null);
       }
 
       // Update multi-valued properties (replace all)
       if (args.emails !== undefined) {
-        modified = removeAllVCardProperty(modified, 'EMAIL');
-        for (const email of args.emails) {
-          const typeParam = email.type ? `;TYPE=${email.type}` : '';
-          const line = `EMAIL${typeParam}:${email.value}`;
-          modified = modified.replace(/END:VCARD/i, `${line}\r\nEND:VCARD`);
-        }
+        replaceAll(
+          doc,
+          'EMAIL',
+          args.emails.map((e) => typedProperty('EMAIL', escapeVCardValue(e.value), e.type))
+        );
       }
 
       if (args.phones !== undefined) {
-        modified = removeAllVCardProperty(modified, 'TEL');
-        for (const phone of args.phones) {
-          const typeParam = phone.type ? `;TYPE=${phone.type}` : '';
-          const line = `TEL${typeParam}:${phone.value}`;
-          modified = modified.replace(/END:VCARD/i, `${line}\r\nEND:VCARD`);
-        }
+        replaceAll(
+          doc,
+          'TEL',
+          args.phones.map((p) => typedProperty('TEL', escapeVCardValue(p.value), p.type))
+        );
       }
 
       if (args.addresses !== undefined) {
-        modified = removeAllVCardProperty(modified, 'ADR');
-        for (const addr of args.addresses) {
-          const typeParam = addr.type ? `;TYPE=${addr.type}` : '';
-          const street = addr.street ? escapeVCardValue(addr.street) : '';
-          const city = addr.city ? escapeVCardValue(addr.city) : '';
-          const region = addr.region ? escapeVCardValue(addr.region) : '';
-          const postalCode = addr.postalCode ? escapeVCardValue(addr.postalCode) : '';
-          const country = addr.country ? escapeVCardValue(addr.country) : '';
-          const line = `ADR${typeParam}:;;${street};${city};${region};${postalCode};${country}`;
-          modified = modified.replace(/END:VCARD/i, `${line}\r\nEND:VCARD`);
-        }
+        replaceAll(
+          doc,
+          'ADR',
+          args.addresses.map((a) => typedProperty('ADR', buildAdrValue(a), a.type))
+        );
       }
 
       if (args.categories !== undefined) {
-        modified = removeAllVCardProperty(modified, 'CATEGORIES');
-        if (args.categories.length > 0) {
-          const line = `CATEGORIES:${args.categories.map(escapeVCardValue).join(',')}`;
-          modified = modified.replace(/END:VCARD/i, `${line}\r\nEND:VCARD`);
-        }
+        replaceAll(
+          doc,
+          'CATEGORIES',
+          args.categories.length > 0
+            ? [property('CATEGORIES', args.categories.map(escapeVCardValue).join(','))]
+            : []
+        );
       }
 
       // Update REV timestamp
       const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-      modified = setVCardProperty(modified, 'REV', now);
+      setProperty(doc, 'REV', now);
+
+      const modified = serializeVCard(doc);
 
       const putUrl = `${config.url}${href}`;
       const putResponse = await fetchCalDAV(putUrl, {
