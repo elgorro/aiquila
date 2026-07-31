@@ -36,6 +36,23 @@ export function decodeXmlEntities(text: string): string {
 }
 
 /**
+ * Encode text for interpolation into an XML request body.
+ * Counterpart to decodeXmlEntities — used when building CalDAV/CardDAV REPORT
+ * filters from user-supplied values (GH #402).
+ */
+export function encodeXmlEntities(text: string): string {
+  return (
+    text
+      // `&` first, otherwise the ampersands introduced below get re-encoded.
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;')
+  );
+}
+
+/**
  * Fetch data from CalDAV endpoint using basic authentication
  */
 export async function fetchCalDAV(
