@@ -17,7 +17,13 @@ class ClaudeModels {
     /** Fable 5 – most powerful model, new tier above Opus (adaptive thinking, 128K output, 1M context, xhigh effort) */
     public const FABLE_5    = 'claude-fable-5';
 
-    /** Opus 4.8 – most capable Opus-tier model (adaptive thinking, 128K output, 1M context, xhigh effort) */
+    /** Opus 5 – for complex agentic coding and enterprise work (adaptive thinking, 128K output, 1M context, xhigh effort) */
+    public const OPUS_5     = 'claude-opus-5';
+
+    /** Sonnet 5 – best combination of speed and intelligence (adaptive thinking, 128K output, 1M context) */
+    public const SONNET_5   = 'claude-sonnet-5';
+
+    /** Opus 4.8 – previous most capable Opus-tier model (adaptive thinking, 128K output, 1M context, xhigh effort) */
     public const OPUS_4_8   = 'claude-opus-4-8';
 
     /** Opus 4.7 – previous-generation Opus (adaptive thinking, 128K output, 1M context, xhigh effort) */
@@ -62,13 +68,15 @@ class ClaudeModels {
 
     // ── Application defaults ───────────────────────────────────────────────
 
-    public const DEFAULT_MODEL      = self::SONNET_4_6;
+    public const DEFAULT_MODEL      = self::SONNET_5;
     public const DEFAULT_MAX_TOKENS = 16384;
 
     // ── Per-model output token ceilings ────────────────────────────────────
 
     private const MAX_TOKENS_CEILING = [
         self::FABLE_5    => 128000,
+        self::OPUS_5     => 128000,
+        self::SONNET_5   => 128000,
         self::OPUS_4_8   => 128000,
         self::OPUS_4_7   => 128000,
         self::OPUS_4_6   => 128000,
@@ -82,6 +90,8 @@ class ClaudeModels {
 
     private const CONTEXT_WINDOW = [
         self::FABLE_5    => 1000000,
+        self::OPUS_5     => 1000000,
+        self::SONNET_5   => 1000000,
         self::OPUS_4_8   => 1000000,
         self::OPUS_4_7   => 1000000,
         self::OPUS_4_6   => 1000000,
@@ -92,6 +102,8 @@ class ClaudeModels {
 
     private const SUPPORTS_THINKING = [
         self::FABLE_5    => true,
+        self::OPUS_5     => true,
+        self::SONNET_5   => true,
         self::OPUS_4_8   => true,
         self::OPUS_4_7   => true,
         self::OPUS_4_6   => true,
@@ -100,6 +112,8 @@ class ClaudeModels {
 
     private const SUPPORTS_EFFORT = [
         self::FABLE_5    => true,
+        self::OPUS_5     => true,
+        self::SONNET_5   => true,
         self::OPUS_4_8   => true,
         self::OPUS_4_7   => true,
         self::OPUS_4_6   => true,
@@ -140,6 +154,8 @@ class ClaudeModels {
     public static function getAllModels(): array {
         return [
             self::FABLE_5,
+            self::OPUS_5,
+            self::SONNET_5,
             self::OPUS_4_8,
             self::OPUS_4_7,
             self::OPUS_4_6,
@@ -154,6 +170,8 @@ class ClaudeModels {
 
     public const EFFORT_LEVEL = [
         self::FABLE_5    => 'xhigh',
+        self::OPUS_5     => 'xhigh',
+        self::SONNET_5   => 'medium',
         self::OPUS_4_8   => 'xhigh',
         self::OPUS_4_7   => 'xhigh',
         self::OPUS_4_6   => 'high',
@@ -172,9 +190,11 @@ class ClaudeModels {
     /** Every effort value any model accepts; used for settings validation. */
     public const ALL_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 
-    /** `xhigh` requires Fable 5 / Opus 4.7+; older models reject it with a 400. */
+    /** `xhigh` requires Fable 5 / Opus 5 / Sonnet 5 / Opus 4.7+; older models reject it with a 400. */
     private const ALLOWED_EFFORTS = [
         self::FABLE_5    => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::OPUS_5     => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::SONNET_5   => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::OPUS_4_8   => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::OPUS_4_7   => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::OPUS_4_6   => ['low', 'medium', 'high', 'max'],
@@ -199,13 +219,17 @@ class ClaudeModels {
     /** Models that reject temperature/top_p/top_k with a 400. */
     private const NO_SAMPLING_PARAMS = [
         self::FABLE_5  => true,
+        self::OPUS_5   => true,
+        self::SONNET_5 => true,
         self::OPUS_4_8 => true,
         self::OPUS_4_7 => true,
     ];
 
     /**
      * Whether a model accepts the temperature/top_p/top_k sampling
-     * parameters. Fable 5 and Opus 4.7+ removed them entirely.
+     * parameters. Fable 5, Opus 4.7+, and the 5-series removed them: Opus 5
+     * rejects them outright, Sonnet 5 rejects any non-default value, so we
+     * omit them for both.
      */
     public static function supportsSamplingParams(string $model): bool {
         return !isset(self::NO_SAMPLING_PARAMS[$model]);
