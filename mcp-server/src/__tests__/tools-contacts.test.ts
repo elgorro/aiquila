@@ -160,6 +160,23 @@ END:VCARD`)}</cr:address-data>
 
       expect(result.content[0].text).toContain('No contacts found');
     });
+
+    it('XML-escapes the search term in the REPORT filter (GH #402)', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        text: () =>
+          Promise.resolve(`<?xml version="1.0" encoding="UTF-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cr="urn:ietf:params:xml:ns:carddav">
+</d:multistatus>`),
+      });
+
+      const { listContactsTool } = await import('../tools/apps/contacts.js');
+      await listContactsTool.handler({ addressBookName: 'contacts', search: 'Müller & Co' });
+
+      const body = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string;
+      expect(body).toContain('Müller &amp; Co');
+      expect(body).not.toContain('Müller & Co');
+    });
   });
 
   describe('get_contact', () => {

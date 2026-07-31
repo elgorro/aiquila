@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: MIT
 
 import { z } from 'zod';
-import { decodeXmlEntities, fetchCalDAV, nsTagContent } from '../../client/caldav.js';
+import {
+  decodeXmlEntities,
+  encodeXmlEntities,
+  fetchCalDAV,
+  nsTagContent,
+} from '../../client/caldav.js';
 import { escapeVCardValue, sanitizeVCardUriValue, unescapeVCardValue } from '../dav-utils.js';
 import {
   getParamValues,
@@ -377,7 +382,7 @@ async function resolveContactByUid(
   </d:prop>
   <cr:filter>
     <cr:prop-filter name="UID">
-      <cr:text-match collation="i;octet">${uid}</cr:text-match>
+      <cr:text-match collation="i;octet">${encodeXmlEntities(uid)}</cr:text-match>
     </cr:prop-filter>
   </cr:filter>
 </cr:addressbook-query>`;
@@ -534,7 +539,7 @@ export const listContactsTool = {
         filterXml = `
   <cr:filter>
     <cr:prop-filter name="FN">
-      <cr:text-match collation="i;unicode-casemap" match-type="contains">${args.search}</cr:text-match>
+      <cr:text-match collation="i;unicode-casemap" match-type="contains">${encodeXmlEntities(args.search)}</cr:text-match>
     </cr:prop-filter>
   </cr:filter>`;
       }

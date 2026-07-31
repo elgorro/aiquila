@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: MIT
 
 import { z } from 'zod';
-import { decodeXmlEntities, fetchCalDAV, nsTagContent } from '../../client/caldav.js';
+import {
+  decodeXmlEntities,
+  encodeXmlEntities,
+  fetchCalDAV,
+  nsTagContent,
+} from '../../client/caldav.js';
 import { escapeICalValue } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
@@ -301,7 +306,7 @@ async function resolveTaskByUid(
     <c:comp-filter name="VCALENDAR">
       <c:comp-filter name="VTODO">
         <c:prop-filter name="UID">
-          <c:text-match collation="i;octet">${uid}</c:text-match>
+          <c:text-match collation="i;octet">${encodeXmlEntities(uid)}</c:text-match>
         </c:prop-filter>
       </c:comp-filter>
     </c:comp-filter>
