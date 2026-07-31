@@ -234,6 +234,11 @@ make reset
 > **Upgrading PostgreSQL major versions:** the stack ships `postgres:18`. A major upgrade
 > won't read an older major's data volume automatically — dump before bumping the image and
 > restore afterwards. See [Upgrading PostgreSQL to 18](../hetzner/advanced.md#upgrading-postgresql-to-18).
+>
+> Note that `postgres_data` is mounted at `/var/lib/postgresql` (not `/var/lib/postgresql/data`),
+> because `postgres:18` stores its data in a major-version subdirectory and refuses to start
+> against the older mount point. A volume from a stack that predates this cannot be reused in
+> place — see [Where the data volume is mounted](../hetzner/advanced.md#where-the-data-volume-is-mounted).
 
 ## Architecture
 
