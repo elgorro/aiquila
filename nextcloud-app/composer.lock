@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "df6ddc1c7b9ccd594093e45de777541f",
+    "content-hash": "c79fd0d11a6e351b386361463e334ee3",
     "packages": [
         {
             "name": "anthropic-ai/sdk",
-            "version": "v0.28.0",
+            "version": "v0.40.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/anthropics/anthropic-sdk-php.git",
-                "reference": "5116de361fde853f122dfac349842512d15da57e"
+                "reference": "273764dcec650b985422d50a4847993579e513aa"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/anthropics/anthropic-sdk-php/zipball/5116de361fde853f122dfac349842512d15da57e",
-                "reference": "5116de361fde853f122dfac349842512d15da57e",
+                "url": "https://api.github.com/repos/anthropics/anthropic-sdk-php/zipball/273764dcec650b985422d50a4847993579e513aa",
+                "reference": "273764dcec650b985422d50a4847993579e513aa",
                 "shasum": ""
             },
             "require": {
@@ -46,7 +46,7 @@
             },
             "suggest": {
                 "aws/aws-sdk-php": "Allows using the AWS Bedrock, AWS gateway, and Bedrock Mantle SDKs",
-                "google/auth": "Allows using the Google Vertex SDK",
+                "google/auth": "Allows using the Google Vertex and Google Cloud gateway SDKs",
                 "mcp/sdk": "Required to use the BetaMcp helpers for integrating MCP servers with the Anthropic SDK"
             },
             "type": "library",
@@ -65,9 +65,9 @@
             "description": "Anthropic PHP SDK",
             "support": {
                 "issues": "https://github.com/anthropics/anthropic-sdk-php/issues",
-                "source": "https://github.com/anthropics/anthropic-sdk-php/tree/v0.28.0"
+                "source": "https://github.com/anthropics/anthropic-sdk-php/tree/v0.40.0"
             },
-            "time": "2026-06-09T16:46:52+00:00"
+            "time": "2026-07-24T16:35:04+00:00"
         },
         {
             "name": "nyholm/psr7",

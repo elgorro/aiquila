@@ -36,7 +36,7 @@ class ConfigureCommand extends Base {
                 'model',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Set Claude model (e.g., claude-fable-5, claude-opus-4-8, claude-sonnet-4-6)'
+                'Set Claude model (e.g., claude-fable-5, claude-opus-5, claude-sonnet-5)'
             )
             ->addOption(
                 'max-tokens',

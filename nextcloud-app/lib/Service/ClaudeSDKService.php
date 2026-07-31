@@ -215,7 +215,8 @@ class ClaudeSDKService implements LLMProviderInterface {
             $params['system'] = [$systemBlock];
         }
 
-        // Sampling parameters — Fable 5 and Opus 4.7+ reject temperature/top_p/top_k with a 400
+        // Sampling parameters — Fable 5, the 5-series, and Opus 4.7+ reject
+        // temperature/top_p/top_k with a 400
         $samplingKeys = ClaudeModels::supportsSamplingParams($model)
             ? ['temperature', 'top_p', 'top_k', 'stop_sequences']
             : ['stop_sequences'];

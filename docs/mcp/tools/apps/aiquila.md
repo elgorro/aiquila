@@ -246,12 +246,19 @@ php occ aiquila:test --user username
 
 ### Model
 Current Claude models:
-- `claude-opus-4-7` - Most capable; adaptive thinking, xhigh effort (recommended for complex reasoning and agentic coding)
-- `claude-opus-4-6` - Frontier model with adaptive thinking, high effort
-- `claude-sonnet-4-6` - Adaptive thinking, medium effort (**default**)
+- `claude-fable-5` - Most capable; adaptive thinking (always on), xhigh effort
+- `claude-opus-5` - Complex agentic coding and enterprise work; adaptive thinking, xhigh effort
+- `claude-sonnet-5` - Best speed/intelligence balance; adaptive thinking, medium effort (**default**)
+- `claude-opus-4-8` - Previous-generation Opus; adaptive thinking, xhigh effort
+- `claude-opus-4-7` - Adaptive thinking, xhigh effort
+- `claude-opus-4-6` - Adaptive thinking, high effort
+- `claude-sonnet-4-6` - Adaptive thinking, medium effort
 - `claude-sonnet-4-5-20250929` - Fast, cost-effective
 - `claude-haiku-4-5-20251001` - Fastest, most economical
-- `claude-opus-4-5-20251101` - Previous Opus generation
+- `claude-opus-4-5-20251101` - Older Opus generation
+
+Fable 5, Opus 5, Sonnet 5, and Opus 4.7+ reject the `temperature` / `top_p` / `top_k`
+sampling parameters; AIquila omits them automatically for those models.
 
 ### Max Tokens
 - **Range**: 1 - 100,000

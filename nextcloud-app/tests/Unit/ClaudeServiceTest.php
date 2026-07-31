@@ -211,12 +211,13 @@ class ClaudeServiceTest extends TestCase {
         );
     }
 
-    private function configWithApiKey(): void {
+    private function configWithApiKey(?string $model = null): void {
+        $model ??= ClaudeModels::DEFAULT_MODEL;
         $this->credentials->method('getApiKey')->willReturn('test-key');
         $this->config->method('getUserValue')->willReturn('');
         $this->config->method('getAppValue')
             ->willReturnCallback(fn($app, $key, $default) => match ($key) {
-                'model'      => ClaudeModels::DEFAULT_MODEL,
+                'model'      => $model,
                 'max_tokens' => '4096',
                 default      => $default,
             });
@@ -398,7 +399,8 @@ class ClaudeServiceTest extends TestCase {
     // ── ask(): options passthrough ─────────────────────────────────────────
 
     public function testAskWithOptionsPassesTemperatureToParams(): void {
-        $this->configWithApiKey();
+        // Sonnet 4.6 still accepts sampling params; the 5-series does not.
+        $this->configWithApiKey(ClaudeModels::SONNET_4_6);
 
         $result = $this->testable->ask('Hi', '', 'testuser', ['temperature' => 0.7]);
 
@@ -408,12 +410,32 @@ class ClaudeServiceTest extends TestCase {
     }
 
     public function testAskWithOptionsPassesTopPAndTopKToParams(): void {
-        $this->configWithApiKey();
+        $this->configWithApiKey(ClaudeModels::SONNET_4_6);
 
         $this->testable->ask('Hi', '', 'testuser', ['top_p' => 0.9, 'top_k' => 40]);
 
         $this->assertSame(0.9, $this->testable->lastCreateParams['top_p']);
         $this->assertSame(40,  $this->testable->lastCreateParams['top_k']);
+    }
+
+    /**
+     * Opus 5 rejects temperature/top_p/top_k with a 400 and Sonnet 5 rejects
+     * any non-default value, so buildParams() must drop them rather than
+     * forward a caller-supplied value.
+     */
+    public function testAskDropsSamplingParamsOn5Series(): void {
+        $this->configWithApiKey(ClaudeModels::SONNET_5);
+
+        $result = $this->testable->ask('Hi', '', 'testuser', [
+            'temperature' => 0.7,
+            'top_p'       => 0.9,
+            'top_k'       => 40,
+        ]);
+
+        $this->assertArrayNotHasKey('error', $result);
+        $this->assertArrayNotHasKey('temperature', $this->testable->lastCreateParams);
+        $this->assertArrayNotHasKey('top_p', $this->testable->lastCreateParams);
+        $this->assertArrayNotHasKey('top_k', $this->testable->lastCreateParams);
     }
 
     public function testAskWithOptionsPassesStopSequencesToParams(): void {

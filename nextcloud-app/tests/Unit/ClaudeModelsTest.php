@@ -7,14 +7,16 @@ use PHPUnit\Framework\TestCase;
 
 class ClaudeModelsTest extends TestCase {
 
-    public function testDefaultModelIsSonnet46(): void {
-        $this->assertEquals(ClaudeModels::SONNET_4_6, ClaudeModels::DEFAULT_MODEL);
+    public function testDefaultModelIsSonnet5(): void {
+        $this->assertEquals(ClaudeModels::SONNET_5, ClaudeModels::DEFAULT_MODEL);
     }
 
     public function testGetAllModelsReturnsCurrentModelsOnly(): void {
         $models = ClaudeModels::getAllModels();
-        $this->assertCount(8, $models);
+        $this->assertCount(10, $models);
         $this->assertContains(ClaudeModels::FABLE_5,    $models);
+        $this->assertContains(ClaudeModels::OPUS_5,     $models);
+        $this->assertContains(ClaudeModels::SONNET_5,   $models);
         $this->assertContains(ClaudeModels::OPUS_4_8,   $models);
         $this->assertContains(ClaudeModels::OPUS_4_7,   $models);
         $this->assertContains(ClaudeModels::OPUS_4_6,   $models);
@@ -29,6 +31,11 @@ class ClaudeModelsTest extends TestCase {
         $this->assertNotContains(ClaudeModels::OPUS_4,   $models);
         // Most capable first
         $this->assertSame(ClaudeModels::FABLE_5, $models[0]);
+    }
+
+    public function testGetMaxTokenCeilingFor5Series(): void {
+        $this->assertEquals(128000, ClaudeModels::getMaxTokenCeiling(ClaudeModels::OPUS_5));
+        $this->assertEquals(128000, ClaudeModels::getMaxTokenCeiling(ClaudeModels::SONNET_5));
     }
 
     public function testGetMaxTokenCeilingForOpus47(): void {
@@ -52,6 +59,8 @@ class ClaudeModelsTest extends TestCase {
 
     public function testGetContextWindowFor1MModels(): void {
         $this->assertEquals(1000000, ClaudeModels::getContextWindow(ClaudeModels::FABLE_5));
+        $this->assertEquals(1000000, ClaudeModels::getContextWindow(ClaudeModels::OPUS_5));
+        $this->assertEquals(1000000, ClaudeModels::getContextWindow(ClaudeModels::SONNET_5));
         $this->assertEquals(1000000, ClaudeModels::getContextWindow(ClaudeModels::OPUS_4_8));
         $this->assertEquals(1000000, ClaudeModels::getContextWindow(ClaudeModels::OPUS_4_7));
         $this->assertEquals(1000000, ClaudeModels::getContextWindow(ClaudeModels::OPUS_4_6));
@@ -73,6 +82,8 @@ class ClaudeModelsTest extends TestCase {
 
     public function testSupportsThinkingForAdaptiveModels(): void {
         $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::FABLE_5));
+        $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::OPUS_5));
+        $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::SONNET_5));
         $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::OPUS_4_8));
         $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::OPUS_4_7));
         $this->assertTrue(ClaudeModels::supportsThinking(ClaudeModels::OPUS_4_6));
@@ -83,6 +94,8 @@ class ClaudeModelsTest extends TestCase {
 
     public function testSupportsEffortForAdaptiveModels(): void {
         $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::FABLE_5));
+        $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::OPUS_5));
+        $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::SONNET_5));
         $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::OPUS_4_8));
         $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::OPUS_4_7));
         $this->assertTrue(ClaudeModels::supportsEffort(ClaudeModels::OPUS_4_6));
@@ -100,8 +113,15 @@ class ClaudeModelsTest extends TestCase {
         $this->assertEquals('xhigh', ClaudeModels::getEffortLevel(ClaudeModels::OPUS_4_8));
     }
 
+    public function testGetEffortLevelFor5Series(): void {
+        $this->assertEquals('xhigh', ClaudeModels::getEffortLevel(ClaudeModels::OPUS_5));
+        $this->assertEquals('medium', ClaudeModels::getEffortLevel(ClaudeModels::SONNET_5));
+    }
+
     public function testSupportsSamplingParams(): void {
         $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::FABLE_5));
+        $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::OPUS_5));
+        $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::SONNET_5));
         $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::OPUS_4_8));
         $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::OPUS_4_7));
         $this->assertTrue(ClaudeModels::supportsSamplingParams(ClaudeModels::SONNET_4_6));
@@ -121,7 +141,14 @@ class ClaudeModelsTest extends TestCase {
     }
 
     public function testAllowedEffortsIncludeXhighOnlyOnOpus47Plus(): void {
-        foreach ([ClaudeModels::FABLE_5, ClaudeModels::OPUS_4_8, ClaudeModels::OPUS_4_7] as $model) {
+        $xhighCapable = [
+            ClaudeModels::FABLE_5,
+            ClaudeModels::OPUS_5,
+            ClaudeModels::SONNET_5,
+            ClaudeModels::OPUS_4_8,
+            ClaudeModels::OPUS_4_7,
+        ];
+        foreach ($xhighCapable as $model) {
             $this->assertEquals(['low', 'medium', 'high', 'xhigh', 'max'], ClaudeModels::getAllowedEfforts($model));
         }
         foreach ([ClaudeModels::OPUS_4_6, ClaudeModels::SONNET_4_6] as $model) {
@@ -154,6 +181,8 @@ class ClaudeModelsTest extends TestCase {
 
     public function testEffortLevelConstantsArePublic(): void {
         $this->assertIsArray(ClaudeModels::EFFORT_LEVEL);
+        $this->assertArrayHasKey(ClaudeModels::OPUS_5, ClaudeModels::EFFORT_LEVEL);
+        $this->assertArrayHasKey(ClaudeModels::SONNET_5, ClaudeModels::EFFORT_LEVEL);
         $this->assertArrayHasKey(ClaudeModels::OPUS_4_7, ClaudeModels::EFFORT_LEVEL);
         $this->assertArrayHasKey(ClaudeModels::OPUS_4_6, ClaudeModels::EFFORT_LEVEL);
         $this->assertArrayHasKey(ClaudeModels::SONNET_4_6, ClaudeModels::EFFORT_LEVEL);
