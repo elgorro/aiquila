@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import { decodeXmlEntities, fetchCalDAV, nsTagContent } from '../../client/caldav.js';
-import { escapeVCardValue, unescapeVCardValue } from '../dav-utils.js';
+import { escapeVCardValue, sanitizeVCardUriValue, unescapeVCardValue } from '../dav-utils.js';
 import {
   getParamValues,
   getProperty,
@@ -213,10 +213,10 @@ function parseVCardBlock(vcardText: string): ParsedContact | null {
         contact.note = unescapeVCardValue(value);
         break;
       case 'BDAY':
-        contact.birthday = unescapeVCardValue(value);
+        contact.birthday = value;
         break;
       case 'URL':
-        contact.url = unescapeVCardValue(value);
+        contact.url = value;
         break;
       case 'CATEGORIES':
         contact.categories.push(
@@ -766,11 +766,11 @@ export const createContactTool = {
       ];
 
       for (const email of args.emails ?? []) {
-        properties.push(typedProperty('EMAIL', escapeVCardValue(email.value), email.type));
+        properties.push(typedProperty('EMAIL', sanitizeVCardUriValue(email.value), email.type));
       }
 
       for (const phone of args.phones ?? []) {
-        properties.push(typedProperty('TEL', escapeVCardValue(phone.value), phone.type));
+        properties.push(typedProperty('TEL', sanitizeVCardUriValue(phone.value), phone.type));
       }
 
       for (const addr of args.addresses ?? []) {
@@ -787,10 +787,10 @@ export const createContactTool = {
         properties.push(property('NOTE', escapeVCardValue(args.note)));
       }
       if (args.birthday) {
-        properties.push(property('BDAY', escapeVCardValue(args.birthday)));
+        properties.push(property('BDAY', sanitizeVCardUriValue(args.birthday)));
       }
       if (args.url) {
-        properties.push(property('URL', escapeVCardValue(args.url)));
+        properties.push(property('URL', sanitizeVCardUriValue(args.url)));
       }
       if (args.categories && args.categories.length > 0) {
         properties.push(property('CATEGORIES', args.categories.map(escapeVCardValue).join(',')));
@@ -965,10 +965,10 @@ export const updateContactTool = {
         setProperty(doc, 'NOTE', args.note ? escapeVCardValue(args.note) : null);
       }
       if (args.birthday !== undefined) {
-        setProperty(doc, 'BDAY', args.birthday ? escapeVCardValue(args.birthday) : null);
+        setProperty(doc, 'BDAY', args.birthday ? sanitizeVCardUriValue(args.birthday) : null);
       }
       if (args.url !== undefined) {
-        setProperty(doc, 'URL', args.url ? escapeVCardValue(args.url) : null);
+        setProperty(doc, 'URL', args.url ? sanitizeVCardUriValue(args.url) : null);
       }
 
       // Update multi-valued properties (replace all)
@@ -976,7 +976,7 @@ export const updateContactTool = {
         replaceAll(
           doc,
           'EMAIL',
-          args.emails.map((e) => typedProperty('EMAIL', escapeVCardValue(e.value), e.type))
+          args.emails.map((e) => typedProperty('EMAIL', sanitizeVCardUriValue(e.value), e.type))
         );
       }
 
@@ -984,7 +984,7 @@ export const updateContactTool = {
         replaceAll(
           doc,
           'TEL',
-          args.phones.map((p) => typedProperty('TEL', escapeVCardValue(p.value), p.type))
+          args.phones.map((p) => typedProperty('TEL', sanitizeVCardUriValue(p.value), p.type))
         );
       }
 

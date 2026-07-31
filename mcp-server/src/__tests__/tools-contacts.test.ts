@@ -433,8 +433,8 @@ NOTE:A note long enough that the server folded it across two content lines
 item1.TEL;TYPE=voice:+41 79 111 22 33
 item1.X-ABLabel:Mobil
 TEL;TYPE=WORK:+41 44 000 00 00
-PHOTO;ENCODING=b;TYPE=JPEG:/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHB
- wcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgy
+PHOTO:data:image/jpeg;base64\\,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGB
+ QgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgy
 REV:20260101T000000Z
 END:VCARD`)}</cr:address-data>
       </d:prop>
@@ -488,7 +488,7 @@ END:VCARD`)}</cr:address-data>
       // Untouched properties survive intact, parameters and all.
       const unfolded = body.replace(/\r\n /g, '');
       expect(unfolded).toContain('FN:Jörg Müller');
-      expect(unfolded).toContain('PHOTO;ENCODING=b;TYPE=JPEG:/9j/');
+      expect(unfolded).toContain('PHOTO:data:image/jpeg;base64\\,/9j/');
       expect(unfolded).toContain(
         'NOTE:A note long enough that the server folded it across two content lines before handing it back to us.'
       );
