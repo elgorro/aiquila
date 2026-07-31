@@ -93,9 +93,10 @@ sudo -u www-data php occ app:enable aiquila
 1. Navigate to **Settings → Administration → AIquila**
 2. Enter your Claude API key from [console.anthropic.com](https://console.anthropic.com)
 3. Configure settings (optional):
-   - **Claude Model**: Default is `claude-sonnet-4-6` (adaptive thinking, medium effort)
-     - Most capable: `claude-opus-4-7` (adaptive thinking, xhigh effort — recommended for complex reasoning and agentic coding)
-     - Other options: `claude-opus-4-6`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, `claude-opus-4-5-20251101`
+   - **Claude Model**: Default is `claude-sonnet-5` (adaptive thinking, medium effort)
+     - Most capable: `claude-fable-5` (adaptive thinking always on, xhigh effort)
+     - For complex agentic coding and enterprise work: `claude-opus-5` (adaptive thinking, xhigh effort)
+     - Other options: `claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, `claude-opus-4-5-20251101`
    - **Max Tokens**: Response length limit (1-100,000, default: 4096)
    - **API Timeout**: Request timeout in seconds (10-1800, default: 30)
 4. Click **Save**

@@ -204,7 +204,7 @@ async function testWithConnector(accessToken: string): Promise<boolean> {
   // Use beta.messages for mcp-client-2025-11-20 support.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const response = await (anthropic.beta.messages as any).create({
-    model: 'claude-opus-4-6',
+    model: 'claude-opus-5',
     max_tokens: 2000,
     messages: [
       {

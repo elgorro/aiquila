@@ -28,11 +28,11 @@ AIquila is built on these excellent open-source projects and services.
 ## Key libraries
 | Library | Version | Role |
 |---------|---------|------|
-| [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/typescript-sdk) | ^1.27 | MCP protocol implementation — tools, resources, and OAuth |
-| [pino](https://getpino.io) | ^9.0 | Structured JSON logging to stderr in the MCP server |
-| [webdav](https://github.com/perry-mitchell/webdav-client) | ^5.8 | WebDAV client — Nextcloud file operations in the MCP server |
-| [zod](https://zod.dev) | ^3.25 | Runtime schema validation for MCP tool inputs |
-| [anthropic-ai/sdk](https://packagist.org/packages/anthropic-ai/sdk) | ^0.5 | Claude API PHP client used by the Nextcloud app |
+| [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/typescript-sdk) | ^1.29 | MCP protocol implementation — tools, resources, and OAuth |
+| [pino](https://getpino.io) | ^10.3 | Structured JSON logging to stderr in the MCP server |
+| [webdav](https://github.com/perry-mitchell/webdav-client) | ^5.10 | WebDAV client — Nextcloud file operations in the MCP server |
+| [zod](https://zod.dev) | ^4.4 | Runtime schema validation for MCP tool inputs |
+| [anthropic-ai/sdk](https://packagist.org/packages/anthropic-ai/sdk) | ^0.40 | Claude API PHP client used by the Nextcloud app |
 | [symfony/http-client](https://symfony.com/doc/current/http_client.html) | ^8.0 | HTTP client for the Nextcloud app backend |
 | [hcloud-go](https://github.com/hetznercloud/hcloud-go) | v2.10 | Hetzner Cloud Go SDK — server provisioning in the CLI |
 | [cobra](https://github.com/spf13/cobra) | v1.9 | CLI framework for `aiquila-hetzner` |
