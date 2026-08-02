@@ -486,10 +486,29 @@ if (!class_exists('OCP\TaskProcessing\Task')) {
         public function getTaskTypeId(): string { return ''; }
         public function getAppId(): string { return ''; }
         public function getUserId(): ?string { return null; }
-        public function getProviderId(): ?string { return null; }
         public function getErrorMessage(): ?string { return null; }
     }
     class_alias('OCP_TaskProcessing_Task', 'OCP\TaskProcessing\Task');
+}
+
+if (!interface_exists('OCP\TaskProcessing\IProvider')) {
+    interface OCP_TaskProcessing_IProvider {
+        public function getId(): string;
+    }
+    class_alias('OCP_TaskProcessing_IProvider', 'OCP\TaskProcessing\IProvider');
+}
+
+if (!interface_exists('OCP\TaskProcessing\IManager')) {
+    interface OCP_TaskProcessing_IManager {
+        public function getPreferredProvider(string $taskTypeId): \OCP\TaskProcessing\IProvider;
+    }
+    class_alias('OCP_TaskProcessing_IManager', 'OCP\TaskProcessing\IManager');
+}
+
+if (!class_exists('OCP\TaskProcessing\Exception\Exception')) {
+    class OCP_TaskProcessing_Exception_Exception extends \Exception {
+    }
+    class_alias('OCP_TaskProcessing_Exception_Exception', 'OCP\TaskProcessing\Exception\Exception');
 }
 
 if (!class_exists('OCP\TaskProcessing\Events\TaskSuccessfulEvent')) {

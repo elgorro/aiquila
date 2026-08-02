@@ -9,6 +9,8 @@ use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\TaskProcessing\Events\TaskFailedEvent;
+use OCP\TaskProcessing\IManager as ITaskProcessingManager;
+use OCP\TaskProcessing\Task;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -33,6 +35,7 @@ class TaskFailedListener implements IEventListener {
 
     public function __construct(
         private INotificationManager $notificationManager,
+        private ITaskProcessingManager $taskProcessingManager,
         private LoggerInterface $logger,
     ) {
     }
@@ -42,9 +45,19 @@ class TaskFailedListener implements IEventListener {
             return;
         }
 
-        $task = $event->getTask();
+        // Same reasoning as TaskSuccessfulListener: a throwable here would
+        // abort the whole TaskProcessing event chain, so guard against it.
+        try {
+            $this->notifyTaskFailure($event->getTask());
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila: failed to send task failure notification', [
+                'exception' => $e,
+            ]);
+        }
+    }
 
-        if (!str_starts_with($task->getProviderId(), 'aiquila:')) {
+    private function notifyTaskFailure(Task $task): void {
+        if (!TaskSuccessfulListener::isAiquilaTask($this->taskProcessingManager, $task)) {
             return;
         }
 
