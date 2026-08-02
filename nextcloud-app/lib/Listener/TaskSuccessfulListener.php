@@ -9,6 +9,8 @@ use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\TaskProcessing\Events\TaskSuccessfulEvent;
+use OCP\TaskProcessing\IManager as ITaskProcessingManager;
+use OCP\TaskProcessing\Task;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -33,6 +35,7 @@ class TaskSuccessfulListener implements IEventListener {
 
     public function __construct(
         private INotificationManager $notificationManager,
+        private ITaskProcessingManager $taskProcessingManager,
         private LoggerInterface $logger,
     ) {
     }
@@ -42,9 +45,20 @@ class TaskSuccessfulListener implements IEventListener {
             return;
         }
 
-        $task = $event->getTask();
+        // Apps load alphabetically, so this listener runs before Assistant's in
+        // the event chain; an uncaught throwable here would abort the chain and
+        // stop Assistant persisting its chat reply. Never let one escape.
+        try {
+            $this->notifyTaskSuccess($event->getTask());
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila: failed to send task success notification', [
+                'exception' => $e,
+            ]);
+        }
+    }
 
-        if (!str_starts_with($task->getProviderId(), 'aiquila:')) {
+    private function notifyTaskSuccess(Task $task): void {
+        if (!self::isAiquilaTask($this->taskProcessingManager, $task)) {
             return;
         }
 
@@ -69,6 +83,22 @@ class TaskSuccessfulListener implements IEventListener {
             'taskType' => $task->getTaskTypeId(),
             'user' => $userId,
         ]);
+    }
+
+    /**
+     * OCP\TaskProcessing\Task exposes no provider id, so the provider is resolved
+     * through the manager to tell whether an aiquila provider handled the task.
+     */
+    public static function isAiquilaTask(ITaskProcessingManager $taskProcessingManager, Task $task): bool {
+        try {
+            $provider = $taskProcessingManager->getPreferredProvider($task->getTaskTypeId());
+        } catch (\OCP\TaskProcessing\Exception\Exception) {
+            // No provider for this task type -> not ours. Unexpected throwables
+            // propagate to handle() above, which logs rather than hides them.
+            return false;
+        }
+
+        return str_starts_with($provider->getId(), 'aiquila:');
     }
 
     public static function getTaskTypeLabel(string $taskTypeId): string {
