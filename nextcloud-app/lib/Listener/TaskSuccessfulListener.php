@@ -17,21 +17,7 @@ use Psr\Log\LoggerInterface;
  * @implements IEventListener<TaskSuccessfulEvent>
  */
 class TaskSuccessfulListener implements IEventListener {
-
-    private static array $typeLabels = [
-        'core:text2text' => 'Text generation',
-        'core:text2text:summary' => 'Summarization',
-        'core:text2text:headline' => 'Headline generation',
-        'core:text2text:topics' => 'Topic extraction',
-        'core:text2text:translate' => 'Translation',
-        'core:text2text:proofread' => 'Proofreading',
-        'core:text2text:reformulate' => 'Reformulation',
-        'core:text2text:formalize' => 'Formalization',
-        'core:text2text:simplify' => 'Simplification',
-        'core:text2text:change-tone' => 'Tone adjustment',
-        'core:image2text' => 'Image analysis',
-        'core:analyze-images' => 'Multi-image analysis',
-    ];
+    use TaskListenerTrait;
 
     public function __construct(
         private INotificationManager $notificationManager,
@@ -58,7 +44,7 @@ class TaskSuccessfulListener implements IEventListener {
     }
 
     private function notifyTaskSuccess(Task $task): void {
-        if (!self::isAiquilaTask($this->taskProcessingManager, $task)) {
+        if (!$this->isAiquilaTask($task)) {
             return;
         }
 
@@ -83,30 +69,5 @@ class TaskSuccessfulListener implements IEventListener {
             'taskType' => $task->getTaskTypeId(),
             'user' => $userId,
         ]);
-    }
-
-    /**
-     * OCP\TaskProcessing\Task exposes no provider id, so the provider is resolved
-     * through the manager to tell whether an aiquila provider handled the task.
-     */
-    public static function isAiquilaTask(ITaskProcessingManager $taskProcessingManager, Task $task): bool {
-        try {
-            $provider = $taskProcessingManager->getPreferredProvider($task->getTaskTypeId());
-        } catch (\OCP\TaskProcessing\Exception\Exception) {
-            // No provider for this task type -> not ours. Unexpected throwables
-            // propagate to handle() above, which logs rather than hides them.
-            return false;
-        }
-
-        return str_starts_with($provider->getId(), 'aiquila:');
-    }
-
-    public static function getTaskTypeLabel(string $taskTypeId): string {
-        if (isset(self::$typeLabels[$taskTypeId])) {
-            return self::$typeLabels[$taskTypeId];
-        }
-
-        $parts = explode(':', $taskTypeId);
-        return ucfirst(end($parts));
     }
 }

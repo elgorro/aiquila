@@ -17,21 +17,7 @@ use Psr\Log\LoggerInterface;
  * @implements IEventListener<TaskFailedEvent>
  */
 class TaskFailedListener implements IEventListener {
-
-    private static array $typeLabels = [
-        'core:text2text' => 'Text generation',
-        'core:text2text:summary' => 'Summarization',
-        'core:text2text:headline' => 'Headline generation',
-        'core:text2text:topics' => 'Topic extraction',
-        'core:text2text:translate' => 'Translation',
-        'core:text2text:proofread' => 'Proofreading',
-        'core:text2text:reformulate' => 'Reformulation',
-        'core:text2text:formalize' => 'Formalization',
-        'core:text2text:simplify' => 'Simplification',
-        'core:text2text:change-tone' => 'Tone adjustment',
-        'core:image2text' => 'Image analysis',
-        'core:analyze-images' => 'Multi-image analysis',
-    ];
+    use TaskListenerTrait;
 
     public function __construct(
         private INotificationManager $notificationManager,
@@ -57,7 +43,7 @@ class TaskFailedListener implements IEventListener {
     }
 
     private function notifyTaskFailure(Task $task): void {
-        if (!TaskSuccessfulListener::isAiquilaTask($this->taskProcessingManager, $task)) {
+        if (!$this->isAiquilaTask($task)) {
             return;
         }
 
@@ -66,7 +52,7 @@ class TaskFailedListener implements IEventListener {
             return;
         }
 
-        $taskTypeLabel = TaskSuccessfulListener::getTaskTypeLabel($task->getTaskTypeId());
+        $taskTypeLabel = self::getTaskTypeLabel($task->getTaskTypeId());
         $errorMessage = $task->getErrorMessage() ?? '';
         if (strlen($errorMessage) > 200) {
             $errorMessage = substr($errorMessage, 0, 200) . '…';
