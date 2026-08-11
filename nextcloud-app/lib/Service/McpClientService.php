@@ -34,17 +34,35 @@ class McpClientService {
     }
 
     /**
+     * Assemble a JSON-RPC 2.0 request body.
+     *
+     * `params` is optional in JSON-RPC and MUST be an object when present. An
+     * empty PHP array encodes to `[]`, not `{}`, which the MCP SDK's schema
+     * rejects with -32700 "Invalid JSON-RPC message" — so the key is omitted
+     * entirely for parameterless methods such as `tools/list`.
+     *
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
+    protected function buildRequestBody(string $method, array $params, int $id): array {
+        $body = [
+            'jsonrpc' => '2.0',
+            'id' => $id,
+            'method' => $method,
+        ];
+        if ($params !== []) {
+            $body['params'] = $params;
+        }
+        return $body;
+    }
+
+    /**
      * Send a JSON-RPC 2.0 request to an MCP server.
      */
     private function jsonRpc(McpServer $server, string $method, array $params = [], ?int $id = null): array {
         $id = $id ?? random_int(1, 999999);
 
-        $body = [
-            'jsonrpc' => '2.0',
-            'id' => $id,
-            'method' => $method,
-            'params' => $params,
-        ];
+        $body = $this->buildRequestBody($method, $params, $id);
 
         $headers = [
             'Content-Type' => 'application/json',
