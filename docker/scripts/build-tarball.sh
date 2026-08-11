@@ -29,14 +29,18 @@ VERSION=$(grep -oP '(?<=<version>)[^<]+' "${APP_DIR}/appinfo/info.xml")
 echo "App version: ${VERSION}"
 echo ""
 
-# Build inside Docker to avoid requiring composer/node on host
+# Build inside Docker to avoid requiring composer/node on host.
+# The source is mounted read-only and copied into a scratch dir inside the container,
+# so the working tree is never modified and no root-owned files land on the host.
 echo "[1/2] Building app inside Docker (composer + npm + vite)..."
 
 docker run --rm \
-    -v "${APP_DIR}:/app" \
+    -v "${APP_DIR}:/src:ro" \
     -v "${OUTPUT_DIR}:/output" \
-    -w /app \
-    node:20 \
+    -e HOST_UID="$(id -u)" \
+    -e HOST_GID="$(id -g)" \
+    -w / \
+    node:24 \
     bash -c '
         set -euo pipefail
 
@@ -50,16 +54,27 @@ docker run --rm \
         echo "PHP $(php -v | head -1 | cut -d" " -f2) + Composer installed."
 
         echo ""
-        echo "--- [1/4] Installing PHP dependencies ---"
-        composer update --no-dev --optimize-autoloader --quiet
+        echo "--- [1/5] Copying source to scratch dir ---"
+        mkdir -p /build
+        tar -C /src \
+            --exclude=./vendor \
+            --exclude=./node_modules \
+            --exclude=./js/dist \
+            --exclude=./.git \
+            --exclude=./.phpunit.result.cache \
+            -cf - . | tar -C /build -xf -
+        cd /build
 
-        echo "--- [2/4] Installing Node dependencies ---"
+        echo "--- [2/5] Installing PHP dependencies ---"
+        composer install --no-dev --optimize-autoloader --no-interaction --quiet
+
+        echo "--- [3/5] Installing Node dependencies ---"
         npm ci --silent
 
-        echo "--- [3/4] Building frontend ---"
+        echo "--- [4/5] Building frontend ---"
         npm run build
 
-        echo "--- [4/4] Verifying build ---"
+        echo "--- [5/5] Verifying build ---"
         test -f js/dist/aiquila-main.js || { echo "ERROR: js/dist/aiquila-main.js not found!"; exit 1; }
         test -d vendor || { echo "ERROR: vendor/ not found!"; exit 1; }
         echo "Build verified."
@@ -78,6 +93,7 @@ docker run --rm \
 
         cd /tmp
         tar -czf /output/aiquila.tar.gz aiquila
+        chown "${HOST_UID}:${HOST_GID}" /output/aiquila.tar.gz
 
         echo ""
         echo "Tarball created."

@@ -74,8 +74,9 @@ docker compose exec -T nextcloud su -p www-data -s /bin/sh -c "php /var/www/html
 Gotchas:
 - `make build-tarball` alone does **not** update the container — the install hook extracts
   `/tmp/aiquila.tar.gz` which is baked into the image, so `make up` (image rebuild) is required.
-- `make build-tarball` strips dev deps from `nextcloud-app/vendor/`; run `composer install`
-  again before `vendor/bin/phpunit`.
+- `make build-tarball` builds in a scratch dir inside the container from a read-only mount of
+  `nextcloud-app/`; it never touches your working tree (`vendor/`, `node_modules/`, `js/dist/`
+  and `composer.lock` are left alone).
 
 Check logs / status codes (level 3 = ERROR, 4 = FATAL; `serverDI` level-0 lines are noise):
 
