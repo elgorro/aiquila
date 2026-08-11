@@ -18,7 +18,7 @@ class MessageMapper extends QBMapper {
     }
 
     /**
-     * @return Message[]
+     * @return list<Message>
      */
     public function findByConversation(int $conversationId): array {
         $qb = $this->db->getQueryBuilder();
@@ -31,7 +31,7 @@ class MessageMapper extends QBMapper {
     }
 
     /**
-     * @return Message[]
+     * @return list<Message>
      */
     public function search(string $userId, string $query, int $limit, int $cursor): array {
         $qb = $this->db->getQueryBuilder();

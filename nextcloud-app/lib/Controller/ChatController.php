@@ -4,6 +4,7 @@
 namespace OCA\AIquila\Controller;
 
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
@@ -19,6 +20,8 @@ use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 
 class ChatController extends Controller {
+    use RequiresUserIdTrait;
+
     private LLMProviderFactory $providerFactory;
     private FileService $fileService;
     private FilesService $filesService;
@@ -66,7 +69,7 @@ class ChatController extends Controller {
      */
     private function checkRateLimit(): bool {
         $key = 'rate_limit_' . ($this->userId ?? 'anonymous');
-        $requests = (int)$this->cache->get($key) ?? 0;
+        $requests = (int)($this->cache->get($key) ?? 0);
 
         if ($requests >= self::RATE_LIMIT_REQUESTS) {
             return false;
@@ -95,12 +98,9 @@ class ChatController extends Controller {
      * 404: One of the attached files was not found
      * 413: Prompt or context exceeds the 5 MB content limit
      * 429: Rate limit exceeded (10 requests per minute)
+     * 500: An attached file could not be read
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      *
      * @NoAdminRequired
      */
@@ -134,12 +134,16 @@ class ChatController extends Controller {
 
     /**
      * Handle ask() with attached files — reads content and delegates to the appropriate Claude method
+     *
+     * @param list<string> $files
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      */
     private function askWithFiles(string $prompt, array $files): JSONResponse {
         $fileDataList = [];
         foreach ($files as $path) {
             try {
-                $fileDataList[] = $this->fileService->getContent($path, $this->userId);
+                $fileDataList[] = $this->fileService->getContent($path, $this->requireUserId());
             } catch (\OCP\Files\NotFoundException $e) {
                 return new JSONResponse(['error' => 'File not found: ' . $path], 404);
             } catch (\InvalidArgumentException $e) {
@@ -299,10 +303,7 @@ class ChatController extends Controller {
      * 413: Combined message content exceeds the 5 MB content limit
      * 429: Rate limit exceeded (10 requests per minute)
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
      *
      * @NoAdminRequired
      */
@@ -323,7 +324,7 @@ class ChatController extends Controller {
         $totalLength = 0;
         foreach ($messages as $msg) {
             $content = $msg['content'] ?? '';
-            $totalLength += is_string($content) ? strlen($content) : strlen(json_encode($content));
+            $totalLength += is_string($content) ? strlen($content) : strlen((string)json_encode($content));
         }
         if ($totalLength > self::MAX_CONTENT_LENGTH) {
             return new JSONResponse([
@@ -390,10 +391,7 @@ class ChatController extends Controller {
      * 413: Content exceeds the 5 MB content limit
      * 429: Rate limit exceeded (10 requests per minute)
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
      *
      * @NoAdminRequired
      */
@@ -432,12 +430,7 @@ class ChatController extends Controller {
      * 413: Prompt exceeds the 5 MB content limit
      * 429: Rate limit exceeded (10 requests per minute)
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      *
      * @NoAdminRequired
      */
@@ -461,7 +454,7 @@ class ChatController extends Controller {
         }
 
         try {
-            $fileData = $this->fileService->getContent($filePath, $this->userId);
+            $fileData = $this->fileService->getContent($filePath, $this->requireUserId());
         } catch (\OCP\Files\NotFoundException $e) {
             return new JSONResponse(['error' => 'File not found: ' . $filePath], 404);
         } catch (\InvalidArgumentException $e) {

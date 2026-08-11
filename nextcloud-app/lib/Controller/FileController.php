@@ -5,6 +5,7 @@ namespace OCA\AIquila\Controller;
 
 use OCA\AIquila\Service\FileService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
@@ -15,6 +16,8 @@ use OCP\IRequest;
 use Psr\Log\LoggerInterface;
 
 class FileController extends Controller {
+    use RequiresUserIdTrait;
+
     private FileService $fileService;
     private ?string $userId;
     private LoggerInterface $logger;
@@ -40,10 +43,9 @@ class FileController extends Controller {
      * 200: File or directory metadata
      * 400: No path provided
      * 404: File or directory not found at the given path
+     * 500: Reading the file metadata failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{name: string, path: string, size: int, mimeType: string, mtime: int, etag: string, permissions: int}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{name: string, path: string, size: int, mimeType: string, mtime: int, etag: string, permissions: int}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      *
      * @NoAdminRequired
      * @NoCSRFRequired
@@ -56,7 +58,7 @@ class FileController extends Controller {
             return new JSONResponse(['error' => 'No path provided'], 400);
         }
         try {
-            return new JSONResponse($this->fileService->getInfo($path, $this->userId));
+            return new JSONResponse($this->fileService->getInfo($path, $this->requireUserId()));
         } catch (NotFoundException $e) {
             return new JSONResponse(['error' => 'File not found: ' . $path], 404);
         } catch (\Exception $e) {
@@ -73,10 +75,9 @@ class FileController extends Controller {
      * 200: Directory listing
      * 400: Path is not a directory or is otherwise invalid
      * 404: Directory not found at the given path
+     * 500: Reading the directory failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{files: list<array{name: string, path: string, size: int, mimeType: string, mtime: int, type: string}>}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{files: list<array{name: string, path: string, size: int, mimeType: string, mtime: int, type: string}>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      *
      * @NoAdminRequired
      * @NoCSRFRequired
@@ -86,7 +87,7 @@ class FileController extends Controller {
     #[OpenAPI]
     public function listDir(string $path = '/'): JSONResponse {
         try {
-            return new JSONResponse($this->fileService->listDirectory($path, $this->userId));
+            return new JSONResponse($this->fileService->listDirectory($path, $this->requireUserId()));
         } catch (NotFoundException $e) {
             return new JSONResponse(['error' => 'Directory not found: ' . $path], 404);
         } catch (\InvalidArgumentException $e) {
@@ -105,10 +106,10 @@ class FileController extends Controller {
      * 200: File content with encoding and MIME type
      * 400: No path provided or path refers to a directory
      * 404: File not found at the given path
+     * 413: File exceeds the size limit
+     * 500: Reading the file failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{content: string, mimeType: string, name: string, size: int, encoding: string}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{content: string, mimeType: string, name: string, size: int, encoding: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      *
      * @NoAdminRequired
      * @NoCSRFRequired
@@ -121,7 +122,7 @@ class FileController extends Controller {
             return new JSONResponse(['error' => 'No path provided'], 400);
         }
         try {
-            return new JSONResponse($this->fileService->getContent($path, $this->userId));
+            return new JSONResponse($this->fileService->getContent($path, $this->requireUserId()));
         } catch (NotFoundException $e) {
             return new JSONResponse(['error' => 'File not found: ' . $path], 404);
         } catch (\InvalidArgumentException $e) {
@@ -149,7 +150,7 @@ class FileController extends Controller {
             return new DataDownloadResponse('', 'error.txt', 'text/plain');
         }
         try {
-            $file = $this->fileService->getFile($path, $this->userId);
+            $file = $this->fileService->getFile($path, $this->requireUserId());
             return new DataDownloadResponse($file->getContent(), $file->getName(), $file->getMimetype());
         } catch (NotFoundException $e) {
             return new DataDownloadResponse('File not found', 'error.txt', 'text/plain');
@@ -169,10 +170,9 @@ class FileController extends Controller {
      * 200: Search results
      * 400: No search query provided or query is invalid
      * 404: Base path not found
+     * 500: The search failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{results: list<array{name: string, path: string, mimeType: string, size: int}>}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{results: list<array{name: string, path: string, mimeType: string, size: int}>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      *
      * @NoAdminRequired
      * @NoCSRFRequired
@@ -185,7 +185,7 @@ class FileController extends Controller {
             return new JSONResponse(['error' => 'No search query provided'], 400);
         }
         try {
-            return new JSONResponse($this->fileService->search($query, $this->userId, $mime, $path));
+            return new JSONResponse($this->fileService->search($query, $this->requireUserId(), $mime, $path));
         } catch (NotFoundException $e) {
             return new JSONResponse(['error' => 'Base path not found: ' . $path], 404);
         } catch (\InvalidArgumentException $e) {
@@ -206,10 +206,9 @@ class FileController extends Controller {
      * 200: Base64-encoded preview image with MIME type
      * 400: No path provided or preview cannot be generated
      * 404: File not found at the given path
+     * 500: Generating the preview failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{preview: string, mimeType: string}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{preview: string, mimeType: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      *
      * @NoAdminRequired
      * @NoCSRFRequired
@@ -224,7 +223,7 @@ class FileController extends Controller {
         $width = max(16, min($width, 1024));
         $height = max(16, min($height, 1024));
         try {
-            return new JSONResponse($this->fileService->getPreview($path, $this->userId, $width, $height));
+            return new JSONResponse($this->fileService->getPreview($path, $this->requireUserId(), $width, $height));
         } catch (NotFoundException $e) {
             return new JSONResponse(['error' => 'File not found: ' . $path], 404);
         } catch (\RuntimeException $e) {
@@ -245,10 +244,11 @@ class FileController extends Controller {
      * 200: Archive created
      * 400: No sources provided or a path is invalid
      * 404: A source path was not found
+     * 409: Destination already exists and overwrite was not requested
+     * 413: Archive exceeds the maximum size
+     * 500: Creating the archive failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{archive: string, entries: int, size: int}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{archive: string, entries: int, size: int}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_CONFLICT, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      *
      * @NoAdminRequired
      * @NoCSRFRequired
@@ -264,7 +264,7 @@ class FileController extends Controller {
             return new JSONResponse(['error' => 'No destination provided'], 400);
         }
         try {
-            return new JSONResponse($this->fileService->compress($sources, $destination, $this->userId, $overwrite));
+            return new JSONResponse($this->fileService->compress($sources, $destination, $this->requireUserId(), $overwrite));
         } catch (NotFoundException $e) {
             return new JSONResponse(['error' => $e->getMessage()], 404);
         } catch (\InvalidArgumentException $e) {
@@ -289,10 +289,11 @@ class FileController extends Controller {
      * 200: Archive extracted
      * 400: Invalid path or unsafe archive entry
      * 404: Archive not found
+     * 409: An entry already exists and overwrite was not requested
+     * 413: Archive exceeds the maximum size
+     * 500: Extracting the archive failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{destination: string, extracted: int}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{destination: string, extracted: int}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_CONFLICT, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      *
      * @NoAdminRequired
      * @NoCSRFRequired
@@ -308,7 +309,7 @@ class FileController extends Controller {
             return new JSONResponse(['error' => 'No destination provided'], 400);
         }
         try {
-            return new JSONResponse($this->fileService->extract($archive, $destination, $this->userId, $overwrite));
+            return new JSONResponse($this->fileService->extract($archive, $destination, $this->requireUserId(), $overwrite));
         } catch (NotFoundException $e) {
             return new JSONResponse(['error' => 'Archive not found: ' . $archive], 404);
         } catch (\InvalidArgumentException $e) {
@@ -331,10 +332,9 @@ class FileController extends Controller {
      * 200: Archive entries
      * 400: No path provided or path is not a file
      * 404: Archive not found
+     * 500: Reading the archive failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{archive: string, count: int, entries: list<array{name: string, size: int, compressedSize: int, isDirectory: bool}>}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{archive: string, count: int, entries: list<array{name: string, size: int, compressedSize: int, isDirectory: bool}>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      *
      * @NoAdminRequired
      * @NoCSRFRequired
@@ -347,7 +347,7 @@ class FileController extends Controller {
             return new JSONResponse(['error' => 'No archive path provided'], 400);
         }
         try {
-            return new JSONResponse($this->fileService->listArchive($archive, $this->userId));
+            return new JSONResponse($this->fileService->listArchive($archive, $this->requireUserId()));
         } catch (NotFoundException $e) {
             return new JSONResponse(['error' => 'Archive not found: ' . $archive], 404);
         } catch (\InvalidArgumentException $e) {

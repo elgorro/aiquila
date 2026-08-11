@@ -80,10 +80,13 @@ class ClaudeAnalyzeImagesProvider implements ISynchronousProvider {
     }
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
-        $prompt = $input['input'] ?? 'Describe these images in detail.';
-        $imageList = $input['images'] ?? [];
+        $prompt = $input['input'] ?? '';
+        if (!is_string($prompt) || $prompt === '') {
+            $prompt = 'Describe these images in detail.';
+        }
 
-        if (empty($imageList)) {
+        $imageList = $input['images'] ?? [];
+        if (!is_array($imageList) || $imageList === []) {
             throw new \RuntimeException('No images provided');
         }
 
@@ -99,6 +102,10 @@ class ClaudeAnalyzeImagesProvider implements ISynchronousProvider {
         $images = [];
         $total = count($imageList);
         foreach ($imageList as $i => $imageData) {
+            if (!is_string($imageData)) {
+                throw new \RuntimeException('Image ' . ($i + 1) . ' is not raw image data');
+            }
+
             $mimeType = $this->detectMimeType($imageData);
 
             if ($this->imageOptimizer->isSupported($mimeType)) {

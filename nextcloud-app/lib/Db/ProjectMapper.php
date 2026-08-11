@@ -32,7 +32,7 @@ class ProjectMapper extends QBMapper {
     }
 
     /**
-     * @return Project[]
+     * @return list<Project>
      */
     public function findAllByUser(string $userId, bool $activeOnly = false): array {
         $qb = $this->db->getQueryBuilder();

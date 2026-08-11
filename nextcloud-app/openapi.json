@@ -60,15 +60,22 @@
                                         "type": "object",
                                         "required": [
                                             "id",
+                                            "userId",
                                             "title",
                                             "model",
                                             "createdAt",
-                                            "updatedAt"
+                                            "updatedAt",
+                                            "projectId",
+                                            "effort",
+                                            "thinking"
                                         ],
                                         "properties": {
                                             "id": {
                                                 "type": "integer",
                                                 "format": "int64"
+                                            },
+                                            "userId": {
+                                                "type": "string"
                                             },
                                             "title": {
                                                 "type": "string",
@@ -84,6 +91,19 @@
                                             "updatedAt": {
                                                 "type": "integer",
                                                 "format": "int64"
+                                            },
+                                            "projectId": {
+                                                "type": "integer",
+                                                "format": "int64",
+                                                "nullable": true
+                                            },
+                                            "effort": {
+                                                "type": "string",
+                                                "nullable": true
+                                            },
+                                            "thinking": {
+                                                "type": "boolean",
+                                                "nullable": true
                                             }
                                         }
                                     }
@@ -146,15 +166,22 @@
                                     "type": "object",
                                     "required": [
                                         "id",
+                                        "userId",
                                         "title",
                                         "model",
                                         "createdAt",
-                                        "updatedAt"
+                                        "updatedAt",
+                                        "projectId",
+                                        "effort",
+                                        "thinking"
                                     ],
                                     "properties": {
                                         "id": {
                                             "type": "integer",
                                             "format": "int64"
+                                        },
+                                        "userId": {
+                                            "type": "string"
                                         },
                                         "title": {
                                             "type": "string",
@@ -170,6 +197,19 @@
                                         "updatedAt": {
                                             "type": "integer",
                                             "format": "int64"
+                                        },
+                                        "projectId": {
+                                            "type": "integer",
+                                            "format": "int64",
+                                            "nullable": true
+                                        },
+                                        "effort": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "thinking": {
+                                            "type": "boolean",
+                                            "nullable": true
                                         }
                                     }
                                 }
@@ -243,14 +283,23 @@
                                     "type": "object",
                                     "required": [
                                         "id",
+                                        "userId",
                                         "title",
                                         "model",
+                                        "createdAt",
+                                        "updatedAt",
+                                        "projectId",
+                                        "effort",
+                                        "thinking",
                                         "messages"
                                     ],
                                     "properties": {
                                         "id": {
                                             "type": "integer",
                                             "format": "int64"
+                                        },
+                                        "userId": {
+                                            "type": "string"
                                         },
                                         "title": {
                                             "type": "string",
@@ -259,12 +308,142 @@
                                         "model": {
                                             "type": "string"
                                         },
+                                        "createdAt": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "updatedAt": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "projectId": {
+                                            "type": "integer",
+                                            "format": "int64",
+                                            "nullable": true
+                                        },
+                                        "effort": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "thinking": {
+                                            "type": "boolean",
+                                            "nullable": true
+                                        },
                                         "messages": {
                                             "type": "array",
                                             "items": {
                                                 "type": "object",
-                                                "additionalProperties": {
-                                                    "type": "object"
+                                                "required": [
+                                                    "id",
+                                                    "conversationId",
+                                                    "role",
+                                                    "content",
+                                                    "inputTokens",
+                                                    "outputTokens",
+                                                    "cacheCreationTokens",
+                                                    "cacheReadTokens",
+                                                    "latencyMs",
+                                                    "citations",
+                                                    "documents",
+                                                    "createdAt",
+                                                    "files"
+                                                ],
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer",
+                                                        "format": "int64"
+                                                    },
+                                                    "conversationId": {
+                                                        "type": "integer",
+                                                        "format": "int64"
+                                                    },
+                                                    "role": {
+                                                        "type": "string"
+                                                    },
+                                                    "content": {
+                                                        "type": "string"
+                                                    },
+                                                    "inputTokens": {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "nullable": true
+                                                    },
+                                                    "outputTokens": {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "nullable": true
+                                                    },
+                                                    "cacheCreationTokens": {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "nullable": true
+                                                    },
+                                                    "cacheReadTokens": {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "nullable": true
+                                                    },
+                                                    "latencyMs": {
+                                                        "type": "integer",
+                                                        "format": "int64",
+                                                        "nullable": true
+                                                    },
+                                                    "citations": {
+                                                        "type": "object",
+                                                        "nullable": true,
+                                                        "additionalProperties": {
+                                                            "type": "object"
+                                                        }
+                                                    },
+                                                    "documents": {
+                                                        "type": "object",
+                                                        "nullable": true,
+                                                        "additionalProperties": {
+                                                            "type": "object"
+                                                        }
+                                                    },
+                                                    "createdAt": {
+                                                        "type": "integer",
+                                                        "format": "int64"
+                                                    },
+                                                    "files": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "required": [
+                                                                "id",
+                                                                "messageId",
+                                                                "filePath",
+                                                                "fileName",
+                                                                "mimeType",
+                                                                "createdAt"
+                                                            ],
+                                                            "properties": {
+                                                                "id": {
+                                                                    "type": "integer",
+                                                                    "format": "int64"
+                                                                },
+                                                                "messageId": {
+                                                                    "type": "integer",
+                                                                    "format": "int64"
+                                                                },
+                                                                "filePath": {
+                                                                    "type": "string"
+                                                                },
+                                                                "fileName": {
+                                                                    "type": "string"
+                                                                },
+                                                                "mimeType": {
+                                                                    "type": "string",
+                                                                    "nullable": true
+                                                                },
+                                                                "createdAt": {
+                                                                    "type": "integer",
+                                                                    "format": "int64"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -392,13 +571,22 @@
                                     "type": "object",
                                     "required": [
                                         "id",
+                                        "userId",
                                         "title",
-                                        "model"
+                                        "model",
+                                        "createdAt",
+                                        "updatedAt",
+                                        "projectId",
+                                        "effort",
+                                        "thinking"
                                     ],
                                     "properties": {
                                         "id": {
                                             "type": "integer",
                                             "format": "int64"
+                                        },
+                                        "userId": {
+                                            "type": "string"
                                         },
                                         "title": {
                                             "type": "string",
@@ -406,6 +594,27 @@
                                         },
                                         "model": {
                                             "type": "string"
+                                        },
+                                        "createdAt": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "updatedAt": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "projectId": {
+                                            "type": "integer",
+                                            "format": "int64",
+                                            "nullable": true
+                                        },
+                                        "effort": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "thinking": {
+                                            "type": "boolean",
+                                            "nullable": true
                                         }
                                     }
                                 }
@@ -419,7 +628,8 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "error"
+                                        "error",
+                                        "allowed"
                                     ],
                                     "properties": {
                                         "error": {
@@ -772,13 +982,22 @@
                                     "type": "object",
                                     "required": [
                                         "id",
+                                        "userId",
                                         "title",
-                                        "model"
+                                        "model",
+                                        "createdAt",
+                                        "updatedAt",
+                                        "projectId",
+                                        "effort",
+                                        "thinking"
                                     ],
                                     "properties": {
                                         "id": {
                                             "type": "integer",
                                             "format": "int64"
+                                        },
+                                        "userId": {
+                                            "type": "string"
                                         },
                                         "title": {
                                             "type": "string",
@@ -786,6 +1005,27 @@
                                         },
                                         "model": {
                                             "type": "string"
+                                        },
+                                        "createdAt": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "updatedAt": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "projectId": {
+                                            "type": "integer",
+                                            "format": "int64",
+                                            "nullable": true
+                                        },
+                                        "effort": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "thinking": {
+                                            "type": "boolean",
+                                            "nullable": true
                                         }
                                     }
                                 }
@@ -1053,6 +1293,24 @@
                                     "type": "object",
                                     "additionalProperties": {
                                         "type": "object"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Title is missing",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
                                     }
                                 }
                             }
@@ -1790,6 +2048,24 @@
                             }
                         }
                     },
+                    "500": {
+                        "description": "An attached file could not be read",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "401": {
                         "description": "Current user is not logged in",
                         "content": {
@@ -2507,11 +2783,62 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
+                                        "provider",
+                                        "userProvider",
+                                        "providers",
                                         "hasUserKey",
                                         "userModel",
-                                        "availableModels"
+                                        "availableModels",
+                                        "defaultSystemPrompt",
+                                        "defaultVerbose",
+                                        "nativeMcpUserOverride",
+                                        "nativeMcpAdminDefault",
+                                        "nativeMcpEffective"
                                     ],
                                     "properties": {
+                                        "provider": {
+                                            "type": "string"
+                                        },
+                                        "userProvider": {
+                                            "type": "string"
+                                        },
+                                        "providers": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": [
+                                                    "id",
+                                                    "label",
+                                                    "configured",
+                                                    "hasUserKey",
+                                                    "userModel",
+                                                    "availableModels"
+                                                ],
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "label": {
+                                                        "type": "string"
+                                                    },
+                                                    "configured": {
+                                                        "type": "boolean"
+                                                    },
+                                                    "hasUserKey": {
+                                                        "type": "boolean"
+                                                    },
+                                                    "userModel": {
+                                                        "type": "string"
+                                                    },
+                                                    "availableModels": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
                                         "hasUserKey": {
                                             "type": "boolean"
                                         },
@@ -2521,20 +2848,23 @@
                                         "availableModels": {
                                             "type": "array",
                                             "items": {
-                                                "type": "object",
-                                                "required": [
-                                                    "id",
-                                                    "name"
-                                                ],
-                                                "properties": {
-                                                    "id": {
-                                                        "type": "string"
-                                                    },
-                                                    "name": {
-                                                        "type": "string"
-                                                    }
-                                                }
+                                                "type": "string"
                                             }
+                                        },
+                                        "defaultSystemPrompt": {
+                                            "type": "string"
+                                        },
+                                        "defaultVerbose": {
+                                            "type": "boolean"
+                                        },
+                                        "nativeMcpUserOverride": {
+                                            "type": "string"
+                                        },
+                                        "nativeMcpAdminDefault": {
+                                            "type": "boolean"
+                                        },
+                                        "nativeMcpEffective": {
+                                            "type": "boolean"
                                         }
                                     }
                                 }
@@ -3875,6 +4205,24 @@
                             }
                         }
                     },
+                    "500": {
+                        "description": "Reading the file metadata failed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "401": {
                         "description": "Current user is not logged in",
                         "content": {
@@ -4010,6 +4358,24 @@
                             }
                         }
                     },
+                    "500": {
+                        "description": "Reading the directory failed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "401": {
                         "description": "Current user is not logged in",
                         "content": {
@@ -4113,6 +4479,42 @@
                     },
                     "404": {
                         "description": "File not found at the given path",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "description": "File exceeds the size limit",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Reading the file failed",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -4274,6 +4676,24 @@
                             }
                         }
                     },
+                    "500": {
+                        "description": "The search failed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "401": {
                         "description": "Current user is not logged in",
                         "content": {
@@ -4384,6 +4804,24 @@
                     },
                     "404": {
                         "description": "File not found at the given path",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Generating the preview failed",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -4531,6 +4969,60 @@
                             }
                         }
                     },
+                    "409": {
+                        "description": "Destination already exists and overwrite was not requested",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "description": "Archive exceeds the maximum size",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Creating the archive failed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "401": {
                         "description": "Current user is not logged in",
                         "content": {
@@ -4638,6 +5130,60 @@
                     },
                     "404": {
                         "description": "Archive not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "An entry already exists and overwrite was not requested",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "description": "Archive exceeds the maximum size",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Extracting the archive failed",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -4774,6 +5320,24 @@
                     },
                     "404": {
                         "description": "Archive not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Reading the archive failed",
                         "content": {
                             "application/json": {
                                 "schema": {

@@ -62,7 +62,6 @@ class CoworkerService {
     }
 
     /**
-     * @param array<string, mixed> $data
      * @throws DoesNotExistException
      */
     public function findForUser(int $id, string $userId): Coworker {
@@ -70,7 +69,7 @@ class CoworkerService {
     }
 
     /**
-     * @return Coworker[]
+     * @return list<Coworker>
      */
     public function listForUser(string $userId): array {
         return $this->mapper->findAllByUser($userId);
@@ -127,7 +126,7 @@ class CoworkerService {
     }
 
     /**
-     * @return CoworkerRun[]
+     * @return list<CoworkerRun>
      * @throws DoesNotExistException
      */
     public function listRuns(int $id, string $userId, int $limit = 20): array {
@@ -308,7 +307,7 @@ class CoworkerService {
             if ($this->registry->has($taskTypeId)) {
                 $this->registry->get($taskTypeId)->validateOptions($options);
             }
-            $coworker->setOptions(json_encode($options));
+            $coworker->setOptions(json_encode($options) ?: null);
         }
 
         // Sensible defaults for required columns on first create.

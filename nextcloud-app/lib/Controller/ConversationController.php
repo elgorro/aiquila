@@ -23,6 +23,7 @@ use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCA\AIquila\BackgroundJob\IndexConversationJob;
@@ -33,6 +34,8 @@ use OCP\BackgroundJob\IJobList;
 use OCP\IRequest;
 
 class ConversationController extends Controller {
+    use RequiresUserIdTrait;
+
     private ConversationMapper $conversationMapper;
     private MessageMapper $messageMapper;
     private MessageFileMapper $messageFileMapper;
@@ -96,12 +99,12 @@ class ConversationController extends Controller {
      *
      * 200: List of conversations
      *
-     * @return JSONResponse<Http::STATUS_OK, list<array{id: int, title: ?string, model: string, createdAt: int, updatedAt: int}>, array{}>
+     * @return JSONResponse<Http::STATUS_OK, list<array{id: int, userId: string, title: ?string, model: string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}>, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function index(): JSONResponse {
-        $conversations = $this->conversationMapper->findAllByUser($this->userId);
+        $conversations = $this->conversationMapper->findAllByUser($this->requireUserId());
         return new JSONResponse(array_map(
             fn(Conversation $c) => $c->jsonSerialize(),
             $conversations
@@ -113,14 +116,14 @@ class ConversationController extends Controller {
      *
      * 200: The created conversation
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, title: ?string, model: string, createdAt: int, updatedAt: int}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function create(): JSONResponse {
         $now = time();
         $conversation = new Conversation();
-        $conversation->setUserId($this->userId);
+        $conversation->setUserId($this->requireUserId());
         $conversation->setModel($this->providerFactory->getProvider($this->userId)->getModel($this->userId));
         $conversation->setCreatedAt($now);
         $conversation->setUpdatedAt($now);
@@ -137,14 +140,13 @@ class ConversationController extends Controller {
      * 200: Conversation with messages
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, title: ?string, model: string, messages: list<array<string, mixed>>}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, messages: list<array{id: int, conversationId: int, role: string, content: string, inputTokens: ?int, outputTokens: ?int, cacheCreationTokens: ?int, cacheReadTokens: ?int, latencyMs: ?int, citations: ?array<string, mixed>, documents: ?array<string, mixed>, createdAt: int, files: list<array{id: int, messageId: int, filePath: string, fileName: string, mimeType: ?string, createdAt: int}>}>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function show(int $id): JSONResponse {
         try {
-            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->userId);
+            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Conversation not found'], 404);
         }
@@ -178,15 +180,13 @@ class ConversationController extends Controller {
      * 400: Invalid effort or thinking value
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, title: ?string, model: string}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, allowed?: list<string>}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, allowed: list<string>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function update(int $id, string $title = '', ?int $projectId = null, ?string $effort = null, ?string $thinking = null): JSONResponse {
         try {
-            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->userId);
+            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Conversation not found'], 404);
         }
@@ -236,14 +236,13 @@ class ConversationController extends Controller {
      * 200: Deletion confirmed
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{deleted: true}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{deleted: true}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function destroy(int $id): JSONResponse {
         try {
-            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->userId);
+            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Conversation not found'], 404);
         }
@@ -273,9 +272,7 @@ class ConversationController extends Controller {
      * 400: No prompt provided
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{userMessage: array<string, mixed>, assistantMessage: array<string, mixed>, conversation: array<string, mixed>}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{userMessage: array<string, mixed>, assistantMessage: array<string, mixed>, conversation: array<string, mixed>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -285,7 +282,7 @@ class ConversationController extends Controller {
         }
 
         try {
-            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->userId);
+            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Conversation not found'], 404);
         }
@@ -304,7 +301,7 @@ class ConversationController extends Controller {
         $fileEntities = [];
         foreach ($files as $filePath) {
             try {
-                $info = $this->fileService->getInfo($filePath, $this->userId);
+                $info = $this->fileService->getInfo($filePath, $this->requireUserId());
             } catch (\Exception $e) {
                 // Store with basic info if lookup fails
                 $info = ['name' => basename($filePath), 'mimeType' => 'application/octet-stream'];
@@ -336,7 +333,7 @@ class ConversationController extends Controller {
             $built = $this->buildFileContentBlocks($files);
             $contentBlocks = $built['blocks'];
             $documentsIndex = $built['documents'];
-            if (!empty($contentBlocks)) {
+            if (!empty($contentBlocks) && $claudeMessages !== []) {
                 $lastIdx = count($claudeMessages) - 1;
                 $userText = $claudeMessages[$lastIdx]['content'];
                 // Convert plain string content to structured array with file blocks + text
@@ -349,9 +346,10 @@ class ConversationController extends Controller {
 
         // 5. Load project system prompt if conversation has a project
         $systemPrompt = null;
-        if ($conversation->getProjectId() !== null) {
+        $projectId = $conversation->getProjectId();
+        if ($projectId !== null) {
             try {
-                $project = $this->projectMapper->findByIdAndUser($conversation->getProjectId(), $this->userId);
+                $project = $this->projectMapper->findByIdAndUser($projectId, $this->requireUserId());
                 $systemPrompt = $project->getSystemPrompt();
 
                 // Build project context from paths
@@ -372,7 +370,7 @@ class ConversationController extends Controller {
         // 6. Call Claude (with MCP tools if available). If the call fails because
         //    a cached Anthropic file_id was evicted server-side, drop the row,
         //    rebuild content blocks (re-uploading), and retry once.
-        $startMs = (int)(microtime(true) * 1000);
+        $startMs = (int)(microtime(true) * 1000.0);
         $options = $this->conversationOptions($conversation);
         $result = $this->callClaude($claudeMessages, $systemPrompt, $options);
         if (
@@ -382,13 +380,13 @@ class ConversationController extends Controller {
             && $this->filesService->evictByFileId($staleId)
         ) {
             $rebuilt = $this->buildFileContentBlocks($files);
-            if (!empty($rebuilt['blocks'])) {
+            if (!empty($rebuilt['blocks']) && $claudeMessages !== []) {
                 $documentsIndex = $rebuilt['documents'];
                 $lastIdx = count($claudeMessages) - 1;
                 $userText = $claudeMessages[$lastIdx]['content'];
                 if (is_array($userText)) {
                     $textBlock = end($userText) ?: ['type' => 'text', 'text' => ''];
-                    $userText = is_array($textBlock) ? ($textBlock['text'] ?? '') : '';
+                    $userText = $textBlock['text'] ?? '';
                 }
                 $claudeMessages[$lastIdx]['content'] = array_merge(
                     $rebuilt['blocks'],
@@ -397,7 +395,7 @@ class ConversationController extends Controller {
             }
             $result = $this->callClaude($claudeMessages, $systemPrompt, $options);
         }
-        $latencyMs = (int)(microtime(true) * 1000) - $startMs;
+        $latencyMs = (int)(microtime(true) * 1000.0) - $startMs;
 
         if (isset($result['error'])) {
             // Persist error as assistant message so user sees it in history
@@ -430,9 +428,9 @@ class ConversationController extends Controller {
         $assistantMsg->setCacheReadTokens($result['usage']['cache_read_tokens'] ?? null);
         $assistantMsg->setLatencyMs($latencyMs);
         if (!empty($result['citations'])) {
-            $assistantMsg->setCitations(json_encode($result['citations']));
+            $assistantMsg->setCitations(json_encode($result['citations']) ?: null);
             if (!empty($documentsIndex)) {
-                $assistantMsg->setDocuments(json_encode($documentsIndex));
+                $assistantMsg->setDocuments(json_encode($documentsIndex) ?: null);
             }
         }
         $assistantMsg->setCreatedAt(time());
@@ -485,7 +483,7 @@ class ConversationController extends Controller {
             return new JSONResponse(['error' => 'No prompt provided'], 400);
         }
         try {
-            $this->conversationMapper->findByIdAndUser($id, $this->userId);
+            $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Conversation not found'], 404);
         }
@@ -504,7 +502,7 @@ class ConversationController extends Controller {
         $now = time();
 
         try {
-            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->userId);
+            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             yield ['type' => 'error', 'error' => 'Conversation not found'];
             return;
@@ -521,7 +519,7 @@ class ConversationController extends Controller {
         $fileEntities = [];
         foreach ($files as $filePath) {
             try {
-                $info = $this->fileService->getInfo($filePath, $this->userId);
+                $info = $this->fileService->getInfo($filePath, $this->requireUserId());
             } catch (\Exception $e) {
                 $info = ['name' => basename($filePath), 'mimeType' => 'application/octet-stream'];
             }
@@ -548,7 +546,7 @@ class ConversationController extends Controller {
             $built = $this->buildFileContentBlocks($files);
             $contentBlocks = $built['blocks'];
             $documentsIndex = $built['documents'];
-            if (!empty($contentBlocks)) {
+            if (!empty($contentBlocks) && $claudeMessages !== []) {
                 $lastIdx = count($claudeMessages) - 1;
                 $userText = $claudeMessages[$lastIdx]['content'];
                 $claudeMessages[$lastIdx]['content'] = array_merge(
@@ -559,9 +557,10 @@ class ConversationController extends Controller {
         }
 
         $systemPrompt = null;
-        if ($conversation->getProjectId() !== null) {
+        $projectId = $conversation->getProjectId();
+        if ($projectId !== null) {
             try {
-                $project = $this->projectMapper->findByIdAndUser($conversation->getProjectId(), $this->userId);
+                $project = $this->projectMapper->findByIdAndUser($projectId, $this->requireUserId());
                 $systemPrompt = $project->getSystemPrompt();
                 $paths = $this->projectPathMapper->findByProject($project->getId());
                 if (!empty($paths)) {
@@ -593,6 +592,10 @@ class ConversationController extends Controller {
             }
         }
 
+        $tools = [];
+        // Replaced below unless the native connector handles the tools instead;
+        // keeping it callable spares every caller a null check.
+        $toolExecutor = static fn(string $_name, array $_input): array => [];
         if (!$useNativeMcp) {
             try {
                 $allTools = $this->mcpClient->getAllTools();
@@ -612,7 +615,7 @@ class ConversationController extends Controller {
         $finalCitations = [];
         $finalUsage = ['input_tokens' => 0, 'output_tokens' => 0, 'cache_creation_tokens' => null, 'cache_read_tokens' => null];
         $errorMessage = null;
-        $startMs = (int)(microtime(true) * 1000);
+        $startMs = (int)(microtime(true) * 1000.0);
         $options = $this->conversationOptions($conversation);
 
         $eventStream = $useNativeMcp
@@ -651,7 +654,7 @@ class ConversationController extends Controller {
             yield $event;
         }
 
-        $latencyMs = (int)(microtime(true) * 1000) - $startMs;
+        $latencyMs = (int)(microtime(true) * 1000.0) - $startMs;
 
         // 5. Persist assistant message — even on error, so partial output is preserved.
         $assistantContent = $accumulatedText !== ''
@@ -671,9 +674,9 @@ class ConversationController extends Controller {
         $assistantMsg->setCacheReadTokens($finalUsage['cache_read_tokens'] ?? null);
         $assistantMsg->setLatencyMs($latencyMs);
         if (!empty($finalCitations)) {
-            $assistantMsg->setCitations(json_encode($finalCitations));
+            $assistantMsg->setCitations(json_encode($finalCitations) ?: null);
             if (!empty($documentsIndex)) {
-                $assistantMsg->setDocuments(json_encode($documentsIndex));
+                $assistantMsg->setDocuments(json_encode($documentsIndex) ?: null);
             }
         }
         $assistantMsg->setCreatedAt(time());
@@ -707,14 +710,13 @@ class ConversationController extends Controller {
      * 200: The duplicated conversation
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, title: ?string, model: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function duplicate(int $id): JSONResponse {
         try {
-            $original = $this->conversationMapper->findByIdAndUser($id, $this->userId);
+            $original = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Conversation not found'], 404);
         }
@@ -723,7 +725,7 @@ class ConversationController extends Controller {
 
         // Clone conversation
         $newConv = new Conversation();
-        $newConv->setUserId($this->userId);
+        $newConv->setUserId($this->requireUserId());
         $newConv->setTitle(($original->getTitle() ?? '') . ' (copy)');
         $newConv->setModel($original->getModel());
         $newConv->setProjectId($original->getProjectId());
@@ -783,12 +785,12 @@ class ConversationController extends Controller {
             return new JSONResponse([]);
         }
 
-        $messages = $this->messageMapper->search($this->userId, $query, $limit, $cursor);
+        $messages = $this->messageMapper->search($this->requireUserId(), $query, $limit, $cursor);
         $result = [];
         foreach ($messages as $msg) {
             $data = $msg->jsonSerialize();
             try {
-                $conv = $this->conversationMapper->findByIdAndUser($msg->getConversationId(), $this->userId);
+                $conv = $this->conversationMapper->findByIdAndUser($msg->getConversationId(), $this->requireUserId());
                 $data['conversationTitle'] = $conv->getTitle();
             } catch (DoesNotExistException $e) {
                 $data['conversationTitle'] = null;
@@ -824,7 +826,7 @@ class ConversationController extends Controller {
         $documents = [];
         foreach ($files as $filePath) {
             try {
-                $fileData = $this->fileService->getContent($filePath, $this->userId);
+                $fileData = $this->fileService->getContent($filePath, $this->requireUserId());
                 $mimeType = $fileData['mimeType'];
 
                 if (str_starts_with($mimeType, 'image/') && $this->imageOptimizer->isSupported($mimeType)) {

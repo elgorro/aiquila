@@ -7,7 +7,6 @@ namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\TaskProcessing\ISynchronousProvider;
-use Psr\Log\LoggerInterface;
 
 /**
  * Claude translate TaskProcessing Provider (core:text2text:translate)
@@ -16,7 +15,6 @@ class ClaudeTranslateProvider implements ISynchronousProvider {
 
     public function __construct(
         private ClaudeSDKService $claudeService,
-        private LoggerInterface $logger,
     ) {
     }
 
@@ -73,11 +71,14 @@ class ClaudeTranslateProvider implements ISynchronousProvider {
         $originLanguage = $input['origin_language'] ?? '';
         $targetLanguage = $input['target_language'] ?? '';
 
-        if (empty($text)) {
+        if (!is_string($text) || $text === '') {
             throw new \RuntimeException('No input text provided');
         }
-        if (empty($targetLanguage)) {
+        if (!is_string($targetLanguage) || $targetLanguage === '') {
             throw new \RuntimeException('No target language provided');
+        }
+        if (!is_string($originLanguage)) {
+            $originLanguage = '';
         }
 
         $reportProgress(0.1);

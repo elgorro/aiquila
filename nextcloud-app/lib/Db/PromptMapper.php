@@ -32,7 +32,7 @@ class PromptMapper extends QBMapper {
     }
 
     /**
-     * @return Prompt[]
+     * @return list<Prompt>
      */
     public function findAllByUser(string $userId, bool $activeOnly = false): array {
         $qb = $this->db->getQueryBuilder();

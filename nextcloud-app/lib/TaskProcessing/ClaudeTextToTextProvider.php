@@ -6,8 +6,8 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\ClaudeSDKService;
-use OCP\TaskProcessing\ISynchronousProvider;
 use Psr\Log\LoggerInterface;
+use OCP\TaskProcessing\ISynchronousProvider;
 
 /**
  * Claude free-prompt TaskProcessing Provider (core:text2text)
@@ -73,7 +73,7 @@ class ClaudeTextToTextProvider implements ISynchronousProvider {
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $prompt = $input['input'] ?? '';
-        if (empty($prompt)) {
+        if (!is_string($prompt) || $prompt === '') {
             throw new \RuntimeException('No input text provided');
         }
 

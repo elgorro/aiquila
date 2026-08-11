@@ -18,7 +18,7 @@ class ProjectPathMapper extends QBMapper {
     }
 
     /**
-     * @return ProjectPath[]
+     * @return list<ProjectPath>
      */
     public function findByProject(int $projectId): array {
         $qb = $this->db->getQueryBuilder();

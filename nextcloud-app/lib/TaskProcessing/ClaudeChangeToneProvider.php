@@ -7,7 +7,6 @@ namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\TaskProcessing\ISynchronousProvider;
-use Psr\Log\LoggerInterface;
 
 /**
  * Claude change-tone TaskProcessing Provider (core:text2text:changetone)
@@ -16,7 +15,6 @@ class ClaudeChangeToneProvider implements ISynchronousProvider {
 
     public function __construct(
         private ClaudeSDKService $claudeService,
-        private LoggerInterface $logger,
     ) {
     }
 
@@ -72,8 +70,11 @@ class ClaudeChangeToneProvider implements ISynchronousProvider {
         $text = $input['input'] ?? '';
         $tone = $input['tone'] ?? 'formal';
 
-        if (empty($text)) {
+        if (!is_string($text) || $text === '') {
             throw new \RuntimeException('No input text provided');
+        }
+        if (!is_string($tone) || $tone === '') {
+            $tone = 'formal';
         }
 
         $reportProgress(0.1);

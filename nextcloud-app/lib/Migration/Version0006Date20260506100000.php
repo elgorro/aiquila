@@ -13,7 +13,6 @@ use OCP\Migration\SimpleMigrationStep;
 
 class Version0006Date20260506100000 extends SimpleMigrationStep {
     public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
-        /** @var ISchemaWrapper $schema */
         $schema = $schemaClosure();
 
         if ($schema->hasTable('aiquila_file_uploads')) {

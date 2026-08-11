@@ -23,3 +23,37 @@ if (!interface_exists(Emitter::class)) {
     interface Emitter {
     }
 }
+
+namespace OC\Security\CSP;
+
+// Reached through OC::$server below; there is no OCP equivalent for the CSP
+// nonce, so the whole chain has to be stubbed.
+if (!class_exists(ContentSecurityPolicyNonceManager::class)) {
+    class ContentSecurityPolicyNonceManager {
+        public function getNonce(): string {
+            return '';
+        }
+    }
+}
+
+namespace OC;
+
+if (!class_exists(Server::class)) {
+    class Server {
+        public function getContentSecurityPolicyNonceManager(): \OC\Security\CSP\ContentSecurityPolicyNonceManager {
+            return new \OC\Security\CSP\ContentSecurityPolicyNonceManager();
+        }
+    }
+}
+
+namespace OC\Core\Command;
+
+// Base class of every `occ` command. It is private, so nextcloud/ocp does not
+// carry it, but lib/Command/*.php extends it. Stubbing it (rather than
+// suppressing UndefinedClass for lib/Command/) keeps those commands analysed
+// against the real Symfony Command signatures. None of our commands use any
+// Base-specific member beyond the constructor, so nothing else is stubbed.
+if (!class_exists(Base::class)) {
+    abstract class Base extends \Symfony\Component\Console\Command\Command {
+    }
+}

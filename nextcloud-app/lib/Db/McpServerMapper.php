@@ -31,7 +31,7 @@ class McpServerMapper extends QBMapper {
     }
 
     /**
-     * @return McpServer[]
+     * @return list<McpServer>
      */
     public function findAll(): array {
         $qb = $this->db->getQueryBuilder();
@@ -43,7 +43,7 @@ class McpServerMapper extends QBMapper {
     }
 
     /**
-     * @return McpServer[]
+     * @return list<McpServer>
      */
     public function findAllEnabled(): array {
         $qb = $this->db->getQueryBuilder();

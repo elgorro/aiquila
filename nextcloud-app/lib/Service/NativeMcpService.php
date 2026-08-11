@@ -7,7 +7,6 @@ namespace OCA\AIquila\Service;
 
 use OCA\AIquila\Db\McpServerMapper;
 use OCP\IConfig;
-use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -22,19 +21,16 @@ class NativeMcpService {
     private McpServerMapper $mapper;
     private CredentialService $credentials;
     private IConfig $config;
-    private LoggerInterface $logger;
     private HttpClientInterface $httpClient;
 
     public function __construct(
         McpServerMapper $mapper,
         CredentialService $credentials,
         IConfig $config,
-        LoggerInterface $logger
     ) {
         $this->mapper = $mapper;
         $this->credentials = $credentials;
         $this->config = $config;
-        $this->logger = $logger;
         $this->httpClient = HttpClient::create(['timeout' => 5]);
     }
 
@@ -196,7 +192,7 @@ class NativeMcpService {
 
     private function slugifyName(string $name): string {
         $slug = strtolower(trim($name));
-        $slug = preg_replace('/[^a-z0-9]+/', '_', $slug);
+        $slug = preg_replace('/[^a-z0-9]+/', '_', $slug) ?? '';
         $slug = trim($slug, '_');
         return $slug !== '' ? $slug : 'mcp';
     }

@@ -20,6 +20,9 @@ use OCP\AppFramework\Http\Response;
  *     not target text/event-stream responses.
  *   - PHP-FPM: `fastcgi_buffering off` may be needed at the proxy.
  */
+/**
+ * @template-extends Response<Http::STATUS_OK, array<string, mixed>>
+ */
 class SSEResponse extends Response {
     /** @param iterable<array<string, mixed>> $events */
     public function __construct(

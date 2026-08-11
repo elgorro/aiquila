@@ -8,10 +8,77 @@
             <directory name="vendor"/>
         </ignoreFiles>
     </projectFiles>
+    <!--
+        nextcloud/ocp ships no `autoload` section — it is published for static
+        analysers, which read the sources directly. Parsing vendor/ as extra files
+        is how psalm resolves `OCP\*` without reporting issues inside vendor/.
+    -->
+    <extraFiles>
+        <directory name="vendor"/>
+    </extraFiles>
+    <stubs>
+        <file name="tests/stubs/oc-private.php"/>
+        <file name="tests/stubs/oc-global.php"/>
+    </stubs>
     <issueHandlers>
         <LessSpecificReturnStatement errorLevel="error"/>
         <LessSpecificReturnType errorLevel="error"/>
         <LessSpecificImplementedReturnType errorLevel="error"/>
         <MoreSpecificReturnType errorLevel="error"/>
+
+        <!--
+            Nothing in a Nextcloud app is called from code psalm can see: services are
+            built by the DI container, controllers by the router, listeners/commands/
+            widgets/jobs by appinfo registration. Psalm's dead-code detection therefore
+            reports the whole app as unused.
+        -->
+        <UnusedClass errorLevel="suppress"/>
+        <PossiblyUnusedMethod errorLevel="suppress"/>
+        <PossiblyUnusedProperty errorLevel="suppress"/>
+        <PossiblyUnusedParam errorLevel="suppress"/>
+        <PossiblyUnusedReturnValue errorLevel="suppress"/>
+
+        <!--
+            #[Override] is a psalm 6 style default, not something the Nextcloud
+            codebase or its app ecosystem uses.
+        -->
+        <MissingOverrideAttribute errorLevel="suppress"/>
+
+        <!--
+            Entities extend OCP\AppFramework\Db\Entity, whose columns are magic
+            properties generated from addType() calls, and the Anthropic SDK models
+            expose their block fields the same way.
+        -->
+        <UndefinedMagicPropertyFetch errorLevel="suppress"/>
+        <UndefinedMagicPropertyAssignment errorLevel="suppress"/>
+
+        <!--
+            The Anthropic SDK models declare non-nullable typed properties, so psalm
+            reads every `isset()`/`??` guard over a response field as redundant. PHP
+            typed properties can still be *uninitialized* — the SDK leaves optional
+            fields unset — and dropping the guards makes the SDK tests fatal with
+            "must not be accessed before initialization".
+        -->
+        <RedundantCondition>
+            <errorLevel type="suppress">
+                <file name="lib/Service/ClaudeSDKService.php"/>
+            </errorLevel>
+        </RedundantCondition>
+        <TypeDoesNotContainType>
+            <errorLevel type="suppress">
+                <file name="lib/Service/ClaudeSDKService.php"/>
+            </errorLevel>
+        </TypeDoesNotContainType>
+
+        <!--
+            IMG_* constants only exist when ext-gd is loaded. Nextcloud requires gd,
+            but the analysis environment need not have it, so keep the result the same
+            either way.
+        -->
+        <UndefinedConstant>
+            <errorLevel type="suppress">
+                <file name="lib/Service/ImageOptimizer.php"/>
+            </errorLevel>
+        </UndefinedConstant>
     </issueHandlers>
 </psalm>

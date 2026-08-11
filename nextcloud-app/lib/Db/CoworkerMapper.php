@@ -36,7 +36,7 @@ class CoworkerMapper extends QBMapper {
      * coworkers carry a non-null owner_app and are excluded so they don't show
      * up in the user-facing list.
      *
-     * @return Coworker[]
+     * @return list<Coworker>
      */
     public function findAllByUser(string $userId): array {
         $qb = $this->db->getQueryBuilder();
@@ -68,7 +68,7 @@ class CoworkerMapper extends QBMapper {
     /**
      * List coworkers owned by an app, optionally filtered to a single user.
      *
-     * @return Coworker[]
+     * @return list<Coworker>
      */
     public function findAllByApp(string $appId, ?string $userId = null): array {
         $qb = $this->db->getQueryBuilder();
@@ -88,7 +88,7 @@ class CoworkerMapper extends QBMapper {
      * next_run_at never satisfies the `<= now` comparison, so paused/disabled
      * coworkers (whose next_run_at is cleared) are excluded automatically.
      *
-     * @return Coworker[]
+     * @return list<Coworker>
      */
     public function findDueForRun(int $now): array {
         $qb = $this->db->getQueryBuilder();

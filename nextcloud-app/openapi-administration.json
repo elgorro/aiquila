@@ -555,7 +555,7 @@
                         }
                     },
                     "500": {
-                        "description": "",
+                        "description": "The PHP CLI binary could not be located or the process failed to start",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -570,6 +570,41 @@
                                         },
                                         "error": {
                                             "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "408": {
+                        "description": "The command exceeded the requested timeout",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "success",
+                                        "error",
+                                        "stdout",
+                                        "stderr",
+                                        "exitCode"
+                                    ],
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "stdout": {
+                                            "type": "string"
+                                        },
+                                        "stderr": {
+                                            "type": "string"
+                                        },
+                                        "exitCode": {
+                                            "type": "integer",
+                                            "format": "int64"
                                         }
                                     }
                                 }
@@ -1379,6 +1414,24 @@
                             }
                         }
                     },
+                    "500": {
+                        "description": "Listing the tools failed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "401": {
                         "description": "Current user is not logged in",
                         "content": {
@@ -1477,6 +1530,24 @@
                     },
                     "404": {
                         "description": "Server not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Starting the authorization flow failed",
                         "content": {
                             "application/json": {
                                 "schema": {

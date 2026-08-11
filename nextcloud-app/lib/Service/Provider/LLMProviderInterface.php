@@ -52,13 +52,13 @@ interface LLMProviderInterface {
     /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
     public function ask(string $prompt, string $context = '', ?string $userId = null, array $options = []): array;
 
-    /** @return array{response: string, usage?: array}|array{error: string} */
+    /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
     public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null): array;
 
     /**
-     * @param array<array{base64: string, mimeType: string}> $images
+     * @param array<array{base64: string, mimeType: string, ...}> $images
      * @param array<int, string|null>|null $fileIds
-     * @return array{response: string, usage?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
     public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null): array;
 
@@ -90,12 +90,18 @@ interface LLMProviderInterface {
     /**
      * Native MCP connector path (Anthropic only). Providers that return false
      * from supportsNativeMcp() are never asked to run this; they yield an error.
+     *
+     * @param list<array<string, mixed>> $mcpServers Server descriptors per BetaRequestMCPServerURLDefinition
      */
     public function chatWithNativeMcp(array $messages, array $mcpServers, ?string $system = null, ?string $userId = null, array $options = []): \Generator;
 
-    /** Non-streaming convenience wrapper around chatWithNativeMcp(). */
+    /**
+     * Non-streaming convenience wrapper around chatWithNativeMcp().
+     *
+     * @param list<array<string, mixed>> $mcpServers
+     */
     public function chatWithNativeMcpCollect(array $messages, array $mcpServers, ?string $system = null, ?string $userId = null, array $options = []): array;
 
-    /** @return array{response: string, usage?: array}|array{error: string} */
+    /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
     public function summarize(string $content, ?string $userId = null): array;
 }

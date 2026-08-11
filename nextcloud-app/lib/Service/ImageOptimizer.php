@@ -113,9 +113,9 @@ class ImageOptimizer {
         }
 
         try {
-            $scale = self::MAX_LONG_EDGE / max($width, $height);
-            $newWidth = (int) round($width * $scale);
-            $newHeight = (int) round($height * $scale);
+            $scale = (float)self::MAX_LONG_EDGE / (float)max($width, $height);
+            $newWidth = (int) round((float)$width * $scale);
+            $newHeight = (int) round((float)$height * $scale);
 
             $dst = imagescale($src, $newWidth, $newHeight, IMG_BICUBIC);
             if ($dst === false) {

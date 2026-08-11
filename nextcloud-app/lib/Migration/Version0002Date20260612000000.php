@@ -17,7 +17,6 @@ use OCP\Migration\SimpleMigrationStep;
  */
 class Version0002Date20260612000000 extends SimpleMigrationStep {
     public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
-        /** @var ISchemaWrapper $schema */
         $schema = $schemaClosure();
 
         $this->extendCoworkersTable($schema);

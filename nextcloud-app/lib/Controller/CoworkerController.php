@@ -26,6 +26,8 @@ use OCP\IRequest;
  * NoCSRFRequired alongside NoAdminRequired.
  */
 class CoworkerController extends Controller {
+    use RequiresUserIdTrait;
+
 
     public function __construct(
         string $appName,
@@ -61,8 +63,7 @@ class CoworkerController extends Controller {
      * 200: The coworker
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -82,8 +83,7 @@ class CoworkerController extends Controller {
      * 200: The created coworker
      * 400: Invalid coworker configuration
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -106,9 +106,7 @@ class CoworkerController extends Controller {
      * 400: Invalid coworker configuration
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -132,8 +130,7 @@ class CoworkerController extends Controller {
      * 200: Coworker deleted
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{deleted: bool}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{deleted: bool}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -155,8 +152,7 @@ class CoworkerController extends Controller {
      * 200: The updated coworker
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -173,8 +169,7 @@ class CoworkerController extends Controller {
      * 200: The updated coworker
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -191,8 +186,7 @@ class CoworkerController extends Controller {
      * 200: The updated coworker
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -209,8 +203,7 @@ class CoworkerController extends Controller {
      * 200: The updated coworker
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -227,8 +220,7 @@ class CoworkerController extends Controller {
      * 200: The completed run
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -251,8 +243,7 @@ class CoworkerController extends Controller {
      * 200: List of runs, newest first
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, list<array<string, mixed>>, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, list<array<string, mixed>>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -292,9 +283,7 @@ class CoworkerController extends Controller {
      * 400: Invalid coworker configuration
      * 404: Unknown template
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -345,8 +334,7 @@ class CoworkerController extends Controller {
      * 200: The stored selection
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{coworkerId: int|null}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{coworkerId: int|null}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -365,6 +353,9 @@ class CoworkerController extends Controller {
         return new JSONResponse(['coworkerId' => $coworkerId]);
     }
 
+    /**
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
     private function togglePaused(int $id, bool $paused): JSONResponse {
         try {
             $coworker = $this->service->setPaused($id, (string)$this->userId, $paused);
@@ -374,6 +365,9 @@ class CoworkerController extends Controller {
         return new JSONResponse($coworker->jsonSerialize());
     }
 
+    /**
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
     private function toggleActive(int $id, bool $active): JSONResponse {
         try {
             $coworker = $this->service->setActive($id, (string)$this->userId, $active);

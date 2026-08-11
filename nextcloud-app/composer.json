@@ -14,7 +14,8 @@
         "phpunit/phpunit": "^13.0",
         "nextcloud/openapi-extractor": "^1.8",
         "nextcloud/ocp": "^33.0",
-        "doctrine/dbal": "^4.4"
+        "doctrine/dbal": "^4.4",
+        "vimeo/psalm": "^6.0"
     },
     "autoload": {
         "psr-4": {
@@ -27,7 +28,8 @@
         }
     },
     "scripts": {
-        "test": "phpunit"
+        "test": "phpunit",
+        "psalm": "psalm --no-cache"
     },
     "config": {
         "allow-plugins": {

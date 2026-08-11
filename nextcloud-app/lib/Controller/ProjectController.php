@@ -19,6 +19,8 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 
 class ProjectController extends Controller {
+    use RequiresUserIdTrait;
+
     private ProjectMapper $projectMapper;
     private ProjectPathMapper $pathMapper;
     private ConversationMapper $conversationMapper;
@@ -49,7 +51,7 @@ class ProjectController extends Controller {
     #[NoAdminRequired]
     #[OpenAPI]
     public function index(): JSONResponse {
-        $projects = $this->projectMapper->findAllByUser($this->userId);
+        $projects = $this->projectMapper->findAllByUser($this->requireUserId());
         $result = [];
         foreach ($projects as $project) {
             $data = $project->jsonSerialize();
@@ -70,8 +72,9 @@ class ProjectController extends Controller {
      * @param string $systemPrompt System prompt for the project
      *
      * 200: The created project
+     * 400: Title is missing
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -82,7 +85,7 @@ class ProjectController extends Controller {
 
         $now = time();
         $project = new Project();
-        $project->setUserId($this->userId);
+        $project->setUserId($this->requireUserId());
         $project->setTitle(trim($title));
         $project->setDescription($description ?: null);
         $project->setSystemPrompt($systemPrompt ?: null);
@@ -104,14 +107,13 @@ class ProjectController extends Controller {
      * 200: Project with paths
      * 404: Project not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function show(int $id): JSONResponse {
         try {
-            $project = $this->projectMapper->findByIdAndUser($id, $this->userId);
+            $project = $this->projectMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Project not found'], 404);
         }
@@ -135,14 +137,13 @@ class ProjectController extends Controller {
      * 200: Updated project
      * 404: Project not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function update(int $id, string $title = '', string $description = '', string $systemPrompt = ''): JSONResponse {
         try {
-            $project = $this->projectMapper->findByIdAndUser($id, $this->userId);
+            $project = $this->projectMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Project not found'], 404);
         }
@@ -172,20 +173,19 @@ class ProjectController extends Controller {
      * 200: Deletion confirmed
      * 404: Project not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{deleted: true}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{deleted: true}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function destroy(int $id): JSONResponse {
         try {
-            $project = $this->projectMapper->findByIdAndUser($id, $this->userId);
+            $project = $this->projectMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Project not found'], 404);
         }
 
         // Null out project_id on any conversations referencing this project
-        $conversations = $this->conversationMapper->findAllByUser($this->userId);
+        $conversations = $this->conversationMapper->findAllByUser($this->requireUserId());
         foreach ($conversations as $conv) {
             if ($conv->getProjectId() === $id) {
                 $conv->setProjectId(null);
@@ -210,9 +210,7 @@ class ProjectController extends Controller {
      * 400: Invalid path type
      * 404: Project not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -226,7 +224,7 @@ class ProjectController extends Controller {
         }
 
         try {
-            $this->projectMapper->findByIdAndUser($id, $this->userId);
+            $this->projectMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Project not found'], 404);
         }
@@ -250,14 +248,13 @@ class ProjectController extends Controller {
      * 200: Deletion confirmed
      * 404: Project or path not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{deleted: true}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{deleted: true}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function removePath(int $id, int $pathId): JSONResponse {
         try {
-            $this->projectMapper->findByIdAndUser($id, $this->userId);
+            $this->projectMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Project not found'], 404);
         }

@@ -13,6 +13,8 @@ use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use Psr\Container\ContainerInterface;
+
 class Application extends App implements IBootstrap {
     public const APP_ID = 'aiquila';
 
@@ -53,10 +55,11 @@ class Application extends App implements IBootstrap {
         $context->registerDashboardWidget(\OCA\AIquila\Dashboard\CoworkerOutputWidget::class);
 
         // Cowork task-type registry — the set of jobs coworkers can run
-        $context->registerService(CoworkerTaskRegistry::class, function ($c) {
-            return new CoworkerTaskRegistry([
-                $c->get(VisionClassifyImagesTaskType::class),
-            ]);
+        $context->registerService(CoworkerTaskRegistry::class, function (ContainerInterface $c) {
+            $visionClassify = $c->get(VisionClassifyImagesTaskType::class);
+            assert($visionClassify instanceof VisionClassifyImagesTaskType);
+
+            return new CoworkerTaskRegistry([$visionClassify]);
         });
 
         // Register Claude TaskProcessing Providers for Nextcloud Assistant integration

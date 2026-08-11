@@ -49,7 +49,7 @@ class ConversationMapper extends QBMapper {
     /**
      * All conversations across all users, used for full Context Chat re-imports.
      *
-     * @return Conversation[]
+     * @return list<Conversation>
      */
     public function findAll(): array {
         $qb = $this->db->getQueryBuilder();
@@ -60,7 +60,7 @@ class ConversationMapper extends QBMapper {
     }
 
     /**
-     * @return Conversation[]
+     * @return list<Conversation>
      */
     public function findAllByUser(string $userId): array {
         $qb = $this->db->getQueryBuilder();

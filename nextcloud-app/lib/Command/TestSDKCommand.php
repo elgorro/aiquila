@@ -103,11 +103,11 @@ class TestSDKCommand extends Base {
                     return 1;
                 }
 
-                $output->writeln('<info>✓ Response received in ' . $duration . 's</info>');
+                $output->writeln('<info>✓ Response received in ' . (string)$duration . 's</info>');
                 $output->writeln('');
                 $output->writeln('<comment>Claude\'s Response:</comment>');
                 $output->writeln('<comment>─────────────────────</comment>');
-                $output->writeln($result['response']);
+                $output->writeln($result['response'] ?? '');
                 $output->writeln('<comment>─────────────────────</comment>');
             }
 

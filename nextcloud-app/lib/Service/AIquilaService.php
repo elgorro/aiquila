@@ -5,7 +5,6 @@ namespace OCA\AIquila\Service;
 
 use OCA\AIquila\Public\IAIquila;
 use OCP\Files\NotFoundException;
-use OCP\IConfig;
 use OCP\Notification\IManager as INotificationManager;
 use Psr\Log\LoggerInterface;
 
@@ -19,7 +18,6 @@ class AIquilaService implements IAIquila {
     private ClaudeSDKService $claudeSDKService;
     private FileService $fileService;
     private ImageOptimizer $imageOptimizer;
-    private IConfig $config;
     private INotificationManager $notificationManager;
     private LoggerInterface $logger;
     private string $appName = 'aiquila';
@@ -28,14 +26,12 @@ class AIquilaService implements IAIquila {
         ClaudeSDKService $claudeSDKService,
         FileService $fileService,
         ImageOptimizer $imageOptimizer,
-        IConfig $config,
         INotificationManager $notificationManager,
         LoggerInterface $logger
     ) {
         $this->claudeSDKService = $claudeSDKService;
         $this->fileService = $fileService;
         $this->imageOptimizer = $imageOptimizer;
-        $this->config = $config;
         $this->notificationManager = $notificationManager;
         $this->logger = $logger;
     }
@@ -106,6 +102,10 @@ class AIquilaService implements IAIquila {
             'file' => $filePath,
         ]);
 
+        if ($userId === null) {
+            return ['error' => 'A user id is required to read files'];
+        }
+
         try {
             $fileData = $this->fileService->getContent($filePath, $userId);
             $mimeType = $fileData['mimeType'];
@@ -149,6 +149,10 @@ class AIquilaService implements IAIquila {
             'user' => $userId,
             'file_count' => count($filePaths),
         ]);
+
+        if ($userId === null) {
+            return ['error' => 'A user id is required to read files'];
+        }
 
         try {
             $images = [];

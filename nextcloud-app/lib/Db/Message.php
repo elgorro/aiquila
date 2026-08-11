@@ -59,6 +59,9 @@ class Message extends Entity implements \JsonSerializable {
         $this->addType('documents', 'string');
     }
 
+    /**
+     * @return array{id: int, conversationId: int, role: string, content: string, inputTokens: ?int, outputTokens: ?int, cacheCreationTokens: ?int, cacheReadTokens: ?int, latencyMs: ?int, citations: ?array<string, mixed>, documents: ?array<string, mixed>, createdAt: int}
+     */
     public function jsonSerialize(): array {
         $citationsJson = $this->getCitations();
         $citations = null;
