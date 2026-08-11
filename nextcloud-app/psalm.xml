@@ -1,5 +1,12 @@
 <?xml version="1.0"?>
-<psalm errorLevel="3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<!--
+    findUnusedIssueHandlerSuppression is off because some suppressions below are
+    environment-dependent: the ext-gd one fires only where gd is missing, so with
+    the check on, the run fails either on the constant or on the "unused"
+    suppression, depending on the machine.
+-->
+<psalm errorLevel="3" findUnusedIssueHandlerSuppression="false"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
        xmlns="https://getpsalm.org/schema/config"
        xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd">
     <projectFiles>
