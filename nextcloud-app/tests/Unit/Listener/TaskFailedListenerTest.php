@@ -35,10 +35,26 @@ class TaskFailedListenerTest extends TestCase {
         $this->taskProcessingManager->method('getPreferredProvider')->willReturn($provider);
     }
 
+    /**
+     * `OCP\\TaskProcessing\\Task` is final and cannot be mocked; build a real one.
+     */
+    private function makeTask(
+        ?int $id = null,
+        ?string $errorMessage = null,
+        string $taskTypeId = 'core:text2text',
+        ?string $userId = 'testuser',
+    ): Task {
+        $task = new Task($taskTypeId, ['input' => 'hello'], 'aiquila', $userId);
+        $task->setId($id);
+        $task->setErrorMessage($errorMessage);
+
+        return $task;
+    }
+
     public function testIgnoresNonAiquilaProvider(): void {
         $this->mockPreferredProvider('other_app:text2text');
 
-        $task = $this->createMock(Task::class);
+        $task = $this->makeTask();
         $event = $this->createMock(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
 
@@ -49,11 +65,7 @@ class TaskFailedListenerTest extends TestCase {
     public function testCreatesNotificationOnFailure(): void {
         $this->mockPreferredProvider('aiquila:text2text');
 
-        $task = $this->createMock(Task::class);
-        $task->method('getUserId')->willReturn('testuser');
-        $task->method('getTaskTypeId')->willReturn('core:text2text');
-        $task->method('getId')->willReturn(99);
-        $task->method('getErrorMessage')->willReturn('API rate limit exceeded');
+        $task = $this->makeTask(99, 'API rate limit exceeded');
 
         $event = $this->createMock(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
@@ -79,11 +91,7 @@ class TaskFailedListenerTest extends TestCase {
 
         $longError = str_repeat('x', 300);
 
-        $task = $this->createMock(Task::class);
-        $task->method('getUserId')->willReturn('testuser');
-        $task->method('getTaskTypeId')->willReturn('core:text2text');
-        $task->method('getId')->willReturn(100);
-        $task->method('getErrorMessage')->willReturn($longError);
+        $task = $this->makeTask(100, $longError);
 
         $event = $this->createMock(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
@@ -109,11 +117,7 @@ class TaskFailedListenerTest extends TestCase {
     public function testHandlesNullErrorMessage(): void {
         $this->mockPreferredProvider('aiquila:text2text');
 
-        $task = $this->createMock(Task::class);
-        $task->method('getUserId')->willReturn('testuser');
-        $task->method('getTaskTypeId')->willReturn('core:text2text');
-        $task->method('getId')->willReturn(101);
-        $task->method('getErrorMessage')->willReturn(null);
+        $task = $this->makeTask(101, null);
 
         $event = $this->createMock(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
@@ -138,7 +142,7 @@ class TaskFailedListenerTest extends TestCase {
         $this->taskProcessingManager->method('getPreferredProvider')
             ->willThrowException(new \OCP\TaskProcessing\Exception\Exception('no provider'));
 
-        $task = $this->createMock(Task::class);
+        $task = $this->makeTask();
         $event = $this->createMock(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
 
@@ -152,7 +156,7 @@ class TaskFailedListenerTest extends TestCase {
         $this->taskProcessingManager->method('getPreferredProvider')
             ->willThrowException(new \RuntimeException('boom'));
 
-        $task = $this->createMock(Task::class);
+        $task = $this->makeTask();
         $event = $this->createMock(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
 
@@ -164,11 +168,7 @@ class TaskFailedListenerTest extends TestCase {
     public function testNotificationFailureDoesNotBreakTheEventChain(): void {
         $this->mockPreferredProvider('aiquila:text2text');
 
-        $task = $this->createMock(Task::class);
-        $task->method('getUserId')->willReturn('testuser');
-        $task->method('getTaskTypeId')->willReturn('core:text2text');
-        $task->method('getId')->willReturn(99);
-        $task->method('getErrorMessage')->willReturn('boom');
+        $task = $this->makeTask(99, 'boom');
 
         $event = $this->createMock(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);

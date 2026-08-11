@@ -35,10 +35,24 @@ class TaskSuccessfulListenerTest extends TestCase {
         $this->taskProcessingManager->method('getPreferredProvider')->willReturn($provider);
     }
 
+    /**
+     * `OCP\\TaskProcessing\\Task` is final and cannot be mocked; build a real one.
+     */
+    private function makeTask(
+        string $taskTypeId = 'core:text2text',
+        ?string $userId = 'testuser',
+        ?int $id = null,
+    ): Task {
+        $task = new Task($taskTypeId, ['input' => 'hello'], 'aiquila', $userId);
+        $task->setId($id);
+
+        return $task;
+    }
+
     public function testIgnoresNonAiquilaProvider(): void {
         $this->mockPreferredProvider('other_app:text2text');
 
-        $task = $this->createMock(Task::class);
+        $task = $this->makeTask();
         $event = $this->createMock(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($task);
 
@@ -49,8 +63,7 @@ class TaskSuccessfulListenerTest extends TestCase {
     public function testIgnoresNullUser(): void {
         $this->mockPreferredProvider('aiquila:text2text');
 
-        $task = $this->createMock(Task::class);
-        $task->method('getUserId')->willReturn(null);
+        $task = $this->makeTask(userId: null);
 
         $event = $this->createMock(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($task);
@@ -62,10 +75,7 @@ class TaskSuccessfulListenerTest extends TestCase {
     public function testCreatesNotificationOnSuccess(): void {
         $this->mockPreferredProvider('aiquila:text2text');
 
-        $task = $this->createMock(Task::class);
-        $task->method('getUserId')->willReturn('testuser');
-        $task->method('getTaskTypeId')->willReturn('core:text2text:summary');
-        $task->method('getId')->willReturn(42);
+        $task = $this->makeTask('core:text2text:summary', id: 42);
 
         $event = $this->createMock(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($task);
@@ -93,7 +103,7 @@ class TaskSuccessfulListenerTest extends TestCase {
         $this->taskProcessingManager->method('getPreferredProvider')
             ->willThrowException(new \OCP\TaskProcessing\Exception\Exception('no provider'));
 
-        $task = $this->createMock(Task::class);
+        $task = $this->makeTask();
         $event = $this->createMock(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($task);
 
@@ -109,7 +119,7 @@ class TaskSuccessfulListenerTest extends TestCase {
         $this->taskProcessingManager->method('getPreferredProvider')
             ->willThrowException(new \RuntimeException('boom'));
 
-        $task = $this->createMock(Task::class);
+        $task = $this->makeTask();
         $event = $this->createMock(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($task);
 
@@ -123,10 +133,7 @@ class TaskSuccessfulListenerTest extends TestCase {
         // chain, so a failure while notifying must be logged and swallowed.
         $this->mockPreferredProvider('aiquila:text2text');
 
-        $task = $this->createMock(Task::class);
-        $task->method('getUserId')->willReturn('testuser');
-        $task->method('getTaskTypeId')->willReturn('core:text2text');
-        $task->method('getId')->willReturn(42);
+        $task = $this->makeTask(id: 42);
 
         $event = $this->createMock(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($task);
