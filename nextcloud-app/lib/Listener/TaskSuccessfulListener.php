@@ -9,30 +9,19 @@ use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\TaskProcessing\Events\TaskSuccessfulEvent;
+use OCP\TaskProcessing\IManager as ITaskProcessingManager;
+use OCP\TaskProcessing\Task;
 use Psr\Log\LoggerInterface;
 
 /**
  * @implements IEventListener<TaskSuccessfulEvent>
  */
 class TaskSuccessfulListener implements IEventListener {
-
-    private static array $typeLabels = [
-        'core:text2text' => 'Text generation',
-        'core:text2text:summary' => 'Summarization',
-        'core:text2text:headline' => 'Headline generation',
-        'core:text2text:topics' => 'Topic extraction',
-        'core:text2text:translate' => 'Translation',
-        'core:text2text:proofread' => 'Proofreading',
-        'core:text2text:reformulate' => 'Reformulation',
-        'core:text2text:formalize' => 'Formalization',
-        'core:text2text:simplify' => 'Simplification',
-        'core:text2text:change-tone' => 'Tone adjustment',
-        'core:image2text' => 'Image analysis',
-        'core:analyze-images' => 'Multi-image analysis',
-    ];
+    use TaskListenerTrait;
 
     public function __construct(
         private INotificationManager $notificationManager,
+        private ITaskProcessingManager $taskProcessingManager,
         private LoggerInterface $logger,
     ) {
     }
@@ -42,9 +31,20 @@ class TaskSuccessfulListener implements IEventListener {
             return;
         }
 
-        $task = $event->getTask();
+        // Apps load alphabetically, so this listener runs before Assistant's in
+        // the event chain; an uncaught throwable here would abort the chain and
+        // stop Assistant persisting its chat reply. Never let one escape.
+        try {
+            $this->notifyTaskSuccess($event->getTask());
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila: failed to send task success notification', [
+                'exception' => $e,
+            ]);
+        }
+    }
 
-        if (!str_starts_with($task->getProviderId(), 'aiquila:')) {
+    private function notifyTaskSuccess(Task $task): void {
+        if (!$this->isAiquilaTask($task)) {
             return;
         }
 
@@ -69,14 +69,5 @@ class TaskSuccessfulListener implements IEventListener {
             'taskType' => $task->getTaskTypeId(),
             'user' => $userId,
         ]);
-    }
-
-    public static function getTaskTypeLabel(string $taskTypeId): string {
-        if (isset(self::$typeLabels[$taskTypeId])) {
-            return self::$typeLabels[$taskTypeId];
-        }
-
-        $parts = explode(':', $taskTypeId);
-        return ucfirst(end($parts));
     }
 }
