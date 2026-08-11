@@ -11,6 +11,17 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
 class CleanupAnthropicFilesJobTest extends TestCase {
+    /**
+     * Invoke the job body directly.
+     *
+     * `TimedJob::start()` is final and resolves a logger through `OCP\Server`,
+     * which needs a running Nextcloud, so the protected `run()` is the only
+     * unit-testable entry point.
+     */
+    private function runJob(CleanupAnthropicFilesJob $job): void {
+        (new \ReflectionMethod($job, 'run'))->invoke($job, null);
+    }
+
     public function testRunsDeleteOlderThanWith30DayCutoff(): void {
         $now = 1_750_000_000;
         $time = $this->createMock(ITimeFactory::class);
@@ -25,8 +36,7 @@ class CleanupAnthropicFilesJobTest extends TestCase {
         $logger = $this->createMock(LoggerInterface::class);
         $logger->expects($this->once())->method('info');
 
-        $job = new CleanupAnthropicFilesJob($time, $mapper, $logger);
-        $job->execute();
+        $this->runJob(new CleanupAnthropicFilesJob($time, $mapper, $logger));
     }
 
     public function testRunsSilentlyWhenNothingDeleted(): void {
@@ -40,7 +50,7 @@ class CleanupAnthropicFilesJobTest extends TestCase {
         $logger->expects($this->never())->method('info');
         $logger->expects($this->never())->method('warning');
 
-        (new CleanupAnthropicFilesJob($time, $mapper, $logger))->execute();
+        $this->runJob(new CleanupAnthropicFilesJob($time, $mapper, $logger));
     }
 
     public function testRunsLogsWhenMapperThrows(): void {
@@ -53,7 +63,7 @@ class CleanupAnthropicFilesJobTest extends TestCase {
         $logger = $this->createMock(LoggerInterface::class);
         $logger->expects($this->once())->method('warning');
 
-        (new CleanupAnthropicFilesJob($time, $mapper, $logger))->execute();
+        $this->runJob(new CleanupAnthropicFilesJob($time, $mapper, $logger));
     }
 
     public function testIntervalIsDaily(): void {

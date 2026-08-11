@@ -8,6 +8,7 @@ use OCP\DB\IResult;
 use OCP\DB\QueryBuilder\IExpressionBuilder;
 use OCP\DB\QueryBuilder\IFunctionBuilder;
 use OCP\DB\QueryBuilder\IQueryBuilder;
+use OCP\DB\QueryBuilder\IQueryFunction;
 use OCP\IDBConnection;
 use PHPUnit\Framework\TestCase;
 
@@ -48,7 +49,16 @@ abstract class MapperTestCase extends TestCase {
         $this->expr->method('eq')->willReturn('1=1');
         $this->expr->method('lte')->willReturn('1<=1');
         $this->expr->method('gte')->willReturn('1>=1');
-        $this->func->method('sum')->willReturnArgument(0); // returns expression
-        $this->func->method('count')->willReturnArgument(0); // returns expression
+        // IFunctionBuilder returns IQueryFunction objects, not strings; stand in
+        // with one that stringifies back to the column it was called with.
+        $this->func->method('sum')->willReturnCallback($this->queryFunction(...));
+        $this->func->method('count')->willReturnCallback($this->queryFunction(...));
+    }
+
+    protected function queryFunction(mixed $expression): IQueryFunction {
+        $function = $this->createMock(IQueryFunction::class);
+        $function->method('__toString')->willReturn((string) $expression);
+
+        return $function;
     }
 }
