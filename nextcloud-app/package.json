@@ -23,8 +23,8 @@
     "vite": "^7.3.3"
   },
   "overrides": {
-    "brace-expansion": "^2.0.3",
-    "dompurify": "^3.4.11",
+    "brace-expansion": "^2.1.4",
+    "dompurify": "^3.4.13",
     "esbuild": ">=0.28.1",
     "follow-redirects": "^1.16.0"
   },

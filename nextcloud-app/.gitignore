@@ -6,6 +6,10 @@ npm-debug.log*
 # Composer
 /vendor/
 
+# PHPUnit
+/.phpunit.result.cache
+/.phpunit.cache/
+
 # IDE
 .vscode/
 .idea/

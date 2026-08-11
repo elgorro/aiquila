@@ -250,8 +250,7 @@ const listMessagesTool = {
         throw new Error(`HTTP ${response.status}: ${await response.text()}`);
       }
       const data = (await response.json()) as
-        | MailMessageSummary[]
-        | { messages?: MailMessageSummary[]; data?: MailMessageSummary[] };
+        MailMessageSummary[] | { messages?: MailMessageSummary[]; data?: MailMessageSummary[] };
       const messages = Array.isArray(data) ? data : (data.messages ?? data.data ?? []);
 
       if (!messages || messages.length === 0) {
@@ -329,8 +328,7 @@ const readMessageTool = {
       text += `\n${'─'.repeat(60)}\n${bodyText}`;
 
       const attachments = data.attachments as
-        | Array<{ id?: string | number; fileName: string; size: number }>
-        | undefined;
+        Array<{ id?: string | number; fileName: string; size: number }> | undefined;
       if (attachments && attachments.length > 0) {
         text += `\n${'─'.repeat(60)}\nAttachments:`;
         for (const att of attachments) {
