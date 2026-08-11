@@ -24,6 +24,7 @@ class LLMProviderFactory {
         private readonly ClaudeSDKService $anthropic,
         private readonly MistralProvider $mistral,
         private readonly DeepSeekProvider $deepseek,
+        private readonly LocalProvider $local,
     ) {
     }
 
@@ -33,6 +34,7 @@ class LLMProviderFactory {
             $this->anthropic->getId() => $this->anthropic,
             $this->mistral->getId() => $this->mistral,
             $this->deepseek->getId() => $this->deepseek,
+            $this->local->getId() => $this->local,
         ];
     }
 

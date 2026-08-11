@@ -5806,6 +5806,295 @@
                 }
             }
         },
+        "/index.php/apps/aiquila/api/admin/local": {
+            "post": {
+                "operationId": "settings-save-local",
+                "summary": "Save the local (self-hosted, OpenAI-compatible) model endpoint settings",
+                "description": "Covers Ollama, LM Studio and llama.cpp's llama-server. Admin scope only: Nextcloud makes server-side requests to whatever base URL is stored here, so it must never be user-settable.\nThis endpoint requires admin access",
+                "tags": [
+                    "settings"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "base_url": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Endpoint base URL, e.g. http://localhost:11434 ('' clears; null keeps unchanged)"
+                                    },
+                                    "api_key": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Optional bearer token ('' clears, null keeps unchanged). Ollama needs none."
+                                    },
+                                    "model": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Model id to request, e.g. llama3.2 (null keeps unchanged)"
+                                    },
+                                    "max_tokens": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Max response tokens (null keeps unchanged)"
+                                    },
+                                    "timeout": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Request timeout in seconds (null keeps unchanged)"
+                                    },
+                                    "vision": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Send images to the endpoint ('1' if the loaded model is multimodal, null keeps unchanged)"
+                                    },
+                                    "allow_local_address": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Permit requests to loopback/private addresses ('1' to allow, null keeps unchanged)"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Local model settings saved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "status",
+                                        "baseUrl"
+                                    ],
+                                    "properties": {
+                                        "status": {
+                                            "type": "string"
+                                        },
+                                        "baseUrl": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "The base URL is not a valid http(s) URL",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "status",
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "status": {
+                                            "type": "string"
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/admin/local/status": {
+            "get": {
+                "operationId": "settings-local-status",
+                "summary": "Get the local model endpoint settings and the models it currently serves",
+                "description": "The `models` list is a live GET {base}/models against the configured endpoint, so an empty list means AIquila could not reach it.\nThis endpoint requires admin access",
+                "tags": [
+                    "settings"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Local model settings",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "baseUrl",
+                                        "hasApiKey",
+                                        "model",
+                                        "maxTokens",
+                                        "timeout",
+                                        "vision",
+                                        "allowLocalAddress",
+                                        "configured",
+                                        "models"
+                                    ],
+                                    "properties": {
+                                        "baseUrl": {
+                                            "type": "string"
+                                        },
+                                        "hasApiKey": {
+                                            "type": "boolean"
+                                        },
+                                        "model": {
+                                            "type": "string"
+                                        },
+                                        "maxTokens": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "timeout": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "vision": {
+                                            "type": "boolean"
+                                        },
+                                        "allowLocalAddress": {
+                                            "type": "boolean"
+                                        },
+                                        "configured": {
+                                            "type": "boolean"
+                                        },
+                                        "models": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/index.php/apps/aiquila/api/occ": {
             "post": {
                 "operationId": "occ-execute",

@@ -5,6 +5,7 @@ namespace OCA\AIquila\Tests\Unit;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\Provider\DeepSeekProvider;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
+use OCA\AIquila\Service\Provider\LocalProvider;
 use OCA\AIquila\Service\Provider\MistralProvider;
 use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
@@ -14,6 +15,7 @@ class LLMProviderFactoryTest extends TestCase {
     private $anthropic;
     private $mistral;
     private $deepseek;
+    private $local;
     private LLMProviderFactory $factory;
 
     protected function setUp(): void {
@@ -21,11 +23,13 @@ class LLMProviderFactoryTest extends TestCase {
         $this->anthropic = $this->createMock(ClaudeSDKService::class);
         $this->mistral   = $this->createMock(MistralProvider::class);
         $this->deepseek  = $this->createMock(DeepSeekProvider::class);
+        $this->local     = $this->createMock(LocalProvider::class);
         $this->anthropic->method('getId')->willReturn('anthropic');
         $this->mistral->method('getId')->willReturn('mistral');
         $this->deepseek->method('getId')->willReturn('deepseek');
+        $this->local->method('getId')->willReturn('local');
 
-        $this->factory = new LLMProviderFactory($this->config, $this->anthropic, $this->mistral, $this->deepseek);
+        $this->factory = new LLMProviderFactory($this->config, $this->anthropic, $this->mistral, $this->deepseek, $this->local);
     }
 
     public function testDefaultsToAnthropic(): void {
@@ -74,17 +78,21 @@ class LLMProviderFactoryTest extends TestCase {
         $this->anthropic->method('getLabel')->willReturn('Claude (Anthropic)');
         $this->mistral->method('getLabel')->willReturn('Mistral');
         $this->deepseek->method('getLabel')->willReturn('DeepSeek');
+        $this->local->method('getLabel')->willReturn('Local model');
         $this->anthropic->method('isConfigured')->willReturn(true);
         $this->mistral->method('isConfigured')->willReturn(false);
         $this->deepseek->method('isConfigured')->willReturn(false);
+        $this->local->method('isConfigured')->willReturn(false);
 
         $described = $this->factory->describeProviders('u');
-        $this->assertCount(3, $described);
+        $this->assertCount(4, $described);
         $this->assertSame('anthropic', $described[0]['id']);
         $this->assertTrue($described[0]['configured']);
         $this->assertSame('mistral', $described[1]['id']);
         $this->assertFalse($described[1]['configured']);
         $this->assertSame('deepseek', $described[2]['id']);
         $this->assertFalse($described[2]['configured']);
+        $this->assertSame('local', $described[3]['id']);
+        $this->assertFalse($described[3]['configured']);
     }
 }

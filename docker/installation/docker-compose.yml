@@ -44,6 +44,12 @@ services:
     image: aiquila-nextcloud:latest
     container_name: aiquila-nextcloud
     restart: unless-stopped
+    # Lets the local model provider reach a backend running on the host
+    # (Ollama on :11434, LM Studio on :1234, llama-server on :8080) via
+    # http://host.docker.internal:<port> — inside the container `localhost`
+    # is the container itself.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy

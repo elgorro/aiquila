@@ -24,6 +24,11 @@ class TestableMcpClientService extends McpClientService {
         parent::__construct($mapper, $logger, $credentials);
     }
 
+    /** Expose the protected JSON-RPC body builder for assertions. */
+    public function exposeRequestBody(string $method, array $params, int $id): array {
+        return $this->buildRequestBody($method, $params, $id);
+    }
+
     /**
      * Queue a response for the next jsonRpc call.
      */
@@ -122,6 +127,29 @@ class McpClientServiceTest extends TestCase {
         $server->setCreatedAt(time());
         $server->setUpdatedAt(time());
         return $server;
+    }
+
+    /**
+     * Regression: an empty `params` used to be sent as `[]`, which json_encodes
+     * to a JSON array rather than an object. The MCP SDK rejects that with
+     * -32700 "Invalid JSON-RPC message", so tools/list always failed and no MCP
+     * tools ever reached the chat.
+     */
+    public function testParameterlessRequestOmitsParams(): void {
+        $body = $this->service->exposeRequestBody('tools/list', [], 42);
+
+        $this->assertArrayNotHasKey('params', $body);
+        $this->assertSame('2.0', $body['jsonrpc']);
+        $this->assertSame('tools/list', $body['method']);
+        $this->assertSame(42, $body['id']);
+        $this->assertStringNotContainsString('"params":[]', json_encode($body));
+    }
+
+    public function testRequestWithParamsEncodesThemAsAnObject(): void {
+        $body = $this->service->exposeRequestBody('tools/call', ['name' => 'list_files', 'arguments' => ['path' => '/']], 7);
+
+        $this->assertSame(['name' => 'list_files', 'arguments' => ['path' => '/']], $body['params']);
+        $this->assertStringContainsString('"params":{"name":"list_files"', json_encode($body));
     }
 
     public function testTestConnectionSuccess(): void {
