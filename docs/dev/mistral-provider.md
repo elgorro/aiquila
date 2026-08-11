@@ -20,6 +20,12 @@ runtime by `LLMProviderFactory`:
   stay provider-agnostic. By default it drives tools with the **local agentic
   loop** (`/v1/chat/completions` + function calling). It also supports a
   **native MCP connector** path (see below).
+- **`DeepSeekProvider`** (`deepseek`) and **`LocalProvider`** (`local`) extend
+  `AbstractOpenAiCompatibleProvider`, which carries the shared OpenAI wire-format
+  handling. `LocalProvider` points at a self-hosted Ollama / LM Studio /
+  llama.cpp endpoint — see [Local model provider](local-provider.md).
+  `MistralProvider` deliberately does *not* extend that base class: its native
+  MCP path runs against the Conversations API, which diverges too far to share.
 
 ### Native MCP connector (Mistral Connectors + Conversations API)
 

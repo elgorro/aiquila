@@ -19,6 +19,7 @@ style('aiquila', 'admin');
             <a href="https://console.mistral.ai/" target="_blank" rel="noopener noreferrer">console.mistral.ai</a>;
             DeepSeek keys from
             <a href="https://platform.deepseek.com/" target="_blank" rel="noopener noreferrer">platform.deepseek.com</a>.
+            <strong>Local model</strong> needs no key — configure its endpoint in the card below instead.
             Keys are stored encrypted in Nextcloud's credential manager. Users may override both provider and key in personal settings. Use <em>Test Configuration</em> after saving to confirm the key reaches the provider.
         </p>
 
@@ -61,6 +62,82 @@ style('aiquila', 'admin');
             <h4>Test Result</h4>
             <pre id="aiquila-test-output"></pre>
         </div>
+    </div>
+
+    <div id="aiquila-local-model" class="section">
+        <h3>Local model endpoint</h3>
+        <p class="settings-hint">
+            Run inference on your own hardware instead of a hosted API — nothing leaves your infrastructure.
+            <a href="https://ollama.com/" target="_blank" rel="noopener noreferrer">Ollama</a>,
+            <a href="https://lmstudio.ai/" target="_blank" rel="noopener noreferrer">LM Studio</a> and
+            llama.cpp's <code>llama-server</code> all speak the same OpenAI-compatible protocol, so one endpoint setting
+            covers all three (as well as vLLM and LocalAI). Pick a preset below, adjust the host if the server runs
+            elsewhere, then choose <strong>Local model</strong> as the default provider above.
+        </p>
+
+        <div class="form-group">
+            <label for="aiquila-local-base-url">Endpoint base URL</label>
+            <input type="text"
+                   id="aiquila-local-base-url"
+                   placeholder="http://localhost:11434"
+                   style="min-width: 26rem;">
+            <p class="hint">
+                Presets:
+                <button type="button" class="secondary aiquila-local-preset" data-url="http://localhost:11434">Ollama</button>
+                <button type="button" class="secondary aiquila-local-preset" data-url="http://localhost:1234">LM Studio</button>
+                <button type="button" class="secondary aiquila-local-preset" data-url="http://localhost:8080">llama.cpp</button>
+                <br>
+                The <code>/v1</code> suffix is added automatically. If Nextcloud runs in Docker, <code>localhost</code>
+                is the container — use <code>http://host.docker.internal:11434</code> or the service name on the shared network instead.
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label for="aiquila-local-api-key">Bearer token (optional)</label>
+            <input type="password"
+                   id="aiquila-local-api-key"
+                   placeholder="Leave blank if the endpoint has no authentication"
+                   style="min-width: 26rem;">
+            <p class="hint">Ollama has no built-in authentication. LM Studio and <code>llama-server --api-key</code> accept a token; so does a reverse proxy in front of any of them. Stored encrypted in Nextcloud's credential manager.</p>
+        </div>
+
+        <div class="form-group">
+            <label for="aiquila-local-model">Model</label>
+            <input type="text" id="aiquila-local-model" placeholder="llama3.2" list="aiquila-local-model-list">
+            <datalist id="aiquila-local-model-list"></datalist>
+            <p class="hint">The model tag as the server reports it. Save the URL first — the list then autocompletes from the endpoint's own <code>/v1/models</code>.</p>
+        </div>
+
+        <div class="form-group">
+            <label for="aiquila-local-max-tokens">Max response tokens</label>
+            <input type="text" id="aiquila-local-max-tokens" placeholder="4096">
+        </div>
+
+        <div class="form-group">
+            <label for="aiquila-local-timeout">Request timeout (seconds)</label>
+            <input type="text" id="aiquila-local-timeout" placeholder="300">
+            <p class="hint">Local inference on CPU is slow; the hosted-provider default of 30 seconds is usually far too low.</p>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="aiquila-local-vision">
+                The loaded model accepts images
+            </label>
+            <p class="hint">Only enable for a multimodal model (llava, llama3.2-vision, qwen2-vl, …). Otherwise image requests are rejected up front instead of failing at the endpoint.</p>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="aiquila-local-allow-local-address">
+                Allow requests to local and private addresses
+            </label>
+            <p class="hint">Required for <code>localhost</code>, Docker networks and LAN hosts — Nextcloud blocks these by default to prevent server-side request forgery. Turn it off if your endpoint has a public hostname.</p>
+        </div>
+
+        <button type="button" id="aiquila-local-save" class="primary">Save local model settings</button>
+        <button type="button" id="aiquila-local-test" class="secondary">Test connection</button>
+        <span id="aiquila-local-status"></span>
     </div>
 
     <div id="aiquila-mcp-servers" class="section">

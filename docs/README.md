@@ -60,6 +60,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[Best Practices](dev/best-practices.md)** — code quality and standards
 - **[CI/CD](dev/ci-cd.md)** — continuous integration and deployment
 - **[MCP Server Architecture](dev/mcp-server-architecture.md)** — technical design
+- **[Local model provider](dev/local-provider.md)** — self-hosted inference via Ollama, LM Studio or llama.cpp
 - **[OpenAPI](dev/openapi.md)** — OpenAPI documentation
 - **MCP Development** — [Architecture](mcp/development/architecture.md) | [Adding Tools](mcp/development/adding-tools.md) | [Adding Apps](mcp/development/adding-apps.md)
 

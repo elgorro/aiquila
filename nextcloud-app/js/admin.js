@@ -446,4 +446,118 @@ document.addEventListener('DOMContentLoaded', function() {
     if (nativeEnabled) {
         loadNativeMcpStatus();
     }
+
+    // ── Local model endpoint (Ollama / LM Studio / llama.cpp) ──────────
+    const localBaseUrl = document.getElementById('aiquila-local-base-url');
+    const localApiKey = document.getElementById('aiquila-local-api-key');
+    const localModel = document.getElementById('aiquila-local-model');
+    const localModelList = document.getElementById('aiquila-local-model-list');
+    const localMaxTokens = document.getElementById('aiquila-local-max-tokens');
+    const localTimeout = document.getElementById('aiquila-local-timeout');
+    const localVision = document.getElementById('aiquila-local-vision');
+    const localAllowLocal = document.getElementById('aiquila-local-allow-local-address');
+    const localSaveBtn = document.getElementById('aiquila-local-save');
+    const localTestBtn = document.getElementById('aiquila-local-test');
+    const localStatus = document.getElementById('aiquila-local-status');
+
+    async function loadLocalStatus() {
+        try {
+            const response = await fetch(OC.generateUrl('/apps/aiquila/api/admin/local/status'), {
+                headers: { 'requesttoken': OC.requestToken },
+            });
+            if (!response.ok) {
+                localStatus.textContent = 'Failed to load local model settings';
+                return;
+            }
+            const data = await response.json();
+            localBaseUrl.value = data.baseUrl || '';
+            localApiKey.placeholder = data.hasApiKey
+                ? 'Token configured (leave blank to keep)'
+                : 'Leave blank if the endpoint has no authentication';
+            localModel.value = data.model || '';
+            localMaxTokens.value = data.maxTokens || '';
+            localTimeout.value = data.timeout || '';
+            localVision.checked = !!data.vision;
+            localAllowLocal.checked = !!data.allowLocalAddress;
+
+            // Populated from the endpoint itself; empty means it was unreachable.
+            localModelList.innerHTML = (data.models || [])
+                .map(m => '<option value="' + escapeHtml(m) + '"></option>')
+                .join('');
+            if (data.configured && (data.models || []).length === 0) {
+                localStatus.textContent = 'Endpoint configured but no models listed — use Test connection.';
+            }
+        } catch (err) {
+            localStatus.textContent = 'Error: ' + err.message;
+        }
+    }
+
+    document.querySelectorAll('.aiquila-local-preset').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            localBaseUrl.value = btn.getAttribute('data-url');
+            localBaseUrl.focus();
+        });
+    });
+
+    if (localSaveBtn) {
+        localSaveBtn.addEventListener('click', async function() {
+            localStatus.textContent = 'Saving...';
+            const body = {
+                base_url: localBaseUrl.value,
+                model: localModel.value,
+                max_tokens: localMaxTokens.value,
+                timeout: localTimeout.value,
+                vision: localVision.checked ? '1' : '0',
+                allow_local_address: localAllowLocal.checked ? '1' : '0',
+            };
+            // Only send the token when one was typed, so saving other fields
+            // never clears an existing token.
+            if (localApiKey.value !== '') {
+                body.api_key = localApiKey.value;
+            }
+            try {
+                const response = await fetch(OC.generateUrl('/apps/aiquila/api/admin/local'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'requesttoken': OC.requestToken },
+                    body: JSON.stringify(body),
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    localStatus.textContent = 'Saved!';
+                    localApiKey.value = '';
+                    loadLocalStatus();
+                } else {
+                    localStatus.textContent = '✗ ' + (result.message || 'Error saving');
+                }
+            } catch (err) {
+                localStatus.textContent = 'Error: ' + err.message;
+            }
+        });
+    }
+
+    if (localTestBtn) {
+        localTestBtn.addEventListener('click', async function() {
+            localTestBtn.disabled = true;
+            localStatus.textContent = 'Testing...';
+            try {
+                const response = await fetch(OC.generateUrl('/apps/aiquila/api/admin/test'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'requesttoken': OC.requestToken },
+                    body: JSON.stringify({ provider: 'local', api_key: '' }),
+                });
+                const result = await response.json();
+                localStatus.textContent = result.success
+                    ? '✓ ' + (result.message || 'OK')
+                    : '✗ ' + result.message;
+            } catch (err) {
+                localStatus.textContent = '✗ ' + err.message;
+            } finally {
+                localTestBtn.disabled = false;
+            }
+        });
+    }
+
+    if (localBaseUrl) {
+        loadLocalStatus();
+    }
 });
