@@ -18,7 +18,7 @@ class MessageFileMapper extends QBMapper {
     }
 
     /**
-     * @return MessageFile[]
+     * @return list<MessageFile>
      */
     public function findByMessage(int $messageId): array {
         $qb = $this->db->getQueryBuilder();

@@ -13,7 +13,6 @@ use OCP\Migration\SimpleMigrationStep;
 
 class Version0001Date20260218000000 extends SimpleMigrationStep {
     public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
-        /** @var ISchemaWrapper $schema */
         $schema = $schemaClosure();
 
         $this->createConversationsTable($schema);

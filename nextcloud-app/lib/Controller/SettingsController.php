@@ -10,6 +10,7 @@ use OCA\AIquila\Service\MistralModels;
 use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
@@ -17,6 +18,8 @@ use OCP\IRequest;
 use OCP\IConfig;
 
 class SettingsController extends Controller {
+    use RequiresUserIdTrait;
+
     private IConfig $config;
     private ?string $userId;
     private LLMProviderFactory $providerFactory;
@@ -45,7 +48,11 @@ class SettingsController extends Controller {
         return $providerId === 'anthropic' ? 'user_model' : 'user_model_' . $providerId;
     }
 
-    /** Static fallback model list for a provider id. */
+    /**
+     * Static fallback model list for a provider id.
+     *
+     * @return list<string>
+     */
     private function staticModels(string $providerId): array {
         return match ($providerId) {
             'mistral' => MistralModels::getAllModels(),
@@ -59,7 +66,7 @@ class SettingsController extends Controller {
      *
      * 200: User settings and available models
      *
-     * @return JSONResponse<Http::STATUS_OK, array{hasUserKey: bool, userModel: string, availableModels: list<array{id: string, name: string}>}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{provider: string, userProvider: string, providers: list<array{id: string, label: string, configured: bool, hasUserKey: bool, userModel: string, availableModels: list<string>}>, hasUserKey: bool, userModel: string, availableModels: list<string>, defaultSystemPrompt: string, defaultVerbose: bool, nativeMcpUserOverride: string, nativeMcpAdminDefault: bool, nativeMcpEffective: bool}, array{}>
      *
      * @NoAdminRequired
      */
@@ -142,9 +149,9 @@ class SettingsController extends Controller {
         // Provider override: '' clears (inherit admin default), non-empty sets it.
         if ($provider !== null) {
             if ($provider === '') {
-                $this->config->deleteUserValue($this->userId, $this->appName, 'user_provider');
+                $this->config->deleteUserValue($this->requireUserId(), $this->appName, 'user_provider');
             } else {
-                $this->config->setUserValue($this->userId, $this->appName, 'user_provider', $provider);
+                $this->config->setUserValue($this->requireUserId(), $this->appName, 'user_provider', $provider);
             }
         }
 
@@ -166,29 +173,29 @@ class SettingsController extends Controller {
 
         $modelKey = $this->userModelKey($scopeProvider);
         if ($model !== '') {
-            $this->config->setUserValue($this->userId, $this->appName, $modelKey, $model);
+            $this->config->setUserValue($this->requireUserId(), $this->appName, $modelKey, $model);
         } else {
-            $this->config->deleteUserValue($this->userId, $this->appName, $modelKey);
+            $this->config->deleteUserValue($this->requireUserId(), $this->appName, $modelKey);
         }
 
         if ($default_system_prompt !== null) {
             if ($default_system_prompt !== '') {
-                $this->config->setUserValue($this->userId, $this->appName, 'default_system_prompt', $default_system_prompt);
+                $this->config->setUserValue($this->requireUserId(), $this->appName, 'default_system_prompt', $default_system_prompt);
             } else {
-                $this->config->deleteUserValue($this->userId, $this->appName, 'default_system_prompt');
+                $this->config->deleteUserValue($this->requireUserId(), $this->appName, 'default_system_prompt');
             }
         }
 
         if ($default_verbose !== null) {
-            $this->config->setUserValue($this->userId, $this->appName, 'default_verbose', $default_verbose === '1' ? '1' : '0');
+            $this->config->setUserValue($this->requireUserId(), $this->appName, 'default_verbose', $default_verbose === '1' ? '1' : '0');
         }
 
         if ($native_mcp_enabled !== null) {
             // '' clears the override (inherit admin); '1' / '0' explicitly opt in/out.
             if ($native_mcp_enabled === '') {
-                $this->config->deleteUserValue($this->userId, $this->appName, 'native_mcp_enabled');
+                $this->config->deleteUserValue($this->requireUserId(), $this->appName, 'native_mcp_enabled');
             } else {
-                $this->config->setUserValue($this->userId, $this->appName, 'native_mcp_enabled', $native_mcp_enabled === '1' ? '1' : '0');
+                $this->config->setUserValue($this->requireUserId(), $this->appName, 'native_mcp_enabled', $native_mcp_enabled === '1' ? '1' : '0');
             }
         }
 
@@ -287,9 +294,7 @@ class SettingsController extends Controller {
      * 200: Test request completed; see success field for result
      * 400: No API key available or the test request failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, message: string}, array{}>
-     *        |JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, message: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, message: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, message: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function testConfig(string $api_key = '', ?string $provider = null): JSONResponse {
@@ -318,7 +323,7 @@ class SettingsController extends Controller {
                 return new JSONResponse(['success' => false, 'message' => $result['error']], 400);
             }
 
-            return new JSONResponse(['success' => true, 'message' => $result['response']]);
+            return new JSONResponse(['success' => true, 'message' => $result['response'] ?? '']);
 
         } catch (\Throwable $e) {
             $this->restoreKey($providerId, $originalApiKey);

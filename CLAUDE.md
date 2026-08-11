@@ -36,6 +36,18 @@ make logs-follow
 make test
 ```
 
+## Nextcloud app — static analysis
+
+Psalm runs over `lib/` at `errorLevel=3` and **CI fails on any error**:
+
+```bash
+cd nextcloud-app && composer psalm
+```
+
+`OCP\*` resolves through `vendor/nextcloud/ocp` (parsed via `<extraFiles>`); the private
+`OC\` classes the app touches are stubbed in `tests/stubs/`. There is no baseline — fix
+findings rather than adding one.
+
 ## Nextcloud app — OpenAPI spec
 
 After editing a controller annotated with `#[OpenAPI]`, regenerate and commit the spec

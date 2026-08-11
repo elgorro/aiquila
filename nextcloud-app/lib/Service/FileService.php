@@ -9,7 +9,6 @@ use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\Files\NotFoundException;
 use OCP\IPreview;
-use Psr\Log\LoggerInterface;
 
 /**
  * File operations service using Nextcloud's storage APIs.
@@ -20,7 +19,6 @@ use Psr\Log\LoggerInterface;
 class FileService {
     private IRootFolder $rootFolder;
     private IPreview $previewManager;
-    private LoggerInterface $logger;
 
     private const MAX_READ_SIZE = 20 * 1024 * 1024; // 20MB
 
@@ -45,11 +43,9 @@ class FileService {
     public function __construct(
         IRootFolder $rootFolder,
         IPreview $previewManager,
-        LoggerInterface $logger
     ) {
         $this->rootFolder = $rootFolder;
         $this->previewManager = $previewManager;
-        $this->logger = $logger;
     }
 
     private function getUserFolder(string $userId): Folder {
@@ -60,7 +56,7 @@ class FileService {
         return [
             'name' => $node->getName(),
             'path' => $node->getPath(),
-            'size' => $node->getSize(),
+            'size' => (int)$node->getSize(),
             'mimeType' => $node->getMimetype(),
             'mtime' => $node->getMTime(),
             'etag' => $node->getEtag(),
@@ -135,7 +131,7 @@ class FileService {
 
         if ($node->getSize() > self::MAX_READ_SIZE) {
             throw new \RuntimeException(
-                'File too large: ' . $node->getSize() . ' bytes (max ' . self::MAX_READ_SIZE . ')'
+                'File too large: ' . (string)$node->getSize() . ' bytes (max ' . self::MAX_READ_SIZE . ')'
             );
         }
 
@@ -146,7 +142,7 @@ class FileService {
         return [
             'name' => $node->getName(),
             'mimeType' => $mimeType,
-            'size' => $node->getSize(),
+            'size' => (int)$node->getSize(),
             'encoding' => $isText ? 'text' : 'base64',
             'content' => $isText ? $rawContent : base64_encode($rawContent),
         ];
@@ -295,7 +291,7 @@ class FileService {
             return [
                 'archive' => $dest->getPath(),
                 'entries' => $entryCount,
-                'size' => $dest->getSize(),
+                'size' => (int)$dest->getSize(),
             ];
         } finally {
             @unlink($tmpFile);
@@ -317,7 +313,7 @@ class FileService {
         }
 
         if ($node instanceof File) {
-            $totalSize += $node->getSize();
+            $totalSize += (int)$node->getSize();
             if ($totalSize > self::MAX_ARCHIVE_SIZE) {
                 throw new \RuntimeException(
                     'Archive contents exceed maximum size of ' . self::MAX_ARCHIVE_SIZE . ' bytes'
@@ -414,7 +410,9 @@ class FileService {
             ];
         } finally {
             $zip->close();
-            @unlink($tmpFile);
+            if ($tmpFile !== null) {
+                @unlink($tmpFile);
+            }
         }
     }
 
@@ -458,7 +456,9 @@ class FileService {
             ];
         } finally {
             $zip->close();
-            @unlink($tmpFile);
+            if ($tmpFile !== null) {
+                @unlink($tmpFile);
+            }
         }
     }
 

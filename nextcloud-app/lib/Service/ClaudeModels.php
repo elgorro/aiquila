@@ -150,6 +150,8 @@ class ClaudeModels {
      * Ordered model list for the admin UI datalist (most capable first).
      * SONNET_4 / OPUS_4 are intentionally omitted — Anthropic deprecated them
      * and the SDK removed them from its typed Model enum in 0.15.0.
+     *
+     * @return list<string>
      */
     public static function getAllModels(): array {
         return [
@@ -204,7 +206,7 @@ class ClaudeModels {
     /**
      * Effort values the API accepts for a model; empty if effort is unsupported.
      *
-     * @return string[]
+     * @return list<string>
      */
     public static function getAllowedEfforts(string $model): array {
         return self::ALLOWED_EFFORTS[$model] ?? [];

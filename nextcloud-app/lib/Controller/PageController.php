@@ -17,6 +17,8 @@ use OCP\IRequest;
  * Page Controller for AIquila main interface
  */
 class PageController extends Controller {
+    use RequiresUserIdTrait;
+
 
     private IInitialState $initialState;
     private LLMProviderFactory $providerFactory;
@@ -57,7 +59,7 @@ class PageController extends Controller {
         $this->initialState->provideInitialState('conversations',
             array_map(
                 fn(Conversation $c) => $c->jsonSerialize(),
-                $this->conversationMapper->findAllByUser($this->userId)
+                $this->conversationMapper->findAllByUser($this->requireUserId())
             )
         );
 

@@ -89,7 +89,7 @@ class McpClientService {
             }
 
             if ($statusCode >= 400) {
-                throw new \RuntimeException("HTTP $statusCode: " . json_encode($result));
+                throw new \RuntimeException("HTTP $statusCode: " . (string)json_encode($result));
             }
 
             if (isset($result['error'])) {
@@ -108,8 +108,6 @@ class McpClientService {
      * Parse an SSE response to extract JSON-RPC result.
      */
     private function parseSseResponse(string $content, int $statusCode, $response): array {
-        $serverId = null;
-
         // Capture session ID from response headers
         $sessionHeaders = $response->getHeaders(false)['mcp-session-id'] ?? [];
 
@@ -334,7 +332,7 @@ class McpClientService {
 
     private function slugify(string $name): string {
         $slug = strtolower(trim($name));
-        $slug = preg_replace('/[^a-z0-9]+/', '_', $slug);
+        $slug = preg_replace('/[^a-z0-9]+/', '_', $slug) ?? '';
         return trim($slug, '_');
     }
 
@@ -348,7 +346,7 @@ class McpClientService {
         $response = $this->httpClient->request('GET', $url);
         $metadata = $response->toArray();
 
-        $server->setOauthMetadata(json_encode($metadata));
+        $server->setOauthMetadata(json_encode($metadata) ?: null);
         $server->setUpdatedAt(time());
         $this->mapper->update($server);
 

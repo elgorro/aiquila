@@ -47,6 +47,9 @@ class Conversation extends Entity implements \JsonSerializable {
         $this->addType('thinking', 'boolean');
     }
 
+    /**
+     * @return array{id: int, userId: string, title: ?string, model: string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}
+     */
     public function jsonSerialize(): array {
         return [
             'id' => $this->getId(),

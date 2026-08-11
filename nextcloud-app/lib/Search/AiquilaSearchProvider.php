@@ -73,7 +73,9 @@ class AiquilaSearchProvider implements IProvider {
         $lastCursor = null;
         if (count($messages) >= $limit) {
             $lastMessage = end($messages);
-            $lastCursor = (string)$lastMessage->getId();
+            if ($lastMessage !== false) {
+                $lastCursor = (string)$lastMessage->getId();
+            }
         }
 
         return $lastCursor !== null

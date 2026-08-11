@@ -86,8 +86,9 @@ class CronSchedule {
             $step = 1;
             $range = $token;
             if (str_contains($token, '/')) {
-                [$range, $stepStr] = explode('/', $token, 2);
-                $step = (int)$stepStr;
+                $parts = explode('/', $token, 2);
+                $range = $parts[0];
+                $step = (int)($parts[1] ?? '');
                 if ($step < 1) {
                     throw new \InvalidArgumentException("Invalid step in cron field: $token");
                 }
@@ -97,9 +98,9 @@ class CronSchedule {
                 $start = $min;
                 $end = $max;
             } elseif (str_contains($range, '-')) {
-                [$a, $b] = explode('-', $range, 2);
-                $start = (int)$a;
-                $end = (int)$b;
+                $bounds = explode('-', $range, 2);
+                $start = (int)$bounds[0];
+                $end = (int)($bounds[1] ?? '');
             } else {
                 $start = $end = (int)$range;
             }

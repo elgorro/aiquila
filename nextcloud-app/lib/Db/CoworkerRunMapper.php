@@ -34,7 +34,7 @@ class CoworkerRunMapper extends QBMapper {
     /**
      * Recent runs for a coworker, newest first.
      *
-     * @return CoworkerRun[]
+     * @return list<CoworkerRun>
      */
     public function findByCoworker(int $coworkerId, string $userId, int $limit = 20): array {
         $qb = $this->db->getQueryBuilder();

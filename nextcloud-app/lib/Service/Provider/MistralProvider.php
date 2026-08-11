@@ -432,9 +432,7 @@ class MistralProvider implements LLMProviderInterface {
                             $this->accumulateUsage($total, $event['usage'] ?? []);
                             break;
                         case 'conversation.response.error':
-                            if (is_resource($stream)) {
-                                fclose($stream);
-                            }
+                            fclose($stream);
                             yield ['type' => 'error', 'error' => (string)($event['message'] ?? 'Mistral conversation error'), 'usage' => $this->finalizeUsage($total)];
                             return;
                         default:
@@ -602,13 +600,18 @@ class MistralProvider implements LLMProviderInterface {
             'timeout' => self::STREAM_TIMEOUT,
         ]);
         $stream = $response->getBody();
-        if (is_string($stream)) {
-            $tmp = fopen('php://temp', 'r+');
-            fwrite($tmp, $stream);
-            rewind($tmp);
-            return $tmp;
+        if (!is_string($stream) && is_resource($stream)) {
+            return $stream;
         }
-        return $stream;
+
+        $tmp = fopen('php://temp', 'r+');
+        if ($tmp === false) {
+            throw new \RuntimeException('Could not open a temporary stream');
+        }
+        fwrite($tmp, is_string($stream) ? $stream : '');
+        rewind($tmp);
+
+        return $tmp;
     }
 
     /**
@@ -710,15 +713,20 @@ class MistralProvider implements LLMProviderInterface {
             'timeout' => self::STREAM_TIMEOUT,
         ]);
         $stream = $response->getBody();
-        if (is_string($stream)) {
-            // Some client backends return the full body instead of a resource;
-            // wrap it so the SSE reader can consume it uniformly.
-            $tmp = fopen('php://temp', 'r+');
-            fwrite($tmp, $stream);
-            rewind($tmp);
-            return $tmp;
+        if (!is_string($stream) && is_resource($stream)) {
+            return $stream;
         }
-        return $stream;
+
+        // Some client backends return the full body instead of a resource;
+        // wrap it so the SSE reader can consume it uniformly.
+        $tmp = fopen('php://temp', 'r+');
+        if ($tmp === false) {
+            throw new \RuntimeException('Could not open a temporary stream');
+        }
+        fwrite($tmp, is_string($stream) ? $stream : '');
+        rewind($tmp);
+
+        return $tmp;
     }
 
     private function requireApiKey(?string $userId): string {

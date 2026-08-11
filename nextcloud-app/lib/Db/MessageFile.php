@@ -35,6 +35,9 @@ class MessageFile extends Entity implements \JsonSerializable {
         $this->addType('createdAt', 'integer');
     }
 
+    /**
+     * @return array{id: int, messageId: int, filePath: string, fileName: string, mimeType: ?string, createdAt: int}
+     */
     public function jsonSerialize(): array {
         return [
             'id' => $this->getId(),

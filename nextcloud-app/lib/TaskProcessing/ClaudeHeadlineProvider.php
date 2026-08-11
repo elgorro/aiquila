@@ -7,7 +7,6 @@ namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\TaskProcessing\ISynchronousProvider;
-use Psr\Log\LoggerInterface;
 
 /**
  * Claude headline TaskProcessing Provider (core:text2text:headline)
@@ -16,7 +15,6 @@ class ClaudeHeadlineProvider implements ISynchronousProvider {
 
     public function __construct(
         private ClaudeSDKService $claudeService,
-        private LoggerInterface $logger,
     ) {
     }
 
@@ -70,7 +68,7 @@ class ClaudeHeadlineProvider implements ISynchronousProvider {
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $text = $input['input'] ?? '';
-        if (empty($text)) {
+        if (!is_string($text) || $text === '') {
             throw new \RuntimeException('No input text provided');
         }
 

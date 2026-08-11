@@ -456,6 +456,10 @@ class ClaudeSDKService implements LLMProviderInterface {
             $base?->usage->serviceTier ?? null,
         );
 
+        // The accumulated blocks are the loosely-typed stdClass shapes the stream
+        // hands us; Message::with() stores them as-is and every reader in this
+        // class goes through the same property access.
+        /** @psalm-suppress InvalidArgument */
         return Message::with(
             $base?->id ?? '',
             null,
@@ -591,7 +595,7 @@ class ClaudeSDKService implements LLMProviderInterface {
             }
             foreach ($citations as $c) {
                 // SDK exposes citation entries as objects; normalise to array.
-                $out[] = is_object($c) ? json_decode(json_encode($c), true) : $c;
+                $out[] = is_object($c) ? json_decode((string)json_encode($c), true) : $c;
             }
         }
         return $out;
@@ -687,7 +691,7 @@ class ClaudeSDKService implements LLMProviderInterface {
      * @param string $context Optional context
      * @param string|null $userId User ID for user-specific API key
      * @param array $options Optional: system, temperature, top_p, top_k, stop_sequences, cache_system
-     * @return array ['response' => string] or ['error' => string]
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
     public function ask(
         string  $prompt,
@@ -745,7 +749,7 @@ class ClaudeSDKService implements LLMProviderInterface {
      * @param string|null $system Optional system prompt
      * @param string|null $userId User ID for API key resolution
      * @param array $options Optional: temperature, top_p, top_k, stop_sequences, cache_system
-     * @return array ['response' => string, 'usage' => [...]] or ['error' => string]
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
     public function chat(
         array   $messages,
@@ -801,7 +805,7 @@ class ClaudeSDKService implements LLMProviderInterface {
      * @param string|null $userId User ID for API key resolution
      * @param array $options Optional: temperature, top_p, etc.
      * @param int $maxIterations Safety cap on tool-use loop iterations
-     * @return array ['response' => string, 'usage' => [...]] or ['error' => string]
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
     public function chatWithTools(
         array    $messages,
@@ -947,7 +951,7 @@ class ClaudeSDKService implements LLMProviderInterface {
      *
      * @param string $content Content to summarize
      * @param string|null $userId User ID for user-specific API key
-     * @return array ['response' => string] or ['error' => string]
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
     public function summarize(string $content, ?string $userId = null): array {
         return $this->ask("Summarize the following content concisely:\n\n$content", '', $userId);
@@ -1055,7 +1059,7 @@ class ClaudeSDKService implements LLMProviderInterface {
                 return $batch;
             }
             if ($reportProgress !== null) {
-                $progress = min(0.9, 0.1 + ($i / $maxAttempts) * 0.8);
+                $progress = min(0.9, 0.1 + ((float)$i / (float)$maxAttempts) * 0.8);
                 $reportProgress($progress);
             }
             $this->sleepBetweenBatchPolls();
@@ -1132,7 +1136,7 @@ class ClaudeSDKService implements LLMProviderInterface {
      * @param bool $cacheDoc Add cache_control to the document block (default true — documents are large and benefit from cache reuse)
      * @param bool $citations Enable citations on the document block (default true). Cited text spans are returned alongside the response.
      * @param string|null $fileId Optional Anthropic Files API file_id. When provided, the document source is `{type:'file', file_id}` instead of inline base64/text.
-     * @return array ['response' => string, 'usage' => [...], 'citations' => [...]] or ['error' => string]
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
     public function askWithDocument(
         string  $prompt,
@@ -1275,7 +1279,7 @@ class ClaudeSDKService implements LLMProviderInterface {
     /**
      * Get current configuration for display/testing
      *
-     * @return array Configuration array
+     * @return array{api_key: string, model: string, max_tokens: int, timeout: int}
      */
     public function getConfiguration(): array {
         return [
@@ -1294,7 +1298,7 @@ class ClaudeSDKService implements LLMProviderInterface {
      * @param string $mimeType Image mime type (image/jpeg, image/png, image/gif, image/webp)
      * @param string|null $userId User ID for API key
      * @param string|null $fileId Optional Anthropic Files API file_id. When provided, the image source is `{type:'file', file_id}` instead of inline base64.
-     * @return array ['response' => string] or ['error' => string]
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
     public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null): array {
         try {
@@ -1345,10 +1349,10 @@ class ClaudeSDKService implements LLMProviderInterface {
      * the text prompt, per Claude best practice (images before text).
      *
      * @param string $prompt What to ask about the images
-     * @param array<array{base64: string, mimeType: string}> $images Image data array
+     * @param array<array{base64: string, mimeType: string, ...}> $images Image data array
      * @param string|null $userId User ID for API key
      * @param array<int, string|null>|null $fileIds Optional per-image Anthropic Files API file_ids, indexed parallel to $images. A non-null entry triggers a `{type:'file', file_id}` source for that image; null entries fall back to inline base64.
-     * @return array ['response' => string, 'usage' => array] or ['error' => string]
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
     public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null): array {
         if (empty($images)) {
@@ -1588,7 +1592,7 @@ class ClaudeSDKService implements LLMProviderInterface {
                             } elseif ($deltaType === 'citations_delta') {
                                 $citation = $delta->citation ?? null;
                                 if ($citation !== null) {
-                                    $normalized = is_object($citation) ? json_decode(json_encode($citation), true) : $citation;
+                                    $normalized = is_object($citation) ? json_decode((string)json_encode($citation), true) : $citation;
                                     if (isset($blocks[$idx])) {
                                         $blocks[$idx]['citations'][] = $normalized;
                                     }
@@ -1731,6 +1735,13 @@ class ClaudeSDKService implements LLMProviderInterface {
      * Dispatch a beta streaming create call with mcp_servers attached. Overridable for testing.
      *
      * @param list<array<string, mixed>> $mcpServers
+     */
+    /**
+     * @param list<array<string, mixed>> $mcpServers Server descriptors per BetaRequestMCPServerURLDefinition
+     *
+     * @psalm-suppress ArgumentTypeCoercion the descriptors are built to the SDK's
+     *                 BetaRequestMCPServerURLDefinition shape, which psalm cannot
+     *                 verify through the generic array docblock
      */
     protected function callBetaCreateStreamWithMcp(Client $client, array $params, array $mcpServers): BaseStream {
         return $client->beta->messages->createStream(
@@ -1875,7 +1886,7 @@ class ClaudeSDKService implements LLMProviderInterface {
                         } elseif ($deltaType === 'citations_delta') {
                             $citation = $delta->citation ?? null;
                             if ($citation !== null) {
-                                $normalized = is_object($citation) ? json_decode(json_encode($citation), true) : $citation;
+                                $normalized = is_object($citation) ? json_decode((string)json_encode($citation), true) : $citation;
                                 if (isset($blocks[$idx])) {
                                     $blocks[$idx]['citations'][] = $normalized;
                                 }
@@ -1962,7 +1973,7 @@ class ClaudeSDKService implements LLMProviderInterface {
                     }
                 }
             }
-            return $out !== '' ? $out : json_encode($content);
+            return $out !== '' ? $out : (string)json_encode($content);
         }
         if (is_object($content)) {
             return json_encode($content) ?: '';
@@ -1974,6 +1985,8 @@ class ClaudeSDKService implements LLMProviderInterface {
      * Non-streaming convenience: drive chatWithNativeMcp() to completion and
      * return a flat result array compatible with the legacy chat()/chatWithTools()
      * shape (response/model/usage/citations).
+     *
+     * @param list<array<string, mixed>> $mcpServers
      */
     public function chatWithNativeMcpCollect(
         array $messages,

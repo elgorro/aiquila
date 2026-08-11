@@ -85,7 +85,7 @@ class McpServer extends Entity {
     }
 
     public function getIsEnabled(): bool {
-        return (int)$this->isEnabled === 1;
+        return $this->isEnabled === 1;
     }
 
     public function setIsEnabled(bool $isEnabled): void {

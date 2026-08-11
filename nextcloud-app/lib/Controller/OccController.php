@@ -4,6 +4,7 @@
 namespace OCA\AIquila\Controller;
 
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
@@ -34,11 +35,10 @@ class OccController extends Controller {
      *
      * 200: Command completed; see exitCode for success/failure
      * 400: No command was provided
+     * 408: The command exceeded the requested timeout
+     * 500: The PHP CLI binary could not be located or the process failed to start
      *
-     * @return JSONResponse<Http::STATUS_OK, array{success: bool, stdout: string, stderr: string, exitCode: int}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, error: string}, array{}>
-     *        |JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, error: string}, array{}>
-     *
+     * @return JSONResponse<Http::STATUS_OK, array{success: bool, stdout: string, stderr: string, exitCode: int}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_TIMEOUT, array{success: bool, error: string, stdout: string, stderr: string, exitCode: int}, array{}>
      */
     #[NoCSRFRequired]
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
@@ -113,8 +113,8 @@ class OccController extends Controller {
 
         while (true) {
             $status = proc_get_status($process);
-            $stdout .= stream_get_contents($pipes[1]);
-            $stderr .= stream_get_contents($pipes[2]);
+            $stdout .= (string)stream_get_contents($pipes[1]);
+            $stderr .= (string)stream_get_contents($pipes[2]);
 
             if (!$status['running']) {
                 break;
@@ -137,8 +137,8 @@ class OccController extends Controller {
             usleep(50000);
         }
 
-        $stdout .= stream_get_contents($pipes[1]);
-        $stderr .= stream_get_contents($pipes[2]);
+        $stdout .= (string)stream_get_contents($pipes[1]);
+        $stderr .= (string)stream_get_contents($pipes[2]);
         fclose($pipes[1]);
         fclose($pipes[2]);
         $exitCode = proc_close($process);

@@ -10,6 +10,7 @@ use OCA\AIquila\Db\McpServerMapper;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\McpClientService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
@@ -63,8 +64,7 @@ class McpServerController extends Controller {
      * 200: Created MCP server
      * 400: Validation error
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, display_name: string, url: string, auth_type: string, is_enabled: bool}, array{}>
-     *        |JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, display_name: string, url: string, auth_type: string, is_enabled: bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function create(
@@ -108,8 +108,7 @@ class McpServerController extends Controller {
      * 200: Updated MCP server
      * 404: Server not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, display_name: string, url: string, auth_type: string, is_enabled: bool}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, display_name: string, url: string, auth_type: string, is_enabled: bool}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function update(
@@ -167,8 +166,7 @@ class McpServerController extends Controller {
      * 200: Server deleted
      * 404: Server not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{status: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{status: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function destroy(int $id): JSONResponse {
@@ -190,8 +188,7 @@ class McpServerController extends Controller {
      * 200: Test result with success status and tool count
      * 404: Server not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string, tool_count: int}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string, tool_count: int}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function test(int $id): JSONResponse {
@@ -212,9 +209,9 @@ class McpServerController extends Controller {
      *
      * 200: List of tools from the server
      * 404: Server not found
+     * 500: Listing the tools failed
      *
-     * @return JSONResponse<Http::STATUS_OK, list<array{name: string, description: string}>, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, list<array{name: string, description: string}>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function tools(int $id): JSONResponse {
@@ -239,9 +236,9 @@ class McpServerController extends Controller {
      *
      * 200: Authorize URL to open in popup
      * 404: Server not found
+     * 500: Starting the authorization flow failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{authorize_url: string}, array{}>
-     *        |JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{authorize_url: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function authorize(int $id): JSONResponse {
@@ -283,7 +280,7 @@ class McpServerController extends Controller {
             $this->mcpClient->completeOAuth($server, $code, $state, $callbackUrl);
 
             $html = '<!DOCTYPE html><html><body><script>'
-                . 'window.opener.postMessage({type:"aiquila-oauth-complete",serverId:' . (int)$id . '}, window.location.origin);'
+                . 'window.opener.postMessage({type:"aiquila-oauth-complete",serverId:' . $id . '}, window.location.origin);'
                 . 'window.close();'
                 . '</script><p>Authentication successful. This window should close automatically.</p></body></html>';
         } catch (\Throwable $e) {

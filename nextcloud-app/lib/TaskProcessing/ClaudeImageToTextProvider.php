@@ -91,12 +91,15 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
     }
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
-        if (empty($input['image'])) {
+        $imageData = $input['image'] ?? '';
+        if (!is_string($imageData) || $imageData === '') {
             throw new \RuntimeException('No image provided in task input');
         }
 
-        $imageData = $input['image'];
-        $prompt = !empty($input['prompt']) ? $input['prompt'] : 'Describe this image in detail.';
+        $prompt = $input['prompt'] ?? '';
+        if (!is_string($prompt) || $prompt === '') {
+            $prompt = 'Describe this image in detail.';
+        }
 
         $mimeType = $this->detectMimeType($imageData);
 

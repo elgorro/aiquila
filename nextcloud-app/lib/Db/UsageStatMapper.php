@@ -18,7 +18,7 @@ class UsageStatMapper extends QBMapper {
     }
 
     /**
-     * @return UsageStat[]
+     * @return list<UsageStat>
      */
     public function findByUser(string $userId, int $limit = 100, int $offset = 0): array {
         $qb = $this->db->getQueryBuilder();
@@ -37,12 +37,10 @@ class UsageStatMapper extends QBMapper {
      */
     public function sumTokensByUser(string $userId): array {
         $qb = $this->db->getQueryBuilder();
-        $qb->select(
-            $qb->func()->sum('input_tokens', 'total_input'),
-            $qb->func()->sum('output_tokens', 'total_output'),
-            $qb->func()->sum('cache_creation_tokens', 'total_cache_creation'),
-            $qb->func()->sum('cache_read_tokens', 'total_cache_read')
-        )
+        $qb->selectAlias($qb->func()->sum('input_tokens'), 'total_input')
+            ->selectAlias($qb->func()->sum('output_tokens'), 'total_output')
+            ->selectAlias($qb->func()->sum('cache_creation_tokens'), 'total_cache_creation')
+            ->selectAlias($qb->func()->sum('cache_read_tokens'), 'total_cache_read')
             ->from($this->getTableName())
             ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)));
 
@@ -65,10 +63,8 @@ class UsageStatMapper extends QBMapper {
      */
     public function sumTokensByUserSince(string $userId, int $since): array {
         $qb = $this->db->getQueryBuilder();
-        $qb->select(
-            $qb->func()->sum('input_tokens', 'total_input'),
-            $qb->func()->sum('output_tokens', 'total_output')
-        )
+        $qb->selectAlias($qb->func()->sum('input_tokens'), 'total_input')
+            ->selectAlias($qb->func()->sum('output_tokens'), 'total_output')
             ->from($this->getTableName())
             ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
             ->andWhere($qb->expr()->gte('created_at', $qb->createNamedParameter($since, IQueryBuilder::PARAM_INT)));

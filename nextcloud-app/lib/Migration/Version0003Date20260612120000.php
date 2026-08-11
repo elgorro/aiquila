@@ -19,7 +19,6 @@ use OCP\Migration\SimpleMigrationStep;
  */
 class Version0003Date20260612120000 extends SimpleMigrationStep {
     public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
-        /** @var ISchemaWrapper $schema */
         $schema = $schemaClosure();
 
         if (!$schema->hasTable('aiquila_coworkers')) {
