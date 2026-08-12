@@ -6,6 +6,7 @@ namespace OCA\AIquila\Command;
 use OC\Core\Command\Base;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\IConfig;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -14,12 +15,14 @@ use Symfony\Component\Console\Output\OutputInterface;
 class ConfigureCommand extends Base {
     private IConfig $config;
     private CredentialService $credentials;
+    private LLMProviderFactory $providerFactory;
     private const APP_NAME = 'aiquila';
 
-    public function __construct(IConfig $config, CredentialService $credentials) {
+    public function __construct(IConfig $config, CredentialService $credentials, LLMProviderFactory $providerFactory) {
         parent::__construct();
         $this->config = $config;
         $this->credentials = $credentials;
+        $this->providerFactory = $providerFactory;
     }
 
     protected function configure(): void {
@@ -63,6 +66,24 @@ class ConfigureCommand extends Base {
                 'Set API timeout in seconds (10-1800, default: 30)'
             )
             ->addOption(
+                'provider',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Set the active LLM provider (anthropic, mistral, deepseek, hetzner, local)'
+            )
+            ->addOption(
+                'provider-key',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Set the API key for the provider given by --provider (defaults to anthropic)'
+            )
+            ->addOption(
+                'provider-model',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Set the model for the provider given by --provider (defaults to anthropic)'
+            )
+            ->addOption(
                 'show',
                 null,
                 InputOption::VALUE_NONE,
@@ -77,6 +98,53 @@ class ConfigureCommand extends Base {
         }
 
         $updated = false;
+
+        // Provider selection + provider-scoped key/model. Used by headless
+        // provisioning (aiquila-hetzner) to point a fresh install at a
+        // non-Anthropic backend without touching the web UI.
+        $providerIds = $this->providerFactory->getProviderIds();
+        $provider = $input->getOption('provider');
+        $providerKey = $input->getOption('provider-key');
+        $providerModel = $input->getOption('provider-model');
+
+        if ($provider !== null) {
+            if (!in_array($provider, $providerIds, true)) {
+                $output->writeln('<error>Unknown provider "' . $provider . '". Available: ' . implode(', ', $providerIds) . '</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'provider', $provider);
+            $output->writeln('<info>✓ Active provider set to: ' . $provider . '</info>');
+            $updated = true;
+        }
+
+        $targetProvider = $provider ?? LLMProviderFactory::DEFAULT_PROVIDER;
+
+        if ($providerKey !== null) {
+            if ($providerKey === '') {
+                $output->writeln('<error>--provider-key cannot be empty</error>');
+                return 1;
+            }
+            if ($targetProvider === LLMProviderFactory::DEFAULT_PROVIDER && !str_starts_with($providerKey, 'sk-ant-')) {
+                $output->writeln('<error>Invalid Anthropic API key format. Must start with sk-ant-</error>');
+                return 1;
+            }
+            $this->credentials->setApiKey(null, $providerKey, $targetProvider);
+            $output->writeln('<info>✓ API key updated for provider: ' . $targetProvider . '</info>');
+            $updated = true;
+        }
+
+        if ($providerModel !== null) {
+            if ($providerModel === '') {
+                $output->writeln('<error>--provider-model cannot be empty</error>');
+                return 1;
+            }
+            $modelKey = $targetProvider === LLMProviderFactory::DEFAULT_PROVIDER
+                ? 'model'
+                : 'model_' . $targetProvider;
+            $this->config->setAppValue(self::APP_NAME, $modelKey, $providerModel);
+            $output->writeln('<info>✓ Model for ' . $targetProvider . ' updated to: ' . $providerModel . '</info>');
+            $updated = true;
+        }
 
         // Set API key
         $apiKey = $input->getOption('api-key');
@@ -163,9 +231,13 @@ class ConfigureCommand extends Base {
     }
 
     private function showConfiguration(OutputInterface $output): int {
-        $hasKey = $this->credentials->hasApiKey(null);
-        $model = $this->config->getAppValue(self::APP_NAME, 'model', ClaudeModels::DEFAULT_MODEL);
-        $maxTokens = $this->config->getAppValue(self::APP_NAME, 'max_tokens', '4096');
+        // Report the *active* provider's key and model, not the Anthropic ones —
+        // otherwise a hetzner/mistral/local instance looks unconfigured here.
+        $providerId = $this->providerFactory->getActiveProviderId();
+        $provider = $this->providerFactory->getProviderById($providerId);
+        $hasKey = $this->credentials->hasApiKey(null, $providerId);
+        $model = $provider->getModel();
+        $maxTokens = (string)$provider->getMaxTokens();
         $effort = $this->config->getAppValue(self::APP_NAME, 'effort', '');
         $thinking = in_array($this->config->getAppValue(self::APP_NAME, 'thinking', 'false'), ['true', '1'], true);
         $timeout = $this->config->getAppValue(self::APP_NAME, 'api_timeout', '30');
@@ -173,6 +245,7 @@ class ConfigureCommand extends Base {
         $output->writeln('');
         $output->writeln('<info>AIquila Configuration:</info>');
         $output->writeln('');
+        $output->writeln('  Provider:   <comment>' . $providerId . '</comment>');
 
         if ($hasKey) {
             $output->writeln('  API Key:    <comment>(configured)</comment>');

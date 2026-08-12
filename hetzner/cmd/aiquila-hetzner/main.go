@@ -51,6 +51,9 @@ var (
 	// NC self-hosted flags (--stack nextcloud / full)
 	createNCAdminUser     string
 	createNCAdminPassword string
+	// Hetzner Inference (experimental) — preconfigures the AIquila app's LLM provider
+	createInferenceToken string
+	createInferenceModel string
 	createToken      string
 	createAcmeEmail  string
 	createMonitoring bool
@@ -149,6 +152,10 @@ func buildCreateCmd() *cobra.Command {
 	// Self-hosted NC flags (--stack nextcloud/full)
 	cmd.Flags().StringVar(&createNCAdminUser, "nc-admin-user", "admin", "Nextcloud admin username (--stack nextcloud/full)")
 	cmd.Flags().StringVar(&createNCAdminPassword, "nc-admin-password", "", "Nextcloud admin password (--stack nextcloud/full)")
+	cmd.Flags().StringVar(&createInferenceToken, "hetzner-inference-token", "",
+		"Hetzner Inference API token — preconfigures AIquila to use it as LLM provider\n\t\t\t\t(--stack nextcloud/full; or $HETZNER_INFERENCE_TOKEN;\n\t\t\t\t create one at https://experiments.hetzner.com/inference)")
+	cmd.Flags().StringVar(&createInferenceModel, "hetzner-inference-model", "",
+		"Model id for --hetzner-inference-token (default: the app's built-in default)")
 	cmd.Flags().StringVar(&createToken, "token", "", "Hetzner API token (default: $HCLOUD_TOKEN)")
 	cmd.Flags().StringVar(&createAcmeEmail, "acme-email", "", "Email for Let's Encrypt cert expiry notices (optional)")
 	cmd.Flags().BoolVar(&createMonitoring, "monitoring", false, "Start monitoring profile (Prometheus + Grafana; --stack mcp only)")
@@ -289,6 +296,15 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	if createNCAdminPassword == "" && fileCfg.NCAdminPassword != "" {
 		createNCAdminPassword = fileCfg.NCAdminPassword
 	}
+	if createInferenceToken == "" && fileCfg.InferenceToken != "" {
+		createInferenceToken = fileCfg.InferenceToken
+	}
+	if createInferenceModel == "" && fileCfg.InferenceModel != "" {
+		createInferenceModel = fileCfg.InferenceModel
+	}
+	if createInferenceToken == "" {
+		createInferenceToken = os.Getenv("HETZNER_INFERENCE_TOKEN")
+	}
 
 	// Packages: config file takes priority over CLI --package flags.
 	var packages []string
@@ -337,6 +353,19 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 		}
 	default:
 		return fmt.Errorf("unknown --stack %q: must be mcp, nextcloud, or full", createStack)
+	}
+
+	// The inference token configures the AIquila app, which only exists on a
+	// self-hosted Nextcloud. On --stack mcp the app lives on the external
+	// instance we do not control, so the flag has nothing to act on.
+	if createInferenceToken != "" && createStack == "mcp" {
+		fmt.Fprintln(os.Stderr, "WARNING: --hetzner-inference-token needs a self-hosted Nextcloud (--stack nextcloud/full); ignoring")
+		createInferenceToken = ""
+		createInferenceModel = ""
+	}
+	if createInferenceModel != "" && createInferenceToken == "" {
+		fmt.Fprintln(os.Stderr, "WARNING: --hetzner-inference-model requires --hetzner-inference-token; ignoring")
+		createInferenceModel = ""
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("required values missing: %s", strings.Join(missing, ", "))
@@ -877,7 +906,49 @@ php occ maintenance:repair --include-expensive'`
 	}
 	fmt.Print(out)
 	fmt.Println("AIquila app installed from store.")
+
+	return configureInferenceProvider(sshClient)
+}
+
+// configureInferenceProvider points the freshly installed AIquila app at the
+// Hetzner Inference API when a token was supplied. The token is passed through
+// occ (which stores it in Nextcloud's encrypted credential manager) and is
+// never echoed back to the terminal.
+func configureInferenceProvider(sshClient *xssh.Client) error {
+	if createInferenceToken == "" {
+		return nil
+	}
+	fmt.Println("\n── Configuring Hetzner Inference as the AIquila LLM provider")
+
+	args := fmt.Sprintf("--provider hetzner --provider-key %s", shellQuote(createInferenceToken))
+	if createInferenceModel != "" {
+		args += fmt.Sprintf(" --provider-model %s", shellQuote(createInferenceModel))
+	}
+	configureCmd := fmt.Sprintf(
+		"docker compose -f /opt/aiquila/docker-compose.yml exec -T nc php occ aiquila:configure %s", args)
+
+	out, err := provision.RunCommand(sshClient, configureCmd)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, redactSecret(out, createInferenceToken))
+		return fmt.Errorf("configure Hetzner Inference provider: %w", err)
+	}
+	fmt.Print(redactSecret(out, createInferenceToken))
+	fmt.Println("Hetzner Inference configured. Note: the service is experimental and offered without an availability guarantee.")
 	return nil
+}
+
+// shellQuote wraps a value in single quotes for safe interpolation into a
+// remote shell command.
+func shellQuote(v string) string {
+	return "'" + strings.ReplaceAll(v, "'", `'\''`) + "'"
+}
+
+// redactSecret removes a secret from command output before it is printed.
+func redactSecret(out, secret string) string {
+	if secret == "" {
+		return out
+	}
+	return strings.ReplaceAll(out, secret, "***")
 }
 
 // confirmCost prints a cost warning and, unless noConfirm is set, prompts the
@@ -1014,7 +1085,7 @@ func printNCSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 %s  SSH:        ssh -i %s root@%s
   Nextcloud:  https://%s
   AIquila:    installed via OCC
-%s%s╚══════════════════════════════════════╝
+%s%s%s╚══════════════════════════════════════╝
 
 %s
 `,
@@ -1022,11 +1093,25 @@ func printNCSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		privateLine,
 		privKeyPath, serverIP,
 		createNCDomain,
+		inferenceSummaryLine(),
 		storageBoxLine,
 		priceLine,
 		dnsNote,
 	)
 	return nil
+}
+
+// inferenceSummaryLine reports the preconfigured LLM provider in the deployment
+// summary, or an empty string when none was configured.
+func inferenceSummaryLine() string {
+	if createInferenceToken == "" {
+		return ""
+	}
+	model := createInferenceModel
+	if model == "" {
+		model = "app default"
+	}
+	return fmt.Sprintf("  LLM:        Hetzner Inference (experimental) — model: %s\n", model)
 }
 
 func printFullSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
@@ -1065,7 +1150,7 @@ func printFullSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
   Nextcloud:  https://%s
   MCP URL:    https://%s/mcp
   AIquila:    installed via OCC
-%s%s╚══════════════════════════════════════╝
+%s%s%s╚══════════════════════════════════════╝
 
 %s
 `,
@@ -1074,6 +1159,7 @@ func printFullSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		privKeyPath, serverIP,
 		createNCDomain,
 		createMCPDomain,
+		inferenceSummaryLine(),
 		storageBoxLine,
 		priceLine,
 		dnsNote,

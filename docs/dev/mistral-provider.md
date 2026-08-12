@@ -73,8 +73,13 @@ back to the local agentic loop.
 
 1. Implement `LLMProviderInterface` (mirror `MistralProvider`).
 2. Add a model registry (mirror `MistralModels`).
-3. Register it in `LLMProviderFactory`.
+3. Register it in `LLMProviderFactory` (and add a `staticModels()` arm in
+   `SettingsController`).
 4. The settings UI picks it up automatically from `describeProviders()`.
+
+For an OpenAI-compatible vendor, extend `AbstractOpenAiCompatibleProvider`
+instead of implementing the interface from scratch — see `DeepSeekProvider` and
+[`HetznerProvider`](hetzner-provider.md), which are ~60 lines each.
 
 ## Verifying MCP works with Mistral (#136)
 
