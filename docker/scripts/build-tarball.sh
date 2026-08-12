@@ -77,6 +77,7 @@ docker run --rm \
         echo "--- [5/5] Verifying build ---"
         test -f js/dist/aiquila-main.js || { echo "ERROR: js/dist/aiquila-main.js not found!"; exit 1; }
         test -d vendor || { echo "ERROR: vendor/ not found!"; exit 1; }
+        php tests/check-vendor-prod-only.php
         echo "Build verified."
 
         echo ""

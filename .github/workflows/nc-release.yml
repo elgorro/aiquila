@@ -94,8 +94,21 @@ jobs:
       - name: Run tests
         working-directory: nextcloud-app
         run: |
-          composer install  # Install dev dependencies for testing
-          composer test || echo "Tests completed"
+          composer install --no-interaction  # dev dependencies needed for phpunit
+          composer test
+
+      # The test step above reinstalls dev dependencies into vendor/. Packaging copies
+      # vendor/ verbatim, so it must be reduced back to production-only first — shipping
+      # symfony/console, amphp/amp or doctrine/dbal breaks occ and other apps (GH #453).
+      - name: Restore production-only vendor tree
+        working-directory: nextcloud-app
+        run: |
+          rm -rf vendor
+          composer install --no-dev --optimize-autoloader --no-interaction
+
+      - name: Verify vendor contains no dev dependencies
+        working-directory: nextcloud-app
+        run: php tests/check-vendor-prod-only.php
 
       - name: Create app package
         run: |
