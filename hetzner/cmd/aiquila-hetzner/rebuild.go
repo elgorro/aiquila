@@ -53,6 +53,9 @@ type DeployConfig struct {
 	NCDomain         string `yaml:"nc_domain"          json:"nc_domain"`
 	NCAdminUser      string `yaml:"nc_admin_user"      json:"nc_admin_user"`
 	NCAdminPassword  string `yaml:"nc_admin_password"  json:"nc_admin_password"`
+	// Hetzner Inference (experimental) — preconfigures the AIquila LLM provider
+	InferenceToken string `yaml:"hetzner_inference_token" json:"hetzner_inference_token"`
+	InferenceModel string `yaml:"hetzner_inference_model" json:"hetzner_inference_model"`
 }
 
 var (

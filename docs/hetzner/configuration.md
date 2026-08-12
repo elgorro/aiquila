@@ -64,6 +64,8 @@ aiquila-hetzner rebuild --config hetzner/examples/deploy-mcp.yaml
 | `nc_admin_user` | string | `--nc-admin-user` | NC admin username (nextcloud/full; default: `admin`) |
 | `nc_admin_password` | string | `--nc-admin-password` | NC admin password (nextcloud/full) |
 | `nc_app_version` | string | `--nc-app-version` | AIquila app version (nextcloud/full; default: `latest`) |
+| `hetzner_inference_token` | string | `--hetzner-inference-token` | [Hetzner Inference](../dev/hetzner-provider.md) token (nextcloud/full) |
+| `hetzner_inference_model` | string | `--hetzner-inference-model` | Model id for the Hetzner Inference provider |
 | `acme_email` | string | `--acme-email` | Let's Encrypt expiry notices |
 | `monitoring` | bool | `--monitoring` | Prometheus + Grafana (mcp stack only) |
 | `ssh_key` | string | `--ssh-key` | Path to existing SSH public key |

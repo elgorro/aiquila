@@ -51,6 +51,8 @@ Provision a new AIquila server end-to-end.
 |------|---------|-------------|
 | `--nc-admin-user` | `admin` | Nextcloud admin username |
 | `--nc-app-version` | `latest` | AIquila app version to install (e.g. `v1.2.3`) |
+| `--hetzner-inference-token` | — | [Hetzner Inference](../dev/hetzner-provider.md) API token; configures AIquila to use it as LLM provider (env: `HETZNER_INFERENCE_TOKEN`) |
+| `--hetzner-inference-model` | app default | Model id for `--hetzner-inference-token` |
 
 **Server options:**
 

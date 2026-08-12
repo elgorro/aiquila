@@ -18,7 +18,10 @@ style('aiquila', 'admin');
             Mistral keys from
             <a href="https://console.mistral.ai/" target="_blank" rel="noopener noreferrer">console.mistral.ai</a>;
             DeepSeek keys from
-            <a href="https://platform.deepseek.com/" target="_blank" rel="noopener noreferrer">platform.deepseek.com</a>.
+            <a href="https://platform.deepseek.com/" target="_blank" rel="noopener noreferrer">platform.deepseek.com</a>;
+            <strong>Hetzner Inference</strong> tokens from
+            <a href="https://experiments.hetzner.com/inference" target="_blank" rel="noopener noreferrer">experiments.hetzner.com/inference</a>
+            (EU-hosted open-weight models — an experimental service offered without an availability guarantee).
             <strong>Local model</strong> needs no key — configure its endpoint in the card below instead.
             Keys are stored encrypted in Nextcloud's credential manager. Users may override both provider and key in personal settings. Use <em>Test Configuration</em> after saving to confirm the key reaches the provider.
         </p>
