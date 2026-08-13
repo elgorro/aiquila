@@ -8,6 +8,7 @@ namespace OCA\AIquila\Service\Provider;
 use OCA\AIquila\Service\CredentialService;
 use OCP\ICacheFactory;
 use OCP\IConfig;
+use Psr\Log\LoggerInterface;
 
 /**
  * Reads and writes provider configuration through the descriptors returned by
@@ -41,6 +42,7 @@ class ProviderSettingsService {
         private readonly IConfig $config,
         private readonly CredentialService $credentials,
         private readonly ICacheFactory $cacheFactory,
+        private readonly LoggerInterface $logger,
     ) {
     }
 
@@ -126,6 +128,8 @@ class ProviderSettingsService {
             }
         }
 
+        $this->logWrite($provider->getId(), 'user', $plan, $rejected, $userId);
+
         return $rejected;
     }
 
@@ -173,6 +177,8 @@ class ProviderSettingsService {
         // An endpoint or key change invalidates whatever model list we cached.
         $this->forgetModels($provider->getId());
 
+        $this->logWrite($provider->getId(), 'admin', $plan, $rejected, null);
+
         return $rejected;
     }
 
@@ -195,6 +201,9 @@ class ProviderSettingsService {
 
         $models = $provider->listModels($userId);
         if ($models === null || $models === []) {
+            $this->logger->warning('AIquila: no live model list from ' . $provider->getId() . ', using the static registry', [
+                'provider' => $provider->getId(),
+            ]);
             // Do not cache the fallback: it is static anyway, and caching it
             // would keep a transient outage pinned for an hour.
             return $this->staticModels($provider);
@@ -215,6 +224,37 @@ class ProviderSettingsService {
     }
 
     // ── Internals ───────────────────────────────────────────────────────────
+
+    /**
+     * Record which fields a settings save touched. Values are deliberately
+     * absent: a plan entry with a null key is an API key, and even the
+     * non-sensitive ones can carry endpoint URLs an admin would not expect in
+     * the log. A rejection is logged at warning level because it means the UI
+     * offered a field the scope rules refuse — either a schema bug or an
+     * attempt to write an admin-only field from the personal page.
+     *
+     * @param list<array{key: ?string, value: string}> $plan
+     * @param list<string> $rejected
+     */
+    private function logWrite(string $providerId, string $scope, array $plan, array $rejected, ?string $userId): void {
+        $written = [];
+        foreach ($plan as $write) {
+            $written[] = $write['key'] ?? 'api_key';
+        }
+
+        $context = ['provider' => $providerId, 'scope' => $scope, 'fields' => $written];
+        if ($userId !== null) {
+            $context['user'] = $userId;
+        }
+
+        if ($written !== []) {
+            $this->logger->info('AIquila: ' . $scope . ' settings saved for ' . $providerId, $context);
+        }
+
+        if ($rejected !== []) {
+            $this->logger->warning('AIquila: rejected out-of-scope fields for ' . $providerId, $context + ['rejected' => $rejected]);
+        }
+    }
 
     /** @return array<string, array<string, mixed>> */
     private function indexSchema(LLMProviderInterface $provider): array {
@@ -284,7 +324,7 @@ class ProviderSettingsService {
         return $raw === '' ? '' : $this->decode($field, $raw);
     }
 
-    private function writeApiKey(string $providerId, ?string $userId, string $value): void {
+    private function writeApiKey(string $providerId, ?string $userId, #[\SensitiveParameter] string $value): void {
         if ($value === '') {
             $this->credentials->deleteApiKey($userId, $providerId);
             return;

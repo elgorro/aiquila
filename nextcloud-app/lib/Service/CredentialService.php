@@ -87,9 +87,13 @@ class CredentialService {
     /**
      * Store API key in secure storage, removing any plaintext leftover.
      */
-    public function setApiKey(?string $userId, string $key, string $provider = self::DEFAULT_PROVIDER): void {
+    public function setApiKey(?string $userId, #[\SensitiveParameter] string $key, string $provider = self::DEFAULT_PROVIDER): void {
         $credUserId = $userId ?? '';
         $this->credentialsManager->store($credUserId, $this->credentialKey($provider), $key);
+        $this->logger->info('AIquila: API key stored for ' . $provider, [
+            'provider' => $provider,
+            'scope' => $userId === null ? 'admin' : 'user',
+        ]);
 
         // Clean up plaintext leftovers (legacy key only).
         if ($provider === self::DEFAULT_PROVIDER) {
@@ -107,6 +111,10 @@ class CredentialService {
     public function deleteApiKey(?string $userId, string $provider = self::DEFAULT_PROVIDER): void {
         $credUserId = $userId ?? '';
         $this->credentialsManager->delete($credUserId, $this->credentialKey($provider));
+        $this->logger->info('AIquila: API key cleared for ' . $provider, [
+            'provider' => $provider,
+            'scope' => $userId === null ? 'admin' : 'user',
+        ]);
 
         if ($provider === self::DEFAULT_PROVIDER) {
             if ($userId !== null) {

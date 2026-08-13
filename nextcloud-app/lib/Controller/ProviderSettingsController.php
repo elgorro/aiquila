@@ -16,6 +16,7 @@ use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IConfig;
 use OCP\IRequest;
+use Psr\Log\LoggerInterface;
 
 /**
  * Schema-driven read/write of provider configuration for the settings pages.
@@ -42,6 +43,7 @@ class ProviderSettingsController extends Controller {
         private readonly LLMProviderFactory $providerFactory,
         private readonly ProviderSettingsService $providerSettings,
         private readonly CredentialService $credentials,
+        private readonly LoggerInterface $logger,
     ) {
         parent::__construct($appName, $request);
     }
@@ -108,14 +110,23 @@ class ProviderSettingsController extends Controller {
                 $values,
             );
         } catch (\InvalidArgumentException $e) {
+            $this->logger->warning('AIquila: rejected user settings for ' . $providerId . ': ' . $e->getMessage(), [
+                'provider' => $providerId,
+                'user' => $userId,
+            ]);
             return new JSONResponse(['status' => 'error', 'message' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
         }
 
         if ($makeDefault === '1') {
             $this->config->setUserValue($userId, $this->appName, 'user_provider', $providerId);
+            $this->logger->info('AIquila: user default provider set to ' . $providerId, [
+                'provider' => $providerId,
+                'user' => $userId,
+            ]);
         } elseif ($makeDefault === '') {
             // Explicit "follow the instance default" rather than "leave alone".
             $this->config->deleteUserValue($userId, $this->appName, 'user_provider');
+            $this->logger->info('AIquila: user default provider cleared', ['user' => $userId]);
         }
 
         return new JSONResponse(['status' => 'ok', 'rejected' => $rejected]);
@@ -162,11 +173,17 @@ class ProviderSettingsController extends Controller {
                 $values,
             );
         } catch (\InvalidArgumentException $e) {
+            $this->logger->warning('AIquila: rejected instance settings for ' . $providerId . ': ' . $e->getMessage(), [
+                'provider' => $providerId,
+            ]);
             return new JSONResponse(['status' => 'error', 'message' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
         }
 
         if ($makeDefault === '1') {
             $this->config->setAppValue($this->appName, 'provider', $providerId);
+            $this->logger->info('AIquila: instance default provider set to ' . $providerId, [
+                'provider' => $providerId,
+            ]);
         }
 
         return new JSONResponse(['status' => 'ok', 'rejected' => $rejected]);
@@ -188,13 +205,19 @@ class ProviderSettingsController extends Controller {
      * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, message: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, message: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
-    public function test(string $providerId, string $api_key = ''): JSONResponse {
+    public function test(string $providerId, #[\SensitiveParameter] string $api_key = ''): JSONResponse {
         if (!$this->providerFactory->isKnownProviderId($providerId)) {
             return new JSONResponse(
                 ['success' => false, 'message' => 'Unknown provider: ' . $providerId],
                 Http::STATUS_BAD_REQUEST,
             );
         }
+
+        $this->logger->info('AIquila: testing connection for ' . $providerId, [
+            'provider' => $providerId,
+            // Whether the key came from the form or from storage; never the key.
+            'usingUnsavedKey' => $api_key !== '',
+        ]);
 
         $service = $this->providerFactory->getProviderById($providerId);
         $testKey = $api_key !== '' ? $api_key : $this->credentials->getApiKey(null, $providerId);
@@ -223,12 +246,24 @@ class ProviderSettingsController extends Controller {
             $this->restoreKey($providerId, $originalKey);
 
             if (isset($result['error'])) {
+                $this->logger->warning('AIquila: connection test for ' . $providerId . ' failed', [
+                    'provider' => $providerId,
+                    'error' => $result['error'],
+                ]);
                 return new JSONResponse(['success' => false, 'message' => $result['error']], Http::STATUS_BAD_REQUEST);
             }
+
+            $this->logger->info('AIquila: connection test for ' . $providerId . ' succeeded', [
+                'provider' => $providerId,
+            ]);
 
             return new JSONResponse(['success' => true, 'message' => $result['response'] ?? '']);
         } catch (\Throwable $e) {
             $this->restoreKey($providerId, $originalKey);
+            $this->logger->error('AIquila: connection test for ' . $providerId . ' threw', [
+                'provider' => $providerId,
+                'exception' => $e,
+            ]);
             return new JSONResponse(
                 ['success' => false, 'message' => $e->getMessage()],
                 Http::STATUS_INTERNAL_SERVER_ERROR,
@@ -265,7 +300,7 @@ class ProviderSettingsController extends Controller {
      * original means there was none, so the slot is cleared rather than left
      * holding the test key.
      */
-    private function restoreKey(string $providerId, string $originalKey): void {
+    private function restoreKey(string $providerId, #[\SensitiveParameter] string $originalKey): void {
         if ($originalKey !== '') {
             $this->credentials->setApiKey(null, $originalKey, $providerId);
         } else {

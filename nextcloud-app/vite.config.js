@@ -19,6 +19,12 @@ export default defineConfig({
 	build: {
 		outDir: 'js/dist',
 		emptyOutDir: true,
+		// Vite auto-injects CSS only for dynamically imported chunks; entry
+		// stylesheets have to be linked by the host page. The manifest is how
+		// lib/Template/ViteAssets.php finds them. Written to js/dist/manifest.json
+		// rather than Vite's default js/dist/.vite/ so packaging cannot drop it
+		// as a dotfile.
+		manifest: 'manifest.json',
 		// `vendor-nextcloud-vue` alone is ~800 KB and is the floor we can't shrink
 		// without dropping @nextcloud/vue; raise the warning so other regressions
 		// stay visible.
