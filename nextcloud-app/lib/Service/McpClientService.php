@@ -382,16 +382,46 @@ class McpClientService {
             throw new \RuntimeException('No registration_endpoint in OAuth metadata');
         }
 
-        $response = $this->httpClient->request('POST', $registrationEndpoint, [
+        $options = [
             'json' => [
                 'client_name' => self::CLIENT_NAME,
                 'redirect_uris' => [$callbackUrl],
                 'grant_types' => ['authorization_code', 'refresh_token'],
                 'token_endpoint_auth_method' => 'none',
             ],
-        ]);
+        ];
 
-        $result = $response->toArray();
+        // RFC 7591 §3.1 initial access token. Servers that gate dynamic registration
+        // (aiquila-mcp does so via MCP_REGISTRATION_TOKEN) answer 401 without it;
+        // servers with open registration ignore the header.
+        $registrationToken = $this->credentials->decryptToken($server->getOauthRegistrationToken());
+        if ($registrationToken !== null && $registrationToken !== '') {
+            $options['headers'] = ['Authorization' => 'Bearer ' . $registrationToken];
+        }
+
+        try {
+            $response = $this->httpClient->request('POST', $registrationEndpoint, $options);
+            $result = $response->toArray();
+        } catch (\Throwable $e) {
+            // A 401/403 here almost always means the endpoint is gated and the
+            // configured registration token is missing or wrong — say so, rather
+            // than surfacing a bare HTTP status to the admin.
+            $status = $e instanceof \Symfony\Contracts\HttpClient\Exception\HttpExceptionInterface
+                ? $e->getResponse()->getStatusCode()
+                : 0;
+            if ($status === 401 || $status === 403) {
+                throw new \RuntimeException(
+                    'Dynamic client registration was rejected (HTTP ' . $status . '). '
+                    . ($registrationToken === null || $registrationToken === ''
+                        ? 'This MCP server requires a registration token — set one on the server entry.'
+                        : 'The configured registration token was not accepted.'),
+                    0,
+                    $e
+                );
+            }
+            throw $e;
+        }
+
         $clientId = $result['client_id'] ?? null;
 
         if (!$clientId) {
@@ -582,5 +612,6 @@ class McpClientService {
         $server->setOauthCodeVerifier(null);
         $server->setOauthState(null);
         $server->setOauthMetadata(null);
+        $server->setOauthRegistrationToken(null);
     }
 }

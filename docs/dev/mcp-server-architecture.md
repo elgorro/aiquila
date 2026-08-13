@@ -173,6 +173,11 @@ MCP_REGISTRATION_ENABLED=true
 MCP_REGISTRATION_TOKEN=<secret>  # optional: gates POST /register with Bearer token
 ```
 
+A gated endpoint rejects registration without `Authorization: Bearer <MCP_REGISTRATION_TOKEN>`,
+so every client has to be given the token — for the Nextcloud app that is the per-server
+**Registration token** field, see
+[OAuth setup](../mcp/oauth.md#connecting-the-nextcloud-app-to-a-gated-server).
+
 **Static pre-seeded client** (for clients that do not support dynamic registration):
 ```
 MCP_CLIENT_ID=<stable-identifier>

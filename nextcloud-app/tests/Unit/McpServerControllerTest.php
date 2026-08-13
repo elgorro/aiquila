@@ -31,6 +31,12 @@ class McpServerControllerTest extends TestCase {
         $this->credentials->method('encryptToken')
             ->willReturnCallback(fn(?string $v) => $v !== null && $v !== '' ? 'encrypted:' . $v : $v);
 
+        // Mirror image of the encrypt mock above.
+        $this->credentials->method('decryptToken')
+            ->willReturnCallback(fn(?string $v) => is_string($v) && str_starts_with($v, 'encrypted:')
+                ? substr($v, strlen('encrypted:'))
+                : $v);
+
         $this->controller = new McpServerController(
             'aiquila',
             $this->request,
@@ -120,6 +126,89 @@ class McpServerControllerTest extends TestCase {
 
         $response = $this->controller->create('My MCP', 'http://localhost:3339/mcp', 'bearer', 'my-token');
         $this->assertEquals(200, $response->getStatus());
+    }
+
+    /**
+     * Regression (#457): a gated registration endpoint needs an RFC 7591 initial
+     * access token, which only makes sense for oauth2 servers.
+     */
+    public function testCreateOauth2EncryptsRegistrationToken(): void {
+        $this->mapper->method('insert')->willReturnCallback(function (McpServer $s) {
+            $this->assertEquals('encrypted:reg-secret', $s->getOauthRegistrationToken());
+            $this->assertNull($s->getAuthToken());
+            $ref = new \ReflectionClass($s);
+            $idProp = $ref->getParentClass()->getProperty('id');
+            $idProp->setValue($s, 1);
+            return $s;
+        });
+
+        $response = $this->controller->create('My MCP', 'http://localhost:3339/mcp', 'oauth2', '', 'reg-secret');
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertEquals('****', $response->getData()['registration_token_masked']);
+    }
+
+    public function testCreateBearerIgnoresRegistrationToken(): void {
+        $this->mapper->method('insert')->willReturnCallback(function (McpServer $s) {
+            $this->assertNull($s->getOauthRegistrationToken());
+            $ref = new \ReflectionClass($s);
+            $idProp = $ref->getParentClass()->getProperty('id');
+            $idProp->setValue($s, 1);
+            return $s;
+        });
+
+        $response = $this->controller->create('My MCP', 'http://localhost:3339/mcp', 'bearer', 'tok', 'reg-secret');
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertNull($response->getData()['registration_token_masked']);
+    }
+
+    /**
+     * A client registered under the old token is worthless once the token
+     * changes, so the registration has to be dropped and redone.
+     */
+    public function testUpdateChangedRegistrationTokenClearsRegistration(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthRegistrationToken('encrypted:old-secret');
+        $server->setOauthClientId('client-abc');
+        $server->setOauthAccessToken('encrypted:access');
+        $server->setOauthRefreshToken('encrypted:refresh');
+        $server->setOauthTokenExpiresAt(time() + 3600);
+        $this->mapper->method('findById')->willReturn($server);
+
+        $response = $this->controller->update(1, '', '', '', '', 'new-secret');
+
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertEquals('encrypted:new-secret', $server->getOauthRegistrationToken());
+        $this->assertNull($server->getOauthClientId());
+        $this->assertNull($server->getOauthAccessToken());
+        $this->assertNull($server->getOauthRefreshToken());
+        $this->assertNull($server->getOauthTokenExpiresAt());
+    }
+
+    public function testUpdateWithoutRegistrationTokenKeepsIt(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthRegistrationToken('encrypted:old-secret');
+        $server->setOauthClientId('client-abc');
+        $this->mapper->method('findById')->willReturn($server);
+
+        $response = $this->controller->update(1, 'Renamed');
+
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertEquals('encrypted:old-secret', $server->getOauthRegistrationToken());
+        $this->assertEquals('client-abc', $server->getOauthClientId());
+    }
+
+    public function testUpdateEmptyRegistrationTokenClearsIt(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthRegistrationToken('encrypted:old-secret');
+        $this->mapper->method('findById')->willReturn($server);
+
+        $response = $this->controller->update(1, '', '', '', '', '');
+
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertNull($server->getOauthRegistrationToken());
     }
 
     public function testDestroyNotFound(): void {

@@ -42,6 +42,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setOauthState(?string $oauthState)
  * @method string|null getOauthMetadata()
  * @method void setOauthMetadata(?string $oauthMetadata)
+ * @method string|null getOauthRegistrationToken()
+ * @method void setOauthRegistrationToken(?string $oauthRegistrationToken)
  */
 class McpServer extends Entity {
     protected string $displayName = '';
@@ -62,6 +64,7 @@ class McpServer extends Entity {
     protected ?string $oauthCodeVerifier = null;
     protected ?string $oauthState = null;
     protected ?string $oauthMetadata = null;
+    protected ?string $oauthRegistrationToken = null;
 
     public function __construct() {
         $this->addType('displayName', 'string');
@@ -82,6 +85,7 @@ class McpServer extends Entity {
         $this->addType('oauthCodeVerifier', 'string');
         $this->addType('oauthState', 'string');
         $this->addType('oauthMetadata', 'string');
+        $this->addType('oauthRegistrationToken', 'string');
     }
 
     public function getIsEnabled(): bool {

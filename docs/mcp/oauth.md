@@ -99,6 +99,11 @@ MCP_REGISTRATION_TOKEN=<openssl rand -hex 32>
 
 This is the standard OAuth 2.0 approach and works with Claude.ai, Cursor, VS Code extensions, and any other client that supports RFC 7591.
 
+With `MCP_REGISTRATION_TOKEN` set, `POST /register` answers `401` unless the request
+carries `Authorization: Bearer <token>` (RFC 7591 §3.1 initial access token). Clients must
+therefore be told the token — see
+[Connecting the Nextcloud app to a gated server](#connecting-the-nextcloud-app-to-a-gated-server).
+
 **Option B — Static pre-seeded client**
 
 For clients that do not support dynamic registration, pre-seed a client ID and redirect URI:
@@ -112,6 +117,20 @@ Check your MCP client's documentation for its callback URL. Example:
 - **Claude.ai / Claude Code**: `https://claude.ai/api/mcp/auth_callback`
 
 You can combine both options — a pre-seeded client and dynamic registration simultaneously.
+
+#### Connecting the Nextcloud app to a gated server
+
+The AIquila Nextcloud app registers itself dynamically when you click **Authenticate** on an
+MCP server entry. If the server gates registration, paste the same value you set in
+`MCP_REGISTRATION_TOKEN` into the **Registration token** field:
+
+**Settings → Administration → AIquila → MCP servers** → edit the server → set
+*Authentication* to **OAuth 2.0** → **Registration token**.
+
+The token is encrypted at rest with Nextcloud's crypto service and only ever sent to the
+server's `registration_endpoint`. Leave it empty for servers with open registration.
+Changing the token discards the previously registered client and its access tokens, so the
+next **Authenticate** registers again against the gated endpoint.
 
 ### 4. Ensure your server is reachable over HTTPS
 
