@@ -7,6 +7,8 @@ use OCA\AIquila\Db\McpServerMapper;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\McpClientService;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\HttpClient\MockHttpClient;
+use Symfony\Component\HttpClient\Response\MockResponse;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -342,6 +344,93 @@ class McpClientServiceTest extends TestCase {
         // Set expiry well in the future
         $server->setOauthTokenExpiresAt(time() + 3600);
         $this->assertFalse($this->service->isTokenExpired($server));
+    }
+
+    /**
+     * Regression (#457): MCP servers may gate RFC 7591 dynamic client
+     * registration behind an initial access token, answering 401 without an
+     * `Authorization` header. The registration token configured on the server
+     * entry has to be sent, or "Authorize" never reaches the consent screen.
+     */
+    public function testRegisterOAuthClientSendsRegistrationTokenWhenSet(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthMetadata(json_encode(['registration_endpoint' => 'https://mcp.example/register']));
+        $server->setOauthRegistrationToken('reg-secret');
+
+        $captured = [];
+        $this->injectHttpClient($captured);
+
+        $clientId = $this->service->registerOAuthClient($server, 'https://nc.example/callback');
+
+        $this->assertSame('generated-client', $clientId);
+        $this->assertSame(['Authorization' => 'Bearer reg-secret'], $captured[0]['headers'] ?? null);
+    }
+
+    public function testRegisterOAuthClientOmitsHeaderWhenNoRegistrationToken(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthMetadata(json_encode(['registration_endpoint' => 'https://mcp.example/register']));
+
+        $captured = [];
+        $this->injectHttpClient($captured);
+
+        $this->service->registerOAuthClient($server, 'https://nc.example/callback');
+
+        $this->assertSame([], $captured[0]['headers']);
+    }
+
+    public function testRegisterOAuthClientExplainsGatedRegistration(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthMetadata(json_encode(['registration_endpoint' => 'https://mcp.example/register']));
+
+        $captured = [];
+        $this->injectHttpClient($captured, 401);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/requires a registration token/');
+        $this->service->registerOAuthClient($server, 'https://nc.example/callback');
+    }
+
+    /**
+     * Swap the service's own HttpClient for a mock and record the request
+     * options each call was made with.
+     *
+     * @param array<int, array<string, mixed>> $captured
+     */
+    private function injectHttpClient(array &$captured, int $status = 200): void {
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$captured, $status) {
+            $captured[] = [
+                'method' => $method,
+                'url' => $url,
+                'headers' => $this->authHeader($options),
+            ];
+            return new MockResponse(
+                json_encode(['client_id' => 'generated-client']),
+                ['http_code' => $status, 'response_headers' => ['content-type' => 'application/json']]
+            );
+        });
+
+        $ref = new \ReflectionProperty(McpClientService::class, 'httpClient');
+        $ref->setValue($this->service, $client);
+    }
+
+    /**
+     * MockHttpClient normalises headers into `$options['headers']` as a list of
+     * "Name: value" strings, so pull the Authorization one back out in the shape
+     * the caller passed it.
+     *
+     * @return array<string, string>
+     */
+    private function authHeader(array $options): array {
+        foreach ($options['headers'] ?? [] as $key => $value) {
+            $line = is_int($key) ? $value : $key . ': ' . (is_array($value) ? ($value[0] ?? '') : $value);
+            if (stripos($line, 'authorization:') === 0) {
+                return ['Authorization' => trim(substr($line, strlen('authorization:')))];
+            }
+        }
+        return [];
     }
 
     public function testGetOAuthBaseUrl(): void {

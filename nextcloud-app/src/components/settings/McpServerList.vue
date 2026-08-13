@@ -74,6 +74,14 @@
 					:label="t('aiquila', 'Bearer token')" />
 
 				<div v-if="form.authType === 'oauth2'">
+					<NcPasswordField v-model="form.registrationToken"
+						:label="t('aiquila', 'Registration token (optional)')"
+						@input="form.registrationTokenDirty = true" />
+					<p class="mcp-form__hint">
+						{{ form.hasRegistrationToken
+							? t('aiquila', 'A registration token is stored. Leave empty to keep it, or type a new one to replace it.')
+							: t('aiquila', 'Only needed if the MCP server gates dynamic client registration (MCP_REGISTRATION_TOKEN). Leave empty for open registration.') }}
+					</p>
 					<NcButton type="secondary" @click="authorize">
 						{{ t('aiquila', 'Authenticate') }}
 					</NcButton>
@@ -189,7 +197,16 @@ export default {
 				: t('aiquila', 'OAuth: not authenticated')
 		},
 		add() {
-			this.form = { id: null, displayName: '', url: '', authType: 'none', authToken: '' }
+			this.form = {
+				id: null,
+				displayName: '',
+				url: '',
+				authType: 'none',
+				authToken: '',
+				registrationToken: '',
+				registrationTokenDirty: false,
+				hasRegistrationToken: false,
+			}
 			this.formError = ''
 			this.oauthStatus = ''
 		},
@@ -200,6 +217,9 @@ export default {
 				url: server.url,
 				authType: server.auth_type,
 				authToken: '',
+				registrationToken: '',
+				registrationTokenDirty: false,
+				hasRegistrationToken: !!server.registration_token_masked,
 			}
 			this.formError = ''
 			this.oauthStatus = server.auth_type === 'oauth2' && server.oauth_status
@@ -214,6 +234,11 @@ export default {
 				url: this.form.url,
 				authType: this.form.authType,
 				authToken: this.form.authToken,
+			}
+			// Only submit the registration token when it was actually edited —
+			// the API reads a submitted empty string as "clear the stored one".
+			if (this.form.authType === 'oauth2' && this.form.registrationTokenDirty) {
+				payload.registrationToken = this.form.registrationToken
 			}
 			try {
 				if (this.form.id) {

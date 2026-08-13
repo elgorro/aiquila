@@ -1083,6 +1083,11 @@
                                         "type": "string",
                                         "default": "",
                                         "description": "Bearer token for authentication"
+                                    },
+                                    "registrationToken": {
+                                        "type": "string",
+                                        "default": "",
+                                        "description": "RFC 7591 initial access token for gated OAuth client registration"
                                     }
                                 }
                             }
@@ -1236,6 +1241,12 @@
                                         "type": "string",
                                         "default": "",
                                         "description": "Updated bearer token"
+                                    },
+                                    "registrationToken": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Updated registration token; null leaves it unchanged, an empty string clears it"
                                     },
                                     "isEnabled": {
                                         "type": "boolean",

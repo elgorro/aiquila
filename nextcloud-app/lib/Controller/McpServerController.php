@@ -60,6 +60,7 @@ class McpServerController extends Controller {
      * @param string $url MCP server endpoint URL
      * @param string $authType Authentication type (none or bearer)
      * @param string $authToken Bearer token for authentication
+     * @param string $registrationToken RFC 7591 initial access token for gated OAuth client registration
      *
      * 200: Created MCP server
      * 400: Validation error
@@ -71,7 +72,8 @@ class McpServerController extends Controller {
         string $displayName = '',
         string $url = '',
         string $authType = 'none',
-        string $authToken = ''
+        string $authToken = '',
+        string $registrationToken = ''
     ): JSONResponse {
         if (empty($displayName) || empty($url)) {
             return new JSONResponse(['error' => 'Display name and URL are required'], 400);
@@ -87,6 +89,11 @@ class McpServerController extends Controller {
         $server->setUrl($url);
         $server->setAuthType($authType);
         $server->setAuthToken($authType === 'bearer' ? $this->credentials->encryptToken($authToken) : null);
+        $server->setOauthRegistrationToken(
+            $authType === 'oauth2' && $registrationToken !== ''
+                ? $this->credentials->encryptToken($registrationToken)
+                : null
+        );
         $server->setIsEnabled(true);
         $server->setCreatedAt($now);
         $server->setUpdatedAt($now);
@@ -103,6 +110,7 @@ class McpServerController extends Controller {
      * @param string $url Updated endpoint URL
      * @param string $authType Updated auth type
      * @param string $authToken Updated bearer token
+     * @param string|null $registrationToken Updated registration token; null leaves it unchanged, an empty string clears it
      * @param bool $isEnabled Whether the server is enabled
      *
      * 200: Updated MCP server
@@ -117,6 +125,7 @@ class McpServerController extends Controller {
         string $url = '',
         string $authType = '',
         string $authToken = '',
+        ?string $registrationToken = null,
         ?bool $isEnabled = null
     ): JSONResponse {
         try {
@@ -148,6 +157,23 @@ class McpServerController extends Controller {
         }
         if (!empty($authToken) && $server->getAuthType() === 'bearer') {
             $server->setAuthToken($this->credentials->encryptToken($authToken));
+        }
+        // Unlike the other fields, null (not '') means "unchanged" here, so an
+        // admin can also clear a stored registration token by submitting ''.
+        if ($registrationToken !== null) {
+            $stored = $this->credentials->decryptToken($server->getOauthRegistrationToken()) ?? '';
+            if ($stored !== $registrationToken) {
+                $server->setOauthRegistrationToken(
+                    $registrationToken === '' ? null : $this->credentials->encryptToken($registrationToken)
+                );
+                // The existing client_id was registered under the old token (or
+                // under none): drop it plus the tokens it earned so the next
+                // Authorize re-registers against the gated endpoint.
+                $server->setOauthClientId(null);
+                $server->setOauthAccessToken(null);
+                $server->setOauthRefreshToken(null);
+                $server->setOauthTokenExpiresAt(null);
+            }
         }
         if ($isEnabled !== null) {
             $server->setIsEnabled($isEnabled);
@@ -318,6 +344,7 @@ class McpServerController extends Controller {
             'url' => $server->getUrl(),
             'auth_type' => $server->getAuthType(),
             'auth_token_masked' => $maskedToken,
+            'registration_token_masked' => $server->getOauthRegistrationToken() ? '****' : null,
             'is_enabled' => $server->getIsEnabled(),
             'last_status' => $server->getLastStatus(),
             'last_error' => $server->getLastError(),
