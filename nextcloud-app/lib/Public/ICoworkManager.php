@@ -50,8 +50,11 @@ interface ICoworkManager {
      * @param string $appId Calling app id; recorded as the owner.
      * @param string $userId User the job runs as (file access, API key).
      * @param array<string, mixed> $config Coworker fields: title, description,
-     *   model, task_type, cron_schedule, input_type, input_path, output_type,
-     *   output_path, is_active, paused, options.
+     *   provider, model, task_type, cron_schedule, input_type, input_path,
+     *   output_type, output_path, is_active, paused, options.
+     *   `provider` pins an LLM provider (null follows the run user's setting)
+     *   and `model` pins a model within it. Before 0.4.0 `model` held the
+     *   provider id; existing rows were migrated.
      * @return array<string, mixed> The created coworker (includes 'id').
      * @throws \InvalidArgumentException on invalid task type / schedule / options.
      */

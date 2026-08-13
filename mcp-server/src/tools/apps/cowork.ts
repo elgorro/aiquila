@@ -19,6 +19,9 @@ interface Coworker {
   id: number;
   title: string;
   description?: string | null;
+  /** Pinned provider id; null follows the owner's setting. */
+  provider?: string | null;
+  /** Pinned model id; null uses the provider's default. */
   model?: string | null;
   taskType: string;
   cronSchedule: string;
@@ -46,7 +49,7 @@ interface CoworkerRun {
 }
 
 interface TemplatesResponse {
-  templates: Array<{ id: string; title: string; description?: string; model?: string }>;
+  templates: Array<{ id: string; title: string; description?: string; provider?: string }>;
   taskTypes: Array<{ id: string; label: string; family: string }>;
 }
 
@@ -76,7 +79,7 @@ function formatCoworker(c: Coworker): string {
   const state = !c.isActive ? 'disabled' : c.paused ? 'paused' : 'active';
   const lines = [
     `- **${c.title}** (ID: ${c.id}) — ${state}`,
-    `  task: ${c.taskType} | provider: ${c.model ?? 'default'} | input: ${c.inputPath ?? '/'}`,
+    `  task: ${c.taskType} | provider: ${c.provider ?? 'default'}${c.model ? ` (${c.model})` : ''} | input: ${c.inputPath ?? '/'}`,
     `  schedule: ${c.cronSchedule} | next run: ${fmtTime(c.nextRunAt)} | last run: ${fmtTime(c.lastRunAt)}${c.lastStatus ? ` (${c.lastStatus})` : ''}`,
   ];
   if (c.lastError) lines.push(`  ⚠ last error: ${c.lastError}`);
@@ -177,10 +180,14 @@ export const createCoworkerTool = {
       .describe('Built-in template id (see list_coworker_templates)'),
     title: z.string().optional(),
     taskType: z.string().optional().describe('Task type id, e.g. "vision:classify"'),
+    provider: z
+      .string()
+      .optional()
+      .describe('Provider id: "anthropic", "mistral", "deepseek", "hetzner" or "local"'),
     model: z
       .string()
       .optional()
-      .describe('Provider id: "anthropic" (Claude) or "mistral" (Pixtral)'),
+      .describe("Model id to run with; omit to use the provider's default"),
     inputPath: z.string().optional().describe('Folder to process, e.g. "/Photos"'),
     cronSchedule: z.string().optional().describe('5-field cron, e.g. "0 3 * * *"'),
     maxTags: z.number().optional().describe('Max tags per image (vision:classify)'),
@@ -191,6 +198,7 @@ export const createCoworkerTool = {
     templateId?: string;
     title?: string;
     taskType?: string;
+    provider?: string;
     model?: string;
     inputPath?: string;
     cronSchedule?: string;
@@ -202,6 +210,7 @@ export const createCoworkerTool = {
       const body: Record<string, unknown> = {};
       if (args.title !== undefined) body.title = args.title;
       if (args.taskType !== undefined) body.task_type = args.taskType;
+      if (args.provider !== undefined) body.provider = args.provider;
       if (args.model !== undefined) body.model = args.model;
       if (args.inputPath !== undefined) {
         body.input_type = 'folder';
@@ -239,7 +248,11 @@ export const updateCoworkerTool = {
   inputSchema: z.object({
     id: z.number().describe('Coworker ID'),
     title: z.string().optional(),
-    model: z.string().optional().describe('"anthropic" or "mistral"'),
+    provider: z
+      .string()
+      .optional()
+      .describe('Provider id; "" unpins so the coworker follows the owner setting'),
+    model: z.string().optional().describe("Model id; omit to use the provider's default"),
     inputPath: z.string().optional(),
     cronSchedule: z.string().optional(),
     maxTags: z.number().optional(),
@@ -248,6 +261,7 @@ export const updateCoworkerTool = {
   handler: async (args: {
     id: number;
     title?: string;
+    provider?: string;
     model?: string;
     inputPath?: string;
     cronSchedule?: string;
@@ -257,6 +271,7 @@ export const updateCoworkerTool = {
     try {
       const body: Record<string, unknown> = {};
       if (args.title !== undefined) body.title = args.title;
+      if (args.provider !== undefined) body.provider = args.provider;
       if (args.model !== undefined) body.model = args.model;
       if (args.inputPath !== undefined) {
         body.input_type = 'folder';

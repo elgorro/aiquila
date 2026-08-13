@@ -27,6 +27,8 @@ export default defineConfig({
 			input: {
 				'aiquila-main': path.resolve(__dirname, 'src/main.js'),
 				'aiquila-dashboard': path.resolve(__dirname, 'src/dashboard.js'),
+				'aiquila-admin': path.resolve(__dirname, 'src/admin.js'),
+				'aiquila-personal': path.resolve(__dirname, 'src/personal.js'),
 			},
 			output: {
 				format: 'es',

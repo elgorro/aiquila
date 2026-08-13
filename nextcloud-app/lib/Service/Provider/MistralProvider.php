@@ -83,6 +83,39 @@ class MistralProvider implements LLMProviderInterface {
         ];
     }
 
+    public function getSettingsSchema(): array {
+        return [
+            ProviderSettingsSchema::apiKey(
+                'API key',
+                'From console.mistral.ai. Stored encrypted in Nextcloud\'s credential manager; a personal key overrides the instance key.',
+            ),
+            ProviderSettingsSchema::model(
+                'model_mistral',
+                'user_model_mistral',
+                MistralModels::DEFAULT_MODEL,
+                'Used for every request unless a conversation pins a different one.',
+            ),
+            ProviderSettingsSchema::maxTokens('max_tokens_mistral', MistralModels::DEFAULT_MAX_TOKENS),
+            ProviderSettingsSchema::timeout('api_timeout', 30, 'Shared across all hosted providers.'),
+            ProviderSettingsSchema::text(
+                'mistral_connector_ids',
+                'mistral_connector_ids',
+                'Connector IDs',
+                'Comma-separated Mistral connector IDs used by the native MCP path. Leave blank unless Mistral has issued you some.',
+                placeholder: 'conn_..., conn_...',
+            ),
+        ];
+    }
+
+    public function getCapabilities(): array {
+        return ProviderSettingsSchema::capabilities([
+            'vision' => true,
+            'tools' => true,
+            'streaming' => true,
+            'native_mcp' => true,
+        ]);
+    }
+
     public function listModels(?string $userId = null): ?array {
         $apiKey = $this->getApiKey($userId);
         if ($apiKey === '') {

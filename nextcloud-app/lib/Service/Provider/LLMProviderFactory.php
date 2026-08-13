@@ -70,6 +70,18 @@ class LLMProviderFactory {
     }
 
     /**
+     * Whether the id names a registered provider.
+     *
+     * Callers that accept a provider id from a request MUST check this before
+     * doing anything with it — getProviderById() silently falls back to
+     * Anthropic, which is right for a stale config value but would mask a bad
+     * request and let an arbitrary string reach persistence.
+     */
+    public function isKnownProviderId(string $id): bool {
+        return isset($this->providers()[$id]);
+    }
+
+    /**
      * Look up a specific provider by id (falls back to Anthropic).
      */
     public function getProviderById(string $id): LLMProviderInterface {

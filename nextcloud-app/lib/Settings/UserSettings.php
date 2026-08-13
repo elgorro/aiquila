@@ -1,26 +1,22 @@
 <?php
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+declare(strict_types=1);
+
 namespace OCA\AIquila\Settings;
 
-use OCA\AIquila\Service\CredentialService;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\Settings\ISettings;
 
+/**
+ * Mount point for the personal settings Vue app.
+ *
+ * Everything it shows comes from /api/providers and /api/settings, so no state
+ * is passed through the template.
+ */
 class UserSettings implements ISettings {
-    private CredentialService $credentials;
-    private ?string $userId;
-
-    public function __construct(CredentialService $credentials, ?string $userId) {
-        $this->credentials = $credentials;
-        $this->userId = $userId;
-    }
-
     public function getForm(): TemplateResponse {
-        $hasKey = $this->credentials->hasApiKey($this->userId);
-        return new TemplateResponse('aiquila', 'user', [
-            'has_key' => $hasKey,
-        ], '');
+        return new TemplateResponse('aiquila', 'user', [], '');
     }
 
     public function getSection(): string {

@@ -107,6 +107,68 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
         return $stored > 0 ? $stored : self::DEFAULT_MAX_TOKENS;
     }
 
+    protected function defaultModel(): string {
+        return self::DEFAULT_MODEL;
+    }
+
+    protected function defaultMaxTokens(): int {
+        return self::DEFAULT_MAX_TOKENS;
+    }
+
+    /**
+     * The local endpoint has no vendor defaults to fall back on, so the base
+     * URL is the field that decides whether this provider works at all — hence
+     * GROUP_BASIC and no API key requirement. Base URL and the local-address
+     * allowance stay admin-scope: see the class docblock (SSRF).
+     *
+     * The timeout uses the provider's own `local_timeout` key rather than the
+     * shared `api_timeout`, because CPU inference needs a much higher ceiling.
+     */
+    public function getSettingsSchema(): array {
+        return [
+            ProviderSettingsSchema::baseUrl(
+                'local_base_url',
+                'Endpoint URL',
+                'Ollama: http://localhost:11434 · LM Studio: http://localhost:1234 · llama.cpp: http://localhost:8080. A /v1 segment is appended automatically.',
+                'http://localhost:11434',
+            ),
+            ProviderSettingsSchema::apiKey(
+                'API key (optional)',
+                'Ollama needs none. LM Studio and `llama-server --api-key` use a bearer token. Left blank, no Authorization header is sent.',
+                optional: true,
+            ),
+            ProviderSettingsSchema::model(
+                'model_local',
+                'user_model_local',
+                self::DEFAULT_MODEL,
+                'The model tag as your backend reports it, e.g. llama3.2. Refresh to pull the loaded list from the endpoint.',
+            ),
+            ProviderSettingsSchema::maxTokens(
+                'max_tokens_local',
+                self::DEFAULT_MAX_TOKENS,
+                'No per-model ceiling is known for local tags, so this value is used as-is.',
+            ),
+            ProviderSettingsSchema::timeout(
+                'local_timeout',
+                self::DEFAULT_TIMEOUT,
+                'Defaults far above the hosted providers — CPU inference is slow.',
+            ),
+            ProviderSettingsSchema::checkbox(
+                'local_vision',
+                'local_vision',
+                'Send images to this model',
+                'Only enable when the loaded model is multimodal; Nextcloud cannot detect this.',
+            ),
+            ProviderSettingsSchema::checkbox(
+                'local_allow_local_address',
+                'local_allow_local_address',
+                'Allow local and private addresses',
+                'Nextcloud blocks requests to localhost and private ranges by default. Required for virtually every local setup.',
+                default: true,
+            ),
+        ];
+    }
+
     protected function supportsVisionInput(?string $userId = null): bool {
         return $this->config->getAppValue(self::APP_NAME, 'local_vision', 'no') === 'yes';
     }

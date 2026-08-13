@@ -63,6 +63,7 @@
                                             "userId",
                                             "title",
                                             "model",
+                                            "provider",
                                             "createdAt",
                                             "updatedAt",
                                             "projectId",
@@ -83,6 +84,10 @@
                                             },
                                             "model": {
                                                 "type": "string"
+                                            },
+                                            "provider": {
+                                                "type": "string",
+                                                "nullable": true
                                             },
                                             "createdAt": {
                                                 "type": "integer",
@@ -134,6 +139,7 @@
             "post": {
                 "operationId": "conversation-create",
                 "summary": "Create a new conversation",
+                "description": "Provider and model are snapshotted so the conversation keeps answering from where it started even after the user changes their default. Omit both to follow the user's setting (`provider` stays null).",
                 "tags": [
                     "conversation"
                 ],
@@ -145,6 +151,30 @@
                         "basic_auth": []
                     }
                 ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "provider": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Provider to pin (null/'' follows the user's setting)"
+                                    },
+                                    "model": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Model to pin (null/'' uses the provider's default)"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 "parameters": [
                     {
                         "name": "OCS-APIRequest",
@@ -169,6 +199,7 @@
                                         "userId",
                                         "title",
                                         "model",
+                                        "provider",
                                         "createdAt",
                                         "updatedAt",
                                         "projectId",
@@ -190,6 +221,10 @@
                                         "model": {
                                             "type": "string"
                                         },
+                                        "provider": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
                                         "createdAt": {
                                             "type": "integer",
                                             "format": "int64"
@@ -210,6 +245,24 @@
                                         "thinking": {
                                             "type": "boolean",
                                             "nullable": true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Unknown provider",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
                                         }
                                     }
                                 }
@@ -286,6 +339,7 @@
                                         "userId",
                                         "title",
                                         "model",
+                                        "provider",
                                         "createdAt",
                                         "updatedAt",
                                         "projectId",
@@ -307,6 +361,10 @@
                                         },
                                         "model": {
                                             "type": "string"
+                                        },
+                                        "provider": {
+                                            "type": "string",
+                                            "nullable": true
                                         },
                                         "createdAt": {
                                             "type": "integer",
@@ -574,6 +632,7 @@
                                         "userId",
                                         "title",
                                         "model",
+                                        "provider",
                                         "createdAt",
                                         "updatedAt",
                                         "projectId",
@@ -594,6 +653,10 @@
                                         },
                                         "model": {
                                             "type": "string"
+                                        },
+                                        "provider": {
+                                            "type": "string",
+                                            "nullable": true
                                         },
                                         "createdAt": {
                                             "type": "integer",
@@ -936,6 +999,189 @@
                 }
             }
         },
+        "/index.php/apps/aiquila/api/conversations/{id}/model": {
+            "put": {
+                "operationId": "conversation-set-model",
+                "summary": "Pin a provider and/or model on an existing conversation",
+                "description": "Passing an empty provider unpins it, so the conversation follows the user's setting again. Changing the provider re-snapshots the model to that provider's default unless one is given explicitly — otherwise the conversation would carry a model id the new provider does not serve.",
+                "tags": [
+                    "conversation"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "provider": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Provider to pin ('' unpins, null keeps unchanged)"
+                                    },
+                                    "model": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Model to pin (null keeps unchanged)"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Conversation ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Updated conversation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "id",
+                                        "userId",
+                                        "title",
+                                        "model",
+                                        "provider",
+                                        "createdAt",
+                                        "updatedAt",
+                                        "projectId",
+                                        "effort",
+                                        "thinking"
+                                    ],
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "userId": {
+                                            "type": "string"
+                                        },
+                                        "title": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "model": {
+                                            "type": "string"
+                                        },
+                                        "provider": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "createdAt": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "updatedAt": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "projectId": {
+                                            "type": "integer",
+                                            "format": "int64",
+                                            "nullable": true
+                                        },
+                                        "effort": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "thinking": {
+                                            "type": "boolean",
+                                            "nullable": true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Unknown provider",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Conversation not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/index.php/apps/aiquila/api/conversations/{id}/duplicate": {
             "post": {
                 "operationId": "conversation-duplicate",
@@ -985,6 +1231,7 @@
                                         "userId",
                                         "title",
                                         "model",
+                                        "provider",
                                         "createdAt",
                                         "updatedAt",
                                         "projectId",
@@ -1005,6 +1252,10 @@
                                         },
                                         "model": {
                                             "type": "string"
+                                        },
+                                        "provider": {
+                                            "type": "string",
+                                            "nullable": true
                                         },
                                         "createdAt": {
                                             "type": "integer",
@@ -2666,8 +2917,9 @@
                                     },
                                     "model": {
                                         "type": "string",
-                                        "default": "",
-                                        "description": "Preferred model ID for the scoped provider (leave empty to use admin default)"
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Preferred model ID for the scoped provider ('' clears the override, null keeps it unchanged)"
                                     },
                                     "provider": {
                                         "type": "string",
@@ -2865,6 +3117,234 @@
                                         },
                                         "nativeMcpEffective": {
                                             "type": "boolean"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/providers": {
+            "get": {
+                "operationId": "provider_settings-index",
+                "summary": "List providers with their user-writable settings",
+                "description": "Returns one entry per registered provider: label, capability flags, model list, and the user-scope fields with their current values. API keys are reported as `hasValue` booleans only — the key itself never leaves the credential manager.",
+                "tags": [
+                    "provider_settings"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "refresh",
+                        "in": "query",
+                        "description": "'1' to bypass the cached model lists and re-query every provider",
+                        "schema": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                        }
+                    },
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Provider settings for the current user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "defaultProvider",
+                                        "userProvider",
+                                        "adminProvider",
+                                        "providers"
+                                    ],
+                                    "properties": {
+                                        "defaultProvider": {
+                                            "type": "string"
+                                        },
+                                        "userProvider": {
+                                            "type": "string"
+                                        },
+                                        "adminProvider": {
+                                            "type": "string"
+                                        },
+                                        "providers": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "additionalProperties": {
+                                                    "type": "object"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/providers/{providerId}": {
+            "post": {
+                "operationId": "provider_settings-update",
+                "summary": "Save user-scope settings for one provider",
+                "description": "Field values are `{fieldId: value}` pairs matching the schema returned by the index endpoint. An empty value clears the user override so the instance default applies again. Fields that are not user-writable are reported back in `rejected` and left untouched.",
+                "tags": [
+                    "provider_settings"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "values": {
+                                        "type": "object",
+                                        "default": {},
+                                        "description": "Field id => value pairs",
+                                        "additionalProperties": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "makeDefault": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "'1' to also make this the user's default provider"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "providerId",
+                        "in": "path",
+                        "description": "Provider to configure",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Settings saved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "status",
+                                        "rejected"
+                                    ],
+                                    "properties": {
+                                        "status": {
+                                            "type": "string"
+                                        },
+                                        "rejected": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Unknown provider or invalid value",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "status",
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "status": {
+                                            "type": "string"
+                                        },
+                                        "message": {
+                                            "type": "string"
                                         }
                                     }
                                 }
@@ -5379,7 +5859,7 @@
             "post": {
                 "operationId": "settings-save-admin",
                 "summary": "Save admin-level API key",
-                "description": "Model, max_tokens, and api_timeout are now managed by Declarative Settings.\nThis endpoint requires admin access",
+                "description": "Provider-specific settings (model, tokens, timeout, keys) go through ProviderSettingsController instead — they mean different things per provider, so they live on the provider's own schema.\nThis endpoint requires admin access",
                 "tags": [
                     "settings"
                 ],
@@ -5432,6 +5912,12 @@
                                         "nullable": true,
                                         "default": null,
                                         "description": "Comma/space-separated Mistral connector IDs for the native-MCP path (trimmed; null keeps unchanged)"
+                                    },
+                                    "search_enabled": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Expose AIquila conversations to unified search ('1' enabled, '0' disabled, null keeps unchanged)"
                                     }
                                 }
                             }
@@ -5462,163 +5948,6 @@
                                     ],
                                     "properties": {
                                         "status": {
-                                            "type": "string"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Current user is not logged in",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "required": [
-                                        "message"
-                                    ],
-                                    "properties": {
-                                        "message": {
-                                            "type": "string"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Logged in account must be an admin",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "required": [
-                                        "message"
-                                    ],
-                                    "properties": {
-                                        "message": {
-                                            "type": "string"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/index.php/apps/aiquila/api/admin/test": {
-            "post": {
-                "operationId": "settings-test-config",
-                "summary": "Test the current configuration by sending a live request to Claude",
-                "description": "Uses saved model/max_tokens/api_timeout from Declarative Settings. Optionally accepts an API key override for testing before saving.\nThis endpoint requires admin access",
-                "tags": [
-                    "settings"
-                ],
-                "security": [
-                    {
-                        "bearer_auth": []
-                    },
-                    {
-                        "basic_auth": []
-                    }
-                ],
-                "requestBody": {
-                    "required": false,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "api_key": {
-                                        "type": "string",
-                                        "default": "",
-                                        "description": "API key to test (uses saved key if empty)"
-                                    },
-                                    "provider": {
-                                        "type": "string",
-                                        "nullable": true,
-                                        "default": null,
-                                        "description": "Provider to test ('anthropic'/'mistral'; null uses the active provider). Also scopes the api_key override."
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "parameters": [
-                    {
-                        "name": "OCS-APIRequest",
-                        "in": "header",
-                        "description": "Required to be true for the API request to pass",
-                        "required": true,
-                        "schema": {
-                            "type": "boolean",
-                            "default": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Test request completed; see success field for result",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "required": [
-                                        "success",
-                                        "message"
-                                    ],
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean"
-                                        },
-                                        "message": {
-                                            "type": "string"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "No API key available or the test request failed",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "required": [
-                                        "success",
-                                        "message"
-                                    ],
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean"
-                                        },
-                                        "message": {
-                                            "type": "string"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "required": [
-                                        "success",
-                                        "message"
-                                    ],
-                                    "properties": {
-                                        "success": {
-                                            "type": "boolean"
-                                        },
-                                        "message": {
                                             "type": "string"
                                         }
                                     }
@@ -5806,13 +6135,119 @@
                 }
             }
         },
-        "/index.php/apps/aiquila/api/admin/local": {
-            "post": {
-                "operationId": "settings-save-local",
-                "summary": "Save the local (self-hosted, OpenAI-compatible) model endpoint settings",
-                "description": "Covers Ollama, LM Studio and llama.cpp's llama-server. Admin scope only: Nextcloud makes server-side requests to whatever base URL is stored here, so it must never be user-settable.\nThis endpoint requires admin access",
+        "/index.php/apps/aiquila/api/admin/providers": {
+            "get": {
+                "operationId": "provider_settings-admin-index",
+                "summary": "List providers with their full settings schema and instance values",
+                "description": "This endpoint requires admin access",
                 "tags": [
-                    "settings"
+                    "provider_settings"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "refresh",
+                        "in": "query",
+                        "description": "'1' to bypass the cached model lists",
+                        "schema": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
+                        }
+                    },
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Provider settings for the instance",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "defaultProvider",
+                                        "providers"
+                                    ],
+                                    "properties": {
+                                        "defaultProvider": {
+                                            "type": "string"
+                                        },
+                                        "providers": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "additionalProperties": {
+                                                    "type": "object"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/admin/providers/{providerId}": {
+            "post": {
+                "operationId": "provider_settings-admin-update",
+                "summary": "Save instance-scope settings for one provider",
+                "description": "This endpoint requires admin access",
+                "tags": [
+                    "provider_settings"
                 ],
                 "security": [
                     {
@@ -5829,47 +6264,19 @@
                             "schema": {
                                 "type": "object",
                                 "properties": {
-                                    "base_url": {
-                                        "type": "string",
-                                        "nullable": true,
-                                        "default": null,
-                                        "description": "Endpoint base URL, e.g. http://localhost:11434 ('' clears; null keeps unchanged)"
+                                    "values": {
+                                        "type": "object",
+                                        "default": {},
+                                        "description": "Field id => value pairs",
+                                        "additionalProperties": {
+                                            "type": "object"
+                                        }
                                     },
-                                    "api_key": {
+                                    "makeDefault": {
                                         "type": "string",
                                         "nullable": true,
                                         "default": null,
-                                        "description": "Optional bearer token ('' clears, null keeps unchanged). Ollama needs none."
-                                    },
-                                    "model": {
-                                        "type": "string",
-                                        "nullable": true,
-                                        "default": null,
-                                        "description": "Model id to request, e.g. llama3.2 (null keeps unchanged)"
-                                    },
-                                    "max_tokens": {
-                                        "type": "string",
-                                        "nullable": true,
-                                        "default": null,
-                                        "description": "Max response tokens (null keeps unchanged)"
-                                    },
-                                    "timeout": {
-                                        "type": "string",
-                                        "nullable": true,
-                                        "default": null,
-                                        "description": "Request timeout in seconds (null keeps unchanged)"
-                                    },
-                                    "vision": {
-                                        "type": "string",
-                                        "nullable": true,
-                                        "default": null,
-                                        "description": "Send images to the endpoint ('1' if the loaded model is multimodal, null keeps unchanged)"
-                                    },
-                                    "allow_local_address": {
-                                        "type": "string",
-                                        "nullable": true,
-                                        "default": null,
-                                        "description": "Permit requests to loopback/private addresses ('1' to allow, null keeps unchanged)"
+                                        "description": "'1' to also make this the instance default provider"
                                     }
                                 }
                             }
@@ -5877,6 +6284,15 @@
                     }
                 },
                 "parameters": [
+                    {
+                        "name": "providerId",
+                        "in": "path",
+                        "description": "Provider to configure",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     {
                         "name": "OCS-APIRequest",
                         "in": "header",
@@ -5890,21 +6306,24 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Local model settings saved",
+                        "description": "Settings saved",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "type": "object",
                                     "required": [
                                         "status",
-                                        "baseUrl"
+                                        "rejected"
                                     ],
                                     "properties": {
                                         "status": {
                                             "type": "string"
                                         },
-                                        "baseUrl": {
-                                            "type": "string"
+                                        "rejected": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
                                         }
                                     }
                                 }
@@ -5912,7 +6331,7 @@
                         }
                     },
                     "400": {
-                        "description": "The base URL is not a valid http(s) URL",
+                        "description": "Unknown provider or invalid value",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -5972,13 +6391,13 @@
                 }
             }
         },
-        "/index.php/apps/aiquila/api/admin/local/status": {
-            "get": {
-                "operationId": "settings-local-status",
-                "summary": "Get the local model endpoint settings and the models it currently serves",
-                "description": "The `models` list is a live GET {base}/models against the configured endpoint, so an empty list means AIquila could not reach it.\nThis endpoint requires admin access",
+        "/index.php/apps/aiquila/api/admin/providers/{providerId}/test": {
+            "post": {
+                "operationId": "provider_settings-test",
+                "summary": "Send a live request to a provider to confirm it is reachable and authorised",
+                "description": "Optionally accepts a key that has not been saved yet, so an admin can verify one before committing it. The stored key is restored afterwards either way.\nThis endpoint requires admin access",
                 "tags": [
-                    "settings"
+                    "provider_settings"
                 ],
                 "security": [
                     {
@@ -5988,7 +6407,33 @@
                         "basic_auth": []
                     }
                 ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "api_key": {
+                                        "type": "string",
+                                        "default": "",
+                                        "description": "Key to test with; the saved key is used when empty"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 "parameters": [
+                    {
+                        "name": "providerId",
+                        "in": "path",
+                        "description": "Provider to test",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     {
                         "name": "OCS-APIRequest",
                         "in": "header",
@@ -6002,54 +6447,65 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Local model settings",
+                        "description": "The provider answered",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "baseUrl",
-                                        "hasApiKey",
-                                        "model",
-                                        "maxTokens",
-                                        "timeout",
-                                        "vision",
-                                        "allowLocalAddress",
-                                        "configured",
-                                        "models"
+                                        "success",
+                                        "message"
                                     ],
                                     "properties": {
-                                        "baseUrl": {
+                                        "success": {
+                                            "type": "boolean"
+                                        },
+                                        "message": {
                                             "type": "string"
-                                        },
-                                        "hasApiKey": {
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "No key available, or the provider rejected the request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "success",
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "success": {
                                             "type": "boolean"
                                         },
-                                        "model": {
+                                        "message": {
                                             "type": "string"
-                                        },
-                                        "maxTokens": {
-                                            "type": "integer",
-                                            "format": "int64"
-                                        },
-                                        "timeout": {
-                                            "type": "integer",
-                                            "format": "int64"
-                                        },
-                                        "vision": {
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "success",
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "success": {
                                             "type": "boolean"
                                         },
-                                        "allowLocalAddress": {
-                                            "type": "boolean"
-                                        },
-                                        "configured": {
-                                            "type": "boolean"
-                                        },
-                                        "models": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "string"
-                                            }
+                                        "message": {
+                                            "type": "string"
                                         }
                                     }
                                 }
@@ -7250,6 +7706,10 @@
         {
             "name": "page",
             "description": "Page Controller for AIquila main interface"
+        },
+        {
+            "name": "provider_settings",
+            "description": "Schema-driven read/write of provider configuration for the settings pages. Both the admin and the personal page render whatever LLMProviderInterface::getSettingsSchema() describes, so this controller never names a provider or a config key — adding a provider requires no change here. The admin/user split is enforced twice over: the admin routes carry no #[NoAdminRequired] (so Nextcloud requires an admin), and ProviderSettingsService::writeUser() additionally drops any field whose scope is not user-writable. That second check is what keeps endpoint URLs — which decide where the server sends outbound requests — out of reach of the personal page even if a route were ever mis-annotated."
         },
         {
             "name": "coworker",

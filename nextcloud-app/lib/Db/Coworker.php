@@ -21,6 +21,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setCustomPrompt(?string $customPrompt)
  * @method string|null getModel()
  * @method void setModel(?string $model)
+ * @method string|null getProvider()
+ * @method void setProvider(?string $provider)
  * @method string|null getOwnerApp()
  * @method void setOwnerApp(?string $ownerApp)
  * @method string getTaskType()
@@ -60,7 +62,10 @@ class Coworker extends Entity implements \JsonSerializable {
     protected ?string $description = null;
     protected ?int $promptId = null;
     protected ?string $customPrompt = null;
+    /** Model id to run this task with; null follows the provider's default. */
     protected ?string $model = null;
+    /** Pinned provider id; null means "follow the owner's current setting". */
+    protected ?string $provider = null;
     protected ?string $ownerApp = null;
     protected string $taskType = 'vision:classify';
     protected int $paused = 0;
@@ -85,6 +90,7 @@ class Coworker extends Entity implements \JsonSerializable {
         $this->addType('promptId', 'integer');
         $this->addType('customPrompt', 'string');
         $this->addType('model', 'string');
+        $this->addType('provider', 'string');
         $this->addType('ownerApp', 'string');
         $this->addType('taskType', 'string');
         $this->addType('paused', 'integer');
@@ -116,6 +122,7 @@ class Coworker extends Entity implements \JsonSerializable {
             'promptId' => $this->getPromptId(),
             'customPrompt' => $this->getCustomPrompt(),
             'model' => $this->getModel(),
+            'provider' => $this->getProvider(),
             'ownerApp' => $this->getOwnerApp(),
             'taskType' => $this->getTaskType(),
             'paused' => (bool)$this->getPaused(),

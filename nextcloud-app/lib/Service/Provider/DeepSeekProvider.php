@@ -49,6 +49,14 @@ class DeepSeekProvider extends AbstractOpenAiCompatibleProvider {
         return min($stored, DeepSeekModels::getMaxTokenCeiling($this->getModel($userId)));
     }
 
+    protected function defaultModel(): string {
+        return DeepSeekModels::DEFAULT_MODEL;
+    }
+
+    protected function defaultMaxTokens(): int {
+        return DeepSeekModels::DEFAULT_MAX_TOKENS;
+    }
+
     /** Reasoning models reject sampling params; only forward them otherwise. */
     protected function applySamplingParams(array &$body, string $model, array $options): void {
         if (DeepSeekModels::isReasoner($model)) {

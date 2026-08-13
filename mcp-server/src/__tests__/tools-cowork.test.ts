@@ -23,7 +23,8 @@ import {
 const sampleCoworker = {
   id: 7,
   title: 'Classify images — Pixtral',
-  model: 'mistral',
+  provider: 'mistral',
+  model: null,
   taskType: 'vision:classify',
   cronSchedule: '0 3 * * *',
   inputType: 'folder',
@@ -96,7 +97,7 @@ describe('Cowork Tools', () => {
       mockFetchAiquilaAPI.mockResolvedValue(sampleCoworker);
       await createCoworkerTool.handler({
         title: 'My job',
-        model: 'anthropic',
+        provider: 'anthropic',
         inputPath: '/Albums',
         cronSchedule: '0 4 * * *',
         maxTags: 5,
@@ -106,7 +107,7 @@ describe('Cowork Tools', () => {
         method: 'POST',
         body: {
           title: 'My job',
-          model: 'anthropic',
+          provider: 'anthropic',
           input_type: 'folder',
           input_path: '/Albums',
           cron_schedule: '0 4 * * *',
@@ -119,10 +120,10 @@ describe('Cowork Tools', () => {
   describe('update_coworker', () => {
     it('PUTs only provided fields', async () => {
       mockFetchAiquilaAPI.mockResolvedValue(sampleCoworker);
-      await updateCoworkerTool.handler({ id: 7, model: 'mistral' });
+      await updateCoworkerTool.handler({ id: 7, provider: 'mistral' });
       expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/coworkers/7', {
         method: 'PUT',
-        body: { model: 'mistral' },
+        body: { provider: 'mistral' },
       });
     });
   });

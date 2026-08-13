@@ -65,17 +65,24 @@ back to the local agentic loop.
   keeps the legacy `aiquila/api_key` slot; others use `aiquila/api_key/<provider>`.
 - Preferred model is stored per provider: `user_model` (anthropic) /
   `user_model_<provider>`; admin defaults `model` / `model_<provider>`.
-- Settings UI: the personal panel (`NavigationSettings.vue`) and the admin form
-  (`templates/admin.php` + `js/admin.js`) expose a provider dropdown; the model
-  list and API-key field are scoped to the selected provider.
+- Settings UI: both pages (`src/views/AdminSettings.vue`, `src/views/PersonalSettings.vue`)
+  render one `ProviderCard` per provider from the schema the provider itself
+  declares via `getSettingsSchema()` — there is no per-provider frontend code.
 
 ### Adding another provider
 
-1. Implement `LLMProviderInterface` (mirror `MistralProvider`).
+1. Implement `LLMProviderInterface` (mirror `MistralProvider`), including
+   `getSettingsSchema()` and `getCapabilities()`. Extending
+   `AbstractOpenAiCompatibleProvider` gives you the usual key/model/tokens/timeout
+   schema for free; merge in anything extra. Endpoint URLs must stay
+   `SCOPE_ADMIN` — see the note in `ProviderSettingsSchema`.
 2. Add a model registry (mirror `MistralModels`).
 3. Register it in `LLMProviderFactory` (and add a `staticModels()` arm in
-   `SettingsController`).
-4. The settings UI picks it up automatically from `describeProviders()`.
+   `ProviderSettingsService`, the fallback used when the live model listing is
+   unavailable).
+4. Both settings pages pick it up automatically — a card is rendered from the
+   schema, with capability chips from `getCapabilities()`, a live model list and
+   a Test connection button. No frontend change is needed.
 
 For an OpenAI-compatible vendor, extend `AbstractOpenAiCompatibleProvider`
 instead of implementing the interface from scratch — see `DeepSeekProvider` and

@@ -4,6 +4,40 @@ Complete guide to installing and configuring the AIquila Nextcloud app.
 
 ## Upgrade notes
 
+### 0.4.0 — conversations pin their provider, and the settings pages changed
+
+**Nothing to do on upgrade.** Existing conversations, keys and model choices
+are preserved; the migration runs on `occ upgrade`.
+
+What changes:
+
+- **A conversation now remembers its provider.** Previously, switching provider
+  in personal settings flipped *every* existing conversation on its next
+  message and replayed its history to a different model. Conversations created
+  from 0.4.0 onwards are pinned to the provider they started on. Conversations
+  that predate the upgrade are unpinned, so they keep following your setting
+  exactly as before — pin one from the picker in the chat header if you want it
+  fixed.
+- **Both settings pages were rebuilt.** Providers are now cards under tabs
+  instead of one long page, and each provider describes its own fields, so
+  Mistral, DeepSeek, Hetzner and the local endpoint finally get their own model
+  lists rather than Anthropic's. All config keys are unchanged.
+- **The chat's settings panel moved.** Provider, model, key and defaults now
+  live in **Settings → Personal → AIquila**. The gear in the chat navigation
+  links there. The chat keeps a per-conversation provider/model picker in its
+  header.
+- **Effort validation is provider-aware.** Setting `/effort` on a conversation
+  served by a provider without the concept now says so, instead of listing
+  Anthropic's levels.
+- **Two admin endpoints were replaced.** `POST /api/admin/local`,
+  `GET /api/admin/local/status` and `POST /api/admin/test` are gone; the
+  schema-driven `GET|POST /api/admin/providers[/{id}]` and
+  `POST /api/admin/providers/{id}/test` cover all providers uniformly. This
+  only matters if you scripted against them.
+- **MCP server:** `create_coworker` / `update_coworker` gain a `provider`
+  argument. Their `model` argument used to hold a provider id and now holds an
+  actual model id; existing coworkers are migrated automatically.
+
 ### 0.3.32 — the default model changed
 
 The built-in default moved from `claude-sonnet-4-6` to **`claude-sonnet-5`**.
@@ -114,30 +148,56 @@ sudo -u www-data php occ app:enable aiquila
 2. Find "AIquila" in the disabled apps list
 3. Click **Enable**
 
-### 5. Configure API Key
+### 5. Configure a provider
 
-**Admin Configuration** (applies to all users):
+**Admin configuration** (applies to every user):
 
 1. Navigate to **Settings → Administration → AIquila**
-2. Enter your Claude API key from [console.anthropic.com](https://console.anthropic.com)
-3. Configure settings (optional):
-   - **Claude Model**: Default is `claude-sonnet-5` (adaptive thinking, medium effort)
-     - Most capable: `claude-fable-5` (adaptive thinking always on, xhigh effort)
-     - For complex agentic coding and enterprise work: `claude-opus-5` (adaptive thinking, xhigh effort)
-     - Other options: `claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, `claude-opus-4-5-20251101`
-   - **Max Tokens**: Response length limit (1-100,000, default: 4096)
-   - **API Timeout**: Request timeout in seconds (10-1800, default: 30)
-4. Click **Save**
-5. Click **Test Configuration** to verify everything works
+2. The **Providers** tab shows one card per available provider — Claude
+   (Anthropic), Mistral, DeepSeek, Hetzner Inference (EU) and Local model.
+   Each card shows whether it is configured, which model it will use, and what
+   it can do (vision, tools, thinking, effort, native MCP, documents).
+3. Pick the instance default with the radio on the card, then click
+   **Configure** to open it:
+   - **API key** — from the provider's console. Stored encrypted in Nextcloud's
+     credential manager. The Local model card takes an endpoint URL instead; its
+     key is optional (Ollama needs none).
+   - **Default model** — the live model list from the provider, with
+     **Refresh models** to re-query it.
+   - **Advanced** — max output tokens, request timeout, and any
+     provider-specific options. On the Claude card this is also where
+     **effort** and **adaptive thinking** defaults live; they are Anthropic
+     concepts and do not apply to the other providers.
+4. Click **Save**, then **Test connection** to send a live request and confirm
+   the key reaches the provider.
 
-**User Configuration** (optional):
+The other tabs cover instance defaults (unified search), **MCP servers**, and
+**Advanced** (the native MCP connector). Each tab is linkable by its anchor,
+e.g. `Settings → Administration → AIquila#mcp`.
 
-Users can override the admin API key with their own:
+**Personal configuration** (optional):
 
 1. Go to **Settings → Personal → AIquila**
-2. Enter your personal Claude API key
-3. Click **Save** to override admin key
-4. Click **Clear Key** to remove override and use admin key
+2. The **Providers** tab shows the same cards, limited to what you may change:
+   your own API key and preferred model per provider, plus which provider is
+   your default. Leave a field blank to inherit the instance setting.
+   Endpoint URLs are administrator-only.
+3. **Defaults** sets the system prompt and verbose mode new conversations start
+   with; **Connectors** overrides the native MCP connector for your account.
+
+Endpoint URLs stay admin-only deliberately: Nextcloud makes outbound requests to
+whatever is stored there, so a user-settable endpoint would be a server-side
+request forgery vector.
+
+### 6. Pick a provider per conversation
+
+Provider and model are snapshotted when a conversation is created, so changing
+your default afterwards leaves existing conversations answering from where they
+started.
+
+The picker in the chat header changes both for the open conversation only. It
+lists just the providers you have credentials for. Choosing **Follow my
+default** unpins the conversation so it tracks your personal setting again.
 
 ## Features
 
@@ -152,7 +212,8 @@ Features:
 - Slash commands (`/add-file`, `/add-directory`, `/verbose`, `/search`, and more)
 - Markdown rendering in responses
 - Clean, responsive design
-- Quick access to settings (⚙️ icon)
+- Per-conversation provider and model picker in the header
+- Settings gear linking to your personal AIquila settings
 
 Usage:
 1. Navigate to `/apps/aiquila`
@@ -242,8 +303,8 @@ See [internal-api.md](../internal-api.md) for complete API documentation.
 
 2. **Admin Test**:
    - Go to **Settings → Administration → AIquila**
-   - Click **Test Configuration**
-   - Should see success message
+   - Open the default provider's card and click **Test connection**
+   - Should see the provider's reply inline
 
 3. **Assistant Integration**:
    - Use Nextcloud Assistant anywhere in the UI
@@ -303,7 +364,7 @@ chmod 644 js/*.js
 1. Verify API key is valid at [console.anthropic.com](https://console.anthropic.com)
 2. Check you copied the entire key (starts with `sk-ant-`)
 3. Remove any extra spaces or newlines
-4. Test configuration in admin settings
+4. Open the provider's card in **Settings → Administration → AIquila** and click **Test connection**
 5. Check Nextcloud logs:
    ```bash
    tail -f /path/to/nextcloud/data/nextcloud.log
@@ -320,7 +381,7 @@ chmod 644 js/*.js
    ```
 2. Check firewall rules allow HTTPS outbound
 3. If using a proxy, configure PHP to use it
-4. Increase timeout in admin settings (default: 30s)
+4. Raise **Request timeout** under **Advanced** on the provider's card (default: 30s; the local endpoint defaults to 300s)
 
 #### Permission Errors
 

@@ -80,6 +80,30 @@ class HetznerProvider extends AbstractOpenAiCompatibleProvider {
         return min($stored, HetznerModels::getMaxTokenCeiling($this->getModel($userId)));
     }
 
+    protected function defaultModel(): string {
+        return HetznerModels::DEFAULT_MODEL;
+    }
+
+    protected function defaultMaxTokens(): int {
+        return HetznerModels::DEFAULT_MAX_TOKENS;
+    }
+
+    /**
+     * Adds the endpoint override. Admin-scope only: the service is
+     * experimental and may move, but a user-settable endpoint would be an SSRF
+     * vector — see the class docblock.
+     */
+    public function getSettingsSchema(): array {
+        return array_merge(parent::getSettingsSchema(), [
+            ProviderSettingsSchema::baseUrl(
+                'hetzner_base_url',
+                'API endpoint',
+                'Leave blank to use ' . self::DEFAULT_API_BASE . '. Override only if Hetzner moves the service.',
+                self::DEFAULT_API_BASE,
+            ),
+        ]);
+    }
+
     /** The served models are multimodal (image + text input). */
     protected function supportsVisionInput(?string $userId = null): bool {
         return true;

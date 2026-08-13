@@ -11,6 +11,7 @@ return [
         ['name' => 'conversation#destroy', 'url' => '/api/conversations/{id}',          'verb' => 'DELETE'],
         ['name' => 'conversation#message',   'url' => '/api/conversations/{id}/messages',  'verb' => 'POST'],
         ['name' => 'conversation#messageStream', 'url' => '/api/conversations/{id}/messages/stream', 'verb' => 'POST'],
+        ['name' => 'conversation#setModel',  'url' => '/api/conversations/{id}/model',      'verb' => 'PUT'],
         ['name' => 'conversation#duplicate', 'url' => '/api/conversations/{id}/duplicate', 'verb' => 'POST'],
         ['name' => 'conversation#search',    'url' => '/api/conversations/search',         'verb' => 'GET'],
 
@@ -30,10 +31,16 @@ return [
         ['name' => 'settings#save', 'url' => '/api/settings', 'verb' => 'POST'],
         ['name' => 'settings#get', 'url' => '/api/settings', 'verb' => 'GET'],
         ['name' => 'settings#saveAdmin', 'url' => '/api/admin/settings', 'verb' => 'POST'],
-        ['name' => 'settings#testConfig', 'url' => '/api/admin/test', 'verb' => 'POST'],
         ['name' => 'settings#nativeMcpStatus', 'url' => '/api/admin/native-mcp/status', 'verb' => 'GET'],
-        ['name' => 'settings#saveLocal', 'url' => '/api/admin/local', 'verb' => 'POST'],
-        ['name' => 'settings#localStatus', 'url' => '/api/admin/local/status', 'verb' => 'GET'],
+
+        // Schema-driven provider settings. The per-provider save endpoints take
+        // {fieldId: value} pairs matching the schema each provider declares, so
+        // adding a provider needs no new route.
+        ['name' => 'provider_settings#index',       'url' => '/api/providers',                        'verb' => 'GET'],
+        ['name' => 'provider_settings#update',      'url' => '/api/providers/{providerId}',           'verb' => 'POST'],
+        ['name' => 'provider_settings#adminIndex',  'url' => '/api/admin/providers',                  'verb' => 'GET'],
+        ['name' => 'provider_settings#adminUpdate', 'url' => '/api/admin/providers/{providerId}',     'verb' => 'POST'],
+        ['name' => 'provider_settings#test',        'url' => '/api/admin/providers/{providerId}/test', 'verb' => 'POST'],
         ['name' => 'occ#execute', 'url' => '/api/occ', 'verb' => 'POST'],
 
         // MCP Server Admin API

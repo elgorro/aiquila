@@ -37,7 +37,7 @@ $job = $cowork->register('myapp', 'alice', [
     'task_type' => 'vision:classify',
     'cron_schedule' => '0 3 * * *',
     'input_path' => '/Photos',
-    'model' => 'anthropic',           // or 'mistral' (Pixtral)
+    'provider' => 'anthropic',        // or 'mistral', 'deepseek', 'hetzner', 'local'
     'options' => ['maxTags' => 8, 'recursive' => true],
 ]);
 
@@ -57,7 +57,8 @@ Passed in the `$config` / `$changes` array of `register()` and `update()`:
 | `title` | string | Human-readable name. |
 | `description` | string\|null | Optional. |
 | `task_type` | string | Registered task-type id, e.g. `vision:classify`. |
-| `model` | string\|null | Provider override: `anthropic` or `mistral`. |
+| `provider` | string\|null | Provider to pin, e.g. `anthropic`, `mistral`, `hetzner`. `null` follows the run user's setting. Unknown ids are rejected. |
+| `model` | string\|null | Model to pin. `null` uses the provider's default — which is what lets a routine task run a cheap model while chat runs a strong one. |
 | `cron_schedule` | string | 5-field cron (`min hour dom month dow`), e.g. `0 3 * * *`. |
 | `input_type` | string | Default `folder`. |
 | `input_path` | string\|null | Nextcloud path resolved against the run user's folder. |
@@ -200,8 +201,12 @@ $cowork->deregister('myapp', $cw['id']);        // delete + history
   job runs. If a task type is missing at run time, `verify()` reports
   `unknown task type: …` and the scheduled run fails gracefully (captured on the
   run record, never throwing at the job level).
-- Provider keys stay encrypted server-side; the `model` field only selects which
-  configured provider (`anthropic` / `mistral`) a vision job uses.
+- Provider keys stay encrypted server-side; `provider` and `model` only select
+  which configured provider and model a job uses, never a key or an endpoint.
+- **Changed in 0.4.0:** `model` used to hold a provider id. It now holds an
+  actual model id, and the provider moved to its own `provider` field. Existing
+  coworkers are migrated automatically on upgrade; callers passing a provider id
+  as `model` must be updated.
 
 ## Support
 
