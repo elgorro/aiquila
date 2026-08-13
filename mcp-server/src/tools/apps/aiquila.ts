@@ -38,7 +38,7 @@ export const showConfigTool = {
   inputSchema: z.object({}),
   handler: async () => {
     try {
-      const output = await runOCC('aiquila:show');
+      const output = await runOCC('aiquila:configure', ['--show']);
       return {
         content: [
           {

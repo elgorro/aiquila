@@ -35,7 +35,7 @@ describe('AIquila Internal Tools', () => {
 
       expect(result.content[0].text).toContain('api_key');
       expect(result.content[0].text).toContain('model');
-      expect(mockExecuteOCC).toHaveBeenCalledWith('aiquila:show', []);
+      expect(mockExecuteOCC).toHaveBeenCalledWith('aiquila:configure', ['--show']);
     });
 
     it('should handle OCC failure', async () => {
