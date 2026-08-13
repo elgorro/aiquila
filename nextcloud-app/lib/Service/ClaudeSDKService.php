@@ -25,6 +25,7 @@ use Anthropic\Messages\Message;
 use Anthropic\Messages\Usage;
 use Anthropic\Models\ModelInfo;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
@@ -178,12 +179,28 @@ class ClaudeSDKService implements LLMProviderInterface {
      *   effort         (string) – per-conversation effort override (low…max)
      *   thinking       (bool)   – per-conversation adaptive-thinking override
      */
+    /**
+     * Model for a single request.
+     *
+     * A conversation may pin a model (`$options['model']`), which outranks the
+     * user preference and the instance default — that is what keeps an existing
+     * conversation on the model it started on after the user switches their
+     * default. Unknown/blank falls back to the normal resolution.
+     */
+    private function resolveRequestModel(?string $userId, array $options): string {
+        $pinned = $options['model'] ?? null;
+        if (is_string($pinned) && $pinned !== '') {
+            return ClaudeModels::resolveModel($pinned);
+        }
+        return $this->getModel($userId);
+    }
+
     private function buildRequestParams(
         array   $messages,
         ?string $userId  = null,
         array   $options = []
     ): array {
-        $model = $this->getModel($userId);
+        $model = $this->resolveRequestModel($userId, $options);
         $caps = $this->resolveModelCapabilities($model, $userId);
 
         $params = [
@@ -266,7 +283,7 @@ class ClaudeSDKService implements LLMProviderInterface {
         if ($override !== null) {
             return $override;
         }
-        // Declarative-settings checkboxes may persist as 'true' or '1'.
+        // Checkboxes have persisted as 'true' or '1' over the app's history.
         return in_array($this->config->getAppValue($this->appName, 'thinking', 'false'), ['true', '1'], true);
     }
 
@@ -1281,6 +1298,58 @@ class ClaudeSDKService implements LLMProviderInterface {
      *
      * @return array{api_key: string, model: string, max_tokens: int, timeout: int}
      */
+    /**
+     * Anthropic keeps the unsuffixed config keys (`model`, `max_tokens`,
+     * `api_timeout`) for backwards compatibility — it predates the provider
+     * abstraction. `effort` and `thinking` are Anthropic-only and previously
+     * lived in AdminModelDeclarativeSettings; they now render on this card,
+     * which is also the only place they are meaningful.
+     */
+    public function getSettingsSchema(): array {
+        return [
+            ProviderSettingsSchema::apiKey(
+                'API key',
+                'From console.anthropic.com. Stored encrypted in Nextcloud\'s credential manager; a personal key overrides the instance key.',
+            ),
+            ProviderSettingsSchema::model(
+                'model',
+                'user_model',
+                ClaudeModels::DEFAULT_MODEL,
+                'Opus is the most capable and most expensive, Haiku the fastest and cheapest, Sonnet sits in the middle.',
+            ),
+            ProviderSettingsSchema::select(
+                'effort',
+                'effort',
+                'Default effort level',
+                'How much work Claude puts into each response. Blank picks a sensible level per model. "xhigh" is only accepted by Fable 5 and Opus 4.7+; elsewhere it falls back to the model default. Overridable per conversation with /effort.',
+                array_merge([''], ClaudeModels::ALL_EFFORTS),
+                group: ProviderSettingsSchema::GROUP_BASIC,
+            ),
+            ProviderSettingsSchema::checkbox(
+                'thinking',
+                'thinking',
+                'Enable adaptive thinking by default',
+                'Lets Claude reason before answering on models that support it. Overridable per conversation with /thinking.',
+                storage: ProviderSettingsSchema::STORAGE_BOOL,
+                group: ProviderSettingsSchema::GROUP_BASIC,
+            ),
+            ProviderSettingsSchema::maxTokens('max_tokens', ClaudeModels::DEFAULT_MAX_TOKENS),
+            ProviderSettingsSchema::timeout('api_timeout', 30, 'Shared across all hosted providers.'),
+        ];
+    }
+
+    public function getCapabilities(): array {
+        return ProviderSettingsSchema::capabilities([
+            'vision' => true,
+            'tools' => true,
+            'streaming' => true,
+            'thinking' => true,
+            'effort' => true,
+            'native_mcp' => true,
+            'documents' => true,
+        ]);
+    }
+
     public function getConfiguration(): array {
         return [
             'api_key' => $this->config->getAppValue($this->appName, 'api_key', ''),
@@ -2019,12 +2088,12 @@ class ClaudeSDKService implements LLMProviderInterface {
         }
 
         if ($error !== null && $text === '') {
-            return ['error' => $error, 'model' => $this->getModel($userId), 'usage' => $usage];
+            return ['error' => $error, 'model' => $this->resolveRequestModel($userId, $options), 'usage' => $usage];
         }
 
         return [
             'response' => $text,
-            'model' => $this->getModel($userId),
+            'model' => $this->resolveRequestModel($userId, $options),
             'usage' => $usage,
             'citations' => $citations,
         ];

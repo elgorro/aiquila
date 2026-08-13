@@ -385,7 +385,7 @@ class CoworkerController extends Controller {
     private function bodyData(): array {
         $params = $this->request->getParams();
         $allowed = [
-            'title', 'description', 'model', 'task_type', 'cron_schedule',
+            'title', 'description', 'provider', 'model', 'task_type', 'cron_schedule',
             'input_type', 'input_path', 'output_type', 'output_path',
             'is_active', 'paused', 'options',
         ];

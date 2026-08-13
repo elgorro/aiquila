@@ -12,6 +12,10 @@
 		{{ t('aiquila', 'Select a conversation or start a new chat') }}
 	</NcEmptyContent>
 	<div v-else class="chat-view">
+		<div class="chat-header">
+			<ConversationModelPicker :conversation="conversation"
+				@conversation-updated="$emit('conversation-updated', $event)" />
+		</div>
 		<div v-if="conversation.projectId && projectName" class="project-badge">
 			<span class="badge-icon">📦</span>
 			<span class="badge-label">{{ projectName }}</span>
@@ -96,6 +100,7 @@ import ChatIcon from 'vue-material-design-icons/Chat.vue'
 
 import MessageBubble from './MessageBubble.vue'
 import ChatInput from './ChatInput.vue'
+import ConversationModelPicker from './ConversationModelPicker.vue'
 import { sendMessage, sendMessageStream, updateConversation } from '../api.js'
 
 const DOT_PATTERNS = ['·····', '··●··', '·●●●·', '●●●●●', '·●●●·', '··●··']
@@ -110,6 +115,7 @@ export default {
 		ChatIcon,
 		MessageBubble,
 		ChatInput,
+		ConversationModelPicker,
 	},
 	props: {
 		conversation: {
@@ -361,6 +367,13 @@ export default {
 </script>
 
 <style scoped>
+.chat-header {
+	display: flex;
+	justify-content: flex-end;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--color-border);
+}
+
 .chat-view {
 	display: flex;
 	flex-direction: column;

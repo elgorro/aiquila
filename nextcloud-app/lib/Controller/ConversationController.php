@@ -21,6 +21,7 @@ use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\McpClientService;
 use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -99,7 +100,7 @@ class ConversationController extends Controller {
      *
      * 200: List of conversations
      *
-     * @return JSONResponse<Http::STATUS_OK, list<array{id: int, userId: string, title: ?string, model: string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}>, array{}>
+     * @return JSONResponse<Http::STATUS_OK, list<array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}>, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -114,21 +115,95 @@ class ConversationController extends Controller {
     /**
      * Create a new conversation
      *
-     * 200: The created conversation
+     * Provider and model are snapshotted so the conversation keeps answering
+     * from where it started even after the user changes their default. Omit
+     * both to follow the user's setting (`provider` stays null).
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>
+     * @param string|null $provider Provider to pin (null/'' follows the user's setting)
+     * @param string|null $model Model to pin (null/'' uses the provider's default)
+     *
+     * 200: The created conversation
+     * 400: Unknown provider
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
-    public function create(): JSONResponse {
+    public function create(?string $provider = null, ?string $model = null): JSONResponse {
+        // Validate before anything else: getProviderById() falls back to
+        // Anthropic for an unknown id, which is right for a stale config value
+        // but would let an arbitrary request string reach persistence unnoticed.
+        if ($provider !== null && $provider !== '' && !$this->providerFactory->isKnownProviderId($provider)) {
+            return new JSONResponse(['error' => 'Unknown provider: ' . $provider], 400);
+        }
+
         $now = time();
+        $pinned = ($provider !== null && $provider !== '') ? $provider : null;
+        $service = $pinned !== null
+            ? $this->providerFactory->getProviderById($pinned)
+            : $this->providerFactory->getProvider($this->userId);
+
         $conversation = new Conversation();
         $conversation->setUserId($this->requireUserId());
-        $conversation->setModel($this->providerFactory->getProvider($this->userId)->getModel($this->userId));
+        $conversation->setProvider($pinned);
+        $conversation->setModel(($model !== null && $model !== '') ? $model : $service->getModel($this->userId));
         $conversation->setCreatedAt($now);
         $conversation->setUpdatedAt($now);
 
         $conversation = $this->conversationMapper->insert($conversation);
+        return new JSONResponse($conversation->jsonSerialize());
+    }
+
+    /**
+     * Pin a provider and/or model on an existing conversation
+     *
+     * Passing an empty provider unpins it, so the conversation follows the
+     * user's setting again. Changing the provider re-snapshots the model to
+     * that provider's default unless one is given explicitly — otherwise the
+     * conversation would carry a model id the new provider does not serve.
+     *
+     * @param int $id Conversation ID
+     * @param string|null $provider Provider to pin ('' unpins, null keeps unchanged)
+     * @param string|null $model Model to pin (null keeps unchanged)
+     *
+     * 200: Updated conversation
+     * 400: Unknown provider
+     * 404: Conversation not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     */
+    #[NoAdminRequired]
+    #[OpenAPI]
+    public function setModel(int $id, ?string $provider = null, ?string $model = null): JSONResponse {
+        try {
+            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
+        } catch (DoesNotExistException $e) {
+            return new JSONResponse(['error' => 'Conversation not found'], 404);
+        }
+
+        if ($provider !== null) {
+            if ($provider !== '' && !$this->providerFactory->isKnownProviderId($provider)) {
+                return new JSONResponse(['error' => 'Unknown provider: ' . $provider], 400);
+            }
+            $conversation->setProvider($provider === '' ? null : $provider);
+
+            if ($model === null || $model === '') {
+                $model = $this->resolveProvider($conversation)->getModel($this->userId);
+            }
+
+            // The pinned effort belongs to the old provider's vocabulary.
+            if (!$this->resolveProvider($conversation)->getCapabilities()['effort']) {
+                $conversation->setEffort(null);
+            }
+        }
+
+        if ($model !== null && $model !== '') {
+            $conversation->setModel($model);
+        }
+
+        $conversation->setUpdatedAt(time());
+        $this->conversationMapper->update($conversation);
+
         return new JSONResponse($conversation->jsonSerialize());
     }
 
@@ -140,7 +215,7 @@ class ConversationController extends Controller {
      * 200: Conversation with messages
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, messages: list<array{id: int, conversationId: int, role: string, content: string, inputTokens: ?int, outputTokens: ?int, cacheCreationTokens: ?int, cacheReadTokens: ?int, latencyMs: ?int, citations: ?array<string, mixed>, documents: ?array<string, mixed>, createdAt: int, files: list<array{id: int, messageId: int, filePath: string, fileName: string, mimeType: ?string, createdAt: int}>}>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, messages: list<array{id: int, conversationId: int, role: string, content: string, inputTokens: ?int, outputTokens: ?int, cacheCreationTokens: ?int, cacheReadTokens: ?int, latencyMs: ?int, citations: ?array<string, mixed>, documents: ?array<string, mixed>, createdAt: int, files: list<array{id: int, messageId: int, filePath: string, fileName: string, mimeType: ?string, createdAt: int}>}>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -180,7 +255,7 @@ class ConversationController extends Controller {
      * 400: Invalid effort or thinking value
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, allowed: list<string>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, allowed: list<string>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -201,9 +276,19 @@ class ConversationController extends Controller {
             $conversation->setProjectId($projectId);
         }
 
-        if ($effort !== null) {
+        if ($effort !== null && $effort !== '') {
+            // Effort is an Anthropic concept; validating a Hetzner or Ollama
+            // conversation against Anthropic's table produced nonsense advice.
+            $provider = $this->resolveProvider($conversation);
+            if (!$provider->getCapabilities()['effort']) {
+                return new JSONResponse([
+                    'error' => $provider->getLabel() . ' does not support effort levels',
+                    'allowed' => [],
+                ], 400);
+            }
+
             $model = ClaudeModels::resolveModel($conversation->getModel());
-            if ($effort !== '' && !ClaudeModels::isAllowedEffort($model, $effort)) {
+            if (!ClaudeModels::isAllowedEffort($model, $effort)) {
                 $allowed = ClaudeModels::getAllowedEfforts($model);
                 return new JSONResponse([
                     'error' => $allowed === []
@@ -212,7 +297,9 @@ class ConversationController extends Controller {
                     'allowed' => $allowed,
                 ], 400);
             }
-            $conversation->setEffort($effort === '' ? null : $effort);
+            $conversation->setEffort($effort);
+        } elseif ($effort === '') {
+            $conversation->setEffort(null);
         }
 
         if ($thinking !== null) {
@@ -372,7 +459,7 @@ class ConversationController extends Controller {
         //    rebuild content blocks (re-uploading), and retry once.
         $startMs = (int)(microtime(true) * 1000.0);
         $options = $this->conversationOptions($conversation);
-        $result = $this->callClaude($claudeMessages, $systemPrompt, $options);
+        $result = $this->callClaude($claudeMessages, $systemPrompt, $options, $conversation);
         if (
             !empty($files)
             && isset($result['error'])
@@ -393,7 +480,7 @@ class ConversationController extends Controller {
                     [['type' => 'text', 'text' => $userText]]
                 );
             }
-            $result = $this->callClaude($claudeMessages, $systemPrompt, $options);
+            $result = $this->callClaude($claudeMessages, $systemPrompt, $options, $conversation);
         }
         $latencyMs = (int)(microtime(true) * 1000.0) - $startMs;
 
@@ -580,7 +667,7 @@ class ConversationController extends Controller {
         //    only used when the active provider supports it AND the flag is on
         //    AND we can offer at least one HTTPS-reachable server descriptor;
         //    otherwise we fall back to the provider-agnostic local loop.
-        $provider = $this->providerFactory->getProvider($this->userId);
+        $provider = $this->resolveProvider($conversation);
         $useNativeMcp = false;
         $nativeMcpServers = [];
         if ($provider->supportsNativeMcp() && $this->nativeMcp->isEnabledForUser($this->userId)) {
@@ -710,7 +797,7 @@ class ConversationController extends Controller {
      * 200: The duplicated conversation
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -728,6 +815,11 @@ class ConversationController extends Controller {
         $newConv->setUserId($this->requireUserId());
         $newConv->setTitle(($original->getTitle() ?? '') . ' (copy)');
         $newConv->setModel($original->getModel());
+        // The copy must answer like the original: carry the pinned provider and
+        // the per-conversation overrides, not just the model.
+        $newConv->setProvider($original->getProvider());
+        $newConv->setEffort($original->getEffort());
+        $newConv->setThinking($original->getThinking());
         $newConv->setProjectId($original->getProjectId());
         $newConv->setCreatedAt($now);
         $newConv->setUpdatedAt($now);
@@ -896,11 +988,34 @@ class ConversationController extends Controller {
     }
 
     /**
+     * The provider that should serve a conversation.
+     *
+     * A pinned provider wins; null falls back to the user's current setting,
+     * which is what every pre-existing conversation does. getProviderById() is
+     * safe here because the stored id was validated on the way in — a value
+     * that later stops being registered degrades to Anthropic rather than
+     * breaking the conversation.
+     */
+    private function resolveProvider(Conversation $conversation): LLMProviderInterface {
+        $pinned = $conversation->getProvider();
+        return $pinned !== null && $pinned !== ''
+            ? $this->providerFactory->getProviderById($pinned)
+            : $this->providerFactory->getProvider($this->userId);
+    }
+
+    /**
      * Per-conversation request options (effort / thinking overrides).
      * Unset overrides are omitted so provider-side defaults apply.
      */
     private function conversationOptions(Conversation $conversation): array {
         $options = [];
+        // Only a pinned conversation overrides the model. An unpinned one
+        // follows the user's setting for both provider and model, so passing
+        // its snapshotted model would send e.g. a Claude model id to whichever
+        // provider the user switched to.
+        if ($conversation->getProvider() !== null && $conversation->getModel() !== '') {
+            $options['model'] = $conversation->getModel();
+        }
         if ($conversation->getEffort() !== null) {
             $options['effort'] = $conversation->getEffort();
         }
@@ -911,10 +1026,12 @@ class ConversationController extends Controller {
     }
 
     /**
-     * Call the active LLM provider with MCP tool support if available
+     * Call the conversation's LLM provider with MCP tool support if available
      */
-    private function callClaude(array $messages, ?string $systemPrompt = null, array $options = []): array {
-        $provider = $this->providerFactory->getProvider($this->userId);
+    private function callClaude(array $messages, ?string $systemPrompt = null, array $options = [], ?Conversation $conversation = null): array {
+        $provider = $conversation !== null
+            ? $this->resolveProvider($conversation)
+            : $this->providerFactory->getProvider($this->userId);
 
         if ($provider->supportsNativeMcp() && $this->nativeMcp->isEnabledForUser($this->userId)) {
             $mcpServers = $provider->getId() === 'mistral'

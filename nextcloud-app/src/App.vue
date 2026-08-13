@@ -25,9 +25,19 @@
 				</router-view>
 			</template>
 			<template #footer>
-				<NcAppNavigationSettings :name="t('aiquila', 'Settings')">
-					<NavigationSettings />
-				</NcAppNavigationSettings>
+				<!--
+					Settings live on the personal settings page now, so provider,
+					model and defaults are configured in one place instead of
+					three. The chat only keeps the per-conversation picker in
+					ChatView's header.
+				-->
+				<NcAppNavigationItem :name="t('aiquila', 'Settings')"
+					:href="settingsUrl"
+					target="_blank">
+					<template #icon>
+						<CogIcon :size="20" />
+					</template>
+				</NcAppNavigationItem>
 			</template>
 		</NcAppNavigation>
 		<NcAppContent>
@@ -76,19 +86,19 @@
 </template>
 
 <script>
-import { defineAsyncComponent } from 'vue'
 import { loadState } from '@nextcloud/initial-state'
+import { generateUrl } from '@nextcloud/router'
 import { translate as t } from '@nextcloud/l10n'
 import NcContent from '@nextcloud/vue/components/NcContent'
 import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
-import NcAppNavigationSettings from '@nextcloud/vue/components/NcAppNavigationSettings'
+import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 
-import SectionNav from './components/SectionNav.vue'
+import CogIcon from 'vue-material-design-icons/Cog.vue'
 
-const NavigationSettings = defineAsyncComponent(() => import('./components/NavigationSettings.vue'))
+import SectionNav from './components/SectionNav.vue'
 import {
 	createConversation,
 	getConversation,
@@ -106,12 +116,12 @@ export default {
 	components: {
 		NcContent,
 		NcAppNavigation,
-		NcAppNavigationSettings,
+		NcAppNavigationItem,
 		NcAppContent,
 		NcButton,
+		CogIcon,
 		NcDialog,
 		SectionNav,
-		NavigationSettings,
 	},
 	data() {
 		return {
@@ -125,6 +135,10 @@ export default {
 		}
 	},
 	computed: {
+		/** Personal settings, where provider/model/defaults now live. */
+		settingsUrl() {
+			return generateUrl('/settings/user/aiquila')
+		},
 		activeConversationId() {
 			const id = this.$route.params.conversationId
 			return id ? Number(id) : null

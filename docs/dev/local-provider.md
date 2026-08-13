@@ -58,9 +58,14 @@ settings) routes chat, tools and streaming through it. The TaskProcessing
 providers and the MCP server's `assistant` tool follow automatically — they call
 Nextcloud's TaskProcessing, which resolves the active provider.
 
-Everything except vision goes through the dedicated admin endpoints
-`POST /api/admin/local` and `GET /api/admin/local/status`; the token is stored
+Configuration goes through the schema-driven endpoints
+`GET /api/admin/providers` and `POST /api/admin/providers/local`, which read and
+write whatever `LocalProvider::getSettingsSchema()` declares; the token is stored
 encrypted in Nextcloud's credential manager like every other provider key.
+
+The base URL and the local-address allowance are declared `SCOPE_ADMIN`, so
+`ProviderSettingsService::writeUser()` refuses them even if the personal page
+were to submit them — see the Security section below.
 
 ## Security
 

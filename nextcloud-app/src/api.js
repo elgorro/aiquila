@@ -26,6 +26,19 @@ export function updateConversation(id, data) {
 	return axios.put(url(`/api/conversations/${id}`), data)
 }
 
+/**
+ * Pin a provider and/or model on a conversation.
+ *
+ * An empty `provider` unpins it, so the conversation follows the user's
+ * personal default again.
+ *
+ * @param {number} id - conversation id
+ * @param {{provider?: string, model?: string}} data - what to pin
+ */
+export function setConversationModel(id, data) {
+	return axios.put(url(`/api/conversations/${id}/model`), data)
+}
+
 export function deleteConversation(id) {
 	return axios.delete(url(`/api/conversations/${id}`))
 }

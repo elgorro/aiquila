@@ -15,6 +15,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setTitle(?string $title)
  * @method string getModel()
  * @method void setModel(string $model)
+ * @method string|null getProvider()
+ * @method void setProvider(?string $provider)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
  * @method int getUpdatedAt()
@@ -30,6 +32,8 @@ class Conversation extends Entity implements \JsonSerializable {
     protected string $userId = '';
     protected ?string $title = null;
     protected string $model = '';
+    /** Pinned provider id; null means "follow the user's current setting". */
+    protected ?string $provider = null;
     protected int $createdAt = 0;
     protected int $updatedAt = 0;
     protected ?int $projectId = null;
@@ -40,6 +44,7 @@ class Conversation extends Entity implements \JsonSerializable {
         $this->addType('userId', 'string');
         $this->addType('title', 'string');
         $this->addType('model', 'string');
+        $this->addType('provider', 'string');
         $this->addType('createdAt', 'integer');
         $this->addType('updatedAt', 'integer');
         $this->addType('projectId', 'integer');
@@ -48,7 +53,7 @@ class Conversation extends Entity implements \JsonSerializable {
     }
 
     /**
-     * @return array{id: int, userId: string, title: ?string, model: string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}
+     * @return array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}
      */
     public function jsonSerialize(): array {
         return [
@@ -56,6 +61,7 @@ class Conversation extends Entity implements \JsonSerializable {
             'userId' => $this->getUserId(),
             'title' => $this->getTitle(),
             'model' => $this->getModel(),
+            'provider' => $this->getProvider(),
             'createdAt' => $this->getCreatedAt(),
             'updatedAt' => $this->getUpdatedAt(),
             'projectId' => $this->getProjectId(),

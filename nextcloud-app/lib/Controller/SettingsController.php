@@ -10,7 +10,6 @@ use OCA\AIquila\Service\HetznerModels;
 use OCA\AIquila\Service\MistralModels;
 use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
-use OCA\AIquila\Service\Provider\LocalProvider;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -131,7 +130,7 @@ class SettingsController extends Controller {
      * Save user-level API key
      *
      * @param string $api_key Personal API key for the scoped provider (leave empty to clear)
-     * @param string $model   Preferred model ID for the scoped provider (leave empty to use admin default)
+     * @param string|null $model Preferred model ID for the scoped provider ('' clears the override, null keeps it unchanged)
      * @param string|null $provider Active provider override ('' clears, e.g. 'anthropic'/'mistral', null keeps unchanged). Also scopes api_key/model in this call.
      * @param string|null $default_system_prompt Default system prompt (null to keep unchanged)
      * @param string|null $default_verbose Enable verbose mode by default ('1' or null to keep unchanged)
@@ -147,7 +146,7 @@ class SettingsController extends Controller {
     #[OpenAPI]
     public function save(
         ?string $api_key = null,
-        string $model = '',
+        ?string $model = null,
         ?string $provider = null,
         ?string $default_system_prompt = null,
         ?string $default_verbose = null,
@@ -178,11 +177,16 @@ class SettingsController extends Controller {
             }
         }
 
-        $modelKey = $this->userModelKey($scopeProvider);
-        if ($model !== '') {
-            $this->config->setUserValue($this->requireUserId(), $this->appName, $modelKey, $model);
-        } else {
-            $this->config->deleteUserValue($this->requireUserId(), $this->appName, $modelKey);
+        // null leaves the preference alone. It used to default to '', so any
+        // caller that saved an unrelated setting silently wiped the user's
+        // model choice — which the split settings pages hit constantly.
+        if ($model !== null) {
+            $modelKey = $this->userModelKey($scopeProvider);
+            if ($model !== '') {
+                $this->config->setUserValue($this->requireUserId(), $this->appName, $modelKey, $model);
+            } else {
+                $this->config->deleteUserValue($this->requireUserId(), $this->appName, $modelKey);
+            }
         }
 
         if ($default_system_prompt !== null) {
@@ -212,7 +216,9 @@ class SettingsController extends Controller {
     /**
      * Save admin-level API key
      *
-     * Model, max_tokens, and api_timeout are now managed by Declarative Settings.
+     * Provider-specific settings (model, tokens, timeout, keys) go through
+     * ProviderSettingsController instead — they mean different things per
+     * provider, so they live on the provider's own schema.
      *
      * @param string $api_key API key for the instance, scoped to $provider (default 'anthropic')
      * @param string|null $provider Instance default provider ('anthropic'/'mistral', null keeps unchanged). Also scopes api_key in this call.
@@ -220,6 +226,7 @@ class SettingsController extends Controller {
      * @param string|null $native_mcp_extra_url Optional extra MCP server URL (trimmed; null keeps unchanged)
      * @param string|null $native_mcp_extra_token Bearer token for the extra MCP server ('' clears, null keeps unchanged)
      * @param string|null $mistral_connector_ids Comma/space-separated Mistral connector IDs for the native-MCP path (trimmed; null keeps unchanged)
+     * @param string|null $search_enabled Expose AIquila conversations to unified search ('1' enabled, '0' disabled, null keeps unchanged)
      *
      * 200: Admin settings saved successfully
      *
@@ -232,7 +239,8 @@ class SettingsController extends Controller {
         ?string $native_mcp_enabled = null,
         ?string $native_mcp_extra_url = null,
         ?string $native_mcp_extra_token = null,
-        ?string $mistral_connector_ids = null
+        ?string $mistral_connector_ids = null,
+        ?string $search_enabled = null
     ): JSONResponse {
         if ($provider !== null && $provider !== '') {
             $this->config->setAppValue($this->appName, 'provider', $provider);
@@ -260,106 +268,11 @@ class SettingsController extends Controller {
         if ($mistral_connector_ids !== null) {
             $this->config->setAppValue($this->appName, 'mistral_connector_ids', trim($mistral_connector_ids));
         }
+        if ($search_enabled !== null) {
+            $this->config->setAppValue($this->appName, 'search_enabled', $search_enabled === '1' ? '1' : '0');
+        }
 
         return new JSONResponse(['status' => 'ok']);
-    }
-
-    /**
-     * Save the local (self-hosted, OpenAI-compatible) model endpoint settings
-     *
-     * Covers Ollama, LM Studio and llama.cpp's llama-server. Admin scope only:
-     * Nextcloud makes server-side requests to whatever base URL is stored here,
-     * so it must never be user-settable.
-     *
-     * @param string|null $base_url Endpoint base URL, e.g. http://localhost:11434 ('' clears; null keeps unchanged)
-     * @param string|null $api_key Optional bearer token ('' clears, null keeps unchanged). Ollama needs none.
-     * @param string|null $model Model id to request, e.g. llama3.2 (null keeps unchanged)
-     * @param string|null $max_tokens Max response tokens (null keeps unchanged)
-     * @param string|null $timeout Request timeout in seconds (null keeps unchanged)
-     * @param string|null $vision Send images to the endpoint ('1' if the loaded model is multimodal, null keeps unchanged)
-     * @param string|null $allow_local_address Permit requests to loopback/private addresses ('1' to allow, null keeps unchanged)
-     *
-     * 200: Local model settings saved
-     * 400: The base URL is not a valid http(s) URL
-     *
-     * @return JSONResponse<Http::STATUS_OK, array{status: string, baseUrl: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}>
-     */
-    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
-    public function saveLocal(
-        ?string $base_url = null,
-        ?string $api_key = null,
-        ?string $model = null,
-        ?string $max_tokens = null,
-        ?string $timeout = null,
-        ?string $vision = null,
-        ?string $allow_local_address = null
-    ): JSONResponse {
-        if ($base_url !== null) {
-            $trimmed = trim($base_url);
-            if ($trimmed !== '' && LocalProvider::normalizeBaseUrl($trimmed) === '') {
-                return new JSONResponse([
-                    'status' => 'error',
-                    'message' => 'Enter a full http:// or https:// URL, for example http://localhost:11434',
-                ], Http::STATUS_BAD_REQUEST);
-            }
-            $this->config->setAppValue($this->appName, 'local_base_url', $trimmed);
-        }
-
-        if ($api_key !== null) {
-            if ($api_key !== '') {
-                $this->credentials->setApiKey(null, $api_key, 'local');
-            } else {
-                $this->credentials->deleteApiKey(null, 'local');
-            }
-        }
-
-        if ($model !== null) {
-            $this->config->setAppValue($this->appName, 'model_local', trim($model));
-        }
-        if ($max_tokens !== null && (int)$max_tokens > 0) {
-            $this->config->setAppValue($this->appName, 'max_tokens_local', (string)(int)$max_tokens);
-        }
-        if ($timeout !== null && (int)$timeout > 0) {
-            $this->config->setAppValue($this->appName, 'local_timeout', (string)(int)$timeout);
-        }
-        if ($vision !== null) {
-            $this->config->setAppValue($this->appName, 'local_vision', $vision === '1' ? 'yes' : 'no');
-        }
-        if ($allow_local_address !== null) {
-            $this->config->setAppValue($this->appName, 'local_allow_local_address', $allow_local_address === '1' ? 'yes' : 'no');
-        }
-
-        return new JSONResponse([
-            'status' => 'ok',
-            'baseUrl' => $this->config->getAppValue($this->appName, 'local_base_url', ''),
-        ]);
-    }
-
-    /**
-     * Get the local model endpoint settings and the models it currently serves
-     *
-     * The `models` list is a live GET {base}/models against the configured
-     * endpoint, so an empty list means AIquila could not reach it.
-     *
-     * 200: Local model settings
-     *
-     * @return JSONResponse<Http::STATUS_OK, array{baseUrl: string, hasApiKey: bool, model: string, maxTokens: int, timeout: int, vision: bool, allowLocalAddress: bool, configured: bool, models: list<string>}, array{}>
-     */
-    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
-    public function localStatus(): JSONResponse {
-        $local = $this->providerFactory->getProviderById('local');
-
-        return new JSONResponse([
-            'baseUrl' => $this->config->getAppValue($this->appName, 'local_base_url', ''),
-            'hasApiKey' => $this->credentials->hasApiKey(null, 'local'),
-            'model' => $local->getModel(null),
-            'maxTokens' => $local->getMaxTokens(null),
-            'timeout' => (int)$this->config->getAppValue($this->appName, 'local_timeout', (string)LocalProvider::DEFAULT_TIMEOUT),
-            'vision' => $this->config->getAppValue($this->appName, 'local_vision', 'no') === 'yes',
-            'allowLocalAddress' => $this->config->getAppValue($this->appName, 'local_allow_local_address', 'yes') === 'yes',
-            'configured' => $local->isConfigured(null),
-            'models' => $local->listModels(null) ?? [],
-        ]);
     }
 
     /**
@@ -387,68 +300,4 @@ class SettingsController extends Controller {
         ]);
     }
 
-    /**
-     * Test the current configuration by sending a live request to Claude
-     *
-     * Uses saved model/max_tokens/api_timeout from Declarative Settings.
-     * Optionally accepts an API key override for testing before saving.
-     *
-     * @param string $api_key API key to test (uses saved key if empty)
-     * @param string|null $provider Provider to test ('anthropic'/'mistral'; null uses the active provider). Also scopes the api_key override.
-     *
-     * 200: Test request completed; see success field for result
-     * 400: No API key available or the test request failed
-     *
-     * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, message: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, message: string}, array{}>
-     */
-    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
-    public function testConfig(string $api_key = '', ?string $provider = null): JSONResponse {
-        $providerId = ($provider !== null && $provider !== '')
-            ? $provider
-            : $this->providerFactory->getActiveProviderId(null);
-
-        $testApiKey = !empty($api_key) ? $api_key : $this->credentials->getApiKey(null, $providerId);
-
-        $service = $this->providerFactory->getProviderById($providerId);
-
-        // Local endpoints (Ollama, llama-server without --api-key) authenticate
-        // with nothing at all, so a missing key is only fatal elsewhere.
-        if (empty($testApiKey) && !($service instanceof LocalProvider)) {
-            return new JSONResponse(['success' => false, 'message' => 'No API key provided'], 400);
-        }
-        if (empty($testApiKey) && !$service->isConfigured(null)) {
-            return new JSONResponse(['success' => false, 'message' => 'No local model endpoint configured'], 400);
-        }
-
-        $originalApiKey = $this->credentials->getApiKey(null, $providerId);
-
-        try {
-            // Temporarily set the test key so the provider picks it up.
-            if ($testApiKey !== '') {
-                $this->credentials->setApiKey(null, $testApiKey, $providerId);
-            }
-
-            $result = $service->ask('Test: Respond with "OK" if you receive this.', '', null);
-
-            $this->restoreKey($providerId, $originalApiKey);
-
-            if (isset($result['error'])) {
-                return new JSONResponse(['success' => false, 'message' => $result['error']], 400);
-            }
-
-            return new JSONResponse(['success' => true, 'message' => $result['response'] ?? '']);
-
-        } catch (\Throwable $e) {
-            $this->restoreKey($providerId, $originalApiKey);
-            return new JSONResponse(['success' => false, 'message' => $e->getMessage()], 500);
-        }
-    }
-
-    private function restoreKey(string $providerId, string $originalApiKey): void {
-        if ($originalApiKey !== '') {
-            $this->credentials->setApiKey(null, $originalApiKey, $providerId);
-        } else {
-            $this->credentials->deleteApiKey(null, $providerId);
-        }
-    }
 }

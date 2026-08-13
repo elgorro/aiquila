@@ -59,7 +59,9 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
     public function run(Coworker $coworker, CoworkerRun $run, callable $progress): array {
         $userId = $coworker->getUserId();
         $options = $this->decodeOptions($coworker);
-        $providerId = $coworker->getModel() ?: $this->providerFactory->getActiveProviderId($userId);
+        // A pinned provider keeps a routine task on a cheap model while chat
+        // runs on a strong one; null falls back to the owner's current setting.
+        $providerId = $coworker->getProvider() ?: $this->providerFactory->getActiveProviderId($userId);
         $provider = $this->providerFactory->getProviderById($providerId);
         $prompt = $this->buildPrompt($options);
 

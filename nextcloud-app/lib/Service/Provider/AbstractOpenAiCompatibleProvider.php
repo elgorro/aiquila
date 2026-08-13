@@ -105,6 +105,47 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
         ];
     }
 
+    // ── Settings schema ─────────────────────────────────────────────────────
+
+    /**
+     * Config key naming is uniform across the OpenAI-compatible providers:
+     * `model_<id>` / `user_model_<id>` / `max_tokens_<id>`, with the shared
+     * `api_timeout`. Subclasses that deviate (LocalProvider's own timeout key)
+     * or add fields (endpoint URLs, vision toggles) merge into this list.
+     */
+    public function getSettingsSchema(): array {
+        $id = $this->getId();
+        return [
+            ProviderSettingsSchema::apiKey(
+                'API key',
+                'Stored encrypted in Nextcloud\'s credential manager. A personal key overrides the instance key.',
+            ),
+            ProviderSettingsSchema::model(
+                'model_' . $id,
+                'user_model_' . $id,
+                $this->defaultModel(),
+                'Used for every request unless a conversation pins a different one.',
+            ),
+            ProviderSettingsSchema::maxTokens('max_tokens_' . $id, $this->defaultMaxTokens()),
+            ProviderSettingsSchema::timeout('api_timeout', 30, 'Shared across all hosted providers.'),
+        ];
+    }
+
+    public function getCapabilities(): array {
+        return ProviderSettingsSchema::capabilities([
+            'vision' => $this->supportsVisionInput(),
+            'tools' => true,
+            'streaming' => true,
+            'native_mcp' => $this->supportsNativeMcp(),
+        ]);
+    }
+
+    /** Model id offered when nothing is configured; used by the schema default. */
+    abstract protected function defaultModel(): string;
+
+    /** Max-tokens value offered when nothing is configured. */
+    abstract protected function defaultMaxTokens(): int;
+
     public function listModels(?string $userId = null): ?array {
         if (!$this->isConfigured($userId)) {
             return null;

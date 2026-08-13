@@ -11,6 +11,7 @@ use OCA\AIquila\Db\Coworker;
 use OCA\AIquila\Db\CoworkerMapper;
 use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Db\CoworkerRunMapper;
+use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
@@ -26,6 +27,7 @@ class CoworkerService {
         private readonly CoworkerMapper $mapper,
         private readonly CoworkerRunMapper $runMapper,
         private readonly CoworkerTaskRegistry $registry,
+        private readonly LLMProviderFactory $providerFactory,
         private readonly ITimeFactory $timeFactory,
         private readonly LoggerInterface $logger,
     ) {
@@ -50,13 +52,13 @@ class CoworkerService {
                 'id' => 'classify-images-claude',
                 'title' => 'Classify images — Claude vision',
                 'description' => 'Tag images in a folder using Claude vision, nightly.',
-                'model' => 'anthropic',
+                'provider' => 'anthropic',
             ]),
             array_merge($shared, [
                 'id' => 'classify-images-pixtral',
                 'title' => 'Classify images — Pixtral',
                 'description' => 'Tag images in a folder using Mistral Pixtral, nightly.',
-                'model' => 'mistral',
+                'provider' => 'mistral',
             ]),
         ];
     }
@@ -259,7 +261,17 @@ class CoworkerService {
             $coworker->setDescription($data['description'] !== null ? (string)$data['description'] : null);
         }
         if (array_key_exists('model', $data)) {
-            $coworker->setModel($data['model'] !== null ? (string)$data['model'] : null);
+            $coworker->setModel($data['model'] !== null && $data['model'] !== '' ? (string)$data['model'] : null);
+        }
+        if (array_key_exists('provider', $data)) {
+            $provider = $data['provider'] !== null ? (string)$data['provider'] : '';
+            // '' means "follow the owner's setting"; anything else must name a
+            // registered provider, so a request string never reaches a config
+            // lookup or an outbound call.
+            if ($provider !== '' && !$this->providerFactory->isKnownProviderId($provider)) {
+                throw new \InvalidArgumentException("Unknown provider: $provider");
+            }
+            $coworker->setProvider($provider !== '' ? $provider : null);
         }
         if (array_key_exists('task_type', $data)) {
             $taskType = (string)$data['task_type'];

@@ -39,11 +39,6 @@ class Application extends App implements IBootstrap {
             return $c->get(CoworkManager::class);
         });
 
-        // Declarative Settings — admin page split into model / request params / search cards
-        $context->registerDeclarativeSettings(\OCA\AIquila\Settings\AdminModelDeclarativeSettings::class);
-        $context->registerDeclarativeSettings(\OCA\AIquila\Settings\AdminRequestParamsDeclarativeSettings::class);
-        $context->registerDeclarativeSettings(\OCA\AIquila\Settings\AdminSearchDeclarativeSettings::class);
-        $context->registerDeclarativeSettings(\OCA\AIquila\Settings\UserDeclarativeSettings::class);
 
         // Expose app capabilities via /ocs/v2.php/cloud/capabilities
         $context->registerCapability(\OCA\AIquila\Capabilities\AIquilaCapability::class);

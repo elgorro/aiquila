@@ -42,6 +42,31 @@ interface LLMProviderInterface {
     public function getConfiguration(): array;
 
     /**
+     * Describe this provider's configuration for the settings UI.
+     *
+     * Returns a list of field descriptors built with ProviderSettingsSchema.
+     * The admin and personal pages render them generically, and
+     * ProviderSettingsService reads/writes them from the descriptor's config
+     * keys — so a new provider needs no frontend or controller changes.
+     *
+     * The `scope` of each field is a security boundary: only SCOPE_USER and
+     * SCOPE_BOTH fields may be written from the personal page. Endpoint URLs
+     * must stay SCOPE_ADMIN (SSRF).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function getSettingsSchema(): array;
+
+    /**
+     * What this provider can actually do, for capability chips in the settings
+     * UI and for provider-aware validation (e.g. whether `effort` is a
+     * meaningful option at all).
+     *
+     * @return array{vision: bool, tools: bool, streaming: bool, thinking: bool, effort: bool, native_mcp: bool, documents: bool}
+     */
+    public function getCapabilities(): array;
+
+    /**
      * List available model IDs for the configured key, or null on error
      * (caller falls back to the static registry).
      *
