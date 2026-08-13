@@ -56,9 +56,11 @@ The token is stored encrypted in Nextcloud's credential manager under
 
 ## Configuring it
 
-**Web UI** — Admin settings → AIquila → pick "Hetzner Inference (EU)" as the
-default provider, paste the token, *Test Configuration*. Users can override the
-provider and their own token in personal settings.
+**Web UI** — Admin settings → AIquila → **Providers** → open the
+"Hetzner Inference (EU)" card, paste the token, **Save**, then
+**Test connection**. Select its radio to make it the instance default. Users can
+override the provider, the model and their own token in personal settings; the
+endpoint override stays admin-only.
 
 **OCC** — useful for headless installs:
 

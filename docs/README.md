@@ -60,6 +60,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[Best Practices](dev/best-practices.md)** — code quality and standards
 - **[CI/CD](dev/ci-cd.md)** — continuous integration and deployment
 - **[MCP Server Architecture](dev/mcp-server-architecture.md)** — technical design
+- **[Provider settings schema](dev/provider-settings.md)** — how providers describe their own configuration, and how to add one
 - **[Local model provider](dev/local-provider.md)** — self-hosted inference via Ollama, LM Studio or llama.cpp
 - **[Hetzner Inference provider](dev/hetzner-provider.md)** — EU-hosted open-weight models via Hetzner's experimental API
 - **[OpenAPI](dev/openapi.md)** — OpenAPI documentation
@@ -123,6 +124,7 @@ docs/
 │   ├── best-practices.md            # Code quality guidelines
 │   ├── ci-cd.md                     # CI/CD setup
 │   ├── mcp-server-architecture.md   # MCP technical architecture
+│   ├── provider-settings.md         # Provider settings schema
 │   └── openapi.md                   # OpenAPI documentation
 ```
 

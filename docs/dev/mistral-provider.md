@@ -78,8 +78,11 @@ back to the local agentic loop.
    `SCOPE_ADMIN` — see the note in `ProviderSettingsSchema`.
 2. Add a model registry (mirror `MistralModels`).
 3. Register it in `LLMProviderFactory` (and add a `staticModels()` arm in
-   `SettingsController`).
-4. The settings UI picks it up automatically from `describeProviders()`.
+   `ProviderSettingsService`, the fallback used when the live model listing is
+   unavailable).
+4. Both settings pages pick it up automatically — a card is rendered from the
+   schema, with capability chips from `getCapabilities()`, a live model list and
+   a Test connection button. No frontend change is needed.
 
 For an OpenAI-compatible vendor, extend `AbstractOpenAiCompatibleProvider`
 instead of implementing the interface from scratch — see `DeepSeekProvider` and

@@ -242,7 +242,8 @@ Administrators can configure AIquila via:
 
 **Web UI:**
 - Settings → Administration → AIquila
-- Click "Test Configuration" button to verify settings work correctly
+- The **Providers** tab has one card per provider; open a card, enter its key
+  and model, then click **Test connection** to send a live request.
 
 **OCC Command:**
 ```bash
@@ -266,10 +267,24 @@ php occ aiquila:test --user john
 
 ### User Configuration
 
-Users can set their own API keys:
-- Settings → Personal → AIquila
+Users configure their own provider, key and model in
+**Settings → Personal → AIquila**. A personal key overrides the instance key;
+leaving a field blank inherits the instance setting.
 
-This allows users to use their own Claude API keys for requests.
+Anything a user may not set — notably provider endpoint URLs — is admin-only and
+is not offered on the personal page.
+
+### Provider resolution
+
+`ask()`, `summarize()` and friends resolve the provider per call: a user
+override (`user_provider`) wins over the instance default (`provider`).
+
+The chat controller adds one more level: a conversation may pin a provider and
+model of its own, so it keeps answering from where it started even after the
+user changes their default. `LLMProviderFactory::isKnownProviderId()` is the
+guard to use before acting on any provider id that came from a request —
+`getProviderById()` deliberately falls back to Anthropic for unknown ids, which
+is right for a stale config value but would mask a bad request.
 
 ## Error Handling
 
