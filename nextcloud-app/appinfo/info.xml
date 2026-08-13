@@ -61,6 +61,7 @@ Made possible by [Claude](https://www.anthropic.com/claude) from [Anthropic](htt
         <admin>OCA\AIquila\Settings\AdminSettings</admin>
         <admin-section>OCA\AIquila\Settings\AdminSection</admin-section>
         <personal>OCA\AIquila\Settings\UserSettings</personal>
+        <personal-section>OCA\AIquila\Settings\PersonalSection</personal-section>
     </settings>
     <repair-steps>
         <post-migration>

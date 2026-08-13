@@ -5,9 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Dashboard;
 
-use OCP\App\IAppManager;
-use OCP\Server;
-use OCP\Util;
+use OCA\AIquila\Template\ViteAssets;
 
 /**
  * Configurable dashboard widget that renders the latest run summary of a
@@ -37,17 +35,6 @@ class CoworkerOutputWidget extends AbstractAIquilaWidget {
     }
 
     public function load(): void {
-        // The Vite build emits ES modules with code-split chunks, so the bundle
-        // must load as `type="module"` — Util::addScript would emit a classic
-        // <script> tag that cannot resolve the chunk imports. Mirror the SPA
-        // bootstrap in templates/main.php and inject a module header instead.
-        $version = Server::get(IAppManager::class)->getAppVersion(self::APP_ID);
-        $src = $this->urlGenerator->linkTo(self::APP_ID, 'js/dist/' . self::APP_ID . '-dashboard.js')
-            . '?v=' . $version;
-        Util::addHeader('script', [
-            'type' => 'module',
-            'src' => $src,
-            'nonce' => \OC::$server->getContentSecurityPolicyNonceManager()->getNonce(),
-        ], '');
+        ViteAssets::load(self::APP_ID . '-dashboard');
     }
 }

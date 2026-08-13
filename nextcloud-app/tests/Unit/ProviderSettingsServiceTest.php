@@ -10,6 +10,7 @@ use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 
 class ProviderSettingsServiceTest extends TestCase {
     private $config;
@@ -25,7 +26,12 @@ class ProviderSettingsServiceTest extends TestCase {
         $this->cache = $this->createMock(ICache::class);
         $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
 
-        $this->service = new ProviderSettingsService($this->config, $this->credentials, $this->cacheFactory);
+        $this->service = new ProviderSettingsService(
+            $this->config,
+            $this->credentials,
+            $this->cacheFactory,
+            $this->createMock(LoggerInterface::class),
+        );
     }
 
     /**
