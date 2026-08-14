@@ -31,6 +31,9 @@ class ChatControllerTest extends TestCase {
         $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
         $this->claude      = $this->createMock(ClaudeSDKService::class);
         $this->factory     = $this->createMock(LLMProviderFactory::class);
+        // Access control is exercised in LLMProviderFactoryTest; here every
+        // provider is permitted so the endpoints reach their own logic.
+        $this->factory->method('hasPermittedProvider')->willReturn(true);
         $this->factory->method('getProvider')->willReturn($this->claude);
         $this->fileService = $this->createMock(FileService::class);
         $this->filesService = $this->createMock(FilesService::class);

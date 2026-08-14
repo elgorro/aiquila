@@ -8,6 +8,8 @@ namespace OCA\AIquila\Service\Provider;
 use OCA\AIquila\Service\CredentialService;
 use OCP\ICacheFactory;
 use OCP\IConfig;
+use OCP\IGroupManager;
+use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -41,6 +43,9 @@ class ProviderSettingsService {
     public function __construct(
         private readonly IConfig $config,
         private readonly CredentialService $credentials,
+        private readonly ProviderAccessService $access,
+        private readonly IUserManager $userManager,
+        private readonly IGroupManager $groupManager,
         private readonly ICacheFactory $cacheFactory,
         private readonly LoggerInterface $logger,
     ) {
@@ -56,7 +61,7 @@ class ProviderSettingsService {
     public function describe(LLMProviderInterface $provider, ?string $userId, bool $admin, bool $refreshModels = false): array {
         $id = $provider->getId();
         $fields = [];
-        foreach ($provider->getSettingsSchema() as $field) {
+        foreach ($this->schemaFor($provider) as $field) {
             if (!$admin && !ProviderSettingsSchema::isUserWritable($field)) {
                 continue;
             }
@@ -144,6 +149,8 @@ class ProviderSettingsService {
         $schema = $this->indexSchema($provider);
         $rejected = [];
         $plan = [];
+        /** @var array<string, list<string>> $accessLists */
+        $accessLists = [];
 
         foreach ($values as $fieldId => $value) {
             $field = $schema[$fieldId] ?? null;
@@ -154,6 +161,11 @@ class ProviderSettingsService {
 
             if (!empty($field['sensitive'])) {
                 $plan[] = ['key' => null, 'value' => (string)$value];
+                continue;
+            }
+
+            if (($field['storage'] ?? null) === ProviderSettingsSchema::STORAGE_ACCESS) {
+                $accessLists[(string)$fieldId] = $this->principalIds($field, $value);
                 continue;
             }
 
@@ -172,6 +184,10 @@ class ProviderSettingsService {
                 continue;
             }
             $this->config->setAppValue(self::APP_NAME, $write['key'], $write['value']);
+        }
+
+        if ($accessLists !== []) {
+            $this->access->setLists($provider->getId(), $accessLists);
         }
 
         // An endpoint or key change invalidates whatever model list we cached.
@@ -259,10 +275,26 @@ class ProviderSettingsService {
     /** @return array<string, array<string, mixed>> */
     private function indexSchema(LLMProviderInterface $provider): array {
         $indexed = [];
-        foreach ($provider->getSettingsSchema() as $field) {
+        foreach ($this->schemaFor($provider) as $field) {
             $indexed[$field['id']] = $field;
         }
         return $indexed;
+    }
+
+    /**
+     * The provider's own schema plus the access lists every provider carries.
+     *
+     * Appending here rather than in each provider's getSettingsSchema() means
+     * access control cannot be forgotten when a provider is added, and the four
+     * descriptors exist in exactly one place.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function schemaFor(LLMProviderInterface $provider): array {
+        return array_merge(
+            $provider->getSettingsSchema(),
+            ProviderSettingsSchema::accessLists(),
+        );
     }
 
     /**
@@ -282,6 +314,14 @@ class ProviderSettingsService {
 
         if (($field['options'] ?? null) === ProviderSettingsSchema::OPTIONS_MODELS) {
             $out['options'] = $this->listModels($provider, $admin ? null : $userId, $refreshModels);
+        }
+
+        // Access lists live in their own table, not IConfig, and only ever have
+        // an instance value — there is no user scope to inherit from.
+        if (($field['storage'] ?? null) === ProviderSettingsSchema::STORAGE_ACCESS) {
+            $out['options'] = [];
+            $out['value'] = $this->access->getLists($providerId)[$field['id']] ?? [];
+            return $out;
         }
 
         if (!empty($field['sensitive'])) {
@@ -332,6 +372,51 @@ class ProviderSettingsService {
         $this->credentials->setApiKey($userId, $value, $providerId);
         // A new key can unlock a different model list.
         $this->forgetModels($providerId);
+    }
+
+    /**
+     * Validate a submitted principal list.
+     *
+     * Every id must name an account or group that exists right now. Storing an
+     * id that does not resolve would be a silent trap: an allow-list entry for a
+     * typo'd uid looks like access was granted while granting nothing, and a
+     * block-list entry for a group that is later created would start denying
+     * people nobody deliberately denied.
+     *
+     * @return list<string>
+     * @throws \InvalidArgumentException when an id does not resolve
+     */
+    private function principalIds(array $field, mixed $value): array {
+        if ($value === '' || $value === null) {
+            return [];
+        }
+        if (!is_array($value)) {
+            throw new \InvalidArgumentException(($field['title'] ?? $field['id']) . ': expected a list.');
+        }
+
+        $isGroup = ($field['principal_type'] ?? ProviderSettingsSchema::PRINCIPAL_USER)
+            === ProviderSettingsSchema::PRINCIPAL_GROUP;
+
+        $ids = [];
+        foreach ($value as $entry) {
+            // NcSelect hands back either the reduced id or the whole option.
+            $id = is_array($entry) ? (string)($entry['id'] ?? '') : (string)$entry;
+            $id = trim($id);
+            if ($id === '') {
+                continue;
+            }
+            $exists = $isGroup
+                ? $this->groupManager->groupExists($id)
+                : $this->userManager->userExists($id);
+            if (!$exists) {
+                throw new \InvalidArgumentException(
+                    ($field['title'] ?? $field['id']) . ': no such ' . ($isGroup ? 'group' : 'user') . ' "' . $id . '".'
+                );
+            }
+            $ids[] = $id;
+        }
+
+        return array_values(array_unique($ids));
     }
 
     /**

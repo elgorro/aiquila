@@ -10,6 +10,7 @@ use OCA\AIquila\Service\HetznerModels;
 use OCA\AIquila\Service\MistralModels;
 use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
+use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -68,24 +69,46 @@ class SettingsController extends Controller {
     }
 
     /**
+     * Every provider is blocked for this user.
+     *
+     * Fails closed with a message the UI can show verbatim, rather than
+     * describing a provider the admin has denied.
+     *
+     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{status: string, message: string}, array{}>
+     */
+    private function noProviderAvailable(): JSONResponse {
+        return new JSONResponse(
+            ['status' => 'error', 'message' => NoPermittedProviderException::USER_MESSAGE],
+            Http::STATUS_FORBIDDEN,
+        );
+    }
+
+    /**
      * Get current user settings and available Claude models
      *
      * 200: User settings and available models
+     * 403: No provider is permitted for this user
      *
-     * @return JSONResponse<Http::STATUS_OK, array{provider: string, userProvider: string, providers: list<array{id: string, label: string, configured: bool, hasUserKey: bool, userModel: string, availableModels: list<string>}>, hasUserKey: bool, userModel: string, availableModels: list<string>, defaultSystemPrompt: string, defaultVerbose: bool, nativeMcpUserOverride: string, nativeMcpAdminDefault: bool, nativeMcpEffective: bool}, array{}>
+     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{status: string, message: string}, array{}>|JSONResponse<Http::STATUS_OK, array{provider: string, userProvider: string, providers: list<array{id: string, label: string, configured: bool, hasUserKey: bool, userModel: string, availableModels: list<string>}>, hasUserKey: bool, userModel: string, availableModels: list<string>, defaultSystemPrompt: string, defaultVerbose: bool, nativeMcpUserOverride: string, nativeMcpAdminDefault: bool, nativeMcpEffective: bool}, array{}>
      *
      * @NoAdminRequired
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function get(): JSONResponse {
-        $activeProviderId = $this->providerFactory->getActiveProviderId($this->userId);
+        try {
+            $activeProviderId = $this->providerFactory->getActiveProviderId($this->userId);
+        } catch (NoPermittedProviderException $e) {
+            return $this->noProviderAvailable();
+        }
         $userProvider     = $this->config->getUserValue($this->userId, $this->appName, 'user_provider', '');
 
         // Per-provider metadata: label, whether a personal key exists, the user's
         // preferred model, and the available model list (live with static fallback).
+        // Only providers this user is permitted to use — the picker must not
+        // offer one the server would then refuse.
         $providers = [];
-        foreach ($this->providerFactory->getProviderIds() as $id) {
+        foreach ($this->providerFactory->getProviderIdsForUser($this->userId) as $id) {
             $provider = $this->providerFactory->getProviderById($id);
             $liveModels = $provider->listModels($this->userId);
             $providers[] = [
@@ -137,8 +160,10 @@ class SettingsController extends Controller {
      * @param string|null $native_mcp_enabled User override for native-MCP ('1' opt in, '0' opt out, '' clears override, null keeps unchanged)
      *
      * 200: Settings saved successfully
+     * 400: Unknown provider
+     * 403: The provider is not permitted for this user
      *
-     * @return JSONResponse<Http::STATUS_OK, array{status: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{status: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{status: string, message: string}, array{}>
      *
      * @NoAdminRequired
      */
@@ -153,6 +178,21 @@ class SettingsController extends Controller {
         ?string $native_mcp_enabled = null
     ): JSONResponse {
         // Provider override: '' clears (inherit admin default), non-empty sets it.
+        // A named provider must be one the user is actually permitted to use —
+        // this endpoint also scopes the API key and model below, so an
+        // unvalidated id would let a blocked provider be configured and selected.
+        if ($provider !== null && $provider !== '') {
+            if (!$this->providerFactory->isKnownProviderId($provider)) {
+                return new JSONResponse(['status' => 'error', 'message' => 'Unknown provider: ' . $provider], Http::STATUS_BAD_REQUEST);
+            }
+            if (!$this->providerFactory->isAllowedForUser($provider, $this->userId)) {
+                return new JSONResponse(
+                    ['status' => 'error', 'message' => 'You are not permitted to use this provider.'],
+                    Http::STATUS_FORBIDDEN,
+                );
+            }
+        }
+
         if ($provider !== null) {
             if ($provider === '') {
                 $this->config->deleteUserValue($this->requireUserId(), $this->appName, 'user_provider');
@@ -163,9 +203,13 @@ class SettingsController extends Controller {
 
         // api_key and model are scoped to the provider being edited (the one named
         // in this call, falling back to the now-active provider).
-        $scopeProvider = ($provider !== null && $provider !== '')
-            ? $provider
-            : $this->providerFactory->getActiveProviderId($this->userId);
+        try {
+            $scopeProvider = ($provider !== null && $provider !== '')
+                ? $provider
+                : $this->providerFactory->getActiveProviderId($this->userId);
+        } catch (NoPermittedProviderException $e) {
+            return $this->noProviderAvailable();
+        }
 
         // null = leave the key untouched (e.g. when only switching provider/model);
         // '' = explicitly clear; non-empty = set.

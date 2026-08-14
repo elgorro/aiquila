@@ -8,6 +8,7 @@ namespace OCA\AIquila\Controller;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LocalProvider;
+use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use OCA\AIquila\Service\Provider\ProviderSettingsService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -15,7 +16,9 @@ use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IConfig;
+use OCP\IGroupManager;
 use OCP\IRequest;
+use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -31,6 +34,10 @@ use Psr\Log\LoggerInterface;
  * is not user-writable. That second check is what keeps endpoint URLs — which
  * decide where the server sends outbound requests — out of reach of the
  * personal page even if a route were ever mis-annotated.
+ *
+ * Provider *access* is enforced on top of that: index() only describes providers
+ * the current user is permitted to use, and update() refuses one they are not,
+ * so the personal page can neither see nor select a provider an admin blocked.
  */
 class ProviderSettingsController extends Controller {
     use RequiresUserIdTrait;
@@ -43,6 +50,8 @@ class ProviderSettingsController extends Controller {
         private readonly LLMProviderFactory $providerFactory,
         private readonly ProviderSettingsService $providerSettings,
         private readonly CredentialService $credentials,
+        private readonly IUserManager $userManager,
+        private readonly IGroupManager $groupManager,
         private readonly LoggerInterface $logger,
     ) {
         parent::__construct($appName, $request);
@@ -67,8 +76,22 @@ class ProviderSettingsController extends Controller {
     #[NoAdminRequired]
     #[OpenAPI]
     public function index(?string $refresh = null): JSONResponse {
+        try {
+            $defaultProvider = $this->providerFactory->getActiveProviderId($this->userId);
+        } catch (NoPermittedProviderException $e) {
+            // Every provider is blocked for this user. Report that honestly —
+            // an empty list with no default — rather than naming one they
+            // cannot use.
+            return new JSONResponse([
+                'defaultProvider' => '',
+                'userProvider' => '',
+                'adminProvider' => '',
+                'providers' => [],
+            ]);
+        }
+
         return new JSONResponse([
-            'defaultProvider' => $this->providerFactory->getActiveProviderId($this->userId),
+            'defaultProvider' => $defaultProvider,
             'userProvider' => $this->config->getUserValue((string)$this->userId, $this->appName, 'user_provider', ''),
             'adminProvider' => $this->config->getAppValue($this->appName, 'provider', LLMProviderFactory::DEFAULT_PROVIDER),
             'providers' => $this->describeAll(admin: false, refresh: $refresh === '1'),
@@ -89,8 +112,9 @@ class ProviderSettingsController extends Controller {
      *
      * 200: Settings saved
      * 400: Unknown provider or invalid value
+     * 403: The provider is not permitted for this user
      *
-     * @return JSONResponse<Http::STATUS_OK, array{status: string, rejected: list<string>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{status: string, rejected: list<string>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{status: string, message: string}, array{}>
      *
      * @NoAdminRequired
      */
@@ -102,6 +126,13 @@ class ProviderSettingsController extends Controller {
         }
 
         $userId = $this->requireUserId();
+
+        // Access is checked before anything is written, and before the provider
+        // can be made the user's default — the personal page never offers a
+        // blocked provider, so reaching here means a hand-made request.
+        if (!$this->providerFactory->isAllowedForUser($providerId, $userId)) {
+            return $this->forbiddenProvider($providerId, $userId);
+        }
 
         try {
             $rejected = $this->providerSettings->writeUser(
@@ -271,12 +302,55 @@ class ProviderSettingsController extends Controller {
         }
     }
 
+    /**
+     * Search users and groups for the provider access lists
+     *
+     * Backs the principal pickers on the admin settings page. Admin-only: the
+     * personal page has no access fields, and an unprivileged user has no reason
+     * to enumerate the user directory through this app.
+     *
+     * @param string $search Substring to match against user and group names
+     * @param int $limit Maximum results per kind (clamped to 100)
+     *
+     * 200: Matching users and groups
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{users: list<array{id: string, label: string}>, groups: list<array{id: string, label: string}>}, array{}>
+     */
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function principals(string $search = '', int $limit = 25): JSONResponse {
+        $limit = max(1, min($limit, 100));
+
+        $users = [];
+        foreach ($this->userManager->searchDisplayName($search, $limit) as $user) {
+            $users[] = ['id' => $user->getUID(), 'label' => $user->getDisplayName()];
+        }
+
+        $groups = [];
+        foreach ($this->groupManager->search($search, $limit) as $group) {
+            $groups[] = ['id' => $group->getGID(), 'label' => $group->getDisplayName()];
+        }
+
+        return new JSONResponse(['users' => $users, 'groups' => $groups]);
+    }
+
     // ── Internals ───────────────────────────────────────────────────────────
 
-    /** @return list<array<string, mixed>> */
+    /**
+     * Describe every provider the caller may configure.
+     *
+     * The admin page sees all of them — an admin has to be able to edit the
+     * access lists of a provider they themselves are blocked from. The personal
+     * page sees only the ones the user is permitted to use.
+     *
+     * @return list<array<string, mixed>>
+     */
     private function describeAll(bool $admin, bool $refresh): array {
+        $ids = $admin
+            ? $this->providerFactory->getProviderIds()
+            : $this->providerFactory->getProviderIdsForUser($this->userId);
+
         $out = [];
-        foreach ($this->providerFactory->getProviderIds() as $id) {
+        foreach ($ids as $id) {
             $out[] = $this->providerSettings->describe(
                 $this->providerFactory->getProviderById($id),
                 $this->userId,
@@ -285,6 +359,18 @@ class ProviderSettingsController extends Controller {
             );
         }
         return $out;
+    }
+
+    /** @return JSONResponse<Http::STATUS_FORBIDDEN, array{status: string, message: string}, array{}> */
+    private function forbiddenProvider(string $providerId, string $userId): JSONResponse {
+        $this->logger->warning('AIquila: denied provider access for ' . $providerId, [
+            'provider' => $providerId,
+            'user' => $userId,
+        ]);
+        return new JSONResponse(
+            ['status' => 'error', 'message' => 'You are not permitted to use this provider.'],
+            Http::STATUS_FORBIDDEN,
+        );
     }
 
     /** @return JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}> */

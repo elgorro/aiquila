@@ -718,6 +718,145 @@
                 }
             }
         },
+        "/index.php/apps/aiquila/api/admin/principals": {
+            "get": {
+                "operationId": "provider_settings-principals",
+                "summary": "Search users and groups for the provider access lists",
+                "description": "Backs the principal pickers on the admin settings page. Admin-only: the personal page has no access fields, and an unprivileged user has no reason to enumerate the user directory through this app.\nThis endpoint requires admin access",
+                "tags": [
+                    "provider_settings"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "description": "Substring to match against user and group names",
+                        "schema": {
+                            "type": "string",
+                            "default": ""
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Maximum results per kind (clamped to 100)",
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64",
+                            "default": 25
+                        }
+                    },
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Matching users and groups",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "users",
+                                        "groups"
+                                    ],
+                                    "properties": {
+                                        "users": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": [
+                                                    "id",
+                                                    "label"
+                                                ],
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "label": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "groups": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": [
+                                                    "id",
+                                                    "label"
+                                                ],
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "label": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/index.php/apps/aiquila/api/occ": {
             "post": {
                 "operationId": "occ-execute",
@@ -1887,7 +2026,7 @@
         },
         {
             "name": "provider_settings",
-            "description": "Schema-driven read/write of provider configuration for the settings pages. Both the admin and the personal page render whatever LLMProviderInterface::getSettingsSchema() describes, so this controller never names a provider or a config key — adding a provider requires no change here. The admin/user split is enforced twice over: the admin routes carry no #[NoAdminRequired] (so Nextcloud requires an admin), and ProviderSettingsService::writeUser() additionally drops any field whose scope is not user-writable. That second check is what keeps endpoint URLs — which decide where the server sends outbound requests — out of reach of the personal page even if a route were ever mis-annotated."
+            "description": "Schema-driven read/write of provider configuration for the settings pages. Both the admin and the personal page render whatever LLMProviderInterface::getSettingsSchema() describes, so this controller never names a provider or a config key — adding a provider requires no change here. The admin/user split is enforced twice over: the admin routes carry no #[NoAdminRequired] (so Nextcloud requires an admin), and ProviderSettingsService::writeUser() additionally drops any field whose scope is not user-writable. That second check is what keeps endpoint URLs — which decide where the server sends outbound requests — out of reach of the personal page even if a route were ever mis-annotated. Provider *access* is enforced on top of that: index() only describes providers the current user is permitted to use, and update() refuses one they are not, so the personal page can neither see nor select a provider an admin blocked."
         },
         {
             "name": "coworker",

@@ -18,6 +18,7 @@ use OCA\AIquila\Service\McpClientService;
 use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 
 class ChatController extends Controller {
     use RequiresUserIdTrait;
@@ -59,9 +60,30 @@ class ChatController extends Controller {
         $this->cache = $cacheFactory->createDistributed('aiquila_ratelimit');
     }
 
-    /** The LLM provider active for the current user. */
+    /**
+     * The LLM provider active for the current user.
+     *
+     * @throws NoPermittedProviderException when the admin has blocked every
+     *         provider for this user; each endpoint checks noProviderAvailable()
+     *         up front so this never escapes as a 500.
+     */
     private function provider(): LLMProviderInterface {
         return $this->providerFactory->getProvider($this->userId);
+    }
+
+    /**
+     * Fail closed when no provider is permitted, or null to carry on.
+     *
+     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|null
+     */
+    private function noProviderAvailable(): ?JSONResponse {
+        if ($this->providerFactory->hasPermittedProvider($this->userId)) {
+            return null;
+        }
+        return new JSONResponse(
+            ['error' => NoPermittedProviderException::USER_MESSAGE],
+            Http::STATUS_FORBIDDEN,
+        );
     }
 
     /**
@@ -97,16 +119,21 @@ class ChatController extends Controller {
      * 400: No prompt was provided
      * 404: One of the attached files was not found
      * 413: Prompt or context exceeds the 5 MB content limit
+     * 403: No provider is permitted for this user
      * 429: Rate limit exceeded (10 requests per minute)
      * 500: An attached file could not be read
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      *
      * @NoAdminRequired
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function ask(string $prompt = '', string $context = '', array $files = []): JSONResponse {
+        if (($denied = $this->noProviderAvailable()) !== null) {
+            return $denied;
+        }
+
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
@@ -137,7 +164,7 @@ class ChatController extends Controller {
      *
      * @param list<string> $files
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      */
     private function askWithFiles(string $prompt, array $files): JSONResponse {
         $fileDataList = [];
@@ -301,15 +328,20 @@ class ChatController extends Controller {
      * 200: Claude response with model info and token usage
      * 400: Messages array is missing or empty
      * 413: Combined message content exceeds the 5 MB content limit
+     * 403: No provider is permitted for this user
      * 429: Rate limit exceeded (10 requests per minute)
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
      *
      * @NoAdminRequired
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function chat(array $messages = [], ?string $system = null, array $options = []): JSONResponse {
+        if (($denied = $this->noProviderAvailable()) !== null) {
+            return $denied;
+        }
+
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
@@ -389,15 +421,20 @@ class ChatController extends Controller {
      * 200: Claude summary with model info and token usage
      * 400: No content was provided
      * 413: Content exceeds the 5 MB content limit
+     * 403: No provider is permitted for this user
      * 429: Rate limit exceeded (10 requests per minute)
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
      *
      * @NoAdminRequired
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function summarize(string $content = ''): JSONResponse {
+        if (($denied = $this->noProviderAvailable()) !== null) {
+            return $denied;
+        }
+
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
@@ -428,15 +465,20 @@ class ChatController extends Controller {
      * 400: No filePath provided or prompt is invalid
      * 404: File not found at the given path
      * 413: Prompt exceeds the 5 MB content limit
+     * 403: No provider is permitted for this user
      * 429: Rate limit exceeded (10 requests per minute)
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
      *
      * @NoAdminRequired
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function analyzeFile(string $filePath = '', string $prompt = 'Analyze and describe this file.'): JSONResponse {
+        if (($denied = $this->noProviderAvailable()) !== null) {
+            return $denied;
+        }
+
         if (!$this->checkRateLimit()) {
             return new JSONResponse([
                 'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'

@@ -36,6 +36,9 @@ class SettingsControllerTest extends TestCase {
         $this->provider->method('isConfigured')->willReturn(false);
         $this->factory->method('getActiveProviderId')->willReturn('anthropic');
         $this->factory->method('getProviderIds')->willReturn(['anthropic']);
+        $this->factory->method('getProviderIdsForUser')->willReturn(['anthropic']);
+        $this->factory->method('isKnownProviderId')->willReturn(true);
+        $this->factory->method('isAllowedForUser')->willReturn(true);
         $this->factory->method('getProviderById')->willReturn($this->provider);
         $this->factory->method('getProvider')->willReturn($this->provider);
 

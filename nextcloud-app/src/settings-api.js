@@ -56,6 +56,16 @@ export function testProvider(providerId, apiKey = '') {
 	return axios.post(url(`/api/admin/providers/${providerId}/test`), { api_key: apiKey })
 }
 
+/**
+ * Search users and groups for the per-provider access lists (admin only).
+ *
+ * @param {string} search - substring to match against user and group names
+ * @return {Promise} resolving to `{users: [{id, label}], groups: [{id, label}]}`
+ */
+export function searchPrincipals(search = '') {
+	return axios.get(url('/api/admin/principals'), { params: { search } })
+}
+
 // ── Non-provider settings ───────────────────────────────────────────────
 
 export function getSettings() {

@@ -4,11 +4,14 @@ namespace OCA\AIquila\Tests\Unit;
 
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\Provider\ProviderAccessService;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 use OCA\AIquila\Service\Provider\ProviderSettingsService;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
+use OCP\IGroupManager;
+use OCP\IUserManager;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -17,6 +20,9 @@ class ProviderSettingsServiceTest extends TestCase {
     private $credentials;
     private $cacheFactory;
     private $cache;
+    private $access;
+    private $userManager;
+    private $groupManager;
     private ProviderSettingsService $service;
 
     protected function setUp(): void {
@@ -26,9 +32,22 @@ class ProviderSettingsServiceTest extends TestCase {
         $this->cache = $this->createMock(ICache::class);
         $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
 
+        $this->access = $this->createMock(ProviderAccessService::class);
+        $this->access->method('getLists')->willReturn([
+            'allowed_users' => [],
+            'allowed_groups' => [],
+            'blocked_users' => [],
+            'blocked_groups' => [],
+        ]);
+        $this->userManager = $this->createMock(IUserManager::class);
+        $this->groupManager = $this->createMock(IGroupManager::class);
+
         $this->service = new ProviderSettingsService(
             $this->config,
             $this->credentials,
+            $this->access,
+            $this->userManager,
+            $this->groupManager,
             $this->cacheFactory,
             $this->createMock(LoggerInterface::class),
         );

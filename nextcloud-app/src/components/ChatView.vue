@@ -267,7 +267,14 @@ export default {
 				try {
 					await this.sendNonStreaming(prompt, filePaths)
 				} catch (err2) {
+					// Both paths are gone, so there is no reply coming. Say why —
+					// this used to reset the draft and leave the message looking
+					// like it vanished, which is what a blocked provider (403)
+					// or an expired session looks like from the user's side.
 					console.error('aiquila: non-streaming fallback also failed', err2)
+					this.noticeIsError = true
+					this.notice = err2.response?.data?.error
+						|| t('aiquila', 'Your message could not be sent.')
 				}
 			} finally {
 				this.resetDraft()

@@ -121,10 +121,12 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
 
         $reportProgress(0.5);
 
-        $providerId = !empty($input['provider']) && is_string($input['provider'])
-            ? $input['provider']
-            : $this->providerFactory->getActiveProviderId($userId);
-        $provider = $this->providerFactory->getProviderById($providerId);
+        $requested = !empty($input['provider']) && is_string($input['provider']) ? $input['provider'] : null;
+        // getProviderForUser() applies the admin's access rules: a provider the
+        // user may not use falls through to the one they may, rather than being
+        // reachable through the task-processing API.
+        $provider = $this->providerFactory->getProviderForUser($userId, $requested);
+        $providerId = $provider->getId();
 
         $result = $provider->askWithImage(
             $prompt,
