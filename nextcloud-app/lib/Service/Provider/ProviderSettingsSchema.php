@@ -46,6 +46,8 @@ final class ProviderSettingsSchema {
     public const TYPE_CHECKBOX = 'checkbox';
     public const TYPE_URL = 'url';
     public const TYPE_NUMBER = 'number';
+    /** Multiple values from an async lookup; the value is a list of ids. */
+    public const TYPE_MULTISELECT = 'multiselect';
 
     /**
      * Placeholder for the `options` of a model select. The API expands it to the
@@ -53,10 +55,27 @@ final class ProviderSettingsSchema {
      */
     public const OPTIONS_MODELS = '@models';
 
+    /**
+     * Placeholder for the `options` of a principal picker. There is no fixed
+     * option list — the client queries the principals endpoint as the admin
+     * types, scoped by `principal_type`.
+     */
+    public const OPTIONS_PRINCIPALS = '@principals';
+
+    /** Which side of the principals endpoint a picker queries. */
+    public const PRINCIPAL_USER = 'user';
+    public const PRINCIPAL_GROUP = 'group';
+
     /** Shown inline on the card. */
     public const GROUP_BASIC = 'basic';
     /** Hidden behind a disclosure on the card. */
     public const GROUP_ADVANCED = 'advanced';
+
+    /**
+     * Not stored in IConfig at all: the value is a list of principals held in
+     * `aiquila_provider_access` and written through ProviderAccessService.
+     */
+    public const STORAGE_ACCESS = 'access';
 
     /** Booleans stored as the literal strings 'yes'/'no' (local provider legacy). */
     public const STORAGE_YESNO = 'yesno';
@@ -236,6 +255,62 @@ final class ProviderSettingsSchema {
             'documents' => false,
         ], $overrides);
         return $merged;
+    }
+
+    /**
+     * The four access-control lists every provider carries.
+     *
+     * These are not declared by the providers themselves — access control is a
+     * property of the app, not of any one provider — so ProviderSettingsService
+     * appends them to every admin-scope description. They are SCOPE_ADMIN, which
+     * is what keeps them off the personal settings page: isUserWritable() already
+     * filters them out there, and writeUser() would reject them anyway.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function accessLists(): array {
+        return [
+            self::principalList(
+                'allowed_users',
+                self::PRINCIPAL_USER,
+                'Allowed users',
+                'Only these users may use this provider. Leave empty to allow everyone.',
+            ),
+            self::principalList(
+                'allowed_groups',
+                self::PRINCIPAL_GROUP,
+                'Allowed groups',
+                'Only members of these groups may use this provider. Leave empty to allow everyone.',
+            ),
+            self::principalList(
+                'blocked_users',
+                self::PRINCIPAL_USER,
+                'Blocked users',
+                'These users may never use this provider, even if an allow list names them.',
+            ),
+            self::principalList(
+                'blocked_groups',
+                self::PRINCIPAL_GROUP,
+                'Blocked groups',
+                'Members of these groups may never use this provider, even if an allow list names them.',
+            ),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private static function principalList(string $id, string $principalType, string $title, string $description): array {
+        return [
+            'id' => $id,
+            'title' => $title,
+            'description' => $description,
+            'type' => self::TYPE_MULTISELECT,
+            'scope' => self::SCOPE_ADMIN,
+            'storage' => self::STORAGE_ACCESS,
+            'principal_type' => $principalType,
+            'options' => self::OPTIONS_PRINCIPALS,
+            'default' => [],
+            'group' => self::GROUP_ADVANCED,
+        ];
     }
 
     /** True when the field may be written from the personal settings page. */

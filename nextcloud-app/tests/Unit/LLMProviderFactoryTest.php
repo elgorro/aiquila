@@ -8,6 +8,8 @@ use OCA\AIquila\Service\Provider\HetznerProvider;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LocalProvider;
 use OCA\AIquila\Service\Provider\MistralProvider;
+use OCA\AIquila\Service\Provider\NoPermittedProviderException;
+use OCA\AIquila\Service\Provider\ProviderAccessService;
 use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
 
@@ -18,6 +20,7 @@ class LLMProviderFactoryTest extends TestCase {
     private $deepseek;
     private $hetzner;
     private $local;
+    private $access;
     private LLMProviderFactory $factory;
 
     protected function setUp(): void {
@@ -33,7 +36,27 @@ class LLMProviderFactoryTest extends TestCase {
         $this->hetzner->method('getId')->willReturn('hetzner');
         $this->local->method('getId')->willReturn('local');
 
-        $this->factory = new LLMProviderFactory($this->config, $this->anthropic, $this->mistral, $this->deepseek, $this->hetzner, $this->local);
+        // Access control off by default: filterAllowed() returns everything, so
+        // these tests keep asserting the plain precedence rules.
+        $this->access = $this->createMock(ProviderAccessService::class);
+        $this->access->method('filterAllowed')->willReturnCallback(
+            static fn (array $ids, ?string $userId): array => $ids,
+        );
+        $this->access->method('isAllowed')->willReturn(true);
+
+        $this->factory = new LLMProviderFactory($this->config, $this->anthropic, $this->mistral, $this->deepseek, $this->hetzner, $this->local, $this->access);
+    }
+
+    /** Rebuild the factory with only $permitted allowed for every user. */
+    private function permitOnly(array $permitted): void {
+        $access = $this->createMock(ProviderAccessService::class);
+        $access->method('filterAllowed')->willReturnCallback(
+            static fn (array $ids, ?string $userId): array => array_values(array_intersect($ids, $permitted)),
+        );
+        $access->method('isAllowed')->willReturnCallback(
+            static fn (string $id, ?string $userId): bool => in_array($id, $permitted, true),
+        );
+        $this->factory = new LLMProviderFactory($this->config, $this->anthropic, $this->mistral, $this->deepseek, $this->hetzner, $this->local, $access);
     }
 
     public function testDefaultsToAnthropic(): void {
@@ -111,5 +134,54 @@ class LLMProviderFactoryTest extends TestCase {
         $this->assertFalse($described[3]['configured']);
         $this->assertSame('local', $described[4]['id']);
         $this->assertFalse($described[4]['configured']);
+    }
+
+    public function testDeniedUserOverrideFallsBackToTheInstanceDefault(): void {
+        // The user picked Mistral, but the admin has since blocked it for them.
+        $this->config->method('getUserValue')->willReturn('mistral');
+        $this->config->method('getAppValue')->willReturn('hetzner');
+        $this->permitOnly(['hetzner', 'local']);
+
+        $this->assertSame('hetzner', $this->factory->getActiveProviderId('u'));
+    }
+
+    public function testDeniedInstanceDefaultFallsThroughToAPermittedProvider(): void {
+        $this->config->method('getUserValue')->willReturn('');
+        $this->config->method('getAppValue')->willReturn('anthropic');
+        $this->permitOnly(['deepseek', 'local']);
+
+        // Display order decides, so deepseek wins over local.
+        $this->assertSame('deepseek', $this->factory->getActiveProviderId('u'));
+    }
+
+    public function testNoPermittedProviderFailsClosed(): void {
+        $this->config->method('getUserValue')->willReturn('');
+        $this->config->method('getAppValue')->willReturnArgument(2);
+        $this->permitOnly([]);
+
+        $this->expectException(NoPermittedProviderException::class);
+        $this->factory->getActiveProviderId('u');
+    }
+
+    public function testGetProviderForUserDegradesADeniedPin(): void {
+        $this->config->method('getUserValue')->willReturn('');
+        $this->config->method('getAppValue')->willReturn('local');
+        $this->permitOnly(['local']);
+
+        // The conversation is pinned to Mistral, which is now blocked.
+        $this->assertSame($this->local, $this->factory->getProviderForUser('u', 'mistral'));
+    }
+
+    public function testGetProviderForUserHonoursAPermittedPin(): void {
+        $this->config->method('getUserValue')->willReturn('');
+        $this->config->method('getAppValue')->willReturn('local');
+        $this->permitOnly(['local', 'mistral']);
+
+        $this->assertSame($this->mistral, $this->factory->getProviderForUser('u', 'mistral'));
+    }
+
+    public function testSystemContextIsUnrestricted(): void {
+        $this->config->method('getAppValue')->willReturn('mistral');
+        $this->assertSame('mistral', $this->factory->getActiveProviderId(null));
     }
 }

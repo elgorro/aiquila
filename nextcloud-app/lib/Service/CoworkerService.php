@@ -271,6 +271,12 @@ class CoworkerService {
             if ($provider !== '' && !$this->providerFactory->isKnownProviderId($provider)) {
                 throw new \InvalidArgumentException("Unknown provider: $provider");
             }
+            // Pinning a provider on a coworker is a provider-selecting path like
+            // any other: the owner has to be permitted to use it, or a blocked
+            // provider could be reached through a scheduled run.
+            if ($provider !== '' && !$this->providerFactory->isAllowedForUser($provider, $coworker->getUserId())) {
+                throw new \InvalidArgumentException("You are not permitted to use this provider: $provider");
+            }
             $coworker->setProvider($provider !== '' ? $provider : null);
         }
         if (array_key_exists('task_type', $data)) {

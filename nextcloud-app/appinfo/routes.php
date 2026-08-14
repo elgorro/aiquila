@@ -41,6 +41,8 @@ return [
         ['name' => 'provider_settings#adminIndex',  'url' => '/api/admin/providers',                  'verb' => 'GET'],
         ['name' => 'provider_settings#adminUpdate', 'url' => '/api/admin/providers/{providerId}',     'verb' => 'POST'],
         ['name' => 'provider_settings#test',        'url' => '/api/admin/providers/{providerId}/test', 'verb' => 'POST'],
+        // Backs the user/group pickers on the per-provider access lists.
+        ['name' => 'provider_settings#principals',  'url' => '/api/admin/principals',                 'verb' => 'GET'],
         ['name' => 'occ#execute', 'url' => '/api/occ', 'verb' => 'POST'],
 
         // MCP Server Admin API

@@ -35,10 +35,25 @@ The descriptor carries its own config keys, so key naming stays with the
 provider that owns it — `ProviderSettingsService` reads and writes purely from
 the descriptor and never names a provider.
 
-Types: `text`, `number`, `password`, `select`, `checkbox`, `url`.
+Types: `text`, `number`, `password`, `select`, `checkbox`, `url`, `multiselect`.
 Groups: `basic` renders inline on the card, `advanced` behind a disclosure.
 A select whose `options` is the sentinel `@models` is expanded to the provider's
-live model list (cached, with the static registry as fallback).
+live model list (cached, with the static registry as fallback); a `multiselect`
+whose `options` is `@principals` is a user/group picker that queries
+`/api/admin/principals` as the admin types.
+
+## Fields no provider declares
+
+The four access lists — allowed/blocked users and groups — are not part of any
+provider's `getSettingsSchema()`. Access control is a property of the app, not of
+a provider, so `ProviderSettingsService::schemaFor()` appends
+`ProviderSettingsSchema::accessLists()` to every provider's schema. A new
+provider gets them automatically and cannot forget them.
+
+They carry `storage => 'access'` instead of a config key: `describe()` fills
+their value from `ProviderAccessService::getLists()` and `writeAdmin()` routes
+them to `setLists()` rather than `IConfig`. Being `SCOPE_ADMIN`, they are
+filtered off the personal page by the ordinary scope rules.
 
 ## Scope is a security boundary
 

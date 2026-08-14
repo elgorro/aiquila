@@ -10,7 +10,16 @@
 
 		<SettingsTabs v-else v-model="tab" :tabs="tabs">
 			<template #providers>
-				<NcNoteCard type="info">
+				<!--
+					An admin can block every provider for a user. Say so plainly
+					rather than showing an empty page with a note about defaults
+					that no longer apply to anything.
+				-->
+				<NcNoteCard v-if="providers.length === 0" type="warning">
+					{{ t('aiquila', 'No AI provider is available for your account. Ask your administrator for access.') }}
+				</NcNoteCard>
+
+				<NcNoteCard v-else type="info">
 					{{ inheritNote }}
 				</NcNoteCard>
 
@@ -26,7 +35,7 @@
 						@saved="load(false)" />
 				</div>
 
-				<NcButton v-if="userProvider" type="tertiary" @click="followInstanceDefault">
+				<NcButton v-if="userProvider && providers.length > 0" type="tertiary" @click="followInstanceDefault">
 					{{ t('aiquila', 'Follow the instance default again') }}
 				</NcButton>
 			</template>

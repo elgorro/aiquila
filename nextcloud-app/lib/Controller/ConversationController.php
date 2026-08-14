@@ -22,6 +22,7 @@ use OCA\AIquila\Service\McpClientService;
 use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -124,8 +125,9 @@ class ConversationController extends Controller {
      *
      * 200: The created conversation
      * 400: Unknown provider
+     * 403: The provider is not permitted for this user
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -136,12 +138,21 @@ class ConversationController extends Controller {
         if ($provider !== null && $provider !== '' && !$this->providerFactory->isKnownProviderId($provider)) {
             return new JSONResponse(['error' => 'Unknown provider: ' . $provider], 400);
         }
+        // Pinning is a provider-selecting path like any other, so it is subject
+        // to the same access rules as the settings pages.
+        if ($provider !== null && $provider !== '' && !$this->providerFactory->isAllowedForUser($provider, $this->userId)) {
+            return $this->forbiddenProvider($provider);
+        }
 
         $now = time();
         $pinned = ($provider !== null && $provider !== '') ? $provider : null;
-        $service = $pinned !== null
-            ? $this->providerFactory->getProviderById($pinned)
-            : $this->providerFactory->getProvider($this->userId);
+        try {
+            $service = $pinned !== null
+                ? $this->providerFactory->getProviderById($pinned)
+                : $this->providerFactory->getProvider($this->userId);
+        } catch (NoPermittedProviderException $e) {
+            return $this->noProviderAvailable();
+        }
 
         $conversation = new Conversation();
         $conversation->setUserId($this->requireUserId());
@@ -168,13 +179,17 @@ class ConversationController extends Controller {
      *
      * 200: Updated conversation
      * 400: Unknown provider
+     * 403: The provider is not permitted for this user
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function setModel(int $id, ?string $provider = null, ?string $model = null): JSONResponse {
+        if (!$this->providerFactory->hasPermittedProvider($this->userId)) {
+            return $this->noProviderAvailable();
+        }
         try {
             $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
@@ -184,6 +199,9 @@ class ConversationController extends Controller {
         if ($provider !== null) {
             if ($provider !== '' && !$this->providerFactory->isKnownProviderId($provider)) {
                 return new JSONResponse(['error' => 'Unknown provider: ' . $provider], 400);
+            }
+            if ($provider !== '' && !$this->providerFactory->isAllowedForUser($provider, $this->userId)) {
+                return $this->forbiddenProvider($provider);
             }
             $conversation->setProvider($provider === '' ? null : $provider);
 
@@ -253,13 +271,17 @@ class ConversationController extends Controller {
      *
      * 200: Updated conversation
      * 400: Invalid effort or thinking value
+     * 403: No provider is permitted for this user
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, allowed: list<string>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, allowed: list<string>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function update(int $id, string $title = '', ?int $projectId = null, ?string $effort = null, ?string $thinking = null): JSONResponse {
+        if (!$this->providerFactory->hasPermittedProvider($this->userId)) {
+            return $this->noProviderAvailable();
+        }
         try {
             $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
@@ -357,13 +379,17 @@ class ConversationController extends Controller {
      *
      * 200: User message and assistant response
      * 400: No prompt provided
+     * 403: No provider is permitted for this user
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{userMessage: array<string, mixed>, assistantMessage: array<string, mixed>, conversation: array<string, mixed>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{userMessage: array<string, mixed>, assistantMessage: array<string, mixed>, conversation: array<string, mixed>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
     public function message(int $id, string $prompt = '', array $files = []): JSONResponse {
+        if (!$this->providerFactory->hasPermittedProvider($this->userId)) {
+            return $this->noProviderAvailable();
+        }
         if (!$prompt && empty($files)) {
             return new JSONResponse(['error' => 'No prompt provided'], 400);
         }
@@ -568,6 +594,9 @@ class ConversationController extends Controller {
     public function messageStream(int $id, string $prompt = '', array $files = []): Response {
         if (!$prompt && empty($files)) {
             return new JSONResponse(['error' => 'No prompt provided'], 400);
+        }
+        if (!$this->providerFactory->hasPermittedProvider($this->userId)) {
+            return $this->noProviderAvailable();
         }
         try {
             $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
@@ -816,8 +845,16 @@ class ConversationController extends Controller {
         $newConv->setTitle(($original->getTitle() ?? '') . ' (copy)');
         $newConv->setModel($original->getModel());
         // The copy must answer like the original: carry the pinned provider and
-        // the per-conversation overrides, not just the model.
-        $newConv->setProvider($original->getProvider());
+        // the per-conversation overrides, not just the model. A pin the user is
+        // no longer permitted to use is dropped rather than copied forward, so
+        // the copy follows their current setting instead of carrying a denied
+        // provider into a brand-new conversation.
+        $originalProvider = $original->getProvider();
+        $newConv->setProvider(
+            $originalProvider !== null && $this->providerFactory->isAllowedForUser($originalProvider, $this->userId)
+                ? $originalProvider
+                : null,
+        );
         $newConv->setEffort($original->getEffort());
         $newConv->setThinking($original->getThinking());
         $newConv->setProjectId($original->getProjectId());
@@ -988,19 +1025,38 @@ class ConversationController extends Controller {
     }
 
     /**
+     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>
+     */
+    private function forbiddenProvider(string $providerId): JSONResponse {
+        return new JSONResponse(
+            ['error' => 'You are not permitted to use this provider: ' . $providerId],
+            Http::STATUS_FORBIDDEN,
+        );
+    }
+
+    /**
+     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>
+     */
+    private function noProviderAvailable(): JSONResponse {
+        return new JSONResponse(
+            ['error' => NoPermittedProviderException::USER_MESSAGE],
+            Http::STATUS_FORBIDDEN,
+        );
+    }
+
+    /**
      * The provider that should serve a conversation.
      *
      * A pinned provider wins; null falls back to the user's current setting,
-     * which is what every pre-existing conversation does. getProviderById() is
-     * safe here because the stored id was validated on the way in — a value
-     * that later stops being registered degrades to Anthropic rather than
-     * breaking the conversation.
+     * which is what every pre-existing conversation does. getProviderForUser()
+     * degrades rather than fails: a pin that later stops being registered — or
+     * that the admin has since blocked for this user — falls back to the user's
+     * current provider instead of continuing to be honoured.
+     *
+     * @throws NoPermittedProviderException when every provider is blocked
      */
     private function resolveProvider(Conversation $conversation): LLMProviderInterface {
-        $pinned = $conversation->getProvider();
-        return $pinned !== null && $pinned !== ''
-            ? $this->providerFactory->getProviderById($pinned)
-            : $this->providerFactory->getProvider($this->userId);
+        return $this->providerFactory->getProviderForUser($this->userId, $conversation->getProvider());
     }
 
     /**

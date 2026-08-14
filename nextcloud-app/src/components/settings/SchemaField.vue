@@ -15,7 +15,25 @@
 		<template v-else>
 			<label class="schema-field__label" :for="inputId">{{ field.title }}</label>
 
-			<NcSelect v-if="field.type === 'select'"
+			<!--
+				Principal picker for the per-provider access lists. There is no
+				fixed option list — the backend answers as the admin types — so
+				this branch owns its own async search, unlike the plain select
+				whose options arrive with the schema.
+			-->
+			<NcSelect v-if="field.type === 'multiselect'"
+				:model-value="selectedPrincipals"
+				:input-id="inputId"
+				:options="principalOptions"
+				:placeholder="field.placeholder || t('aiquila', 'Search users and groups…')"
+				:loading="principalsLoading"
+				:multiple="true"
+				:close-on-select="false"
+				label="label"
+				@search="onPrincipalSearch"
+				@update:model-value="emitPrincipals" />
+
+			<NcSelect v-else-if="field.type === 'select'"
 				:model-value="modelValue || null"
 				:input-id="inputId"
 				:options="field.options || []"
@@ -48,6 +66,7 @@
 
 <script>
 import { translate as t } from '@nextcloud/l10n'
+import { searchPrincipals } from '../../settings-api.js'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcPasswordField from '@nextcloud/vue/components/NcPasswordField'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
@@ -68,7 +87,7 @@ export default {
 			required: true,
 		},
 		modelValue: {
-			type: [String, Number, Boolean, null],
+			type: [String, Number, Boolean, Array, null],
 			default: '',
 		},
 		/** Provider id, used only to keep input ids unique across cards. */
@@ -83,9 +102,28 @@ export default {
 		},
 	},
 	emits: ['update:modelValue'],
+	data() {
+		return {
+			/** Options for the principal picker, refreshed as the admin types. */
+			principalOptions: [],
+			principalsLoading: false,
+			/** Labels learned from earlier searches, so stored ids render as names. */
+			principalLabels: {},
+			searchTimer: null,
+		}
+	},
 	computed: {
 		inputId() {
 			return `aiquila-${this.providerId}-${this.field.id}`
+		},
+		/**
+		 * NcSelect works in option objects; the field's value is a list of ids.
+		 * An id whose display name we have not seen yet renders as the id, which
+		 * is still unambiguous.
+		 */
+		selectedPrincipals() {
+			const ids = Array.isArray(this.modelValue) ? this.modelValue : []
+			return ids.map((id) => ({ id, label: this.principalLabels[id] || id }))
 		},
 		stringValue() {
 			return this.modelValue === null || this.modelValue === undefined ? '' : String(this.modelValue)
@@ -125,6 +163,44 @@ export default {
 		emit(value) {
 			this.$emit('update:modelValue', value)
 		},
+		/** Emit ids, not option objects — that is what the API stores. */
+		emitPrincipals(options) {
+			const list = (options || []).map((option) => {
+				if (option && typeof option === 'object') {
+					this.principalLabels[option.id] = option.label || option.id
+					return option.id
+				}
+				return option
+			})
+			this.$emit('update:modelValue', list)
+		},
+		/**
+		 * Debounced so a burst of keystrokes makes one request. The field's
+		 * `principal_type` decides which half of the answer is offered, so a
+		 * "blocked groups" picker never lists users.
+		 */
+		onPrincipalSearch(query) {
+			clearTimeout(this.searchTimer)
+			this.searchTimer = setTimeout(() => this.loadPrincipals(query), 300)
+		},
+		async loadPrincipals(query) {
+			this.principalsLoading = true
+			try {
+				const { data } = await searchPrincipals(query || '')
+				const wanted = this.field.principal_type === 'group' ? data.groups : data.users
+				this.principalOptions = wanted || []
+				this.principalOptions.forEach((option) => {
+					this.principalLabels[option.id] = option.label || option.id
+				})
+			} catch (e) {
+				this.principalOptions = []
+			} finally {
+				this.principalsLoading = false
+			}
+		},
+	},
+	beforeUnmount() {
+		clearTimeout(this.searchTimer)
 	},
 }
 </script>

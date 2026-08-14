@@ -188,7 +188,15 @@ export default {
 				// Sensitive fields never carry a value from the server; an empty
 				// box means "leave the stored key alone", so they start blank
 				// and are only submitted when the admin types something.
-				draft[field.id] = field.sensitive ? '' : (field.value ?? '')
+				if (field.sensitive) {
+					draft[field.id] = ''
+				} else if (field.type === 'multiselect') {
+					// A list field is always a list, so an untouched card submits
+					// the same shape the backend validates.
+					draft[field.id] = Array.isArray(field.value) ? [...field.value] : []
+				} else {
+					draft[field.id] = field.value ?? ''
+				}
 			}
 			this.draft = draft
 			this.dirty = false

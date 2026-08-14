@@ -286,6 +286,36 @@ guard to use before acting on any provider id that came from a request —
 `getProviderById()` deliberately falls back to Anthropic for unknown ids, which
 is right for a stale config value but would mask a bad request.
 
+### Provider access control
+
+Each provider carries four lists an admin edits under **Access** on its card in
+the admin settings: allowed users, allowed groups, blocked users, blocked
+groups. They are stored in `aiquila_provider_access` (one row per principal) and
+interpreted by `ProviderAccessService`:
+
+- An empty allow-list means **everyone**.
+- **A block always wins**, whether it names the user or one of their groups.
+- A `null` user id — CLI, background job, admin settings — is unrestricted.
+
+Every level of provider resolution runs through the check, including the
+instance default: if the default is blocked for a user, resolution falls through
+to the first provider they may actually use rather than handing back one they
+cannot. If nothing is left, `getActiveProviderId()` throws
+`NoPermittedProviderException` and the endpoints answer **403** — provider
+resolution fails closed rather than serving a blocked provider.
+
+Two methods matter for callers:
+
+- `isAllowedForUser($id, $userId)` — check before persisting a provider id that
+  came from a request (conversation pin, coworker pin, personal settings).
+- `getProviderForUser($userId, $pinnedId)` — resolve a *stored* pin. Permissions
+  can be revoked after a pin is made, so a pin the user may no longer use
+  degrades to their current provider instead of continuing to be honoured. Use
+  this rather than `getProviderById()` on any stored id.
+
+`GET /api/admin/principals?search=` backs the user/group pickers; it is
+admin-only.
+
 ## Error Handling
 
 Always check for errors in the response:

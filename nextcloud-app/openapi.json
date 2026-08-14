@@ -269,6 +269,24 @@
                             }
                         }
                     },
+                    "403": {
+                        "description": "The provider is not permitted for this user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "401": {
                         "description": "Current user is not logged in",
                         "content": {
@@ -727,6 +745,24 @@
                             }
                         }
                     },
+                    "403": {
+                        "description": "No provider is permitted for this user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "401": {
                         "description": "Current user is not logged in",
                         "content": {
@@ -978,6 +1014,24 @@
                             }
                         }
                     },
+                    "403": {
+                        "description": "No provider is permitted for this user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "401": {
                         "description": "Current user is not logged in",
                         "content": {
@@ -1127,6 +1181,24 @@
                     },
                     "400": {
                         "description": "Unknown provider",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "The provider is not permitted for this user",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -2227,6 +2299,24 @@
                             }
                         }
                     },
+                    "403": {
+                        "description": "No provider is permitted for this user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "400": {
                         "description": "No prompt was provided",
                         "content": {
@@ -2452,6 +2542,24 @@
                             }
                         }
                     },
+                    "403": {
+                        "description": "No provider is permitted for this user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "400": {
                         "description": "Messages array is missing or empty",
                         "content": {
@@ -2606,6 +2714,24 @@
                                                     "format": "int64"
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "No provider is permitted for this user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
                                         }
                                     }
                                 }
@@ -2771,6 +2897,24 @@
                                                     "format": "int64"
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "No provider is permitted for this user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
                                         }
                                     }
                                 }
@@ -2981,6 +3125,50 @@
                             }
                         }
                     },
+                    "400": {
+                        "description": "Unknown provider",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "status",
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "status": {
+                                            "type": "string"
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "The provider is not permitted for this user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "status",
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "status": {
+                                            "type": "string"
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "401": {
                         "description": "Current user is not logged in",
                         "content": {
@@ -3028,6 +3216,28 @@
                     }
                 ],
                 "responses": {
+                    "403": {
+                        "description": "No provider is permitted for this user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "status",
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "status": {
+                                            "type": "string"
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "200": {
                         "description": "User settings and available models",
                         "content": {
@@ -3331,6 +3541,28 @@
                     },
                     "400": {
                         "description": "Unknown provider or invalid value",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "status",
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "status": {
+                                            "type": "string"
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "The provider is not permitted for this user",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -5863,7 +6095,7 @@
         },
         {
             "name": "provider_settings",
-            "description": "Schema-driven read/write of provider configuration for the settings pages. Both the admin and the personal page render whatever LLMProviderInterface::getSettingsSchema() describes, so this controller never names a provider or a config key — adding a provider requires no change here. The admin/user split is enforced twice over: the admin routes carry no #[NoAdminRequired] (so Nextcloud requires an admin), and ProviderSettingsService::writeUser() additionally drops any field whose scope is not user-writable. That second check is what keeps endpoint URLs — which decide where the server sends outbound requests — out of reach of the personal page even if a route were ever mis-annotated."
+            "description": "Schema-driven read/write of provider configuration for the settings pages. Both the admin and the personal page render whatever LLMProviderInterface::getSettingsSchema() describes, so this controller never names a provider or a config key — adding a provider requires no change here. The admin/user split is enforced twice over: the admin routes carry no #[NoAdminRequired] (so Nextcloud requires an admin), and ProviderSettingsService::writeUser() additionally drops any field whose scope is not user-writable. That second check is what keeps endpoint URLs — which decide where the server sends outbound requests — out of reach of the personal page even if a route were ever mis-annotated. Provider *access* is enforced on top of that: index() only describes providers the current user is permitted to use, and update() refuses one they are not, so the personal page can neither see nor select a provider an admin blocked."
         },
         {
             "name": "coworker",

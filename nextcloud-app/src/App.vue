@@ -42,6 +42,15 @@
 		</NcAppNavigation>
 		<NcAppContent>
 			<div class="app-content-inner">
+				<!--
+					An admin can block every provider for this user. Say so once,
+					up front: without this the app looks fully functional and the
+					first message just fails.
+				-->
+				<NcNoteCard v-if="noProviderMessage" type="warning">
+					{{ noProviderMessage }}
+				</NcNoteCard>
+
 				<div class="tab-content">
 					<router-view v-slot="{ Component }">
 						<component :is="Component"
@@ -93,6 +102,7 @@ import NcContent from '@nextcloud/vue/components/NcContent'
 import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
 import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
+import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 
@@ -119,6 +129,7 @@ export default {
 		NcAppNavigationItem,
 		NcAppContent,
 		NcButton,
+		NcNoteCard,
 		CogIcon,
 		NcDialog,
 		SectionNav,
@@ -126,6 +137,7 @@ export default {
 	data() {
 		return {
 			conversations: loadState('aiquila', 'conversations', []),
+			noProviderMessage: loadState('aiquila', 'config', {}).no_provider || '',
 			activeConversation: null,
 			loading: false,
 			projects: [],

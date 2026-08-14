@@ -61,8 +61,10 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
         $options = $this->decodeOptions($coworker);
         // A pinned provider keeps a routine task on a cheap model while chat
         // runs on a strong one; null falls back to the owner's current setting.
-        $providerId = $coworker->getProvider() ?: $this->providerFactory->getActiveProviderId($userId);
-        $provider = $this->providerFactory->getProviderById($providerId);
+        // A pin the owner may no longer use degrades to their current provider
+        // rather than running the task on a provider the admin has blocked.
+        $provider = $this->providerFactory->getProviderForUser($userId, $coworker->getProvider());
+        $providerId = $provider->getId();
         $prompt = $this->buildPrompt($options);
 
         $files = $this->collectFiles($coworker, $options);
