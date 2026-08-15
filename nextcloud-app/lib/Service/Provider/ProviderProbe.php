@@ -30,6 +30,7 @@ final class ProviderProbe {
     public const REASON_UNAUTHORIZED = 'unauthorized';
     public const REASON_RATE_LIMITED = 'rate_limited';
     public const REASON_UNREACHABLE = 'unreachable';
+    public const REASON_TLS = 'tls';
     public const REASON_MODEL_MISSING = 'model_missing';
     public const REASON_OK = 'ok';
 
@@ -100,8 +101,37 @@ final class ProviderProbe {
         if (self::mentions($raw, ['429', 'rate limit', 'too many requests', 'quota'])) {
             return self::result(self::STATE_DEGRADED, self::REASON_RATE_LIMITED, $message, $model);
         }
+        // Before the unreachable fallback: a certificate the client refuses is
+        // a reachable endpoint with a fixable configuration, and telling an
+        // admin "unreachable" sends them to look at the wrong thing.
+        if (self::mentions($raw, self::TLS_MARKERS)) {
+            return self::result(self::STATE_ERROR, self::REASON_TLS, $message, $model);
+        }
         return self::result(self::STATE_ERROR, self::REASON_UNREACHABLE, $message, $model);
     }
+
+    /**
+     * Substrings that identify a TLS failure across cURL, OpenSSL and Guzzle
+     * wordings. Shared with the providers' errorMessage() so one failure is
+     * classified the same way wherever it is rendered.
+     *
+     * @var list<string>
+     */
+    public const TLS_MARKERS = [
+        'curl error 35',
+        'curl error 58',
+        'curl error 60',
+        'curl error 77',
+        'certificate verify failed',
+        'ssl certificate problem',
+        'unable to get local issuer',
+        'self signed certificate',
+        'self-signed certificate',
+        'ssl connect error',
+        'sslv3',
+        'tlsv1',
+        'handshake failure',
+    ];
 
     /** @param list<string> $needles */
     private static function mentions(string $haystack, array $needles): bool {

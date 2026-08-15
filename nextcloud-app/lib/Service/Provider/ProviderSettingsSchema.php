@@ -46,6 +46,8 @@ final class ProviderSettingsSchema {
     public const TYPE_CHECKBOX = 'checkbox';
     public const TYPE_URL = 'url';
     public const TYPE_NUMBER = 'number';
+    /** Multi-line free text (currently the local provider's extra headers). */
+    public const TYPE_TEXTAREA = 'textarea';
     /** Multiple values from an async lookup; the value is a list of ids. */
     public const TYPE_MULTISELECT = 'multiselect';
 
@@ -76,6 +78,18 @@ final class ProviderSettingsSchema {
      * `aiquila_provider_access` and written through ProviderAccessService.
      */
     public const STORAGE_ACCESS = 'access';
+
+    /**
+     * `format` values. A format is an extra validation rule applied by
+     * ProviderSettingsService::encode() on top of the type check, so the rules
+     * live in one place instead of in each provider.
+     */
+    /** A single HTTP header name, e.g. `X-API-Key`. */
+    public const FORMAT_HEADER_NAME = 'header_name';
+    /** A `Name: value` block, one header per line. */
+    public const FORMAT_HEADERS = 'headers';
+    /** An absolute path to a file readable by the web server. */
+    public const FORMAT_FILE_PATH = 'file_path';
 
     /** Booleans stored as the literal strings 'yes'/'no' (local provider legacy). */
     public const STORAGE_YESNO = 'yesno';
@@ -223,8 +237,10 @@ final class ProviderSettingsSchema {
         string $scope = self::SCOPE_ADMIN,
         string $group = self::GROUP_ADVANCED,
         string $placeholder = '',
+        ?string $format = null,
+        ?array $visibleIf = null,
     ): array {
-        return [
+        return self::visibility([
             'id' => $id,
             'title' => $title,
             'description' => $description,
@@ -234,7 +250,75 @@ final class ProviderSettingsSchema {
             'default' => $default,
             'placeholder' => $placeholder,
             'group' => $group,
-        ];
+        ] + ($format !== null ? ['format' => $format] : []), $visibleIf);
+    }
+
+    /**
+     * Multi-line secret held in CredentialService under its own name rather
+     * than in the per-provider API-key slot, for the second credential a
+     * provider needs (the local provider's extra request headers). Like every
+     * `sensitive` field the value is never returned to the client — only
+     * whether one is stored.
+     */
+    public static function secretTextarea(
+        string $id,
+        string $secret,
+        string $title,
+        string $description,
+        string $placeholder = '',
+        ?string $format = null,
+        ?array $visibleIf = null,
+    ): array {
+        return self::visibility([
+            'id' => $id,
+            'title' => $title,
+            'description' => $description,
+            'type' => self::TYPE_TEXTAREA,
+            'scope' => self::SCOPE_ADMIN,
+            'sensitive' => true,
+            'secret' => $secret,
+            'optional' => true,
+            'placeholder' => $placeholder,
+            'group' => self::GROUP_ADVANCED,
+        ] + ($format !== null ? ['format' => $format] : []), $visibleIf);
+    }
+
+    /** Single-line named secret; see secretTextarea() for the storage rules. */
+    public static function secret(
+        string $id,
+        string $secret,
+        string $title,
+        string $description,
+        ?array $visibleIf = null,
+    ): array {
+        return self::visibility([
+            'id' => $id,
+            'title' => $title,
+            'description' => $description,
+            'type' => self::TYPE_PASSWORD,
+            'scope' => self::SCOPE_ADMIN,
+            'sensitive' => true,
+            'secret' => $secret,
+            'optional' => true,
+            'group' => self::GROUP_ADVANCED,
+        ], $visibleIf);
+    }
+
+    /**
+     * Attach a display condition: the field is only rendered when the named
+     * sibling field currently holds one of `in`.
+     *
+     * Presentation only — the settings page has no business showing a Basic
+     * username while the mode is `bearer`. It is deliberately *not* a write
+     * guard: scope is what decides who may write a field, and a hidden field
+     * whose stored value stays put is the right behaviour when an admin
+     * switches modes back and forth.
+     */
+    private static function visibility(array $field, ?array $visibleIf): array {
+        if ($visibleIf !== null) {
+            $field['visible_if'] = $visibleIf;
+        }
+        return $field;
     }
 
     /**

@@ -162,10 +162,10 @@ export default {
 			return this.provider.fields || []
 		},
 		basicFields() {
-			return this.fields.filter(f => (f.group || 'basic') === 'basic')
+			return this.fields.filter(f => (f.group || 'basic') === 'basic' && this.isVisible(f))
 		},
 		advancedFields() {
-			return this.fields.filter(f => f.group === 'advanced')
+			return this.fields.filter(f => f.group === 'advanced' && this.isVisible(f))
 		},
 		capabilityChips() {
 			const caps = this.provider.capabilities || {}
@@ -219,6 +219,22 @@ export default {
 		this.refreshHealth()
 	},
 	methods: {
+		/**
+		 * Honour a field's `visible_if`: show it only while the named sibling
+		 * holds one of the listed values, read from the live draft so switching
+		 * the auth mode reveals its fields immediately.
+		 *
+		 * Display only — the value of a hidden field is still submitted, which
+		 * is deliberate: an admin flipping between auth modes should not lose
+		 * the username they typed for the other one.
+		 */
+		isVisible(field) {
+			const condition = field.visible_if
+			if (!condition) {
+				return true
+			}
+			return (condition.in || []).includes(this.draft[condition.field])
+		},
 		t,
 		/** One probe per card, fired lazily so the page never waits on providers. */
 		async refreshHealth() {

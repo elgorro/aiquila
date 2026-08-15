@@ -129,6 +129,8 @@ class ProviderSettingsService {
             }
 
             if (!empty($field['sensitive'])) {
+                // Named secrets are instance-scope by construction, so they can
+                // never be user-writable and never reach this branch.
                 $plan[] = ['key' => null, 'value' => (string)$value];
                 continue;
             }
@@ -183,6 +185,14 @@ class ProviderSettingsService {
             }
 
             if (!empty($field['sensitive'])) {
+                $secret = $field['secret'] ?? null;
+                if ($secret !== null) {
+                    // Validated before anything is written, like every other
+                    // field — an unparsable header block must not be stored.
+                    $this->validateFormat($field, (string)$value);
+                    $plan[] = ['key' => null, 'secret' => (string)$secret, 'value' => (string)$value];
+                    continue;
+                }
                 $plan[] = ['key' => null, 'value' => (string)$value];
                 continue;
             }
@@ -203,6 +213,10 @@ class ProviderSettingsService {
 
         foreach ($plan as $write) {
             if ($write['key'] === null) {
+                if (isset($write['secret'])) {
+                    $this->writeSecret($write['secret'], $write['value']);
+                    continue;
+                }
                 $this->writeApiKey($provider->getId(), null, $write['value']);
                 continue;
             }
@@ -363,13 +377,13 @@ class ProviderSettingsService {
      * offered a field the scope rules refuse — either a schema bug or an
      * attempt to write an admin-only field from the personal page.
      *
-     * @param list<array{key: ?string, value: string}> $plan
+     * @param list<array{key: ?string, secret?: string, value: string}> $plan
      * @param list<string> $rejected
      */
     private function logWrite(string $providerId, string $scope, array $plan, array $rejected, ?string $userId): void {
         $written = [];
         foreach ($plan as $write) {
-            $written[] = $write['key'] ?? 'api_key';
+            $written[] = $write['key'] ?? ($write['secret'] ?? 'api_key');
         }
 
         $context = ['provider' => $providerId, 'scope' => $scope, 'fields' => $written];
@@ -439,9 +453,12 @@ class ProviderSettingsService {
         }
 
         if (!empty($field['sensitive'])) {
-            $out['hasValue'] = $admin
-                ? $this->credentials->hasApiKey(null, $providerId)
-                : ($userId !== null && $this->credentials->hasApiKey($userId, $providerId));
+            $secret = $field['secret'] ?? null;
+            $out['hasValue'] = $secret !== null
+                ? ($admin && $this->credentials->hasSecret((string)$secret))
+                : ($admin
+                    ? $this->credentials->hasApiKey(null, $providerId)
+                    : ($userId !== null && $this->credentials->hasApiKey($userId, $providerId)));
             unset($out['value']);
             return $out;
         }
@@ -476,6 +493,19 @@ class ProviderSettingsService {
         // '' means "not set — follow the instance default", which the UI renders
         // as an empty picker rather than as a false checkbox.
         return $raw === '' ? '' : $this->decode($field, $raw);
+    }
+
+    /**
+     * A named secret, cleared when submitted empty — the same convention the
+     * API key uses, so "wipe this field and save" removes the credential
+     * instead of storing an empty string.
+     */
+    private function writeSecret(string $name, #[\SensitiveParameter] string $value): void {
+        if ($value === '') {
+            $this->credentials->deleteSecret($name);
+            return;
+        }
+        $this->credentials->setSecret($name, $value);
     }
 
     private function writeApiKey(string $providerId, ?string $userId, #[\SensitiveParameter] string $value): void {
@@ -565,6 +595,8 @@ class ProviderSettingsService {
             }
         }
 
+        $this->validateFormat($field, $string);
+
         // A select may only receive one of the values it offered. `options` is
         // '@models' at this point for model fields, whose valid set is whatever
         // the provider currently serves — those are checked by the provider on
@@ -578,6 +610,51 @@ class ProviderSettingsService {
         }
 
         return $string;
+    }
+
+    /**
+     * Apply the descriptor's `format` rule, if any. Empty always passes: an
+     * empty value means the field is unset, and the caller decides whether that
+     * is allowed.
+     *
+     * @throws \InvalidArgumentException
+     */
+    private function validateFormat(array $field, string $value): void {
+        $format = $field['format'] ?? null;
+        if ($format === null || $value === '') {
+            return;
+        }
+        $label = (string)($field['title'] ?? $field['id']);
+
+        try {
+            match ($format) {
+                ProviderSettingsSchema::FORMAT_HEADER_NAME => HeaderSpec::requireName($value),
+                ProviderSettingsSchema::FORMAT_HEADERS => HeaderSpec::parse($value),
+                ProviderSettingsSchema::FORMAT_FILE_PATH => $this->requireReadableFile($value),
+                default => null,
+            };
+        } catch (\InvalidArgumentException $e) {
+            throw new \InvalidArgumentException($label . ': ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Certificate material is given as a path on the server rather than
+     * uploaded, so a typo would otherwise surface as an opaque TLS failure at
+     * request time. Checked here as the web-server user, which is exactly who
+     * has to read it later.
+     *
+     * @throws \InvalidArgumentException
+     */
+    private function requireReadableFile(string $path): void {
+        if (!str_starts_with($path, '/')) {
+            throw new \InvalidArgumentException('enter an absolute path, for example /etc/ssl/certs/internal-ca.pem.');
+        }
+        if (!is_file($path) || !is_readable($path)) {
+            throw new \InvalidArgumentException(
+                '"' . $path . '" does not exist or is not readable by the web server. In Docker it must be mounted into the container.'
+            );
+        }
     }
 
     /** Turn a stored string back into the type the UI expects. */

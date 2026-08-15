@@ -31,15 +31,32 @@ class LocalProviderTest extends TestCase {
 
     /**
      * @param array<string, string> $appValues
+     * @param array<string, string> $secrets named CredentialService secrets
      */
-    private function provider(array $appValues = [], string $apiKey = ''): LocalProvider {
+    private function provider(array $appValues = [], string $apiKey = '', array $secrets = []): LocalProvider {
         $appValues += ['local_base_url' => 'http://localhost:11434'];
         $this->config->method('getAppValue')->willReturnCallback(
             fn($app, $key, $default = '') => $appValues[$key] ?? $default
         );
         $this->credentials->method('getApiKey')->willReturn($apiKey);
+        $this->credentials->method('getSecret')->willReturnCallback(
+            fn(string $name) => $secrets[$name] ?? ''
+        );
 
         return new LocalProvider($this->clientService, $this->config, $this->credentials, $this->logger);
+    }
+
+    /** The IClientService options a plain chat() call ends up sending. */
+    private function postOptions(LocalProvider $provider): array {
+        $captured = null;
+        $this->client->method('post')->willReturnCallback(function (string $url, array $opts) use (&$captured) {
+            $captured = $opts;
+            return $this->jsonResponse(['choices' => [['message' => ['content' => 'ok']]]]);
+        });
+
+        $provider->chat([['role' => 'user', 'content' => 'hi']]);
+
+        return $captured;
     }
 
     private function jsonResponse(array $payload): IResponse {
@@ -292,5 +309,178 @@ class LocalProviderTest extends TestCase {
         $this->assertSame('error', $events[0]['type']);
 
         $this->assertArrayHasKey('error', $provider->chatWithNativeMcpCollect([['role' => 'user', 'content' => 'hi']], []));
+    }
+
+    // ── Auth modes (#446) ───────────────────────────────────────────────
+
+    public function testBearerRemainsTheDefaultMode(): void {
+        // Installs predating the auth-mode setting must keep behaving exactly
+        // as they did.
+        $options = $this->postOptions($this->provider([], 'token'));
+
+        $this->assertSame('Bearer token', $options['headers']['Authorization']);
+    }
+
+    public function testAuthModeNoneSendsNoCredential(): void {
+        $options = $this->postOptions($this->provider(['local_auth_mode' => 'none'], 'token'));
+
+        $this->assertArrayNotHasKey('Authorization', $options['headers']);
+    }
+
+    public function testAuthModeBasicSendsTheKeyAsThePassword(): void {
+        $options = $this->postOptions($this->provider([
+            'local_auth_mode' => 'basic',
+            'local_auth_user' => 'nextcloud',
+        ], 's3cret'));
+
+        $this->assertSame('Basic ' . base64_encode('nextcloud:s3cret'), $options['headers']['Authorization']);
+    }
+
+    public function testAuthModeHeaderSendsTheNamedHeaderAndNoAuthorization(): void {
+        $options = $this->postOptions($this->provider([
+            'local_auth_mode' => 'header',
+            'local_auth_header' => 'X-API-Key',
+        ], 'gateway-key'));
+
+        $this->assertSame('gateway-key', $options['headers']['X-API-Key']);
+        $this->assertArrayNotHasKey('Authorization', $options['headers']);
+    }
+
+    public function testAuthModeHeaderWithoutAHeaderNameSendsNothing(): void {
+        // Better an obvious 401 than the key landing in a header nobody named.
+        $options = $this->postOptions($this->provider(['local_auth_mode' => 'header'], 'gateway-key'));
+
+        $this->assertArrayNotHasKey('Authorization', $options['headers']);
+        $this->assertSame(['Content-Type' => 'application/json'], $options['headers']);
+    }
+
+    public function testUnknownAuthModeFallsBackToBearer(): void {
+        $options = $this->postOptions($this->provider(['local_auth_mode' => 'kerberos'], 'token'));
+
+        $this->assertSame('Bearer token', $options['headers']['Authorization']);
+    }
+
+    public function testEmptyKeySendsNoCredentialInAnyMode(): void {
+        $options = $this->postOptions($this->provider([
+            'local_auth_mode' => 'basic',
+            'local_auth_user' => 'nextcloud',
+        ], ''));
+
+        $this->assertArrayNotHasKey('Authorization', $options['headers']);
+    }
+
+    // ── Extra headers ───────────────────────────────────────────────────
+
+    public function testExtraHeadersAreMerged(): void {
+        $options = $this->postOptions($this->provider([], 'token', [
+            'local_extra_headers' => "# Cloudflare Access\nCF-Access-Client-Id: abc\nCF-Access-Client-Secret: def\n",
+        ]));
+
+        $this->assertSame('abc', $options['headers']['CF-Access-Client-Id']);
+        $this->assertSame('def', $options['headers']['CF-Access-Client-Secret']);
+        $this->assertSame('Bearer token', $options['headers']['Authorization']);
+    }
+
+    public function testExtraHeadersCannotOverrideTheProvidersOwn(): void {
+        // HeaderSpec refuses these at save time; a value that got stored anyway
+        // must still not win over the configured auth scheme.
+        $options = $this->postOptions($this->provider([], 'token', [
+            'local_extra_headers' => "Authorization: Bearer stolen\nContent-Type: text/plain",
+        ]));
+
+        $this->assertSame('Bearer token', $options['headers']['Authorization']);
+        $this->assertSame('application/json', $options['headers']['Content-Type']);
+    }
+
+    public function testUnparsableStoredExtraHeadersAreDroppedNotSpliced(): void {
+        $options = $this->postOptions($this->provider([], 'token', [
+            'local_extra_headers' => 'this is not a header',
+        ]));
+
+        $this->assertSame(
+            ['Authorization' => 'Bearer token', 'Content-Type' => 'application/json'],
+            $options['headers'],
+        );
+    }
+
+    // ── TLS ─────────────────────────────────────────────────────────────
+
+    public function testNoTlsOptionsByDefault(): void {
+        $options = $this->postOptions($this->provider());
+
+        $this->assertArrayNotHasKey('verify', $options);
+        $this->assertArrayNotHasKey('cert', $options);
+        $this->assertArrayNotHasKey('ssl_key', $options);
+    }
+
+    public function testVerificationCanBeTurnedOff(): void {
+        $options = $this->postOptions($this->provider(['local_tls_verify' => 'no']));
+
+        $this->assertFalse($options['verify']);
+    }
+
+    public function testCaBundleAndClientCertificateArePassedThrough(): void {
+        $ca = $this->tempFile('ca');
+        $cert = $this->tempFile('cert');
+        $key = $this->tempFile('key');
+
+        $options = $this->postOptions($this->provider([
+            'local_ca_bundle' => $ca,
+            'local_client_cert' => $cert,
+            'local_client_key' => $key,
+        ]));
+
+        $this->assertSame($ca, $options['verify']);
+        $this->assertSame($cert, $options['cert']);
+        $this->assertSame($key, $options['ssl_key']);
+    }
+
+    public function testClientKeyPassphraseIsPairedWithThePaths(): void {
+        $cert = $this->tempFile('cert');
+        $key = $this->tempFile('key');
+
+        $options = $this->postOptions($this->provider([
+            'local_client_cert' => $cert,
+            'local_client_key' => $key,
+        ], '', ['local_client_key_password' => 'pw']));
+
+        $this->assertSame([$cert, 'pw'], $options['cert']);
+        $this->assertSame([$key, 'pw'], $options['ssl_key']);
+    }
+
+    public function testCaBundleIsIgnoredWhenVerificationIsOff(): void {
+        $options = $this->postOptions($this->provider([
+            'local_tls_verify' => 'no',
+            'local_ca_bundle' => $this->tempFile('ca'),
+        ]));
+
+        $this->assertFalse($options['verify']);
+    }
+
+    public function testAMissingCertificateFileFailsWithAReadableMessage(): void {
+        // chat() renders every failure through errorMessage(), so the check is
+        // that the admin is told which file and which setting — not a cURL 58.
+        $provider = $this->provider(['local_client_cert' => '/nope/missing.pem']);
+
+        $result = $provider->chat([['role' => 'user', 'content' => 'hi']]);
+
+        $this->assertStringContainsString('/nope/missing.pem', $result['error']);
+        $this->assertStringContainsString('client certificate', $result['error']);
+    }
+
+    /** @var list<string> */
+    private array $tempFiles = [];
+
+    private function tempFile(string $prefix): string {
+        $path = tempnam(sys_get_temp_dir(), 'aiquila-' . $prefix);
+        $this->tempFiles[] = $path;
+        return $path;
+    }
+
+    protected function tearDown(): void {
+        foreach ($this->tempFiles as $path) {
+            @unlink($path);
+        }
+        $this->tempFiles = [];
     }
 }

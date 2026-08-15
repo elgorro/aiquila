@@ -35,13 +35,45 @@ The descriptor carries its own config keys, so key naming stays with the
 provider that owns it — `ProviderSettingsService` reads and writes purely from
 the descriptor and never names a provider.
 
-Types: `text`, `number`, `password`, `select`, `checkbox`, `url`, `multiselect`.
+Types: `text`, `number`, `password`, `textarea`, `select`, `checkbox`, `url`,
+`multiselect`.
 Groups: `basic` renders inline on the card, `advanced` behind a disclosure.
 A select whose `options` is the sentinel `@models` is expanded to the provider's
 live model list (cached per credential, with the static registry as fallback —
 see [Model list caching](#model-list-caching)); a `multiselect`
 whose `options` is `@principals` is a user/group picker that queries
 `/api/admin/principals` as the admin types.
+
+A `format` adds a validation rule on top of the type, applied by
+`ProviderSettingsService::encode()` so the rule lives in one place rather than in
+each provider: `header_name` (a single HTTP header name), `headers` (a
+`Name: value` block, parsed by `HeaderSpec`), `file_path` (an absolute path that
+must exist and be readable by the web-server user). A failure raises
+`InvalidArgumentException`, which the controller turns into a 400 carrying the
+message.
+
+A `visible_if` — `['field' => 'local_auth_mode', 'in' => ['basic']]` — hides a
+field until a sibling holds one of the listed values. Presentation only: scope is
+what decides who may *write* a field, and a hidden field's stored value stays
+put, so flipping between auth modes does not discard what was typed for the other
+one.
+
+## Secrets
+
+`sensitive => true` keeps a value out of every response — `describe()` reports
+only `hasValue`, and the client submits an empty string to mean "leave it alone".
+Where it is stored depends on one more key:
+
+- No `secret` key: the field is *the* provider API key, held in
+  `CredentialService` under the provider id. Writable in user scope, which is how
+  a personal key overrides the instance one.
+- `secret => '<name>'`: a named instance-scope slot
+  (`aiquila/secret/<name>`), for the second credential a provider needs — the
+  local provider's extra request headers and client-key passphrase. Namespaced
+  away from the API keys so a secret name cannot collide with a provider id, and
+  `SCOPE_ADMIN` by construction. Submitting an empty value clears it.
+
+Either way the value never reaches `IConfig`.
 
 ## Fields no provider declares
 

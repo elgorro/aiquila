@@ -14,6 +14,8 @@ class CredentialService {
     private const APP_NAME = 'aiquila';
     private const CREDENTIAL_KEY = 'aiquila/api_key';
     private const NATIVE_MCP_EXTRA_TOKEN_KEY = 'aiquila/native_mcp_extra_token';
+    /** Namespace for the generic named secrets; see secretKey(). */
+    private const SECRET_KEY_PREFIX = 'aiquila/secret/';
 
     /** Default provider whose key lives under the legacy CREDENTIAL_KEY. */
     private const DEFAULT_PROVIDER = 'anthropic';
@@ -170,6 +172,44 @@ class CredentialService {
 
     public function hasNativeMcpExtraToken(): bool {
         return $this->getNativeMcpExtraToken() !== '';
+    }
+
+    // ── Named app-scope secrets ─────────────────────────────────────────────
+
+    /**
+     * Generic instance-scope secret slot, addressed by name rather than by
+     * provider.
+     *
+     * The per-provider API key covers "the one credential a provider needs";
+     * some providers need a second one — the local provider's extra request
+     * headers (a Cloudflare Access client secret lives in there) and its client
+     * key passphrase. Those go here rather than into IConfig so they stay
+     * encrypted at rest, and rather than into credentialKey() so they cannot
+     * collide with a provider id.
+     *
+     * Instance scope only: every field backed by one of these is SCOPE_ADMIN.
+     */
+    private function secretKey(string $name): string {
+        return self::SECRET_KEY_PREFIX . $name;
+    }
+
+    public function getSecret(string $name): string {
+        $value = $this->credentialsManager->retrieve('', $this->secretKey($name));
+        return is_string($value) ? $value : '';
+    }
+
+    public function setSecret(string $name, #[\SensitiveParameter] string $value): void {
+        $this->credentialsManager->store('', $this->secretKey($name), $value);
+        $this->logger->info('AIquila: secret stored', ['secret' => $name]);
+    }
+
+    public function deleteSecret(string $name): void {
+        $this->credentialsManager->delete('', $this->secretKey($name));
+        $this->logger->info('AIquila: secret cleared', ['secret' => $name]);
+    }
+
+    public function hasSecret(string $name): bool {
+        return $this->getSecret($name) !== '';
     }
 
     /**

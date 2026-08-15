@@ -46,7 +46,16 @@ none of it is user-settable (see [Security](#security)).
 | Field | App config key | Default | Notes |
 |---|---|---|---|
 | Endpoint base URL | `local_base_url` | *(empty)* | `/v1` appended automatically; must be `http(s)`. Empty means the provider is unconfigured. |
-| Bearer token | credential manager, provider `local` | *(empty)* | Optional. Empty ⇒ **no** `Authorization` header at all. |
+| API key | credential manager, provider `local` | *(empty)* | Optional, and used by whichever auth mode is selected — the bearer token, the Basic *password*, or the custom header's value. Empty ⇒ **no** credential header at all. |
+| Authentication | `local_auth_mode` | `bearer` | `none` \| `bearer` \| `basic` \| `header` — see [Authentication](#authentication). |
+| Basic auth username | `local_auth_user` | *(empty)* | Only used in `basic` mode. |
+| Header name | `local_auth_header` | *(empty)* | Only used in `header` mode, e.g. `X-API-Key`. |
+| Additional request headers | credential manager, secret `local_extra_headers` | *(empty)* | `Name: value` per line — see [Additional headers](#additional-headers). |
+| Verify TLS certificate | `local_tls_verify` | `yes` | Unchecking accepts any certificate for this endpoint. |
+| CA bundle path | `local_ca_bundle` | *(empty)* | Absolute path to a PEM bundle for a private CA. |
+| Client certificate path | `local_client_cert` | *(empty)* | mTLS; absolute path. |
+| Client key path | `local_client_key` | *(empty)* | mTLS; absolute path. |
+| Client key passphrase | credential manager, secret `local_client_key_password` | *(empty)* | Only for an encrypted private key. |
 | Model | `model_local` | `llama3.2` | Free text; autocompletes from the endpoint's `/v1/models`. Users may override with `user_model_local`. |
 | Max response tokens | `max_tokens_local` | `4096` | No per-model ceiling table — local model ids are arbitrary tags. |
 | Request timeout | `local_timeout` | `300` | Applies to streaming and non-streaming. The shared `api_timeout` (30 s) is far too low for CPU inference. |
@@ -63,9 +72,87 @@ Configuration goes through the schema-driven endpoints
 write whatever `LocalProvider::getSettingsSchema()` declares; the token is stored
 encrypted in Nextcloud's credential manager like every other provider key.
 
-The base URL and the local-address allowance are declared `SCOPE_ADMIN`, so
-`ProviderSettingsService::writeUser()` refuses them even if the personal page
-were to submit them — see the Security section below.
+Every field above is declared `SCOPE_ADMIN`, so
+`ProviderSettingsService::writeUser()` refuses it even if the personal page were
+to submit it — see the Security section below. The only user-scope setting this
+provider has is `user_model_local`.
+
+## Authentication
+
+A bare Ollama or LM Studio takes a bearer token or nothing at all, but a
+self-hosted endpoint published beyond localhost is usually behind a reverse
+proxy that wants something else. `local_auth_mode` picks the scheme; the stored
+API key is the secret in every case, so switching modes does not mean
+re-entering it.
+
+| Mode | Sent | For |
+|---|---|---|
+| `none` | nothing | A backend with no auth, where a stored key should stay unused |
+| `bearer` | `Authorization: Bearer <key>` | LM Studio, `llama-server --api-key`. The default, and what every install had before this existed |
+| `basic` | `Authorization: Basic base64(<local_auth_user>:<key>)` | nginx `auth_basic`, Caddy `basic_auth` |
+| `header` | `<local_auth_header>: <key>` | LiteLLM, vLLM behind a gateway, anything wanting `X-API-Key` |
+
+An empty key means no credential header at all, whatever the mode — that is the
+keyless-Ollama case. In `header` mode with no header name configured, nothing is
+sent either: an obvious 401 beats the key landing in a header nobody named.
+
+The **Test connection** button distinguishes the failures rather than reporting a
+flat "unreachable": a rejected credential names the configured scheme, a TLS
+failure points at the CA settings, an unresolvable host points at
+`host.docker.internal`, and a refused connection points at the port.
+
+## Additional headers
+
+`local_extra_headers` holds static headers for setups that need more than a
+credential — Cloudflare Access sends a `CF-Access-Client-Id` /
+`CF-Access-Client-Secret` pair, gateways want a tenant or routing header. One
+`Name: value` per line; blank lines and `#` comments are ignored.
+
+```
+# Cloudflare Access
+CF-Access-Client-Id: 1234….access
+CF-Access-Client-Secret: abcd…
+X-Tenant: research
+```
+
+It goes through the credential manager rather than `appconfig`, because those
+values are secrets. `HeaderSpec` validates the block both when it is saved (so a
+mistake is a readable error, not a cURL failure hours later) and when it is read
+back, and refuses:
+
+- CR/LF anywhere — header injection, against an endpoint whose SSRF guard is off.
+- Hop-by-hop headers and `Content-Length` — they describe the connection, not the
+  message.
+- `Content-Type` and `Authorization` — owned by the provider; letting an extra
+  header silently beat the configured auth scheme would make the mode a lie.
+
+`Host` **is** allowed: the URL already decides which address is contacted, so
+overriding it only selects a vhost there.
+
+## TLS and mTLS
+
+An internal endpoint is often published with a certificate no public bundle
+trusts, or behind a proxy demanding a client certificate. These map straight onto
+the HTTP client's options, since Nextcloud's `Client` merges caller options over
+its own defaults (`array_merge($defaults, $options)`) — so `verify` set here
+really does replace the instance CA bundle, and leaving it unset keeps that
+bundle applying.
+
+- `local_ca_bundle` → `verify`. The instance-wide alternative is
+  `occ security:certificates:import`, which affects every outbound request rather
+  than just this provider's.
+- `local_client_cert` / `local_client_key` → `cert` / `ssl_key`, paired with
+  `local_client_key_password` when the key is encrypted.
+- `local_tls_verify` off → `verify: false`. Accepts any certificate for this
+  endpoint, including one presented by an attacker on the path. It exists because
+  an admin who knows their own network may knowingly want it; prefer the CA
+  bundle.
+
+Certificate material is given as **paths on the server**, not uploaded: private
+keys stay out of app storage. The path must be absolute and readable by the
+web-server user — in Docker it has to be mounted into the container. It is
+checked when saved and again on every request, so a rotated-away mount reports
+the file and the setting instead of an opaque cURL error.
 
 ## Security
 
@@ -79,10 +166,16 @@ would block every realistic local-model deployment. `LocalProvider` sets
 this provider's requests only — nothing else in the app gains it. Turn it off if
 your endpoint has a public hostname.
 
-**The base URL is admin-only, deliberately.** Nextcloud makes outbound
-server-side requests to whatever is stored there, so a user-settable URL combined
-with the allowance above would be a straightforward SSRF primitive. There is a
-`user_model_local` override for the *model*, but no user override for the URL.
+**Every setting here is admin-only, deliberately.** Nextcloud makes outbound
+server-side requests to whatever is stored in the base URL, so a user-settable
+URL combined with the allowance above would be a straightforward SSRF primitive
+— and user-settable headers on top of it would be a way to post an instance
+credential wherever the user likes. There is a `user_model_local` override for
+the *model*, and nothing else.
+
+**Secrets never touch `appconfig`.** The API key, the extra headers and the
+client-key passphrase all live in the credential manager, encrypted at rest, and
+the settings API returns only whether each one is set.
 
 **Don't expose the backend itself.** The recommended topology is to keep the
 runtime bound to `127.0.0.1` and reach it over the Docker network, a reverse
