@@ -38,7 +38,8 @@ the descriptor and never names a provider.
 Types: `text`, `number`, `password`, `select`, `checkbox`, `url`, `multiselect`.
 Groups: `basic` renders inline on the card, `advanced` behind a disclosure.
 A select whose `options` is the sentinel `@models` is expanded to the provider's
-live model list (cached, with the static registry as fallback); a `multiselect`
+live model list (cached per credential, with the static registry as fallback —
+see [Model list caching](#model-list-caching)); a `multiselect`
 whose `options` is `@principals` is a user/group picker that queries
 `/api/admin/principals` as the admin types.
 
@@ -102,14 +103,43 @@ distinguishes your own key from an inherited instance one.
 ## Model list caching
 
 `listModels()` is a live HTTP call. Rendering a settings page used to make one
-per registered provider on every load. `ProviderSettingsService::listModels()`
-caches results for an hour in a distributed cache, and the pages pass
-`?refresh=1` behind the card's **Refresh models** button.
+per registered provider on every load, which matters more than it sounds: Hetzner
+allows only 10 requests per 60s per token, so an uncached settings page can spend
+the whole budget on model lists and then get 429s in chat.
+`ProviderSettingsService::listModels()` therefore caches, and both the personal
+(`SettingsController`) and provider (`ProviderSettingsController`) endpoints go
+through it. The pages pass `?refresh=1` behind the card's **Refresh models**
+button to bypass the cache entirely.
 
-The static fallback is deliberately *not* cached: it is static anyway, and
-caching it would pin a transient outage for the full TTL. Saving a key or an
-endpoint drops the provider's cached list, since either can change what it
-serves.
+| | TTL | Notes |
+|---|---|---|
+| Successful listing | 3600s | The line-up changes rarely |
+| Failed listing (marker) | 60s | Serves the static fallback without a request |
+| Status probe | 30s | The per-card status light |
+
+**Keyed per credential, not per provider.** The cache key is the *credential
+scope*: `user-<uid>` for a user with a personal key, `instance` for everyone
+inheriting the instance key. A personal key talks to the provider as that user
+and can see a different line-up — or a working endpoint where the instance key is
+revoked — so serving their list to other users would both leak what they have
+access to and show everyone else models they cannot reach.
+
+**Failures are cached, the fallback is not.** The static registry is static
+anyway, so there is nothing to cache; but re-asking an endpoint that just refused
+us on every page load keeps a rate-limited key pinned at its ceiling and turns
+one transient 429 into a permanent fallback. A short failure marker breaks that
+loop while still recovering on its own within a minute.
+
+**The status light is throttled, not cached.** `status()` stays live per call —
+a stale green after a key was revoked would be worse than no light at all — but
+each card costs its own `/models` probe on top of the model lists, so a result is
+reused for 30s. Short enough that a revoked key goes red almost immediately, long
+enough that a reload loop cannot exhaust the request budget on status lights.
+
+Each provider owns its own cache namespace (`aiquila-models-<id>`), because
+`ISimpleCache` cannot enumerate or glob keys and `forgetModels()` has to drop
+*every* scope of a provider at once. Saving a key or an endpoint calls it, since
+either can change what the provider serves.
 
 ## Where this is used
 

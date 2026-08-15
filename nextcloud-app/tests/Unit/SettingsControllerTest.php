@@ -7,6 +7,7 @@ use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\Provider\ProviderSettingsService;
 use OCP\IConfig;
 use OCP\IRequest;
 use PHPUnit\Framework\TestCase;
@@ -18,6 +19,7 @@ class SettingsControllerTest extends TestCase {
     private $provider;
     private $credentials;
     private $nativeMcp;
+    private $providerSettings;
     private SettingsController $ctrl;
 
     protected function setUp(): void {
@@ -29,6 +31,18 @@ class SettingsControllerTest extends TestCase {
         $this->nativeMcp   = $this->createMock(\OCA\AIquila\Service\NativeMcpService::class);
         $this->nativeMcp->method('isEnabledForUser')->willReturn(false);
         $this->nativeMcp->method('probeAll')->willReturn([]);
+
+        // The controller no longer calls the provider directly; it goes through
+        // the caching service. Stand in for it with the same live-or-fallback
+        // rule the real one applies, so the provider stubs below still drive
+        // what these tests assert on.
+        $this->providerSettings = $this->createMock(ProviderSettingsService::class);
+        $this->providerSettings->method('listModels')->willReturnCallback(
+            static function (LLMProviderInterface $provider): array {
+                $live = $provider->listModels(null);
+                return $live !== null && $live !== [] ? $live : ClaudeModels::getAllModels();
+            }
+        );
 
         // Single-provider (anthropic) world for these tests.
         $this->provider->method('getId')->willReturn('anthropic');
@@ -49,7 +63,8 @@ class SettingsControllerTest extends TestCase {
             'testuser',
             $this->factory,
             $this->credentials,
-            $this->nativeMcp
+            $this->nativeMcp,
+            $this->providerSettings
         );
     }
 

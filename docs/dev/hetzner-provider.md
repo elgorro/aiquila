@@ -17,12 +17,29 @@ GPU of your own.
 | Base URL | `https://inference.hetzner.com/api/v1` |
 | Auth | `Authorization: Bearer <token>` — create tokens at [experiments.hetzner.com/inference](https://experiments.hetzner.com/inference) |
 | Endpoints used | `POST /chat/completions` (incl. SSE streaming and `tools` / `tool_calls`), `GET /models` |
-| Rate limits (per token) | 3M input / 60k output tokens per 60s; 500M input / 5M output per 24h — exceeding them returns HTTP 429 |
+| Token limits (per token) | 4M input / 100k output tokens per 60s; 500M input / 5M output per 24h |
+| Request limit (per token) | **10 requests per 60s** |
 
-The model line-up changes as the experiment evolves (Qwen3.6, DeepSeek-V4-Flash
-and GLM-5.2 families have all appeared). The settings UI therefore lists whatever
-`GET /models` currently returns and only falls back to `HetznerModels` when that
-call fails. Model ids can also be typed freely.
+Exceeding either limit returns HTTP 429. The request limit is the tight one for
+AIquila: every settings page render costs a `GET /models` per provider, so the
+model list and the provider status light are both cached — see
+[Provider settings](provider-settings.md).
+
+## Models
+
+| Model | Type | Context | Modalities |
+|---|---|---|---|
+| `Qwen/Qwen3.6-35B-A3B-FP8` | MoE, 35B total / 3B active | 262k | Text, Image |
+| `Kimi-K2.7-Code` | MoE, 1T total / 32B active | 262k | Text, Image |
+| `DeepSeek-V4-Flash-0731` | MoE, 304B total / 13B active | 512k | Text |
+| `GLM-5.2-NVFP4` | MoE, 744B total / 40B active | 512k | Text |
+
+The line-up changes as the experiment evolves, so the settings UI lists whatever
+`GET /models` currently returns and falls back to `HetznerModels` only when that
+call fails. Model ids can also be typed freely. Keep
+`nextcloud-app/lib/Service/HetznerModels.php` in step with the table above: it
+carries the fallback list, the per-model output-token ceilings and the
+text-only set.
 
 ## Implementation
 
@@ -31,7 +48,11 @@ extends `AbstractOpenAiCompatibleProvider`, the same base class `DeepSeekProvide
 and `LocalProvider` use, so all wire-format handling is shared. It only supplies:
 
 - identity (`hetzner`, "Hetzner Inference (EU)") and the base URL,
-- `supportsVisionInput() === true` — the served models are multimodal,
+- `supportsVisionInput()` — decided per model via `HetznerModels::supportsVision()`:
+  true for Qwen3.6 and Kimi-K2.7-Code, false for DeepSeek-V4-Flash and GLM-5.2.
+  An id the registry does not know is assumed vision-capable, so a model added to
+  the service after this release is not crippled by a stale list — the API
+  rejects an unsupported modality on its own,
 - error mapping for 401 (bad token), 429 (quota) and 502/503 (experiment down),
 - model / max-token resolution from the config keys below.
 
@@ -45,8 +66,18 @@ App config (`oc_appconfig`, app `aiquila`):
 | Key | Default | Meaning |
 |---|---|---|
 | `model_hetzner` | `Qwen/Qwen3.6-35B-A3B-FP8` | Admin default model |
-| `max_tokens_hetzner` | `8192` | Output token limit, clamped to the per-model ceiling |
+| `max_tokens_hetzner` | `8192` | Output token limit, clamped to the per-model ceiling below |
 | `hetzner_base_url` | *(unset → default endpoint)* | Endpoint override; admin-scope only (SSRF), validated by `HetznerProvider::normalizeBaseUrl()` |
+
+Per-model output ceilings applied by `HetznerModels::getMaxTokenCeiling()`
+(an unknown id falls back to the 8192 default):
+
+| Model | Ceiling |
+|---|---|
+| `Qwen/Qwen3.6-35B-A3B-FP8` | 32768 |
+| `Kimi-K2.7-Code` | 32768 |
+| `DeepSeek-V4-Flash-0731` | 65536 |
+| `GLM-5.2-NVFP4` | 65536 |
 
 User config: `user_model_hetzner` (per-user model override), `user_provider`
 (per-user provider override).
@@ -89,9 +120,40 @@ to `occ aiquila:configure` over SSH and redacted from all printed output. On
 `--stack mcp` the flag is ignored with a warning — there is no local Nextcloud to
 configure.
 
+## Troubleshooting
+
+**Only one model in the dropdown.** The live listing failed and the static
+registry rendered instead. `listModels()` swallows the failure to keep its
+contract, but it always logs the reason first:
+
+```bash
+grep 'Could not list models' data/nextcloud.log   # the provider's own error
+grep 'no live model list'    data/nextcloud.log   # the fallback that followed
+```
+
+The `error` field distinguishes the causes:
+
+| Error | Cause |
+|---|---|
+| `401 Unauthorized` | No token configured, or a revoked/mistyped one |
+| `429 Too Many Requests` | The 10 requests / 60s budget is exhausted |
+| `cURL error 28` / timeout | The experiment is unreachable |
+
+Check the token against the API directly:
+
+```bash
+curl -si https://inference.hetzner.com/api/v1/models \
+  -H "Authorization: Bearer $HETZNER_INFERENCE_TOKEN" | head -30
+```
+
+If `curl` lists the models but the UI does not, the cached failure marker is
+still live — click **Refresh models** on the provider card (it sends
+`?refresh=1`, which bypasses both the marker and the cached list), or wait out
+the 60s TTL.
+
 ## Tests
 
 `nextcloud-app/tests/Unit/HetznerProviderTest.php` covers endpoint targeting, the
 bearer header, base-URL override and its validation, model/max-token resolution,
-image input, the tool round-trip, streaming, `listModels()`, and the 401/429 error
-mapping.
+per-model vision support and the static registry, image input, the tool
+round-trip, streaming, `listModels()`, and the 401/429 error mapping.

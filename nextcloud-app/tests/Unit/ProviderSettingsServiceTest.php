@@ -3,6 +3,7 @@
 namespace OCA\AIquila\Tests\Unit;
 
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\ProviderAccessService;
 use OCA\AIquila\Service\Provider\ProviderProbe;
@@ -24,6 +25,7 @@ class ProviderSettingsServiceTest extends TestCase {
     private $access;
     private $userManager;
     private $groupManager;
+    private $providerFactory;
     private ProviderSettingsService $service;
 
     protected function setUp(): void {
@@ -42,6 +44,8 @@ class ProviderSettingsServiceTest extends TestCase {
         ]);
         $this->userManager = $this->createMock(IUserManager::class);
         $this->groupManager = $this->createMock(IGroupManager::class);
+        $this->providerFactory = $this->createMock(LLMProviderFactory::class);
+        $this->providerFactory->method('getProviderIds')->willReturn(['testprovider']);
 
         $this->service = new ProviderSettingsService(
             $this->config,
@@ -50,6 +54,7 @@ class ProviderSettingsServiceTest extends TestCase {
             $this->userManager,
             $this->groupManager,
             $this->cacheFactory,
+            $this->providerFactory,
             $this->createMock(LoggerInterface::class),
         );
     }
@@ -262,20 +267,87 @@ class ProviderSettingsServiceTest extends TestCase {
         $provider = $this->provider([]);
         $provider->expects($this->once())->method('listModels')->willReturn(['live-a']);
         $this->cache->expects($this->never())->method('get');
-        $this->cache->expects($this->once())->method('set')->with('testprovider', ['live-a'], 3600);
+        $this->cache->expects($this->once())->method('set')->with('instance', ['live-a'], 3600);
 
         $this->assertSame(['live-a'], $this->service->listModels($provider, 'alice', refresh: true));
     }
 
-    public function testUnreachableProviderFallsBackWithoutCaching(): void {
+    public function testUnreachableProviderFallsBackAndRemembersTheFailure(): void {
         $provider = $this->provider([]);
         $provider->method('listModels')->willReturn(null);
         $provider->method('getModel')->willReturn('configured-tag');
         $this->cache->method('get')->willReturn(null);
 
-        // Caching the fallback would pin a transient outage for the full TTL.
-        $this->cache->expects($this->never())->method('set');
+        // The fallback itself is never cached — it is static anyway — but the
+        // failure is, briefly, so a dead endpoint is not re-asked per page load.
+        $this->cache->expects($this->once())->method('set')
+            ->with('instance', ['__aiquila_failed' => true], 60);
 
         $this->assertSame(['configured-tag'], $this->service->listModels($provider, 'alice'));
+    }
+
+    public function testCachedFailureServesTheFallbackWithoutCallingTheProvider(): void {
+        $provider = $this->provider([]);
+        $provider->expects($this->never())->method('listModels');
+        $provider->method('getModel')->willReturn('configured-tag');
+        $this->cache->method('get')->willReturn(['__aiquila_failed' => true]);
+
+        $this->assertSame(['configured-tag'], $this->service->listModels($provider, 'alice'));
+    }
+
+    public function testRefreshBypassesACachedFailure(): void {
+        $provider = $this->provider([]);
+        $provider->expects($this->once())->method('listModels')->willReturn(['live-a']);
+        $this->cache->expects($this->never())->method('get');
+
+        $this->assertSame(['live-a'], $this->service->listModels($provider, 'alice', refresh: true));
+    }
+
+    /**
+     * A personal key talks to the provider as that user and can see a different
+     * line-up, so it must not share the instance entry.
+     */
+    public function testPersonalKeyGetsItsOwnCacheEntry(): void {
+        $provider = $this->provider([]);
+        $provider->method('listModels')->willReturn(['live-a']);
+        $this->credentials->method('hasApiKey')
+            ->willReturnCallback(static fn (?string $uid): bool => $uid === 'alice');
+        $this->cache->method('get')->willReturn(null);
+
+        $keys = [];
+        $this->cache->method('set')->willReturnCallback(
+            function (string $key) use (&$keys): bool {
+                $keys[] = $key;
+                return true;
+            }
+        );
+
+        $this->service->listModels($provider, 'alice');
+        $this->service->listModels($provider, 'bob');
+        $this->service->listModels($provider, null);
+
+        $this->assertSame(['user-alice', 'instance', 'instance'], $keys);
+    }
+
+    public function testForgetModelsClearsEveryScopeOfTheProvider(): void {
+        // remove() cannot drop the per-user entries, so each provider owns a
+        // cache namespace and the sweep clears the whole thing.
+        $this->cache->expects($this->once())->method('clear');
+        $this->cache->expects($this->never())->method('remove');
+
+        $this->service->forgetModels('testprovider');
+    }
+
+    public function testStatusIsReusedWithinTheThrottleWindow(): void {
+        $provider = $this->provider([]);
+        $provider->method('getId')->willReturn('testprovider');
+        $provider->expects($this->once())->method('probe')->willReturn(
+            ProviderProbe::unconfigured('no key', 'some-model')
+        );
+        $this->cache->method('get')->willReturn(null);
+        $this->cache->expects($this->once())->method('set')
+            ->with('status-admin', $this->anything(), 30);
+
+        $this->service->status($provider, 'alice', admin: true);
     }
 }
