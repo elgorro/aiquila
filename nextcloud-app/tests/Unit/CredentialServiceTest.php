@@ -215,4 +215,45 @@ class CredentialServiceTest extends TestCase {
         $result = $this->service->decryptToken('plaintext-value');
         $this->assertEquals('plaintext-value', $result);
     }
+
+    // ── Named secrets ───────────────────────────────────────────────────
+
+    public function testSetSecretStoresUnderItsOwnNamespace(): void {
+        // Namespaced away from the per-provider API keys so a secret name can
+        // never collide with a provider id.
+        $this->credManager->expects($this->once())
+            ->method('store')
+            ->with('', 'aiquila/secret/local_extra_headers', 'X-Tenant: acme');
+
+        $this->service->setSecret('local_extra_headers', 'X-Tenant: acme');
+    }
+
+    public function testGetSecretReturnsTheStoredValue(): void {
+        $this->credManager->method('retrieve')->willReturnCallback(
+            fn(string $user, string $key) => $key === 'aiquila/secret/local_extra_headers' ? 'X-Tenant: acme' : null
+        );
+
+        $this->assertSame('X-Tenant: acme', $this->service->getSecret('local_extra_headers'));
+    }
+
+    public function testGetSecretReturnsEmptyStringWhenAbsent(): void {
+        $this->credManager->method('retrieve')->willReturn(null);
+
+        $this->assertSame('', $this->service->getSecret('local_extra_headers'));
+        $this->assertFalse($this->service->hasSecret('local_extra_headers'));
+    }
+
+    public function testHasSecretTrue(): void {
+        $this->credManager->method('retrieve')->willReturn('anything');
+
+        $this->assertTrue($this->service->hasSecret('local_extra_headers'));
+    }
+
+    public function testDeleteSecret(): void {
+        $this->credManager->expects($this->once())
+            ->method('delete')
+            ->with('', 'aiquila/secret/local_extra_headers');
+
+        $this->service->deleteSecret('local_extra_headers');
+    }
 }

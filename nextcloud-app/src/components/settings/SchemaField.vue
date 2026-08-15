@@ -48,6 +48,21 @@
 				:placeholder="passwordPlaceholder"
 				@update:model-value="emit" />
 
+			<!--
+				Multi-line secret (the local provider's extra request headers).
+				Like the password field it never receives a value from the
+				server, so the placeholder is what tells the admin whether one
+				is already stored.
+			-->
+			<NcTextArea v-else-if="field.type === 'textarea'"
+				:id="inputId"
+				:model-value="stringValue"
+				:label="field.title"
+				:label-visible="false"
+				:rows="4"
+				:placeholder="textareaPlaceholder"
+				@update:model-value="emit" />
+
 			<NcTextField v-else
 				:id="inputId"
 				:model-value="stringValue"
@@ -70,6 +85,7 @@ import { searchPrincipals } from '../../settings-api.js'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcPasswordField from '@nextcloud/vue/components/NcPasswordField'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
+import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 
 export default {
@@ -78,6 +94,7 @@ export default {
 		NcCheckboxRadioSwitch,
 		NcPasswordField,
 		NcSelect,
+		NcTextArea,
 		NcTextField,
 	},
 	props: {
@@ -143,6 +160,14 @@ export default {
 		},
 		textPlaceholder() {
 			return this.userScope ? this.inheritedHint : (this.field.placeholder || '')
+		},
+		textareaPlaceholder() {
+			if (this.field.sensitive) {
+				return this.field.hasValue
+					? t('aiquila', 'Configured — enter new lines to replace them')
+					: (this.field.placeholder || '')
+			}
+			return this.field.placeholder || ''
 		},
 		passwordPlaceholder() {
 			if (this.field.hasValue) {

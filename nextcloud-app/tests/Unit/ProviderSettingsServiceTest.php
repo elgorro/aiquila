@@ -350,4 +350,136 @@ class ProviderSettingsServiceTest extends TestCase {
 
         $this->service->status($provider, 'alice', admin: true);
     }
+
+    // ── Named secrets and formats (#446) ────────────────────────────────
+
+    /** @return list<array<string, mixed>> */
+    private function secretSchema(): array {
+        return [
+            ProviderSettingsSchema::secretTextarea(
+                'extra_headers',
+                'test_extra_headers',
+                'Additional request headers',
+                '',
+                format: ProviderSettingsSchema::FORMAT_HEADERS,
+            ),
+            ProviderSettingsSchema::text(
+                'auth_header',
+                'auth_header',
+                'Header name',
+                '',
+                format: ProviderSettingsSchema::FORMAT_HEADER_NAME,
+            ),
+            ProviderSettingsSchema::text(
+                'ca_bundle',
+                'ca_bundle',
+                'CA bundle path',
+                '',
+                format: ProviderSettingsSchema::FORMAT_FILE_PATH,
+            ),
+        ];
+    }
+
+    public function testNamedSecretGoesToTheCredentialStoreNotConfig(): void {
+        $provider = $this->provider($this->secretSchema());
+
+        $this->config->expects($this->never())->method('setAppValue');
+        $this->credentials->expects($this->once())
+            ->method('setSecret')
+            ->with('test_extra_headers', 'X-Tenant: acme');
+
+        $this->service->writeAdmin($provider, ['extra_headers' => 'X-Tenant: acme']);
+    }
+
+    public function testEmptyNamedSecretClearsIt(): void {
+        $provider = $this->provider($this->secretSchema());
+
+        $this->credentials->expects($this->once())->method('deleteSecret')->with('test_extra_headers');
+        $this->credentials->expects($this->never())->method('setSecret');
+
+        $this->service->writeAdmin($provider, ['extra_headers' => '']);
+    }
+
+    public function testNamedSecretIsNeverReturnedToTheClient(): void {
+        $provider = $this->provider($this->secretSchema());
+        $this->credentials->method('hasSecret')->willReturnCallback(
+            fn(string $name) => $name === 'test_extra_headers'
+        );
+
+        $described = $this->service->describe($provider, null, true);
+        $field = $this->fieldById($described, 'extra_headers');
+
+        $this->assertTrue($field['hasValue']);
+        $this->assertArrayNotHasKey('value', $field);
+    }
+
+    public function testNamedSecretIsNotOfferedOnThePersonalPage(): void {
+        // It is SCOPE_ADMIN, and the local provider's headers are exactly the
+        // thing a user must not be able to point at their own endpoint.
+        $provider = $this->provider($this->secretSchema());
+
+        $described = $this->service->describe($provider, 'alice', false);
+        $ids = array_column($described['fields'], 'id');
+
+        $this->assertNotContains('extra_headers', $ids);
+    }
+
+    public function testMalformedHeaderBlockIsRejectedBeforeStorage(): void {
+        $provider = $this->provider($this->secretSchema());
+
+        $this->credentials->expects($this->never())->method('setSecret');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('cannot be overridden');
+        $this->service->writeAdmin($provider, ['extra_headers' => 'Authorization: Bearer x']);
+    }
+
+    public function testInvalidHeaderNameIsRejected(): void {
+        $provider = $this->provider($this->secretSchema());
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('not a valid header name');
+        $this->service->writeAdmin($provider, ['auth_header' => 'X API Key']);
+    }
+
+    public function testRelativeCertificatePathIsRejected(): void {
+        $provider = $this->provider($this->secretSchema());
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('absolute path');
+        $this->service->writeAdmin($provider, ['ca_bundle' => 'certs/ca.pem']);
+    }
+
+    public function testUnreadableCertificatePathIsRejected(): void {
+        $provider = $this->provider($this->secretSchema());
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('not readable by the web server');
+        $this->service->writeAdmin($provider, ['ca_bundle' => '/nope/ca.pem']);
+    }
+
+    public function testReadableCertificatePathIsAccepted(): void {
+        $provider = $this->provider($this->secretSchema());
+        $path = tempnam(sys_get_temp_dir(), 'aiquila-ca');
+
+        $this->config->expects($this->once())
+            ->method('setAppValue')
+            ->with('aiquila', 'ca_bundle', $path);
+
+        try {
+            $this->assertSame([], $this->service->writeAdmin($provider, ['ca_bundle' => $path]));
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    /** @param array<string, mixed> $described */
+    private function fieldById(array $described, string $id): array {
+        foreach ($described['fields'] as $field) {
+            if ($field['id'] === $id) {
+                return $field;
+            }
+        }
+        $this->fail('no such field: ' . $id);
+    }
 }
