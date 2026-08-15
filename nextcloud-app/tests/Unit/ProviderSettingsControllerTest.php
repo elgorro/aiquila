@@ -93,6 +93,31 @@ class ProviderSettingsControllerTest extends TestCase {
         $this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
     }
 
+    public function testStatusReportsTheProbeResult(): void {
+        $this->factory->method('isAllowedForUser')->willReturn(true);
+        $this->settings->method('status')->willReturn([
+            'providerId' => 'anthropic',
+            'state' => 'degraded',
+            'reason' => 'model_missing',
+            'message' => 'not offered',
+            'model' => 'gone-1',
+        ]);
+
+        $response = $this->ctrl->status('anthropic');
+
+        $this->assertSame(Http::STATUS_OK, $response->getStatus());
+        $this->assertSame('degraded', $response->getData()['state']);
+    }
+
+    public function testStatusRefusesADeniedProvider(): void {
+        $this->factory->method('isAllowedForUser')->willReturn(false);
+        // A blocked provider must not be probed at all — the light would
+        // otherwise confirm a key the user may not use.
+        $this->settings->expects($this->never())->method('status');
+
+        $this->assertSame(Http::STATUS_FORBIDDEN, $this->ctrl->status('anthropic')->getStatus());
+    }
+
     public function testUpdateAcceptsAPermittedProvider(): void {
         $this->factory->method('isAllowedForUser')->willReturn(true);
         $this->settings->method('writeUser')->willReturn([]);

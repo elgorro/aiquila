@@ -57,6 +57,23 @@ export function testProvider(providerId, apiKey = '') {
 }
 
 /**
+ * Live health of one provider, behind the status light on its card.
+ *
+ * The user-scope route reports what this user actually gets (their own key, or
+ * the inherited instance one); the admin route reports the instance config.
+ *
+ * @param {string} providerId - provider to check
+ * @param {string} scope - 'admin' or 'user'
+ * @return {Promise} resolving to `{providerId, state, reason, message, model}`
+ */
+export function getProviderStatus(providerId, scope) {
+	const path = scope === 'admin'
+		? `/api/admin/providers/${providerId}/status`
+		: `/api/providers/${providerId}/status`
+	return axios.get(url(path))
+}
+
+/**
  * Search users and groups for the per-provider access lists (admin only).
  *
  * @param {string} search - substring to match against user and group names

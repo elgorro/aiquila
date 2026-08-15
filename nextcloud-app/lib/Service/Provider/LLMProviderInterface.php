@@ -74,6 +74,19 @@ interface LLMProviderInterface {
      */
     public function listModels(?string $userId = null): ?array;
 
+    /**
+     * Cheap liveness check for the settings UI: can this key reach this
+     * endpoint, and is the configured model actually on offer?
+     *
+     * Unlike listModels(), which flattens every failure to null, a probe
+     * distinguishes a rejected key from an unreachable host from a provider
+     * that is merely rate-limiting — that is what the four-state light on a
+     * provider card needs. Build the return value with ProviderProbe.
+     *
+     * @return array{state: string, reason: string, message: string, model: string}
+     */
+    public function probe(?string $userId = null): array;
+
     /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
     public function ask(string $prompt, string $context = '', ?string $userId = null, array $options = []): array;
 

@@ -3,7 +3,9 @@
 namespace OCA\AIquila\Tests\Unit;
 
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\DeepSeekModels;
 use OCA\AIquila\Service\Provider\DeepSeekProvider;
+use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -229,5 +231,71 @@ class DeepSeekProviderTest extends TestCase {
         $models = $this->provider->listModels('u');
         $this->assertContains('deepseek-chat', $models);
         $this->assertContains('deepseek-reasoner', $models);
+    }
+
+    /**
+     * The probe covers every OpenAI-compatible provider through the shared
+     * implementation in AbstractOpenAiCompatibleProvider.
+     */
+    public function testProbeIsGreenWhenTheConfiguredModelIsOffered(): void {
+        $this->client->method('get')->willReturn($this->jsonResponse([
+            'data' => [['id' => DeepSeekModels::DEFAULT_MODEL]],
+        ]));
+
+        $result = $this->provider->probe('u');
+
+        $this->assertSame(ProviderProbe::STATE_OK, $result['state']);
+        $this->assertSame(ProviderProbe::REASON_OK, $result['reason']);
+    }
+
+    public function testProbeIsOrangeWhenTheConfiguredModelIsGone(): void {
+        $this->client->method('get')->willReturn($this->jsonResponse([
+            'data' => [['id' => 'some-other-model']],
+        ]));
+
+        $result = $this->provider->probe('u');
+
+        $this->assertSame(ProviderProbe::STATE_DEGRADED, $result['state']);
+        $this->assertSame(ProviderProbe::REASON_MODEL_MISSING, $result['reason']);
+        $this->assertStringContainsString(DeepSeekModels::DEFAULT_MODEL, $result['message']);
+    }
+
+    public function testProbeIsRedWhenTheKeyIsRejected(): void {
+        $this->client->method('get')->willThrowException(new \RuntimeException('HTTP 401 Unauthorized'));
+
+        $result = $this->provider->probe('u');
+
+        $this->assertSame(ProviderProbe::STATE_ERROR, $result['state']);
+        $this->assertSame(ProviderProbe::REASON_UNAUTHORIZED, $result['reason']);
+    }
+
+    /** Rate limiting is orange: the key is fine, the request just has to wait. */
+    public function testProbeIsOrangeWhenRateLimited(): void {
+        $this->client->method('get')->willThrowException(new \RuntimeException('HTTP 429 Too Many Requests'));
+
+        $result = $this->provider->probe('u');
+
+        $this->assertSame(ProviderProbe::STATE_DEGRADED, $result['state']);
+        $this->assertSame(ProviderProbe::REASON_RATE_LIMITED, $result['reason']);
+    }
+
+    public function testProbeIsRedWhenTheEndpointIsUnreachable(): void {
+        $this->client->method('get')->willThrowException(new \RuntimeException('cURL error 7: connection refused'));
+
+        $result = $this->provider->probe('u');
+
+        $this->assertSame(ProviderProbe::STATE_ERROR, $result['state']);
+        $this->assertSame(ProviderProbe::REASON_UNREACHABLE, $result['reason']);
+    }
+
+    public function testProbeIsGreyWithoutAKey(): void {
+        $credentials = $this->createMock(CredentialService::class);
+        $credentials->method('getApiKey')->willReturn('');
+        $provider = new DeepSeekProvider($this->clientService, $this->config, $credentials, $this->logger);
+
+        $result = $provider->probe('u');
+
+        $this->assertSame(ProviderProbe::STATE_UNCONFIGURED, $result['state']);
+        $this->assertSame(ProviderProbe::REASON_NOT_CONFIGURED, $result['reason']);
     }
 }

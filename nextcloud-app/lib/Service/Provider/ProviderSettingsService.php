@@ -229,6 +229,41 @@ class ProviderSettingsService {
         return $models;
     }
 
+    /**
+     * Live health of one provider, for the status light on its settings card.
+     *
+     * Deliberately uncached: the light is fetched lazily per card, and a stale
+     * green after a key was revoked would be worse than no light at all. The
+     * probe is a single /models call, which is the cheapest thing a provider
+     * answers.
+     *
+     * @param bool $admin true to probe the instance configuration, false to
+     *                    probe what this user actually gets (personal key or
+     *                    inherited instance key)
+     * @return array{providerId: string, state: string, reason: string, message: string, model: string}
+     */
+    public function status(LLMProviderInterface $provider, ?string $userId, bool $admin): array {
+        $id = $provider->getId();
+        $result = $provider->probe($admin ? null : $userId);
+
+        $context = [
+            'provider' => $id,
+            'reason' => $result['reason'],
+            'scope' => $admin ? 'admin' : 'user',
+            'model' => $result['model'],
+        ];
+        // A red or orange light always has a log line explaining it; a green one
+        // stays at debug so a settings page full of healthy providers does not
+        // fill the log.
+        match ($result['state']) {
+            ProviderProbe::STATE_ERROR => $this->logger->warning('AIquila: provider status ' . $id . ' is unhealthy: ' . $result['message'], $context),
+            ProviderProbe::STATE_DEGRADED => $this->logger->info('AIquila: provider status ' . $id . ' is degraded: ' . $result['message'], $context),
+            default => $this->logger->debug('AIquila: provider status ' . $id . ' is ' . $result['state'], $context),
+        };
+
+        return ['providerId' => $id] + $result;
+    }
+
     /** Drop the cached model list for a provider (or all of them). */
     public function forgetModels(?string $providerId = null): void {
         $cache = $this->cacheFactory->createDistributed('aiquila-models');

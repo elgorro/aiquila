@@ -151,24 +151,50 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
             return null;
         }
         try {
-            $client = $this->clientService->newClient();
-            $response = $client->get($this->apiBase() . '/models', $this->requestOptions($userId, [
-                'timeout' => 15,
-            ]));
-            $data = json_decode((string)$response->getBody(), true);
-            $items = is_array($data) ? ($data['data'] ?? []) : [];
-            $ids = [];
-            foreach ($items as $m) {
-                if (isset($m['id']) && is_string($m['id'])) {
-                    $ids[] = $m['id'];
-                }
-            }
-            sort($ids);
+            $ids = $this->fetchModelIds($userId);
             return $ids !== [] ? $ids : null;
         } catch (\Throwable $e) {
             $this->logger->warning('AIquila ' . $this->getLabel() . ': Could not list models', ['error' => $e->getMessage()]);
             return null;
         }
+    }
+
+    public function probe(?string $userId = null): array {
+        $model = $this->getModel($userId);
+        if (!$this->isConfigured($userId)) {
+            return ProviderProbe::unconfigured($this->notConfiguredMessage(), $model);
+        }
+        try {
+            return ProviderProbe::fromModels($this->fetchModelIds($userId), $model);
+        } catch (\Throwable $e) {
+            return ProviderProbe::fromThrowable($e, $this->errorMessage($e), $model);
+        }
+    }
+
+    /**
+     * The /models listing, letting failures out.
+     *
+     * listModels() swallows them to keep its ?array contract; probe() needs the
+     * exception itself to tell a rejected key from a dead endpoint, so the call
+     * lives here and each caller decides what to do with a throw.
+     *
+     * @return list<string>
+     */
+    protected function fetchModelIds(?string $userId): array {
+        $client = $this->clientService->newClient();
+        $response = $client->get($this->apiBase() . '/models', $this->requestOptions($userId, [
+            'timeout' => 15,
+        ]));
+        $data = json_decode((string)$response->getBody(), true);
+        $items = is_array($data) ? ($data['data'] ?? []) : [];
+        $ids = [];
+        foreach ($items as $m) {
+            if (isset($m['id']) && is_string($m['id'])) {
+                $ids[] = $m['id'];
+            }
+        }
+        sort($ids);
+        return $ids;
     }
 
     // ── Non-streaming entry points ──────────────────────────────────────────
