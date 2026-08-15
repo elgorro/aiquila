@@ -265,6 +265,57 @@ class HetznerProviderTest extends TestCase {
         $this->assertContains('zai-org/GLM-5.2', $models);
     }
 
+    public function testStaticRegistryCoversTheFullLineUp(): void {
+        // The fallback is what the settings UI shows when the live listing
+        // fails, so a registry that has gone stale silently narrows the picker.
+        $this->assertSame([
+            HetznerModels::QWEN3_6_35B,
+            HetznerModels::KIMI_K2_7_CODE,
+            HetznerModels::DEEPSEEK_V4_FLASH,
+            HetznerModels::GLM_5_2_NVFP4,
+        ], HetznerModels::getAllModels());
+    }
+
+    public function testEveryKnownModelHasItsOwnCeiling(): void {
+        foreach (HetznerModels::getAllModels() as $model) {
+            $this->assertGreaterThan(
+                HetznerModels::DEFAULT_MAX_TOKENS,
+                HetznerModels::getMaxTokenCeiling($model),
+                $model . ' is clamped to the generic default'
+            );
+        }
+        // An id the registry has not caught up with still gets a safe value.
+        $this->assertSame(HetznerModels::DEFAULT_MAX_TOKENS, HetznerModels::getMaxTokenCeiling('brand/new'));
+    }
+
+    public function testMaxTokensUsesTheSelectedModelsCeiling(): void {
+        $provider = $this->provider([
+            'model_hetzner' => HetznerModels::DEEPSEEK_V4_FLASH,
+            'max_tokens_hetzner' => '999999',
+        ]);
+        $this->assertSame(
+            HetznerModels::getMaxTokenCeiling(HetznerModels::DEEPSEEK_V4_FLASH),
+            $provider->getMaxTokens()
+        );
+    }
+
+    public function testVisionSupportFollowsTheSelectedModel(): void {
+        $this->assertTrue(HetznerModels::supportsVision(HetznerModels::QWEN3_6_35B));
+        $this->assertTrue(HetznerModels::supportsVision(HetznerModels::KIMI_K2_7_CODE));
+        $this->assertFalse(HetznerModels::supportsVision(HetznerModels::DEEPSEEK_V4_FLASH));
+        $this->assertFalse(HetznerModels::supportsVision(HetznerModels::GLM_5_2_NVFP4));
+        // Unknown ids are assumed capable rather than crippled by a stale list.
+        $this->assertTrue(HetznerModels::supportsVision('brand/new'));
+    }
+
+    public function testTextOnlyModelRefusesImageInput(): void {
+        $provider = $this->provider(['model_hetzner' => HetznerModels::GLM_5_2_NVFP4]);
+
+        $result = $provider->askWithImage('what is this', base64_encode('x'), 'image/png', 'u');
+
+        $this->assertStringContainsString('vision', strtolower($result['error']));
+    }
+
     public function testRateLimitErrorIsMapped(): void {
         $this->client->method('post')->willThrowException(new \RuntimeException('HTTP 429 Too Many Requests'));
 

@@ -3,14 +3,11 @@
 
 namespace OCA\AIquila\Controller;
 
-use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\CredentialService;
-use OCA\AIquila\Service\DeepSeekModels;
-use OCA\AIquila\Service\HetznerModels;
-use OCA\AIquila\Service\MistralModels;
 use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
+use OCA\AIquila\Service\Provider\ProviderSettingsService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -27,6 +24,7 @@ class SettingsController extends Controller {
     private LLMProviderFactory $providerFactory;
     private CredentialService $credentials;
     private NativeMcpService $nativeMcp;
+    private ProviderSettingsService $providerSettings;
 
     public function __construct(
         string $appName,
@@ -35,7 +33,8 @@ class SettingsController extends Controller {
         ?string $userId,
         LLMProviderFactory $providerFactory,
         CredentialService $credentials,
-        NativeMcpService $nativeMcp
+        NativeMcpService $nativeMcp,
+        ProviderSettingsService $providerSettings
     ) {
         parent::__construct($appName, $request);
         $this->config = $config;
@@ -43,29 +42,12 @@ class SettingsController extends Controller {
         $this->providerFactory = $providerFactory;
         $this->credentials = $credentials;
         $this->nativeMcp = $nativeMcp;
+        $this->providerSettings = $providerSettings;
     }
 
     /** Config key holding a user's preferred model for a provider. */
     private function userModelKey(string $providerId): string {
         return $providerId === 'anthropic' ? 'user_model' : 'user_model_' . $providerId;
-    }
-
-    /**
-     * Static fallback model list for a provider id.
-     *
-     * @return list<string>
-     */
-    private function staticModels(string $providerId): array {
-        return match ($providerId) {
-            'mistral' => MistralModels::getAllModels(),
-            'deepseek' => DeepSeekModels::getAllModels(),
-            'hetzner' => HetznerModels::getAllModels(),
-            // Local model ids are arbitrary tags with no static registry; the
-            // live /v1/models listing is the real source, so fall back to
-            // whatever is currently configured.
-            'local' => [$this->providerFactory->getProviderById('local')->getModel($this->userId)],
-            default => ClaudeModels::getAllModels(),
-        };
     }
 
     /**
@@ -104,20 +86,23 @@ class SettingsController extends Controller {
         $userProvider     = $this->config->getUserValue($this->userId, $this->appName, 'user_provider', '');
 
         // Per-provider metadata: label, whether a personal key exists, the user's
-        // preferred model, and the available model list (live with static fallback).
+        // preferred model, and the available model list (cached live listing,
+        // with the static registry as fallback).
         // Only providers this user is permitted to use — the picker must not
         // offer one the server would then refuse.
         $providers = [];
+        /** @var array<string, list<string>> $models model lists, keyed by provider id, reused below */
+        $models = [];
         foreach ($this->providerFactory->getProviderIdsForUser($this->userId) as $id) {
             $provider = $this->providerFactory->getProviderById($id);
-            $liveModels = $provider->listModels($this->userId);
+            $models[$id] = $this->providerSettings->listModels($provider, $this->userId);
             $providers[] = [
                 'id'              => $id,
                 'label'          => $provider->getLabel(),
                 'configured'     => $provider->isConfigured($this->userId),
                 'hasUserKey'     => $this->credentials->hasApiKey($this->userId, $id),
                 'userModel'      => $this->config->getUserValue($this->userId, $this->appName, $this->userModelKey($id), ''),
-                'availableModels' => $liveModels ?? $this->staticModels($id),
+                'availableModels' => $models[$id],
             ];
         }
 
@@ -125,7 +110,10 @@ class SettingsController extends Controller {
         $active = $this->providerFactory->getProviderById($activeProviderId);
         $hasUserKey      = $this->credentials->hasApiKey($this->userId, $activeProviderId);
         $userModel       = $this->config->getUserValue($this->userId, $this->appName, $this->userModelKey($activeProviderId), '');
-        $availableModels = $active->listModels($this->userId) ?? $this->staticModels($activeProviderId);
+        // The loop above already resolved every permitted provider's list; the
+        // active one is always among them, so reuse it rather than paying for a
+        // second lookup.
+        $availableModels = $models[$activeProviderId] ?? $this->providerSettings->listModels($active, $this->userId);
 
         $defaultSystemPrompt = $this->config->getUserValue($this->userId, $this->appName, 'default_system_prompt', '');
         $defaultVerbose = $this->config->getUserValue($this->userId, $this->appName, 'default_verbose', '0') === '1';

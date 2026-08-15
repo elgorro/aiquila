@@ -40,6 +40,28 @@ class ProviderSettingsService {
      */
     private const MODEL_CACHE_TTL = 3600;
 
+    /**
+     * How long a failed live listing is remembered. Without this every page load
+     * retries an endpoint that just refused us, which against Hetzner's 10
+     * requests / 60s budget keeps the key pinned at its ceiling and turns one
+     * transient 429 into a permanent fallback. Short enough that a fixed key or
+     * a recovered endpoint is picked up on its own; the Refresh models button
+     * bypasses it outright.
+     */
+    private const MODEL_FAILURE_TTL = 60;
+
+    /**
+     * How long a provider status probe is reused. status() is deliberately
+     * live-per-call (see its docblock), but the light is fetched once per card,
+     * so an admin page holding five providers costs five /models calls on top of
+     * the model lists. A throttle this short keeps a reload loop from exhausting
+     * the request budget without letting a revoked key show green for long.
+     */
+    private const STATUS_THROTTLE_TTL = 30;
+
+    /** Marker stored in place of a model list when the live call failed. */
+    private const FAILURE_MARKER = ['__aiquila_failed' => true];
+
     public function __construct(
         private readonly IConfig $config,
         private readonly CredentialService $credentials,
@@ -47,6 +69,7 @@ class ProviderSettingsService {
         private readonly IUserManager $userManager,
         private readonly IGroupManager $groupManager,
         private readonly ICacheFactory $cacheFactory,
+        private readonly LLMProviderFactory $providerFactory,
         private readonly LoggerInterface $logger,
     ) {
     }
@@ -205,11 +228,14 @@ class ProviderSettingsService {
      * @return list<string>
      */
     public function listModels(LLMProviderInterface $provider, ?string $userId, bool $refresh = false): array {
-        $cache = $this->cacheFactory->createDistributed('aiquila-models');
-        $cacheKey = $provider->getId();
+        $cache = $this->modelCache($provider->getId());
+        $cacheKey = $this->credentialScope($provider->getId(), $userId);
 
         if (!$refresh) {
             $cached = $cache->get($cacheKey);
+            if ($cached === self::FAILURE_MARKER) {
+                return $this->staticModels($provider);
+            }
             if (is_array($cached)) {
                 return array_values($cached);
             }
@@ -220,8 +246,10 @@ class ProviderSettingsService {
             $this->logger->warning('AIquila: no live model list from ' . $provider->getId() . ', using the static registry', [
                 'provider' => $provider->getId(),
             ]);
-            // Do not cache the fallback: it is static anyway, and caching it
-            // would keep a transient outage pinned for an hour.
+            // The fallback itself is never cached — it is static anyway — but
+            // the *failure* is, briefly, so a dead or rate-limiting endpoint is
+            // not re-asked on every page load.
+            $cache->set($cacheKey, self::FAILURE_MARKER, self::MODEL_FAILURE_TTL);
             return $this->staticModels($provider);
         }
 
@@ -230,12 +258,41 @@ class ProviderSettingsService {
     }
 
     /**
+     * Which credential a model list was fetched with, and therefore who may be
+     * served it from cache.
+     *
+     * A user with a personal key talks to the provider as themselves and can see
+     * a different line-up (or a working endpoint where the instance key is
+     * revoked), so their list must not be handed to anyone else. Everyone
+     * falling back to the instance key shares one entry.
+     */
+    private function credentialScope(string $providerId, ?string $userId): string {
+        if ($userId !== null && $this->credentials->hasApiKey($userId, $providerId)) {
+            return 'user-' . $userId;
+        }
+        return 'instance';
+    }
+
+    /**
+     * One cache namespace per provider, so forgetModels() can drop every scope
+     * of a single provider with clear() — ISimpleCache cannot enumerate or glob
+     * keys, and an admin changing a key must not leave other users' entries
+     * pointing at the old endpoint.
+     */
+    private function modelCache(string $providerId): \OCP\ICache {
+        return $this->cacheFactory->createDistributed('aiquila-models-' . $providerId);
+    }
+
+    /**
      * Live health of one provider, for the status light on its settings card.
      *
-     * Deliberately uncached: the light is fetched lazily per card, and a stale
+     * Near enough to uncached: the light is fetched lazily per card, and a stale
      * green after a key was revoked would be worse than no light at all. The
-     * probe is a single /models call, which is the cheapest thing a provider
-     * answers.
+     * probe is a single /models call, the cheapest thing a provider answers, but
+     * one per card still adds up — Hetzner allows only 10 requests per 60s — so
+     * the result is held for STATUS_THROTTLE_TTL. That is short enough that a
+     * revoked key goes red almost immediately, while a reload loop can no longer
+     * spend the whole request budget on status lights.
      *
      * @param bool $admin true to probe the instance configuration, false to
      *                    probe what this user actually gets (personal key or
@@ -244,7 +301,17 @@ class ProviderSettingsService {
      */
     public function status(LLMProviderInterface $provider, ?string $userId, bool $admin): array {
         $id = $provider->getId();
+
+        $cache = $this->modelCache($id);
+        $throttleKey = 'status-' . ($admin ? 'admin' : $this->credentialScope($id, $userId));
+        $throttled = $cache->get($throttleKey);
+        if (is_array($throttled) && isset($throttled['state'])) {
+            /** @var array{state: string, reason: string, message: string, model: string} $throttled */
+            return ['providerId' => $id] + $throttled;
+        }
+
         $result = $provider->probe($admin ? null : $userId);
+        $cache->set($throttleKey, $result, self::STATUS_THROTTLE_TTL);
 
         $context = [
             'provider' => $id,
@@ -266,12 +333,24 @@ class ProviderSettingsService {
 
     /** Drop the cached model list for a provider (or all of them). */
     public function forgetModels(?string $providerId = null): void {
-        $cache = $this->cacheFactory->createDistributed('aiquila-models');
-        if ($providerId === null) {
-            $cache->clear();
+        if ($providerId !== null) {
+            $this->modelCache($providerId)->clear();
             return;
         }
-        $cache->remove($providerId);
+        foreach ($this->knownProviderIds() as $id) {
+            $this->modelCache($id)->clear();
+        }
+    }
+
+    /**
+     * Provider ids whose caches forgetModels(null) has to sweep. Each provider
+     * owns a cache namespace, so the sweep needs the registry rather than being
+     * able to clear one shared bucket.
+     *
+     * @return list<string>
+     */
+    private function knownProviderIds(): array {
+        return $this->providerFactory->getProviderIds();
     }
 
     // ── Internals ───────────────────────────────────────────────────────────

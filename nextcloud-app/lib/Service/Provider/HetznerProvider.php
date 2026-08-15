@@ -16,9 +16,11 @@ use OCA\AIquila\Service\HetznerModels;
  *   - Bearer token from https://experiments.hetzner.com/inference (required).
  *   - The model line-up changes; the live /models listing is authoritative and
  *     HetznerModels is only the fallback.
- *   - The current model is multimodal, so image input is enabled.
- *   - Per-key token quotas (3M in / 60k out per minute, 500M / 5M per day)
- *     surface as HTTP 429.
+ *   - Some of the served models are multimodal and some are text-only, so image
+ *     input is decided per model via HetznerModels::supportsVision().
+ *   - Per-key quotas surface as HTTP 429: 4M in / 100k out tokens per 60s,
+ *     500M / 5M per day, and — the one that bites the settings pages — a limit
+ *     of 10 requests per 60s.
  *
  * The base URL is overridable through the app config key `hetzner_base_url`
  * because the service is experimental and may move. It is admin-scope only and
@@ -104,9 +106,9 @@ class HetznerProvider extends AbstractOpenAiCompatibleProvider {
         ]);
     }
 
-    /** The served models are multimodal (image + text input). */
+    /** Image input depends on the selected model; unknown ids are assumed capable. */
     protected function supportsVisionInput(?string $userId = null): bool {
-        return true;
+        return HetznerModels::supportsVision($this->getModel($userId));
     }
 
     // ── Errors ──────────────────────────────────────────────────────────────
