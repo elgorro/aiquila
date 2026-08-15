@@ -221,6 +221,65 @@ class ProviderSettingsController extends Controller {
     }
 
     /**
+     * Report whether a provider is reachable and serving the configured model
+     *
+     * Backs the status light on the personal settings page: the light describes
+     * what *this user* gets, so the probe runs against their own key when they
+     * have one and the inherited instance key otherwise.
+     *
+     * @param string $providerId Provider to check
+     *
+     * 200: Current provider health
+     * 400: Unknown provider
+     * 403: The provider is not permitted for this user
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{providerId: string, state: string, reason: string, message: string, model: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{status: string, message: string}, array{}>
+     *
+     * @NoAdminRequired
+     */
+    #[NoAdminRequired]
+    #[OpenAPI]
+    public function status(string $providerId): JSONResponse {
+        if (!$this->providerFactory->isKnownProviderId($providerId)) {
+            return $this->unknownProvider($providerId);
+        }
+
+        $userId = $this->requireUserId();
+        if (!$this->providerFactory->isAllowedForUser($providerId, $userId)) {
+            return $this->forbiddenProvider($providerId, $userId);
+        }
+
+        return new JSONResponse($this->providerSettings->status(
+            $this->providerFactory->getProviderById($providerId),
+            $userId,
+            admin: false,
+        ));
+    }
+
+    /**
+     * Report whether a provider is reachable and serving the instance model
+     *
+     * @param string $providerId Provider to check
+     *
+     * 200: Current provider health
+     * 400: Unknown provider
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{providerId: string, state: string, reason: string, message: string, model: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}>
+     */
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function adminStatus(string $providerId): JSONResponse {
+        if (!$this->providerFactory->isKnownProviderId($providerId)) {
+            return $this->unknownProvider($providerId);
+        }
+
+        return new JSONResponse($this->providerSettings->status(
+            $this->providerFactory->getProviderById($providerId),
+            null,
+            admin: true,
+        ));
+    }
+
+    /**
      * Send a live request to a provider to confirm it is reachable and authorised
      *
      * Optionally accepts a key that has not been saved yet, so an admin can

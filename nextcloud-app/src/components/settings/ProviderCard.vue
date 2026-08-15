@@ -20,6 +20,11 @@
 		</div>
 
 		<div class="provider-card__summary">
+			<span class="provider-card__light"
+				:class="`provider-card__light--${light.tone}`"
+				:title="light.title"
+				:aria-label="light.title"
+				role="img" />
 			<span class="provider-card__status" :class="`provider-card__status--${status.kind}`">
 				{{ status.label }}
 			</span>
@@ -65,7 +70,7 @@
 				<NcButton type="primary" :disabled="saving || !dirty" @click="save">
 					{{ saving ? t('aiquila', 'Saving…') : t('aiquila', 'Save') }}
 				</NcButton>
-				<NcButton v-if="scope === 'admin'" type="secondary" :disabled="testing" @click="test">
+				<NcButton type="secondary" :disabled="testing" @click="test">
 					{{ testing ? t('aiquila', 'Testing…') : t('aiquila', 'Test connection') }}
 				</NcButton>
 				<NcButton type="tertiary" :disabled="refreshing" @click="$emit('refresh-models')">
@@ -83,7 +88,7 @@ import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwit
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 
 import SchemaField from './SchemaField.vue'
-import { saveAdminProvider, saveUserProvider, testProvider } from '../../settings-api.js'
+import { getProviderStatus, saveAdminProvider, saveUserProvider, testProvider } from '../../settings-api.js'
 
 /** Capability flag → chip label. Flags absent from here are not worth a chip. */
 const CAPABILITY_LABELS = {
@@ -93,6 +98,17 @@ const CAPABILITY_LABELS = {
 	effort: 'effort',
 	native_mcp: 'native MCP',
 	documents: 'documents',
+}
+
+/**
+ * Probe state → light colour. Grey covers both "not configured" and "still
+ * checking": neither says anything is wrong.
+ */
+const STATE_TONES = {
+	unconfigured: 'grey',
+	error: 'red',
+	degraded: 'orange',
+	ok: 'green',
 }
 
 export default {
@@ -133,6 +149,9 @@ export default {
 			message: '',
 			messageType: 'success',
 			draft: {},
+			// null until the first probe answers — the light stays grey and the
+			// card renders immediately rather than waiting on an outbound call.
+			health: null,
 		}
 	},
 	computed: {
@@ -153,6 +172,22 @@ export default {
 			return Object.keys(CAPABILITY_LABELS)
 				.filter(key => caps[key])
 				.map(key => CAPABILITY_LABELS[key])
+		},
+		/**
+		 * Does it actually work? A separate question from `status`, which says
+		 * which configuration applies — a provider can be the default, on the
+		 * instance key, and still be answering 401.
+		 */
+		light() {
+			if (this.health === null) {
+				return { tone: 'grey', title: t('aiquila', 'Checking the provider…') }
+			}
+			return {
+				tone: STATE_TONES[this.health.state] || 'grey',
+				// The message is the only non-colour carrier of the state, so it
+				// doubles as the tooltip and the accessible label.
+				title: this.health.message || '',
+			}
 		},
 		/**
 		 * The personal page cares whether *this user* can talk to the provider,
@@ -180,8 +215,25 @@ export default {
 			},
 		},
 	},
+	mounted() {
+		this.refreshHealth()
+	},
 	methods: {
 		t,
+		/** One probe per card, fired lazily so the page never waits on providers. */
+		async refreshHealth() {
+			try {
+				const { data } = await getProviderStatus(this.provider.id, this.scope)
+				this.health = data
+			} catch (err) {
+				this.health = {
+					state: 'error',
+					reason: 'unreachable',
+					message: err.response?.data?.message || err.message,
+				}
+			}
+			return this.health
+		},
 		resetDraft() {
 			const draft = {}
 			for (const field of this.fields) {
@@ -234,6 +286,7 @@ export default {
 					this.messageType = 'success'
 					this.message = t('aiquila', 'Saved.')
 				}
+				this.refreshHealth()
 				this.$emit('saved')
 			} catch (err) {
 				this.messageType = 'error'
@@ -242,8 +295,23 @@ export default {
 				this.saving = false
 			}
 		},
-		/** Tests the typed key when there is one, so it can be checked before saving. */
+		/**
+		 * Admin scope sends a real completion and can check a key typed into the
+		 * form before it is saved. User scope re-runs the probe instead: it is
+		 * read-only, costs no tokens, and — unlike the admin test — never swaps
+		 * the stored key out from under a concurrent request.
+		 */
 		async test() {
+			if (this.scope !== 'admin') {
+				this.testing = true
+				this.message = ''
+				const health = await this.refreshHealth()
+				this.messageType = health.state === 'ok' ? 'success' : (health.state === 'degraded' ? 'warning' : 'error')
+				this.message = health.message || t('aiquila', 'No answer from the provider.')
+				this.testing = false
+				return
+			}
+
 			this.testing = true
 			this.message = ''
 			try {
@@ -257,6 +325,7 @@ export default {
 				this.message = err.response?.data?.message || err.message
 			} finally {
 				this.testing = false
+				this.refreshHealth()
 			}
 		},
 	},
@@ -296,6 +365,27 @@ export default {
 	gap: 8px;
 	margin: 4px 0 0 4px;
 	font-size: 0.9em;
+}
+
+.provider-card__light {
+	flex: none;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	align-self: center;
+	background-color: var(--color-text-maxcontrast);
+}
+
+.provider-card__light--green {
+	background-color: var(--color-success);
+}
+
+.provider-card__light--orange {
+	background-color: var(--color-warning);
+}
+
+.provider-card__light--red {
+	background-color: var(--color-error);
 }
 
 .provider-card__status--default {

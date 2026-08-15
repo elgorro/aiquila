@@ -117,30 +117,52 @@ class MistralProvider implements LLMProviderInterface {
     }
 
     public function listModels(?string $userId = null): ?array {
-        $apiKey = $this->getApiKey($userId);
-        if ($apiKey === '') {
+        if ($this->getApiKey($userId) === '') {
             return null;
         }
         try {
-            $client = $this->clientService->newClient();
-            $response = $client->get(self::API_BASE . '/models', [
-                'headers' => $this->headers($apiKey),
-                'timeout' => 15,
-            ]);
-            $data = json_decode((string)$response->getBody(), true);
-            $items = $data['data'] ?? [];
-            $ids = [];
-            foreach ($items as $m) {
-                if (isset($m['id']) && is_string($m['id'])) {
-                    $ids[] = $m['id'];
-                }
-            }
-            sort($ids);
+            $ids = $this->fetchModelIds($userId);
             return $ids !== [] ? $ids : null;
         } catch (\Throwable $e) {
             $this->logger->warning('AIquila Mistral: Could not list models', ['error' => $e->getMessage()]);
             return null;
         }
+    }
+
+    public function probe(?string $userId = null): array {
+        $model = $this->getModel($userId);
+        if ($this->getApiKey($userId) === '') {
+            return ProviderProbe::unconfigured('No Mistral API key configured', $model);
+        }
+        try {
+            return ProviderProbe::fromModels($this->fetchModelIds($userId), $model);
+        } catch (\Throwable $e) {
+            return ProviderProbe::fromThrowable($e, $this->errorMessage($e), $model);
+        }
+    }
+
+    /**
+     * The /models listing, letting failures out — see the note on
+     * AbstractOpenAiCompatibleProvider::fetchModelIds().
+     *
+     * @return list<string>
+     */
+    private function fetchModelIds(?string $userId): array {
+        $client = $this->clientService->newClient();
+        $response = $client->get(self::API_BASE . '/models', [
+            'headers' => $this->headers($this->getApiKey($userId)),
+            'timeout' => 15,
+        ]);
+        $data = json_decode((string)$response->getBody(), true);
+        $items = is_array($data) ? ($data['data'] ?? []) : [];
+        $ids = [];
+        foreach ($items as $m) {
+            if (isset($m['id']) && is_string($m['id'])) {
+                $ids[] = $m['id'];
+            }
+        }
+        sort($ids);
+        return $ids;
     }
 
     // ── Non-streaming entry points ──────────────────────────────────────────

@@ -5,6 +5,7 @@ namespace OCA\AIquila\Tests\Unit;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\ProviderAccessService;
+use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 use OCA\AIquila\Service\Provider\ProviderSettingsService;
 use OCP\ICache;
@@ -219,6 +220,35 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     // ── Model list caching ──────────────────────────────────────────────
+
+    public function testStatusPassesTheProbeThroughWithTheProviderId(): void {
+        $provider = $this->provider([]);
+        $provider->expects($this->once())->method('probe')->with('alice')->willReturn([
+            'state' => ProviderProbe::STATE_DEGRADED,
+            'reason' => ProviderProbe::REASON_MODEL_MISSING,
+            'message' => 'not offered',
+            'model' => 'gone-1',
+        ]);
+
+        $status = $this->service->status($provider, 'alice', admin: false);
+
+        $this->assertSame('testprovider', $status['providerId']);
+        $this->assertSame(ProviderProbe::STATE_DEGRADED, $status['state']);
+        $this->assertSame('gone-1', $status['model']);
+    }
+
+    /** The admin card describes the instance, so its probe must ignore the caller. */
+    public function testAdminStatusProbesWithoutAUser(): void {
+        $provider = $this->provider([]);
+        $provider->expects($this->once())->method('probe')->with(null)->willReturn([
+            'state' => ProviderProbe::STATE_OK,
+            'reason' => ProviderProbe::REASON_OK,
+            'message' => 'fine',
+            'model' => 'm',
+        ]);
+
+        $this->service->status($provider, 'alice', admin: true);
+    }
 
     public function testCachedModelListSkipsTheProvider(): void {
         $provider = $this->provider([]);

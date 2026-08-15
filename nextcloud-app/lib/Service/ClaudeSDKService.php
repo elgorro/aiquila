@@ -25,6 +25,7 @@ use Anthropic\Messages\Message;
 use Anthropic\Messages\Usage;
 use Anthropic\Models\ModelInfo;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 use OCP\ICache;
 use OCP\ICacheFactory;
@@ -545,6 +546,37 @@ class ClaudeSDKService implements LLMProviderInterface {
             ]);
             return null;
         }
+    }
+
+    public function probe(?string $userId = null): array {
+        $model = $this->getModel($userId);
+        if (!$this->isConfigured($userId)) {
+            return ProviderProbe::unconfigured('No Anthropic API key configured', $model);
+        }
+        try {
+            $client = $this->getClient($userId);
+            $items = $this->callListModels($client, ['limit' => 1000]);
+            return ProviderProbe::fromModels(array_map(fn (ModelInfo $m) => $m->id, $items), $model);
+        } catch (AuthenticationException|PermissionDeniedException $e) {
+            // The SDK types these, so no message sniffing is needed here.
+            return ProviderProbe::unauthorized('The Anthropic API rejected the key: ' . self::probeDetail($e), $model);
+        } catch (RateLimitException $e) {
+            return ProviderProbe::rateLimited('Anthropic is rate-limiting this key: ' . self::probeDetail($e), $model);
+        } catch (APIConnectionException|APITimeoutException $e) {
+            return ProviderProbe::unreachable('Could not reach the Anthropic API: ' . self::probeDetail($e), $model);
+        } catch (\Throwable $e) {
+            return ProviderProbe::fromThrowable($e, 'Anthropic API error: ' . self::probeDetail($e), $model);
+        }
+    }
+
+    /**
+     * The SDK renders its exceptions as a headline plus a pretty-printed JSON
+     * body. Only the headline belongs in a tooltip; the full text is already in
+     * the log line the status endpoint writes.
+     */
+    private static function probeDetail(\Throwable $e): string {
+        $first = strtok($e->getMessage(), "\n");
+        return $first === false ? $e->getMessage() : trim($first);
     }
 
     /**
