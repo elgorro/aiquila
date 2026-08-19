@@ -30,14 +30,14 @@ model list and the provider status light are both cached — see
 | Model | Type | Context | Modalities |
 |---|---|---|---|
 | `Qwen/Qwen3.6-35B-A3B-FP8` | MoE, 35B total / 3B active | 262k | Text, Image |
+| `Qwen3.8-27B` | Dense, 27B | 262k | Text, Image |
 
 On 2026-08-19 Hetzner withdrew the large models — `Kimi-K2.7-Code`,
 `DeepSeek-V4-Flash-0731` and `GLM-5.2-NVFP4` — from public Experiments while it
-works on capacity; only the small Qwen models remain, and `Qwen3.8-27B` is
-announced but not yet served ([Hetzner
-blog](https://www.hetzner.com/de/blog/inference-experiment/)). It is deliberately
-absent from `HetznerModels` until `GET /models` reports its exact id — an unknown
-id already degrades safely.
+works on capacity ([Hetzner
+blog](https://www.hetzner.com/de/blog/inference-experiment/)); only the two small
+Qwen models above remain. Note that `Qwen3.8-27B` is served without a vendor
+prefix, unlike `Qwen/Qwen3.6-35B-A3B-FP8`.
 
 The line-up changes as the experiment evolves, so the settings UI lists whatever
 `GET /models` currently returns and falls back to `HetznerModels` only when that
@@ -80,6 +80,7 @@ Per-model output ceilings applied by `HetznerModels::getMaxTokenCeiling()`
 | Model | Ceiling |
 |---|---|
 | `Qwen/Qwen3.6-35B-A3B-FP8` | 32768 |
+| `Qwen3.8-27B` | 32768 |
 
 User config: `user_model_hetzner` (per-user model override), `user_provider`
 (per-user provider override).

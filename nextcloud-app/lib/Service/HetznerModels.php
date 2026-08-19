@@ -22,6 +22,9 @@ class HetznerModels {
     /** Qwen3.6 MoE, 35B total / 3B active, causal LM + vision, 262k context. */
     public const QWEN3_6_35B = 'Qwen/Qwen3.6-35B-A3B-FP8';
 
+    /** Qwen3.8 dense, 27B, causal LM + vision, 262k context. */
+    public const QWEN3_8_27B = 'Qwen3.8-27B';
+
     // ── Application defaults ────────────────────────────────────────────────
 
     public const DEFAULT_MODEL      = self::QWEN3_6_35B;
@@ -31,6 +34,7 @@ class HetznerModels {
 
     private const MAX_TOKENS_CEILING = [
         self::QWEN3_6_35B => 32768,
+        self::QWEN3_8_27B => 32768,
     ];
 
     /**
@@ -73,6 +77,7 @@ class HetznerModels {
     public static function getAllModels(): array {
         return [
             self::QWEN3_6_35B,
+            self::QWEN3_8_27B,
         ];
     }
 }
