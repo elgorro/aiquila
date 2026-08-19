@@ -81,7 +81,8 @@ aiquila-hetzner rebuild --config hetzner/examples/deploy-mcp.yaml
 | `network` | string | `--network` | Attach to an existing private network |
 | `labels` | []string | `--label` | Resource labels `key=value` (repeatable) |
 | `dns_zone` | string | `--dns-zone` | Hetzner DNS zone for auto-record creation |
-| `ssh_allow_cidr` | string | `--ssh-allow-cidr` | Restrict SSH to this CIDR |
+| `ssh_allow_cidr` | string | `--ssh-allow-cidr` | Restrict SSH to this CIDR (default: your detected public IP) |
+| `ssh_allow_any` | bool | `--ssh-allow-any` | Open SSH to `0.0.0.0/0` instead |
 | `packages` | []string | `--package` | Extra OS packages via cloud-init (repeatable) |
 
 ---

@@ -94,7 +94,8 @@ Your job:
      --nc-admin-password NC_PASS_VALUE \\
      --name "NC_NAME_VALUE" \\
      --type NC_SERVER_TYPE \\
-     --dns-zone DNS_ZONE
+     --dns-zone DNS_ZONE \\
+     --ssh-allow-any
 
 4. While NC is provisioning (or after), provision the MCP server (MCP_SERVER_TYPE, default cpx11):
    /tmp/aiquila-hetzner create \\
@@ -105,7 +106,8 @@ Your job:
      --nc-password NC_PASS_VALUE \\
      --name "MCP_NAME_VALUE" \\
      --type MCP_SERVER_TYPE \\
-     --dns-zone DNS_ZONE
+     --dns-zone DNS_ZONE \\
+     --ssh-allow-any
 
    Note: The NC server creates an app password via OCC; use the Nextcloud admin password
    as the --nc-password if no separate app password was generated.

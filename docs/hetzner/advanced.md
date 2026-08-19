@@ -83,7 +83,17 @@ aiquila-hetzner network attach --server myserver --network mynet
 
 ## SSH CIDR restriction
 
-Restrict SSH access to a known IP range:
+SSH (port 22) is never opened to the internet by default. When you do not pass
+`--ssh-allow-cidr`, `create` detects the public IP of the machine you run it
+from and restricts port 22 to that single address:
+
+```
+No --ssh-allow-cidr specified, restricting SSH to your current IP: 203.0.113.7/32
+```
+
+**Always set `--ssh-allow-cidr` explicitly** for anything long-lived — a
+detected address is whatever your ISP or VPN handed you today, and it will
+change. Pass the range you actually administer the server from:
 
 ```bash
 aiquila-hetzner create --mcp-domain mcp.example.com \
@@ -91,8 +101,33 @@ aiquila-hetzner create --mcp-domain mcp.example.com \
   --ssh-allow-cidr 203.0.113.0/24
 ```
 
-The firewall rule for port 22 is updated to allow only the specified CIDR
-instead of the default `0.0.0.0/0`.
+An invalid CIDR is rejected before any Hetzner resource is created. Ports
+80/443 are always open to the world; only port 22 is restricted.
+
+If you genuinely need SSH reachable from anywhere — CI provisioning, a dynamic
+office IP — opt in explicitly:
+
+```bash
+aiquila-hetzner create ... --ssh-allow-any
+```
+
+That prints a warning and falls back to `0.0.0.0/0`. The same fallback applies
+(also with a warning) when public-IP detection fails, so an offline or
+firewalled workstation never blocks a deploy.
+
+### Changing the CIDR later
+
+`create` is idempotent and reuses a firewall that already carries the target
+name. It will **not** rewrite the SSH rule of an existing firewall; if the rule
+does not match what you asked for, you get:
+
+```
+WARNING: existing firewall "myserver-fw" allows SSH from 0.0.0.0/0, not 203.0.113.0/24 — not modified;
+edit it in the Hetzner console or delete it to have it recreated
+```
+
+Adjust the rule in the Hetzner console (or delete the firewall and re-run
+`create`) to change it.
 
 ---
 

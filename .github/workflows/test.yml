@@ -65,3 +65,25 @@ jobs:
             echo "::error::OpenAPI spec is out of date. Run 'make openapi' and commit the result."
             exit 1
           }
+
+  hetzner-cli:
+    name: Hetzner CLI Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hetzner
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: hetzner/go.mod
+          cache-dependency-path: hetzner/go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test ./...
