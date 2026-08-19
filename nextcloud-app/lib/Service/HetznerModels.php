@@ -22,15 +22,6 @@ class HetznerModels {
     /** Qwen3.6 MoE, 35B total / 3B active, causal LM + vision, 262k context. */
     public const QWEN3_6_35B = 'Qwen/Qwen3.6-35B-A3B-FP8';
 
-    /** DeepSeek-V4-Flash MoE, 304B total / 13B active, text only, 512k context. */
-    public const DEEPSEEK_V4_FLASH = 'DeepSeek-V4-Flash-0731';
-
-    /** GLM-5.2 MoE (NVFP4), 744B total / 40B active, text only, 512k context. */
-    public const GLM_5_2_NVFP4 = 'GLM-5.2-NVFP4';
-
-    /** Kimi K2.7 Code MoE, 1T total / 32B active, text + vision, 262k context. */
-    public const KIMI_K2_7_CODE = 'Kimi-K2.7-Code';
-
     // ── Application defaults ────────────────────────────────────────────────
 
     public const DEFAULT_MODEL      = self::QWEN3_6_35B;
@@ -39,10 +30,7 @@ class HetznerModels {
     // ── Per-model output token ceilings ─────────────────────────────────────
 
     private const MAX_TOKENS_CEILING = [
-        self::QWEN3_6_35B       => 32768,
-        self::DEEPSEEK_V4_FLASH => 65536,
-        self::GLM_5_2_NVFP4     => 65536,
-        self::KIMI_K2_7_CODE    => 32768,
+        self::QWEN3_6_35B => 32768,
     ];
 
     /**
@@ -50,12 +38,13 @@ class HetznerModels {
      * capable, so a model added to the service after this release is not
      * crippled by a registry that has not caught up with it.
      *
+     * Currently empty: the text-only members of the line-up (DeepSeek-V4-Flash
+     * and GLM-5.2) were withdrawn from Experiments on 2026-08-19. The mechanism
+     * stays because their replacements may well be text-only again.
+     *
      * @var list<string>
      */
-    private const TEXT_ONLY = [
-        self::DEEPSEEK_V4_FLASH,
-        self::GLM_5_2_NVFP4,
-    ];
+    private const TEXT_ONLY = [];
 
     /**
      * Maximum output token ceiling for a model; used to clamp the configured
@@ -84,9 +73,6 @@ class HetznerModels {
     public static function getAllModels(): array {
         return [
             self::QWEN3_6_35B,
-            self::KIMI_K2_7_CODE,
-            self::DEEPSEEK_V4_FLASH,
-            self::GLM_5_2_NVFP4,
         ];
     }
 }
