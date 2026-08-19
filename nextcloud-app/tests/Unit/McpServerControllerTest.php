@@ -43,7 +43,8 @@ class McpServerControllerTest extends TestCase {
             $this->mapper,
             $this->mcpClient,
             $this->credentials,
-            $this->urlGenerator
+            $this->urlGenerator,
+            $this->createMock(\Psr\Log\LoggerInterface::class)
         );
     }
 

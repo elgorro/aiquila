@@ -29,6 +29,7 @@ services:
       MCP_REGISTRATION_TOKEN: ${MCP_REGISTRATION_TOKEN:-}
       MCP_CLIENT_REDIRECT_URIS: ${MCP_CLIENT_REDIRECT_URIS:-}
       MCP_TRUST_PROXY: ${MCP_TRUST_PROXY:-}
+      MCP_CORS_ORIGINS: ${MCP_CORS_ORIGINS:-}
       MCP_TLS_STRICT: ${MCP_TLS_STRICT:-}
     volumes:
       - standalone_mcp_state:/app/state

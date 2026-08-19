@@ -504,14 +504,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "status",
-                                        "message"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
-                                        "status": {
+                                        "error": {
                                             "type": "string"
                                         },
-                                        "message": {
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -642,14 +642,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "success",
-                                        "message"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
-                                        "success": {
-                                            "type": "boolean"
+                                        "error": {
+                                            "type": "string"
                                         },
-                                        "message": {
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -664,14 +664,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "success",
-                                        "message"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
-                                        "success": {
-                                            "type": "boolean"
+                                        "error": {
+                                            "type": "string"
                                         },
-                                        "message": {
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -798,14 +798,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "success",
-                                        "message"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
-                                        "success": {
-                                            "type": "boolean"
+                                        "error": {
+                                            "type": "string"
                                         },
-                                        "message": {
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -820,14 +820,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "success",
-                                        "message"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
-                                        "success": {
-                                            "type": "boolean"
+                                        "error": {
+                                            "type": "string"
                                         },
-                                        "message": {
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -953,14 +953,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "status",
-                                        "message"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
-                                        "status": {
+                                        "error": {
                                             "type": "string"
                                         },
-                                        "message": {
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -1233,13 +1233,17 @@
                                     "type": "object",
                                     "required": [
                                         "success",
-                                        "error"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
                                         "success": {
                                             "type": "boolean"
                                         },
                                         "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -1255,13 +1259,17 @@
                                     "type": "object",
                                     "required": [
                                         "success",
-                                        "error"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
                                         "success": {
                                             "type": "boolean"
                                         },
                                         "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -1278,6 +1286,7 @@
                                     "required": [
                                         "success",
                                         "error",
+                                        "errorId",
                                         "stdout",
                                         "stderr",
                                         "exitCode"
@@ -1287,6 +1296,9 @@
                                             "type": "boolean"
                                         },
                                         "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
                                             "type": "string"
                                         },
                                         "stdout": {
@@ -1577,10 +1589,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "error"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
                                         "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -1751,10 +1767,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "error"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
                                         "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -1863,10 +1883,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "error"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
                                         "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -1986,10 +2010,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "error"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
                                         "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -2107,10 +2135,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "error"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
                                         "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -2125,10 +2157,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "error"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
                                         "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -2239,10 +2275,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "error"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
                                         "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -2257,10 +2297,14 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "error"
+                                        "error",
+                                        "errorId"
                                     ],
                                     "properties": {
                                         "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }

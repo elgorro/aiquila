@@ -5,6 +5,7 @@ namespace OCA\AIquila\Controller;
 
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
@@ -12,6 +13,7 @@ use OCP\IRequest;
 use Psr\Log\LoggerInterface;
 
 class OccController extends Controller {
+    use ErrorResponseTrait;
     private LoggerInterface $logger;
 
     private const DEFAULT_TIMEOUT = 120;
@@ -38,13 +40,16 @@ class OccController extends Controller {
      * 408: The command exceeded the requested timeout
      * 500: The PHP CLI binary could not be located or the process failed to start
      *
-     * @return JSONResponse<Http::STATUS_OK, array{success: bool, stdout: string, stderr: string, exitCode: int}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_TIMEOUT, array{success: bool, error: string, stdout: string, stderr: string, exitCode: int}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{success: bool, stdout: string, stderr: string, exitCode: int}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_TIMEOUT, array{success: bool, error: string, errorId: string, stdout: string, stderr: string, exitCode: int}, array{}>
      */
     #[NoCSRFRequired]
+    // Admin-only, but it shells out to the PHP CLI and is CSRF-exempt, so
+    // repeated failed calls are worth throttling.
+    #[BruteForceProtection(action: 'aiquilaOccExecute')]
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function execute(string $command = '', array $args = [], int $timeout = 120): JSONResponse {
         if (empty($command)) {
-            return new JSONResponse(['success' => false, 'error' => 'No command provided'], 400);
+            return new JSONResponse(['success' => false, 'error' => 'No command provided', 'errorId' => ''], 400);
         }
 
         $timeout = max(1, min($timeout, self::MAX_TIMEOUT));
@@ -77,7 +82,7 @@ class OccController extends Controller {
 
         if (empty($phpBinary)) {
             $this->logger->error('Cannot locate PHP CLI binary; OCC command aborted', ['command' => $command]);
-            return new JSONResponse(['success' => false, 'error' => 'Cannot locate PHP CLI binary'], 500);
+            return new JSONResponse(['success' => false, 'error' => 'Cannot locate PHP CLI binary', 'errorId' => ''], 500);
         }
 
         $shellCmd = escapeshellarg($phpBinary)
@@ -100,7 +105,7 @@ class OccController extends Controller {
         $process = proc_open($shellCmd, $descriptors, $pipes, \OC::$SERVERROOT);
 
         if (!is_resource($process)) {
-            return new JSONResponse(['success' => false, 'error' => 'Failed to start process'], 500);
+            return new JSONResponse(['success' => false, 'error' => 'Failed to start process', 'errorId' => ''], 500);
         }
 
         fclose($pipes[0]);
@@ -128,6 +133,7 @@ class OccController extends Controller {
                 return new JSONResponse([
                     'success' => false,
                     'error' => "Command timed out after {$timeout} seconds",
+                    'errorId' => '',
                     'stdout' => $stdout,
                     'stderr' => $stderr,
                     'exitCode' => -1,

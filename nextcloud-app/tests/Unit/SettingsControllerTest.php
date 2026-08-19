@@ -64,7 +64,8 @@ class SettingsControllerTest extends TestCase {
             $this->factory,
             $this->credentials,
             $this->nativeMcp,
-            $this->providerSettings
+            $this->providerSettings,
+            $this->createMock(\Psr\Log\LoggerInterface::class)
         );
     }
 

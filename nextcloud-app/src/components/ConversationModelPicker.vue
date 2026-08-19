@@ -97,7 +97,7 @@ export default {
 				this.defaultProvider = data.defaultProvider
 				this.syncFromConversation()
 			} catch (err) {
-				this.error = err.response?.data?.message || err.message
+				this.error = err.response?.data?.error || err.message
 			}
 		},
 		syncFromConversation() {

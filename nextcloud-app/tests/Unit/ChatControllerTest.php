@@ -12,6 +12,7 @@ use OCA\AIquila\Service\McpClientService;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IRequest;
+use Psr\Log\LoggerInterface;
 use PHPUnit\Framework\TestCase;
 
 class ChatControllerTest extends TestCase {
@@ -23,6 +24,7 @@ class ChatControllerTest extends TestCase {
     private $imageOptimizer;
     private $mcpClient;
     private $request;
+    private $logger;
     private ChatController $ctrl;
 
     protected function setUp(): void {
@@ -49,6 +51,7 @@ class ChatControllerTest extends TestCase {
         $this->nativeMcp   = $this->createMock(\OCA\AIquila\Service\NativeMcpService::class);
         $this->nativeMcp->method('isEnabledForUser')->willReturn(false);
         $this->request     = $this->createMock(IRequest::class);
+        $this->logger      = $this->createMock(LoggerInterface::class);
         $this->ctrl        = new ChatController(
             'aiquila',
             $this->request,
@@ -59,7 +62,7 @@ class ChatControllerTest extends TestCase {
             $this->mcpClient,
             $this->nativeMcp,
             'testuser',
-            $this->cacheFactory
+            $this->logger
         );
     }
 
@@ -82,13 +85,46 @@ class ChatControllerTest extends TestCase {
         $this->assertArrayHasKey('error', $response->getData());
     }
 
-    public function testAskReturnsRateLimitErrorWhenLimitExceeded(): void {
-        // RATE_LIMIT_REQUESTS = 10
-        $this->cache->method('get')->willReturn(10);
+    /**
+     * Rate limiting moved from a hand-rolled, userId-keyed counter to Nextcloud's
+     * RateLimitingMiddleware. The middleware never runs in a unit test, so assert
+     * the attributes are present instead — and that both are, since UserRateLimit
+     * alone leaves anonymous callers sharing a single bucket.
+     *
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('rateLimitedEndpoints')]
+    public function testEndpointCarriesBothRateLimitAttributes(string $method): void {
+        $reflection = new \ReflectionMethod(ChatController::class, $method);
 
-        $response = $this->ctrl->ask('hello');
-        $this->assertEquals(429, $response->getStatus());
-        $this->assertArrayHasKey('error', $response->getData());
+        $attributes = array_map(
+            static fn(\ReflectionAttribute $a): string => $a->getName(),
+            $reflection->getAttributes(),
+        );
+
+        $this->assertContains(
+            \OCP\AppFramework\Http\Attribute\UserRateLimit::class,
+            $attributes,
+            $method . ' must be rate limited per user',
+        );
+        $this->assertContains(
+            \OCP\AppFramework\Http\Attribute\AnonRateLimit::class,
+            $attributes,
+            $method . ' must also be rate limited per IP',
+        );
+    }
+
+    /** @return list<array{string}> */
+    public static function rateLimitedEndpoints(): array {
+        return [['ask'], ['chat'], ['summarize'], ['analyzeFile']];
+    }
+
+    public function testControllerNoLongerCarriesItsOwnLimiter(): void {
+        // The old counter silently did nothing when no distributed cache was
+        // configured, so its removal is worth pinning down.
+        $this->assertFalse(
+            method_exists(ChatController::class, 'checkRateLimit'),
+            'the hand-rolled rate limiter should be gone',
+        );
     }
 
     public function testAskDelegatesToClaudeService(): void {

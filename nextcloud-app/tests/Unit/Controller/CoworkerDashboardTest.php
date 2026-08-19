@@ -23,7 +23,8 @@ class CoworkerDashboardTest extends TestCase {
         $registry = $this->createMock(CoworkerTaskRegistry::class);
         $request = $this->createMock(IRequest::class);
         $this->ctrl = new CoworkerController(
-            'aiquila', $request, $this->service, $registry, $this->config, 'alice'
+            'aiquila', $request, $this->service, $registry, $this->config, 'alice',
+            $this->createMock(\Psr\Log\LoggerInterface::class)
         );
     }
 

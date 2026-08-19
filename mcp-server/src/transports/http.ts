@@ -15,6 +15,7 @@ import {
   markStateUnwritableWarned,
 } from '../auth/store.js';
 import { loginHandler } from '../auth/login.js';
+import { LOGIN_STYLESHEET, LOGIN_STYLESHEET_PATH } from '../auth/login-page-css.js';
 import { isPublicRequest } from './lazy-auth.js';
 import { logger } from '../logger.js';
 import { fetchStatus } from '../client/ocs.js';
@@ -166,7 +167,73 @@ export async function startHttp(): Promise<void> {
     }
   }
 
+  // Explicit CORS. Browser-based MCP clients need these headers; previously the
+  // server sent none and relied entirely on the reverse proxy. The issuer origin
+  // is trusted by default (it serves the login page), and MCP_CORS_ORIGINS adds
+  // extra origins — comma-separated, whitespace-trimmed, same idiom as
+  // MCP_ALLOWED_HOSTS. Origins are matched exactly and echoed back; the wildcard
+  // '*' is never sent, since these endpoints are credentialed.
+  const allowedOrigins = new Set<string>();
+  const issuerForCors = process.env.MCP_AUTH_ISSUER;
+  if (authEnabled && issuerForCors) {
+    try {
+      allowedOrigins.add(new URL(issuerForCors).origin);
+    } catch {
+      // Malformed issuer URL — the validation below will throw a clear error.
+    }
+  }
+  const extraOrigins = process.env.MCP_CORS_ORIGINS;
+  if (extraOrigins) {
+    for (const raw of extraOrigins.split(',')) {
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      try {
+        allowedOrigins.add(new URL(trimmed).origin);
+      } catch {
+        logger.warn({ origin: trimmed }, '[startup] Ignoring malformed MCP_CORS_ORIGINS entry');
+      }
+    }
+  }
+
   const app = createMcpExpressApp({ host, allowedHosts });
+
+  // Mounted ahead of every other route so that preflights are answered before
+  // the auth chain runs — an OPTIONS request carries no Authorization header
+  // and would otherwise be rejected with 401 by requireBearerAuth.
+  app.use((req: any, res: any, next: any) => {
+    const origin = req.headers?.origin;
+    if (typeof origin === 'string' && allowedOrigins.has(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader(
+        'Access-Control-Allow-Headers',
+        'Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID'
+      );
+      res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id, WWW-Authenticate');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+    // Always vary on Origin: the response differs per origin even when no
+    // headers are added, so a shared cache must not reuse one for another.
+    res.setHeader('Vary', 'Origin');
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
+
+  // Stylesheet for the OAuth login page. Served as its own document so the page
+  // needs no inline <style>, which lets its CSP drop 'unsafe-inline'. Must stay
+  // ahead of the auth middleware — the login page is shown to anonymous users.
+  app.get(LOGIN_STYLESHEET_PATH, (_req: any, res: any) => {
+    res
+      .set('Content-Type', 'text/css; charset=utf-8')
+      .set('Cache-Control', 'public, max-age=86400')
+      .set('X-Content-Type-Options', 'nosniff')
+      .status(200)
+      .send(LOGIN_STYLESHEET);
+  });
 
   // Simple health check — bypasses all auth middleware so Docker health checks
   // work even before OAuth is fully configured or TLS is verified.

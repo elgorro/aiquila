@@ -251,7 +251,7 @@ export default {
 				this.health = {
 					state: 'error',
 					reason: 'unreachable',
-					message: err.response?.data?.message || err.message,
+					message: err.response?.data?.error || err.message,
 				}
 			}
 			return this.health
@@ -312,7 +312,7 @@ export default {
 				this.$emit('saved')
 			} catch (err) {
 				this.messageType = 'error'
-				this.message = err.response?.data?.message || err.message
+				this.message = err.response?.data?.error || err.message
 			} finally {
 				this.saving = false
 			}
@@ -337,7 +337,7 @@ export default {
 					|| t('aiquila', 'Done.')
 			} catch (err) {
 				this.messageType = 'error'
-				this.message = err.response?.data?.message || err.message
+				this.message = err.response?.data?.error || err.message
 			} finally {
 				this.runningAction = ''
 			}
@@ -363,7 +363,7 @@ export default {
 					: data.message
 			} catch (err) {
 				this.messageType = 'error'
-				this.message = err.response?.data?.message || err.message
+				this.message = err.response?.data?.error || err.message
 			} finally {
 				this.testing = false
 				this.refreshHealth()

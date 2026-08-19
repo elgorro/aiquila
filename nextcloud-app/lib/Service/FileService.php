@@ -3,6 +3,8 @@
 
 namespace OCA\AIquila\Service;
 
+use OCA\AIquila\Service\Exception\ContentTooLargeException;
+use OCA\AIquila\Service\Exception\DestinationExistsException;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
@@ -130,7 +132,7 @@ class FileService {
         }
 
         if ($node->getSize() > self::MAX_READ_SIZE) {
-            throw new \RuntimeException(
+            throw new ContentTooLargeException(
                 'File too large: ' . (string)$node->getSize() . ' bytes (max ' . self::MAX_READ_SIZE . ')'
             );
         }
@@ -245,7 +247,7 @@ class FileService {
         $userFolder = $this->getUserFolder($userId);
 
         if ($userFolder->nodeExists($destinationPath) && !$overwrite) {
-            throw new \RuntimeException("Destination already exists: $destinationPath");
+            throw new DestinationExistsException("Destination already exists: $destinationPath");
         }
 
         // Resolve all sources up front so a missing path fails before any work.
@@ -315,7 +317,7 @@ class FileService {
         if ($node instanceof File) {
             $totalSize += (int)$node->getSize();
             if ($totalSize > self::MAX_ARCHIVE_SIZE) {
-                throw new \RuntimeException(
+                throw new ContentTooLargeException(
                     'Archive contents exceed maximum size of ' . self::MAX_ARCHIVE_SIZE . ' bytes'
                 );
             }
@@ -373,7 +375,7 @@ class FileService {
 
                 $totalSize += (int)$stat['size'];
                 if ($totalSize > self::MAX_ARCHIVE_SIZE) {
-                    throw new \RuntimeException(
+                    throw new ContentTooLargeException(
                         'Extracted contents exceed maximum size of ' . self::MAX_ARCHIVE_SIZE . ' bytes'
                     );
                 }
@@ -391,7 +393,7 @@ class FileService {
 
                 if ($destFolder->nodeExists($safe)) {
                     if (!$overwrite) {
-                        throw new \RuntimeException("Entry already exists: $safe (use overwrite)");
+                        throw new DestinationExistsException("Entry already exists: $safe (use overwrite)");
                     }
                     $target = $destFolder->get($safe);
                     if (!($target instanceof File)) {

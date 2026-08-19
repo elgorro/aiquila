@@ -233,7 +233,7 @@ export default {
 				this.message = t('aiquila', 'Saved.')
 			} catch (err) {
 				this.messageType = 'error'
-				this.message = err.response?.data?.message || err.message
+				this.message = err.response?.data?.error || err.message
 			} finally {
 				this.saving = false
 			}
