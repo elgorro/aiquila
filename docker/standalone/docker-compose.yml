@@ -34,6 +34,12 @@ services:
       - standalone_mcp_state:/app/state
     networks:
       - aiquila-standalone-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '1.0'
+          pids: 100
 
   # Caddy Reverse Proxy (HTTPS)
   caddy:
@@ -54,6 +60,12 @@ services:
       - standalone_caddy_config:/config
     networks:
       - aiquila-standalone-network
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '1.0'
+          pids: 100
 
 volumes:
   standalone_mcp_state:
