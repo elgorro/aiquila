@@ -88,6 +88,20 @@ their value from `ProviderAccessService::getLists()` and `writeAdmin()` routes
 them to `setLists()` rather than `IConfig`. Being `SCOPE_ADMIN`, they are
 filtered off the personal page by the ordinary scope rules.
 
+## Buttons instead of values
+
+`ProviderSettingsSchema::action()` declares a field that runs something rather
+than storing something — the Anthropic card's *Reveal* / *Rotate* metadata-salt
+buttons are the only ones today. An action descriptor carries no `key`, so
+`writeAdmin()` rejects it like any other unwritable field; the client instead
+POSTs the field id to
+`/api/admin/providers/{providerId}/action/{actionId}`, which dispatches to
+`ProviderActionsInterface::runAction()` on the provider. The endpoint is
+admin-only, because an action's answer can be a secret. Providers that declare
+no actions need not implement the interface.
+
+See [Request metadata](request-metadata.md).
+
 ## Scope is a security boundary
 
 `scope` decides which endpoint may write a field:
@@ -188,3 +202,4 @@ either can change what the provider serves.
 - [Local model provider](local-provider.md)
 - [Hetzner Inference provider](hetzner-provider.md)
 - [Mistral provider](mistral-provider.md)
+- [Request metadata](request-metadata.md)

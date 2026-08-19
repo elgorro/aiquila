@@ -9,6 +9,7 @@ use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LocalProvider;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
+use OCA\AIquila\Service\Provider\ProviderActionsInterface;
 use OCA\AIquila\Service\Provider\ProviderSettingsService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -277,6 +278,69 @@ class ProviderSettingsController extends Controller {
             null,
             admin: true,
         ));
+    }
+
+    /**
+     * Run an action declared by a provider's settings schema
+     *
+     * Actions are buttons rather than stored values (ProviderSettingsSchema::action()).
+     * `value` carries whatever the action produced — for the Anthropic metadata
+     * salt that is the salt itself, which is why this endpoint is admin-only.
+     *
+     * @param string $providerId Provider owning the action
+     * @param string $actionId Id of the TYPE_ACTION field to run
+     *
+     * 200: The action ran
+     * 400: Unknown provider, or the provider has no such action
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string, value: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, message: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, message: string}, array{}>
+     */
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function adminAction(string $providerId, string $actionId): JSONResponse {
+        if (!$this->providerFactory->isKnownProviderId($providerId)) {
+            return new JSONResponse(
+                ['success' => false, 'message' => 'Unknown provider: ' . $providerId],
+                Http::STATUS_BAD_REQUEST,
+            );
+        }
+
+        $service = $this->providerFactory->getProviderById($providerId);
+        if (!($service instanceof ProviderActionsInterface)) {
+            return new JSONResponse(
+                ['success' => false, 'message' => 'Provider has no actions: ' . $providerId],
+                Http::STATUS_BAD_REQUEST,
+            );
+        }
+
+        try {
+            $result = $service->runAction($actionId);
+        } catch (\InvalidArgumentException $e) {
+            return new JSONResponse(
+                ['success' => false, 'message' => $e->getMessage()],
+                Http::STATUS_BAD_REQUEST,
+            );
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila: provider action failed', [
+                'provider' => $providerId,
+                'action' => $actionId,
+                'exception' => $e,
+            ]);
+            return new JSONResponse(
+                ['success' => false, 'message' => 'Action failed'],
+                Http::STATUS_INTERNAL_SERVER_ERROR,
+            );
+        }
+
+        $this->logger->info('AIquila: ran provider action', [
+            'provider' => $providerId,
+            'action' => $actionId,
+        ]);
+
+        return new JSONResponse([
+            'success' => true,
+            'message' => (string)($result['message'] ?? ''),
+            'value' => (string)($result['value'] ?? ''),
+        ]);
     }
 
     /**

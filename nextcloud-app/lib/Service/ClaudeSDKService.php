@@ -5,6 +5,7 @@ namespace OCA\AIquila\Service;
 
 use Anthropic\Beta\AnthropicBeta;
 use Anthropic\Beta\Files\FileMetadata;
+use Anthropic\Beta\Messages\BetaMetadata;
 use Anthropic\Client;
 use Anthropic\Core\Contracts\BaseStream;
 use Anthropic\Core\Exceptions\APIConnectionException;
@@ -22,9 +23,11 @@ use Anthropic\Messages\Batches\MessageBatchExpiredResult;
 use Anthropic\Messages\Batches\MessageBatchIndividualResponse;
 use Anthropic\Messages\Batches\MessageBatchSucceededResult;
 use Anthropic\Messages\Message;
+use Anthropic\Messages\Metadata;
 use Anthropic\Messages\Usage;
 use Anthropic\Models\ModelInfo;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\Provider\ProviderActionsInterface;
 use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 use OCP\ICache;
@@ -38,11 +41,12 @@ use Psr\Log\LoggerInterface;
  * This is the new implementation using the official SDK.
  * Provides better error handling, type safety, and streaming support.
  */
-class ClaudeSDKService implements LLMProviderInterface {
+class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface {
     private IConfig $config;
     private LoggerInterface $logger;
     private CredentialService $credentials;
     private ICache $cache;
+    private RequestMetadataService $requestMetadata;
     private string $appName = 'aiquila';
 
     private const CAPABILITY_CACHE_TTL = 3600; // 1 hour
@@ -54,11 +58,16 @@ class ClaudeSDKService implements LLMProviderInterface {
      */
     private const STREAMING_THRESHOLD = 16384;
 
-    public function __construct(IConfig $config, LoggerInterface $logger, CredentialService $credentials, ICacheFactory $cacheFactory) {
+    /** Ids of the settings-card actions handled by runAction(). */
+    private const ACTION_REVEAL_SALT = 'reveal_metadata_salt';
+    private const ACTION_ROTATE_SALT = 'rotate_metadata_salt';
+
+    public function __construct(IConfig $config, LoggerInterface $logger, CredentialService $credentials, ICacheFactory $cacheFactory, RequestMetadataService $requestMetadata) {
         $this->config = $config;
         $this->logger = $logger;
         $this->credentials = $credentials;
         $this->cache = $cacheFactory->createDistributed('aiquila_model_caps');
+        $this->requestMetadata = $requestMetadata;
     }
 
     public function getId(): string {
@@ -210,6 +219,13 @@ class ClaudeSDKService implements LLMProviderInterface {
             'messages'   => $messages,
         ];
 
+        // Pseudonymous attribution for Anthropic's abuse detection. Never the
+        // raw UID — see RequestMetadataService.
+        $userHash = $this->requestMetadata->hashUserId($userId);
+        if ($userHash !== null) {
+            $params['metadata'] = ['user_id' => $userHash];
+        }
+
         // Adaptive thinking is opt-in (conversation override or admin default).
         // "Off" means omitting the param entirely — an explicit
         // {type: 'disabled'} is rejected with a 400 on Fable 5.
@@ -355,6 +371,21 @@ class ClaudeSDKService implements LLMProviderInterface {
     /**
      * Dispatch a non-streaming create call. Overridable for testing.
      */
+    /**
+     * Metadata param for a create call, or null when nothing is attached.
+     * The SDK property is `userID`; it serializes as `user_id`.
+     */
+    private function metadataParam(array $params): ?Metadata {
+        $userId = $params['metadata']['user_id'] ?? null;
+        return is_string($userId) ? Metadata::with(userID: $userId) : null;
+    }
+
+    /** Beta-endpoint twin of metadataParam(). */
+    private function betaMetadataParam(array $params): ?BetaMetadata {
+        $userId = $params['metadata']['user_id'] ?? null;
+        return is_string($userId) ? BetaMetadata::with(userID: $userId) : null;
+    }
+
     protected function callCreate(Client $client, array $params): Message {
         return $client->messages->create(
             maxTokens: $params['max_tokens'],
@@ -368,6 +399,7 @@ class ClaudeSDKService implements LLMProviderInterface {
             topK: $params['top_k'] ?? null,
             stopSequences: $params['stop_sequences'] ?? null,
             tools: $params['tools'] ?? null,
+            metadata: $this->metadataParam($params),
             requestOptions: $this->requestOptionsForMessages($params),
         );
     }
@@ -506,6 +538,7 @@ class ClaudeSDKService implements LLMProviderInterface {
             topK: $params['top_k'] ?? null,
             stopSequences: $params['stop_sequences'] ?? null,
             tools: $params['tools'] ?? null,
+            metadata: $this->metadataParam($params),
             requestOptions: $this->requestOptionsForMessages($params),
         );
     }
@@ -1087,6 +1120,11 @@ class ClaudeSDKService implements LLMProviderInterface {
         if (isset($params['stop_sequences'])) {
             $out['stopSequences'] = $params['stop_sequences'];
         }
+        // The SDK model wants a Metadata object here, not our snake_case array.
+        $metadata = $this->metadataParam($params);
+        if ($metadata !== null) {
+            $out['metadata'] = $metadata;
+        }
         return $out;
     }
 
@@ -1367,7 +1405,41 @@ class ClaudeSDKService implements LLMProviderInterface {
             ),
             ProviderSettingsSchema::maxTokens('max_tokens', ClaudeModels::DEFAULT_MAX_TOKENS),
             ProviderSettingsSchema::timeout('api_timeout', 30, 'Shared across all hosted providers.'),
+            ProviderSettingsSchema::checkbox(
+                RequestMetadataService::ENABLED_KEY,
+                RequestMetadataService::ENABLED_KEY,
+                'Send a pseudonymous user id with each request',
+                'Attaches metadata.user_id — an HMAC-SHA256 of the Nextcloud user id, salted with a secret unique to this instance. The login name itself is never sent, and the hash cannot be correlated with any other AIquila deployment. Anthropic uses it to attribute abuse; only an admin holding the salt can resolve it back to an account.',
+                storage: ProviderSettingsSchema::STORAGE_BOOL,
+            ),
+            ProviderSettingsSchema::action(
+                self::ACTION_REVEAL_SALT,
+                'Metadata salt',
+                'Reveal',
+                'Needed to resolve a hashed user id back to an account, e.g. when answering an abuse report. Also available as `occ aiquila:metadata-salt`.',
+            ),
+            ProviderSettingsSchema::action(
+                self::ACTION_ROTATE_SALT,
+                'Rotate the metadata salt',
+                'Rotate',
+                'Issues a fresh salt. All hashes sent before this point become permanently unresolvable.',
+                confirm: true,
+            ),
         ];
+    }
+
+    public function runAction(string $actionId): array {
+        switch ($actionId) {
+            case self::ACTION_REVEAL_SALT:
+                return ['value' => $this->requestMetadata->getSalt()];
+            case self::ACTION_ROTATE_SALT:
+                return [
+                    'value' => $this->requestMetadata->rotateSalt(),
+                    'message' => 'A new metadata salt was generated. Hashes sent earlier can no longer be resolved.',
+                ];
+            default:
+                throw new \InvalidArgumentException('Unknown action: ' . $actionId);
+        }
     }
 
     public function getCapabilities(): array {
@@ -1858,6 +1930,7 @@ class ClaudeSDKService implements LLMProviderInterface {
             tools: $params['tools'] ?? null,
             topK: $params['top_k'] ?? null,
             topP: $params['top_p'] ?? null,
+            metadata: $this->betaMetadataParam($params),
             betas: [AnthropicBeta::MCP_CLIENT_2025_11_20],
         );
     }

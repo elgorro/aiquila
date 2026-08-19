@@ -8,6 +8,7 @@ use Anthropic\Messages\Message;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
@@ -68,6 +69,7 @@ class ClaudeSDKServiceAutoStreamTest extends TestCase {
     private LoggerInterface $logger;
     private CredentialService $credentials;
     private ICacheFactory $cacheFactory;
+    private RequestMetadataService $requestMetadata;
 
     protected function setUp(): void {
         $this->config = $this->createMock(IConfig::class);
@@ -83,6 +85,7 @@ class ClaudeSDKServiceAutoStreamTest extends TestCase {
             'supports_effort' => false,
         ]);
         $this->cacheFactory = $this->createMock(ICacheFactory::class);
+        $this->requestMetadata = $this->createMock(RequestMetadataService::class);
         $this->cacheFactory->method('createDistributed')->willReturn($cache);
 
         $this->config->method('getUserValue')->willReturn('');
@@ -141,7 +144,7 @@ class ClaudeSDKServiceAutoStreamTest extends TestCase {
     }
 
     public function testLargeMaxTokensUsesStreamingTransport(): void {
-        $service = new AutoStreamTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service = new AutoStreamTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
         $service->setStreamEvents($this->makeEvents());
 
         $result = $service->ask('test prompt', '', 'testuser');
@@ -167,7 +170,7 @@ class ClaudeSDKServiceAutoStreamTest extends TestCase {
                 default => $default,
             });
 
-        $service = new AutoStreamTestableService($config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service = new AutoStreamTestableService($config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
 
         $result = $service->ask('test prompt', '', 'testuser');
 

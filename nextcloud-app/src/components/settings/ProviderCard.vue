@@ -49,7 +49,9 @@
 				:provider-id="provider.id"
 				:user-scope="scope === 'user'"
 				:model-value="draft[field.id]"
-				@update:model-value="v => setValue(field.id, v)" />
+				:action-running="runningAction === field.id"
+				@update:model-value="v => setValue(field.id, v)"
+				@action="runAction" />
 
 			<details v-if="advancedFields.length" class="provider-card__advanced">
 				<summary>{{ t('aiquila', 'Advanced') }}</summary>
@@ -59,7 +61,9 @@
 					:provider-id="provider.id"
 					:user-scope="scope === 'user'"
 					:model-value="draft[field.id]"
-					@update:model-value="v => setValue(field.id, v)" />
+					:action-running="runningAction === field.id"
+					@update:model-value="v => setValue(field.id, v)"
+					@action="runAction" />
 			</details>
 
 			<NcNoteCard v-if="message" :type="messageType">
@@ -88,7 +92,7 @@ import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwit
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 
 import SchemaField from './SchemaField.vue'
-import { getProviderStatus, saveAdminProvider, saveUserProvider, testProvider } from '../../settings-api.js'
+import { getProviderStatus, runProviderAction, saveAdminProvider, saveUserProvider, testProvider } from '../../settings-api.js'
 
 /** Capability flag → chip label. Flags absent from here are not worth a chip. */
 const CAPABILITY_LABELS = {
@@ -145,6 +149,8 @@ export default {
 			open: false,
 			saving: false,
 			testing: false,
+			/** Id of the action field whose request is in flight, '' when idle. */
+			runningAction: '',
 			dirty: false,
 			message: '',
 			messageType: 'success',
@@ -317,6 +323,25 @@ export default {
 		 * read-only, costs no tokens, and — unlike the admin test — never swaps
 		 * the stored key out from under a concurrent request.
 		 */
+		/**
+		 * Schema-declared button. The answer's `value` (e.g. a revealed salt) is
+		 * shown in the card's note area, which is the only place it is exposed.
+		 */
+		async runAction(actionId) {
+			this.runningAction = actionId
+			this.message = ''
+			try {
+				const { data } = await runProviderAction(this.provider.id, actionId)
+				this.messageType = data.success ? 'success' : 'error'
+				this.message = [data.message, data.value].filter(Boolean).join(' ')
+					|| t('aiquila', 'Done.')
+			} catch (err) {
+				this.messageType = 'error'
+				this.message = err.response?.data?.message || err.message
+			} finally {
+				this.runningAction = ''
+			}
+		},
 		async test() {
 			if (this.scope !== 'admin') {
 				this.testing = true
