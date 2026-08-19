@@ -22,37 +22,38 @@ import (
 // DeployConfig holds the deployment parameters that can be supplied via a
 // YAML or JSON config file (keys match flag names, snake_case).
 type DeployConfig struct {
-	Name       string `yaml:"name"        json:"name"`
-	Domain     string `yaml:"domain"      json:"domain"`
-	NCURL      string `yaml:"nc_url"      json:"nc_url"`
-	NCUser     string `yaml:"nc_user"     json:"nc_user"`
-	NCPassword string `yaml:"nc_password" json:"nc_password"`
+	Name       string   `yaml:"name"        json:"name"`
+	Domain     string   `yaml:"domain"      json:"domain"`
+	NCURL      string   `yaml:"nc_url"      json:"nc_url"`
+	NCUser     string   `yaml:"nc_user"     json:"nc_user"`
+	NCPassword string   `yaml:"nc_password" json:"nc_password"`
 	AcmeEmail  string   `yaml:"acme_email"  json:"acme_email"`
 	Monitoring bool     `yaml:"monitoring"  json:"monitoring"`
 	SSHKey     string   `yaml:"ssh_key"     json:"ssh_key"`
 	Token      string   `yaml:"token"       json:"token"`
 	Packages   []string `yaml:"packages"    json:"packages"`
 	// Infrastructure
-	Stack      string `yaml:"stack"       json:"stack"`
-	Image      string `yaml:"image"       json:"image"`
-	Location   string `yaml:"location"    json:"location"`
-	Type       string `yaml:"type"        json:"type"`
-	Swap       string `yaml:"swap"        json:"swap"`
-	VolumeSize int    `yaml:"volume_size" json:"volume_size"`
-	LUKS       bool   `yaml:"luks"        json:"luks"`
-	StorageBox         int    `yaml:"storage_box"          json:"storage_box"`
-	StorageBoxPassword string `yaml:"storage_box_password" json:"storage_box_password"`
-	Network    string `yaml:"network"     json:"network"`
-	Labels     []string `yaml:"labels"    json:"labels"`
+	Stack              string   `yaml:"stack"       json:"stack"`
+	Image              string   `yaml:"image"       json:"image"`
+	Location           string   `yaml:"location"    json:"location"`
+	Type               string   `yaml:"type"        json:"type"`
+	Swap               string   `yaml:"swap"        json:"swap"`
+	VolumeSize         int      `yaml:"volume_size" json:"volume_size"`
+	LUKS               bool     `yaml:"luks"        json:"luks"`
+	StorageBox         int      `yaml:"storage_box"          json:"storage_box"`
+	StorageBoxPassword string   `yaml:"storage_box_password" json:"storage_box_password"`
+	Network            string   `yaml:"network"     json:"network"`
+	Labels             []string `yaml:"labels"    json:"labels"`
 	// DNS
 	DNSZone  string `yaml:"dns_zone"  json:"dns_zone"`
 	DNSToken string `yaml:"dns_token" json:"dns_token"` // deprecated: DNS uses the Cloud API token
 	// SSH
 	SSHAllowCIDR string `yaml:"ssh_allow_cidr" json:"ssh_allow_cidr"`
+	SSHAllowAny  bool   `yaml:"ssh_allow_any" json:"ssh_allow_any"`
 	// Nextcloud self-hosted (--stack nextcloud/full)
-	NCDomain         string `yaml:"nc_domain"          json:"nc_domain"`
-	NCAdminUser      string `yaml:"nc_admin_user"      json:"nc_admin_user"`
-	NCAdminPassword  string `yaml:"nc_admin_password"  json:"nc_admin_password"`
+	NCDomain        string `yaml:"nc_domain"          json:"nc_domain"`
+	NCAdminUser     string `yaml:"nc_admin_user"      json:"nc_admin_user"`
+	NCAdminPassword string `yaml:"nc_admin_password"  json:"nc_admin_password"`
 	// Hetzner Inference (experimental) — preconfigures the AIquila LLM provider
 	InferenceToken string `yaml:"hetzner_inference_token" json:"hetzner_inference_token"`
 	InferenceModel string `yaml:"hetzner_inference_model" json:"hetzner_inference_model"`

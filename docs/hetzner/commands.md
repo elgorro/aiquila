@@ -76,7 +76,8 @@ Run `aiquila-hetzner options` to list all server types, locations, and images av
 | Flag | Description |
 |------|-------------|
 | `--dns-zone` | Hetzner DNS zone (e.g. `example.com`); creates `<name>.<zone>` A record |
-| `--ssh-allow-cidr` | Restrict SSH to this CIDR (e.g. `203.0.113.0/24`) instead of `0.0.0.0/0` |
+| `--ssh-allow-cidr` | Restrict SSH to this CIDR (e.g. `203.0.113.0/24`); default: your detected public IP as `/32` |
+| `--ssh-allow-any` | Open SSH to `0.0.0.0/0` — disables public-IP detection, prints a warning |
 | `--network` | Attach server to an existing private network |
 
 **Storage:**

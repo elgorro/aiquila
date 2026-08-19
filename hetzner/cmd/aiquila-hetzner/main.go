@@ -18,6 +18,7 @@ import (
 	hcloudclient "github.com/elgorro/aiquila/hetzner/internal/hcloud"
 	profilepkg "github.com/elgorro/aiquila/hetzner/internal/profile"
 	"github.com/elgorro/aiquila/hetzner/internal/provision"
+	"github.com/elgorro/aiquila/hetzner/internal/publicip"
 	"github.com/elgorro/aiquila/hetzner/internal/server"
 	"github.com/elgorro/aiquila/hetzner/internal/storagebox"
 	"github.com/elgorro/aiquila/hetzner/internal/volume"
@@ -52,28 +53,29 @@ var (
 	createNCAdminUser     string
 	createNCAdminPassword string
 	// Hetzner Inference (experimental) — preconfigures the AIquila app's LLM provider
-	createInferenceToken string
-	createInferenceModel string
-	createToken      string
-	createAcmeEmail  string
-	createMonitoring bool
-	createVolumeSize int
-	createLUKS       bool
+	createInferenceToken     string
+	createInferenceModel     string
+	createToken              string
+	createAcmeEmail          string
+	createMonitoring         bool
+	createVolumeSize         int
+	createLUKS               bool
 	createStorageBox         int
 	createStorageBoxPassword string
-	createDryRun     bool
-	createNoConfirm  bool
-	createLabels        []string
-	createDNSZone string
-	createSSHAllowCIDR  string
-	createNetworkName   string
-	createSwap          string
-	createConfig        string
-	createPackages      []string
+	createDryRun             bool
+	createNoConfirm          bool
+	createLabels             []string
+	createDNSZone            string
+	createSSHAllowCIDR       string
+	createSSHAllowAny        bool
+	createNetworkName        string
+	createSwap               string
+	createConfig             string
+	createPackages           []string
 
 	// destroy flags
-	destroyName     string
-	destroyToken    string
+	destroyName    string
+	destroyToken   string
 	destroyDNSZone string
 )
 
@@ -168,7 +170,10 @@ func buildCreateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&createDryRun, "dry-run", false, "Print what would be created without making any API calls")
 	cmd.Flags().StringArrayVar(&createLabels, "label", nil, "Resource label key=value (repeatable, applied to server/firewall/key/volume)")
 	cmd.Flags().StringVar(&createDNSZone, "dns-zone", "", "Hetzner DNS zone (e.g. example.com) — creates <name>.<zone> A record after server IP is known")
-	cmd.Flags().StringVar(&createSSHAllowCIDR, "ssh-allow-cidr", "", "Restrict SSH (port 22) to this CIDR instead of 0.0.0.0/0 (e.g. 203.0.113.0/24)")
+	cmd.Flags().StringVar(&createSSHAllowCIDR, "ssh-allow-cidr", "",
+		"Restrict SSH (port 22) to this CIDR (e.g. 203.0.113.0/24); default: your detected public IP")
+	cmd.Flags().BoolVar(&createSSHAllowAny, "ssh-allow-any", false,
+		"Allow SSH (port 22) from any IP (0.0.0.0/0) — disables public-IP auto-detection")
 	cmd.Flags().StringVar(&createNetworkName, "network", "", "Attach server to this private network (must exist; create with 'network create')")
 	cmd.Flags().StringVar(&createSwap, "swap", "", "Create a swap file of this size (e.g. 1G, 2G) — useful for cpx11/cx22 instances")
 	cmd.Flags().StringVar(&createConfig, "config", "", "Path to YAML or JSON deployment config file")
@@ -287,6 +292,9 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	if createSSHAllowCIDR == "" && fileCfg.SSHAllowCIDR != "" {
 		createSSHAllowCIDR = fileCfg.SSHAllowCIDR
 	}
+	if !cmd.Flags().Changed("ssh-allow-any") && fileCfg.SSHAllowAny {
+		createSSHAllowAny = true
+	}
 	if createNCDomain == "" && fileCfg.NCDomain != "" {
 		createNCDomain = fileCfg.NCDomain
 	}
@@ -376,6 +384,14 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 		createLUKS = false
 	}
 
+	// Resolve the SSH firewall source before anything is created, so a bad CIDR
+	// fails before a server is billed. Under --dry-run we never reach out to the
+	// network; the plan just states that detection happens at create time.
+	sshSourceDesc, err := resolveSSHAllowCIDR(context.Background(), createDryRun)
+	if err != nil {
+		return err
+	}
+
 	if createName == "" {
 		createName = "aiquila-" + randomSuffix(6)
 	}
@@ -388,7 +404,7 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 
 	// ── 5. Dry-run — print plan and exit ───────────────────────────────────
 	if createDryRun {
-		return printDryRun(createSwap, packages)
+		return printDryRun(createSwap, packages, sshSourceDesc)
 	}
 
 	// ── 5b. Cost confirmation ───────────────────────────────────────────────
@@ -1229,7 +1245,56 @@ func runDestroy(_ *cobra.Command, _ []string) error {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-func printDryRun(swapSize string, packages []string) error {
+// resolveSSHAllowCIDR settles what the firewall's inbound TCP 22 rule will
+// allow and returns a human-readable description of the source for the plan
+// output. It mutates createSSHAllowCIDR, which is what firewall.Setup consumes.
+//
+// Precedence: an explicit --ssh-allow-cidr, then --ssh-allow-any, then this
+// machine's detected public IP. Detection failures never block a deploy — they
+// fall back to the world-open default with a warning.
+func resolveSSHAllowCIDR(ctx context.Context, dryRun bool) (string, error) {
+	const anyCIDR = "0.0.0.0/0"
+
+	if createSSHAllowCIDR != "" && createSSHAllowAny {
+		return "", fmt.Errorf("--ssh-allow-cidr and --ssh-allow-any are mutually exclusive")
+	}
+
+	if createSSHAllowCIDR != "" {
+		if _, err := firewall.ParseSSHSources(createSSHAllowCIDR); err != nil {
+			return "", err
+		}
+		appLog.Info("firewall", "ssh source from --ssh-allow-cidr", "cidr", createSSHAllowCIDR)
+		return createSSHAllowCIDR, nil
+	}
+
+	if createSSHAllowAny {
+		fmt.Fprintln(os.Stderr, "WARNING: --ssh-allow-any: SSH (port 22) will be reachable from any IP")
+		createSSHAllowCIDR = anyCIDR
+		appLog.Info("firewall", "ssh open to all IPs (--ssh-allow-any)", "cidr", anyCIDR)
+		return anyCIDR + " (any IP)", nil
+	}
+
+	if dryRun {
+		return "your detected public IP (auto-detected at create time)", nil
+	}
+
+	ip, err := publicip.Detect(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr,
+			"WARNING: could not detect your public IP (%v); SSH (port 22) will be open to %s — "+
+				"pass --ssh-allow-cidr to restrict it\n", err, anyCIDR)
+		createSSHAllowCIDR = anyCIDR
+		appLog.Info("firewall", "public IP detection failed; ssh open to all IPs", "error", err.Error())
+		return anyCIDR + " (any IP)", nil
+	}
+
+	createSSHAllowCIDR = publicip.CIDR(ip)
+	fmt.Printf("No --ssh-allow-cidr specified, restricting SSH to your current IP: %s\n", createSSHAllowCIDR)
+	appLog.Info("firewall", "ssh restricted to detected public IP", "cidr", createSSHAllowCIDR)
+	return createSSHAllowCIDR + " (auto-detected)", nil
+}
+
+func printDryRun(swapSize string, packages []string, sshSourceDesc string) error {
 	home, _ := os.UserHomeDir()
 	keyDesc := "generate Ed25519 → " + home + "/.ssh/aiquila_ed25519"
 	if createSSHKey != "" {
@@ -1263,6 +1328,7 @@ func printDryRun(swapSize string, packages []string) error {
   Stack:     %s
   Server:    %s (%s, %s, %s)
   Firewall:  %s-fw  (TCP 22/80/443, UDP 443)
+  SSH from:  %s
   SSH key:   %s-key  (%s)
   Volume:    %s
   MCP Domain: %s
@@ -1277,6 +1343,7 @@ func printDryRun(swapSize string, packages []string) error {
 		createStack,
 		createName, createType, createImage, createLocation,
 		createName,
+		sshSourceDesc,
 		createName, keyDesc,
 		volumeDesc,
 		createMCPDomain,

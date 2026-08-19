@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"strings"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
@@ -15,23 +17,25 @@ import (
 // firewall with the same name already exists, it is reused.
 //
 // sshCIDR restricts SSH access to the given CIDR (e.g. "203.0.113.0/24").
-// Pass "" to allow SSH from anywhere (0.0.0.0/0 and ::/0).
+// Pass "" to allow SSH from anywhere (0.0.0.0/0 and ::/0) — callers should
+// resolve a concrete CIDR up front rather than relying on that default.
 func Setup(ctx context.Context, client *hcloud.Client, name string, server *hcloud.Server, labels map[string]string, sshCIDR string) (*hcloud.Firewall, error) {
 	existing, _, err := client.Firewall.GetByName(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("look up firewall %q: %w", name, err)
 	}
+	sshSources, err := ParseSSHSources(sshCIDR)
+	if err != nil {
+		return nil, err
+	}
+
 	if existing != nil {
 		fmt.Printf("  Reusing existing firewall %q (id=%d)\n", name, existing.ID)
+		warnSSHRuleMismatch(existing, sshSources)
 		if err := attach(ctx, client, existing, server); err != nil {
 			return nil, err
 		}
 		return existing, nil
-	}
-
-	sshSources, err := parseSSHSources(sshCIDR)
-	if err != nil {
-		return nil, err
 	}
 
 	rules := []hcloud.FirewallRule{
@@ -88,7 +92,61 @@ func tcpRuleWithSources(port int, description string, sources []net.IPNet) hclou
 	}
 }
 
-func parseSSHSources(sshCIDR string) ([]net.IPNet, error) {
+// warnSSHRuleMismatch reports when an existing firewall we are about to reuse
+// permits SSH from somewhere other than what was requested. The firewall may
+// have been tuned by hand, so it is never modified here.
+func warnSSHRuleMismatch(fw *hcloud.Firewall, want []net.IPNet) {
+	for _, rule := range fw.Rules {
+		if rule.Direction != hcloud.FirewallRuleDirectionIn ||
+			rule.Protocol != hcloud.FirewallRuleProtocolTCP ||
+			rule.Port == nil || *rule.Port != "22" {
+			continue
+		}
+		if sameSources(rule.SourceIPs, want) {
+			return
+		}
+		fmt.Fprintf(os.Stderr,
+			"WARNING: existing firewall %q allows SSH from %s, not %s — not modified; "+
+				"edit it in the Hetzner console or delete it to have it recreated\n",
+			fw.Name, joinNets(rule.SourceIPs), joinNets(want))
+		return
+	}
+	fmt.Fprintf(os.Stderr,
+		"WARNING: existing firewall %q has no inbound TCP 22 rule — SSH may be unreachable\n", fw.Name)
+}
+
+func sameSources(a, b []net.IPNet) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[string]int, len(a))
+	for _, n := range a {
+		seen[n.String()]++
+	}
+	for _, n := range b {
+		key := n.String()
+		if seen[key] == 0 {
+			return false
+		}
+		seen[key]--
+	}
+	return true
+}
+
+func joinNets(nets []net.IPNet) string {
+	parts := make([]string, 0, len(nets))
+	for _, n := range nets {
+		parts = append(parts, n.String())
+	}
+	if len(parts) == 0 {
+		return "(nothing)"
+	}
+	return strings.Join(parts, ", ")
+}
+
+// ParseSSHSources turns a CIDR string into firewall source networks. An empty
+// string yields the world-open default (0.0.0.0/0 and ::/0).
+func ParseSSHSources(sshCIDR string) ([]net.IPNet, error) {
 	if sshCIDR == "" {
 		return []net.IPNet{
 			{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)},
