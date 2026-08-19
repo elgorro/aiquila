@@ -73,6 +73,7 @@ Made possible by [Claude](https://www.anthropic.com/claude) from [Anthropic](htt
         <command>OCA\AIquila\Command\TestSDKCommand</command>
         <command>OCA\AIquila\Command\McpAddCommand</command>
         <command>OCA\AIquila\Command\DoctorCommand</command>
+        <command>OCA\AIquila\Command\MetadataSaltCommand</command>
     </commands>
     <openmetrics>
         <exporter>OCA\AIquila\OpenMetrics\TokensUsedExporter</exporter>

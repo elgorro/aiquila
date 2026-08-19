@@ -12,6 +12,18 @@
 			{{ field.title }}
 		</NcCheckboxRadioSwitch>
 
+		<!--
+			A button, not a value: the parent POSTs the field id to the provider
+			action endpoint. Whatever comes back (e.g. a revealed salt) is shown
+			by the parent, not here.
+		-->
+		<template v-else-if="field.type === 'action'">
+			<label class="schema-field__label">{{ field.title }}</label>
+			<NcButton :disabled="actionRunning" @click="runAction">
+				{{ field.button_label || t('aiquila', 'Run') }}
+			</NcButton>
+		</template>
+
 		<template v-else>
 			<label class="schema-field__label" :for="inputId">{{ field.title }}</label>
 
@@ -82,6 +94,7 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import { searchPrincipals } from '../../settings-api.js'
+import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcPasswordField from '@nextcloud/vue/components/NcPasswordField'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
@@ -91,6 +104,7 @@ import NcTextField from '@nextcloud/vue/components/NcTextField'
 export default {
 	name: 'SchemaField',
 	components: {
+		NcButton,
 		NcCheckboxRadioSwitch,
 		NcPasswordField,
 		NcSelect,
@@ -117,8 +131,13 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+		/** Action fields only: the parent's request is in flight. */
+		actionRunning: {
+			type: Boolean,
+			default: false,
+		},
 	},
-	emits: ['update:modelValue'],
+	emits: ['update:modelValue', 'action'],
 	data() {
 		return {
 			/** Options for the principal picker, refreshed as the admin types. */
@@ -187,6 +206,13 @@ export default {
 		t,
 		emit(value) {
 			this.$emit('update:modelValue', value)
+		},
+		/** Destructive actions ask first; the schema decides which those are. */
+		runAction() {
+			if (this.field.confirm && !window.confirm(this.field.description || this.field.title)) {
+				return
+			}
+			this.$emit('action', this.field.id)
 		},
 		/** Emit ids, not option objects — that is what the API stores. */
 		emitPrincipals(options) {

@@ -50,6 +50,12 @@ final class ProviderSettingsSchema {
     public const TYPE_TEXTAREA = 'textarea';
     /** Multiple values from an async lookup; the value is a list of ids. */
     public const TYPE_MULTISELECT = 'multiselect';
+    /**
+     * A button, not a value. Stores nothing: the client POSTs the field id to
+     * the provider-action endpoint and renders whatever comes back. Providers
+     * that declare one must implement ProviderActionsInterface.
+     */
+    public const TYPE_ACTION = 'action';
 
     /**
      * Placeholder for the `options` of a model select. The API expands it to the
@@ -394,6 +400,35 @@ final class ProviderSettingsSchema {
             'options' => self::OPTIONS_PRINCIPALS,
             'default' => [],
             'group' => self::GROUP_ADVANCED,
+        ];
+    }
+
+    /**
+     * A button that runs a provider-side action instead of storing a value.
+     *
+     * Carries no `key`, so ProviderSettingsService rejects it on write; it is
+     * only ever exercised through the action endpoint. Admin scope only.
+     *
+     * @param string $buttonLabel Text on the button itself.
+     * @param bool   $confirm     Ask the admin to confirm before running.
+     */
+    public static function action(
+        string $id,
+        string $title,
+        string $buttonLabel,
+        string $description = '',
+        bool $confirm = false,
+        string $group = self::GROUP_ADVANCED,
+    ): array {
+        return [
+            'id' => $id,
+            'title' => $title,
+            'description' => $description,
+            'type' => self::TYPE_ACTION,
+            'scope' => self::SCOPE_ADMIN,
+            'button_label' => $buttonLabel,
+            'confirm' => $confirm,
+            'group' => $group,
         ];
     }
 

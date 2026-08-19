@@ -57,6 +57,17 @@ export function testProvider(providerId, apiKey = '') {
 }
 
 /**
+ * Run a schema-declared provider action (a button rather than a stored value).
+ *
+ * @param {string} providerId - provider owning the action
+ * @param {string} actionId - id of the action field
+ * @return {Promise} resolving to `{success, message, value}`
+ */
+export function runProviderAction(providerId, actionId) {
+	return axios.post(url(`/api/admin/providers/${providerId}/action/${actionId}`), {})
+}
+
+/**
  * Live health of one provider, behind the status light on its card.
  *
  * The user-scope route reports what this user actually gets (their own key, or

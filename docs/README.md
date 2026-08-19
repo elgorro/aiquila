@@ -63,6 +63,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[Provider settings schema](dev/provider-settings.md)** — how providers describe their own configuration, and how to add one
 - **[Local model provider](dev/local-provider.md)** — self-hosted inference via Ollama, LM Studio or llama.cpp
 - **[Hetzner Inference provider](dev/hetzner-provider.md)** — EU-hosted open-weight models via Hetzner's experimental API
+- **[Request metadata](dev/request-metadata.md)** — the hashed `metadata.user_id` sent to Anthropic, and how to resolve it
 - **[OpenAPI](dev/openapi.md)** — OpenAPI documentation
 - **MCP Development** — [Architecture](mcp/development/architecture.md) | [Adding Tools](mcp/development/adding-tools.md) | [Adding Apps](mcp/development/adding-apps.md)
 

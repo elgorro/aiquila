@@ -17,6 +17,7 @@ use Anthropic\Models\ModelInfo;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
@@ -164,6 +165,7 @@ class ClaudeServiceTest extends TestCase {
     private $logger;
     private $credentials;
     private $cacheFactory;
+    private $requestMetadata;
     private ClaudeSDKService $service;
     private TestableClaudeSDKService $testable;
 
@@ -176,10 +178,11 @@ class ClaudeServiceTest extends TestCase {
         $cache->method('get')->willReturn(null);
         $cache->method('set')->willReturn(true);
         $this->cacheFactory = $this->createMock(ICacheFactory::class);
+        $this->requestMetadata = $this->createMock(RequestMetadataService::class);
         $this->cacheFactory->method('createDistributed')->willReturn($cache);
 
-        $this->service     = new ClaudeSDKService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
-        $this->testable    = new TestableClaudeSDKService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $this->service     = new ClaudeSDKService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
+        $this->testable    = new TestableClaudeSDKService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
     }
 
     // ── PSR-7 helpers for building SDK exceptions ─────────────────────────
@@ -1339,6 +1342,57 @@ class ClaudeServiceTest extends TestCase {
         $this->assertCount(1, $done['citations']);
         $this->assertSame('page_location', $done['citations'][0]['type']);
         $this->assertSame(2, $done['citations'][0]['start_page_number']);
+    }
+
+    // ── metadata.user_id ───────────────────────────────────────────────────
+
+    public function testMetadataCarriesTheHashAndNeverTheRawUid(): void {
+        $this->configWithApiKey();
+        $hash = str_repeat('ab', 32);
+        $this->requestMetadata->method('hashUserId')
+            ->willReturnCallback(fn (?string $uid) => $uid === 'testuser' ? $hash : null);
+
+        $this->testable->ask('Hi', '', 'testuser');
+
+        $this->assertSame(['user_id' => $hash], $this->testable->lastCreateParams['metadata']);
+        $this->assertStringNotContainsString(
+            'testuser',
+            json_encode($this->testable->lastCreateParams['metadata']),
+        );
+    }
+
+    public function testMetadataIsAbsentWhenSendingIsOff(): void {
+        $this->configWithApiKey();
+        // The default mock returns null — the disabled/no-user case.
+        $this->testable->ask('Hi', '', 'testuser');
+
+        $this->assertArrayNotHasKey('metadata', $this->testable->lastCreateParams);
+    }
+
+    public function testMetadataReachesTheStreamingPath(): void {
+        $this->configWithApiKey();
+        $hash = str_repeat('cd', 32);
+        $this->requestMetadata->method('hashUserId')->willReturn($hash);
+
+        iterator_to_array($this->testable->askStream('Hi', '', 'testuser'), false);
+
+        $this->assertSame(['user_id' => $hash], $this->testable->lastStreamParams['metadata']);
+    }
+
+    /**
+     * A param captured in $lastCreateParams is worthless if the dispatcher
+     * never forwards it, so guard the SDK argument itself.
+     */
+    public function testCreateDispatchersForwardMetadataToTheSdk(): void {
+        foreach (['callCreate', 'callCreateStream'] as $method) {
+            $ref = new \ReflectionMethod(ClaudeSDKService::class, $method);
+            $source = implode('', array_slice(
+                file($ref->getFileName()),
+                $ref->getStartLine() - 1,
+                $ref->getEndLine() - $ref->getStartLine() + 1,
+            ));
+            $this->assertStringContainsString('metadata:', $source, $method . ' must forward metadata');
+        }
     }
 
     public function testChatWithToolsStreamYieldsErrorOnStreamFailure(): void {

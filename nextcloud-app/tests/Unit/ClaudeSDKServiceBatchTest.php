@@ -8,9 +8,11 @@ use Anthropic\Messages\Batches\MessageBatchIndividualResponse;
 use Anthropic\Messages\Batches\MessageBatchRequestCounts;
 use Anthropic\Messages\Batches\MessageBatchSucceededResult;
 use Anthropic\Messages\Message;
+use Anthropic\Messages\Metadata;
 use Anthropic\Messages\Usage;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
@@ -112,7 +114,9 @@ class ClaudeSDKServiceBatchTest extends TestCase {
         $cache = $this->createMock(ICache::class);
         $cacheFactory = $this->createMock(ICacheFactory::class);
         $cacheFactory->method('createDistributed')->willReturn($cache);
-        return new BatchTestableService($config, $logger, $credentials, $cacheFactory);
+        $requestMetadata = $this->createMock(RequestMetadataService::class);
+        $requestMetadata->method('hashUserId')->willReturn('deadbeef');
+        return new BatchTestableService($config, $logger, $credentials, $cacheFactory, $requestMetadata);
     }
 
     public function testBatchSummarySucceedsOnFirstPoll(): void {
@@ -158,5 +162,19 @@ class ClaudeSDKServiceBatchTest extends TestCase {
         $this->assertSame('user', $req['params']['messages'][0]['role']);
         $this->assertStringContainsString('Summarize', $req['params']['messages'][0]['content']);
         $this->assertStringContainsString('document body', $req['params']['messages'][0]['content']);
+    }
+
+    /**
+     * toBatchParams() translates a whitelist of keys, so a new one is dropped
+     * unless it is handled — and metadata has to arrive as an SDK model, not
+     * as the snake_case array the Messages API params carry.
+     */
+    public function testBatchParamsCarryHashedUserMetadata(): void {
+        $svc = $this->makeService();
+        $svc->summarizeViaBatch('document body', 'testuser', null);
+
+        $metadata = $svc->lastBatchRequests[0]['params']['metadata'];
+        $this->assertInstanceOf(Metadata::class, $metadata);
+        $this->assertSame('deadbeef', $metadata->userID);
     }
 }

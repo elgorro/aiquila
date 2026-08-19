@@ -41,6 +41,8 @@ return [
         ['name' => 'provider_settings#adminIndex',  'url' => '/api/admin/providers',                  'verb' => 'GET'],
         ['name' => 'provider_settings#adminUpdate', 'url' => '/api/admin/providers/{providerId}',     'verb' => 'POST'],
         ['name' => 'provider_settings#test',        'url' => '/api/admin/providers/{providerId}/test', 'verb' => 'POST'],
+        // Schema-declared buttons (ProviderSettingsSchema::action()) — no stored value.
+        ['name' => 'provider_settings#adminAction', 'url' => '/api/admin/providers/{providerId}/action/{actionId}', 'verb' => 'POST'],
         // Live health behind the status light on a provider card. The user-scope
         // route probes what that user actually gets, so the personal page shows
         // the same four states the admin page does.

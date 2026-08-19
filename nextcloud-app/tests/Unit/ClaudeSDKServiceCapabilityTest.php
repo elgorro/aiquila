@@ -10,6 +10,7 @@ use Anthropic\Models\ModelInfo;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
@@ -70,6 +71,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
     private CredentialService $credentials;
     private ICache $cache;
     private ICacheFactory $cacheFactory;
+    private RequestMetadataService $requestMetadata;
 
     protected function setUp(): void {
         $this->config = $this->createMock(IConfig::class);
@@ -79,6 +81,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
 
         $this->cache = $this->createMock(ICache::class);
         $this->cacheFactory = $this->createMock(ICacheFactory::class);
+        $this->requestMetadata = $this->createMock(RequestMetadataService::class);
         $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
 
         $this->config->method('getUserValue')->willReturn('');
@@ -120,7 +123,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             128000
         );
 
-        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
         $service->setRetrieveModelInfo($info);
 
         // Trigger buildRequestParams via ask()
@@ -166,7 +169,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             128000
         );
 
-        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
         $service->setRetrieveModelInfo($info);
         $service->ask('test', '', 'testuser');
 
@@ -184,7 +187,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         // set() should not be called since we have a cache hit
         $this->cache->expects($this->never())->method('set');
 
-        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
         $service->throwOnRetrieveModel(new \RuntimeException('should not be called'));
 
         $result = $service->ask('test', '', 'testuser');
@@ -194,7 +197,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
     public function testFallbackOnApiFailure(): void {
         $this->cache->method('get')->willReturn(null);
 
-        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
         $service->throwOnRetrieveModel(new \RuntimeException('API unreachable'));
 
         // Should fall back to static values without error
@@ -244,7 +247,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             128000
         );
 
-        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
         $service->setRetrieveModelInfo($info);
 
         $service->ask('test', '', 'testuser');
@@ -292,7 +295,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             8192
         );
 
-        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
         $service->setRetrieveModelInfo($info);
 
         $result = $service->ask('test', '', 'testuser');
@@ -321,7 +324,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             'supports_effort' => true,
         ]);
 
-        return new CapabilityTestableService($config, $this->logger, $this->credentials, $this->cacheFactory);
+        return new CapabilityTestableService($config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
     }
 
     public function testEffortConversationOverrideWins(): void {
@@ -412,9 +415,9 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                 }
             });
 
-        $service = new class($this->config, $logger, $this->credentials, $this->cacheFactory, $e) extends ClaudeSDKService {
-            public function __construct($cfg, $log, $cred, $cf, private \Throwable $toThrow) {
-                parent::__construct($cfg, $log, $cred, $cf);
+        $service = new class($this->config, $logger, $this->credentials, $this->cacheFactory, $this->requestMetadata, $e) extends ClaudeSDKService {
+            public function __construct($cfg, $log, $cred, $cf, $meta, private \Throwable $toThrow) {
+                parent::__construct($cfg, $log, $cred, $cf, $meta);
             }
             protected function callCreate(Client $client, array $params): \Anthropic\Messages\Message {
                 throw $this->toThrow;
@@ -449,9 +452,9 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
 
         $refusal = RefusalStopDetails::with('cyber', 'I cannot help with that.');
 
-        $service = new class($this->config, $logger, $this->credentials, $this->cacheFactory, $refusal) extends ClaudeSDKService {
-            public function __construct($cfg, $log, $cred, $cf, private RefusalStopDetails $refusal) {
-                parent::__construct($cfg, $log, $cred, $cf);
+        $service = new class($this->config, $logger, $this->credentials, $this->cacheFactory, $this->requestMetadata, $refusal) extends ClaudeSDKService {
+            public function __construct($cfg, $log, $cred, $cf, $meta, private RefusalStopDetails $refusal) {
+                parent::__construct($cfg, $log, $cred, $cf, $meta);
             }
             protected function callCreate(Client $client, array $params): \Anthropic\Messages\Message {
                 $stub = (new \ReflectionClass(\Anthropic\Messages\Message::class))->newInstanceWithoutConstructor();
@@ -496,7 +499,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             'supports_effort' => false,
         ]);
 
-        $service = new class($this->config, $this->logger, $this->credentials, $this->cacheFactory) extends ClaudeSDKService {
+        $service = new class($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata) extends ClaudeSDKService {
             public ?array $lastCreateParams = null;
             protected function callCreate(Client $client, array $params): \Anthropic\Messages\Message {
                 $this->lastCreateParams = $params;

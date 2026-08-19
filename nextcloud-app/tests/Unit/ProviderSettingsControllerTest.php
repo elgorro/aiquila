@@ -7,6 +7,7 @@ use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
+use OCA\AIquila\Service\Provider\ProviderActionsInterface;
 use OCA\AIquila\Service\Provider\ProviderSettingsService;
 use OCP\AppFramework\Http;
 use OCP\IConfig;
@@ -126,5 +127,71 @@ class ProviderSettingsControllerTest extends TestCase {
 
         $this->assertSame(Http::STATUS_OK, $response->getStatus());
         $this->assertSame('ok', $response->getData()['status']);
+    }
+
+    // ── provider actions ───────────────────────────────────────────────────
+
+    /**
+     * @param LLMProviderInterface $provider what getProviderById() answers with
+     */
+    private function ctrlWithProvider(LLMProviderInterface $provider): ProviderSettingsController {
+        $factory = $this->createMock(LLMProviderFactory::class);
+        $factory->method('isKnownProviderId')->willReturn(true);
+        $factory->method('getProviderById')->willReturn($provider);
+
+        return new ProviderSettingsController(
+            'aiquila',
+            $this->createMock(IRequest::class),
+            'testuser',
+            $this->config,
+            $factory,
+            $this->settings,
+            $this->createMock(CredentialService::class),
+            $this->createMock(IUserManager::class),
+            $this->createMock(IGroupManager::class),
+            $this->createMock(LoggerInterface::class),
+        );
+    }
+
+    public function testAdminActionRunsTheProviderAction(): void {
+        $provider = $this->createMockForIntersectionOfInterfaces(
+            [LLMProviderInterface::class, ProviderActionsInterface::class],
+        );
+        $provider->method('getId')->willReturn('anthropic');
+        $provider->expects($this->once())
+            ->method('runAction')
+            ->with('rotate_metadata_salt')
+            ->willReturn(['value' => 'new-salt', 'message' => 'rotated']);
+
+        $response = $this->ctrlWithProvider($provider)->adminAction('anthropic', 'rotate_metadata_salt');
+
+        $this->assertSame(Http::STATUS_OK, $response->getStatus());
+        $this->assertSame(
+            ['success' => true, 'message' => 'rotated', 'value' => 'new-salt'],
+            $response->getData(),
+        );
+    }
+
+    public function testAdminActionRejectsAProviderWithoutActions(): void {
+        $provider = $this->createMock(LLMProviderInterface::class);
+        $provider->method('getId')->willReturn('mistral');
+
+        $response = $this->ctrlWithProvider($provider)->adminAction('mistral', 'rotate_metadata_salt');
+
+        $this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+        $this->assertFalse($response->getData()['success']);
+    }
+
+    public function testAdminActionRejectsAnUnknownActionId(): void {
+        $provider = $this->createMockForIntersectionOfInterfaces(
+            [LLMProviderInterface::class, ProviderActionsInterface::class],
+        );
+        $provider->method('getId')->willReturn('anthropic');
+        $provider->method('runAction')->willThrowException(new \InvalidArgumentException('Unknown action: nope'));
+
+        $response = $this->ctrlWithProvider($provider)->adminAction('anthropic', 'nope');
+
+        $this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+        $this->assertStringContainsString('Unknown action', $response->getData()['message']);
     }
 }

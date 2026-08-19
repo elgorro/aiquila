@@ -7,6 +7,7 @@ use Anthropic\Core\Contracts\BaseStream;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
@@ -60,6 +61,7 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
     private CredentialService $credentials;
     private ICache $cache;
     private ICacheFactory $cacheFactory;
+    private RequestMetadataService $requestMetadata;
 
     protected function setUp(): void {
         $this->config = $this->createMock(IConfig::class);
@@ -75,6 +77,7 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
             'supports_effort' => false,
         ]);
         $this->cacheFactory = $this->createMock(ICacheFactory::class);
+        $this->requestMetadata = $this->createMock(RequestMetadataService::class);
         $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
 
         $this->config->method('getUserValue')->willReturn('');
@@ -105,8 +108,35 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
         return $o;
     }
 
+    /**
+     * The beta endpoint takes its own metadata type, so the native-MCP path
+     * needs its own conversion — a plain array would not reach the wire.
+     */
+    public function testNativeMcpPathCarriesHashedUserMetadata(): void {
+        $hash = str_repeat('ef', 32);
+        $this->requestMetadata->method('hashUserId')->willReturn($hash);
+
+        $service = new NativeMcpTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
+        $service->setStubStream($this->streamFromEvents([]));
+        iterator_to_array($service->chatWithNativeMcp(
+            messages: [['role' => 'user', 'content' => 'hi']],
+            mcpServers: [['type' => 'url', 'url' => 'https://mcp.example/mcp', 'name' => 'x']],
+            userId: 'alice',
+        ), false);
+
+        $this->assertSame(['user_id' => $hash], $service->lastParams['metadata']);
+
+        $ref = new \ReflectionMethod(ClaudeSDKService::class, 'callBetaCreateStreamWithMcp');
+        $source = implode('', array_slice(
+            file($ref->getFileName()),
+            $ref->getStartLine() - 1,
+            $ref->getEndLine() - $ref->getStartLine() + 1,
+        ));
+        $this->assertStringContainsString('metadata:', $source);
+    }
+
     public function testEmptyMcpServersYieldsError(): void {
-        $service = new NativeMcpTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service = new NativeMcpTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
         $events = iterator_to_array($service->chatWithNativeMcp(
             messages: [['role' => 'user', 'content' => 'hi']],
             mcpServers: [],
@@ -119,7 +149,7 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
     }
 
     public function testStreamMapsTextAndMcpBlocksToEvents(): void {
-        $service = new NativeMcpTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service = new NativeMcpTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
 
         $stream = [
             $this->obj([
@@ -186,7 +216,7 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
     }
 
     public function testOpenFailureYieldsErrorEvent(): void {
-        $service = new NativeMcpTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service = new NativeMcpTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
         $service->shouldThrowOnOpen = true;
 
         $events = iterator_to_array($service->chatWithNativeMcp(
@@ -201,7 +231,7 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
     }
 
     public function testCollectFlattensToLegacyShape(): void {
-        $service = new NativeMcpTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory);
+        $service = new NativeMcpTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
         $stream = [
             $this->obj(['type' => 'message_start', 'message' => ['usage' => ['inputTokens' => 5, 'cacheCreationInputTokens' => 0, 'cacheReadInputTokens' => 0]]]),
             $this->obj(['type' => 'content_block_start', 'index' => 0, 'contentBlock' => ['type' => 'text']]),
