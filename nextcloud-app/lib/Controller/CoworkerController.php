@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Controller;
 
+use OCA\AIquila\Service\Exception\ValidationException;
 use OCA\AIquila\Cowork\CoworkerTaskRegistry;
 use OCA\AIquila\Db\Coworker;
 use OCA\AIquila\Db\CoworkerRun;
@@ -12,12 +13,15 @@ use OCA\AIquila\Service\CoworkerService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IConfig;
 use OCP\IRequest;
+use Psr\Log\LoggerInterface;
 
 /**
  * REST API for cowork tasks — persistent scheduled AI jobs.
@@ -26,6 +30,7 @@ use OCP\IRequest;
  * NoCSRFRequired alongside NoAdminRequired.
  */
 class CoworkerController extends Controller {
+    use ErrorResponseTrait;
     use RequiresUserIdTrait;
 
 
@@ -36,6 +41,7 @@ class CoworkerController extends Controller {
         private readonly CoworkerTaskRegistry $registry,
         private readonly IConfig $config,
         private readonly ?string $userId,
+        private readonly LoggerInterface $logger,
     ) {
         parent::__construct($appName, $request);
     }
@@ -63,7 +69,7 @@ class CoworkerController extends Controller {
      * 200: The coworker
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -72,7 +78,7 @@ class CoworkerController extends Controller {
         try {
             $coworker = $this->service->findForUser($id, (string)$this->userId);
         } catch (DoesNotExistException) {
-            return new JSONResponse(['error' => 'Coworker not found'], 404);
+            return $this->clientError(404, 'Coworker not found');
         }
         return new JSONResponse($coworker->jsonSerialize());
     }
@@ -83,7 +89,7 @@ class CoworkerController extends Controller {
      * 200: The created coworker
      * 400: Invalid coworker configuration
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -91,8 +97,9 @@ class CoworkerController extends Controller {
     public function create(): JSONResponse {
         try {
             $coworker = $this->service->create((string)$this->userId, $this->bodyData());
-        } catch (\InvalidArgumentException $e) {
-            return new JSONResponse(['error' => $e->getMessage()], 400);
+        } catch (ValidationException $e) {
+            // ValidationException messages are written by this app and safe to show.
+            return $this->clientError(400, $e->getMessage());
         }
         return new JSONResponse($coworker->jsonSerialize());
     }
@@ -106,7 +113,7 @@ class CoworkerController extends Controller {
      * 400: Invalid coworker configuration
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -115,9 +122,10 @@ class CoworkerController extends Controller {
         try {
             $coworker = $this->service->update($id, (string)$this->userId, $this->bodyData());
         } catch (DoesNotExistException) {
-            return new JSONResponse(['error' => 'Coworker not found'], 404);
-        } catch (\InvalidArgumentException $e) {
-            return new JSONResponse(['error' => $e->getMessage()], 400);
+            return $this->clientError(404, 'Coworker not found');
+        } catch (ValidationException $e) {
+            // ValidationException messages are written by this app and safe to show.
+            return $this->clientError(400, $e->getMessage());
         }
         return new JSONResponse($coworker->jsonSerialize());
     }
@@ -130,7 +138,7 @@ class CoworkerController extends Controller {
      * 200: Coworker deleted
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{deleted: bool}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{deleted: bool}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -139,7 +147,7 @@ class CoworkerController extends Controller {
         try {
             $this->service->delete($id, (string)$this->userId);
         } catch (DoesNotExistException) {
-            return new JSONResponse(['error' => 'Coworker not found'], 404);
+            return $this->clientError(404, 'Coworker not found');
         }
         return new JSONResponse(['deleted' => true]);
     }
@@ -152,7 +160,7 @@ class CoworkerController extends Controller {
      * 200: The updated coworker
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -169,7 +177,7 @@ class CoworkerController extends Controller {
      * 200: The updated coworker
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -186,7 +194,7 @@ class CoworkerController extends Controller {
      * 200: The updated coworker
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -203,7 +211,7 @@ class CoworkerController extends Controller {
      * 200: The updated coworker
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -220,16 +228,19 @@ class CoworkerController extends Controller {
      * 200: The completed run
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
+    // Each run bills an LLM call, so it is metered per user and per IP.
+    #[UserRateLimit(limit: 20, period: 60)]
+    #[AnonRateLimit(limit: 20, period: 60)]
     #[OpenAPI]
     public function run(int $id): JSONResponse {
         try {
             $run = $this->service->runNow($id, (string)$this->userId);
         } catch (DoesNotExistException) {
-            return new JSONResponse(['error' => 'Coworker not found'], 404);
+            return $this->clientError(404, 'Coworker not found');
         }
         return new JSONResponse($run->jsonSerialize());
     }
@@ -243,7 +254,7 @@ class CoworkerController extends Controller {
      * 200: List of runs, newest first
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, list<array<string, mixed>>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, list<array<string, mixed>>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -252,7 +263,7 @@ class CoworkerController extends Controller {
         try {
             $runs = $this->service->listRuns($id, (string)$this->userId, $limit);
         } catch (DoesNotExistException) {
-            return new JSONResponse(['error' => 'Coworker not found'], 404);
+            return $this->clientError(404, 'Coworker not found');
         }
         return new JSONResponse(array_map(fn(CoworkerRun $r) => $r->jsonSerialize(), $runs));
     }
@@ -283,7 +294,7 @@ class CoworkerController extends Controller {
      * 400: Invalid coworker configuration
      * 404: Unknown template
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -297,7 +308,7 @@ class CoworkerController extends Controller {
             }
         }
         if ($template === null) {
-            return new JSONResponse(['error' => 'Unknown template: ' . $templateId], 404);
+            return $this->clientError(404, 'Unknown template: ' . $templateId);
         }
 
         // Allow the caller to override fields (e.g. input_path) at creation time.
@@ -305,8 +316,9 @@ class CoworkerController extends Controller {
         unset($data['id']);
         try {
             $coworker = $this->service->create((string)$this->userId, $data);
-        } catch (\InvalidArgumentException $e) {
-            return new JSONResponse(['error' => $e->getMessage()], 400);
+        } catch (ValidationException $e) {
+            // ValidationException messages are written by this app and safe to show.
+            return $this->clientError(400, $e->getMessage());
         }
         return new JSONResponse($coworker->jsonSerialize());
     }
@@ -334,7 +346,7 @@ class CoworkerController extends Controller {
      * 200: The stored selection
      * 404: Coworker not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{coworkerId: int|null}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{coworkerId: int|null}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]
@@ -347,32 +359,32 @@ class CoworkerController extends Controller {
         try {
             $this->service->findForUser($coworkerId, (string)$this->userId);
         } catch (DoesNotExistException) {
-            return new JSONResponse(['error' => 'Coworker not found'], 404);
+            return $this->clientError(404, 'Coworker not found');
         }
         $this->config->setUserValue((string)$this->userId, 'aiquila', 'dashboard_coworker', (string)$coworkerId);
         return new JSONResponse(['coworkerId' => $coworkerId]);
     }
 
     /**
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     private function togglePaused(int $id, bool $paused): JSONResponse {
         try {
             $coworker = $this->service->setPaused($id, (string)$this->userId, $paused);
         } catch (DoesNotExistException) {
-            return new JSONResponse(['error' => 'Coworker not found'], 404);
+            return $this->clientError(404, 'Coworker not found');
         }
         return new JSONResponse($coworker->jsonSerialize());
     }
 
     /**
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     private function toggleActive(int $id, bool $active): JSONResponse {
         try {
             $coworker = $this->service->setActive($id, (string)$this->userId, $active);
         } catch (DoesNotExistException) {
-            return new JSONResponse(['error' => 'Coworker not found'], 404);
+            return $this->clientError(404, 'Coworker not found');
         }
         return new JSONResponse($coworker->jsonSerialize());
     }

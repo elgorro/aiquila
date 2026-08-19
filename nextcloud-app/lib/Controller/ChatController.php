@@ -5,12 +5,13 @@ namespace OCA\AIquila\Controller;
 
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
-use OCP\ICache;
-use OCP\ICacheFactory;
+use OCA\AIquila\Service\Exception\ContentTooLargeException;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
@@ -19,9 +20,11 @@ use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
+use Psr\Log\LoggerInterface;
 
 class ChatController extends Controller {
     use RequiresUserIdTrait;
+    use ErrorResponseTrait;
 
     private LLMProviderFactory $providerFactory;
     private FileService $fileService;
@@ -30,10 +33,14 @@ class ChatController extends Controller {
     private McpClientService $mcpClient;
     private NativeMcpService $nativeMcp;
     private ?string $userId;
-    private ICache $cache;
+    private LoggerInterface $logger;
 
-    // Constants for validation and rate limiting
     private const MAX_CONTENT_LENGTH = 5242880; // 5MB (5 * 1024 * 1024)
+
+    // Rate limits are enforced by Nextcloud's RateLimitingMiddleware via the
+    // attributes on each endpoint: UserRateLimit keys on the session user,
+    // AnonRateLimit on the remote IP. Both are needed — a user-keyed limit alone
+    // gives every anonymous caller one shared bucket.
     private const RATE_LIMIT_REQUESTS = 10;
     private const RATE_LIMIT_WINDOW = 60; // seconds
 
@@ -47,7 +54,7 @@ class ChatController extends Controller {
         McpClientService $mcpClient,
         NativeMcpService $nativeMcp,
         ?string $userId,
-        ICacheFactory $cacheFactory
+        LoggerInterface $logger
     ) {
         parent::__construct($appName, $request);
         $this->providerFactory = $providerFactory;
@@ -57,7 +64,7 @@ class ChatController extends Controller {
         $this->mcpClient = $mcpClient;
         $this->nativeMcp = $nativeMcp;
         $this->userId = $userId;
-        $this->cache = $cacheFactory->createDistributed('aiquila_ratelimit');
+        $this->logger = $logger;
     }
 
     /**
@@ -74,31 +81,16 @@ class ChatController extends Controller {
     /**
      * Fail closed when no provider is permitted, or null to carry on.
      *
-     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|null
+     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|null
      */
     private function noProviderAvailable(): ?JSONResponse {
         if ($this->providerFactory->hasPermittedProvider($this->userId)) {
             return null;
         }
-        return new JSONResponse(
-            ['error' => NoPermittedProviderException::USER_MESSAGE],
+        return $this->clientError(
             Http::STATUS_FORBIDDEN,
+            NoPermittedProviderException::USER_MESSAGE,
         );
-    }
-
-    /**
-     * Check if user has exceeded rate limit
-     */
-    private function checkRateLimit(): bool {
-        $key = 'rate_limit_' . ($this->userId ?? 'anonymous');
-        $requests = (int)($this->cache->get($key) ?? 0);
-
-        if ($requests >= self::RATE_LIMIT_REQUESTS) {
-            return false;
-        }
-
-        $this->cache->set($key, $requests + 1, self::RATE_LIMIT_WINDOW);
-        return true;
     }
 
     /**
@@ -123,25 +115,21 @@ class ChatController extends Controller {
      * 429: Rate limit exceeded (10 requests per minute)
      * 500: An attached file could not be read
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
      *
      * @NoAdminRequired
      */
     #[NoAdminRequired]
+    #[UserRateLimit(limit: self::RATE_LIMIT_REQUESTS, period: self::RATE_LIMIT_WINDOW)]
+    #[AnonRateLimit(limit: self::RATE_LIMIT_REQUESTS, period: self::RATE_LIMIT_WINDOW)]
     #[OpenAPI]
     public function ask(string $prompt = '', string $context = '', array $files = []): JSONResponse {
         if (($denied = $this->noProviderAvailable()) !== null) {
             return $denied;
         }
 
-        if (!$this->checkRateLimit()) {
-            return new JSONResponse([
-                'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
-            ], 429);
-        }
-
         if (!$prompt) {
-            return new JSONResponse(['error' => 'No prompt provided'], 400);
+            return $this->clientError(400, 'No prompt provided');
         }
 
         // When files are attached, load their content and delegate appropriately
@@ -150,9 +138,7 @@ class ChatController extends Controller {
         }
 
         if (!$this->validateContentLength($prompt . $context)) {
-            return new JSONResponse([
-                'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
-            ], 413);
+            return $this->clientError(413, 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB');
         }
 
         $result = $this->provider()->ask($prompt, $context, $this->userId);
@@ -164,7 +150,7 @@ class ChatController extends Controller {
      *
      * @param list<string> $files
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
      */
     private function askWithFiles(string $prompt, array $files): JSONResponse {
         $fileDataList = [];
@@ -172,13 +158,13 @@ class ChatController extends Controller {
             try {
                 $fileDataList[] = $this->fileService->getContent($path, $this->requireUserId());
             } catch (\OCP\Files\NotFoundException $e) {
-                return new JSONResponse(['error' => 'File not found: ' . $path], 404);
+                return $this->clientError(404, 'File not found: ' . $path);
             } catch (\InvalidArgumentException $e) {
-                return new JSONResponse(['error' => $e->getMessage()], 400);
-            } catch (\RuntimeException $e) {
-                return new JSONResponse(['error' => $e->getMessage()], 413);
+                return $this->clientError(400, 'Attached path does not refer to a file');
+            } catch (ContentTooLargeException $e) {
+                return $this->clientError(413, 'Attached file is too large to read');
             } catch (\Exception $e) {
-                return new JSONResponse(['error' => 'Could not read file: ' . $e->getMessage()], 500);
+                return $this->errorResponse($e, 500, 'Could not read an attached file', 'ChatController::ask');
             }
         }
 
@@ -206,9 +192,7 @@ class ChatController extends Controller {
         }
 
         if (count($images) > ImageOptimizer::MAX_IMAGES) {
-            return new JSONResponse([
-                'error' => 'Too many images. Maximum ' . ImageOptimizer::MAX_IMAGES . ' images per request.'
-            ], 400);
+            return $this->clientError(400, 'Too many images. Maximum ' . ImageOptimizer::MAX_IMAGES . ' images per request.');
         }
 
         // Images only (no other file types)
@@ -309,9 +293,7 @@ class ChatController extends Controller {
         $context = implode("\n\n", $textParts);
 
         if (!$this->validateContentLength($prompt . $context)) {
-            return new JSONResponse([
-                'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
-            ], 413);
+            return $this->clientError(413, 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB');
         }
 
         $result = $this->provider()->ask($prompt, $context, $this->userId);
@@ -331,25 +313,21 @@ class ChatController extends Controller {
      * 403: No provider is permitted for this user
      * 429: Rate limit exceeded (10 requests per minute)
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string, errorId: string}, array{}>
      *
      * @NoAdminRequired
      */
     #[NoAdminRequired]
+    #[UserRateLimit(limit: self::RATE_LIMIT_REQUESTS, period: self::RATE_LIMIT_WINDOW)]
+    #[AnonRateLimit(limit: self::RATE_LIMIT_REQUESTS, period: self::RATE_LIMIT_WINDOW)]
     #[OpenAPI]
     public function chat(array $messages = [], ?string $system = null, array $options = []): JSONResponse {
         if (($denied = $this->noProviderAvailable()) !== null) {
             return $denied;
         }
 
-        if (!$this->checkRateLimit()) {
-            return new JSONResponse([
-                'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
-            ], 429);
-        }
-
         if (empty($messages)) {
-            return new JSONResponse(['error' => 'No messages provided'], 400);
+            return $this->clientError(400, 'No messages provided');
         }
 
         // Validate total content size
@@ -359,9 +337,7 @@ class ChatController extends Controller {
             $totalLength += is_string($content) ? strlen($content) : strlen((string)json_encode($content));
         }
         if ($totalLength > self::MAX_CONTENT_LENGTH) {
-            return new JSONResponse([
-                'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
-            ], 413);
+            return $this->clientError(413, 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB');
         }
 
         // Native MCP connector path: hand the conversation to the provider's
@@ -424,31 +400,25 @@ class ChatController extends Controller {
      * 403: No provider is permitted for this user
      * 429: Rate limit exceeded (10 requests per minute)
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string, errorId: string}, array{}>
      *
      * @NoAdminRequired
      */
     #[NoAdminRequired]
+    #[UserRateLimit(limit: self::RATE_LIMIT_REQUESTS, period: self::RATE_LIMIT_WINDOW)]
+    #[AnonRateLimit(limit: self::RATE_LIMIT_REQUESTS, period: self::RATE_LIMIT_WINDOW)]
     #[OpenAPI]
     public function summarize(string $content = ''): JSONResponse {
         if (($denied = $this->noProviderAvailable()) !== null) {
             return $denied;
         }
 
-        if (!$this->checkRateLimit()) {
-            return new JSONResponse([
-                'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
-            ], 429);
-        }
-
         if (!$content) {
-            return new JSONResponse(['error' => 'No content provided'], 400);
+            return $this->clientError(400, 'No content provided');
         }
 
         if (!$this->validateContentLength($content)) {
-            return new JSONResponse([
-                'error' => 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
-            ], 413);
+            return $this->clientError(413, 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB');
         }
 
         $result = $this->provider()->summarize($content, $this->userId);
@@ -468,43 +438,37 @@ class ChatController extends Controller {
      * 403: No provider is permitted for this user
      * 429: Rate limit exceeded (10 requests per minute)
      *
-     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{response: string, model: string, usage: array{input_tokens: int, output_tokens: int}}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_ENTITY_TOO_LARGE, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_TOO_MANY_REQUESTS, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
      *
      * @NoAdminRequired
      */
     #[NoAdminRequired]
+    #[UserRateLimit(limit: self::RATE_LIMIT_REQUESTS, period: self::RATE_LIMIT_WINDOW)]
+    #[AnonRateLimit(limit: self::RATE_LIMIT_REQUESTS, period: self::RATE_LIMIT_WINDOW)]
     #[OpenAPI]
     public function analyzeFile(string $filePath = '', string $prompt = 'Analyze and describe this file.'): JSONResponse {
         if (($denied = $this->noProviderAvailable()) !== null) {
             return $denied;
         }
 
-        if (!$this->checkRateLimit()) {
-            return new JSONResponse([
-                'error' => 'Rate limit exceeded. Maximum ' . self::RATE_LIMIT_REQUESTS . ' requests per minute.'
-            ], 429);
-        }
-
         if (empty($filePath)) {
-            return new JSONResponse(['error' => 'No filePath provided'], 400);
+            return $this->clientError(400, 'No filePath provided');
         }
 
         if (!$this->validateContentLength($prompt)) {
-            return new JSONResponse([
-                'error' => 'Prompt too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB'
-            ], 413);
+            return $this->clientError(413, 'Prompt too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB');
         }
 
         try {
             $fileData = $this->fileService->getContent($filePath, $this->requireUserId());
         } catch (\OCP\Files\NotFoundException $e) {
-            return new JSONResponse(['error' => 'File not found: ' . $filePath], 404);
+            return $this->clientError(404, 'File not found: ' . $filePath);
         } catch (\InvalidArgumentException $e) {
-            return new JSONResponse(['error' => $e->getMessage()], 400);
-        } catch (\RuntimeException $e) {
-            return new JSONResponse(['error' => $e->getMessage()], 413);
+            return $this->clientError(400, 'Path does not refer to a file');
+        } catch (ContentTooLargeException $e) {
+            return $this->clientError(413, 'File is too large to read');
         } catch (\Exception $e) {
-            return new JSONResponse(['error' => 'Could not read file: ' . $e->getMessage()], 500);
+            return $this->errorResponse($e, 500, 'Could not read the file', 'ChatController::analyzeFile');
         }
 
         $mimeType = $fileData['mimeType'];

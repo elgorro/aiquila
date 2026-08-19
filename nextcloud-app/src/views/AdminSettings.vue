@@ -235,7 +235,7 @@ export default {
 				await this.loadNativeMcp()
 			} catch (err) {
 				this.nativeMcpMessageType = 'error'
-				this.nativeMcpMessage = err.response?.data?.message || err.message
+				this.nativeMcpMessage = err.response?.data?.error || err.message
 			} finally {
 				this.savingNativeMcp = false
 			}

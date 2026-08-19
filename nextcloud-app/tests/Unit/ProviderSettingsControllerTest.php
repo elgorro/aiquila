@@ -179,7 +179,8 @@ class ProviderSettingsControllerTest extends TestCase {
         $response = $this->ctrlWithProvider($provider)->adminAction('mistral', 'rotate_metadata_salt');
 
         $this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
-        $this->assertFalse($response->getData()['success']);
+        // Errors now use one shape across the whole app: {error, errorId}.
+        $this->assertStringContainsString('no actions', $response->getData()['error']);
     }
 
     public function testAdminActionRejectsAnUnknownActionId(): void {
@@ -192,6 +193,6 @@ class ProviderSettingsControllerTest extends TestCase {
         $response = $this->ctrlWithProvider($provider)->adminAction('anthropic', 'nope');
 
         $this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
-        $this->assertStringContainsString('Unknown action', $response->getData()['message']);
+        $this->assertStringContainsString('Unknown action', $response->getData()['error']);
     }
 }

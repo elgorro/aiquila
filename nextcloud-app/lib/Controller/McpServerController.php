@@ -11,18 +11,23 @@ use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\McpClientService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
+use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\IRequest;
 use OCP\IURLGenerator;
+use Psr\Log\LoggerInterface;
 
 class McpServerController extends Controller {
+    use ErrorResponseTrait;
     private McpServerMapper $mapper;
     private McpClientService $mcpClient;
     private CredentialService $credentials;
     private IURLGenerator $urlGenerator;
+    private LoggerInterface $logger;
 
     public function __construct(
         string $appName,
@@ -30,13 +35,15 @@ class McpServerController extends Controller {
         McpServerMapper $mapper,
         McpClientService $mcpClient,
         CredentialService $credentials,
-        IURLGenerator $urlGenerator
+        IURLGenerator $urlGenerator,
+        LoggerInterface $logger
     ) {
         parent::__construct($appName, $request);
         $this->mapper = $mapper;
         $this->mcpClient = $mcpClient;
         $this->credentials = $credentials;
         $this->urlGenerator = $urlGenerator;
+        $this->logger = $logger;
     }
 
     /**
@@ -65,7 +72,7 @@ class McpServerController extends Controller {
      * 200: Created MCP server
      * 400: Validation error
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, display_name: string, url: string, auth_type: string, is_enabled: bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, display_name: string, url: string, auth_type: string, is_enabled: bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function create(
@@ -76,11 +83,11 @@ class McpServerController extends Controller {
         string $registrationToken = ''
     ): JSONResponse {
         if (empty($displayName) || empty($url)) {
-            return new JSONResponse(['error' => 'Display name and URL are required'], 400);
+            return $this->clientError(400, 'Display name and URL are required');
         }
 
         if (!in_array($authType, ['none', 'bearer', 'oauth2'], true)) {
-            return new JSONResponse(['error' => 'Invalid auth type. Must be "none", "bearer", or "oauth2"'], 400);
+            return $this->clientError(400, 'Invalid auth type. Must be "none", "bearer", or "oauth2"');
         }
 
         $now = time();
@@ -116,7 +123,7 @@ class McpServerController extends Controller {
      * 200: Updated MCP server
      * 404: Server not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, display_name: string, url: string, auth_type: string, is_enabled: bool}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, display_name: string, url: string, auth_type: string, is_enabled: bool}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function update(
@@ -131,7 +138,7 @@ class McpServerController extends Controller {
         try {
             $server = $this->mapper->findById($id);
         } catch (\Throwable $e) {
-            return new JSONResponse(['error' => 'Server not found'], 404);
+            return $this->clientError(404, 'Server not found');
         }
 
         if (!empty($displayName)) {
@@ -192,14 +199,14 @@ class McpServerController extends Controller {
      * 200: Server deleted
      * 404: Server not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{status: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{status: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function destroy(int $id): JSONResponse {
         try {
             $server = $this->mapper->findById($id);
         } catch (\Throwable $e) {
-            return new JSONResponse(['error' => 'Server not found'], 404);
+            return $this->clientError(404, 'Server not found');
         }
 
         $this->mapper->delete($server);
@@ -214,14 +221,14 @@ class McpServerController extends Controller {
      * 200: Test result with success status and tool count
      * 404: Server not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string, tool_count: int}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string, tool_count: int}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function test(int $id): JSONResponse {
         try {
             $server = $this->mapper->findById($id);
         } catch (\Throwable $e) {
-            return new JSONResponse(['error' => 'Server not found'], 404);
+            return $this->clientError(404, 'Server not found');
         }
 
         $result = $this->mcpClient->testConnection($server);
@@ -237,21 +244,21 @@ class McpServerController extends Controller {
      * 404: Server not found
      * 500: Listing the tools failed
      *
-     * @return JSONResponse<Http::STATUS_OK, list<array{name: string, description: string}>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, list<array{name: string, description: string}>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function tools(int $id): JSONResponse {
         try {
             $server = $this->mapper->findById($id);
         } catch (\Throwable $e) {
-            return new JSONResponse(['error' => 'Server not found'], 404);
+            return $this->clientError(404, 'Server not found');
         }
 
         try {
             $tools = $this->mcpClient->listTools($server);
             return new JSONResponse($tools);
         } catch (\Throwable $e) {
-            return new JSONResponse(['error' => 'Failed to list tools: ' . $e->getMessage()], 500);
+            return $this->errorResponse($e, 500, 'Failed to list tools on the MCP server', 'McpServerController::listTools');
         }
     }
 
@@ -264,14 +271,14 @@ class McpServerController extends Controller {
      * 404: Server not found
      * 500: Starting the authorization flow failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{authorize_url: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{authorize_url: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function authorize(int $id): JSONResponse {
         try {
             $server = $this->mapper->findById($id);
         } catch (\Throwable $e) {
-            return new JSONResponse(['error' => 'Server not found'], 404);
+            return $this->clientError(404, 'Server not found');
         }
 
         try {
@@ -282,7 +289,7 @@ class McpServerController extends Controller {
             $authorizeUrl = $this->mcpClient->initiateOAuth($server, $callbackUrl);
             return new JSONResponse(['authorize_url' => $authorizeUrl]);
         } catch (\Throwable $e) {
-            return new JSONResponse(['error' => 'OAuth initiation failed: ' . $e->getMessage()], 500);
+            return $this->errorResponse($e, 500, 'Could not start the OAuth flow', 'McpServerController::initiateOAuth');
         }
     }
 
@@ -294,8 +301,14 @@ class McpServerController extends Controller {
      * @param string $state CSRF state parameter
      */
     #[NoCSRFRequired]
+    // Browser-redirect target carrying attacker-influenced code/state, so it is
+    // the most exposed endpoint in the app. Limit by IP and throttle guessing.
+    #[AnonRateLimit(limit: 10, period: 60)]
+    #[BruteForceProtection(action: 'aiquilaMcpOauthCallback')]
     #[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]
     public function oauthCallback(int $id, string $code = '', string $state = ''): DataDisplayResponse {
+
+        $failed = false;
 
         try {
             $server = $this->mapper->findById($id);
@@ -310,14 +323,32 @@ class McpServerController extends Controller {
                 . 'window.close();'
                 . '</script><p>Authentication successful. This window should close automatically.</p></body></html>';
         } catch (\Throwable $e) {
-            $error = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+            $failed = true;
+            // Rendered into the popup the user sees. Guzzle/cURL failures embed
+            // request URLs, CA bundle paths and config paths, so show only a
+            // correlation id and keep the detail in the log.
+            $errorId = $this->newErrorId();
+            $this->logger->error(
+                'McpServerController::oauthCallback failed [' . $errorId . ']',
+                ['exception' => $e, 'errorId' => $errorId],
+            );
             $html = '<!DOCTYPE html><html><body>'
-                . '<h3>Authentication Failed</h3><p>' . $error . '</p>'
+                . '<h3>Authentication Failed</h3>'
+                . '<p>Ask your administrator to check the log for reference '
+                . htmlspecialchars($errorId, ENT_QUOTES, 'UTF-8') . '.</p>'
                 . '<p><button onclick="window.close()">Close</button></p></body></html>';
         }
 
         $response = new DataDisplayResponse($html);
         $response->addHeader('Content-Type', 'text/html; charset=utf-8');
+
+        // BruteForceProtection only counts an attempt when the response is
+        // throttled, so a failed exchange must mark itself explicitly. A wrong
+        // or replayed state lands here, which is what makes guessing expensive.
+        if ($failed) {
+            $response->throttle(['action' => 'aiquilaMcpOauthCallback']);
+        }
+
         return $response;
     }
 

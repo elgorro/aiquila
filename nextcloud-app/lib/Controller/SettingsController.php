@@ -14,9 +14,11 @@ use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
+use Psr\Log\LoggerInterface;
 use OCP\IConfig;
 
 class SettingsController extends Controller {
+    use ErrorResponseTrait;
     use RequiresUserIdTrait;
 
     private IConfig $config;
@@ -25,6 +27,7 @@ class SettingsController extends Controller {
     private CredentialService $credentials;
     private NativeMcpService $nativeMcp;
     private ProviderSettingsService $providerSettings;
+    private LoggerInterface $logger;
 
     public function __construct(
         string $appName,
@@ -34,10 +37,12 @@ class SettingsController extends Controller {
         LLMProviderFactory $providerFactory,
         CredentialService $credentials,
         NativeMcpService $nativeMcp,
-        ProviderSettingsService $providerSettings
+        ProviderSettingsService $providerSettings,
+        LoggerInterface $logger
     ) {
         parent::__construct($appName, $request);
         $this->config = $config;
+        $this->logger = $logger;
         $this->userId = $userId;
         $this->providerFactory = $providerFactory;
         $this->credentials = $credentials;
@@ -56,12 +61,12 @@ class SettingsController extends Controller {
      * Fails closed with a message the UI can show verbatim, rather than
      * describing a provider the admin has denied.
      *
-     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{status: string, message: string}, array{}>
+     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
      */
     private function noProviderAvailable(): JSONResponse {
-        return new JSONResponse(
-            ['status' => 'error', 'message' => NoPermittedProviderException::USER_MESSAGE],
+        return $this->clientError(
             Http::STATUS_FORBIDDEN,
+            NoPermittedProviderException::USER_MESSAGE,
         );
     }
 
@@ -71,7 +76,7 @@ class SettingsController extends Controller {
      * 200: User settings and available models
      * 403: No provider is permitted for this user
      *
-     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{status: string, message: string}, array{}>|JSONResponse<Http::STATUS_OK, array{provider: string, userProvider: string, providers: list<array{id: string, label: string, configured: bool, hasUserKey: bool, userModel: string, availableModels: list<string>}>, hasUserKey: bool, userModel: string, availableModels: list<string>, defaultSystemPrompt: string, defaultVerbose: bool, nativeMcpUserOverride: string, nativeMcpAdminDefault: bool, nativeMcpEffective: bool}, array{}>
+     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_OK, array{provider: string, userProvider: string, providers: list<array{id: string, label: string, configured: bool, hasUserKey: bool, userModel: string, availableModels: list<string>}>, hasUserKey: bool, userModel: string, availableModels: list<string>, defaultSystemPrompt: string, defaultVerbose: bool, nativeMcpUserOverride: string, nativeMcpAdminDefault: bool, nativeMcpEffective: bool}, array{}>
      *
      * @NoAdminRequired
      */
@@ -151,7 +156,7 @@ class SettingsController extends Controller {
      * 400: Unknown provider
      * 403: The provider is not permitted for this user
      *
-     * @return JSONResponse<Http::STATUS_OK, array{status: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{status: string, message: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{status: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
      *
      * @NoAdminRequired
      */
@@ -171,12 +176,12 @@ class SettingsController extends Controller {
         // unvalidated id would let a blocked provider be configured and selected.
         if ($provider !== null && $provider !== '') {
             if (!$this->providerFactory->isKnownProviderId($provider)) {
-                return new JSONResponse(['status' => 'error', 'message' => 'Unknown provider: ' . $provider], Http::STATUS_BAD_REQUEST);
+                return $this->clientError(Http::STATUS_BAD_REQUEST, 'Unknown provider: ' . $provider);
             }
             if (!$this->providerFactory->isAllowedForUser($provider, $this->userId)) {
-                return new JSONResponse(
-                    ['status' => 'error', 'message' => 'You are not permitted to use this provider.'],
+                return $this->clientError(
                     Http::STATUS_FORBIDDEN,
+                    'You are not permitted to use this provider.',
                 );
             }
         }

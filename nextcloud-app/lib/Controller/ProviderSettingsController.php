@@ -13,8 +13,10 @@ use OCA\AIquila\Service\Provider\ProviderActionsInterface;
 use OCA\AIquila\Service\Provider\ProviderSettingsService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IConfig;
 use OCP\IGroupManager;
@@ -41,6 +43,7 @@ use Psr\Log\LoggerInterface;
  * so the personal page can neither see nor select a provider an admin blocked.
  */
 class ProviderSettingsController extends Controller {
+    use ErrorResponseTrait;
     use RequiresUserIdTrait;
 
     public function __construct(
@@ -115,7 +118,7 @@ class ProviderSettingsController extends Controller {
      * 400: Unknown provider or invalid value
      * 403: The provider is not permitted for this user
      *
-     * @return JSONResponse<Http::STATUS_OK, array{status: string, rejected: list<string>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{status: string, message: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{status: string, rejected: list<string>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
      *
      * @NoAdminRequired
      */
@@ -146,7 +149,7 @@ class ProviderSettingsController extends Controller {
                 'provider' => $providerId,
                 'user' => $userId,
             ]);
-            return new JSONResponse(['status' => 'error', 'message' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+            return $this->clientError(Http::STATUS_BAD_REQUEST, $e->getMessage());
         }
 
         if ($makeDefault === '1') {
@@ -191,7 +194,7 @@ class ProviderSettingsController extends Controller {
      * 200: Settings saved
      * 400: Unknown provider or invalid value
      *
-     * @return JSONResponse<Http::STATUS_OK, array{status: string, rejected: list<string>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{status: string, rejected: list<string>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function adminUpdate(string $providerId, array $values = [], ?string $makeDefault = null): JSONResponse {
@@ -208,7 +211,7 @@ class ProviderSettingsController extends Controller {
             $this->logger->warning('AIquila: rejected instance settings for ' . $providerId . ': ' . $e->getMessage(), [
                 'provider' => $providerId,
             ]);
-            return new JSONResponse(['status' => 'error', 'message' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+            return $this->clientError(Http::STATUS_BAD_REQUEST, $e->getMessage());
         }
 
         if ($makeDefault === '1') {
@@ -234,11 +237,15 @@ class ProviderSettingsController extends Controller {
      * 400: Unknown provider
      * 403: The provider is not permitted for this user
      *
-     * @return JSONResponse<Http::STATUS_OK, array{providerId: string, state: string, reason: string, message: string, model: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{status: string, message: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{providerId: string, state: string, reason: string, message: string, model: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
      *
      * @NoAdminRequired
      */
     #[NoAdminRequired]
+    // Probes the provider over the network; the service-level cache TTL bounds
+    // repeat work but not the request rate.
+    #[UserRateLimit(limit: 30, period: 60)]
+    #[AnonRateLimit(limit: 30, period: 60)]
     #[OpenAPI]
     public function status(string $providerId): JSONResponse {
         if (!$this->providerFactory->isKnownProviderId($providerId)) {
@@ -265,7 +272,7 @@ class ProviderSettingsController extends Controller {
      * 200: Current provider health
      * 400: Unknown provider
      *
-     * @return JSONResponse<Http::STATUS_OK, array{providerId: string, state: string, reason: string, message: string, model: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{providerId: string, state: string, reason: string, message: string, model: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function adminStatus(string $providerId): JSONResponse {
@@ -293,41 +300,39 @@ class ProviderSettingsController extends Controller {
      * 200: The action ran
      * 400: Unknown provider, or the provider has no such action
      *
-     * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string, value: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, message: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, message: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string, value: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function adminAction(string $providerId, string $actionId): JSONResponse {
         if (!$this->providerFactory->isKnownProviderId($providerId)) {
-            return new JSONResponse(
-                ['success' => false, 'message' => 'Unknown provider: ' . $providerId],
+            return $this->clientError(
                 Http::STATUS_BAD_REQUEST,
+                'Unknown provider: ' . $providerId,
             );
         }
 
         $service = $this->providerFactory->getProviderById($providerId);
         if (!($service instanceof ProviderActionsInterface)) {
-            return new JSONResponse(
-                ['success' => false, 'message' => 'Provider has no actions: ' . $providerId],
+            return $this->clientError(
                 Http::STATUS_BAD_REQUEST,
+                'Provider has no actions: ' . $providerId,
             );
         }
 
         try {
             $result = $service->runAction($actionId);
         } catch (\InvalidArgumentException $e) {
-            return new JSONResponse(
-                ['success' => false, 'message' => $e->getMessage()],
-                Http::STATUS_BAD_REQUEST,
-            );
+            // Validation text authored by the provider service, safe to show.
+            return $this->clientError(Http::STATUS_BAD_REQUEST, $e->getMessage());
         } catch (\Throwable $e) {
             $this->logger->error('AIquila: provider action failed', [
                 'provider' => $providerId,
                 'action' => $actionId,
                 'exception' => $e,
             ]);
-            return new JSONResponse(
-                ['success' => false, 'message' => 'Action failed'],
+            return $this->clientError(
                 Http::STATUS_INTERNAL_SERVER_ERROR,
+                'Action failed',
             );
         }
 
@@ -356,14 +361,14 @@ class ProviderSettingsController extends Controller {
      * 200: The provider answered
      * 400: No key available, or the provider rejected the request
      *
-     * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, message: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, message: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{success: bool, message: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
      */
     #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
     public function test(string $providerId, #[\SensitiveParameter] string $api_key = ''): JSONResponse {
         if (!$this->providerFactory->isKnownProviderId($providerId)) {
-            return new JSONResponse(
-                ['success' => false, 'message' => 'Unknown provider: ' . $providerId],
+            return $this->clientError(
                 Http::STATUS_BAD_REQUEST,
+                'Unknown provider: ' . $providerId,
             );
         }
 
@@ -379,12 +384,12 @@ class ProviderSettingsController extends Controller {
         // Local endpoints (Ollama, llama-server without --api-key) authenticate
         // with nothing at all, so a missing key is only fatal elsewhere.
         if ($testKey === '' && !($service instanceof LocalProvider)) {
-            return new JSONResponse(['success' => false, 'message' => 'No API key provided'], Http::STATUS_BAD_REQUEST);
+            return $this->clientError(Http::STATUS_BAD_REQUEST, 'No API key provided');
         }
         if ($testKey === '' && !$service->isConfigured(null)) {
-            return new JSONResponse(
-                ['success' => false, 'message' => 'No local model endpoint configured'],
+            return $this->clientError(
                 Http::STATUS_BAD_REQUEST,
+                'No local model endpoint configured',
             );
         }
 
@@ -404,7 +409,7 @@ class ProviderSettingsController extends Controller {
                     'provider' => $providerId,
                     'error' => $result['error'],
                 ]);
-                return new JSONResponse(['success' => false, 'message' => $result['error']], Http::STATUS_BAD_REQUEST);
+                return $this->clientError(Http::STATUS_BAD_REQUEST, (string)$result['error']);
             }
 
             $this->logger->info('AIquila: connection test for ' . $providerId . ' succeeded', [
@@ -418,9 +423,11 @@ class ProviderSettingsController extends Controller {
                 'provider' => $providerId,
                 'exception' => $e,
             ]);
-            return new JSONResponse(
-                ['success' => false, 'message' => $e->getMessage()],
+            return $this->errorResponse(
+                $e,
                 Http::STATUS_INTERNAL_SERVER_ERROR,
+                'The connection test failed',
+                'ProviderSettingsController::testConnection',
             );
         }
     }
@@ -484,22 +491,22 @@ class ProviderSettingsController extends Controller {
         return $out;
     }
 
-    /** @return JSONResponse<Http::STATUS_FORBIDDEN, array{status: string, message: string}, array{}> */
+    /** @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}> */
     private function forbiddenProvider(string $providerId, string $userId): JSONResponse {
         $this->logger->warning('AIquila: denied provider access for ' . $providerId, [
             'provider' => $providerId,
             'user' => $userId,
         ]);
         return new JSONResponse(
-            ['status' => 'error', 'message' => 'You are not permitted to use this provider.'],
+            ['error' => 'You are not permitted to use this provider.', 'errorId' => ''],
             Http::STATUS_FORBIDDEN,
         );
     }
 
-    /** @return JSONResponse<Http::STATUS_BAD_REQUEST, array{status: string, message: string}, array{}> */
+    /** @return JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}> */
     private function unknownProvider(string $providerId): JSONResponse {
         return new JSONResponse(
-            ['status' => 'error', 'message' => 'Unknown provider: ' . $providerId],
+            ['error' => 'Unknown provider: ' . $providerId, 'errorId' => ''],
             Http::STATUS_BAD_REQUEST,
         );
     }

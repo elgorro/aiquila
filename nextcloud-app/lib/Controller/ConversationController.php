@@ -26,17 +26,21 @@ use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCA\AIquila\BackgroundJob\IndexConversationJob;
 use OCA\AIquila\Service\ContextChatService;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\BackgroundJob\IJobList;
 use OCP\IRequest;
+use Psr\Log\LoggerInterface;
 
 class ConversationController extends Controller {
     use RequiresUserIdTrait;
+    use ErrorResponseTrait;
 
     private ConversationMapper $conversationMapper;
     private MessageMapper $messageMapper;
@@ -52,6 +56,7 @@ class ConversationController extends Controller {
     private IJobList $jobList;
     private ContextChatService $contextChat;
     private ?string $userId;
+    private LoggerInterface $logger;
 
     public function __construct(
         string $appName,
@@ -69,9 +74,11 @@ class ConversationController extends Controller {
         NativeMcpService $nativeMcp,
         IJobList $jobList,
         ContextChatService $contextChat,
-        ?string $userId
+        ?string $userId,
+        LoggerInterface $logger
     ) {
         parent::__construct($appName, $request);
+        $this->logger = $logger;
         $this->conversationMapper = $conversationMapper;
         $this->messageMapper = $messageMapper;
         $this->messageFileMapper = $messageFileMapper;
@@ -127,7 +134,7 @@ class ConversationController extends Controller {
      * 400: Unknown provider
      * 403: The provider is not permitted for this user
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -136,7 +143,7 @@ class ConversationController extends Controller {
         // Anthropic for an unknown id, which is right for a stale config value
         // but would let an arbitrary request string reach persistence unnoticed.
         if ($provider !== null && $provider !== '' && !$this->providerFactory->isKnownProviderId($provider)) {
-            return new JSONResponse(['error' => 'Unknown provider: ' . $provider], 400);
+            return $this->clientError(400, 'Unknown provider: ' . $provider);
         }
         // Pinning is a provider-selecting path like any other, so it is subject
         // to the same access rules as the settings pages.
@@ -182,7 +189,7 @@ class ConversationController extends Controller {
      * 403: The provider is not permitted for this user
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -193,12 +200,12 @@ class ConversationController extends Controller {
         try {
             $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
-            return new JSONResponse(['error' => 'Conversation not found'], 404);
+            return $this->clientError(404, 'Conversation not found');
         }
 
         if ($provider !== null) {
             if ($provider !== '' && !$this->providerFactory->isKnownProviderId($provider)) {
-                return new JSONResponse(['error' => 'Unknown provider: ' . $provider], 400);
+                return $this->clientError(400, 'Unknown provider: ' . $provider);
             }
             if ($provider !== '' && !$this->providerFactory->isAllowedForUser($provider, $this->userId)) {
                 return $this->forbiddenProvider($provider);
@@ -233,7 +240,7 @@ class ConversationController extends Controller {
      * 200: Conversation with messages
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, messages: list<array{id: int, conversationId: int, role: string, content: string, inputTokens: ?int, outputTokens: ?int, cacheCreationTokens: ?int, cacheReadTokens: ?int, latencyMs: ?int, citations: ?array<string, mixed>, documents: ?array<string, mixed>, createdAt: int, files: list<array{id: int, messageId: int, filePath: string, fileName: string, mimeType: ?string, createdAt: int}>}>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, messages: list<array{id: int, conversationId: int, role: string, content: string, inputTokens: ?int, outputTokens: ?int, cacheCreationTokens: ?int, cacheReadTokens: ?int, latencyMs: ?int, citations: ?array<string, mixed>, documents: ?array<string, mixed>, createdAt: int, files: list<array{id: int, messageId: int, filePath: string, fileName: string, mimeType: ?string, createdAt: int}>}>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -241,7 +248,7 @@ class ConversationController extends Controller {
         try {
             $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
-            return new JSONResponse(['error' => 'Conversation not found'], 404);
+            return $this->clientError(404, 'Conversation not found');
         }
 
         $messages = $this->messageMapper->findByConversation($id);
@@ -274,7 +281,7 @@ class ConversationController extends Controller {
      * 403: No provider is permitted for this user
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, allowed: list<string>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, allowed: list<string>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -285,7 +292,7 @@ class ConversationController extends Controller {
         try {
             $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
-            return new JSONResponse(['error' => 'Conversation not found'], 404);
+            return $this->clientError(404, 'Conversation not found');
         }
 
         if ($title !== '') {
@@ -305,6 +312,7 @@ class ConversationController extends Controller {
             if (!$provider->getCapabilities()['effort']) {
                 return new JSONResponse([
                     'error' => $provider->getLabel() . ' does not support effort levels',
+                    'errorId' => '',
                     'allowed' => [],
                 ], 400);
             }
@@ -316,6 +324,7 @@ class ConversationController extends Controller {
                     'error' => $allowed === []
                         ? 'Model ' . $model . ' does not support effort'
                         : 'Invalid effort for ' . $model . '. Allowed: ' . implode(', ', $allowed),
+                    'errorId' => '',
                     'allowed' => $allowed,
                 ], 400);
             }
@@ -326,7 +335,7 @@ class ConversationController extends Controller {
 
         if ($thinking !== null) {
             if (!in_array($thinking, ['on', 'off', ''], true)) {
-                return new JSONResponse(['error' => 'Thinking must be "on", "off" or empty'], 400);
+                return $this->clientError(400, 'Thinking must be "on", "off" or empty');
             }
             $conversation->setThinking($thinking === '' ? null : $thinking === 'on');
         }
@@ -345,7 +354,7 @@ class ConversationController extends Controller {
      * 200: Deletion confirmed
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{deleted: true}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{deleted: true}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -353,7 +362,7 @@ class ConversationController extends Controller {
         try {
             $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
-            return new JSONResponse(['error' => 'Conversation not found'], 404);
+            return $this->clientError(404, 'Conversation not found');
         }
 
         // Delete files for each message
@@ -382,22 +391,26 @@ class ConversationController extends Controller {
      * 403: No provider is permitted for this user
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{userMessage: array<string, mixed>, assistantMessage: array<string, mixed>, conversation: array<string, mixed>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{userMessage: array<string, mixed>, assistantMessage: array<string, mixed>, conversation: array<string, mixed>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
+    // Each call bills an LLM request. These are the endpoints the chat UI
+    // actually uses — ChatController's limits never covered them.
+    #[UserRateLimit(limit: 30, period: 60)]
+    #[AnonRateLimit(limit: 30, period: 60)]
     #[OpenAPI]
     public function message(int $id, string $prompt = '', array $files = []): JSONResponse {
         if (!$this->providerFactory->hasPermittedProvider($this->userId)) {
             return $this->noProviderAvailable();
         }
         if (!$prompt && empty($files)) {
-            return new JSONResponse(['error' => 'No prompt provided'], 400);
+            return $this->clientError(400, 'No prompt provided');
         }
 
         try {
             $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
-            return new JSONResponse(['error' => 'Conversation not found'], 404);
+            return $this->clientError(404, 'Conversation not found');
         }
 
         $now = time();
@@ -590,10 +603,14 @@ class ConversationController extends Controller {
      * @NoCSRFRequired
      */
     #[NoAdminRequired]
+    // Each call bills an LLM request. These are the endpoints the chat UI
+    // actually uses — ChatController's limits never covered them.
+    #[UserRateLimit(limit: 30, period: 60)]
+    #[AnonRateLimit(limit: 30, period: 60)]
     #[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]
     public function messageStream(int $id, string $prompt = '', array $files = []): Response {
         if (!$prompt && empty($files)) {
-            return new JSONResponse(['error' => 'No prompt provided'], 400);
+            return $this->clientError(400, 'No prompt provided');
         }
         if (!$this->providerFactory->hasPermittedProvider($this->userId)) {
             return $this->noProviderAvailable();
@@ -601,7 +618,7 @@ class ConversationController extends Controller {
         try {
             $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
-            return new JSONResponse(['error' => 'Conversation not found'], 404);
+            return $this->clientError(404, 'Conversation not found');
         }
         return new SSEResponse($this->streamConversationReply($id, $prompt, $files));
     }
@@ -826,7 +843,7 @@ class ConversationController extends Controller {
      * 200: The duplicated conversation
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -834,7 +851,7 @@ class ConversationController extends Controller {
         try {
             $original = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
-            return new JSONResponse(['error' => 'Conversation not found'], 404);
+            return $this->clientError(404, 'Conversation not found');
         }
 
         $now = time();
@@ -1015,9 +1032,16 @@ class ConversationController extends Controller {
                     ];
                 }
             } catch (\Exception $e) {
+                // This text is sent to the LLM provider, so an exception message
+                // here would ship server paths off-instance. Log it, tell the
+                // model only that the file was unreadable.
+                $this->logger->warning(
+                    'Could not attach file to conversation',
+                    ['exception' => $e, 'file' => basename($filePath)],
+                );
                 $blocks[] = [
                     'type' => 'text',
-                    'text' => "--- File: " . basename($filePath) . " (could not read: {$e->getMessage()}) ---",
+                    'text' => "--- File: " . basename($filePath) . " (could not be read) ---",
                 ];
             }
         }
@@ -1025,22 +1049,22 @@ class ConversationController extends Controller {
     }
 
     /**
-     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
      */
     private function forbiddenProvider(string $providerId): JSONResponse {
-        return new JSONResponse(
-            ['error' => 'You are not permitted to use this provider: ' . $providerId],
+        return $this->clientError(
             Http::STATUS_FORBIDDEN,
+            'You are not permitted to use this provider: ' . $providerId,
         );
     }
 
     /**
-     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string}, array{}>
+     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
      */
     private function noProviderAvailable(): JSONResponse {
-        return new JSONResponse(
-            ['error' => NoPermittedProviderException::USER_MESSAGE],
+        return $this->clientError(
             Http::STATUS_FORBIDDEN,
+            NoPermittedProviderException::USER_MESSAGE,
         );
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Service;
 
+use OCA\AIquila\Service\Exception\ValidationException;
 use OCA\AIquila\Cowork\CoworkerTaskRegistry;
 use OCA\AIquila\Cowork\CronSchedule;
 use OCA\AIquila\Db\Coworker;
@@ -269,27 +270,27 @@ class CoworkerService {
             // registered provider, so a request string never reaches a config
             // lookup or an outbound call.
             if ($provider !== '' && !$this->providerFactory->isKnownProviderId($provider)) {
-                throw new \InvalidArgumentException("Unknown provider: $provider");
+                throw new ValidationException("Unknown provider: $provider");
             }
             // Pinning a provider on a coworker is a provider-selecting path like
             // any other: the owner has to be permitted to use it, or a blocked
             // provider could be reached through a scheduled run.
             if ($provider !== '' && !$this->providerFactory->isAllowedForUser($provider, $coworker->getUserId())) {
-                throw new \InvalidArgumentException("You are not permitted to use this provider: $provider");
+                throw new ValidationException("You are not permitted to use this provider: $provider");
             }
             $coworker->setProvider($provider !== '' ? $provider : null);
         }
         if (array_key_exists('task_type', $data)) {
             $taskType = (string)$data['task_type'];
             if (!$this->registry->has($taskType)) {
-                throw new \InvalidArgumentException("Unknown task type: $taskType");
+                throw new ValidationException("Unknown task type: $taskType");
             }
             $coworker->setTaskType($taskType);
         }
         if (array_key_exists('cron_schedule', $data)) {
             $schedule = (string)$data['cron_schedule'];
             if (!CronSchedule::isValid($schedule)) {
-                throw new \InvalidArgumentException("Invalid cron schedule: $schedule");
+                throw new ValidationException("Invalid cron schedule: $schedule");
             }
             $coworker->setCronSchedule($schedule);
         }
