@@ -1441,6 +1441,19 @@ func parseLabels(pairs []string) (map[string]string, error) {
 // cloudInitYAML returns the cloud-init user-data for Docker installation.
 // swapSize, if non-empty (e.g. "2G"), creates and enables a swap file at /swapfile.
 // packages, if non-empty, are installed via cloud-init's native package module.
+// Pinned Docker install inputs for cloud-init. Verified at boot so a substituted
+// key or a tampered binary fails the provision instead of running as root.
+const (
+	// Docker's official package signing key (https://download.docker.com/linux/*/gpg).
+	dockerGPGFingerprint = "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+
+	// Standalone compose plugin, used only on distros that do not package it
+	// (openSUSE). Checksums come from the release's checksums.txt.
+	composeVersion       = "v2.40.3"
+	composeSHA256x86_64  = "dba9d98e1ba5bfe11d88c99b9bd32fc4a0624a30fafe68eea34d61a3e42fd372"
+	composeSHA256aarch64 = "d26373b19e89160546d15407516cc59f453030d9bc5b43ba7faf16f7b4980137"
+)
+
 func cloudInitYAML(swapSize string, packages []string) string {
 	swapStep := ""
 	if swapSize != "" {
@@ -1469,6 +1482,22 @@ package_update: true
   - |
     set -e
     . /etc/os-release
+
+    # Docker's official signing key. The key is fetched over TLS, but TLS alone
+    # is trust-on-first-use: pinning the fingerprint means a substituted key is
+    # rejected instead of silently trusted for every later package install.
+    DOCKER_GPG_FINGERPRINT="` + dockerGPGFingerprint + `"
+
+    verify_docker_gpg() {
+      # $1 = path to the downloaded ASCII-armoured key
+      command -v gpg >/dev/null 2>&1 || { echo "gpg not available for key verification" >&2; exit 1; }
+      got=$(gpg --show-keys --with-colons "$1" 2>/dev/null | awk -F: '/^fpr:/ {print $10; exit}')
+      if [ "$got" != "$DOCKER_GPG_FINGERPRINT" ]; then
+        echo "Docker GPG fingerprint mismatch: got '$got', expected '$DOCKER_GPG_FINGERPRINT'" >&2
+        exit 1
+      fi
+    }
+
     if command -v dnf >/dev/null 2>&1; then
       # Fedora 41+ uses DNF5 which dropped the config-manager --add-repo syntax;
       # download the .repo file directly instead (works on DNF4 and DNF5).
@@ -1479,24 +1508,49 @@ package_update: true
         dnf -y install dnf-plugins-core
         dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
       fi
+      # The shipped .repo files enable gpgcheck, but set it explicitly so a
+      # tampered file cannot quietly turn signature checking off.
+      for f in /etc/yum.repos.d/docker-ce.repo; do
+        [ -f "$f" ] || continue
+        sed -i 's/^gpgcheck=.*/gpgcheck=1/' "$f"
+        grep -q '^gpgcheck=' "$f" || echo 'gpgcheck=1' >> "$f"
+      done
+      rpm --import https://download.docker.com/linux/${ID}/gpg
       dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     elif command -v pacman >/dev/null 2>&1; then
       pacman -Sy --noconfirm docker docker-compose
     elif command -v zypper >/dev/null 2>&1; then
-      zypper install -y docker
+      zypper install -y docker gpg2 || zypper install -y docker
       mkdir -p /usr/local/lib/docker/cli-plugins
-      curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.1/docker-compose-linux-$(uname -m)" \
+      # Pinned release + pinned digest: the compose binary is fetched straight
+      # from GitHub and made executable, so an unverified download here would be
+      # arbitrary code execution as root on first boot.
+      case "$(uname -m)" in
+        x86_64)  COMPOSE_ARCH=x86_64;  COMPOSE_SHA256="` + composeSHA256x86_64 + `" ;;
+        aarch64|arm64) COMPOSE_ARCH=aarch64; COMPOSE_SHA256="` + composeSHA256aarch64 + `" ;;
+        *) echo "Unsupported architecture for docker compose: $(uname -m)" >&2; exit 1 ;;
+      esac
+      curl -fsSL "https://github.com/docker/compose/releases/download/` + composeVersion + `/docker-compose-linux-${COMPOSE_ARCH}" \
         -o /usr/local/lib/docker/cli-plugins/docker-compose
+      echo "${COMPOSE_SHA256}  /usr/local/lib/docker/cli-plugins/docker-compose" | sha256sum -c - || {
+        echo "docker-compose checksum mismatch — refusing to install" >&2
+        rm -f /usr/local/lib/docker/cli-plugins/docker-compose
+        exit 1
+      }
       chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
     elif command -v apt-get >/dev/null 2>&1; then
-      apt-get install -y ca-certificates curl
+      apt-get install -y ca-certificates curl gnupg
       install -m 0755 -d /etc/apt/keyrings
       curl -fsSL "https://download.docker.com/linux/${ID}/gpg" -o /etc/apt/keyrings/docker.asc
+      verify_docker_gpg /etc/apt/keyrings/docker.asc
       chmod a+r /etc/apt/keyrings/docker.asc
       echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${ID} ${VERSION_CODENAME} stable" \
         > /etc/apt/sources.list.d/docker.list
       apt-get update -y
       apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    else
+      echo "Unsupported distribution: no dnf, pacman, zypper or apt-get found" >&2
+      exit 1
     fi
   - systemctl enable --now docker
   - mkdir -p /opt/aiquila

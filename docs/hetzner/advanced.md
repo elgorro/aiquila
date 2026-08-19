@@ -131,6 +131,75 @@ Adjust the rule in the Hetzner console (or delete the firewall and re-run
 
 ---
 
+## SSH key rotation
+
+There is no `rotate` subcommand — key material has no automated lifecycle. Rotate
+on a fixed schedule (annually is a reasonable default) and immediately whenever a
+laptop holding a private key is lost, leaves the team, or is suspected compromised.
+
+**Know this first:** `create` derives the Hetzner key name from the server name
+(`<server>-key`) and, if a key with that name already exists, **reuses it as-is
+without comparing fingerprints**. Generating a new local key pair and re-running
+`create` therefore does *not* rotate anything — the old public key stays on the
+server and keeps working. The old key must be removed explicitly.
+
+### Rotating
+
+```bash
+# 1. Generate a new pair (do not overwrite the old one yet — you still need it)
+ssh-keygen -t ed25519 -f ~/.ssh/aiquila_ed25519.new -C "aiquila $(date +%Y-%m)"
+
+# 2. Append the new public key on the server, using the old key to get in
+ssh -i ~/.ssh/aiquila_ed25519 root@<server-ip> \
+  "cat >> /root/.ssh/authorized_keys" < ~/.ssh/aiquila_ed25519.new.pub
+
+# 3. Verify the new key works — in a second terminal, before closing the first
+ssh -i ~/.ssh/aiquila_ed25519.new root@<server-ip> true && echo "new key OK"
+
+# 4. Only once step 3 succeeds, drop the old key from the server
+ssh -i ~/.ssh/aiquila_ed25519.new root@<server-ip> \
+  "grep -v -F -f /dev/stdin /root/.ssh/authorized_keys > /root/.ssh/ak.new && \
+   mv /root/.ssh/ak.new /root/.ssh/authorized_keys" < ~/.ssh/aiquila_ed25519.pub
+
+# 5. Promote the new key locally
+mv ~/.ssh/aiquila_ed25519.new ~/.ssh/aiquila_ed25519
+mv ~/.ssh/aiquila_ed25519.new.pub ~/.ssh/aiquila_ed25519.pub
+```
+
+Keep the old key until step 3 passes. Removing it first and finding the new key
+does not work leaves you locked out, recoverable only through the Hetzner
+console's rescue mode.
+
+### Replacing the stored Hetzner key
+
+The key object in the Hetzner project is only used when a server is *created*;
+deleting it does not affect a running server. Replace it so future `create` runs
+pick up the new material:
+
+```bash
+hcloud ssh-key delete <server>-key
+hcloud ssh-key create --name <server>-key --public-key-from-file ~/.ssh/aiquila_ed25519.pub
+```
+
+`aiquila-hetzner destroy` also deletes the `<server>-key` object along with the
+server.
+
+### Revoking access
+
+To cut off a key immediately without a full rotation, remove its line from
+`/root/.ssh/authorized_keys` on each server and delete the Hetzner key object.
+Existing SSH sessions survive removal — terminate them too:
+
+```bash
+ssh root@<server-ip> "pkill -f 'sshd:.*@pts' || true"
+```
+
+Since SSH is restricted to a single CIDR by default (see
+[SSH CIDR restriction](#ssh-cidr-restriction)), tightening that range is a fast
+containment step while you rotate.
+
+---
+
 ## DNS automation
 
 Create A (and AAAA) records automatically after the server IP is assigned:

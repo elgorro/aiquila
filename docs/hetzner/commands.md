@@ -71,6 +71,11 @@ Run `aiquila-hetzner options` to list all server types, locations, and images av
 |------|-------------|
 | `--ssh-key` | Path to existing SSH public key; omit to auto-generate an Ed25519 pair |
 
+A key that already exists in the Hetzner project under the derived name
+`<server>-key` is reused without a fingerprint comparison, so supplying a new
+`--ssh-key` does not by itself replace the key on an existing server — see
+[SSH key rotation](advanced.md#ssh-key-rotation).
+
 **Networking & DNS:**
 
 | Flag | Description |
