@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { NextcloudOAuthProvider, renderLoginForm } from './provider.js';
+import { NextcloudOAuthProvider, renderLoginForm, applySecurityHeaders } from './provider.js';
 import { logger } from '../logger.js';
 
 export function loginHandler(provider: NextcloudOAuthProvider) {
@@ -15,7 +15,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
     }
 
     if (!username || !password || !client_id || !redirect_uri || !code_challenge) {
-      res
+      applySecurityHeaders(res)
         .status(400)
         .type('html')
         .send(
@@ -33,7 +33,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
 
     const client = await provider.clientsStore.getClient(client_id);
     if (!client) {
-      res
+      applySecurityHeaders(res)
         .status(400)
         .type('html')
         .send(
@@ -49,7 +49,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       return;
     }
     if (!client.redirect_uris.map(String).includes(redirect_uri)) {
-      res
+      applySecurityHeaders(res)
         .status(400)
         .type('html')
         .send(
@@ -78,7 +78,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
 
       if (!ncResp.ok) {
         logger.warn({ user: username, status: ncResp.status }, '[auth] Login failed');
-        res
+        applySecurityHeaders(res)
           .status(200)
           .type('html')
           .send(
@@ -112,7 +112,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       res.redirect(redirectUrl.toString());
     } catch (err) {
       logger.error({ user: username, err }, '[auth] Login error');
-      res
+      applySecurityHeaders(res)
         .status(200)
         .type('html')
         .send(

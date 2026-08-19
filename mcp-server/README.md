@@ -92,6 +92,8 @@ See the [Docker setup guide](https://github.com/elgorro/aiquila/blob/main/docs/m
 | `MCP_AUTH_ENABLED`   | No       | `true` to enable OAuth for remote clients     |
 | `MCP_AUTH_SECRET`    | If auth  | `openssl rand -hex 32`                        |
 | `MCP_AUTH_ISSUER`    | If auth  | public HTTPS URL of this server               |
+| `MCP_ALLOWED_HOSTS`  | No       | extra hostnames for DNS rebinding protection  |
+| `MCP_CORS_ORIGINS`   | No       | extra browser origins allowed via CORS        |
 | `LOG_LEVEL`          | No       | `trace`/`debug`/`info`/`warn`/`error`/`fatal` |
 
 ## Requirements

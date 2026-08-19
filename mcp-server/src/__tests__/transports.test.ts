@@ -351,4 +351,89 @@ describe('http transport with auth enabled', () => {
 
     expect(mockConnect).toHaveBeenCalledWith(mockHttpTransport);
   });
+
+  // ---- CORS ----
+
+  /** Runs the CORS middleware (the first app.use registered) against a fake request. */
+  async function runCors(headers: Record<string, string>, method = 'GET') {
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+    const middleware = mockUse.mock.calls
+      .map((c) => c[0])
+      .find((fn) => typeof fn === 'function' && fn.length === 3) as (
+      req: unknown,
+      res: unknown,
+      next: unknown
+    ) => void;
+    expect(middleware).toBeDefined();
+
+    const set: Record<string, string> = {};
+    const next = vi.fn();
+    const end = vi.fn();
+    const res = {
+      setHeader: (k: string, v: string) => {
+        set[k] = v;
+      },
+      status: vi.fn(function (this: unknown) {
+        return { end };
+      }),
+      end,
+    };
+    middleware({ headers, method }, res, next);
+    return { set, next, res, end };
+  }
+
+  it('echoes the issuer origin back as an allowed CORS origin', async () => {
+    const { set, next } = await runCors({ origin: 'https://mcp.example.com' });
+    expect(set['Access-Control-Allow-Origin']).toBe('https://mcp.example.com');
+    expect(set['Vary']).toBe('Origin');
+    expect(next).toHaveBeenCalled();
+  });
+
+  it('does not send CORS headers for a foreign origin', async () => {
+    const { set, next } = await runCors({ origin: 'https://evil.example' });
+    expect(set['Access-Control-Allow-Origin']).toBeUndefined();
+    // Vary is set unconditionally so shared caches cannot mix responses.
+    expect(set['Vary']).toBe('Origin');
+    expect(next).toHaveBeenCalled();
+  });
+
+  it('never responds with a wildcard origin', async () => {
+    const { set } = await runCors({ origin: 'https://mcp.example.com' });
+    expect(set['Access-Control-Allow-Origin']).not.toBe('*');
+  });
+
+  it('allows extra origins from MCP_CORS_ORIGINS', async () => {
+    process.env.MCP_CORS_ORIGINS = 'https://a.example, https://b.example';
+    const { set } = await runCors({ origin: 'https://b.example' });
+    expect(set['Access-Control-Allow-Origin']).toBe('https://b.example');
+  });
+
+  it('ignores malformed MCP_CORS_ORIGINS entries without throwing', async () => {
+    process.env.MCP_CORS_ORIGINS = 'not-a-url';
+    const { set } = await runCors({ origin: 'https://mcp.example.com' });
+    // The issuer origin still works; the bad entry is simply dropped.
+    expect(set['Access-Control-Allow-Origin']).toBe('https://mcp.example.com');
+  });
+
+  it('answers OPTIONS preflight with 204 before the auth chain runs', async () => {
+    const { res, next, end } = await runCors({ origin: 'https://mcp.example.com' }, 'OPTIONS');
+    expect(res.status).toHaveBeenCalledWith(204);
+    expect(end).toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('serves the login stylesheet unauthenticated as text/css', async () => {
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+    const cssCall = mockGet.mock.calls.find((c) => c[0] === '/auth/login.css');
+    expect(cssCall).toBeDefined();
+
+    const set = vi.fn().mockReturnThis();
+    const send = vi.fn();
+    const res = { set, status: vi.fn().mockReturnThis(), send };
+    (cssCall![1] as (req: unknown, res: unknown) => void)({}, res);
+    expect(set).toHaveBeenCalledWith('Content-Type', 'text/css; charset=utf-8');
+    expect(send).toHaveBeenCalledWith(expect.stringContaining('.card {'));
+  });
 });

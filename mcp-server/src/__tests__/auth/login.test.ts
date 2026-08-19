@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { NextcloudOAuthProvider } from '../../auth/provider.js';
 import { loginHandler } from '../../auth/login.js';
+import { LOGIN_PAGE_CSP } from '../../auth/provider.js';
 
 global.fetch = vi.fn();
 
@@ -21,6 +22,7 @@ const BASE_BODY = {
 
 function makeRes() {
   const res = {
+    set: vi.fn().mockReturnThis(),
     status: vi.fn().mockReturnThis(),
     type: vi.fn().mockReturnThis(),
     send: vi.fn().mockReturnThis(),
@@ -99,6 +101,55 @@ describe('loginHandler', () => {
     await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
     expect(res.redirect).not.toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith(expect.stringContaining('Authentication failed'));
+  });
+
+  it('sets CSP and frame-options on every re-rendered error page', async () => {
+    // Each of these paths re-renders the login form; all must carry the same
+    // headers as the initial GET, which they previously did not.
+    const cases: Array<() => Promise<unknown>> = [
+      // invalid credentials
+      async () => {
+        (global.fetch as any).mockResolvedValueOnce({ ok: false, status: 401 });
+        return loginHandler(provider)({ body: BASE_BODY } as any, makeResAndTrack() as any);
+      },
+      // network failure
+      async () => {
+        (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
+        return loginHandler(provider)({ body: BASE_BODY } as any, makeResAndTrack() as any);
+      },
+      // missing fields
+      async () =>
+        loginHandler(provider)({ body: { username: 'u' } } as any, makeResAndTrack() as any),
+      // unknown client
+      async () =>
+        loginHandler(provider)(
+          { body: { ...BASE_BODY, client_id: 'nope' } } as any,
+          makeResAndTrack() as any
+        ),
+      // invalid redirect URI
+      async () =>
+        loginHandler(provider)(
+          { body: { ...BASE_BODY, redirect_uri: 'https://evil.example/cb' } } as any,
+          makeResAndTrack() as any
+        ),
+    ];
+
+    const seen: Array<ReturnType<typeof makeRes>> = [];
+    function makeResAndTrack() {
+      const r = makeRes();
+      seen.push(r);
+      return r;
+    }
+
+    for (const run of cases) {
+      await run();
+    }
+
+    expect(seen).toHaveLength(cases.length);
+    for (const res of seen) {
+      expect(res.set).toHaveBeenCalledWith('Content-Security-Policy', LOGIN_PAGE_CSP);
+      expect(res.set).toHaveBeenCalledWith('X-Frame-Options', 'DENY');
+    }
   });
 
   it('returns 500 when NEXTCLOUD_URL is not configured', async () => {

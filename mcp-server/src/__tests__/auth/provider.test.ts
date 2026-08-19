@@ -4,7 +4,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { NextcloudOAuthProvider, renderLoginForm } from '../../auth/provider.js';
+import { NextcloudOAuthProvider, renderLoginForm, LOGIN_PAGE_CSP } from '../../auth/provider.js';
+import { LOGIN_STYLESHEET_PATH } from '../../auth/login-page-css.js';
 
 const TEST_SECRET = 'super-secret-32-char-key-for-testing!!';
 
@@ -139,13 +140,25 @@ describe('NextcloudOAuthProvider', () => {
         res as any
       );
       expect(res.set).toHaveBeenCalledWith('X-Frame-Options', 'DENY');
-      expect(res.set).toHaveBeenCalledWith(
-        'Content-Security-Policy',
-        "frame-ancestors 'none'; default-src 'self'; style-src 'unsafe-inline'"
-      );
+      expect(res.set).toHaveBeenCalledWith('X-Content-Type-Options', 'nosniff');
+      expect(res.set).toHaveBeenCalledWith('Referrer-Policy', 'no-referrer');
+      expect(res.set).toHaveBeenCalledWith('Content-Security-Policy', LOGIN_PAGE_CSP);
+      expect(LOGIN_PAGE_CSP).not.toContain("'unsafe-inline'");
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.type).toHaveBeenCalledWith('html');
       expect(res.send).toHaveBeenCalledWith(expect.stringContaining('action="/auth/login"'));
+    });
+
+    it('links the external stylesheet and inlines no styles or scripts', () => {
+      const html = renderLoginForm({
+        clientId: 'c1',
+        redirectUri: 'https://r.com',
+        codeChallenge: 'ch',
+      });
+      expect(html).toContain(`<link rel="stylesheet" href="${LOGIN_STYLESHEET_PATH}">`);
+      expect(html).not.toContain('<style');
+      expect(html).not.toContain('<script');
+      expect(html).not.toContain('style="');
     });
 
     it('includes client name in the rendered form', async () => {

@@ -207,6 +207,8 @@ MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
 | `MCP_HOST` | No | `0.0.0.0` | Bind address |
 | `MCP_TRUST_PROXY` | No | `false` | Set to `1` when behind a single reverse proxy |
 | `MCP_TLS_STRICT` | No | `false` | Set `true` to fail fast on TLS cert errors |
+| `MCP_ALLOWED_HOSTS` | No | — | Comma-separated extra hostnames accepted by DNS rebinding protection (e.g. `mcp` for a Docker service name). The `MCP_AUTH_ISSUER` hostname plus `localhost` / `127.0.0.1` are always allowed |
+| `MCP_CORS_ORIGINS` | No | — | Comma-separated extra origins allowed to make cross-origin browser requests. The `MCP_AUTH_ISSUER` origin is allowed by default when auth is enabled. Origins are matched exactly and echoed back — `*` is never sent, because these endpoints are credentialed |
 
 ### Auth (`MCP_AUTH_ENABLED=true`)
 
