@@ -64,7 +64,7 @@ jobs:
       RUN_INFRA_TEST: ${{ inputs.run_infra_test }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Mask sensitive inputs
         run: |
