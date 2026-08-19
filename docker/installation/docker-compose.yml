@@ -1,3 +1,7 @@
+# AIquila dev stack (local development).
+# Resource limits below are deliberately looser than the production stacks in
+# hetzner/docker/* — they exist to contain runaway processes, not to model prod
+# sizing (the dev MCP server runs a tsx watcher and Nextcloud rebuilds assets).
 services:
   # PostgreSQL Database
   db:
@@ -19,6 +23,12 @@ services:
       retries: 5
     networks:
       - aiquila-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '1.0'
+          pids: 200
 
   # Redis Cache
   redis:
@@ -35,6 +45,12 @@ services:
       retries: 5
     networks:
       - aiquila-network
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.5'
+          pids: 100
 
   # Nextcloud with AIquila installed from tarball
   nextcloud:
@@ -87,6 +103,12 @@ services:
       - "8080:80"
     networks:
       - aiquila-network
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '2.0'
+          pids: 400
 
   # MCP Server (Development)
   mcp-server:
@@ -116,6 +138,12 @@ services:
       - "3339:3339"
     networks:
       - aiquila-network
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '2.0'
+          pids: 300
 
   # Caddy Reverse Proxy (HTTPS)
   caddy:
@@ -134,6 +162,12 @@ services:
       - caddy_config:/config
     networks:
       - aiquila-network
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '1.0'
+          pids: 100
 
   # MailHog (Email Testing)
   mailhog:
@@ -145,6 +179,12 @@ services:
       - "1025:1025"  # SMTP
     networks:
       - aiquila-network
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: '0.5'
+          pids: 50
 
   # Adminer (Database UI)
   adminer:
@@ -160,6 +200,12 @@ services:
       - "8081:8080"
     networks:
       - aiquila-network
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.5'
+          pids: 100
 
 volumes:
   postgres_data:

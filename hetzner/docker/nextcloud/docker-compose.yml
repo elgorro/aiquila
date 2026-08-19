@@ -55,6 +55,8 @@ services:
       resources:
         limits:
           memory: 1g
+          cpus: '2.0'
+          pids: 400
     logging:
       driver: "json-file"
       options:
@@ -84,6 +86,8 @@ services:
       resources:
         limits:
           memory: 512m
+          cpus: '1.0'
+          pids: 200
         reservations:
           memory: 256m
     logging:
@@ -104,6 +108,8 @@ services:
       resources:
         limits:
           memory: 256m
+          cpus: '0.5'
+          pids: 100
         reservations:
           memory: 128m
     logging:
@@ -127,6 +133,8 @@ services:
       resources:
         limits:
           memory: 64m
+          cpus: '0.5'
+          pids: 50
         reservations:
           memory: 32m
     logging:
@@ -155,6 +163,8 @@ services:
       resources:
         limits:
           memory: 256m
+          cpus: '1.0'
+          pids: 100
         reservations:
           memory: 128m
     logging:
@@ -180,6 +190,8 @@ services:
       resources:
         limits:
           memory: 512m
+          cpus: '1.0'
+          pids: 200
         reservations:
           memory: 256m
     logging:
