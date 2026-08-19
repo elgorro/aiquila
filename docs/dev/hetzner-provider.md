@@ -30,9 +30,14 @@ model list and the provider status light are both cached — see
 | Model | Type | Context | Modalities |
 |---|---|---|---|
 | `Qwen/Qwen3.6-35B-A3B-FP8` | MoE, 35B total / 3B active | 262k | Text, Image |
-| `Kimi-K2.7-Code` | MoE, 1T total / 32B active | 262k | Text, Image |
-| `DeepSeek-V4-Flash-0731` | MoE, 304B total / 13B active | 512k | Text |
-| `GLM-5.2-NVFP4` | MoE, 744B total / 40B active | 512k | Text |
+
+On 2026-08-19 Hetzner withdrew the large models — `Kimi-K2.7-Code`,
+`DeepSeek-V4-Flash-0731` and `GLM-5.2-NVFP4` — from public Experiments while it
+works on capacity; only the small Qwen models remain, and `Qwen3.8-27B` is
+announced but not yet served ([Hetzner
+blog](https://www.hetzner.com/de/blog/inference-experiment/)). It is deliberately
+absent from `HetznerModels` until `GET /models` reports its exact id — an unknown
+id already degrades safely.
 
 The line-up changes as the experiment evolves, so the settings UI lists whatever
 `GET /models` currently returns and falls back to `HetznerModels` only when that
@@ -49,8 +54,8 @@ and `LocalProvider` use, so all wire-format handling is shared. It only supplies
 
 - identity (`hetzner`, "Hetzner Inference (EU)") and the base URL,
 - `supportsVisionInput()` — decided per model via `HetznerModels::supportsVision()`:
-  true for Qwen3.6 and Kimi-K2.7-Code, false for DeepSeek-V4-Flash and GLM-5.2.
-  An id the registry does not know is assumed vision-capable, so a model added to
+  no model currently served by Experiments is text-only, so the text-only set is
+  empty. An id the registry does not know is assumed vision-capable, so a model added to
   the service after this release is not crippled by a stale list — the API
   rejects an unsupported modality on its own,
 - error mapping for 401 (bad token), 429 (quota) and 502/503 (experiment down),
@@ -75,9 +80,6 @@ Per-model output ceilings applied by `HetznerModels::getMaxTokenCeiling()`
 | Model | Ceiling |
 |---|---|
 | `Qwen/Qwen3.6-35B-A3B-FP8` | 32768 |
-| `Kimi-K2.7-Code` | 32768 |
-| `DeepSeek-V4-Flash-0731` | 65536 |
-| `GLM-5.2-NVFP4` | 65536 |
 
 User config: `user_model_hetzner` (per-user model override), `user_provider`
 (per-user provider override).

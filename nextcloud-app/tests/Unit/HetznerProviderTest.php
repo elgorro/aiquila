@@ -254,7 +254,7 @@ class HetznerProviderTest extends TestCase {
         $this->client->method('get')->willReturnCallback(function (string $url) use (&$capturedUrl) {
             $capturedUrl = $url;
             return $this->jsonResponse([
-                'data' => [['id' => 'Qwen/Qwen3.6-35B-A3B-FP8'], ['id' => 'zai-org/GLM-5.2']],
+                'data' => [['id' => 'Qwen/Qwen3.6-35B-A3B-FP8'], ['id' => 'Qwen/Qwen3.8-27B']],
             ]);
         });
 
@@ -262,17 +262,16 @@ class HetznerProviderTest extends TestCase {
 
         $this->assertSame('https://inference.hetzner.com/api/v1/models', $capturedUrl);
         $this->assertContains('Qwen/Qwen3.6-35B-A3B-FP8', $models);
-        $this->assertContains('zai-org/GLM-5.2', $models);
+        $this->assertContains('Qwen/Qwen3.8-27B', $models);
     }
 
     public function testStaticRegistryCoversTheFullLineUp(): void {
         // The fallback is what the settings UI shows when the live listing
         // fails, so a registry that has gone stale silently narrows the picker.
+        // Hetzner withdrew the large models (Kimi-K2.7-Code, DeepSeek-V4-Flash,
+        // GLM-5.2) from Experiments on 2026-08-19; Qwen3.6 is all that is left.
         $this->assertSame([
             HetznerModels::QWEN3_6_35B,
-            HetznerModels::KIMI_K2_7_CODE,
-            HetznerModels::DEEPSEEK_V4_FLASH,
-            HetznerModels::GLM_5_2_NVFP4,
         ], HetznerModels::getAllModels());
     }
 
@@ -290,30 +289,21 @@ class HetznerProviderTest extends TestCase {
 
     public function testMaxTokensUsesTheSelectedModelsCeiling(): void {
         $provider = $this->provider([
-            'model_hetzner' => HetznerModels::DEEPSEEK_V4_FLASH,
+            'model_hetzner' => HetznerModels::QWEN3_6_35B,
             'max_tokens_hetzner' => '999999',
         ]);
         $this->assertSame(
-            HetznerModels::getMaxTokenCeiling(HetznerModels::DEEPSEEK_V4_FLASH),
+            HetznerModels::getMaxTokenCeiling(HetznerModels::QWEN3_6_35B),
             $provider->getMaxTokens()
         );
     }
 
     public function testVisionSupportFollowsTheSelectedModel(): void {
         $this->assertTrue(HetznerModels::supportsVision(HetznerModels::QWEN3_6_35B));
-        $this->assertTrue(HetznerModels::supportsVision(HetznerModels::KIMI_K2_7_CODE));
-        $this->assertFalse(HetznerModels::supportsVision(HetznerModels::DEEPSEEK_V4_FLASH));
-        $this->assertFalse(HetznerModels::supportsVision(HetznerModels::GLM_5_2_NVFP4));
-        // Unknown ids are assumed capable rather than crippled by a stale list.
+        // No model currently served by Experiments is text-only, and an id the
+        // registry has not caught up with is assumed capable rather than
+        // crippled by a stale list.
         $this->assertTrue(HetznerModels::supportsVision('brand/new'));
-    }
-
-    public function testTextOnlyModelRefusesImageInput(): void {
-        $provider = $this->provider(['model_hetzner' => HetznerModels::GLM_5_2_NVFP4]);
-
-        $result = $provider->askWithImage('what is this', base64_encode('x'), 'image/png', 'u');
-
-        $this->assertStringContainsString('vision', strtolower($result['error']));
     }
 
     public function testRateLimitErrorIsMapped(): void {
