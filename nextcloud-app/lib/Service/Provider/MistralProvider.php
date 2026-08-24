@@ -95,6 +95,16 @@ class MistralProvider implements LLMProviderInterface {
                 MistralModels::DEFAULT_MODEL,
                 'Used for every request unless a conversation pins a different one.',
             ),
+            ProviderSettingsSchema::select(
+                'effort',
+                'effort_mistral',
+                'Default reasoning effort',
+                'Only Mistral Small 4 and Medium 3.5 reason. "high" makes the model think before answering (more tokens); "none" keeps it direct. Blank leaves the parameter off entirely. Overridable per conversation with /effort.',
+                array_merge([''], MistralModels::ALL_EFFORTS),
+                group: ProviderSettingsSchema::GROUP_BASIC,
+                scope: ProviderSettingsSchema::SCOPE_BOTH,
+                userKey: 'user_effort_mistral',
+            ),
             ProviderSettingsSchema::maxTokens('max_tokens_mistral', MistralModels::DEFAULT_MAX_TOKENS),
             ProviderSettingsSchema::timeout('api_timeout', 30, 'Shared across all hosted providers.'),
             ProviderSettingsSchema::text(
@@ -112,8 +122,36 @@ class MistralProvider implements LLMProviderInterface {
             'vision' => true,
             'tools' => true,
             'streaming' => true,
+            'effort' => true,
             'native_mcp' => true,
         ]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getAllowedEfforts(string $model): array {
+        return MistralModels::getAllowedEfforts($model);
+    }
+
+    /**
+     * Resolve `reasoning_effort` for a request: conversation override → user
+     * setting → admin setting. Values the model does not accept fall through
+     * to the next level; null means "omit the parameter".
+     */
+    private function resolveEffort(string $model, ?string $override, ?string $userId): ?string {
+        $candidates = [$override];
+        if ($userId !== null) {
+            $candidates[] = $this->config->getUserValue($userId, self::APP_NAME, 'user_effort_mistral', '');
+        }
+        $candidates[] = $this->config->getAppValue(self::APP_NAME, 'effort_mistral', '');
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && $candidate !== '' && MistralModels::isAllowedEffort($model, $candidate)) {
+                return $candidate;
+            }
+        }
+        return null;
     }
 
     public function listModels(?string $userId = null): ?array {
@@ -204,7 +242,7 @@ class MistralProvider implements LLMProviderInterface {
     private function visionOptions(?string $userId): array {
         return MistralModels::supportsVision($this->getModel($userId))
             ? []
-            : ['model' => MistralModels::PIXTRAL];
+            : ['model' => MistralModels::VISION_MODEL];
     }
 
     public function askWithDocument(string $prompt, string $documentData, string $mediaType, string $title = '', ?string $userId = null, bool $cacheDoc = true, bool $citations = true, ?string $fileId = null): array {
@@ -234,7 +272,7 @@ class MistralProvider implements LLMProviderInterface {
             return ['error' => 'Mistral returned no choices'];
         }
         return [
-            'response' => (string)($choice['message']['content'] ?? ''),
+            'response' => $this->extractMessageText($choice['message']['content'] ?? ''),
             'usage' => $this->extractUsage($data['usage'] ?? []),
             'citations' => [],
         ];
@@ -256,7 +294,8 @@ class MistralProvider implements LLMProviderInterface {
             $this->accumulateUsage($total, $data['usage'] ?? []);
             $choice = $data['choices'][0] ?? [];
             $message = $choice['message'] ?? [];
-            $text = (string)($message['content'] ?? '');
+            $text = $this->extractMessageText($message['content'] ?? '');
+            $thinking = $this->extractThinkingText($message['content'] ?? '');
             $toolCalls = $message['tool_calls'] ?? [];
             $finalText = $text;
 
@@ -264,7 +303,7 @@ class MistralProvider implements LLMProviderInterface {
                 return ['response' => $text, 'usage' => $this->finalizeUsage($total), 'citations' => []];
             }
 
-            $messages[] = $this->assistantMessageFromToolCalls($text, $toolCalls);
+            $messages[] = $this->assistantMessageFromToolCalls($text, $toolCalls, $thinking);
             $messages[] = ['role' => 'user', 'content' => $this->executeToolCalls($toolCalls, $toolExecutor)];
         }
 
@@ -290,6 +329,7 @@ class MistralProvider implements LLMProviderInterface {
             $body = $this->buildBody($messages, $system, $userId, $options, true);
 
             $text = '';
+            $thinking = '';
             /** @var array<int, array{id: string, name: string, arguments: string}> $toolAcc */
             $toolAcc = [];
             $finishReason = null;
@@ -325,8 +365,11 @@ class MistralProvider implements LLMProviderInterface {
                             continue;
                         }
                         $delta = $choice['delta'] ?? [];
-                        $deltaText = $delta['content'] ?? null;
-                        if (is_string($deltaText) && $deltaText !== '') {
+                        // With reasoning on, `content` is a chunk list while the
+                        // model thinks and a plain string afterwards.
+                        $thinking .= $this->extractThinkingText($delta['content'] ?? '');
+                        $deltaText = $this->extractMessageText($delta['content'] ?? '');
+                        if ($deltaText !== '') {
                             $text .= $deltaText;
                             yield ['type' => 'text_delta', 'text' => $deltaText];
                         }
@@ -366,7 +409,7 @@ class MistralProvider implements LLMProviderInterface {
                 return;
             }
 
-            $messages[] = $this->assistantMessageFromToolCalls($text, $toolCalls);
+            $messages[] = $this->assistantMessageFromToolCalls($text, $toolCalls, $thinking);
             foreach ($toolCalls as $tc) {
                 yield ['type' => 'tool_use', 'id' => $tc['id'], 'name' => $tc['function']['name'], 'input' => $this->decodeArguments($tc['function']['arguments'])];
             }
@@ -442,7 +485,7 @@ class MistralProvider implements LLMProviderInterface {
 
                     switch ($event['type'] ?? '') {
                         case 'message.output.delta':
-                            $text = $this->extractDeltaText($event['content'] ?? '');
+                            $text = $this->extractMessageText($event['content'] ?? '');
                             if ($text !== '') {
                                 yield ['type' => 'text_delta', 'text' => $text];
                             }
@@ -550,8 +593,9 @@ class MistralProvider implements LLMProviderInterface {
      * Build a Conversations API request body from app-format messages.
      */
     private function buildConversationBody(array $messages, ?string $system, array $tools, ?string $userId, array $options, bool $stream): array {
+        $model = $this->getModel($userId);
         $body = [
-            'model' => $this->getModel($userId),
+            'model' => $model,
             'inputs' => $this->toConversationInputs($messages),
             'tools' => $tools,
             'stream' => $stream,
@@ -561,6 +605,10 @@ class MistralProvider implements LLMProviderInterface {
             $body['instructions'] = $system;
         }
         $completionArgs = ['max_tokens' => $this->getMaxTokens($userId)];
+        $effort = $this->resolveEffort($model, $options['effort'] ?? null, $userId);
+        if ($effort !== null) {
+            $completionArgs['reasoning_effort'] = $effort;
+        }
         foreach (['temperature', 'top_p'] as $key) {
             if (array_key_exists($key, $options)) {
                 $completionArgs[$key] = $options[$key];
@@ -670,12 +718,14 @@ class MistralProvider implements LLMProviderInterface {
     }
 
     /**
-     * Extract plain text from a message.output.delta `content` field, which may
-     * be a string or an array of content chunks.
+     * Extract the answer text from a `content` field. Mistral returns a plain
+     * string normally, but a list of chunks when reasoning is on (and for
+     * Conversations API deltas). ThinkChunks are skipped here — they are
+     * carried separately by extractThinkingText().
      *
      * @param mixed $content
      */
-    private function extractDeltaText($content): string {
+    private function extractMessageText($content): string {
         if (is_string($content)) {
             return $content;
         }
@@ -689,6 +739,27 @@ class MistralProvider implements LLMProviderInterface {
             return $text;
         }
         return '';
+    }
+
+    /**
+     * Extract the reasoning trace from a `content` field: the concatenated text
+     * of every ThinkChunk (`{type: thinking, thinking: [TextChunk, …]}`).
+     *
+     * @param mixed $content
+     */
+    private function extractThinkingText($content): string {
+        if (!is_array($content)) {
+            return '';
+        }
+        $text = '';
+        foreach ($content as $part) {
+            if (!is_array($part) || ($part['type'] ?? '') !== 'thinking') {
+                continue;
+            }
+            $inner = $part['thinking'] ?? '';
+            $text .= is_string($inner) ? $inner : $this->extractMessageText($inner);
+        }
+        return $text;
     }
 
     /**
@@ -722,6 +793,10 @@ class MistralProvider implements LLMProviderInterface {
         ];
         if ($stream) {
             $body['stream'] = true;
+        }
+        $effort = $this->resolveEffort($model, $options['effort'] ?? null, $userId);
+        if ($effort !== null) {
+            $body['reasoning_effort'] = $effort;
         }
         foreach (['temperature', 'top_p'] as $key) {
             if (array_key_exists($key, $options)) {
@@ -841,9 +916,15 @@ class MistralProvider implements LLMProviderInterface {
             $toolUses = array_values(array_filter($content, fn($b) => is_array($b) && ($b['type'] ?? '') === 'tool_use'));
             if ($role === 'assistant' && $toolUses !== []) {
                 $text = '';
+                $thinking = '';
                 foreach ($content as $b) {
-                    if (is_array($b) && ($b['type'] ?? '') === 'text') {
+                    if (!is_array($b)) {
+                        continue;
+                    }
+                    if (($b['type'] ?? '') === 'text') {
                         $text .= $b['text'] ?? '';
+                    } elseif (($b['type'] ?? '') === 'thinking') {
+                        $thinking .= is_string($b['thinking'] ?? '') ? $b['thinking'] : '';
                     }
                 }
                 $toolCalls = [];
@@ -854,7 +935,16 @@ class MistralProvider implements LLMProviderInterface {
                         'function' => ['name' => $b['name'] ?? '', 'arguments' => json_encode($b['input'] ?? new \stdClass())],
                     ];
                 }
-                $out[] = ['role' => 'assistant', 'content' => $text, 'tool_calls' => $toolCalls];
+                $out[] = [
+                    'role' => 'assistant',
+                    'content' => $thinking === ''
+                        ? $text
+                        : [
+                            ['type' => 'thinking', 'thinking' => [['type' => 'text', 'text' => $thinking]]],
+                            ['type' => 'text', 'text' => $text],
+                        ],
+                    'tool_calls' => $toolCalls,
+                ];
                 continue;
             }
 
@@ -928,9 +1018,16 @@ class MistralProvider implements LLMProviderInterface {
 
     /**
      * Build an app-format assistant message from streamed/returned tool calls.
+     *
+     * $thinking is the reasoning trace, kept as its own block: Mistral's docs
+     * are explicit that stripping it before replaying an assistant turn costs
+     * coherence across turns, so toMistralMessages() sends it straight back.
      */
-    private function assistantMessageFromToolCalls(string $text, array $toolCalls): array {
+    private function assistantMessageFromToolCalls(string $text, array $toolCalls, string $thinking = ''): array {
         $assistantContent = [];
+        if ($thinking !== '') {
+            $assistantContent[] = ['type' => 'thinking', 'thinking' => $thinking];
+        }
         if ($text !== '') {
             $assistantContent[] = ['type' => 'text', 'text' => $text];
         }
