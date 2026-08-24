@@ -15,6 +15,7 @@ use OCA\AIquila\Db\ProjectMapper;
 use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Http\SSEResponse;
 use OCA\AIquila\Service\ClaudeModels;
+use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
@@ -108,7 +109,7 @@ class ConversationController extends Controller {
      *
      * 200: List of conversations
      *
-     * @return JSONResponse<Http::STATUS_OK, list<array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}>, array{}>
+     * @return JSONResponse<Http::STATUS_OK, list<array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, thinkingBudget: ?int}>, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -134,7 +135,7 @@ class ConversationController extends Controller {
      * 400: Unknown provider
      * 403: The provider is not permitted for this user
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, thinkingBudget: ?int}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -189,7 +190,7 @@ class ConversationController extends Controller {
      * 403: The provider is not permitted for this user
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, thinkingBudget: ?int}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -220,6 +221,11 @@ class ConversationController extends Controller {
             if (!$this->resolveProvider($conversation)->getCapabilities()['effort']) {
                 $conversation->setEffort(null);
             }
+
+            // Likewise the budget, which is meaningless without thinking.
+            if (!$this->resolveProvider($conversation)->getCapabilities()['thinking']) {
+                $conversation->setThinkingBudget(null);
+            }
         }
 
         if ($model !== null && $model !== '') {
@@ -240,7 +246,7 @@ class ConversationController extends Controller {
      * 200: Conversation with messages
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, messages: list<array{id: int, conversationId: int, role: string, content: string, inputTokens: ?int, outputTokens: ?int, cacheCreationTokens: ?int, cacheReadTokens: ?int, latencyMs: ?int, citations: ?array<string, mixed>, documents: ?array<string, mixed>, createdAt: int, files: list<array{id: int, messageId: int, filePath: string, fileName: string, mimeType: ?string, createdAt: int}>}>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, thinkingBudget: ?int, messages: list<array{id: int, conversationId: int, role: string, content: string, inputTokens: ?int, outputTokens: ?int, cacheCreationTokens: ?int, cacheReadTokens: ?int, latencyMs: ?int, citations: ?array<string, mixed>, documents: ?array<string, mixed>, createdAt: int, files: list<array{id: int, messageId: int, filePath: string, fileName: string, mimeType: ?string, createdAt: int}>}>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -275,17 +281,18 @@ class ConversationController extends Controller {
      * @param int|null $projectId Project ID to link (null to clear)
      * @param string|null $effort Effort override (low…max; empty string clears)
      * @param string|null $thinking Adaptive-thinking override ('on'/'off'; empty string clears)
+     * @param string|null $thinkingBudget Explicit thinking budget in tokens (empty string clears)
      *
      * 200: Updated conversation
-     * 400: Invalid effort or thinking value
+     * 400: Invalid effort, thinking or thinkingBudget value
      * 403: No provider is permitted for this user
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, allowed: list<string>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, thinkingBudget: ?int}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, allowed: list<string>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
-    public function update(int $id, string $title = '', ?int $projectId = null, ?string $effort = null, ?string $thinking = null): JSONResponse {
+    public function update(int $id, string $title = '', ?int $projectId = null, ?string $effort = null, ?string $thinking = null, ?string $thinkingBudget = null): JSONResponse {
         if (!$this->providerFactory->hasPermittedProvider($this->userId)) {
             return $this->noProviderAvailable();
         }
@@ -338,6 +345,38 @@ class ConversationController extends Controller {
                 return $this->clientError(400, 'Thinking must be "on", "off" or empty');
             }
             $conversation->setThinking($thinking === '' ? null : $thinking === 'on');
+        }
+
+        if ($thinkingBudget !== null && $thinkingBudget !== '') {
+            // Like effort, an Anthropic concept — do not validate a Hetzner or
+            // Ollama conversation against it.
+            $provider = $this->resolveProvider($conversation);
+            if (!$provider->getCapabilities()['thinking']) {
+                return new JSONResponse([
+                    'error' => $provider->getLabel() . ' does not support a thinking budget',
+                    'errorId' => '',
+                    'allowed' => [],
+                ], 400);
+            }
+
+            if (!ctype_digit($thinkingBudget)) {
+                return $this->clientError(400, 'Thinking budget must be a whole number of tokens');
+            }
+
+            // The API caps thinking and response text against the same
+            // max_tokens, so the budget has to stay strictly below it.
+            $budget = (int)$thinkingBudget;
+            $ceiling = $provider->getMaxTokens($this->userId);
+            if ($budget < ClaudeSDKService::MIN_THINKING_BUDGET || $budget >= $ceiling) {
+                return $this->clientError(400, sprintf(
+                    'Thinking budget must be between %d and %d tokens',
+                    ClaudeSDKService::MIN_THINKING_BUDGET,
+                    $ceiling - 1,
+                ));
+            }
+            $conversation->setThinkingBudget($budget);
+        } elseif ($thinkingBudget === '') {
+            $conversation->setThinkingBudget(null);
         }
 
         $conversation->setUpdatedAt(time());
@@ -843,7 +882,7 @@ class ConversationController extends Controller {
      * 200: The duplicated conversation
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, thinkingBudget: ?int}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -1101,6 +1140,9 @@ class ConversationController extends Controller {
         }
         if ($conversation->getThinking() !== null) {
             $options['thinking'] = $conversation->getThinking();
+        }
+        if ($conversation->getThinkingBudget() !== null) {
+            $options['thinking_budget'] = $conversation->getThinkingBudget();
         }
         return $options;
     }

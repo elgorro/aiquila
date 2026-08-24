@@ -27,6 +27,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setEffort(?string $effort)
  * @method bool|null getThinking()
  * @method void setThinking(?bool $thinking)
+ * @method int|null getThinkingBudget()
+ * @method void setThinkingBudget(?int $thinkingBudget)
  */
 class Conversation extends Entity implements \JsonSerializable {
     protected string $userId = '';
@@ -39,6 +41,8 @@ class Conversation extends Entity implements \JsonSerializable {
     protected ?int $projectId = null;
     protected ?string $effort = null;
     protected ?bool $thinking = null;
+    /** Explicit thinking budget in tokens; null keeps thinking adaptive. */
+    protected ?int $thinkingBudget = null;
 
     public function __construct() {
         $this->addType('userId', 'string');
@@ -50,10 +54,11 @@ class Conversation extends Entity implements \JsonSerializable {
         $this->addType('projectId', 'integer');
         $this->addType('effort', 'string');
         $this->addType('thinking', 'boolean');
+        $this->addType('thinkingBudget', 'integer');
     }
 
     /**
-     * @return array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool}
+     * @return array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, thinkingBudget: ?int}
      */
     public function jsonSerialize(): array {
         return [
@@ -67,6 +72,7 @@ class Conversation extends Entity implements \JsonSerializable {
             'projectId' => $this->getProjectId(),
             'effort' => $this->getEffort(),
             'thinking' => $this->getThinking(),
+            'thinkingBudget' => $this->getThinkingBudget(),
         ];
     }
 }
