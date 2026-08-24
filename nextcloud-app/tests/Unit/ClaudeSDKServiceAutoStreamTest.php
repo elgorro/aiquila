@@ -82,6 +82,7 @@ class ClaudeSDKServiceAutoStreamTest extends TestCase {
             'max_tokens' => 128000,
             'context_window' => 1000000,
             'supports_thinking' => false,
+            'supports_thinking_enabled' => false,
             'supports_effort' => false,
         ]);
         $this->cacheFactory = $this->createMock(ICacheFactory::class);

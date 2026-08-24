@@ -74,6 +74,7 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
         $this->cache->method('get')->willReturn([
             'max_tokens' => 8192,
             'supports_thinking' => false,
+            'supports_thinking_enabled' => false,
             'supports_effort' => false,
         ]);
         $this->cacheFactory = $this->createMock(ICacheFactory::class);

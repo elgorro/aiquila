@@ -115,7 +115,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                 'image_input' => ['supported' => true],
                 'pdf_input' => ['supported' => true],
                 'structured_outputs' => ['supported' => false],
-                'thinking' => ['supported' => true, 'types' => ['adaptive' => ['supported' => true]]],
+                'thinking' => ['supported' => true, 'types' => ['adaptive' => ['supported' => true], 'enabled' => ['supported' => true]]],
             ],
             new \DateTime(),
             'Claude Opus 4.6',
@@ -161,7 +161,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                 'image_input' => ['supported' => true],
                 'pdf_input' => ['supported' => true],
                 'structured_outputs' => ['supported' => false],
-                'thinking' => ['supported' => true, 'types' => ['adaptive' => ['supported' => true]]],
+                'thinking' => ['supported' => true, 'types' => ['adaptive' => ['supported' => true], 'enabled' => ['supported' => true]]],
             ],
             new \DateTime(),
             'Claude Opus 4.6',
@@ -239,7 +239,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                 'image_input' => ['supported' => true],
                 'pdf_input' => ['supported' => true],
                 'structured_outputs' => ['supported' => false],
-                'thinking' => ['supported' => true, 'types' => ['adaptive' => ['supported' => true]]],
+                'thinking' => ['supported' => true, 'types' => ['adaptive' => ['supported' => true], 'enabled' => ['supported' => true]]],
             ],
             new \DateTime(),
             'Claude Opus 4.7',
@@ -287,7 +287,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                 'image_input' => ['supported' => true],
                 'pdf_input' => ['supported' => true],
                 'structured_outputs' => ['supported' => false],
-                'thinking' => ['supported' => false, 'types' => ['adaptive' => ['supported' => false]]],
+                'thinking' => ['supported' => false, 'types' => ['adaptive' => ['supported' => false], 'enabled' => ['supported' => false]]],
             ],
             new \DateTime(),
             'Claude Haiku 4.5',
@@ -306,7 +306,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
     }
 
     /** Build a service for a given model with cached caps and optional admin config. */
-    private function makeServiceForModel(string $model, array $appConfig = []): CapabilityTestableService {
+    private function makeServiceForModel(string $model, array $appConfig = [], bool $supportsEnabledThinking = true): CapabilityTestableService {
         $config = $this->createMock(IConfig::class);
         $config->method('getUserValue')->willReturn('');
         $config->method('getAppValue')
@@ -321,6 +321,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             'max_tokens' => 64000,
             'context_window' => 200000,
             'supports_thinking' => true,
+            'supports_thinking_enabled' => $supportsEnabledThinking,
             'supports_effort' => true,
         ]);
 
@@ -368,6 +369,105 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $service = $this->makeServiceForModel(ClaudeModels::FABLE_5);
         $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking' => true]);
         $this->assertEquals(['type' => 'adaptive'], $service->lastCreateParams['thinking']);
+    }
+
+    public function testExplicitBudgetSwitchesThinkingToEnabledMode(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking_budget' => 2048]);
+        $this->assertEquals(
+            ['type' => 'enabled', 'budget_tokens' => 2048],
+            $service->lastCreateParams['thinking']
+        );
+    }
+
+    /** A budget implies thinking, so it does not need the adaptive toggle on as well. */
+    public function testExplicitBudgetDoesNotNeedThinkingEnabled(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5, ['thinking' => 'false']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking_budget' => 2048]);
+        $this->assertEquals(
+            ['type' => 'enabled', 'budget_tokens' => 2048],
+            $service->lastCreateParams['thinking']
+        );
+    }
+
+    /** "Off" is the more specific instruction and must beat a budget. */
+    public function testExplicitThinkingOffBeatsBudget(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5, ['thinking' => 'true']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', [
+            'thinking' => false,
+            'thinking_budget' => 2048,
+        ]);
+        $this->assertArrayNotHasKey('thinking', $service->lastCreateParams);
+    }
+
+    public function testAdminBudgetDefaultUsedWithoutOverride(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5, ['thinking_budget' => '3000']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertEquals(
+            ['type' => 'enabled', 'budget_tokens' => 3000],
+            $service->lastCreateParams['thinking']
+        );
+    }
+
+    public function testBudgetOverrideBeatsAdminDefault(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5, ['thinking_budget' => '3000']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking_budget' => 2048]);
+        $this->assertEquals(
+            ['type' => 'enabled', 'budget_tokens' => 2048],
+            $service->lastCreateParams['thinking']
+        );
+    }
+
+    /** One bad admin setting must not break every request on the instance. */
+    public function testInvalidAdminBudgetIsIgnored(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5, ['thinking_budget' => '12', 'thinking' => 'true']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertEquals(['type' => 'adaptive'], $service->lastCreateParams['thinking']);
+    }
+
+    /**
+     * chat() reports every failure as an ['error' => …] array rather than
+     * throwing, so a rejected budget must surface the reason there — and the
+     * request must not be sent.
+     */
+    public function testBudgetBelowMinimumIsRejected(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5);
+        $result = $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking_budget' => 500]);
+        $this->assertStringContainsString('at least ' . ClaudeSDKService::MIN_THINKING_BUDGET, $result['error']);
+        $this->assertNull($service->lastCreateParams);
+    }
+
+    /** max_tokens caps thinking and the reply together, so the budget must stay under it. */
+    public function testBudgetAtOrAboveMaxTokensIsRejected(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5);
+        $result = $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking_budget' => 4096]);
+        $this->assertStringContainsString('below max_tokens', $result['error']);
+        $this->assertNull($service->lastCreateParams);
+    }
+
+    public function testNonNumericBudgetIsRejected(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5);
+        $result = $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking_budget' => 'lots']);
+        $this->assertStringContainsString('must be an integer', $result['error']);
+        $this->assertNull($service->lastCreateParams);
+    }
+
+    public function testBudgetRejectedOnAdaptiveOnlyModel(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::FABLE_5, [], false);
+        $result = $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking_budget' => 2048]);
+        $this->assertStringContainsString('does not support an explicit thinking budget', $result['error']);
+        $this->assertNull($service->lastCreateParams);
+    }
+
+    /** Without a live capability answer we only claim adaptive, so a budget is refused. */
+    public function testBudgetRejectedOnStaticFallback(): void {
+        $this->cache->method('get')->willReturn(null);
+        $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
+        $service->throwOnRetrieveModel(new \RuntimeException('offline'));
+
+        $result = $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking_budget' => 2048]);
+        $this->assertStringContainsString('does not support an explicit thinking budget', $result['error']);
+        $this->assertNull($service->lastCreateParams);
     }
 
     public function testCallCreateStreamForwardsTools(): void {
