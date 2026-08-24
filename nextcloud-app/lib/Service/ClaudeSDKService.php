@@ -1494,6 +1494,16 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 storage: ProviderSettingsSchema::STORAGE_BOOL,
                 group: ProviderSettingsSchema::GROUP_BASIC,
             ),
+            ProviderSettingsSchema::number(
+                'thinking_budget',
+                'thinking_budget',
+                'Thinking budget (tokens)',
+                'Blank lets Claude decide how long to think (adaptive). A number pins the budget instead: at least '
+                    . self::MIN_THINKING_BUDGET . ' tokens and below max output tokens, which caps thinking and the '
+                    . 'reply together. Only models that support non-adaptive thinking accept this. Overridable per '
+                    . 'conversation with /thinking-budget.',
+                group: ProviderSettingsSchema::GROUP_BASIC,
+            ),
             ProviderSettingsSchema::maxTokens('max_tokens', ClaudeModels::DEFAULT_MAX_TOKENS),
             ProviderSettingsSchema::timeout('api_timeout', 30, 'Shared across all hosted providers.'),
             ProviderSettingsSchema::checkbox(

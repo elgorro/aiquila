@@ -135,6 +135,32 @@ final class ProviderSettingsSchema {
         ];
     }
 
+    /**
+     * A free-form numeric field. `maxTokens()` and `timeout()` stay separate:
+     * they pin their own id and copy, which callers rely on.
+     *
+     * @return array{id: string, title: string, description: string, type: string, scope: string, key: string, default: string, group: string}
+     */
+    public static function number(
+        string $id,
+        string $appKey,
+        string $title,
+        string $description,
+        string $default = '',
+        string $group = self::GROUP_ADVANCED,
+    ): array {
+        return [
+            'id' => $id,
+            'title' => $title,
+            'description' => $description,
+            'type' => self::TYPE_NUMBER,
+            'scope' => self::SCOPE_ADMIN,
+            'key' => $appKey,
+            'default' => $default,
+            'group' => $group,
+        ];
+    }
+
     public static function maxTokens(string $appKey, int $default, string $description = ''): array {
         return [
             'id' => 'max_tokens',

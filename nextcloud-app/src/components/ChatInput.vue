@@ -124,6 +124,12 @@ const SLASH_COMMANDS = [
 		icon: '🧠',
 		description: 'Toggle adaptive thinking for this conversation (/thinking:on or /thinking:off; no value resets to default)',
 	},
+	{
+		id: 'thinking-budget',
+		label: '/thinking-budget',
+		icon: '🎚️',
+		description: 'Cap thinking at a fixed number of tokens (e.g. /thinking-budget:8000; no value or "off" returns to adaptive)',
+	},
 ]
 
 export default {
@@ -239,6 +245,9 @@ export default {
 				break
 			case 'thinking':
 				this.$emit('command', { type: 'set-thinking', args })
+				break
+			case 'thinking-budget':
+				this.$emit('command', { type: 'set-thinking-budget', args })
 				break
 			}
 		},
