@@ -67,6 +67,18 @@ interface LLMProviderInterface {
     public function getCapabilities(): array;
 
     /**
+     * Effort values this provider accepts for $model, in the provider's own
+     * vocabulary (Anthropic's low…max, Mistral's none/high, …); empty when the
+     * model — or the provider — has no effort knob.
+     *
+     * Callers must not validate one provider's effort against another's table;
+     * that is what this exists for.
+     *
+     * @return list<string>
+     */
+    public function getAllowedEfforts(string $model): array;
+
+    /**
      * List available model IDs for the configured key, or null on error
      * (caller falls back to the static registry).
      *

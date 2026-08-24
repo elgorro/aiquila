@@ -14,7 +14,6 @@ use OCA\AIquila\Db\MessageMapper;
 use OCA\AIquila\Db\ProjectMapper;
 use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Http\SSEResponse;
-use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
@@ -313,8 +312,10 @@ class ConversationController extends Controller {
         }
 
         if ($effort !== null && $effort !== '') {
-            // Effort is an Anthropic concept; validating a Hetzner or Ollama
-            // conversation against Anthropic's table produced nonsense advice.
+            // Effort vocabularies differ per provider (Anthropic's low…max,
+            // Mistral's none/high), so validate against the provider that owns
+            // the conversation — checking a Mistral conversation against
+            // Anthropic's table produced nonsense advice.
             $provider = $this->resolveProvider($conversation);
             if (!$provider->getCapabilities()['effort']) {
                 return new JSONResponse([
@@ -324,9 +325,9 @@ class ConversationController extends Controller {
                 ], 400);
             }
 
-            $model = ClaudeModels::resolveModel($conversation->getModel());
-            if (!ClaudeModels::isAllowedEffort($model, $effort)) {
-                $allowed = ClaudeModels::getAllowedEfforts($model);
+            $model = $conversation->getModel();
+            $allowed = $provider->getAllowedEfforts($model);
+            if (!in_array($effort, $allowed, true)) {
                 return new JSONResponse([
                     'error' => $allowed === []
                         ? 'Model ' . $model . ' does not support effort'
