@@ -172,7 +172,7 @@ export const createCoworkerTool = {
     openWorldHint: false,
   },
   description:
-    'Create a coworker. Provide templateId to start from a built-in template (e.g. "classify-images-claude" or "classify-images-pixtral"), and/or explicit fields to configure a custom one. Fields override template defaults.',
+    'Create a coworker. Provide templateId to start from a built-in template (e.g. "classify-images-claude" or "classify-images-mistral"), and/or explicit fields to configure a custom one. Fields override template defaults.',
   inputSchema: z.object({
     templateId: z
       .string()

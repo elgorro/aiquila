@@ -85,10 +85,10 @@ describe('Cowork Tools', () => {
   describe('create_coworker', () => {
     it('creates from a template via the templates endpoint', async () => {
       mockFetchAiquilaAPI.mockResolvedValue(sampleCoworker);
-      const res = await createCoworkerTool.handler({ templateId: 'classify-images-pixtral' });
+      const res = await createCoworkerTool.handler({ templateId: 'classify-images-mistral' });
       expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/coworkers/templates', {
         method: 'POST',
-        body: { templateId: 'classify-images-pixtral' },
+        body: { templateId: 'classify-images-mistral' },
       });
       expect(res.content[0].text).toContain('Coworker created');
     });
