@@ -304,6 +304,9 @@ export default {
 			case 'set-thinking':
 				this.setThinking(args || '')
 				break
+			case 'set-thinking-budget':
+				this.setThinkingBudget(args || '')
+				break
 			case 'add-project':
 				if (args) {
 					const id = parseInt(args, 10)
@@ -359,6 +362,26 @@ export default {
 			} catch (err) {
 				this.noticeIsError = true
 				this.notice = err.response?.data?.error || t('aiquila', 'Failed to set thinking')
+			}
+		},
+		async setThinkingBudget(value) {
+			// "off" reads better than an empty command for "stop capping this".
+			const budget = value === 'off' ? '' : value
+			if (budget !== '' && !/^\d+$/.test(budget)) {
+				this.noticeIsError = true
+				this.notice = t('aiquila', 'Usage: /thinking-budget:8000 or /thinking-budget:off')
+				return
+			}
+			try {
+				const { data } = await updateConversation(this.conversation.id, { thinkingBudget: budget })
+				this.$emit('conversation-updated', data)
+				this.noticeIsError = false
+				this.notice = budget === ''
+					? t('aiquila', 'Thinking budget cleared — back to adaptive thinking for this conversation')
+					: t('aiquila', 'Thinking budget set to {budget} tokens for this conversation — applies to new messages only', { budget })
+			} catch (err) {
+				this.noticeIsError = true
+				this.notice = err.response?.data?.error || t('aiquila', 'Failed to set thinking budget')
 			}
 		},
 		async detachProject() {

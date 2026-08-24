@@ -5,6 +5,7 @@ namespace OCA\AIquila\Command;
 
 use OC\Core\Command\Base;
 use OCA\AIquila\Service\ClaudeModels;
+use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\IConfig;
@@ -58,6 +59,12 @@ class ConfigureCommand extends Base {
                 null,
                 InputOption::VALUE_REQUIRED,
                 'Enable adaptive thinking by default (on|off)'
+            )
+            ->addOption(
+                'thinking-budget',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Pin the thinking budget in tokens (>= ' . ClaudeSDKService::MIN_THINKING_BUDGET . ', empty string for adaptive)'
             )
             ->addOption(
                 'timeout',
@@ -207,6 +214,20 @@ class ConfigureCommand extends Base {
             $updated = true;
         }
 
+        // Set the default thinking budget
+        $thinkingBudget = $input->getOption('thinking-budget');
+        if ($thinkingBudget !== null) {
+            // The upper bound is per-request (it depends on max_tokens at send
+            // time), so only the floor can be checked here.
+            if ($thinkingBudget !== '' && (!ctype_digit($thinkingBudget) || (int)$thinkingBudget < ClaudeSDKService::MIN_THINKING_BUDGET)) {
+                $output->writeln('<error>Thinking budget must be at least ' . ClaudeSDKService::MIN_THINKING_BUDGET . ' tokens (or empty to use adaptive thinking)</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'thinking_budget', $thinkingBudget);
+            $output->writeln('<info>✓ Thinking budget ' . ($thinkingBudget === '' ? 'cleared — using adaptive thinking' : 'updated to: ' . $thinkingBudget . ' tokens') . '</info>');
+            $updated = true;
+        }
+
         // Set timeout
         $timeout = $input->getOption('timeout');
         if ($timeout !== null) {
@@ -240,6 +261,7 @@ class ConfigureCommand extends Base {
         $maxTokens = (string)$provider->getMaxTokens();
         $effort = $this->config->getAppValue(self::APP_NAME, 'effort', '');
         $thinking = in_array($this->config->getAppValue(self::APP_NAME, 'thinking', 'false'), ['true', '1'], true);
+        $thinkingBudget = $this->config->getAppValue(self::APP_NAME, 'thinking_budget', '');
         $timeout = $this->config->getAppValue(self::APP_NAME, 'api_timeout', '30');
 
         $output->writeln('');
@@ -257,6 +279,7 @@ class ConfigureCommand extends Base {
         $output->writeln('  Max Tokens: <comment>' . $maxTokens . '</comment>');
         $output->writeln('  Effort:     <comment>' . ($effort !== '' ? $effort : '(model default)') . '</comment>');
         $output->writeln('  Thinking:   <comment>' . ($thinking ? 'on' : 'off') . '</comment>');
+        $output->writeln('  Budget:     <comment>' . ($thinkingBudget !== '' ? $thinkingBudget . ' tokens' : '(adaptive)') . '</comment>');
         $output->writeln('  Timeout:    <comment>' . $timeout . ' seconds</comment>');
         $output->writeln('');
 

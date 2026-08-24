@@ -4,7 +4,7 @@
 namespace OCA\AIquila\Service;
 
 use Anthropic\Beta\AnthropicBeta;
-use Anthropic\Beta\Files\FileMetadata;
+use Anthropic\Beta\Files\BetaFileMetadata;
 use Anthropic\Beta\Messages\BetaMetadata;
 use Anthropic\Client;
 use Anthropic\Core\Contracts\BaseStream;
@@ -50,6 +50,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     private string $appName = 'aiquila';
 
     private const CAPABILITY_CACHE_TTL = 3600; // 1 hour
+    /** Smallest budget the Messages API accepts for thinking type 'enabled'. */
+    public const MIN_THINKING_BUDGET = 1024;
+    /** Bumped whenever the cached capability array grows a key. */
+    private const CAPABILITY_CACHE_PREFIX = 'v2:';
 
     /**
      * Above this max_tokens value, non-streaming requests risk HTTP timeouts
@@ -130,10 +134,12 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     /**
      * Resolve model capabilities dynamically via the SDK, with caching and static fallback.
      *
-     * @return array{max_tokens: int, context_window: int, supports_thinking: bool, supports_effort: bool}
+     * @return array{max_tokens: int, context_window: int, supports_thinking: bool, supports_thinking_enabled: bool, supports_effort: bool}
      */
     private function resolveModelCapabilities(string $model, ?string $userId = null): array {
-        $cacheKey = $model;
+        // Versioned so entries written before a shape change are ignored rather
+        // than returned with keys missing.
+        $cacheKey = self::CAPABILITY_CACHE_PREFIX . $model;
         $cached = $this->cache->get($cacheKey);
         if (is_array($cached)) {
             return $cached;
@@ -147,6 +153,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 'max_tokens' => $info->maxTokens ?? ClaudeModels::getMaxTokenCeiling($model),
                 'context_window' => $info->maxInputTokens ?? ClaudeModels::getContextWindow($model),
                 'supports_thinking' => $info->capabilities->thinking->supported ?? false,
+                'supports_thinking_enabled' => $info->capabilities->thinking->types->enabled->supported ?? false,
                 'supports_effort' => $info->capabilities->effort->supported ?? false,
             ];
 
@@ -168,6 +175,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 'max_tokens' => ClaudeModels::getMaxTokenCeiling($model),
                 'context_window' => ClaudeModels::getContextWindow($model),
                 'supports_thinking' => ClaudeModels::supportsThinking($model),
+                // No static table for per-type support: without a live answer we
+                // only claim adaptive, so an explicit budget is refused rather
+                // than sent to a model that may reject it.
+                'supports_thinking_enabled' => false,
                 'supports_effort' => ClaudeModels::supportsEffort($model),
             ];
         }
@@ -188,6 +199,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      *   tools          (array)  – Anthropic-format tool definitions
      *   effort         (string) – per-conversation effort override (low…max)
      *   thinking       (bool)   – per-conversation adaptive-thinking override
+     *   thinking_budget (int)   – explicit thinking budget in tokens; switches
+     *                             thinking from adaptive to enabled mode
      */
     /**
      * Model for a single request.
@@ -226,10 +239,20 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $params['metadata'] = ['user_id' => $userHash];
         }
 
-        // Adaptive thinking is opt-in (conversation override or admin default).
-        // "Off" means omitting the param entirely — an explicit
-        // {type: 'disabled'} is rejected with a 400 on Fable 5.
-        if ($caps['supports_thinking'] && $this->resolveThinking($options['thinking'] ?? null)) {
+        // Thinking is opt-in (conversation override or admin default). "Off"
+        // means omitting the param entirely — an explicit {type: 'disabled'}
+        // is rejected with a 400 on Fable 5.
+        //
+        // An explicit budget switches from adaptive to enabled mode, but a
+        // deliberate "thinking off" is the more specific instruction and wins.
+        $thinkingOn = $caps['supports_thinking'] && $this->resolveThinking($options['thinking'] ?? null);
+        $budget = ($options['thinking'] ?? null) === false
+            ? null
+            : $this->resolveThinkingBudget($options, $model, $caps, $params['max_tokens']);
+
+        if ($budget !== null) {
+            $params['thinking'] = ['type' => 'enabled', 'budget_tokens' => $budget];
+        } elseif ($thinkingOn) {
             $params['thinking'] = ['type' => 'adaptive'];
         }
 
@@ -305,10 +328,76 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     }
 
     /**
-     * Upload bytes to Anthropic's beta Files API and return the resulting
-     * FileMetadata. Overridable for testing.
+     * Resolve an explicit thinking budget: per-request override → admin default
+     * (app config `thinking_budget`, blank = unset) → null, which leaves the
+     * adaptive path in charge.
+     *
+     * A bad per-request value throws, because the caller asked for something
+     * specific and silently ignoring it would hide the mistake. A bad *admin*
+     * value falls through to null instead, so one wrong setting cannot break
+     * every request on the instance.
+     *
+     * @param array{supports_thinking: bool, supports_thinking_enabled: bool, ...} $caps
+     *
+     * @throws \InvalidArgumentException when the request asks for a budget the
+     *                                   model or max_tokens cannot honour
      */
-    protected function callFilesUpload(Client $client, FileParam $file): FileMetadata {
+    private function resolveThinkingBudget(array $options, string $model, array $caps, int $maxTokens): ?int {
+        $requested = $options['thinking_budget'] ?? null;
+        if ($requested !== null) {
+            $budget = $this->validateThinkingBudget($requested, $maxTokens);
+            if (!$caps['supports_thinking'] || !$caps['supports_thinking_enabled']) {
+                throw new \InvalidArgumentException(
+                    sprintf('Model %s does not support an explicit thinking budget; use adaptive thinking instead.', $model)
+                );
+            }
+            return $budget;
+        }
+
+        $adminDefault = $this->config->getAppValue($this->appName, 'thinking_budget', '');
+        if ($adminDefault === '' || !$caps['supports_thinking'] || !$caps['supports_thinking_enabled']) {
+            return null;
+        }
+        try {
+            return $this->validateThinkingBudget($adminDefault, $maxTokens);
+        } catch (\InvalidArgumentException $e) {
+            $this->logger->warning('AIquila SDK: Ignoring invalid thinking_budget default', [
+                'value' => $adminDefault,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * The API requires a budget of at least MIN_THINKING_BUDGET and strictly
+     * below max_tokens, which caps thinking and response text together.
+     *
+     * @throws \InvalidArgumentException
+     */
+    private function validateThinkingBudget(mixed $value, int $maxTokens): int {
+        if (!is_int($value) && !(is_string($value) && ctype_digit($value))) {
+            throw new \InvalidArgumentException('thinking_budget must be an integer number of tokens.');
+        }
+        $budget = (int)$value;
+        if ($budget < self::MIN_THINKING_BUDGET) {
+            throw new \InvalidArgumentException(
+                sprintf('thinking_budget must be at least %d tokens, got %d.', self::MIN_THINKING_BUDGET, $budget)
+            );
+        }
+        if ($budget >= $maxTokens) {
+            throw new \InvalidArgumentException(
+                sprintf('thinking_budget must be below max_tokens (%d), got %d.', $maxTokens, $budget)
+            );
+        }
+        return $budget;
+    }
+
+    /**
+     * Upload bytes to Anthropic's beta Files API and return the resulting
+     * BetaFileMetadata. Overridable for testing.
+     */
+    protected function callFilesUpload(Client $client, FileParam $file): BetaFileMetadata {
         return $client->beta->files->upload(
             file: $file,
             betas: [AnthropicBeta::FILES_API_2025_04_14],
@@ -639,10 +728,12 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     private function cacheModelInfoCapabilities(ModelInfo $info): void {
         $caps = [
             'max_tokens' => $info->maxTokens ?? ClaudeModels::getMaxTokenCeiling($info->id),
+            'context_window' => $info->maxInputTokens ?? ClaudeModels::getContextWindow($info->id),
             'supports_thinking' => $info->capabilities->thinking->supported ?? false,
+            'supports_thinking_enabled' => $info->capabilities->thinking->types->enabled->supported ?? false,
             'supports_effort' => $info->capabilities->effort->supported ?? false,
         ];
-        $this->cache->set($info->id, $caps, self::CAPABILITY_CACHE_TTL);
+        $this->cache->set(self::CAPABILITY_CACHE_PREFIX . $info->id, $caps, self::CAPABILITY_CACHE_TTL);
     }
 
     /**
@@ -1401,6 +1492,16 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 'Enable adaptive thinking by default',
                 'Lets Claude reason before answering on models that support it. Overridable per conversation with /thinking.',
                 storage: ProviderSettingsSchema::STORAGE_BOOL,
+                group: ProviderSettingsSchema::GROUP_BASIC,
+            ),
+            ProviderSettingsSchema::number(
+                'thinking_budget',
+                'thinking_budget',
+                'Thinking budget (tokens)',
+                'Blank lets Claude decide how long to think (adaptive). A number pins the budget instead: at least '
+                    . self::MIN_THINKING_BUDGET . ' tokens and below max output tokens, which caps thinking and the '
+                    . 'reply together. Only models that support non-adaptive thinking accept this. Overridable per '
+                    . 'conversation with /thinking-budget.',
                 group: ProviderSettingsSchema::GROUP_BASIC,
             ),
             ProviderSettingsSchema::maxTokens('max_tokens', ClaudeModels::DEFAULT_MAX_TOKENS),
