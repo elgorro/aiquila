@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "8252045c2f4a1651eb035dcedcdbc5df",
+    "content-hash": "523b1fe41064b7ccdea3930c9084b43c",
     "packages": [
         {
             "name": "anthropic-ai/sdk",
-            "version": "v0.40.0",
+            "version": "v0.43.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/anthropics/anthropic-sdk-php.git",
-                "reference": "273764dcec650b985422d50a4847993579e513aa"
+                "reference": "475a13451a04e91fd6de235c7b9609cb7c082d92"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/anthropics/anthropic-sdk-php/zipball/273764dcec650b985422d50a4847993579e513aa",
-                "reference": "273764dcec650b985422d50a4847993579e513aa",
+                "url": "https://api.github.com/repos/anthropics/anthropic-sdk-php/zipball/475a13451a04e91fd6de235c7b9609cb7c082d92",
+                "reference": "475a13451a04e91fd6de235c7b9609cb7c082d92",
                 "shasum": ""
             },
             "require": {
@@ -34,7 +34,7 @@
                 "friendsofphp/php-cs-fixer": "^3",
                 "google/auth": "^1.49",
                 "guzzlehttp/guzzle": "^7",
-                "mcp/sdk": "^0.5",
+                "mcp/sdk": "^0.7.1",
                 "nyholm/psr7": "^1",
                 "pestphp/pest": "^3",
                 "php-http/mock-client": "^1",
@@ -65,9 +65,9 @@
             "description": "Anthropic PHP SDK",
             "support": {
                 "issues": "https://github.com/anthropics/anthropic-sdk-php/issues",
-                "source": "https://github.com/anthropics/anthropic-sdk-php/tree/v0.40.0"
+                "source": "https://github.com/anthropics/anthropic-sdk-php/tree/v0.43.0"
             },
-            "time": "2026-07-24T16:35:04+00:00"
+            "time": "2026-08-20T18:20:25+00:00"
         },
         {
             "name": "nyholm/psr7",

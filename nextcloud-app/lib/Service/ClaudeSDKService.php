@@ -4,7 +4,7 @@
 namespace OCA\AIquila\Service;
 
 use Anthropic\Beta\AnthropicBeta;
-use Anthropic\Beta\Files\FileMetadata;
+use Anthropic\Beta\Files\BetaFileMetadata;
 use Anthropic\Beta\Messages\BetaMetadata;
 use Anthropic\Client;
 use Anthropic\Core\Contracts\BaseStream;
@@ -306,9 +306,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
     /**
      * Upload bytes to Anthropic's beta Files API and return the resulting
-     * FileMetadata. Overridable for testing.
+     * BetaFileMetadata. Overridable for testing.
      */
-    protected function callFilesUpload(Client $client, FileParam $file): FileMetadata {
+    protected function callFilesUpload(Client $client, FileParam $file): BetaFileMetadata {
         return $client->beta->files->upload(
             file: $file,
             betas: [AnthropicBeta::FILES_API_2025_04_14],
