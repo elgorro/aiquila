@@ -1555,6 +1555,13 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         ]);
     }
 
+    /**
+     * @return list<string>
+     */
+    public function getAllowedEfforts(string $model): array {
+        return ClaudeModels::getAllowedEfforts(ClaudeModels::resolveModel($model));
+    }
+
     public function getConfiguration(): array {
         return [
             'api_key' => $this->config->getAppValue($this->appName, 'api_key', ''),

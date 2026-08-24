@@ -56,9 +56,9 @@ class CoworkerService {
                 'provider' => 'anthropic',
             ]),
             array_merge($shared, [
-                'id' => 'classify-images-pixtral',
-                'title' => 'Classify images — Pixtral',
-                'description' => 'Tag images in a folder using Mistral Pixtral, nightly.',
+                'id' => 'classify-images-mistral',
+                'title' => 'Classify images — Mistral vision',
+                'description' => 'Tag images in a folder using Mistral vision, nightly.',
                 'provider' => 'mistral',
             ]),
         ];

@@ -88,6 +88,65 @@ For an OpenAI-compatible vendor, extend `AbstractOpenAiCompatibleProvider`
 instead of implementing the interface from scratch — see `DeepSeekProvider` and
 [`HetznerProvider`](hetzner-provider.md), which are ~60 lines each.
 
+## Models & reasoning
+
+`nextcloud-app/lib/Service/MistralModels.php` is the static registry. It is only
+a **fallback**: `MistralProvider::listModels()` prefers the live `/v1/models`
+listing and the settings UI renders that when it is reachable.
+
+### Dated IDs, not `-latest` aliases
+
+The registry pins dated model IDs (`mistral-small-2603`, `mistral-large-2512`, …)
+on purpose. It used to pin `-latest` aliases on the assumption that they stay
+current by themselves, which does not survive a family being retired:
+`pixtral-large-2411` was retired on 2026-05-31 and `ministral-8b-2410` on
+2025-12-31, and the app went on pointing its **vision fallback** at Pixtral long
+after the API stopped serving it (#487). Dated IDs can be checked against
+Mistral's published deprecation table; aliases cannot.
+
+Current entries: Mistral Large 3, Medium 3.5, Small 4 and Ministral 3
+(14B/8B/3B). All are natively multimodal, so `supportsVision()` is a lookup over
+the registry plus a family-prefix check — not the old `str_contains(…, 'pixtral')`
+heuristic. `MistralModels::VISION_MODEL` is the model
+`MistralProvider::visionOptions()` swaps in when the configured model cannot take
+image input; since the default (Small 4) is multimodal, it rarely fires.
+
+**When Mistral ships a new generation**, add the dated IDs to the constants,
+`MAX_TOKENS_CEILING`, `VISION_MODELS` and `getAllModels()`, and check the
+deprecation table for anything the app still names.
+
+### Reasoning (`reasoning_effort`)
+
+Mistral Small 4 and Medium 3.5 are hybrid reasoning models. They take a
+`reasoning_effort` request parameter — `high` (think before answering) or `none`
+— which the app exposes through its existing **`effort`** capability, not
+`thinking`/`thinkingBudget`: there is no token budget to set. Resolution order in
+`MistralProvider::resolveEffort()` is conversation override (`/effort`) → user
+setting (`user_effort_mistral`) → admin setting (`effort_mistral`); a value the
+model does not accept falls through rather than 400ing the API, and when nothing
+resolves the parameter is omitted entirely.
+
+Effort vocabularies differ per provider (Anthropic's `low…max` vs Mistral's
+`none`/`high`), so `LLMProviderInterface::getAllowedEfforts()` lets each provider
+own its own table. `ConversationController::update()` validates through it;
+providers without an effort knob return `[]`.
+
+With `reasoning_effort: high` the response shape changes: `message.content`
+becomes a list of chunks (`{type: thinking, thinking: [TextChunk…]}` then
+`{type: text}`) instead of a plain string, and the streaming `delta.content` is a
+chunk list while the model thinks and a string afterwards.
+`extractMessageText()` / `extractThinkingText()` split the two. The reasoning
+trace is **replayed** on assistant turns inside a tool loop —
+`assistantMessageFromToolCalls()` keeps it as a `thinking` block and
+`toMistralMessages()` sends it back — because Mistral's docs are explicit that
+stripping it costs coherence across turns.
+
+> **Known limitation.** Persisted conversation history stores assistant messages
+> as plain text, so a reasoning trace does not survive a page reload; it is only
+> replayed within a single request's agentic loop. The native-MCP Conversations
+> path drops it too (`toConversationInputs()` keeps text/image/document blocks
+> only).
+
 ## Verifying MCP works with Mistral (#136)
 
 The AIquila MCP server is provider-agnostic — it just exposes Nextcloud tools

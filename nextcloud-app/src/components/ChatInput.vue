@@ -116,7 +116,7 @@ const SLASH_COMMANDS = [
 		id: 'effort',
 		label: '/effort',
 		icon: '⚡',
-		description: 'Set effort for this conversation (low, medium, high, xhigh, max — e.g. /effort:high; no value resets to default)',
+		description: 'Set effort for this conversation — allowed values depend on the provider and model (e.g. /effort:high; no value resets to default)',
 	},
 	{
 		id: 'thinking',

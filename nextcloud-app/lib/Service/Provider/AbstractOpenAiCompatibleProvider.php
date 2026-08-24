@@ -140,6 +140,16 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
         ]);
     }
 
+    /**
+     * OpenAI-compatible endpoints expose no portable effort knob; subclasses
+     * with one override this.
+     *
+     * @return list<string>
+     */
+    public function getAllowedEfforts(string $model): array {
+        return [];
+    }
+
     /** Model id offered when nothing is configured; used by the schema default. */
     abstract protected function defaultModel(): string;
 

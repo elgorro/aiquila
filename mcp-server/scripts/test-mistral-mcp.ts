@@ -20,7 +20,7 @@
  *
  * Optional env vars:
  *   MCP_URL               Base URL of the MCP server (default: http://localhost:3339)
- *   MISTRAL_MODEL         Model to drive the loop (default: mistral-large-latest)
+ *   MISTRAL_MODEL         Model to drive the loop (default: mistral-large-2512)
  *
  * Usage:
  *   cd mcp-server/scripts
@@ -36,7 +36,7 @@ import * as crypto from 'node:crypto';
 const BASE_URL = (process.env.MCP_URL ?? 'http://localhost:3339').replace(/\/$/, '');
 const NC_USER = process.env.NEXTCLOUD_USER ?? '';
 const NC_PASS = process.env.NEXTCLOUD_PASSWORD ?? '';
-const MODEL = process.env.MISTRAL_MODEL ?? 'mistral-large-latest';
+const MODEL = process.env.MISTRAL_MODEL ?? 'mistral-large-2512';
 const MAX_ITERATIONS = 8;
 
 const REDIRECT_URI = 'https://localhost/callback';
