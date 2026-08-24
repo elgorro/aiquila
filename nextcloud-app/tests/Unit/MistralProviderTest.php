@@ -3,6 +3,7 @@
 namespace OCA\AIquila\Tests\Unit;
 
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\MistralModels;
 use OCA\AIquila\Service\Provider\MistralProvider;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
@@ -199,12 +200,90 @@ class MistralProviderTest extends TestCase {
 
     public function testListModels(): void {
         $this->client->method('get')->willReturn($this->jsonResponse([
-            'data' => [['id' => 'mistral-small-latest'], ['id' => 'mistral-large-latest']],
+            'data' => [['id' => MistralModels::SMALL], ['id' => MistralModels::LARGE]],
         ]));
 
         $models = $this->provider->listModels('u');
-        $this->assertContains('mistral-large-latest', $models);
-        $this->assertContains('mistral-small-latest', $models);
+        $this->assertContains(MistralModels::LARGE, $models);
+        $this->assertContains(MistralModels::SMALL, $models);
+    }
+
+    public function testVisionFallbackTargetsACurrentModel(): void {
+        $captured = null;
+        $this->client->method('post')->willReturnCallback(function (string $url, array $opts) use (&$captured) {
+            $captured = json_decode($opts['body'], true);
+            return $this->jsonResponse(['choices' => [['message' => ['content' => 'a cat']]]]);
+        });
+
+        // Default model is Small 4, which is multimodal: no swap.
+        $this->provider->askWithImage('what is this?', 'AAAA', 'image/png', 'u');
+        $this->assertSame(MistralModels::DEFAULT_MODEL, $captured['model']);
+
+        // supportsVision() must not resurrect the retired pixtral heuristic.
+        $this->assertFalse(MistralModels::supportsVision('pixtral-large-latest'));
+        $this->assertTrue(MistralModels::supportsVision(MistralModels::DEFAULT_MODEL));
+        $this->assertSame(MistralModels::VISION_MODEL, MistralModels::SMALL);
+    }
+
+    public function testReasoningEffortIsSentOnlyForModelsThatAcceptIt(): void {
+        $captured = null;
+        $this->client->method('post')->willReturnCallback(function (string $url, array $opts) use (&$captured) {
+            $captured = json_decode($opts['body'], true);
+            return $this->jsonResponse(['choices' => [['message' => ['content' => 'ok']]]]);
+        });
+
+        // No effort requested → parameter omitted entirely.
+        $this->provider->chat([['role' => 'user', 'content' => 'hi']], null, 'u');
+        $this->assertArrayNotHasKey('reasoning_effort', $captured);
+
+        // Small 4 reasons.
+        $this->provider->chat([['role' => 'user', 'content' => 'hi']], null, 'u', ['effort' => 'high']);
+        $this->assertSame('high', $captured['reasoning_effort']);
+
+        // Ministral does not: the value is dropped rather than 400ing the API.
+        $this->provider->chat([['role' => 'user', 'content' => 'hi']], null, 'u', [
+            'effort' => 'high',
+            'model' => MistralModels::MINISTRAL_8B,
+        ]);
+        $this->assertArrayNotHasKey('reasoning_effort', $captured);
+
+        // Anthropic's vocabulary is not Mistral's.
+        $this->provider->chat([['role' => 'user', 'content' => 'hi']], null, 'u', ['effort' => 'xhigh']);
+        $this->assertArrayNotHasKey('reasoning_effort', $captured);
+    }
+
+    public function testAllowedEffortsAreProviderScoped(): void {
+        $this->assertTrue($this->provider->getCapabilities()['effort']);
+        $this->assertSame(['none', 'high'], $this->provider->getAllowedEfforts(MistralModels::MEDIUM));
+        $this->assertSame([], $this->provider->getAllowedEfforts(MistralModels::MINISTRAL_3B));
+    }
+
+    public function testReasoningChunkListContentIsFlattenedToTheAnswer(): void {
+        $this->client->method('post')->willReturn($this->jsonResponse([
+            'choices' => [[
+                'message' => ['content' => [
+                    ['type' => 'thinking', 'thinking' => [['type' => 'text', 'text' => 'let me think']]],
+                    ['type' => 'text', 'text' => '42'],
+                ]],
+                'finish_reason' => 'stop',
+            ]],
+        ]));
+
+        $result = $this->provider->chat([['role' => 'user', 'content' => 'q']], null, 'u');
+        $this->assertSame('42', $result['response']);
+    }
+
+    public function testStreamedThinkingChunksAreNotEmittedAsAnswerText(): void {
+        $sse = "data: {\"choices\":[{\"delta\":{\"content\":[{\"type\":\"thinking\",\"thinking\":[{\"type\":\"text\",\"text\":\"hmm\"}]}]}}]}\n"
+            . "data: {\"choices\":[{\"delta\":{\"content\":\"Answer\"},\"finish_reason\":\"stop\"}]}\n"
+            . "data: [DONE]\n";
+        $this->client->method('post')->willReturn($this->sseResponse($sse));
+
+        $events = iterator_to_array($this->provider->chatWithToolsStream([['role' => 'user', 'content' => 'hi']], [], fn() => [], null, 'u'));
+
+        $deltas = array_values(array_filter($events, fn($e) => $e['type'] === 'text_delta'));
+        $this->assertCount(1, $deltas);
+        $this->assertSame('Answer', $deltas[0]['text']);
     }
 
     public function testNativeMcpWithoutConnectorsYieldsError(): void {
