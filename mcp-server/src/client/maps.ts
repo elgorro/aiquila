@@ -6,9 +6,10 @@ import { logger } from '../logger.js';
 /**
  * Nextcloud Maps API client.
  *
- * Two helpers:
- *  - fetchMapsExternalAPI  — CORS-enabled external REST API  (/apps/maps/api/1.0/...)
- *  - fetchMapsAPI          — Internal controller endpoints    (/apps/maps/...)
+ * A single helper, fetchMapsAPI, targeting the internal controller endpoints
+ * (/apps/maps/...). Those are a strict superset of the CORS-enabled external
+ * REST API (/apps/maps/api/1.0/...): they accept the same parameters plus the
+ * optional myMapId used to scope an operation to a custom "My Map".
  */
 
 interface FetchOptions {
@@ -54,42 +55,8 @@ function buildHeaders(auth: string, hasBody: boolean): Record<string, string> {
 }
 
 /**
- * Fetch from the CORS-enabled external Maps API.
- * Base: /apps/maps/api/1.0
- * Used for: favorites, devices
- */
-export async function fetchMapsExternalAPI<T = unknown>(
-  endpoint: string,
-  options: FetchOptions = {}
-): Promise<T> {
-  const config = getNextcloudConfig();
-  const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
-  const url = buildUrl(`${config.url}/apps/maps/api/1.0`, endpoint, options.queryParams);
-  const body = options.body ? JSON.stringify(options.body) : undefined;
-
-  const t0 = Date.now();
-  const response = await fetch(url, {
-    method: options.method || 'GET',
-    headers: buildHeaders(auth, !!options.body),
-    body,
-  });
-  logger.trace(
-    { method: options.method || 'GET', url, status: response.status, ms: Date.now() - t0 },
-    '[nc] HTTP'
-  );
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Maps API ${response.status}: ${text || response.statusText}`);
-  }
-
-  return (await response.json()) as T;
-}
-
-/**
  * Fetch from the internal Maps controller endpoints.
  * Base: /apps/maps
- * Used for: tracks, photos, my maps, routing, import/export
  */
 export async function fetchMapsAPI<T = unknown>(
   endpoint: string,

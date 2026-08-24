@@ -3,11 +3,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the Maps API client module
-const mockFetchMapsExternalAPI = vi.fn();
 const mockFetchMapsAPI = vi.fn();
 
 vi.mock('../client/maps.js', () => ({
-  fetchMapsExternalAPI: (...args: unknown[]) => mockFetchMapsExternalAPI(...args),
   fetchMapsAPI: (...args: unknown[]) => mockFetchMapsAPI(...args),
 }));
 
@@ -23,7 +21,7 @@ describe('Maps Tools', () => {
 
   describe('list_map_favorites', () => {
     it('should return formatted favorites list', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue([
+      mockFetchMapsAPI.mockResolvedValue([
         {
           id: 1,
           name: 'Home',
@@ -58,20 +56,34 @@ describe('Maps Tools', () => {
       expect(result.content[0].text).toContain('2');
     });
 
-    it('should pass pruneBefore param', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue([]);
+    it('should filter by pruneBefore client-side', async () => {
+      mockFetchMapsAPI.mockResolvedValue([
+        { id: 1, name: 'Old', lat: 1, lng: 2, date_created: 1, date_modified: 1699999999 },
+        { id: 2, name: 'Fresh', lat: 3, lng: 4, date_created: 1, date_modified: 1700000001 },
+      ]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'list_map_favorites')!;
-      await tool.handler({ pruneBefore: 1700000000 });
+      const result = await tool.handler({ pruneBefore: 1700000000 });
 
-      expect(mockFetchMapsExternalAPI).toHaveBeenCalledWith('/favorites', {
-        queryParams: { pruneBefore: '1700000000' },
+      expect(result.content[0].text).toContain('Fresh');
+      expect(result.content[0].text).not.toContain('Old');
+    });
+
+    it('should scope to a custom map', async () => {
+      mockFetchMapsAPI.mockResolvedValue([]);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'list_map_favorites')!;
+      await tool.handler({ myMapId: 77 });
+
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/favorites', {
+        queryParams: { myMapId: '77' },
       });
     });
 
     it('should handle empty results', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue([]);
+      mockFetchMapsAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'list_map_favorites')!;
@@ -81,7 +93,7 @@ describe('Maps Tools', () => {
     });
 
     it('should handle API errors', async () => {
-      mockFetchMapsExternalAPI.mockRejectedValue(new Error('Maps API 500: Internal Server Error'));
+      mockFetchMapsAPI.mockRejectedValue(new Error('Maps API 500: Internal Server Error'));
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'list_map_favorites')!;
@@ -94,7 +106,7 @@ describe('Maps Tools', () => {
 
   describe('create_map_favorite', () => {
     it('should create a favorite successfully', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue({
+      mockFetchMapsAPI.mockResolvedValue({
         id: 10,
         name: 'Cafe',
         lat: 52.52,
@@ -118,14 +130,14 @@ describe('Maps Tools', () => {
 
       expect(result.content[0].text).toContain('Favorite created');
       expect(result.content[0].text).toContain('ID: 10');
-      expect(mockFetchMapsExternalAPI).toHaveBeenCalledWith('/favorites', {
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/favorite', {
         method: 'POST',
         body: { name: 'Cafe', lat: 52.52, lng: 13.405, category: 'Food', comment: 'Great coffee' },
       });
     });
 
     it('should handle creation errors', async () => {
-      mockFetchMapsExternalAPI.mockRejectedValue(new Error('Maps API 400: Bad Request'));
+      mockFetchMapsAPI.mockRejectedValue(new Error('Maps API 400: Bad Request'));
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'create_map_favorite')!;
@@ -138,7 +150,7 @@ describe('Maps Tools', () => {
 
   describe('update_map_favorite', () => {
     it('should update a favorite successfully', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue({
+      mockFetchMapsAPI.mockResolvedValue({
         id: 1,
         name: 'Updated Name',
         lat: 52.52,
@@ -152,30 +164,67 @@ describe('Maps Tools', () => {
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'update_map_favorite')!;
-      const result = await tool.handler({ id: 1, name: 'Updated Name' });
+      const result = await tool.handler({ id: 1, name: 'Updated Name', lat: 52.52, lng: 13.405 });
 
       expect(result.content[0].text).toContain('Favorite 1 updated');
-      expect(mockFetchMapsExternalAPI).toHaveBeenCalledWith('/favorites/1', {
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/favorites/1', {
         method: 'PUT',
-        body: { name: 'Updated Name' },
+        body: { lat: 52.52, lng: 13.405, name: 'Updated Name' },
       });
+    });
+
+    it('should look up current coordinates when lat/lng are omitted', async () => {
+      mockFetchMapsAPI
+        .mockResolvedValueOnce([{ id: 1, name: 'Home', lat: 52.52, lng: 13.405 }])
+        .mockResolvedValueOnce({
+          id: 1,
+          name: 'Updated Name',
+          lat: 52.52,
+          lng: 13.405,
+          date_created: 1700000000,
+        });
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'update_map_favorite')!;
+      const result = await tool.handler({ id: 1, name: 'Updated Name' });
+
+      expect(mockFetchMapsAPI).toHaveBeenNthCalledWith(1, '/favorites', { queryParams: {} });
+      expect(mockFetchMapsAPI).toHaveBeenNthCalledWith(2, '/favorites/1', {
+        method: 'PUT',
+        body: { lat: 52.52, lng: 13.405, name: 'Updated Name' },
+      });
+      expect(result.content[0].text).toContain('Favorite 1 updated');
+    });
+
+    it('should error when the favorite does not exist', async () => {
+      mockFetchMapsAPI.mockResolvedValue([]);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'update_map_favorite')!;
+      const result = await tool.handler({ id: 9999, name: 'Nope' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('No favorite with ID 9999');
     });
   });
 
   describe('delete_map_favorite', () => {
     it('should delete a favorite successfully', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue('DELETED');
+      mockFetchMapsAPI.mockResolvedValue('DELETED');
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'delete_map_favorite')!;
       const result = await tool.handler({ id: 1 });
 
       expect(result.content[0].text).toContain('Favorite 1 deleted');
-      expect(mockFetchMapsExternalAPI).toHaveBeenCalledWith('/favorites/1', { method: 'DELETE' });
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/favorites/1', {
+        method: 'DELETE',
+        queryParams: {},
+      });
     });
 
     it('should handle deletion errors', async () => {
-      mockFetchMapsExternalAPI.mockRejectedValue(new Error('Maps API 400: Not found'));
+      mockFetchMapsAPI.mockRejectedValue(new Error('Maps API 400: Not found'));
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'delete_map_favorite')!;
@@ -186,11 +235,289 @@ describe('Maps Tools', () => {
     });
   });
 
+  describe('rename_map_favorite_category', () => {
+    it('should rename categories', async () => {
+      mockFetchMapsAPI.mockResolvedValue('RENAMED');
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'rename_map_favorite_category')!;
+      const result = await tool.handler({ categories: ['Food', 'Eats'], newName: 'Restaurants' });
+
+      expect(result.content[0].text).toContain('Renamed 2 categories');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/favorites-category', {
+        method: 'PUT',
+        body: { categories: ['Food', 'Eats'], newName: 'Restaurants' },
+      });
+    });
+
+    it('should pass myMapId', async () => {
+      mockFetchMapsAPI.mockResolvedValue('RENAMED');
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'rename_map_favorite_category')!;
+      await tool.handler({ categories: ['Food'], newName: 'Restaurants', myMapId: 42 });
+
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/favorites-category', {
+        method: 'PUT',
+        body: { categories: ['Food'], newName: 'Restaurants', myMapId: 42 },
+      });
+    });
+
+    it('should handle API errors', async () => {
+      mockFetchMapsAPI.mockRejectedValue(new Error('Maps API 500: Internal Server Error'));
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'rename_map_favorite_category')!;
+      const result = await tool.handler({ categories: ['Food'], newName: 'Restaurants' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error renaming favorite categories');
+    });
+  });
+
+  // ── Favorite category sharing ──────────────────────────────────────────
+
+  describe('list_shared_map_categories', () => {
+    it('should return formatted shares', async () => {
+      mockFetchMapsAPI.mockResolvedValue([
+        { id: 1, category: 'Food', token: 'abc123', owner: 'testuser' },
+      ]);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'list_shared_map_categories')!;
+      const result = await tool.handler({});
+
+      expect(result.content[0].text).toContain('Food');
+      expect(result.content[0].text).toContain('abc123');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/favorites-category/shared', {
+        queryParams: {},
+      });
+    });
+
+    it('should scope to a custom map', async () => {
+      mockFetchMapsAPI.mockResolvedValue([]);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'list_shared_map_categories')!;
+      await tool.handler({ myMapId: 42 });
+
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/favorites-category/shared', {
+        queryParams: { myMapId: '42' },
+      });
+    });
+
+    it('should handle empty results', async () => {
+      mockFetchMapsAPI.mockResolvedValue([]);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'list_shared_map_categories')!;
+      const result = await tool.handler({});
+
+      expect(result.content[0].text).toContain('No shared favorite categories');
+    });
+  });
+
+  describe('share_map_category', () => {
+    it('should share a category', async () => {
+      mockFetchMapsAPI.mockResolvedValue({ id: 1, category: 'Food', token: 'tok1' });
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'share_map_category')!;
+      const result = await tool.handler({ category: 'Food' });
+
+      expect(result.content[0].text).toContain('shared');
+      expect(result.content[0].text).toContain('tok1');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/favorites-category/Food/share', {
+        method: 'POST',
+      });
+    });
+
+    it('should url-encode the category name', async () => {
+      mockFetchMapsAPI.mockResolvedValue({ category: 'My Food', token: 'tok1' });
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'share_map_category')!;
+      await tool.handler({ category: 'My Food' });
+
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/favorites-category/My%20Food/share', {
+        method: 'POST',
+      });
+    });
+
+    it('should handle API errors', async () => {
+      mockFetchMapsAPI.mockRejectedValue(new Error('Maps API 400: Unknown category'));
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'share_map_category')!;
+      const result = await tool.handler({ category: 'Nope' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error sharing category');
+    });
+  });
+
+  describe('unshare_map_category', () => {
+    it('should report a removed share', async () => {
+      mockFetchMapsAPI.mockResolvedValue({ did_exist: true });
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'unshare_map_category')!;
+      const result = await tool.handler({ category: 'Food' });
+
+      expect(result.content[0].text).toContain('unshared');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/favorites-category/Food/un-share', {
+        method: 'POST',
+      });
+    });
+
+    it('should report when nothing was shared', async () => {
+      mockFetchMapsAPI.mockResolvedValue({ did_exist: false });
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'unshare_map_category')!;
+      const result = await tool.handler({ category: 'Food' });
+
+      expect(result.content[0].text).toContain('was not shared');
+    });
+  });
+
+  describe('add_shared_category_to_map', () => {
+    it('should add a shared category to a map', async () => {
+      mockFetchMapsAPI.mockResolvedValue('Done');
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'add_shared_category_to_map')!;
+      const result = await tool.handler({ category: 'Food', targetMapId: 99 });
+
+      expect(result.content[0].text).toContain('added to map 99');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/favorites-category/Food/add-to-map/99', {
+        method: 'PUT',
+        queryParams: {},
+      });
+    });
+
+    it('should handle API errors', async () => {
+      mockFetchMapsAPI.mockRejectedValue(new Error('Maps API 404: Map not Found'));
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'add_shared_category_to_map')!;
+      const result = await tool.handler({ category: 'Food', targetMapId: 99 });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('404');
+    });
+  });
+
+  // ── Device sharing ─────────────────────────────────────────────────────
+
+  describe('share_map_device', () => {
+    it('should share a device', async () => {
+      mockFetchMapsAPI.mockResolvedValue({
+        id: 1,
+        token: 'devtok',
+        deviceId: 7,
+        timestampFrom: 1700000000,
+        timestampTo: 1700003600,
+      });
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'share_map_device')!;
+      const result = await tool.handler({
+        id: 7,
+        timestampFrom: 1700000000,
+        timestampTo: 1700003600,
+      });
+
+      expect(result.content[0].text).toContain('Device 7 shared');
+      expect(result.content[0].text).toContain('devtok');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/devices/7/share', {
+        method: 'POST',
+        body: { timestampFrom: 1700000000, timestampTo: 1700003600 },
+      });
+    });
+
+    it('should handle API errors', async () => {
+      mockFetchMapsAPI.mockRejectedValue(new Error('Maps API 400: No such device'));
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'share_map_device')!;
+      const result = await tool.handler({ id: 9999, timestampFrom: 0, timestampTo: 1 });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error sharing device 9999');
+    });
+  });
+
+  describe('list_shared_map_devices', () => {
+    it('should list device shares on a map', async () => {
+      mockFetchMapsAPI.mockResolvedValue([{ token: 'devtok', device_id: 7 }]);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'list_shared_map_devices')!;
+      const result = await tool.handler({ myMapId: 42 });
+
+      expect(result.content[0].text).toContain('devtok');
+      expect(result.content[0].text).toContain('Device ID: 7');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/devices/s/', {
+        queryParams: { myMapId: '42' },
+      });
+    });
+
+    it('should handle empty results', async () => {
+      mockFetchMapsAPI.mockResolvedValue([]);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'list_shared_map_devices')!;
+      const result = await tool.handler({ myMapId: 42 });
+
+      expect(result.content[0].text).toContain('No shared devices on map 42');
+    });
+  });
+
+  describe('remove_map_device_share', () => {
+    it('should revoke a share', async () => {
+      mockFetchMapsAPI.mockResolvedValue(true);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'remove_map_device_share')!;
+      const result = await tool.handler({ token: 'devtok' });
+
+      expect(result.content[0].text).toContain('Device share devtok removed');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/devices/s/devtok', { method: 'DELETE' });
+    });
+
+    it('should handle API errors', async () => {
+      mockFetchMapsAPI.mockRejectedValue(new Error('Maps API 404: Not Found'));
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'remove_map_device_share')!;
+      const result = await tool.handler({ token: 'nope' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error removing device share');
+    });
+  });
+
+  describe('add_shared_device_to_map', () => {
+    it('should add a shared device to a map', async () => {
+      mockFetchMapsAPI.mockResolvedValue('Done');
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'add_shared_device_to_map')!;
+      const result = await tool.handler({ token: 'devtok', targetMapId: 99 });
+
+      expect(result.content[0].text).toContain('added to map 99');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/devices/s/devtok/map-link/99', {
+        method: 'POST',
+      });
+    });
+  });
+
   // ── Devices ────────────────────────────────────────────────────────────
 
   describe('list_map_devices', () => {
     it('should return formatted device list', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue([
+      mockFetchMapsAPI.mockResolvedValue([
         { id: 1, user_agent: 'PhoneTrack/1.0', color: '#ff0000' },
         { id: 2, user_agent: 'OwnTracks/2.0', color: '#00ff00' },
       ]);
@@ -205,7 +532,7 @@ describe('Maps Tools', () => {
     });
 
     it('should handle empty results', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue([]);
+      mockFetchMapsAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'list_map_devices')!;
@@ -217,7 +544,7 @@ describe('Maps Tools', () => {
 
   describe('get_map_device_points', () => {
     it('should return device location points', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue([
+      mockFetchMapsAPI.mockResolvedValue([
         { id: 1, lat: 52.52, lng: 13.405, timestamp: 1700000000, altitude: 35, accuracy: 10 },
         { id: 2, lat: 52.53, lng: 13.41, timestamp: 1700003600 },
       ]);
@@ -232,19 +559,19 @@ describe('Maps Tools', () => {
     });
 
     it('should pass pruneBefore param', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue([]);
+      mockFetchMapsAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'get_map_device_points')!;
       await tool.handler({ id: 1, pruneBefore: 1700000000 });
 
-      expect(mockFetchMapsExternalAPI).toHaveBeenCalledWith('/devices/1', {
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/devices/1', {
         queryParams: { pruneBefore: '1700000000' },
       });
     });
 
     it('should handle empty results', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue([]);
+      mockFetchMapsAPI.mockResolvedValue([]);
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'get_map_device_points')!;
@@ -256,7 +583,7 @@ describe('Maps Tools', () => {
 
   describe('add_map_device_point', () => {
     it('should log a GPS point successfully', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue({ deviceId: 1, pointId: 42 });
+      mockFetchMapsAPI.mockResolvedValue({ deviceId: 1, pointId: 42 });
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'add_map_device_point')!;
@@ -269,7 +596,7 @@ describe('Maps Tools', () => {
 
       expect(result.content[0].text).toContain('device ID: 1');
       expect(result.content[0].text).toContain('point ID: 42');
-      expect(mockFetchMapsExternalAPI).toHaveBeenCalledWith('/devices', {
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/devices', {
         method: 'POST',
         body: { lat: 52.52, lng: 13.405, user_agent: 'TestDevice', altitude: 35 },
       });
@@ -278,7 +605,7 @@ describe('Maps Tools', () => {
 
   describe('update_map_device', () => {
     it('should update device color', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue({
+      mockFetchMapsAPI.mockResolvedValue({
         id: 1,
         user_agent: 'TestDevice',
         color: '#0000ff',
@@ -289,27 +616,27 @@ describe('Maps Tools', () => {
       const result = await tool.handler({ id: 1, color: '#0000ff' });
 
       expect(result.content[0].text).toContain('Device 1 updated');
-      expect(mockFetchMapsExternalAPI).toHaveBeenCalledWith('/devices/1', {
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/devices/1', {
         method: 'PUT',
-        body: { color: '#0000ff' },
+        body: { color: '#0000ff', name: '' },
       });
     });
   });
 
   describe('delete_map_device', () => {
     it('should delete a device successfully', async () => {
-      mockFetchMapsExternalAPI.mockResolvedValue('DELETED');
+      mockFetchMapsAPI.mockResolvedValue('DELETED');
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'delete_map_device')!;
       const result = await tool.handler({ id: 1 });
 
       expect(result.content[0].text).toContain('Device 1 deleted');
-      expect(mockFetchMapsExternalAPI).toHaveBeenCalledWith('/devices/1', { method: 'DELETE' });
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/devices/1', { method: 'DELETE' });
     });
 
     it('should handle deletion errors', async () => {
-      mockFetchMapsExternalAPI.mockRejectedValue(new Error('Maps API 400: Not found'));
+      mockFetchMapsAPI.mockRejectedValue(new Error('Maps API 400: Not found'));
 
       const { mapsTools } = await import('../tools/apps/maps.js');
       const tool = mapsTools.find((t) => t.name === 'delete_map_device')!;
@@ -486,6 +813,216 @@ describe('Maps Tools', () => {
         method: 'DELETE',
         body: { paths: ['/Photos/a.jpg'] },
       });
+    });
+  });
+
+  describe('get_map_photo_job_status', () => {
+    it('should report the job status', async () => {
+      mockFetchMapsAPI.mockResolvedValue({ running: true, done: 12 });
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'get_map_photo_job_status')!;
+      const result = await tool.handler({});
+
+      expect(result.content[0].text).toContain('running: true');
+      expect(result.content[0].text).toContain('done: 12');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/photos/backgroundJobStatus');
+    });
+
+    it('should handle an empty status', async () => {
+      mockFetchMapsAPI.mockResolvedValue({});
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'get_map_photo_job_status')!;
+      const result = await tool.handler({});
+
+      expect(result.content[0].text).toContain('No photo background job status');
+    });
+  });
+
+  // ── Contacts ───────────────────────────────────────────────────────────
+
+  describe('list_map_contacts', () => {
+    it('should return formatted contacts', async () => {
+      mockFetchMapsAPI.mockResolvedValue([
+        {
+          FN: 'Ada Lovelace',
+          URI: 'ada.vcf',
+          UID: 'ada',
+          BOOKID: 1,
+          ADR: ';;Main St 1;Berlin;;10115;Germany',
+          ADRTYPE: 'HOME',
+          GEO: '52.52;13.405',
+        },
+      ]);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'list_map_contacts')!;
+      const result = await tool.handler({});
+
+      expect(result.content[0].text).toContain('Ada Lovelace');
+      expect(result.content[0].text).toContain('52.52;13.405');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/contacts', { queryParams: {} });
+    });
+
+    it('should scope to a custom map', async () => {
+      mockFetchMapsAPI.mockResolvedValue([]);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'list_map_contacts')!;
+      await tool.handler({ myMapId: 42 });
+
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/contacts', {
+        queryParams: { myMapId: '42' },
+      });
+    });
+
+    it('should handle empty results', async () => {
+      mockFetchMapsAPI.mockResolvedValue([]);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'list_map_contacts')!;
+      const result = await tool.handler({});
+
+      expect(result.content[0].text).toContain('No contacts with addresses found');
+    });
+  });
+
+  describe('search_map_contacts', () => {
+    it('should return matching contacts', async () => {
+      mockFetchMapsAPI.mockResolvedValue([
+        { FN: 'Ada Lovelace', URI: 'ada.vcf', UID: 'ada', BOOKID: 1 },
+      ]);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'search_map_contacts')!;
+      const result = await tool.handler({ query: 'Ada' });
+
+      expect(result.content[0].text).toContain('Ada Lovelace');
+      expect(result.content[0].text).toContain('ada.vcf');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/contacts-search', {
+        queryParams: { query: 'Ada' },
+      });
+    });
+
+    it('should handle empty results', async () => {
+      mockFetchMapsAPI.mockResolvedValue([]);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'search_map_contacts')!;
+      const result = await tool.handler({ query: 'Nobody' });
+
+      expect(result.content[0].text).toContain('No contacts matching "Nobody"');
+    });
+  });
+
+  describe('place_map_contact', () => {
+    it('should place a contact', async () => {
+      mockFetchMapsAPI.mockResolvedValue('EDITED');
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'place_map_contact')!;
+      const result = await tool.handler({
+        bookid: '1',
+        uri: 'ada.vcf',
+        uid: 'ada',
+        lat: 52.52,
+        lng: 13.405,
+        city: 'Berlin',
+      });
+
+      expect(result.content[0].text).toContain('Contact ada placed at 52.52, 13.405');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/contacts/1/ada.vcf', {
+        method: 'PUT',
+        body: { uid: 'ada', lat: 52.52, lng: 13.405, city: 'Berlin' },
+      });
+    });
+
+    it('should surface a non-EDITED status as an error', async () => {
+      mockFetchMapsAPI.mockResolvedValue('CONTACT NOT WRITABLE');
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'place_map_contact')!;
+      const result = await tool.handler({
+        bookid: '1',
+        uri: 'ada.vcf',
+        uid: 'ada',
+        lat: 1,
+        lng: 2,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('CONTACT NOT WRITABLE');
+    });
+  });
+
+  describe('add_contact_to_map', () => {
+    it('should add a contact to a map', async () => {
+      mockFetchMapsAPI.mockResolvedValue('DONE');
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'add_contact_to_map')!;
+      const result = await tool.handler({ bookid: '1', uri: 'ada.vcf', myMapId: 42 });
+
+      expect(result.content[0].text).toContain('added to map 42');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/contacts/1/ada.vcf/add-to-map/', {
+        method: 'PUT',
+        body: { myMapId: 42 },
+      });
+    });
+
+    it('should surface a non-DONE status as an error', async () => {
+      mockFetchMapsAPI.mockResolvedValue('MAP NOT FOUND');
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'add_contact_to_map')!;
+      const result = await tool.handler({ bookid: '1', uri: 'ada.vcf', myMapId: 9999 });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('MAP NOT FOUND');
+    });
+  });
+
+  describe('delete_map_contact_address', () => {
+    it('should remove an address', async () => {
+      mockFetchMapsAPI.mockResolvedValue('DELETED');
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'delete_map_contact_address')!;
+      const result = await tool.handler({
+        bookid: '1',
+        uri: 'ada.vcf',
+        uid: 'ada',
+        adr: ';;Main St 1;Berlin;;10115;Germany',
+        geo: '52.52;13.405',
+      });
+
+      expect(result.content[0].text).toContain('Address removed from contact ada');
+      expect(mockFetchMapsAPI).toHaveBeenCalledWith('/contacts/1/ada.vcf', {
+        method: 'DELETE',
+        body: {
+          uid: 'ada',
+          adr: ';;Main St 1;Berlin;;10115;Germany',
+          geo: '52.52;13.405',
+        },
+      });
+    });
+
+    it('should surface a READONLY status as an error', async () => {
+      mockFetchMapsAPI.mockResolvedValue('READONLY');
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'delete_map_contact_address')!;
+      const result = await tool.handler({
+        bookid: '1',
+        uri: 'ada.vcf',
+        uid: 'ada',
+        adr: 'x',
+        geo: 'y',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('READONLY');
     });
   });
 

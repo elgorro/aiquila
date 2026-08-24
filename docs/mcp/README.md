@@ -33,7 +33,7 @@ Nextcloud apps and administration:
 - **Contacts** — Full CRUD for contacts with structured fields (CardDAV)
 - **Mail** — Email accounts, mailboxes, messages, send, and flags
 - **Bookmarks** — Bookmark CRUD, folder hierarchy, and tag management
-- **Maps** — Favorites, GPS devices/tracks, photo geotagging, custom maps, import/export
+- **Maps** — Favorites, category/device sharing, GPS devices/tracks, photo geotagging, contacts, custom maps, import/export
 - **Notes** — Markdown notes with categories and search
 - **News** — RSS/Atom feed subscriptions, folders, and article reading/triage
 - **Polls** — Create text/date polls, vote, comment, and share
@@ -162,13 +162,18 @@ Nextcloud apps and administration:
 | `rename_bookmark_tag` | Rename a tag | [Bookmarks](tools/apps/bookmarks.md#rename_bookmark_tag) |
 | `delete_bookmark_tag` | Delete a tag | [Bookmarks](tools/apps/bookmarks.md#delete_bookmark_tag) |
 
-#### Maps (26 tools)
+#### Maps (40 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_map_favorites` | List saved locations | [Maps](tools/apps/maps.md#list_map_favorites) |
 | `create_map_favorite` | Create a favorite | [Maps](tools/apps/maps.md#create_map_favorite) |
 | `update_map_favorite` | Update a favorite | [Maps](tools/apps/maps.md#update_map_favorite) |
 | `delete_map_favorite` | Delete a favorite | [Maps](tools/apps/maps.md#delete_map_favorite) |
+| `rename_map_favorite_category` | Rename favorite categories | [Maps](tools/apps/maps.md#rename_map_favorite_category) |
+| `list_shared_map_categories` | List shared favorite categories | [Maps](tools/apps/maps.md#list_shared_map_categories) |
+| `share_map_category` | Share a category via link | [Maps](tools/apps/maps.md#share_map_category) |
+| `unshare_map_category` | Revoke a category share | [Maps](tools/apps/maps.md#unshare_map_category) |
+| `add_shared_category_to_map` | Add a shared category to a map | [Maps](tools/apps/maps.md#add_shared_category_to_map) |
 | `export_map_favorites` | Export favorites as GPX | [Maps](tools/apps/maps.md#export_map_favorites) |
 | `import_map_favorites` | Import favorites from file | [Maps](tools/apps/maps.md#import_map_favorites) |
 | `list_map_devices` | List GPS devices | [Maps](tools/apps/maps.md#list_map_devices) |
@@ -178,6 +183,10 @@ Nextcloud apps and administration:
 | `delete_map_device` | Delete a device | [Maps](tools/apps/maps.md#delete_map_device) |
 | `export_map_devices` | Export device data as GPX | [Maps](tools/apps/maps.md#export_map_devices) |
 | `import_map_devices` | Import device data | [Maps](tools/apps/maps.md#import_map_devices) |
+| `share_map_device` | Share a device via link | [Maps](tools/apps/maps.md#share_map_device) |
+| `list_shared_map_devices` | List device shares on a map | [Maps](tools/apps/maps.md#list_shared_map_devices) |
+| `remove_map_device_share` | Revoke a device share | [Maps](tools/apps/maps.md#remove_map_device_share) |
+| `add_shared_device_to_map` | Add a shared device to a map | [Maps](tools/apps/maps.md#add_shared_device_to_map) |
 | `list_map_tracks` | List GPS tracks | [Maps](tools/apps/maps.md#list_map_tracks) |
 | `get_map_track` | Get track details/content | [Maps](tools/apps/maps.md#get_map_track) |
 | `update_map_track` | Update track metadata | [Maps](tools/apps/maps.md#update_map_track) |
@@ -186,6 +195,12 @@ Nextcloud apps and administration:
 | `list_map_photos_nonlocalized` | List photos without GPS | [Maps](tools/apps/maps.md#list_map_photos_nonlocalized) |
 | `place_map_photos` | Set GPS coords on photos | [Maps](tools/apps/maps.md#place_map_photos) |
 | `reset_map_photo_coords` | Remove GPS from photos | [Maps](tools/apps/maps.md#reset_map_photo_coords) |
+| `get_map_photo_job_status` | Photo geolocation job status | [Maps](tools/apps/maps.md#get_map_photo_job_status) |
+| `list_map_contacts` | List contacts with addresses | [Maps](tools/apps/maps.md#list_map_contacts) |
+| `search_map_contacts` | Search contacts by name | [Maps](tools/apps/maps.md#search_map_contacts) |
+| `place_map_contact` | Put a contact on the map | [Maps](tools/apps/maps.md#place_map_contact) |
+| `add_contact_to_map` | Copy a contact into a map | [Maps](tools/apps/maps.md#add_contact_to_map) |
+| `delete_map_contact_address` | Remove a contact's address | [Maps](tools/apps/maps.md#delete_map_contact_address) |
 | `list_maps` | List custom maps | [Maps](tools/apps/maps.md#list_maps) |
 | `create_map` | Create a custom map | [Maps](tools/apps/maps.md#create_map) |
 | `update_map` | Update a custom map | [Maps](tools/apps/maps.md#update_map) |

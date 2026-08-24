@@ -29,7 +29,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 | Contacts (CardDAV) | 6 | [Contacts](mcp/tools/apps/contacts.md) |
 | Email | 8 | [Mail](mcp/tools/apps/mail.md) |
 | Bookmarks, folders, tags | 13 | [Bookmarks](mcp/tools/apps/bookmarks.md) |
-| Maps, GPS, tracks, photos | 26 | [Maps](mcp/tools/apps/maps.md) |
+| Maps, GPS, tracks, photos, contacts | 40 | [Maps](mcp/tools/apps/maps.md) |
 | Notes | 5 | [Notes](mcp/tools/apps/notes.md) |
 | News (RSS feeds) | 17 | [News](mcp/tools/apps/news.md) |
 | Recipes | 6 | [Cookbook](mcp/tools/apps/cookbook.md) |
