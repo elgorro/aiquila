@@ -490,6 +490,54 @@ describe('Talk Tools', () => {
     });
   });
 
+  // ── Chat endpoint version ───────────────────────────────────────────
+  // Rooms and participants live under api/v4, but the chat endpoints are
+  // api/v1 — calling them under v4 yields a 404 "Invalid query" from Talk.
+
+  describe('chat endpoint version', () => {
+    const chatV1 = 'https://cloud.example.com/ocs/v2.php/apps/spreed/api/v1/chat/abc123';
+
+    function calledUrl(): string {
+      const [url] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      return String(url);
+    }
+
+    it('lists messages from the v1 chat endpoint', async () => {
+      mockOCS([]);
+
+      const { listMessagesTool } = await import('../tools/apps/talk.js');
+      await listMessagesTool.handler({ token: 'abc123' });
+
+      expect(calledUrl().split('?')[0]).toBe(chatV1);
+    });
+
+    it('sends messages to the v1 chat endpoint', async () => {
+      mockOCS({
+        id: 1,
+        actorId: 'testuser',
+        actorDisplayName: 'Test User',
+        message: 'hi',
+        messageParameters: {},
+        timestamp: 1700000000,
+        systemMessage: '',
+      });
+
+      const { sendMessageTool } = await import('../tools/apps/talk.js');
+      await sendMessageTool.handler({ token: 'abc123', message: 'hi' });
+
+      expect(calledUrl()).toBe(chatV1);
+    });
+
+    it('deletes messages via the v1 chat endpoint', async () => {
+      mockOCS({});
+
+      const { deleteMessageTool } = await import('../tools/apps/talk.js');
+      await deleteMessageTool.handler({ token: 'abc123', messageId: 42 });
+
+      expect(calledUrl()).toBe(`${chatV1}/42`);
+    });
+  });
+
   // ── Network errors ──────────────────────────────────────────────────
 
   describe('network errors', () => {
