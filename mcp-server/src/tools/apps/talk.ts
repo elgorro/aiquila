@@ -195,7 +195,7 @@ export const listMessagesTool = {
         queryParams.lastKnownMessageId = String(args.lastKnownMessageId);
       }
 
-      const data = await fetchOCS<ChatMessage[]>(`${API_V4}/chat/${args.token}`, { queryParams });
+      const data = await fetchOCS<ChatMessage[]>(`${API_V1}/chat/${args.token}`, { queryParams });
       let messages = data.ocs.data ?? [];
 
       if (!args.includeSystemMessages) {
@@ -246,7 +246,7 @@ export const sendMessageTool = {
       if (args.replyTo !== undefined) body.replyTo = String(args.replyTo);
       if (args.silent) body.silent = 'true';
 
-      const data = await fetchOCS<ChatMessage>(`${API_V4}/chat/${args.token}`, {
+      const data = await fetchOCS<ChatMessage>(`${API_V1}/chat/${args.token}`, {
         method: 'POST',
         body,
       });
@@ -444,7 +444,7 @@ export const deleteMessageTool = {
   }),
   handler: async (args: { token: string; messageId: number }) => {
     try {
-      await fetchOCS(`${API_V4}/chat/${args.token}/${args.messageId}`, {
+      await fetchOCS(`${API_V1}/chat/${args.token}/${args.messageId}`, {
         method: 'DELETE',
       });
       return text(`Message ${args.messageId} deleted from conversation ${args.token}.`);
