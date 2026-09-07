@@ -26,22 +26,13 @@ if (!interface_exists(Emitter::class)) {
 
 namespace OC\Security\CSP;
 
-// Reached through OC::$server below; there is no OCP equivalent for the CSP
-// nonce, so the whole chain has to be stubbed.
+// The CSP nonce manager has no OCP equivalent — core itself resolves this
+// private class through the DI container (lib/private/Template/functions.php),
+// and so does Template\ViteAssets.
 if (!class_exists(ContentSecurityPolicyNonceManager::class)) {
     class ContentSecurityPolicyNonceManager {
         public function getNonce(): string {
             return '';
-        }
-    }
-}
-
-namespace OC;
-
-if (!class_exists(Server::class)) {
-    class Server {
-        public function getContentSecurityPolicyNonceManager(): \OC\Security\CSP\ContentSecurityPolicyNonceManager {
-            return new \OC\Security\CSP\ContentSecurityPolicyNonceManager();
         }
     }
 }

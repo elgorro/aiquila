@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Template;
 
+use OC\Security\CSP\ContentSecurityPolicyNonceManager;
 use OCA\AIquila\AppInfo\Application;
 use OCP\App\IAppManager;
 use OCP\IURLGenerator;
@@ -64,7 +65,7 @@ final class ViteAssets {
         Util::addHeader('script', [
             'type' => 'module',
             'src' => $url($file),
-            'nonce' => \OC::$server->getContentSecurityPolicyNonceManager()->getNonce(),
+            'nonce' => Server::get(ContentSecurityPolicyNonceManager::class)->getNonce(),
         ], '');
     }
 
