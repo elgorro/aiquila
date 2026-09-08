@@ -195,8 +195,13 @@ export const listMessagesTool = {
         queryParams.lastKnownMessageId = String(args.lastKnownMessageId);
       }
 
-      const data = await fetchOCS<ChatMessage[]>(`${API_V1}/chat/${args.token}`, { queryParams });
-      let messages = data.ocs.data ?? [];
+      // Talk answers 304 Not Modified when no further messages are available,
+      // which is a normal end-of-pagination result rather than a failure.
+      const data = await fetchOCS<ChatMessage[]>(`${API_V1}/chat/${args.token}`, {
+        queryParams,
+        allowNotModified: true,
+      });
+      let messages = data?.ocs.data ?? [];
 
       if (!args.includeSystemMessages) {
         messages = messages.filter((m) => !m.systemMessage);
