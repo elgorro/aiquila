@@ -1,12 +1,12 @@
 module github.com/elgorro/aiquila/hetzner
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/hetznercloud/hcloud-go/v2 v2.47.0
 	github.com/pkg/sftp v1.13.11
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
