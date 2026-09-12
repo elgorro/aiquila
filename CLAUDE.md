@@ -116,7 +116,30 @@ side: how to get a PR verified and merged, and which red checks are real.
 
 ### Verify claims, don't trust the description
 
-A PR that says "tests pass" and "these tests are load-bearing" is a claim. Check it:
+A PR that says "tests pass" and "these tests are load-bearing" is a claim, not
+evidence. How you check it depends on who wrote it.
+
+**Never run an outside contributor's code on your workstation.** `npm ci` alone
+executes arbitrary lifecycle scripts with your SSH keys, npm tokens and cloud
+credentials in reach — a far worse exposure than an ephemeral runner. Do not check
+out a fork branch and build or test it locally.
+
+For a fork PR, verify at arm's length instead:
+
+1. Read the diff as text — `gh pr diff <N>`.
+2. Let CI run it: approve the parked workflow runs (below) and read the results.
+3. Trigger **Manual Code Review** (`.github/workflows/manual-code-review.yml`) for
+   the automated review, which the `pull_request` workflow cannot do on forks:
+
+   ```bash
+   gh workflow run manual-code-review.yml -f pr=<N>
+   gh run watch "$(gh run list --workflow=manual-code-review.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+   ```
+
+If you genuinely must execute fork code, do it in a throwaway container with no
+mounted credentials — not in your checkout.
+
+For an **internal** PR from a trusted author, a local worktree is fine:
 
 ```bash
 git fetch origin pull/<N>/head:pr<N>-check
@@ -157,12 +180,18 @@ never see `CLAUDE_CODE_OAUTH_TOKEN` or anything else. Two consequences:
   and no `pull_request_target` trigger exists in this repo — that is the trigger that
   *would* expose secrets to fork-controlled code, so keep it that way.
 - **`claude-review` always fails on fork PRs** with `Could not fetch an OIDC token`,
-  even though `id-token: write` is set. This is infrastructure, not a code signal —
-  review those by hand and do not let the red check block the merge.
+  even though `id-token: write` is set. This is infrastructure, not a code signal, so
+  do not let the red check block the merge. Run **Manual Code Review** instead
+  (`gh workflow run manual-code-review.yml -f pr=<N>`) — `workflow_dispatch` is
+  restricted to accounts with write access, so no outside contributor can trigger a
+  review of their own PR, and it runs in the base-repo context where credentials
+  exist. It checks out this repo's default branch rather than the PR head and grants
+  no shell tool, so fork code is read as data and never executed.
 
 The residual risk is ordinary: `npm ci` and the test suite execute fork-authored code
-on the runner. Read the diff before approving, and treat any change to
-`package.json`, lock files or `.github/**` as a reason to look much harder.
+**on the runner** — which is the right place for it. Read the diff before approving,
+and treat any change to `package.json`, lock files or `.github/**` as a reason to look
+much harder.
 
 ### Bot PRs
 

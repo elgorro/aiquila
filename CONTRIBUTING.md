@@ -103,9 +103,13 @@ before your fix, the passing run after — is much more useful than a checked bo
 ### A note on CI for external contributions
 
 Pull requests from forks need a maintainer to approve the workflow runs before
-CI starts, so there may be a short delay before checks appear. The automated
-code review does not run on fork pull requests, since GitHub does not issue the
-credentials it needs in that context. A maintainer reviews those by hand.
+CI starts, so there may be a short delay before checks appear.
+
+The automatic code review cannot run on a fork pull request — GitHub does not
+issue the credentials it needs in that context, so you may see that one check
+red through no fault of your own. It does not block your pull request. A
+maintainer triggers the review manually instead, so there is nothing you need to
+do about it.
 
 ## AI-assisted contributions
 
