@@ -1,5 +1,5 @@
 # AIquila Nextcloud — Hetzner Production (Nextcloud-only stack)
-# Nextcloud 33 + PostgreSQL + Redis + Traefik v3 + CrowdSec
+# Nextcloud 34 + PostgreSQL + Redis + Traefik v3 + CrowdSec
 #
 # AIquila app is installed via OCC at provisioning time (not baked into image).
 #
@@ -10,7 +10,7 @@
 
 services:
   nc:
-    image: nextcloud:33-apache
+    image: nextcloud:34-apache
     container_name: aiq-nc
     restart: unless-stopped
     depends_on:
@@ -31,7 +31,7 @@ services:
       OVERWRITEHOST: ${NC_DOMAIN}
       OVERWRITEPROTOCOL: https
       OVERWRITECLIURL: https://${NC_DOMAIN}
-      # NC33 built-in metrics app — token for /metrics?token= endpoint
+      # built-in metrics app — token for /metrics?token= endpoint
       NC_METRICS_TOKEN: ${NC_METRICS_TOKEN:-}
     labels:
       - "traefik.enable=true"

@@ -201,7 +201,7 @@ func (e *NCEnv) Render() string {
 	b.WriteString(fmt.Sprintf("CROWDSEC_BOUNCER_KEY=%s\n", e.CrowdSecBouncerKey))
 	b.WriteString("\n")
 
-	b.WriteString("# NC33 metrics app — endpoint: https://<NC_DOMAIN>/metrics?token=<value>\n")
+	b.WriteString("# built-in metrics app — endpoint: https://<NC_DOMAIN>/metrics?token=<value>\n")
 	b.WriteString(fmt.Sprintf("NC_METRICS_TOKEN=%s\n", e.NCMetricsToken))
 
 	return b.String()
@@ -313,7 +313,7 @@ func (e *FullEnv) Render() string {
 	b.WriteString(fmt.Sprintf("CROWDSEC_BOUNCER_KEY=%s\n", e.CrowdSecBouncerKey))
 	b.WriteString("\n")
 
-	b.WriteString("# NC33 metrics app — endpoint: https://<NC_DOMAIN>/metrics?token=<value>\n")
+	b.WriteString("# built-in metrics app — endpoint: https://<NC_DOMAIN>/metrics?token=<value>\n")
 	b.WriteString(fmt.Sprintf("NC_METRICS_TOKEN=%s\n", e.NCMetricsToken))
 	b.WriteString("\n")
 

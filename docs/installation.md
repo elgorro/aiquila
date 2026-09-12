@@ -66,7 +66,7 @@ make up
 
 Add Claude AI directly inside your Nextcloud UI — chat interface, text processing, and public API.
 
-**Prerequisites:** Nextcloud 33+, PHP 8.4+, Claude API key.
+**Prerequisites:** Nextcloud 34, PHP 8.4+, Claude API key. See [Nextcloud compatibility](nextcloud-compatibility.md) for the supported version window.
 
 ```bash
 # 1. Install from Nextcloud App Store (recommended)

@@ -282,7 +282,7 @@ and what to expect from `rebuild`.
 | `NC_ADMIN_PASSWORD` | `--nc-admin-password` | Nextcloud admin password |
 | `POSTGRES_PASSWORD` | auto 64-char hex | PostgreSQL password |
 | `CROWDSEC_BOUNCER_KEY` | auto 64-char hex | CrowdSec bouncer API key |
-| `NC_METRICS_TOKEN` | auto 32-char hex | NC33 metrics endpoint token |
+| `NC_METRICS_TOKEN` | auto 32-char hex | Metrics endpoint token |
 
 **Full stack** (`/opt/aiquila/.env`): all variables from both tables above, plus:
 

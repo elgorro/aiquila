@@ -1,5 +1,5 @@
 # AIquila Full Stack — Hetzner Production (Nextcloud + MCP on one server)
-# Nextcloud 33 + PostgreSQL + Redis + MCP Server + Traefik v3 + CrowdSec
+# Nextcloud 34 + PostgreSQL + Redis + MCP Server + Traefik v3 + CrowdSec
 #
 # MCP talks to Nextcloud over the internal Docker network (http://nc) —
 # no HTTPS overhead, no external DNS dependency between services.
@@ -11,7 +11,7 @@
 
 services:
   nc:
-    image: nextcloud:33-apache
+    image: nextcloud:34-apache
     container_name: aiq-nc
     restart: unless-stopped
     depends_on:
@@ -32,7 +32,7 @@ services:
       OVERWRITEHOST: ${NC_DOMAIN}
       OVERWRITEPROTOCOL: https
       OVERWRITECLIURL: https://${NC_DOMAIN}
-      # NC33 built-in metrics app — token for /metrics?token= endpoint
+      # built-in metrics app — token for /metrics?token= endpoint
       NC_METRICS_TOKEN: ${NC_METRICS_TOKEN:-}
     labels:
       - "traefik.enable=true"

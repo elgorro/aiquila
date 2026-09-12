@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "b1ec92ed47fae7a677f75b04c3b733b2",
+    "content-hash": "7a57e2bb87f6b9f93c99bdf612c39eb7",
     "packages": [
         {
             "name": "anthropic-ai/sdk",
@@ -2739,16 +2739,16 @@
         },
         {
             "name": "nextcloud/ocp",
-            "version": "v33.0.7",
+            "version": "v34.0.4",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nextcloud-deps/ocp.git",
-                "reference": "742a6be5d14fce6d3ddd329cf1f6d2b9bb5b5327"
+                "reference": "f316bffe9b506532d1aafcf817d8d17f3bbe2cde"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nextcloud-deps/ocp/zipball/742a6be5d14fce6d3ddd329cf1f6d2b9bb5b5327",
-                "reference": "742a6be5d14fce6d3ddd329cf1f6d2b9bb5b5327",
+                "url": "https://api.github.com/repos/nextcloud-deps/ocp/zipball/f316bffe9b506532d1aafcf817d8d17f3bbe2cde",
+                "reference": "f316bffe9b506532d1aafcf817d8d17f3bbe2cde",
                 "shasum": ""
             },
             "require": {
@@ -2756,12 +2756,13 @@
                 "psr/clock": "^1.0",
                 "psr/container": "^2.0.2",
                 "psr/event-dispatcher": "^1.0",
+                "psr/http-client": "^1.0.3",
                 "psr/log": "^3.0.2"
             },
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-stable33": "33.0.0-dev"
+                    "dev-stable34": "34.0.0-dev"
                 }
             },
             "notification-url": "https://packagist.org/downloads/",
@@ -2781,9 +2782,9 @@
             "description": "Composer package containing Nextcloud's public OCP API and the unstable NCU API",
             "support": {
                 "issues": "https://github.com/nextcloud-deps/ocp/issues",
-                "source": "https://github.com/nextcloud-deps/ocp/tree/v33.0.7"
+                "source": "https://github.com/nextcloud-deps/ocp/tree/v34.0.4"
             },
-            "time": "2026-07-16T01:28:14+00:00"
+            "time": "2026-09-02T01:51:50+00:00"
         },
         {
             "name": "nextcloud/openapi-extractor",

@@ -44,6 +44,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[Internal API Guide](internal-api.md)** — integrate AIquila AI (ask/summarize/analyze) into your own Nextcloud apps
 - **[Cowork Management API](cowork-api.md)** — register, steer and verify scheduled cowork jobs from your own Nextcloud app
 - **[Monitoring](monitoring.md)** — OpenMetrics / Prometheus export for usage and task metrics
+- **[Nextcloud compatibility](nextcloud-compatibility.md)** — supported Nextcloud versions and the policy behind the declared window
 
 ## Deployment
 
@@ -74,6 +75,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 docs/
 ├── README.md                        # This file — navigation hub
 ├── installation.md                  # Getting started guide
+├── nextcloud-compatibility.md       # Supported Nextcloud versions & policy
 ├── connectivity.md                  # Network & connection troubleshooting
 ├── internal-api.md                  # Nextcloud app internal AI API
 ├── cowork-api.md                    # Cowork job management API (ICoworkManager)

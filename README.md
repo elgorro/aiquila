@@ -33,6 +33,7 @@ Pick the path that fits your setup:
 
 - [Getting Started Guide](docs/installation.md) — all five paths with step-by-step instructions
 - [Full Documentation](docs/README.md) — architecture, configuration, and advanced topics
+- [Nextcloud compatibility](docs/nextcloud-compatibility.md) — which Nextcloud versions are supported, and what "supported" means
 
 ## Contributing
 
