@@ -19,7 +19,7 @@ jobs:
       hetzner: ${{ steps.filter.outputs.hetzner }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # Needed to diff against the base commit.
           fetch-depth: 0
@@ -74,7 +74,7 @@ jobs:
         working-directory: mcp-server
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: needs.changes.outputs.mcp == 'true'
 
       - name: Setup Node.js
@@ -111,7 +111,7 @@ jobs:
         working-directory: nextcloud-app
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: needs.changes.outputs.nextcloud == 'true'
 
       - name: Setup PHP
@@ -159,12 +159,12 @@ jobs:
         working-directory: hetzner
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: needs.changes.outputs.hetzner == 'true'
 
       - name: Setup Go
         if: needs.changes.outputs.hetzner == 'true'
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: hetzner/go.mod
           cache-dependency-path: hetzner/go.sum

@@ -36,7 +36,7 @@ jobs:
       # Deliberately checks out this repository's default branch, NOT the pull
       # request head. Nothing from the fork reaches the runner's filesystem.
       - name: Checkout base repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 

@@ -120,7 +120,7 @@ services:
         max-file: "3"
 
   crowdsec:
-    image: crowdsecurity/crowdsec:latest
+    image: crowdsecurity/crowdsec:v1.8.1
     container_name: aiq-crowdsec
     restart: unless-stopped
     environment:
@@ -151,7 +151,7 @@ services:
 
   node-exporter:
     profiles: [monitoring]
-    image: prom/node-exporter:latest
+    image: prom/node-exporter:v1
     container_name: aiq-node-exporter
     restart: unless-stopped
     command:
@@ -180,7 +180,7 @@ services:
 
   cadvisor:
     profiles: [monitoring]
-    image: gcr.io/cadvisor/cadvisor:latest
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
     container_name: aiq-cadvisor
     restart: unless-stopped
     command:
@@ -213,7 +213,7 @@ services:
 
   prometheus:
     profiles: [monitoring]
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3
     container_name: aiq-prometheus
     restart: unless-stopped
     volumes:
@@ -237,7 +237,7 @@ services:
 
   grafana:
     profiles: [monitoring]
-    image: grafana/grafana-oss:latest
+    image: grafana/grafana-oss:13.0.2
     container_name: aiq-grafana
     restart: unless-stopped
     environment:

@@ -98,6 +98,7 @@ git checkout -b feat/<short-description>   # or fix/, chore/, docs/
 git add <specific files>
 git commit -m "feat(mcp): ..."
 gh pr create
+gh pr checks <N> --watch       # a PR is not delivered until its checks are green
 ```
 
 Commit messages follow **Conventional Commits** with scope:
@@ -108,6 +109,22 @@ Commit messages follow **Conventional Commits** with scope:
 To auto-close the issue a PR resolves, put a **closing keyword** in the PR description —
 `Closes #184` (or `Fixes #184` / `Resolves #184`). A bare mention like `(#184)` or
 `Implements GH #184` links the issue but does **not** close it on merge.
+
+### A PR is not done until its checks are green
+
+**Opening a PR is not the end of the task — watch it to a conclusion.** `gh pr create`
+returns a URL, not a result. Run `gh pr checks <N> --watch` and report the actual
+outcome; never describe a PR as finished, ready, or passing on the strength of a local
+run alone. CI tests things a working tree does not: a clean checkout, `npm ci` against
+the committed lockfile, and a different Node, PHP and Go than yours.
+
+If a check goes red, fix it in the same PR. The exception is `claude-review` on a fork
+PR, which always fails with `Could not fetch an OIDC token` — see the fork section below
+for why that one is infrastructure rather than a code signal.
+
+Required checks are `ESLint & Prettier`, `MCP Server Tests` and `Nextcloud App Tests`.
+A check stuck on `Expected — Waiting for status to be reported` is usually a workflow
+that never ran; see the `paths:` filter warning under **Merging**.
 
 ### Documentation is part of the change
 

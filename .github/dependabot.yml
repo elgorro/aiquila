@@ -52,3 +52,35 @@ updates:
         update-types:
           - minor
           - patch
+
+  - package-ecosystem: composer
+    directory: /nextcloud-app
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(nextcloud)"
+    groups:
+      composer-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: docker
+    directories:
+      - /docker/installation
+      - /docker/mcp-server
+      - /docker/standalone
+      - /hetzner/docker/mcp
+      - /hetzner/docker/nextcloud
+      - /hetzner/docker/full
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+    groups:
+      docker-minor-and-patch:
+        update-types:
+          - minor
+          - patch

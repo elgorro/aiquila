@@ -232,7 +232,7 @@ services:
         max-file: "3"
 
   crowdsec:
-    image: crowdsecurity/crowdsec:latest
+    image: crowdsecurity/crowdsec:v1.8.1
     container_name: aiq-crowdsec
     restart: unless-stopped
     environment:

@@ -10,7 +10,7 @@
 services:
   # MCP Server (Production image from GHCR)
   mcp-server:
-    image: ghcr.io/elgorro/aiquila-mcp:0.2.17
+    image: ghcr.io/elgorro/aiquila-mcp:latest
     container_name: aiquila-standalone-mcp
     restart: unless-stopped
     environment:

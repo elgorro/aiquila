@@ -44,23 +44,23 @@
   "overrides": {
     "brace-expansion": "^2.0.3",
     "esbuild": ">=0.28.1",
-    "hono": "^4.12.14"
+    "hono": "^4.13.7"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "jose": "^6.2.8",
+    "jose": "^6.2.12",
     "pino": "^10.3.1",
     "webdav": "^5.10.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.2.0",
-    "eslint": "^10.8.1",
+    "@types/node": "^26.5.1",
+    "eslint": "^10.10.0",
     "prettier": "^3.9.6",
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.13",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.67.0",
-    "vitest": "^4.1.10"
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.0"
   }
 }
