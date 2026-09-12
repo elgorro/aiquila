@@ -1,4 +1,4 @@
-FROM nextcloud:33-apache
+FROM nextcloud:34-apache
 
 # Copy the pre-built tarball into a staging area
 COPY aiquila.tar.gz /tmp/aiquila.tar.gz
