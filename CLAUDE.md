@@ -109,6 +109,167 @@ To auto-close the issue a PR resolves, put a **closing keyword** in the PR descr
 `Closes #184` (or `Fixes #184` / `Resolves #184`). A bare mention like `(#184)` or
 `Implements GH #184` links the issue but does **not** close it on merge.
 
+### Documentation is part of the change
+
+**Checking the docs is mandatory on every change; updating them is mandatory when
+behaviour changed.** A PR that alters a command, flag, env var, endpoint, workflow or
+default and leaves `docs/` describing the old behaviour is incomplete. Do the doc edit
+in the same PR — not a follow-up.
+
+Where things live:
+
+| Changed | Update |
+|---|---|
+| Workflows, CI behaviour | `docs/dev/ci-cd.md` |
+| MCP tools | `docs/mcp/tools/**`, and the tool table in `docs/mcp/README.md` |
+| Env vars, transports, auth | `docs/mcp/setup.md`, the table in this file |
+| Nextcloud endpoints | `docs/dev/openapi.md`, plus regenerating the spec |
+| Install or deploy steps | `docs/installation/**`, `docs/hetzner/**` |
+| How to propose a change | `CONTRIBUTING.md` |
+
+**Keep the docs general.** They describe how the project works *now*, durably. They are
+not a changelog or an incident log. Keep out:
+
+- issue and PR numbers, and "fixed in #504" narrative
+- dated workarounds, "currently broken" notes, migration chatter for a single release
+- anything that stops being true once a ticket closes
+
+That material belongs in the GitHub issue or discussion — link to it rather than
+inlining it. If a fact needs a date or a ticket number to make sense, it is probably
+not documentation. One fact, one home: link between pages instead of restating.
+
+## Reviewing pull requests
+
+Contributor-facing rules live in `CONTRIBUTING.md`. This section is the maintainer
+side: how to get a PR verified and merged, and which red checks are real.
+
+### Verify claims, don't trust the description
+
+A PR that says "tests pass" and "these tests are load-bearing" is a claim, not
+evidence. How you check it depends on who wrote it.
+
+**Never run an outside contributor's code on your workstation.** `npm ci` alone
+executes arbitrary lifecycle scripts with your SSH keys, npm tokens and cloud
+credentials in reach — a far worse exposure than an ephemeral runner. Do not check
+out a fork branch and build or test it locally.
+
+For a fork PR, verify at arm's length instead:
+
+1. Read the diff as text — `gh pr diff <N>`.
+2. Let CI run it: approve the parked workflow runs (below) and read the results.
+3. Trigger **Manual Code Review** (`.github/workflows/manual-code-review.yml`) for
+   the automated review, which the `pull_request` workflow cannot do on forks:
+
+   ```bash
+   gh workflow run manual-code-review.yml -f pr=<N>
+   gh run watch "$(gh run list --workflow=manual-code-review.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+   ```
+
+If you genuinely must execute fork code, do it in a throwaway container with no
+mounted credentials — not in your checkout.
+
+For an **internal** PR from a trusted author, a local worktree is fine:
+
+```bash
+git fetch origin pull/<N>/head:pr<N>-check
+git worktree add /tmp/pr<N> pr<N>-check          # isolated; never dirty the main tree
+cd /tmp/pr<N>/mcp-server && npm ci && npx vitest run
+```
+
+To confirm a new test actually covers the fix, revert only the source files and
+re-run — the new tests must go red:
+
+```bash
+git checkout origin/main -- mcp-server/src/<changed files>
+npx vitest run src/__tests__/<new test file>
+```
+
+Clean up with `git worktree remove --force /tmp/pr<N>` and `git branch -D pr<N>-check`.
+
+Also confirm the premise against upstream when a fix depends on third-party
+behaviour (e.g. Nextcloud/spreed docs for a Talk status code) rather than taking
+the PR's reading of it.
+
+### Fork PRs
+
+Workflow runs from a fork park at `action_required` until a maintainer approves
+them, so `gh pr checks` reports nothing at first:
+
+```bash
+gh api repos/elgorro/aiquila/actions/runs --paginate \
+  --jq '.workflow_runs[] | select(.head_branch=="<branch>" and .conclusion=="action_required") | "\(.id) \(.name)"'
+gh api --method POST repos/elgorro/aiquila/actions/runs/<run_id>/approve
+```
+
+Approving releases the compute, **not** the secrets. GitHub does not pass repository
+secrets or mint an OIDC token for `pull_request` runs from a fork, so fork builds
+never see `CLAUDE_CODE_OAUTH_TOKEN` or anything else. Two consequences:
+
+- Approving a fork run is safe. The runner is ephemeral, `GITHUB_TOKEN` is read-only,
+  and no `pull_request_target` trigger exists in this repo — that is the trigger that
+  *would* expose secrets to fork-controlled code, so keep it that way.
+- **`claude-review` always fails on fork PRs** with `Could not fetch an OIDC token`,
+  even though `id-token: write` is set. This is infrastructure, not a code signal, so
+  do not let the red check block the merge. Run **Manual Code Review** instead
+  (`gh workflow run manual-code-review.yml -f pr=<N>`) — `workflow_dispatch` is
+  restricted to accounts with write access, so no outside contributor can trigger a
+  review of their own PR, and it runs in the base-repo context where credentials
+  exist. It checks out this repo's default branch rather than the PR head and grants
+  no shell tool, so fork code is read as data and never executed.
+
+The residual risk is ordinary: `npm ci` and the test suite execute fork-authored code
+**on the runner** — which is the right place for it. Read the diff before approving,
+and treat any change to `package.json`, lock files or `.github/**` as a reason to look
+much harder.
+
+### Bot PRs
+
+`claude-code-action` rejects non-human actors unless they appear in `allowed_bots`
+(`.github/workflows/claude-code-review.yml`). `dependabot[bot]` is allow-listed; a new
+bot needs adding there or it fails with `Workflow initiated by non-human actor`.
+
+### Assigning an issue to an external contributor
+
+GitHub only accepts assignees who are repo collaborators **or** who have commented on
+that specific issue. A `Fixes #N` on the PR does not count. `gh issue edit --add-assignee`
+exits 0 and silently does nothing when this fails — verify instead of trusting it:
+
+```bash
+gh api repos/elgorro/aiquila/assignees/<user>     # 204 = assignable, 404 = not
+gh issue view <N> --json assignees --jq '.assignees[].login'
+```
+
+Ask them to comment on the issue, or grant **Triage** (assignable, no write access).
+
+### Merging
+
+```bash
+gh pr view <N> --json mergeable,mergeStateStatus,reviewDecision
+gh api repos/elgorro/aiquila/compare/main...<owner>:<repo>:<branch> --jq '{ahead_by,behind_by}'
+```
+
+- `BLOCKED` + `REVIEW_REQUIRED` — needs an approving review; `UNSTABLE` means only a
+  non-required check is red (typically `claude-review` on a fork) and is mergeable.
+- Squash-merge to match history (`fix(mcp): ... (#504)`); squash preserves the
+  contributor as author.
+- Check `behind_by` is 0 before merging.
+
+**Never put a `paths:` filter on the trigger of a workflow whose job is a required
+status check, and never gate such a job with a job-level `if:`.** Either way the job
+does not run, so it never reports, and the PR hangs on
+`Expected — Waiting for status to be reported` with no way to clear it. Let the job
+always run and gate its *steps* instead: `.github/workflows/test.yml` has a `changes`
+job that diffs against the base commit and publishes per-component booleans, and each
+test job gates its steps on those. A workflow change sets every component to true, so
+CI revalidates itself. `.github/workflows/lint.yml` does the same inline.
+
+Required checks are currently `ESLint & Prettier`, `MCP Server Tests` and
+`Nextcloud App Tests`:
+
+```bash
+gh api repos/elgorro/aiquila/branches/main/protection --jq '.required_status_checks.contexts'
+```
+
 ## Version Bumps
 
 All locations that must be updated on each release:

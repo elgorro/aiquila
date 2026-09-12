@@ -17,7 +17,8 @@ Brief description of the changes.
 ## Checklist
 - [ ] I have tested my changes locally
 - [ ] I have added tests for new functionality
-- [ ] I have updated the documentation if needed
+- [ ] I have checked the documentation, and updated it if behaviour changed
+      (kept general — issue-specific detail belongs in the issue, not the docs)
 - [ ] My code follows the project's style guidelines
 
 ## Related Issues

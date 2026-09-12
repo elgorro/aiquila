@@ -6,8 +6,11 @@ AIquila uses GitHub Actions for continuous integration and deployment.
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `test.yml` | Push/PR to main | Run tests |
-| `lint.yml` | Push/PR to main | Code quality checks |
+| `test.yml` | PR to main | Run tests, per component |
+| `lint.yml` | PR to main | ESLint + Prettier on the MCP server |
+| `claude-code-review.yml` | PR to main | Automatic code review (internal PRs and bots) |
+| `manual-code-review.yml` | Manual dispatch | Maintainer-triggered review, for fork PRs |
+| `claude.yml` | `@claude` mention | Respond to a mention on an issue or PR |
 | `mcp-release.yml` | Version change in `mcp-server/` | Auto-release MCP server (GitHub Release + Docker + npm + MCP Registry) |
 | `nc-release.yml` | Version change in `nextcloud-app/` | Auto-release & publish NC app (nightly + stable) |
 | `hetzner-release.yml` | Version change in `hetzner/` | Auto-release Hetzner CLI (GitHub Release + cosign) |
@@ -15,25 +18,48 @@ AIquila uses GitHub Actions for continuous integration and deployment.
 
 ## Test Workflow (`test.yml`)
 
-Runs on every push and pull request to `main`.
+Runs on every pull request to `main`. Three component jobs, each of which only does
+work when its component actually changed.
 
-**MCP Server:**
-- Installs dependencies
-- Type checks with TypeScript
-- Runs Vitest tests
-- Builds the project
+A `changes` job diffs the PR against its base commit and publishes one boolean per
+component; each test job then gates its steps on the relevant one.
 
-**Nextcloud App:**
-- Sets up PHP 8.4
-- Installs Composer dependencies
-- Runs PHPUnit tests
+| Job (status check) | Runs when | Does |
+|---|---|---|
+| `MCP Server Tests` | `mcp-server/**` changed (excluding `*.md`) | `npm ci`, `npm test`, `npm run build` |
+| `Nextcloud App Tests` | `nextcloud-app/**` changed (excluding `*.md`) | Composer install, `composer test`, `composer psalm`, regenerate the OpenAPI spec and fail if it differs |
+| `Hetzner CLI Tests` | `hetzner/**` changed (excluding `*.md`) | `go vet ./...`, `go test ./...` |
+
+Two rules worth knowing:
+
+- **Markdown-only changes under a component do not trigger its tests.**
+- **Any change under `.github/workflows/` sets every component to true**, so CI
+  revalidates itself whenever a workflow is edited.
+
+A docs-only PR reports all three jobs green in seconds without installing anything.
+
+### Why the jobs are not filtered off the trigger
+
+`MCP Server Tests` and `Nextcloud App Tests` are **required status checks**. A
+required job that does not run is never *reported*, and GitHub then blocks the PR
+forever on `Expected — Waiting for status to be reported`. A `paths:` filter on the
+trigger, or a job-level `if:`, both cause this. That is why the jobs always run and
+gate their **steps** instead. Keep that shape when adding a job that becomes required.
+
+List the current required checks with:
+
+```bash
+gh api repos/elgorro/aiquila/branches/main/protection --jq '.required_status_checks.contexts'
+```
 
 ## Lint Workflow (`lint.yml`)
 
-Ensures code quality on every push and PR.
+Runs on every pull request to `main`. The `ESLint & Prettier` job is a required
+status check, so it always runs, and uses the same inline change detection: it lints
+only when a non-Markdown file under `mcp-server/` outside `tests/` changed.
 
 **Checks:**
-- ESLint for TypeScript errors
+- ESLint for TypeScript errors (warnings are allowed, errors fail)
 - Prettier for formatting consistency
 
 **Fix locally before pushing:**
@@ -42,6 +68,56 @@ cd mcp-server
 npm run lint:fix
 npm run format
 ```
+
+## Code Review Workflows
+
+### Automatic (`claude-code-review.yml`)
+
+Runs on every pull request to `main` and posts inline comments.
+
+`claude-code-action` refuses non-human actors unless they are listed in
+`allowed_bots`. `dependabot[bot]` is allow-listed; any other bot needs adding there
+or its PRs fail with `Workflow initiated by non-human actor`. The allow-list
+lowercases and strips a trailing `[bot]`, so either spelling matches.
+
+### Fork pull requests
+
+**The automatic review cannot run on a fork PR.** GitHub does not mint an OIDC token
+for a `pull_request` event from a fork, so the job fails with
+`Could not fetch an OIDC token` no matter what permissions the workflow declares.
+That red check is infrastructure, not a verdict on the code, and should not block a
+merge.
+
+Two other things follow from the same rule, and are worth understanding before
+approving anything:
+
+- A fork's workflow runs park at `action_required` until a maintainer approves them,
+  so no checks appear at first. Approving releases the **compute**, not the secrets —
+  repository secrets are never passed to a fork's `pull_request` run.
+- Never check out a fork branch and build or test it on your own machine. `npm ci`
+  alone executes arbitrary lifecycle scripts with your SSH keys, npm tokens and cloud
+  credentials in reach. Let CI run it, or use a throwaway container.
+
+There is deliberately **no `pull_request_target` trigger** in this repository. That is
+the trigger that *would* hand secrets to fork-controlled code. Keep it that way.
+
+### Manual (`manual-code-review.yml`)
+
+The review path for fork PRs. Triggered by a maintainer:
+
+```bash
+gh workflow run manual-code-review.yml -f pr=504
+```
+
+- `workflow_dispatch` can only be started by an account with **write access**, so an
+  outside contributor cannot trigger a review of their own pull request.
+- It runs in the base-repository context, which is exactly what the `pull_request`
+  event denies a fork — so the credentials are available.
+- **Fork code is never executed.** The job checks out this repository's default
+  branch, *not* the PR head, and Claude is given only the inline-comment tool: no
+  shell, no install, no build, no test run. The diff is read as data.
+- Permissions are `contents: read` plus `pull-requests: write`, so the worst case for
+  a hostile diff attempting prompt injection is an unwanted comment.
 
 ## Automated Release Workflows
 
@@ -269,6 +345,38 @@ Before pushing:
 
 ## Troubleshooting
 
+### A check is stuck on "Expected — Waiting for status to be reported"
+
+The check is **required** in branch protection, but its job never ran, so it never
+reported. Nothing you push will clear it and there is no run to re-run.
+
+The cause is almost always a `paths:` filter on the workflow's trigger, or a
+job-level `if:`, that filtered the job out for this PR. Fix the workflow rather than
+the PR: let the job always run and gate its steps instead — see
+`.github/workflows/test.yml`. Removing the check from branch protection also clears
+it, at the cost of the gate.
+
+### `claude-review` is red on a fork PR
+
+Expected, and not a verdict on the code — a fork gets no OIDC token, so the job
+cannot authenticate. Do not let it block the merge. Run the manual review instead:
+
+```bash
+gh workflow run manual-code-review.yml -f pr=<N>
+```
+
+### A fork PR shows no checks at all
+
+Its workflow runs are parked awaiting maintainer approval:
+
+```bash
+gh api repos/elgorro/aiquila/actions/runs --paginate \
+  --jq '.workflow_runs[] | select(.head_branch=="<branch>" and .conclusion=="action_required") | "\(.id) \(.name)"'
+gh api --method POST repos/elgorro/aiquila/actions/runs/<run_id>/approve
+```
+
+Read the diff before approving — the runner executes the fork's test code.
+
 ### Tests Failing in CI
 
 - Check Node.js version matches (24)
@@ -322,23 +430,40 @@ npm run lint:fix && npm run format
 
 ### Adding New Test Jobs
 
-Edit `.github/workflows/test.yml`:
+Edit `.github/workflows/test.yml`. Add a boolean for the component to the `changes`
+job, then gate the new job's steps on it — do **not** filter the job off the trigger
+or skip it with a job-level `if:`, or it can never become a required check:
 
 ```yaml
 jobs:
-  new-job:
+  changes:
+    outputs:
+      mynewthing: ${{ steps.filter.outputs.mynewthing }}
+    # ... add `mynewthing=$(match '^my-new-thing/')` to the filter step
+
+  my-new-thing:
+    name: My New Thing Tests
     runs-on: ubuntu-latest
+    needs: changes
     steps:
-      - uses: actions/checkout@v4
-      # Add your steps
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.mynewthing == 'true'
+      # ... further steps, each with the same `if:`
+
+      - name: No My New Thing changes
+        if: needs.changes.outputs.mynewthing != 'true'
+        run: echo "Nothing to test." >> "$GITHUB_STEP_SUMMARY"
 ```
+
+The job name is what branch protection matches, so keep it stable once the check is
+required.
 
 ### Changing Node.js Version
 
 Update in all workflows:
 ```yaml
 - name: Setup Node.js
-  uses: actions/setup-node@v4
+  uses: actions/setup-node@v7
   with:
-    node-version: '22'  # Change version here
+    node-version: '24'  # Change version here
 ```

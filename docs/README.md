@@ -55,7 +55,8 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 
 ## Development
 
-- **[Development Guide](dev/development.md)** — contributing and workflow
+- **[Contributing](../CONTRIBUTING.md)** — how to propose a change: claim an issue first, branch and commit conventions, the checks CI runs
+- **[Development Guide](dev/development.md)** — local setup, adding tools and endpoints, debugging
 - **[Docker Setup](dev/docker-setup.md)** — development environment (`docker/installation/`)
 - **[Best Practices](dev/best-practices.md)** — code quality and standards
 - **[CI/CD](dev/ci-cd.md)** — continuous integration and deployment

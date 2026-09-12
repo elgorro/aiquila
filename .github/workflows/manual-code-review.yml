@@ -1,0 +1,63 @@
+name: Manual Code Review
+
+# Maintainer-triggered review, for pull requests the automatic
+# "Claude Code Review" workflow cannot handle — primarily forks, which are
+# never issued an OIDC token on a `pull_request` event and so always fail
+# there.
+#
+# `workflow_dispatch` can only be started by someone with write access to this
+# repository, so an outside contributor cannot trigger a review of their own
+# pull request. The run happens in the base-repository context, which is what
+# makes the credentials available.
+#
+# Fork code is never executed here: the job checks out this repository's
+# default branch (trusted) rather than the pull request head, and Claude is
+# given only the inline-comment tool — no shell, no install, no build, no test
+# run. The diff is read as data.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Pull request number to review (e.g. 504)'
+        required: true
+        type: string
+
+jobs:
+  manual-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+
+    steps:
+      # Deliberately checks out this repository's default branch, NOT the pull
+      # request head. Nothing from the fork reaches the runner's filesystem.
+      - name: Checkout base repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Show what is being reviewed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+        run: |
+          gh pr view "$PR" --repo "$GITHUB_REPOSITORY" \
+            --json number,title,author,isCrossRepository,headRepository,additions,deletions,files \
+            --jq '"PR #\(.number): \(.title)
+          author: \(.author.login)  fork: \(.isCrossRepository)
+          churn: +\(.additions)/-\(.deletions) across \(.files | length) files"'
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
+          plugins: 'code-review@claude-code-plugins'
+          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ inputs.pr }}'
+          # No Bash and no file-writing tools: the diff is untrusted input and
+          # must be read, never run.
+          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
