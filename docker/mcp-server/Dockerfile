@@ -1,5 +1,5 @@
 # Stage 1: Build TypeScript
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Production image
-FROM node:24-alpine AS runner
+FROM node:26-alpine AS runner
 LABEL io.modelcontextprotocol.server.name="io.github.elgorro/aiquila-mcp"
 WORKDIR /app
 ENV NODE_ENV=production
