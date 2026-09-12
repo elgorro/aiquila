@@ -23,7 +23,7 @@ A monorepo with two independently versioned components:
 | Path | What it is |
 |------|------------|
 | `mcp-server/` | TypeScript/Node.js MCP server (npm package `aiquila-mcp`) |
-| `nextcloud-app/` | PHP 8.4 Nextcloud app |
+| `nextcloud-app/` | Nextcloud app — PHP 8.5, floor 8.4 |
 | `hetzner/` | Go CLI (`aiquila-hetzner`) for provisioning |
 | `docs/` | Documentation |
 | `docker/` | Dev (`installation/`) and prod (`standalone/`) environments |
