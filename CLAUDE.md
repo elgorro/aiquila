@@ -109,6 +109,93 @@ To auto-close the issue a PR resolves, put a **closing keyword** in the PR descr
 `Closes #184` (or `Fixes #184` / `Resolves #184`). A bare mention like `(#184)` or
 `Implements GH #184` links the issue but does **not** close it on merge.
 
+## Reviewing pull requests
+
+Contributor-facing rules live in `CONTRIBUTING.md`. This section is the maintainer
+side: how to get a PR verified and merged, and which red checks are real.
+
+### Verify claims, don't trust the description
+
+A PR that says "tests pass" and "these tests are load-bearing" is a claim. Check it:
+
+```bash
+git fetch origin pull/<N>/head:pr<N>-check
+git worktree add /tmp/pr<N> pr<N>-check          # isolated; never dirty the main tree
+cd /tmp/pr<N>/mcp-server && npm ci && npx vitest run
+```
+
+To confirm a new test actually covers the fix, revert only the source files and
+re-run — the new tests must go red:
+
+```bash
+git checkout origin/main -- mcp-server/src/<changed files>
+npx vitest run src/__tests__/<new test file>
+```
+
+Clean up with `git worktree remove --force /tmp/pr<N>` and `git branch -D pr<N>-check`.
+
+Also confirm the premise against upstream when a fix depends on third-party
+behaviour (e.g. Nextcloud/spreed docs for a Talk status code) rather than taking
+the PR's reading of it.
+
+### Fork PRs
+
+Workflow runs from a fork park at `action_required` until a maintainer approves
+them, so `gh pr checks` reports nothing at first:
+
+```bash
+gh api repos/elgorro/aiquila/actions/runs --paginate \
+  --jq '.workflow_runs[] | select(.head_branch=="<branch>" and .conclusion=="action_required") | "\(.id) \(.name)"'
+gh api --method POST repos/elgorro/aiquila/actions/runs/<run_id>/approve
+```
+
+Approving releases the compute, **not** the secrets. GitHub does not pass repository
+secrets or mint an OIDC token for `pull_request` runs from a fork, so fork builds
+never see `CLAUDE_CODE_OAUTH_TOKEN` or anything else. Two consequences:
+
+- Approving a fork run is safe. The runner is ephemeral, `GITHUB_TOKEN` is read-only,
+  and no `pull_request_target` trigger exists in this repo — that is the trigger that
+  *would* expose secrets to fork-controlled code, so keep it that way.
+- **`claude-review` always fails on fork PRs** with `Could not fetch an OIDC token`,
+  even though `id-token: write` is set. This is infrastructure, not a code signal —
+  review those by hand and do not let the red check block the merge.
+
+The residual risk is ordinary: `npm ci` and the test suite execute fork-authored code
+on the runner. Read the diff before approving, and treat any change to
+`package.json`, lock files or `.github/**` as a reason to look much harder.
+
+### Bot PRs
+
+`claude-code-action` rejects non-human actors unless they appear in `allowed_bots`
+(`.github/workflows/claude-code-review.yml`). `dependabot[bot]` is allow-listed; a new
+bot needs adding there or it fails with `Workflow initiated by non-human actor`.
+
+### Assigning an issue to an external contributor
+
+GitHub only accepts assignees who are repo collaborators **or** who have commented on
+that specific issue. A `Fixes #N` on the PR does not count. `gh issue edit --add-assignee`
+exits 0 and silently does nothing when this fails — verify instead of trusting it:
+
+```bash
+gh api repos/elgorro/aiquila/assignees/<user>     # 204 = assignable, 404 = not
+gh issue view <N> --json assignees --jq '.assignees[].login'
+```
+
+Ask them to comment on the issue, or grant **Triage** (assignable, no write access).
+
+### Merging
+
+```bash
+gh pr view <N> --json mergeable,mergeStateStatus,reviewDecision
+gh api repos/elgorro/aiquila/compare/main...<owner>:<repo>:<branch> --jq '{ahead_by,behind_by}'
+```
+
+- `BLOCKED` + `REVIEW_REQUIRED` — needs an approving review; `UNSTABLE` means only a
+  non-required check is red (typically `claude-review` on a fork) and is mergeable.
+- Squash-merge to match history (`fix(mcp): ... (#504)`); squash preserves the
+  contributor as author.
+- Check `behind_by` is 0 before merging.
+
 ## Version Bumps
 
 All locations that must be updated on each release:
