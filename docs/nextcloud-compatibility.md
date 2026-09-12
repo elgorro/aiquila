@@ -51,8 +51,13 @@ Nextcloud 34 boots on PHP 8.2 through 8.5 — `lib/versioncheck.php` refuses any
 8.2 or at 8.6 and above. AIquila declares a higher floor than that on purpose:
 
 ```xml
-<php min-version="8.4"/>
+<php min-version="8.4" max-version="8.5"/>
 ```
+
+`max-version` is what Nextcloud's own app upgrade guide recommends declaring, and it
+matters here for the same reason it does on the Nextcloud dependency: Nextcloud 34
+refuses to boot on PHP 8.6 or above, so an app that declares no ceiling advertises
+itself as installable on a runtime the server will not start.
 
 The floor stays at 8.4 so an instance that has not yet moved to 8.5 keeps working, while
 development and CI track the version the shipped image actually runs. As with the Nextcloud
