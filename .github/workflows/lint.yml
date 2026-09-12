@@ -18,7 +18,7 @@ jobs:
         working-directory: mcp-server
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # Needed to diff against the base commit.
           fetch-depth: 0
