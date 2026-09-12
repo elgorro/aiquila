@@ -5,7 +5,7 @@ The AIquila Nextcloud app exports usage and task-processing metrics in the
 token spend and system health with Prometheus and Grafana.
 
 The metrics are served through Nextcloud's built-in `/metrics` endpoint
-(**Nextcloud 33+**). AIquila registers its exporters via `appinfo/info.xml`; no extra
+(**Nextcloud 34**). AIquila registers its exporters via `appinfo/info.xml`; no extra
 configuration is required once the app is installed.
 
 ## Exported metrics

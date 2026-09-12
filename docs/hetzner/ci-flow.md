@@ -114,9 +114,9 @@ mid-run. This prevents runaway billing from forgotten servers.
 
 **Motivation:** NC releases patch versions frequently. A nightly infrastructure build verifies:
 
-- The PHP 8.4 Dockerfile upgrade still compiles cleanly with the latest NC33 patch image
+- The PHP 8.4 Dockerfile upgrade still compiles cleanly with the latest Nextcloud patch image
 - The AIquila app installs and enables without errors (`occ app:enable aiquila`)
-- The NC33 `metrics` app enables and its `/metrics?token=` endpoint responds
+- The built-in `metrics` app enables and its `/metrics?token=` endpoint responds
 - No regressions in the NC → MCP integration path
 
 **Proposed workflow: `.github/workflows/hetzner-nc-nightly.yml`**
