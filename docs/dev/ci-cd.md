@@ -103,6 +103,11 @@ Two things follow from this:
 
 Runs on every pull request to `main` and posts inline comments.
 
+Permissions are `contents: read` plus `pull-requests: write`. The write scope is what
+lets the review post its comments — with `pull-requests: read` the job still succeeds
+and still runs Claude, but every finding is silently dropped, which looks exactly like
+a clean review.
+
 `claude-code-action` refuses non-human actors unless they are listed in
 `allowed_bots`. `dependabot[bot]` is allow-listed; any other bot needs adding there
 or its PRs fail with `Workflow initiated by non-human actor`. The allow-list
@@ -407,7 +412,7 @@ Read the diff before approving — the runner executes the fork's test code.
 
 ### Tests Failing in CI
 
-- Check Node.js version matches (24)
+- Check Node.js version matches (26)
 - Check PHP version matches (8.5)
 - Run tests locally to reproduce
 
@@ -493,5 +498,5 @@ Update in all workflows:
 - name: Setup Node.js
   uses: actions/setup-node@v7
   with:
-    node-version: '24'  # Change version here
+    node-version: '26'  # Change version here
 ```

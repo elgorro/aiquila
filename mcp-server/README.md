@@ -98,7 +98,7 @@ See the [Docker setup guide](https://github.com/elgorro/aiquila/blob/main/docs/m
 
 ## Requirements
 
-- Node.js 24+
+- Node.js 26+
 - A Nextcloud instance with an App Password
 
 Optional Nextcloud apps unlock additional tool categories: Tasks, Calendar, Contacts, Notes, Cookbook, Deck, Bookmarks, Mail, Maps, Photos, Talk, Circles, and more.

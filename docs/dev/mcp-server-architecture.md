@@ -11,7 +11,7 @@ The MCP server is a TypeScript/Node.js implementation of the [Model Context Prot
 
 ## Technology Stack
 
-- **Runtime**: Node.js 24+
+- **Runtime**: Node.js 26+
 - **Language**: TypeScript 5.8+ (strict mode)
 - **Protocol**: Model Context Protocol via [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) ^1.x
 - **Transport**: `StdioServerTransport` or `StreamableHTTPServerTransport`
