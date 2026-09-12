@@ -109,6 +109,35 @@ To auto-close the issue a PR resolves, put a **closing keyword** in the PR descr
 `Closes #184` (or `Fixes #184` / `Resolves #184`). A bare mention like `(#184)` or
 `Implements GH #184` links the issue but does **not** close it on merge.
 
+### Documentation is part of the change
+
+**Checking the docs is mandatory on every change; updating them is mandatory when
+behaviour changed.** A PR that alters a command, flag, env var, endpoint, workflow or
+default and leaves `docs/` describing the old behaviour is incomplete. Do the doc edit
+in the same PR — not a follow-up.
+
+Where things live:
+
+| Changed | Update |
+|---|---|
+| Workflows, CI behaviour | `docs/dev/ci-cd.md` |
+| MCP tools | `docs/mcp/tools/**`, and the tool table in `docs/mcp/README.md` |
+| Env vars, transports, auth | `docs/mcp/setup.md`, the table in this file |
+| Nextcloud endpoints | `docs/dev/openapi.md`, plus regenerating the spec |
+| Install or deploy steps | `docs/installation/**`, `docs/hetzner/**` |
+| How to propose a change | `CONTRIBUTING.md` |
+
+**Keep the docs general.** They describe how the project works *now*, durably. They are
+not a changelog or an incident log. Keep out:
+
+- issue and PR numbers, and "fixed in #504" narrative
+- dated workarounds, "currently broken" notes, migration chatter for a single release
+- anything that stops being true once a ticket closes
+
+That material belongs in the GitHub issue or discussion — link to it rather than
+inlining it. If a fact needs a date or a ticket number to make sense, it is probably
+not documentation. One fact, one home: link between pages instead of restating.
+
 ## Reviewing pull requests
 
 Contributor-facing rules live in `CONTRIBUTING.md`. This section is the maintainer

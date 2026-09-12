@@ -86,6 +86,30 @@ spec (CI fails on a mismatch):
 cd nextcloud-app && vendor/bin/generate-spec
 ```
 
+## Documentation
+
+**Checking the documentation is part of every change, not an optional extra.**
+
+If your change alters a command, flag, environment variable, endpoint, default or
+workflow, update the page that describes it in the same pull request. A change that
+leaves `docs/` describing the old behaviour is not finished. If nothing needs
+changing, say so in the pull request — that tells a reviewer you looked.
+
+Not sure which page? Ask in the issue and we will point you at it.
+
+**Keep documentation general.** The docs describe how AIquila works now, for someone
+reading them a year from now. They are not a changelog or a record of what went
+wrong. Please leave out:
+
+- issue or pull request numbers, and "fixed in #504" style narrative
+- dated workarounds, "currently broken" notes, or migration detail for one release
+- anything that stops being true once the ticket closes
+
+That context is valuable — it just belongs in the GitHub issue or a
+[discussion](https://github.com/elgorro/aiquila/discussions), which is where people
+will look for it. Link to the issue from the docs if it genuinely helps, rather than
+copying its contents in.
+
 ## Pull requests
 
 Fill in the pull request template, and put a **closing keyword** in the
