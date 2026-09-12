@@ -88,12 +88,10 @@ class BatchTestableService extends ClaudeSDKService {
 
         foreach (['content' => [$textObj], 'stopReason' => 'end_turn'] as $prop => $val) {
             $p = $ref->getProperty($prop);
-            $p->setAccessible(true);
             $p->setValue($msg, $val);
         }
         $usage = Usage::with(null, null, null, null, 5, 7, null, null, null);
         $up = $ref->getProperty('usage');
-        $up->setAccessible(true);
         $up->setValue($msg, $usage);
 
         return MessageBatchIndividualResponse::with(

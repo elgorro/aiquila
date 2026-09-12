@@ -49,7 +49,6 @@ class CapabilityTestableService extends ClaudeSDKService {
 
         foreach (['content' => [$textObj], 'stopReason' => 'end_turn'] as $prop => $val) {
             $p = $ref->getProperty($prop);
-            $p->setAccessible(true);
             $p->setValue($stub, $val);
         }
         $usage = \Anthropic\Messages\Usage::with(null, null, null, null, 10, 20, null, null, null);
@@ -499,10 +498,8 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         // needs full HTTP Request/Response objects which are awkward to mock.
         $e = (new \ReflectionClass(RateLimitException::class))->newInstanceWithoutConstructor();
         $typeProp = new \ReflectionProperty(\Anthropic\Core\Exceptions\APIStatusException::class, 'type');
-        $typeProp->setAccessible(true);
         $typeProp->setValue($e, ErrorType::RATE_LIMIT_ERROR);
         $msgProp = new \ReflectionProperty(\Exception::class, 'message');
-        $msgProp->setAccessible(true);
         $msgProp->setValue($e, 'rate limited');
 
         $capturedCtx = null;
@@ -564,7 +561,6 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                 $textObj->text = '';
                 foreach (['content' => [$textObj], 'stopReason' => 'refusal', 'stopDetails' => $this->refusal] as $prop => $val) {
                     $p = $ref->getProperty($prop);
-                    $p->setAccessible(true);
                     $p->setValue($stub, $val);
                 }
                 $usage = \Anthropic\Messages\Usage::with(null, null, null, null, 10, 5, null, null, null);
@@ -610,7 +606,6 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                 $textObj->text = 'response';
                 foreach (['content' => [$textObj], 'stopReason' => 'end_turn'] as $prop => $val) {
                     $p = $ref->getProperty($prop);
-                    $p->setAccessible(true);
                     $p->setValue($stub, $val);
                 }
                 $usage = \Anthropic\Messages\Usage::with(null, 50, 200, 'us', 100, 30, null, null, 'standard');
