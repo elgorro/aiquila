@@ -226,11 +226,16 @@ gh api repos/elgorro/aiquila/compare/main...<owner>:<repo>:<branch> --jq '{ahead
 - Check `behind_by` is 0 before merging.
 
 **Never put a `paths:` filter on the trigger of a workflow whose job is a required
-status check.** A filtered-out job never runs, so it never reports, and the PR hangs
-on `Expected — Waiting for status to be reported` with no way to clear it. Let the
-job always run and decide internally whether there is work to do — see the change
-detection in `.github/workflows/lint.yml`. Required checks are currently
-`ESLint & Prettier`, `MCP Server Tests` and `Nextcloud App Tests`:
+status check, and never gate such a job with a job-level `if:`.** Either way the job
+does not run, so it never reports, and the PR hangs on
+`Expected — Waiting for status to be reported` with no way to clear it. Let the job
+always run and gate its *steps* instead: `.github/workflows/test.yml` has a `changes`
+job that diffs against the base commit and publishes per-component booleans, and each
+test job gates its steps on those. A workflow change sets every component to true, so
+CI revalidates itself. `.github/workflows/lint.yml` does the same inline.
+
+Required checks are currently `ESLint & Prettier`, `MCP Server Tests` and
+`Nextcloud App Tests`:
 
 ```bash
 gh api repos/elgorro/aiquila/branches/main/protection --jq '.required_status_checks.contexts'

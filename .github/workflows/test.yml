@@ -1,21 +1,84 @@
 name: Tests
 
+# "MCP Server Tests" and "Nextcloud App Tests" are required status checks, so
+# their jobs must always run and report — a `paths:` filter on the trigger, or a
+# job-level `if:`, would leave them unreported and hang the PR. Instead every job
+# runs, and gates its steps on the `changes` job below. A PR that touches only
+# docs reports all three green in seconds without installing anything.
 on:
   pull_request:
     branches: [main]
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      mcp: ${{ steps.filter.outputs.mcp }}
+      nextcloud: ${{ steps.filter.outputs.nextcloud }}
+      hetzner: ${{ steps.filter.outputs.hetzner }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Needed to diff against the base commit.
+          fetch-depth: 0
+
+      - name: Work out which components changed
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          files=$(git diff --name-only "$BASE_SHA" HEAD)
+
+          # A change to the workflows themselves revalidates every component.
+          all=false
+          if printf '%s\n' "$files" | grep -qE '^\.github/workflows/'; then
+            all=true
+            echo "Workflow change detected — running every component." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Markdown-only changes under a component do not warrant a test run.
+          match() {
+            if [ "$all" = true ]; then echo true; return; fi
+            if printf '%s\n' "$files" \
+              | { grep -E "$1" || true; } \
+              | { grep -vE '\.md$' || true; } \
+              | grep -q .; then echo true; else echo false; fi
+          }
+
+          mcp=$(match '^mcp-server/')
+          nextcloud=$(match '^nextcloud-app/')
+          hetzner=$(match '^hetzner/')
+
+          {
+            echo "mcp=$mcp"
+            echo "nextcloud=$nextcloud"
+            echo "hetzner=$hetzner"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "| Component | Tests run |"
+            echo "|---|---|"
+            echo "| MCP server | $mcp |"
+            echo "| Nextcloud app | $nextcloud |"
+            echo "| Hetzner CLI | $hetzner |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   mcp-server:
     name: MCP Server Tests
     runs-on: ubuntu-latest
+    needs: changes
     defaults:
       run:
         working-directory: mcp-server
 
     steps:
       - uses: actions/checkout@v5
+        if: needs.changes.outputs.mcp == 'true'
 
       - name: Setup Node.js
+        if: needs.changes.outputs.mcp == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -23,67 +86,98 @@ jobs:
           cache-dependency-path: mcp-server/package-lock.json
 
       - name: Install dependencies
+        if: needs.changes.outputs.mcp == 'true'
         run: npm ci
 
       - name: Run tests
+        if: needs.changes.outputs.mcp == 'true'
         run: npm test
 
       - name: Build
+        if: needs.changes.outputs.mcp == 'true'
         run: npm run build
+
+      - name: No MCP server changes
+        if: needs.changes.outputs.mcp != 'true'
+        working-directory: ${{ github.workspace }}
+        run: echo "No MCP server changes — nothing to test." >> "$GITHUB_STEP_SUMMARY"
 
   nextcloud-app:
     name: Nextcloud App Tests
     runs-on: ubuntu-latest
+    needs: changes
     defaults:
       run:
         working-directory: nextcloud-app
 
     steps:
       - uses: actions/checkout@v5
+        if: needs.changes.outputs.nextcloud == 'true'
 
       - name: Setup PHP
+        if: needs.changes.outputs.nextcloud == 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
           tools: composer
 
       - name: Install dependencies
+        if: needs.changes.outputs.nextcloud == 'true'
         run: composer install --no-progress --prefer-dist
 
       - name: Run tests
+        if: needs.changes.outputs.nextcloud == 'true'
         run: composer test
 
       - name: Static analysis (psalm)
+        if: needs.changes.outputs.nextcloud == 'true'
         run: composer psalm
 
       - name: Generate OpenAPI spec
+        if: needs.changes.outputs.nextcloud == 'true'
         run: vendor/bin/generate-spec
 
       - name: Check OpenAPI spec is up to date
+        if: needs.changes.outputs.nextcloud == 'true'
         run: |
           git diff --exit-code openapi.json openapi-administration.json openapi-full.json || {
             echo "::error::OpenAPI spec is out of date. Run 'make openapi' and commit the result."
             exit 1
           }
 
+      - name: No Nextcloud app changes
+        if: needs.changes.outputs.nextcloud != 'true'
+        working-directory: ${{ github.workspace }}
+        run: echo "No Nextcloud app changes — nothing to test." >> "$GITHUB_STEP_SUMMARY"
+
   hetzner-cli:
     name: Hetzner CLI Tests
     runs-on: ubuntu-latest
+    needs: changes
     defaults:
       run:
         working-directory: hetzner
 
     steps:
       - uses: actions/checkout@v5
+        if: needs.changes.outputs.hetzner == 'true'
 
       - name: Setup Go
+        if: needs.changes.outputs.hetzner == 'true'
         uses: actions/setup-go@v6
         with:
           go-version-file: hetzner/go.mod
           cache-dependency-path: hetzner/go.sum
 
       - name: Vet
+        if: needs.changes.outputs.hetzner == 'true'
         run: go vet ./...
 
       - name: Run tests
+        if: needs.changes.outputs.hetzner == 'true'
         run: go test ./...
+
+      - name: No Hetzner CLI changes
+        if: needs.changes.outputs.hetzner != 'true'
+        working-directory: ${{ github.workspace }}
+        run: echo "No Hetzner CLI changes — nothing to test." >> "$GITHUB_STEP_SUMMARY"
