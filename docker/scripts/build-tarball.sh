@@ -40,7 +40,7 @@ docker run --rm \
     -e HOST_UID="$(id -u)" \
     -e HOST_GID="$(id -g)" \
     -w / \
-    node:24 \
+    node:26 \
     bash -c '
         set -euo pipefail
 

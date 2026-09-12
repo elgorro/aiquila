@@ -407,7 +407,7 @@ Read the diff before approving — the runner executes the fork's test code.
 
 ### Tests Failing in CI
 
-- Check Node.js version matches (24)
+- Check Node.js version matches (26)
 - Check PHP version matches (8.4)
 - Run tests locally to reproduce
 
@@ -493,5 +493,5 @@ Update in all workflows:
 - name: Setup Node.js
   uses: actions/setup-node@v7
   with:
-    node-version: '24'  # Change version here
+    node-version: '26'  # Change version here
 ```

@@ -54,7 +54,7 @@
 ### MCP Server
 
 - Build for production: `npm run build`
-- Use Node.js 20+ for better performance
+- Use Node.js 26+ for better performance
 - Consider caching for frequently accessed data
 - Monitor WebDAV connection health
 
