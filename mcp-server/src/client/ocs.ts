@@ -29,6 +29,13 @@ interface OcsRequestOptions {
   /** JSON body (for newer TaskProcessing and text2image endpoints) */
   jsonBody?: unknown;
   queryParams?: Record<string, string | string[]>;
+  /**
+   * Resolve with `null` instead of throwing when the server answers
+   * `304 Not Modified`. Opt-in, for endpoints that document 304 as a normal
+   * "nothing to return" answer (Talk's chat endpoint). Every other caller
+   * keeps the previous behaviour and still gets an error on 304.
+   */
+  allowNotModified?: boolean;
 }
 
 /**
@@ -39,8 +46,16 @@ interface OcsRequestOptions {
  */
 export async function fetchOCS<T = unknown>(
   path: string,
+  options?: OcsRequestOptions & { allowNotModified?: false }
+): Promise<OcsResponse<T>>;
+export async function fetchOCS<T = unknown>(
+  path: string,
+  options: OcsRequestOptions & { allowNotModified: true }
+): Promise<OcsResponse<T> | null>;
+export async function fetchOCS<T = unknown>(
+  path: string,
   options: OcsRequestOptions = {}
-): Promise<OcsResponse<T>> {
+): Promise<OcsResponse<T> | null> {
   const config = getNextcloudConfig();
   const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
 
@@ -84,6 +99,10 @@ export async function fetchOCS<T = unknown>(
   );
 
   if (!response.ok) {
+    if (response.status === 304 && options.allowNotModified) {
+      // 304 carries an empty body; the caller asked to read it as "no data".
+      return null;
+    }
     if (response.status === 403) {
       throw new Error(
         'Permission denied. This operation requires admin or sub-admin privileges. ' +
