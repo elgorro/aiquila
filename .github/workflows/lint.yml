@@ -1,12 +1,13 @@
 name: Lint
 
+# No `paths:` filter on the trigger. "ESLint & Prettier" is a required status
+# check, and a required check that never runs is never reported — GitHub then
+# blocks the PR forever on "Expected — Waiting for status to be reported".
+# So the job always runs, and decides internally whether there is anything to
+# lint. A PR that touches no MCP server code reports green in a few seconds.
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'mcp-server/**'
-      - '!mcp-server/**/*.md'
-      - '!mcp-server/**/tests/**'
 
 jobs:
   eslint:
@@ -18,8 +19,36 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Needed to diff against the base commit.
+          fetch-depth: 0
+
+      # Mirrors the path filter this workflow used to carry on its trigger:
+      # mcp-server/**, excluding Markdown and tests/.
+      - name: Detect MCP server changes
+        id: filter
+        working-directory: ${{ github.workspace }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE_SHA" HEAD \
+            | { grep -E '^mcp-server/' || true; } \
+            | { grep -vE '\.md$' || true; } \
+            | { grep -vE '/tests/' || true; })
+
+          if [ -n "$changed" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Linting. Changed MCP server files:" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$changed" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No MCP server changes — nothing to lint." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Setup Node.js
+        if: steps.filter.outputs.changed == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -27,10 +56,13 @@ jobs:
           cache-dependency-path: mcp-server/package-lock.json
 
       - name: Install dependencies
+        if: steps.filter.outputs.changed == 'true'
         run: npm ci
 
       - name: Run ESLint
+        if: steps.filter.outputs.changed == 'true'
         run: npm run lint
 
       - name: Check Prettier formatting
+        if: steps.filter.outputs.changed == 'true'
         run: npx prettier --check src/
