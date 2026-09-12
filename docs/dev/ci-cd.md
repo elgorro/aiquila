@@ -69,6 +69,34 @@ npm run lint:fix
 npm run format
 ```
 
+## Dependency Updates (`.github/dependabot.yml`)
+
+Dependabot runs weekly across every ecosystem in the repo:
+
+| Ecosystem | Directory | Commit prefix |
+|---|---|---|
+| npm | `/mcp-server` | `chore(mcp)` |
+| npm | `/nextcloud-app` | `chore(nextcloud)` |
+| composer | `/nextcloud-app` | `chore(nextcloud)` |
+| gomod | `/hetzner` | `chore(hetzner)` |
+| docker | each `docker/` and `hetzner/docker/` stack | `chore` |
+| github-actions | `/` | `chore` |
+
+Minor and patch updates are grouped into a single PR per ecosystem; majors
+arrive as individual PRs so they can be evaluated on their own. Each ecosystem
+is capped at 5 open PRs.
+
+Two things follow from this:
+
+- **Pin third-party images to a tag.** Dependabot cannot propose an update for
+  a service pinned to `:latest`, so an unpinned image is silently excluded from
+  dependency tracking. First-party images (`aiquila-mcp`, `aiquila-nextcloud`)
+  are the deliberate exception.
+- **Transitive vulnerabilities usually need a lockfile refresh, not a bump.**
+  Direct dependencies tend to declare their own dependencies as ranges, so the
+  fix is often `npm audit fix` plus committing the lockfile. Check the alert's
+  dependency path before assuming a direct dependency is at fault.
+
 ## Code Review Workflows
 
 ### Automatic (`claude-code-review.yml`)
