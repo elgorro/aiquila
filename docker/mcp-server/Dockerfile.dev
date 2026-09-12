@@ -1,4 +1,4 @@
-FROM node:24-alpine
+FROM node:26-alpine
 
 # Install development dependencies
 # poppler-utils provides pdftotext, used by mail_get_attachment for PDF text extraction
