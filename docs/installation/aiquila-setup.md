@@ -68,7 +68,7 @@ php occ aiquila:configure --model claude-sonnet-4-6
 
 - Nextcloud 34 — see [Nextcloud compatibility](../nextcloud-compatibility.md) for the supported version window
 - PHP 8.4 or higher with Composer
-- Node.js 20 or higher (for building frontend)
+- Node.js 26 or higher (for building frontend)
 - npm 10 or higher
 - Claude API key from [console.anthropic.com](https://console.anthropic.com)
 

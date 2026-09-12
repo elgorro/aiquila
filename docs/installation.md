@@ -6,7 +6,7 @@ Choose the path that matches how you want to use AIquila.
 
 Give any MCP client (Claude Desktop, Claude Code, Cursor, VS Code, etc.) direct access to your Nextcloud — files, calendar, tasks, contacts, mail, bookmarks, maps, notes, recipes, and more.
 
-**Prerequisites:** Node.js 20+, a Nextcloud instance, a Nextcloud app password.
+**Prerequisites:** Node.js 26+, a Nextcloud instance, a Nextcloud app password.
 
 ```bash
 # 1. Run with npx (no clone needed)
