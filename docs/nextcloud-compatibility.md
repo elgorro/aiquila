@@ -37,6 +37,28 @@ on purpose, for the two reasons above.
 **Being inside the window is not a support promise.** It means the app will install and
 we have no reason to expect breakage — not that the combination is exercised.
 
+## PHP
+
+The same shape applies to PHP, for the same reason.
+
+| PHP | Status | What this means |
+|---|---|---|
+| **8.5** | **Supported** | What CI runs, what the `nextcloud:34-apache` image ships, and what the development stack installs. |
+| 8.4 | Permitted, untested | The declared floor in `appinfo/info.xml` and `composer.json`. Installs and is expected to work; no targeted testing. |
+| ≤ 8.3 | Unsupported | Below the declared floor, even though Nextcloud 34 itself runs on 8.2+. |
+
+Nextcloud 34 boots on PHP 8.2 through 8.5 — `lib/versioncheck.php` refuses anything below
+8.2 or at 8.6 and above. AIquila declares a higher floor than that on purpose:
+
+```xml
+<php min-version="8.4"/>
+```
+
+The floor stays at 8.4 so an instance that has not yet moved to 8.5 keeps working, while
+development and CI track the version the shipped image actually runs. As with the Nextcloud
+window, being above the floor means the app will install and we have no reason to expect
+breakage — not that the combination is exercised.
+
 ## How the window moves
 
 When a new Nextcloud major is released, all of the following move forward together:

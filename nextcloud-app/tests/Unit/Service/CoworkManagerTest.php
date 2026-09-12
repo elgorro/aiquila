@@ -51,7 +51,6 @@ class CoworkManagerTest extends TestCase {
         $cw->setLastStatus('success');
         // id is protected on the mock Entity; set via reflection for assertions.
         $ref = new \ReflectionProperty($cw, 'id');
-        $ref->setAccessible(true);
         $ref->setValue($cw, $id);
         return $cw;
     }

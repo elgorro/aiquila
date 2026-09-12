@@ -19,10 +19,12 @@ class ChatControllerTest extends TestCase {
     private $cache;
     private $cacheFactory;
     private $claude;
+    private $factory;
     private $fileService;
     private $filesService;
     private $imageOptimizer;
     private $mcpClient;
+    private $nativeMcp;
     private $request;
     private $logger;
     private ChatController $ctrl;

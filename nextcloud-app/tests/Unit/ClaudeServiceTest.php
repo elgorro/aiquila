@@ -150,7 +150,6 @@ class TestableClaudeSDKService extends ClaudeSDKService {
 
         foreach (['content' => $contentItems, 'stopReason' => 'end_turn'] as $prop => $val) {
             $p = $ref->getProperty($prop);
-            $p->setAccessible(true);
             $p->setValue($stub, $val);
         }
         $usage = Usage::with(null, null, null, null, 10, 20, null, null, null);

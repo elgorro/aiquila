@@ -413,7 +413,7 @@ Read the diff before approving — the runner executes the fork's test code.
 ### Tests Failing in CI
 
 - Check Node.js version matches (26)
-- Check PHP version matches (8.4)
+- Check PHP version matches (8.5)
 - Run tests locally to reproduce
 
 ### Lint Errors

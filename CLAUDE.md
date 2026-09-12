@@ -4,7 +4,7 @@
 
 Monorepo with two independently versioned components:
 - **`mcp-server/`** — TypeScript/Node.js MCP server (npm package: `aiquila-mcp`, admin account: `aiquila` on npmjs.com; versioned in `package.json`)
-- **`nextcloud-app/`** — PHP 8.4 Nextcloud app (Composer, versioned in `appinfo/info.xml`)
+- **`nextcloud-app/`** — PHP Nextcloud app (Composer, versioned in `appinfo/info.xml`). Developed and tested on PHP 8.5; the declared floor is 8.4
 
 Docs live in `docs/`. Docker environments in `docker/` (dev: `installation/`, prod: `standalone/`).
 

@@ -114,7 +114,7 @@ mid-run. This prevents runaway billing from forgotten servers.
 
 **Motivation:** NC releases patch versions frequently. A nightly infrastructure build verifies:
 
-- The PHP 8.4 Dockerfile upgrade still compiles cleanly with the latest Nextcloud patch image
+- The Dockerfile still compiles cleanly against the latest Nextcloud patch image
 - The AIquila app installs and enables without errors (`occ app:enable aiquila`)
 - The built-in `metrics` app enables and its `/metrics?token=` endpoint responds
 - No regressions in the NC → MCP integration path

@@ -118,7 +118,7 @@ jobs:
         if: needs.changes.outputs.nextcloud == 'true'
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           tools: composer
 
       - name: Install dependencies
