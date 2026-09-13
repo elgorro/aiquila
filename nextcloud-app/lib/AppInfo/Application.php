@@ -73,6 +73,13 @@ class Application extends App implements IBootstrap {
         $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\SimplificationProvider::class);
         $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ReformulationProvider::class);
         $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\FormalizationProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ChatProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ContextWriteProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\GenerateEmojiProvider::class);
+
+        // Nextcloud 34+ only; on 33 the task type is not registered and this
+        // provider is never offered.
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ReformatParagraphsProvider::class);
 
         // Register notification formatter for AIquila task notifications
         $context->registerNotifierService(\OCA\AIquila\Notifier\AIquilaNotifier::class);
