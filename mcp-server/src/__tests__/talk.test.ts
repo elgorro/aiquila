@@ -211,6 +211,16 @@ describe('Talk Tools', () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Error listing messages');
     });
+
+    it('does not advance the read marker', async () => {
+      mockOCS([]);
+
+      const { listMessagesTool } = await import('../tools/apps/talk.js');
+      await listMessagesTool.handler({ token: 'abc123' });
+
+      const [url] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(new URL(String(url)).searchParams.get('setReadMarker')).toBe('0');
+    });
   });
 
   // ── send_message ────────────────────────────────────────────────────
