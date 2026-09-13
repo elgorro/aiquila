@@ -6,9 +6,11 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\ImageOptimizer;
+use OCP\Files\File;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\ShapeDescriptor;
+use OCP\TaskProcessing\TaskTypes\AnalyzeImages;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -39,7 +41,7 @@ class AnalyzeImagesProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return 'core:analyze-images';
+        return AnalyzeImages::ID;
     }
 
     public function getExpectedRuntime(): int {
@@ -90,6 +92,8 @@ class AnalyzeImagesProvider implements ISynchronousProvider {
             $prompt = 'Describe these images in detail.';
         }
 
+        // The framework resolves ListOfImages slots to File nodes before
+        // calling us — the raw bytes never travel through the task input.
         $imageList = $input['images'] ?? [];
         if (!is_array($imageList) || $imageList === []) {
             throw new \RuntimeException('No images provided');
@@ -107,26 +111,15 @@ class AnalyzeImagesProvider implements ISynchronousProvider {
         ]);
 
         $images = [];
+        $fileIds = [];
         $total = count($imageList);
-        foreach ($imageList as $i => $imageData) {
-            if (!is_string($imageData)) {
-                throw new \RuntimeException('Image ' . ($i + 1) . ' is not raw image data');
+        foreach (array_values($imageList) as $i => $file) {
+            if (!$file instanceof File) {
+                throw new \RuntimeException('Image ' . ($i + 1) . ' is not a file');
             }
 
-            $mimeType = $this->detectMimeType($imageData);
-
-            if ($this->imageOptimizer->isSupported($mimeType)) {
-                $optimized = $this->imageOptimizer->optimize($imageData, $mimeType);
-                $images[] = [
-                    'base64' => $optimized['data'],
-                    'mimeType' => $optimized['mimeType'],
-                ];
-            } else {
-                $images[] = [
-                    'base64' => base64_encode($imageData),
-                    'mimeType' => $mimeType,
-                ];
-            }
+            $images[] = $this->imageOptimizer->prepare($file->getContent(), $file->getMimetype());
+            $fileIds[] = (string)$file->getId();
 
             $reportProgress(($i + 1) / ($total + 1));
         }
@@ -137,12 +130,14 @@ class AnalyzeImagesProvider implements ISynchronousProvider {
                 $images[0]['base64'],
                 $images[0]['mimeType'],
                 $userId,
+                $fileIds[0],
             );
         } else {
             $result = $provider->askWithImages(
                 $prompt,
                 $images,
                 $userId,
+                $fileIds,
             );
         }
 
@@ -152,31 +147,5 @@ class AnalyzeImagesProvider implements ISynchronousProvider {
         }
 
         return ['output' => $result['response'] ?? ''];
-    }
-
-    /**
-     * Detect MIME type from raw image bytes using magic bytes.
-     */
-    private function detectMimeType(string $data): string {
-        if (strlen($data) < 4) {
-            return 'image/jpeg';
-        }
-
-        $header = substr($data, 0, 4);
-
-        if (str_starts_with($header, "\xFF\xD8\xFF")) {
-            return 'image/jpeg';
-        }
-        if (str_starts_with($header, "\x89PNG")) {
-            return 'image/png';
-        }
-        if (str_starts_with($header, 'GIF8')) {
-            return 'image/gif';
-        }
-        if (str_starts_with($header, 'RIFF') && strlen($data) >= 12 && substr($data, 8, 4) === 'WEBP') {
-            return 'image/webp';
-        }
-
-        return 'image/jpeg';
     }
 }
