@@ -5,29 +5,33 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\ClaudeSDKService;
+use Psr\Log\LoggerInterface;
 use OCP\TaskProcessing\ISynchronousProvider;
 
 /**
- * Claude simplification TaskProcessing Provider (core:text2text:simplification)
+ * Free-prompt TaskProcessing Provider (core:text2text)
+ *
+ * General-purpose text generation. Handles arbitrary prompts in the
+ * Nextcloud Assistant, on whichever provider the user has selected.
  */
-class ClaudeSimplificationProvider implements ISynchronousProvider {
+class TextToTextProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ClaudeSDKService $claudeService,
+        private ProviderResolver $providers,
+        private LoggerInterface $logger,
     ) {
     }
 
     public function getId(): string {
-        return 'aiquila:text2text:simplification';
+        return 'aiquila:text2text';
     }
 
     public function getName(): string {
-        return 'Claude (AIquila)';
+        return 'AIquila';
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:simplification';
+        return 'core:text2text';
     }
 
     public function getExpectedRuntime(): int {
@@ -67,18 +71,18 @@ class ClaudeSimplificationProvider implements ISynchronousProvider {
     }
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
-        $text = $input['input'] ?? '';
-        if (!is_string($text) || $text === '') {
+        $prompt = $input['input'] ?? '';
+        if (!is_string($prompt) || $prompt === '') {
             throw new \RuntimeException('No input text provided');
         }
 
+        $this->logger->debug('AIquila Text2Text: Processing', [
+            'prompt_length' => strlen($prompt),
+        ]);
+
         $reportProgress(0.1);
 
-        $result = $this->claudeService->ask(
-            "Simplify the following text so it is very easy to understand, even for children. Return only the simplified text, nothing else:\n\n" . $text,
-            '',
-            $userId,
-        );
+        $result = $this->providers->resolve($userId)->ask($prompt, '', $userId);
 
         if (isset($result['error'])) {
             throw new \RuntimeException($result['error']);

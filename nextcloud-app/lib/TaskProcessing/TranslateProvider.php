@@ -5,34 +5,28 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\ClaudeSDKService;
-use Psr\Log\LoggerInterface;
 use OCP\TaskProcessing\ISynchronousProvider;
 
 /**
- * Claude free-prompt TaskProcessing Provider (core:text2text)
- *
- * General-purpose text generation via Claude. Handles arbitrary prompts
- * in the Nextcloud Assistant.
+ * Translate TaskProcessing Provider (core:text2text:translate)
  */
-class ClaudeTextToTextProvider implements ISynchronousProvider {
+class TranslateProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ClaudeSDKService $claudeService,
-        private LoggerInterface $logger,
+        private ProviderResolver $providers,
     ) {
     }
 
     public function getId(): string {
-        return 'aiquila:text2text';
+        return 'aiquila:text2text:translate';
     }
 
     public function getName(): string {
-        return 'Claude (AIquila)';
+        return 'AIquila';
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text';
+        return 'core:text2text:translate';
     }
 
     public function getExpectedRuntime(): int {
@@ -72,18 +66,28 @@ class ClaudeTextToTextProvider implements ISynchronousProvider {
     }
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
-        $prompt = $input['input'] ?? '';
-        if (!is_string($prompt) || $prompt === '') {
+        $text = $input['input'] ?? '';
+        $originLanguage = $input['origin_language'] ?? '';
+        $targetLanguage = $input['target_language'] ?? '';
+
+        if (!is_string($text) || $text === '') {
             throw new \RuntimeException('No input text provided');
         }
-
-        $this->logger->debug('Claude Text2Text: Processing', [
-            'prompt_length' => strlen($prompt),
-        ]);
+        if (!is_string($targetLanguage) || $targetLanguage === '') {
+            throw new \RuntimeException('No target language provided');
+        }
+        if (!is_string($originLanguage)) {
+            $originLanguage = '';
+        }
 
         $reportProgress(0.1);
 
-        $result = $this->claudeService->ask($prompt, '', $userId);
+        $fromClause = !empty($originLanguage) ? " from {$originLanguage}" : '';
+        $result = $this->providers->resolve($userId)->ask(
+            "Translate the following text{$fromClause} to {$targetLanguage}. Return only the translated text, nothing else:\n\n" . $text,
+            '',
+            $userId,
+        );
 
         if (isset($result['error'])) {
             throw new \RuntimeException($result['error']);

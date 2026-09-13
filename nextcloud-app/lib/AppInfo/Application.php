@@ -57,22 +57,22 @@ class Application extends App implements IBootstrap {
             return new CoworkerTaskRegistry([$visionClassify]);
         });
 
-        // Register Claude TaskProcessing Providers for Nextcloud Assistant integration
+        // Register AIquila TaskProcessing Providers for Nextcloud Assistant integration
         // Vision providers
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeImageToTextProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeAnalyzeImagesProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ImageToTextProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\AnalyzeImagesProvider::class);
 
         // Text-to-text providers
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeTextToTextProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeSummaryProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeHeadlineProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeTopicsProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeTranslateProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeProofreadProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeChangeToneProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeSimplificationProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeReformulationProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ClaudeFormalizationProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\TextToTextProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\SummaryProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\HeadlineProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\TopicsProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\TranslateProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ProofreadProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ChangeToneProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\SimplificationProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ReformulationProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\FormalizationProvider::class);
 
         // Register notification formatter for AIquila task notifications
         $context->registerNotifierService(\OCA\AIquila\Notifier\AIquilaNotifier::class);

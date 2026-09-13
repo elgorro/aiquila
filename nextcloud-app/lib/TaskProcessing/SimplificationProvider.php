@@ -5,33 +5,32 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\TaskProcessing\ISynchronousProvider;
 
 /**
- * Claude topics TaskProcessing Provider (core:text2text:topics)
+ * Simplification TaskProcessing Provider (core:text2text:simplification)
  */
-class ClaudeTopicsProvider implements ISynchronousProvider {
+class SimplificationProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ClaudeSDKService $claudeService,
+        private ProviderResolver $providers,
     ) {
     }
 
     public function getId(): string {
-        return 'aiquila:text2text:topics';
+        return 'aiquila:text2text:simplification';
     }
 
     public function getName(): string {
-        return 'Claude (AIquila)';
+        return 'AIquila';
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:topics';
+        return 'core:text2text:simplification';
     }
 
     public function getExpectedRuntime(): int {
-        return 15;
+        return 30;
     }
 
     public function getOptionalInputShape(): array {
@@ -74,8 +73,8 @@ class ClaudeTopicsProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->claudeService->ask(
-            "Extract the main topics from the following text. Return a comma-separated list of topics, nothing else:\n\n" . $text,
+        $result = $this->providers->resolve($userId)->ask(
+            "Simplify the following text so it is very easy to understand, even for children. Return only the simplified text, nothing else:\n\n" . $text,
             '',
             $userId,
         );

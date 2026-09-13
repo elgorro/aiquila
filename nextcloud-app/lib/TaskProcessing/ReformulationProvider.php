@@ -5,29 +5,28 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\TaskProcessing\ISynchronousProvider;
 
 /**
- * Claude formalization TaskProcessing Provider (core:text2text:formalization)
+ * Reformulation TaskProcessing Provider (core:text2text:reformulation)
  */
-class ClaudeFormalizationProvider implements ISynchronousProvider {
+class ReformulationProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ClaudeSDKService $claudeService,
+        private ProviderResolver $providers,
     ) {
     }
 
     public function getId(): string {
-        return 'aiquila:text2text:formalization';
+        return 'aiquila:text2text:reformulation';
     }
 
     public function getName(): string {
-        return 'Claude (AIquila)';
+        return 'AIquila';
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:formalization';
+        return 'core:text2text:reformulation';
     }
 
     public function getExpectedRuntime(): int {
@@ -74,8 +73,8 @@ class ClaudeFormalizationProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->claudeService->ask(
-            "Rewrite the following text in a formal, professional tone. Return only the formalized text, nothing else:\n\n" . $text,
+        $result = $this->providers->resolve($userId)->ask(
+            "Reformulate the following text while keeping the same meaning. Return only the reformulated text, nothing else:\n\n" . $text,
             '',
             $userId,
         );

@@ -5,7 +5,6 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
@@ -13,19 +12,19 @@ use OCP\TaskProcessing\ShapeDescriptor;
 use Psr\Log\LoggerInterface;
 
 /**
- * Claude Vision multi-image TaskProcessing Provider
+ * Multi-image vision TaskProcessing Provider
  *
- * Registers Claude as a core:analyze-images provider in Nextcloud's
+ * Registers AIquila as a core:analyze-images provider in Nextcloud's
  * TaskProcessing framework (NC 30+). This powers the "Analyze images"
  * action in the Nextcloud Assistant, supporting up to 20 images at once.
  *
  * Input:  input (text prompt) + images (list of image files)
  * Output: output (text description/analysis)
  */
-class ClaudeAnalyzeImagesProvider implements ISynchronousProvider {
+class AnalyzeImagesProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ClaudeSDKService $claudeService,
+        private ProviderResolver $providers,
         private ImageOptimizer $imageOptimizer,
         private LoggerInterface $logger,
     ) {
@@ -36,7 +35,7 @@ class ClaudeAnalyzeImagesProvider implements ISynchronousProvider {
     }
 
     public function getName(): string {
-        return 'Claude Vision (AIquila)';
+        return 'AIquila Vision';
     }
 
     public function getTaskTypeId(): string {
@@ -48,7 +47,13 @@ class ClaudeAnalyzeImagesProvider implements ISynchronousProvider {
     }
 
     public function getOptionalInputShape(): array {
-        return [];
+        return [
+            'provider' => new ShapeDescriptor(
+                'Provider',
+                'Optional LLM provider id override (e.g. anthropic, mistral)',
+                EShapeType::Text
+            ),
+        ];
     }
 
     public function getOptionalOutputShape(): array {
@@ -94,7 +99,9 @@ class ClaudeAnalyzeImagesProvider implements ISynchronousProvider {
             throw new \RuntimeException('Too many images. Maximum is ' . ImageOptimizer::MAX_IMAGES);
         }
 
-        $this->logger->debug('Claude AnalyzeImages: Processing {count} images', [
+        $provider = $this->providers->resolveVisionCapable($userId, $this->providers->requestedId($input));
+
+        $this->logger->debug('AIquila AnalyzeImages: Processing {count} images', [
             'count' => count($imageList),
             'prompt_length' => strlen($prompt),
         ]);
@@ -125,14 +132,14 @@ class ClaudeAnalyzeImagesProvider implements ISynchronousProvider {
         }
 
         if (count($images) === 1) {
-            $result = $this->claudeService->askWithImage(
+            $result = $provider->askWithImage(
                 $prompt,
                 $images[0]['base64'],
                 $images[0]['mimeType'],
                 $userId,
             );
         } else {
-            $result = $this->claudeService->askWithImages(
+            $result = $provider->askWithImages(
                 $prompt,
                 $images,
                 $userId,
@@ -140,7 +147,7 @@ class ClaudeAnalyzeImagesProvider implements ISynchronousProvider {
         }
 
         if (isset($result['error'])) {
-            $this->logger->error('Claude AnalyzeImages: Error', ['error' => $result['error']]);
+            $this->logger->error('AIquila AnalyzeImages: Error', ['error' => $result['error'], 'provider' => $provider->getId()]);
             throw new \RuntimeException($result['error']);
         }
 

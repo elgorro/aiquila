@@ -5,33 +5,32 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\TaskProcessing\ISynchronousProvider;
 
 /**
- * Claude translate TaskProcessing Provider (core:text2text:translate)
+ * Headline TaskProcessing Provider (core:text2text:headline)
  */
-class ClaudeTranslateProvider implements ISynchronousProvider {
+class HeadlineProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ClaudeSDKService $claudeService,
+        private ProviderResolver $providers,
     ) {
     }
 
     public function getId(): string {
-        return 'aiquila:text2text:translate';
+        return 'aiquila:text2text:headline';
     }
 
     public function getName(): string {
-        return 'Claude (AIquila)';
+        return 'AIquila';
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:translate';
+        return 'core:text2text:headline';
     }
 
     public function getExpectedRuntime(): int {
-        return 30;
+        return 15;
     }
 
     public function getOptionalInputShape(): array {
@@ -68,24 +67,14 @@ class ClaudeTranslateProvider implements ISynchronousProvider {
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $text = $input['input'] ?? '';
-        $originLanguage = $input['origin_language'] ?? '';
-        $targetLanguage = $input['target_language'] ?? '';
-
         if (!is_string($text) || $text === '') {
             throw new \RuntimeException('No input text provided');
-        }
-        if (!is_string($targetLanguage) || $targetLanguage === '') {
-            throw new \RuntimeException('No target language provided');
-        }
-        if (!is_string($originLanguage)) {
-            $originLanguage = '';
         }
 
         $reportProgress(0.1);
 
-        $fromClause = !empty($originLanguage) ? " from {$originLanguage}" : '';
-        $result = $this->claudeService->ask(
-            "Translate the following text{$fromClause} to {$targetLanguage}. Return only the translated text, nothing else:\n\n" . $text,
+        $result = $this->providers->resolve($userId)->ask(
+            "Generate a concise, descriptive headline for the following text. Return only the headline, nothing else:\n\n" . $text,
             '',
             $userId,
         );

@@ -5,29 +5,28 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\TaskProcessing\ISynchronousProvider;
 
 /**
- * Claude reformulation TaskProcessing Provider (core:text2text:reformulation)
+ * Change-tone TaskProcessing Provider (core:text2text:changetone)
  */
-class ClaudeReformulationProvider implements ISynchronousProvider {
+class ChangeToneProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ClaudeSDKService $claudeService,
+        private ProviderResolver $providers,
     ) {
     }
 
     public function getId(): string {
-        return 'aiquila:text2text:reformulation';
+        return 'aiquila:text2text:changetone';
     }
 
     public function getName(): string {
-        return 'Claude (AIquila)';
+        return 'AIquila';
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:reformulation';
+        return 'core:text2text:changetone';
     }
 
     public function getExpectedRuntime(): int {
@@ -68,14 +67,19 @@ class ClaudeReformulationProvider implements ISynchronousProvider {
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $text = $input['input'] ?? '';
+        $tone = $input['tone'] ?? 'formal';
+
         if (!is_string($text) || $text === '') {
             throw new \RuntimeException('No input text provided');
+        }
+        if (!is_string($tone) || $tone === '') {
+            $tone = 'formal';
         }
 
         $reportProgress(0.1);
 
-        $result = $this->claudeService->ask(
-            "Reformulate the following text while keeping the same meaning. Return only the reformulated text, nothing else:\n\n" . $text,
+        $result = $this->providers->resolve($userId)->ask(
+            "Rewrite the following text in a {$tone} tone. Return only the rewritten text, nothing else:\n\n" . $text,
             '',
             $userId,
         );

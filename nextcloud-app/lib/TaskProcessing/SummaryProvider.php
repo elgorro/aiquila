@@ -9,29 +9,31 @@ use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\TaskProcessing\ISynchronousProvider;
 
 /**
- * Claude change-tone TaskProcessing Provider (core:text2text:changetone)
+ * Summary TaskProcessing Provider (core:text2text:summary)
  */
-class ClaudeChangeToneProvider implements ISynchronousProvider {
+class SummaryProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ClaudeSDKService $claudeService,
+        private ProviderResolver $providers,
     ) {
     }
 
     public function getId(): string {
-        return 'aiquila:text2text:changetone';
+        return 'aiquila:text2text:summary';
     }
 
     public function getName(): string {
-        return 'Claude (AIquila)';
+        return 'AIquila';
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:changetone';
+        return 'core:text2text:summary';
     }
 
     public function getExpectedRuntime(): int {
-        return 30;
+        // Batch round-trip: typically a few seconds, can stretch to a few minutes
+        // under load. The framework uses this to size its job-runner timeout.
+        return 120;
     }
 
     public function getOptionalInputShape(): array {
@@ -68,22 +70,21 @@ class ClaudeChangeToneProvider implements ISynchronousProvider {
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $text = $input['input'] ?? '';
-        $tone = $input['tone'] ?? 'formal';
-
         if (!is_string($text) || $text === '') {
             throw new \RuntimeException('No input text provided');
         }
-        if (!is_string($tone) || $tone === '') {
-            $tone = 'formal';
+
+        $provider = $this->providers->resolve($userId);
+
+        if ($provider instanceof ClaudeSDKService) {
+            // Anthropic's Batch API halves the cost and this runs in a background
+            // job, so the wait is affordable. No other provider has an equivalent,
+            // hence the branch rather than a method on LLMProviderInterface.
+            $result = $provider->summarizeViaBatch($text, $userId, $reportProgress);
+        } else {
+            $reportProgress(0.1);
+            $result = $provider->ask("Summarize the following content concisely:\n\n" . $text, '', $userId);
         }
-
-        $reportProgress(0.1);
-
-        $result = $this->claudeService->ask(
-            "Rewrite the following text in a {$tone} tone. Return only the rewritten text, nothing else:\n\n" . $text,
-            '',
-            $userId,
-        );
 
         if (isset($result['error'])) {
             throw new \RuntimeException($result['error']);

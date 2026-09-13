@@ -5,33 +5,32 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\TaskProcessing\ISynchronousProvider;
 
 /**
- * Claude proofread TaskProcessing Provider (core:text2text:proofread)
+ * Topics TaskProcessing Provider (core:text2text:topics)
  */
-class ClaudeProofreadProvider implements ISynchronousProvider {
+class TopicsProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ClaudeSDKService $claudeService,
+        private ProviderResolver $providers,
     ) {
     }
 
     public function getId(): string {
-        return 'aiquila:text2text:proofread';
+        return 'aiquila:text2text:topics';
     }
 
     public function getName(): string {
-        return 'Claude (AIquila)';
+        return 'AIquila';
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:proofread';
+        return 'core:text2text:topics';
     }
 
     public function getExpectedRuntime(): int {
-        return 30;
+        return 15;
     }
 
     public function getOptionalInputShape(): array {
@@ -74,8 +73,8 @@ class ClaudeProofreadProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->claudeService->ask(
-            "Proofread the following text for grammar and spelling mistakes. Return the corrected text only, nothing else:\n\n" . $text,
+        $result = $this->providers->resolve($userId)->ask(
+            "Extract the main topics from the following text. Return a comma-separated list of topics, nothing else:\n\n" . $text,
             '',
             $userId,
         );
