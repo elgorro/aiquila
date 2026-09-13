@@ -25,14 +25,17 @@ The Nextcloud app supports five providers for chat. Each user can pick a provide
 
 | Provider | Hosting | Notes |
 |---|---|---|
-| **Claude (Anthropic)** | Anthropic API | The default, and the most deeply integrated: vision, thinking budgets, native MCP connector, and the Nextcloud Assistant / TaskProcessing integrations. |
+| **Claude (Anthropic)** | Anthropic API | The default, and the most deeply integrated: vision, thinking budgets, native MCP connector, and PDF handling with citations. |
 | **Hetzner Inference** | Hetzner (German provider) | OpenAI-compatible. Currently an [experimental Hetzner service](https://docs.hetzner.com/general/company-and-policy/experiments/inference/), free while experimental; Hetzner states it does not store request and response content. Tokens from [experiments.hetzner.com](https://experiments.hetzner.com/inference). |
 | **Mistral** | Mistral API (French provider) | Also supports the native MCP connector. Mistral offers EU-only processing through its regional inference endpoints. |
 | **Local model** | Your own hardware | Ollama, LM Studio or llama.cpp. Nothing leaves your infrastructure. Supports bearer/basic/header auth and mTLS. |
 | **DeepSeek** | DeepSeek API | OpenAI-compatible. No native MCP connector. |
 
-Provider choice applies to chat and the per-conversation model picker. The Nextcloud
-Assistant / TaskProcessing integrations currently run on Claude only.
+Provider choice applies to chat, the per-conversation model picker and the Nextcloud
+Assistant / TaskProcessing integrations, which all run on the provider the user has
+selected. Assistant actions that send images ("Describe this image", "Analyze images")
+need a vision-capable provider, and report which of the available ones qualify when
+the selected provider is not.
 
 ## Getting Started
 

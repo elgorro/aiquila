@@ -76,9 +76,9 @@ php occ aiquila:configure --model claude-sonnet-4-6
 
 AIquila provides three main features:
 
-1. **Chat Interface**: Interactive chat with Claude AI at `/apps/aiquila`
+1. **Chat Interface**: Interactive chat with your AI provider at `/apps/aiquila`
 2. **Text Processing Provider**: Native integration with Nextcloud Assistant
-3. **Public API**: RESTful endpoints for other apps to use Claude
+3. **Public API**: RESTful endpoints for other apps to use AIquila
 
 ## Installation
 
@@ -244,6 +244,11 @@ AIquila automatically registers as a Text Processing Provider, making it availab
 - No additional configuration needed
 - Seamlessly integrated into workflows
 
+Assistant actions run on whichever AI provider the user has selected — the same
+choice that drives chat — within what the admin allows. The image actions
+("Describe this image", "Analyze images") need a vision-capable provider; with a
+text-only one selected they fail with a message naming the alternatives.
+
 ### 3. Public API
 
 Other Nextcloud apps can programmatically use AIquila:
@@ -308,7 +313,7 @@ See [internal-api.md](../internal-api.md) for complete API documentation.
 
 3. **Assistant Integration**:
    - Use Nextcloud Assistant anywhere in the UI
-   - Select "Claude (AIquila)" as the provider
+   - Select "AIquila" as the provider
    - Verify it responds to prompts
 
 ## Troubleshooting
