@@ -31,6 +31,14 @@ class MistralProvider implements LLMProviderInterface {
     private const APP_NAME = 'aiquila';
     private const STREAM_TIMEOUT = 300;
 
+    /** Audio work routinely outlasts the shared 30s chat timeout. */
+    private const AUDIO_TIMEOUT = 300;
+
+    public const DEFAULT_TRANSCRIBE_MODEL = 'voxtral-mini-latest';
+    public const DEFAULT_TTS_MODEL = 'voxtral-mini-tts-2603';
+    /** The conversation model that drives the image_generation tool. */
+    public const DEFAULT_IMAGE_MODEL = 'mistral-medium-latest';
+
     public function __construct(
         private readonly IClientService $clientService,
         private readonly IConfig $config,
@@ -114,6 +122,39 @@ class MistralProvider implements LLMProviderInterface {
                 'Comma-separated Mistral connector IDs used by the native MCP path. Leave blank unless Mistral has issued you some.',
                 placeholder: 'conn_..., conn_...',
             ),
+
+            // ── Non-text modalities ────────────────────────────────────────
+            // Separate model ids: none of these run on the chat model above.
+            ProviderSettingsSchema::text(
+                'mistral_transcribe_model',
+                'mistral_transcribe_model',
+                'Transcription model',
+                'Voxtral model used for the Assistant\'s speech-to-text action.',
+                default: self::DEFAULT_TRANSCRIBE_MODEL,
+                placeholder: self::DEFAULT_TRANSCRIBE_MODEL,
+            ),
+            ProviderSettingsSchema::text(
+                'mistral_tts_model',
+                'mistral_tts_model',
+                'Speech model',
+                'Voxtral text-to-speech model used for generated audio.',
+                default: self::DEFAULT_TTS_MODEL,
+                placeholder: self::DEFAULT_TTS_MODEL,
+            ),
+            ProviderSettingsSchema::text(
+                'mistral_tts_voice',
+                'mistral_tts_voice',
+                'Speech voice',
+                'Preset voice id. Left blank, Mistral picks its default.',
+            ),
+            ProviderSettingsSchema::text(
+                'mistral_image_model',
+                'mistral_image_model',
+                'Image generation model',
+                'The conversation model that drives Mistral\'s image_generation tool. Images themselves come from the tool, not from this model.',
+                default: self::DEFAULT_IMAGE_MODEL,
+                placeholder: self::DEFAULT_IMAGE_MODEL,
+            ),
         ];
     }
 
@@ -124,6 +165,9 @@ class MistralProvider implements LLMProviderInterface {
             'streaming' => true,
             'effort' => true,
             'native_mcp' => true,
+            'audio_in' => true,
+            'audio_out' => true,
+            'image_out' => true,
         ]);
     }
 
@@ -592,8 +636,8 @@ class MistralProvider implements LLMProviderInterface {
     /**
      * Build a Conversations API request body from app-format messages.
      */
-    private function buildConversationBody(array $messages, ?string $system, array $tools, ?string $userId, array $options, bool $stream): array {
-        $model = $this->getModel($userId);
+    private function buildConversationBody(array $messages, ?string $system, array $tools, ?string $userId, array $options, bool $stream, ?string $modelOverride = null): array {
+        $model = $modelOverride ?? $this->getModel($userId);
         $body = [
             'model' => $model,
             'inputs' => $this->toConversationInputs($messages),
@@ -1131,6 +1175,216 @@ class MistralProvider implements LLMProviderInterface {
             'input_tokens' => (int)($usage['prompt_tokens'] ?? 0),
             'output_tokens' => (int)($usage['completion_tokens'] ?? 0),
         ];
+    }
+
+    // ── Non-text modalities ─────────────────────────────────────────────────
+
+    /**
+     * Transcription via Voxtral (`POST /v1/audio/transcriptions`).
+     *
+     * The request is multipart rather than JSON: the audio travels as a file
+     * part, and the endpoint reads the container format from the filename, so
+     * the caller's name is passed through rather than a generic one.
+     */
+    public function transcribeAudio(string $audioData, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array {
+        if ($audioData === '') {
+            return ['error' => 'No audio to transcribe.'];
+        }
+        $parts = [
+            ['name' => 'model', 'contents' => $this->config->getAppValue(self::APP_NAME, 'mistral_transcribe_model', self::DEFAULT_TRANSCRIBE_MODEL)],
+            ['name' => 'file', 'contents' => $audioData, 'filename' => $filename],
+        ];
+        $language = $options['language'] ?? '';
+        if (is_string($language) && $language !== '') {
+            $parts[] = ['name' => 'language', 'contents' => $language];
+        }
+
+        try {
+            $client = $this->clientService->newClient();
+            $headers = $this->headers($this->requireApiKey($userId));
+            // Guzzle writes Content-Type itself, boundary included.
+            unset($headers['Content-Type']);
+            $response = $client->post(self::API_BASE . '/audio/transcriptions', [
+                'headers' => $headers,
+                'multipart' => $parts,
+                'timeout' => self::AUDIO_TIMEOUT,
+            ]);
+            $decoded = json_decode((string)$response->getBody(), true);
+            if (!is_array($decoded) || !isset($decoded['text']) || !is_string($decoded['text'])) {
+                return ['error' => 'Mistral returned no transcript.'];
+            }
+            $usage = $decoded['usage'] ?? null;
+            return [
+                'response' => $decoded['text'],
+                'usage' => $this->extractUsage(is_array($usage) ? $usage : []),
+            ];
+        } catch (\Throwable $e) {
+            return $this->handleException($e, 'transcribeAudio');
+        }
+    }
+
+    /**
+     * Speech via Voxtral TTS (`POST /v1/audio/speech`).
+     *
+     * Mistral documents a JSON body carrying base64 in `audio_data`, but the
+     * OpenAI-shaped route this mirrors answers with the audio bytes directly.
+     * Both are accepted: a body that parses as JSON with that key is decoded,
+     * anything else is taken as the bytes themselves.
+     */
+    public function synthesizeSpeech(string $text, ?string $userId = null, array $options = []): array {
+        if (trim($text) === '') {
+            return ['error' => 'No text to speak.'];
+        }
+        $body = [
+            'model' => $this->config->getAppValue(self::APP_NAME, 'mistral_tts_model', self::DEFAULT_TTS_MODEL),
+            'input' => $text,
+            'response_format' => 'mp3',
+            'stream' => false,
+        ];
+        $voice = $options['voice'] ?? $this->config->getAppValue(self::APP_NAME, 'mistral_tts_voice', '');
+        if (is_string($voice) && $voice !== '') {
+            $body['voice_id'] = $voice;
+        }
+
+        try {
+            $client = $this->clientService->newClient();
+            $response = $client->post(self::API_BASE . '/audio/speech', [
+                'headers' => $this->headers($this->requireApiKey($userId)),
+                'body' => json_encode($body),
+                'timeout' => self::AUDIO_TIMEOUT,
+            ]);
+            $audio = $this->decodeSpeechBody((string)$response->getBody());
+            if ($audio === '') {
+                return ['error' => 'Mistral returned no audio.'];
+            }
+            return ['audio' => $audio, 'mimeType' => 'audio/mpeg'];
+        } catch (\Throwable $e) {
+            return $this->handleException($e, 'synthesizeSpeech');
+        }
+    }
+
+    /** Raw audio bytes, whether they arrived raw or base64 inside a JSON envelope. */
+    private function decodeSpeechBody(string $body): string {
+        if ($body === '' || $body[0] !== '{') {
+            return $body;
+        }
+        $decoded = json_decode($body, true);
+        if (!is_array($decoded) || !isset($decoded['audio_data']) || !is_string($decoded['audio_data'])) {
+            return $body;
+        }
+        $bytes = base64_decode($decoded['audio_data'], true);
+        return $bytes === false ? '' : $bytes;
+    }
+
+    /**
+     * Image generation through the Conversations API.
+     *
+     * Mistral has no plain images endpoint: generation is a server-side tool the
+     * model calls. The same inline-tool path the native MCP connector already
+     * uses works here — no agent needs creating — and the model answers with
+     * `tool_file` chunks naming files to fetch separately.
+     *
+     * $count is phrased into the prompt because the model, not the caller,
+     * decides how many files the tool emits; callers handle a shorter list.
+     */
+    public function generateImages(string $prompt, int $count = 1, ?string $userId = null, array $options = []): array {
+        if (trim($prompt) === '') {
+            return ['error' => 'No prompt to generate from.'];
+        }
+        $count = max(1, $count);
+        $instruction = $count > 1
+            ? $prompt . "\n\nGenerate " . $count . ' distinct images for this description.'
+            : $prompt;
+
+        $body = $this->buildConversationBody(
+            [['role' => 'user', 'content' => $instruction]],
+            'Use the image generation tool to produce the requested images. Do not describe them in words.',
+            [['type' => 'image_generation']],
+            $userId,
+            $options,
+            false,
+            $this->config->getAppValue(self::APP_NAME, 'mistral_image_model', self::DEFAULT_IMAGE_MODEL),
+        );
+
+        try {
+            $apiKey = $this->requireApiKey($userId);
+            $client = $this->clientService->newClient();
+            $response = $client->post(self::CONVERSATIONS_URL, [
+                'headers' => $this->headers($apiKey),
+                'body' => json_encode($body),
+                'timeout' => self::AUDIO_TIMEOUT,
+            ]);
+            $decoded = json_decode((string)$response->getBody(), true);
+            if (!is_array($decoded)) {
+                return ['error' => 'Mistral returned a non-JSON response'];
+            }
+
+            $files = $this->extractToolFiles($decoded);
+            if ($files === []) {
+                return ['error' => 'Mistral generated no images for this prompt.'];
+            }
+
+            $images = [];
+            $mimeType = 'image/png';
+            foreach (array_slice($files, 0, $count) as $file) {
+                $bytes = $this->downloadFile($file['file_id'], $apiKey);
+                if ($bytes === '') {
+                    continue;
+                }
+                $images[] = $bytes;
+                $mimeType = $this->imageMimeType($file['file_type']);
+            }
+            if ($images === []) {
+                return ['error' => 'Mistral generated images but none could be downloaded.'];
+            }
+
+            $usage = $decoded['usage'] ?? null;
+            return [
+                'images' => $images,
+                'mimeType' => $mimeType,
+                'usage' => $this->extractUsage(is_array($usage) ? $usage : []),
+            ];
+        } catch (\Throwable $e) {
+            return $this->handleException($e, 'generateImages');
+        }
+    }
+
+    /**
+     * Collect `tool_file` chunks out of a non-streaming conversation response.
+     *
+     * @param array<string, mixed> $response
+     * @return list<array{file_id: string, file_type: string}>
+     */
+    private function extractToolFiles(array $response): array {
+        $files = [];
+        foreach ($response['outputs'] ?? [] as $output) {
+            if (!is_array($output) || !is_array($output['content'] ?? null)) {
+                continue;
+            }
+            foreach ($output['content'] as $chunk) {
+                if (!is_array($chunk) || ($chunk['type'] ?? '') !== 'tool_file') {
+                    continue;
+                }
+                $id = $chunk['file_id'] ?? null;
+                if (is_string($id) && $id !== '') {
+                    $files[] = ['file_id' => $id, 'file_type' => (string)($chunk['file_type'] ?? 'png')];
+                }
+            }
+        }
+        return $files;
+    }
+
+    private function downloadFile(string $fileId, string $apiKey): string {
+        $response = $this->clientService->newClient()->get(self::API_BASE . '/files/' . rawurlencode($fileId) . '/content', [
+            'headers' => ['Authorization' => 'Bearer ' . $apiKey],
+            'timeout' => self::AUDIO_TIMEOUT,
+        ]);
+        return (string)$response->getBody();
+    }
+
+    private function imageMimeType(string $fileType): string {
+        $type = strtolower($fileType);
+        return 'image/' . ($type === 'jpg' ? 'jpeg' : ($type !== '' ? $type : 'png'));
     }
 
     // ── Errors ──────────────────────────────────────────────────────────────

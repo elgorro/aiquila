@@ -379,4 +379,167 @@ class MistralProviderTest extends TestCase {
         $this->assertSame('All done', $result['response']);
         $this->assertSame(7, $result['usage']['input_tokens']);
     }
+
+    // ── Non-text modalities ─────────────────────────────────────────────────
+
+    public function testCapabilitiesDeclareTheThreeModalities(): void {
+        $capabilities = $this->provider->getCapabilities();
+        $this->assertTrue($capabilities['audio_in']);
+        $this->assertTrue($capabilities['audio_out']);
+        $this->assertTrue($capabilities['image_out']);
+    }
+
+    public function testTranscribeAudioPostsMultipartWithoutAJsonContentType(): void {
+        $url = null;
+        $options = null;
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$url, &$options): IResponse {
+                $url = $u;
+                $options = $o;
+                return $this->jsonResponse([
+                    'text' => 'Guten Morgen.',
+                    'usage' => ['prompt_tokens' => 40, 'completion_tokens' => 8],
+                ]);
+            }
+        );
+
+        $result = $this->provider->transcribeAudio('raw-bytes', 'audio/mpeg', 'memo.mp3', 'u', ['language' => 'de']);
+
+        $this->assertSame('Guten Morgen.', $result['response']);
+        $this->assertSame(40, $result['usage']['input_tokens']);
+        $this->assertSame('https://api.mistral.ai/v1/audio/transcriptions', $url);
+        // Guzzle writes Content-Type itself, boundary included.
+        $this->assertArrayNotHasKey('Content-Type', $options['headers']);
+        $this->assertSame('Bearer test-key', $options['headers']['Authorization']);
+        $this->assertSame([
+            ['name' => 'model', 'contents' => MistralProvider::DEFAULT_TRANSCRIBE_MODEL],
+            ['name' => 'file', 'contents' => 'raw-bytes', 'filename' => 'memo.mp3'],
+            ['name' => 'language', 'contents' => 'de'],
+        ], $options['multipart']);
+    }
+
+    public function testTranscribeAudioReportsAMissingTranscript(): void {
+        $this->client->method('post')->willReturn($this->jsonResponse(['model' => 'voxtral-mini-latest']));
+
+        $this->assertSame(['error' => 'Mistral returned no transcript.'], $this->provider->transcribeAudio('raw', 'audio/mpeg', 'a.mp3', 'u'));
+    }
+
+    public function testTranscribeAudioRejectsAnEmptyRecordingWithoutCallingTheApi(): void {
+        $this->client->expects($this->never())->method('post');
+
+        $this->assertSame(['error' => 'No audio to transcribe.'], $this->provider->transcribeAudio('', 'audio/mpeg', 'a.mp3', 'u'));
+    }
+
+    /** Mistral documents base64 inside a JSON envelope. */
+    public function testSynthesizeSpeechDecodesABase64Envelope(): void {
+        $body = null;
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$body): IResponse {
+                $body = json_decode($o['body'], true);
+                return $this->jsonResponse(['audio_data' => base64_encode('mp3-bytes')]);
+            }
+        );
+
+        $result = $this->provider->synthesizeSpeech('Read this out.', 'u', ['voice' => 'alloy']);
+
+        $this->assertSame('mp3-bytes', $result['audio']);
+        $this->assertSame('audio/mpeg', $result['mimeType']);
+        $this->assertSame(MistralProvider::DEFAULT_TTS_MODEL, $body['model']);
+        $this->assertSame('Read this out.', $body['input']);
+        $this->assertSame('alloy', $body['voice_id']);
+        $this->assertSame('mp3', $body['response_format']);
+    }
+
+    /** The OpenAI-shaped route this mirrors answers with the bytes directly. */
+    public function testSynthesizeSpeechAcceptsARawAudioBody(): void {
+        $response = $this->createMock(IResponse::class);
+        $response->method('getBody')->willReturn("ID3\x03 raw mp3");
+        $this->client->method('post')->willReturn($response);
+
+        $this->assertSame("ID3\x03 raw mp3", $this->provider->synthesizeSpeech('Hello', 'u')['audio']);
+    }
+
+    public function testSynthesizeSpeechRejectsBlankTextWithoutCallingTheApi(): void {
+        $this->client->expects($this->never())->method('post');
+
+        $this->assertSame(['error' => 'No text to speak.'], $this->provider->synthesizeSpeech('   ', 'u'));
+    }
+
+    public function testGenerateImagesUsesAnInlineToolAndDownloadsEachFile(): void {
+        $body = null;
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$body): IResponse {
+                $this->assertSame('https://api.mistral.ai/v1/conversations', $u);
+                $body = json_decode($o['body'], true);
+                return $this->jsonResponse([
+                    'outputs' => [
+                        ['type' => 'tool.execution', 'name' => 'image_generation'],
+                        ['type' => 'message.output', 'content' => [
+                            ['type' => 'text', 'text' => 'Here you go.'],
+                            ['type' => 'tool_file', 'tool' => 'image_generation', 'file_id' => 'file-1', 'file_type' => 'png'],
+                            ['type' => 'tool_file', 'tool' => 'image_generation', 'file_id' => 'file-2', 'file_type' => 'png'],
+                        ]],
+                    ],
+                    'usage' => ['prompt_tokens' => 30, 'completion_tokens' => 4],
+                ]);
+            }
+        );
+        $downloaded = [];
+        $this->client->method('get')->willReturnCallback(
+            function (string $u) use (&$downloaded): IResponse {
+                $downloaded[] = $u;
+                $response = $this->createMock(IResponse::class);
+                $response->method('getBody')->willReturn('png-' . count($downloaded));
+                return $response;
+            }
+        );
+
+        $result = $this->provider->generateImages('an orange cat', 2, 'u');
+
+        $this->assertSame(['png-1', 'png-2'], $result['images']);
+        $this->assertSame('image/png', $result['mimeType']);
+        $this->assertSame(30, $result['usage']['input_tokens']);
+        $this->assertSame([
+            'https://api.mistral.ai/v1/files/file-1/content',
+            'https://api.mistral.ai/v1/files/file-2/content',
+        ], $downloaded);
+
+        // No agent is created: the tool rides along on the conversation itself.
+        $this->assertSame([['type' => 'image_generation']], $body['tools']);
+        $this->assertSame(MistralProvider::DEFAULT_IMAGE_MODEL, $body['model']);
+        $this->assertFalse($body['stream']);
+        $this->assertStringContainsString('Generate 2 distinct images', $body['inputs'][0]['content']);
+    }
+
+    public function testGenerateImagesStopsAtTheRequestedCount(): void {
+        $this->client->method('post')->willReturn($this->jsonResponse([
+            'outputs' => [['type' => 'message.output', 'content' => [
+                ['type' => 'tool_file', 'file_id' => 'file-1', 'file_type' => 'jpg'],
+                ['type' => 'tool_file', 'file_id' => 'file-2', 'file_type' => 'jpg'],
+            ]]],
+        ]));
+        $this->client->expects($this->once())->method('get')->willReturnCallback(
+            function (): IResponse {
+                $response = $this->createMock(IResponse::class);
+                $response->method('getBody')->willReturn('jpeg-bytes');
+                return $response;
+            }
+        );
+
+        $result = $this->provider->generateImages('a blue door', 1, 'u');
+
+        $this->assertSame(['jpeg-bytes'], $result['images']);
+        $this->assertSame('image/jpeg', $result['mimeType']);
+    }
+
+    public function testGenerateImagesReportsAResponseWithNoFiles(): void {
+        $this->client->method('post')->willReturn($this->jsonResponse([
+            'outputs' => [['type' => 'message.output', 'content' => [['type' => 'text', 'text' => 'I cannot do that.']]]],
+        ]));
+
+        $this->assertSame(
+            ['error' => 'Mistral generated no images for this prompt.'],
+            $this->provider->generateImages('a blue door', 1, 'u'),
+        );
+    }
 }
