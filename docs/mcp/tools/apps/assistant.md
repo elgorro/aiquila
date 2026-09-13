@@ -91,7 +91,9 @@ Ask Claude: "Check the result of AI task 42"
 
 ### generate_image
 
-Generate an image from a text prompt using Nextcloud's text-to-image AI provider (e.g., Stable Diffusion via LocalAI). Returns the task ID; use `get_task_result` to check completion.
+Generate an image from a text prompt using whichever `core:text2image` provider the Nextcloud instance has registered. Returns the task ID; use `get_task_result` to check completion.
+
+This tool consumes a provider, it does not register one: it calls Nextcloud's own OCS task API and whatever serves that task type answers. The AIquila Nextcloud app registers such a provider itself (backed by Mistral), so on an instance running both components this tool works without a separate image-generation app installed — see [Assistant integration](../../../installation/aiquila-setup.md).
 
 **Parameters:**
 - `prompt` (string, required): Text description of the image to generate

@@ -64,6 +64,11 @@ and `LocalProvider` use, so all wire-format handling is shared. It only supplies
 Native MCP is not supported (no connector API); tools are executed client-side by
 the shared base class, exactly as for DeepSeek.
 
+The Inference API exposes only `/v1/models`, `/v1/completions` and
+`/v1/chat/completions`, so there is no transcription, speech or image-generation
+route to call: `audio_in`, `audio_out` and `image_out` all stay false, and those
+Assistant actions refuse with a message naming Mistral instead.
+
 ## Configuration keys
 
 App config (`oc_appconfig`, app `aiquila`):

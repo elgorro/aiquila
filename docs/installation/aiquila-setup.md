@@ -260,16 +260,34 @@ needed.
 | `core:generateemoji` | Suggest an emoji for a text |
 | `core:analyze-images` | Ask a question about one or more images |
 | `core:image2text:ocr` | Extract the text visible in images |
+| `core:audio2text` | Transcribe a recording |
+| `core:text2speech` | Read a text out as audio |
+| `core:text2image` | Generate images from a description |
+| `core:audio2audio:chat` | Voice chat: a spoken question answered with spoken audio |
 
 Assistant actions run on whichever AI provider the user has selected — the same
 choice that drives chat — within what the admin allows. A task may also pin a
-provider explicitly through the optional `provider` input. The image actions need a
-vision-capable provider; with a text-only one selected they fail with a message naming
-the alternatives.
+provider explicitly through the optional `provider` input.
 
-Speech and audio (`core:audio2text`, `core:text2speech`), image generation
-(`core:text2image`) and the Context Agent task types are not served by AIquila — install
-a dedicated provider app for those.
+Not every provider can serve every action. Anything beyond plain text needs the
+matching capability, shown as a chip on the provider's card in the AIquila settings:
+
+| Action | Needs | Providers that offer it |
+|---|---|---|
+| Image questions and OCR | `vision` | Claude, Mistral, Hetzner (model-dependent), Local (admin flag) |
+| Transcription, voice chat | `transcription` | Mistral, Local (admin flag) |
+| Generated speech, voice chat | `speech` | Mistral, Local (admin flag) |
+| Generated images | `image generation` | Mistral |
+
+Picking a provider without the capability an action needs is an error rather than a
+silent hand-off to a different one — the point of choosing a provider is that the data
+goes where you chose. The action fails with a message naming the providers you could
+switch to. Voice chat needs one provider holding both audio capabilities, so that a
+spoken message and its reply do not travel to two different vendors.
+
+The Context Agent task types (`core:contextagent:interaction` and
+`core:contextagent:audiointeraction`) are not served by AIquila — install a dedicated
+provider app for those.
 
 ### 3. Public API
 
