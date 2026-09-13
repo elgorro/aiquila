@@ -59,7 +59,7 @@ providers:
 - `exposedByDefault: false` — containers are not routed by default; they must opt in
   with the label `traefik.enable=true`.
 - Traefik does **not** mount the Docker socket directly. Instead it talks to
-  `aiq-socket-proxy` (`tecnativa/docker-socket-proxy:0.3`), which only exposes the
+  `aiq-socket-proxy` (`tecnativa/docker-socket-proxy:v0.5.0`), which only exposes the
   `CONTAINERS` and `NETWORKS` API endpoints. This limits the blast radius if Traefik
   is compromised.
 
