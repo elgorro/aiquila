@@ -20,8 +20,8 @@ use OCA\AIquila\Service\Provider\NoPermittedProviderException;
  *
  * The framework expects process() to fail with a RuntimeException, so the two
  * things that can go wrong here — no permitted provider at all, and a provider
- * that cannot see images — are translated into one, with a message that tells
- * the user what to switch to.
+ * missing the modality the task needs — are translated into one, with a message
+ * that tells the user what to switch to.
  */
 class ProviderResolver {
 
@@ -67,28 +67,90 @@ class ProviderResolver {
      */
     public function resolveVisionCapable(?string $userId, ?string $requestedId = null): LLMProviderInterface {
         $provider = $this->resolve($userId, $requestedId);
-        if ($provider->getCapabilities()['vision']) {
+        return $this->requireCapability($provider, $userId, 'vision', 'process images', 'vision-capable');
+    }
+
+    /**
+     * Same as resolve(), but for tasks that send audio to be transcribed.
+     *
+     * @throws \RuntimeException when the resolved provider cannot transcribe audio
+     */
+    public function resolveAudioCapable(?string $userId, ?string $requestedId = null): LLMProviderInterface {
+        $provider = $this->resolve($userId, $requestedId);
+        return $this->requireCapability($provider, $userId, 'audio_in', 'transcribe audio', 'transcription-capable');
+    }
+
+    /**
+     * Same as resolve(), but for tasks that ask for generated speech.
+     *
+     * @throws \RuntimeException when the resolved provider cannot generate speech
+     */
+    public function resolveSpeechCapable(?string $userId, ?string $requestedId = null): LLMProviderInterface {
+        $provider = $this->resolve($userId, $requestedId);
+        return $this->requireCapability($provider, $userId, 'audio_out', 'generate speech', 'speech-capable');
+    }
+
+    /**
+     * Same as resolve(), but for tasks that ask for generated images.
+     *
+     * @throws \RuntimeException when the resolved provider cannot generate images
+     */
+    public function resolveImageGenCapable(?string $userId, ?string $requestedId = null): LLMProviderInterface {
+        $provider = $this->resolve($userId, $requestedId);
+        return $this->requireCapability($provider, $userId, 'image_out', 'generate images', 'image-generating');
+    }
+
+    /**
+     * Same as resolve(), but for the voice-chat task, which both consumes and
+     * produces audio. Checked in the order the run would fail anyway, so the
+     * message names the first thing that is missing rather than both.
+     *
+     * @throws \RuntimeException when the resolved provider cannot do both
+     */
+    public function resolveVoiceChatCapable(?string $userId, ?string $requestedId = null): LLMProviderInterface {
+        $provider = $this->resolve($userId, $requestedId);
+        $this->requireCapability($provider, $userId, 'audio_in', 'transcribe audio', 'transcription-capable');
+        return $this->requireCapability($provider, $userId, 'audio_out', 'generate speech', 'speech-capable');
+    }
+
+    /**
+     * Hand back $provider when it declares $capability, or fail with a message
+     * that names what to switch to.
+     *
+     * $cannot completes "<provider> cannot …" and $needs qualifies "… provider",
+     * so the two halves of both sentences stay in one place.
+     *
+     * @throws \RuntimeException
+     */
+    private function requireCapability(
+        LLMProviderInterface $provider,
+        ?string $userId,
+        string $capability,
+        string $cannot,
+        string $needs,
+    ): LLMProviderInterface {
+        if ($provider->getCapabilities()[$capability]) {
             return $provider;
         }
 
-        $alternatives = $this->visionCapableLabels($userId);
+        $alternatives = $this->capableLabels($userId, $capability);
         throw new \RuntimeException(
             $alternatives === []
-                ? $provider->getLabel() . ' cannot process images, and no vision-capable AI provider is available for your account. Ask your administrator.'
-                : $provider->getLabel() . ' cannot process images. Pick a vision-capable provider in your AIquila settings — available: ' . implode(', ', $alternatives) . '.'
+                ? $provider->getLabel() . ' cannot ' . $cannot . ', and no ' . $needs . ' AI provider is available for your account. Ask your administrator.'
+                : $provider->getLabel() . ' cannot ' . $cannot . '. Pick a ' . $needs . ' provider in your AIquila settings — available: ' . implode(', ', $alternatives) . '.'
         );
     }
 
     /**
-     * Labels of the configured, vision-capable providers this user may use.
+     * Labels of the configured providers this user may use that declare $capability.
      *
      * @return list<string>
      */
-    private function visionCapableLabels(?string $userId): array {
+    private function capableLabels(?string $userId, string $capability): array {
         $labels = [];
         foreach ($this->providerFactory->getProviderIdsForUser($userId) as $id) {
             $candidate = $this->providerFactory->getProviderById($id);
-            if ($candidate->getCapabilities()['vision'] && $candidate->isConfigured($userId)) {
+            if ($candidate->getCapabilities()[$capability] && $candidate->isConfigured($userId)) {
                 $labels[] = $candidate->getLabel();
             }
         }
