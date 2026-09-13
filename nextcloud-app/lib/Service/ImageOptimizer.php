@@ -43,6 +43,28 @@ class ImageOptimizer {
     }
 
     /**
+     * Prepare raw image bytes for a provider vision call.
+     *
+     * Every vision call site wants the same two things — base64 payload and the
+     * mime type the model will actually be told about — and the same fallback
+     * when the format is one the optimizer cannot re-encode. Keeping that in one
+     * place is what stops the call sites from disagreeing about it.
+     *
+     * @param string $rawBytes Raw image bytes
+     * @param string $mimeType Mime type of those bytes
+     * @return array{base64: string, mimeType: string}
+     */
+    public function prepare(string $rawBytes, string $mimeType): array {
+        if (!$this->isSupported($mimeType)) {
+            return ['base64' => base64_encode($rawBytes), 'mimeType' => $mimeType];
+        }
+
+        $optimized = $this->optimize($rawBytes, $mimeType);
+
+        return ['base64' => $optimized['data'], 'mimeType' => $optimized['mimeType']];
+    }
+
+    /**
      * Optimize an image for Claude Vision.
      *
      * If the long edge exceeds MAX_LONG_EDGE the image is down-scaled while

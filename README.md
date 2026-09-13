@@ -33,7 +33,7 @@ The Nextcloud app supports five providers for chat. Each user can pick a provide
 
 Provider choice applies to chat, the per-conversation model picker and the Nextcloud
 Assistant / TaskProcessing integrations, which all run on the provider the user has
-selected. Assistant actions that send images ("Describe this image", "Analyze images")
+selected. Assistant actions that send images ("Analyze images", "Extract text from image")
 need a vision-capable provider, and report which of the available ones qualify when
 the selected provider is not.
 

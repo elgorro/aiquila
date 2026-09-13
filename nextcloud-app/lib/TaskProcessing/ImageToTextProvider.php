@@ -6,22 +6,27 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\ImageOptimizer;
+use OCP\Files\File;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\ShapeDescriptor;
+use OCP\TaskProcessing\TaskTypes\ImageToTextOpticalCharacterRecognition;
 use Psr\Log\LoggerInterface;
 
 /**
- * Single-image vision TaskProcessing Provider
+ * Optical character recognition TaskProcessing Provider
  *
- * Registers AIquila as an image-to-text (vision) provider in Nextcloud's
- * TaskProcessing framework (NC 29+). This enables "Describe this image"
- * actions in Files, Photos, and the Nextcloud Assistant.
+ * Registers AIquila against core:image2text:ocr, the task type behind
+ * "Extract text from image" in the Nextcloud Assistant and in Files. The type
+ * is a batch: one run carries a list of files and returns one text per file,
+ * in the same order.
  *
- * Input:  image (binary)
- * Output: output (string)
+ * Input:  input (list of image files)
+ * Output: output (list of extracted texts)
  */
 class ImageToTextProvider implements ISynchronousProvider {
+
+    private const DEFAULT_PROMPT = 'Extract all text visible in this image. Return only the extracted text, with no commentary. If the image contains no text, return an empty response.';
 
     public function __construct(
         private ProviderResolver $providers,
@@ -39,7 +44,7 @@ class ImageToTextProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return 'core:image2text';
+        return ImageToTextOpticalCharacterRecognition::ID;
     }
 
     public function getExpectedRuntime(): int {
@@ -50,7 +55,7 @@ class ImageToTextProvider implements ISynchronousProvider {
         return [
             'prompt' => new ShapeDescriptor(
                 'Prompt',
-                'Optional question or instruction about the image',
+                'Optional instruction describing what to extract from each image',
                 EShapeType::Text
             ),
             'provider' => new ShapeDescriptor(
@@ -78,7 +83,7 @@ class ImageToTextProvider implements ISynchronousProvider {
     }
 
     public function getOptionalInputShapeDefaults(): array {
-        return ['prompt' => 'Describe this image in detail.'];
+        return ['prompt' => self::DEFAULT_PROMPT];
     }
 
     public function getOutputShapeEnumValues(): array {
@@ -90,79 +95,59 @@ class ImageToTextProvider implements ISynchronousProvider {
     }
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
-        $imageData = $input['image'] ?? '';
-        if (!is_string($imageData) || $imageData === '') {
-            throw new \RuntimeException('No image provided in task input');
+        // The framework resolves ListOfFiles slots to File nodes before calling
+        // us — the raw bytes never travel through the task input.
+        $files = $input['input'] ?? [];
+        if (!is_array($files) || $files === []) {
+            throw new \RuntimeException('No images provided');
+        }
+
+        if (count($files) > ImageOptimizer::MAX_IMAGES) {
+            throw new \RuntimeException('Too many images. Maximum is ' . ImageOptimizer::MAX_IMAGES);
         }
 
         $prompt = $input['prompt'] ?? '';
         if (!is_string($prompt) || $prompt === '') {
-            $prompt = 'Describe this image in detail.';
+            $prompt = self::DEFAULT_PROMPT;
         }
 
-        $mimeType = $this->detectMimeType($imageData);
-
-        $this->logger->debug('AIquila ImageToText: Processing image', [
-            'mime_type' => $mimeType,
-            'prompt_length' => strlen($prompt),
-        ]);
-
-        $reportProgress(0.3);
-
-        // Optimize image for the provider's vision endpoint
-        if ($this->imageOptimizer->isSupported($mimeType)) {
-            $optimized = $this->imageOptimizer->optimize($imageData, $mimeType);
-            $base64 = $optimized['data'];
-            $mimeType = $optimized['mimeType'];
-        } else {
-            $base64 = base64_encode($imageData);
-        }
-
-        $reportProgress(0.5);
-
-        // The resolver applies the admin's access rules: a provider the user may
-        // not use falls through to the one they may, rather than being reachable
-        // through the task-processing API.
         $provider = $this->providers->resolveVisionCapable($userId, $this->providers->requestedId($input));
 
-        $result = $provider->askWithImage(
-            $prompt,
-            $base64,
-            $mimeType,
-            $userId,
-        );
+        $this->logger->debug('AIquila ImageToText: Extracting text from {count} image(s)', [
+            'count' => count($files),
+            'provider' => $provider->getId(),
+        ]);
 
-        if (isset($result['error'])) {
-            $this->logger->error('AIquila ImageToText: Error', ['error' => $result['error'], 'provider' => $provider->getId()]);
-            throw new \RuntimeException($result['error']);
+        $texts = [];
+        $total = count($files);
+        foreach (array_values($files) as $i => $file) {
+            if (!$file instanceof File) {
+                throw new \RuntimeException('Image ' . ($i + 1) . ' is not a file');
+            }
+
+            $image = $this->imageOptimizer->prepare($file->getContent(), $file->getMimetype());
+
+            $result = $provider->askWithImage(
+                $prompt,
+                $image['base64'],
+                $image['mimeType'],
+                $userId,
+                (string)$file->getId(),
+            );
+
+            if (isset($result['error'])) {
+                $this->logger->error('AIquila ImageToText: Error', [
+                    'error' => $result['error'],
+                    'provider' => $provider->getId(),
+                    'file' => $file->getId(),
+                ]);
+                throw new \RuntimeException($result['error']);
+            }
+
+            $texts[] = (string)($result['response'] ?? '');
+            $reportProgress(($i + 1) / $total);
         }
 
-        return ['output' => $result['response'] ?? ''];
-    }
-
-    /**
-     * Detect MIME type from raw image bytes using magic bytes.
-     */
-    private function detectMimeType(string $data): string {
-        if (strlen($data) < 4) {
-            return 'image/jpeg';
-        }
-
-        $header = substr($data, 0, 4);
-
-        if (str_starts_with($header, "\xFF\xD8\xFF")) {
-            return 'image/jpeg';
-        }
-        if (str_starts_with($header, "\x89PNG")) {
-            return 'image/png';
-        }
-        if (str_starts_with($header, 'GIF8')) {
-            return 'image/gif';
-        }
-        if (str_starts_with($header, 'RIFF') && strlen($data) >= 12 && substr($data, 8, 4) === 'WEBP') {
-            return 'image/webp';
-        }
-
-        return 'image/jpeg';
+        return ['output' => $texts];
     }
 }

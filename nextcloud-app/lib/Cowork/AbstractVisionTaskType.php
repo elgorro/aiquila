@@ -77,17 +77,9 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
 
         foreach ($files as $file) {
             try {
-                $raw = $file->getContent();
-                $mime = $file->getMimetype();
-                if ($this->imageOptimizer->isSupported($mime)) {
-                    $optimized = $this->imageOptimizer->optimize($raw, $mime);
-                    $base64 = $optimized['data'];
-                    $mime = $optimized['mimeType'];
-                } else {
-                    $base64 = base64_encode($raw);
-                }
+                $image = $this->imageOptimizer->prepare($file->getContent(), $file->getMimetype());
 
-                $result = $provider->askWithImage($prompt, $base64, $mime, $userId, (string)$file->getId());
+                $result = $provider->askWithImage($prompt, $image['base64'], $image['mimeType'], $userId, (string)$file->getId());
                 if (isset($result['error'])) {
                     throw new \RuntimeException($result['error']);
                 }

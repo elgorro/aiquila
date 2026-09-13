@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCP\TaskProcessing\ISynchronousProvider;
+use OCP\TaskProcessing\TaskTypes\TextToTextFormalization;
 
 /**
  * Formalization TaskProcessing Provider (core:text2text:formalization)
@@ -26,7 +27,7 @@ class FormalizationProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:formalization';
+        return TextToTextFormalization::ID;
     }
 
     public function getExpectedRuntime(): int {

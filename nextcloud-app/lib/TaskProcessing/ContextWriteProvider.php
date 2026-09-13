@@ -5,13 +5,19 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
+use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
-use OCP\TaskProcessing\TaskTypes\TextToTextChangeTone;
+use OCP\TaskProcessing\ShapeDescriptor;
+use OCP\TaskProcessing\TaskTypes\ContextWrite;
 
 /**
- * Change-tone TaskProcessing Provider (core:text2text:changetone)
+ * Context write TaskProcessing Provider (core:contextwrite)
+ *
+ * Powers the Assistant's "Context write" action: write about one thing in the
+ * voice of another. `style_input` is the sample whose tone and style to copy,
+ * `source_input` is what the new text should be about.
  */
-class ChangeToneProvider implements ISynchronousProvider {
+class ContextWriteProvider implements ISynchronousProvider {
 
     public function __construct(
         private ProviderResolver $providers,
@@ -19,7 +25,7 @@ class ChangeToneProvider implements ISynchronousProvider {
     }
 
     public function getId(): string {
-        return 'aiquila:text2text:changetone';
+        return 'aiquila:contextwrite';
     }
 
     public function getName(): string {
@@ -27,7 +33,7 @@ class ChangeToneProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return TextToTextChangeTone::ID;
+        return ContextWrite::ID;
     }
 
     public function getExpectedRuntime(): int {
@@ -35,7 +41,13 @@ class ChangeToneProvider implements ISynchronousProvider {
     }
 
     public function getOptionalInputShape(): array {
-        return [];
+        return [
+            'provider' => new ShapeDescriptor(
+                'Provider',
+                'Optional LLM provider id override (e.g. anthropic, mistral)',
+                EShapeType::Text
+            ),
+        ];
     }
 
     public function getOptionalOutputShape(): array {
@@ -67,20 +79,20 @@ class ChangeToneProvider implements ISynchronousProvider {
     }
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
-        $text = $input['input'] ?? '';
-        $tone = $input['tone'] ?? 'formal';
-
-        if (!is_string($text) || $text === '') {
-            throw new \RuntimeException('No input text provided');
+        $style = $input['style_input'] ?? '';
+        $source = $input['source_input'] ?? '';
+        if (!is_string($style) || $style === '') {
+            throw new \RuntimeException('No writing style provided');
         }
-        if (!is_string($tone) || $tone === '') {
-            $tone = 'formal';
+        if (!is_string($source) || $source === '') {
+            throw new \RuntimeException('No source material provided');
         }
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId)->ask(
-            "Rewrite the following text in a {$tone} tone. Return only the rewritten text, nothing else:\n\n" . $text,
+        $result = $this->providers->resolve($userId, $this->providers->requestedId($input))->ask(
+            "Write a text about the subject below, imitating the tone, voice and style of the sample. Return only the text you wrote, nothing else.\n\n"
+                . "Style sample:\n" . $style . "\n\nSubject:\n" . $source,
             '',
             $userId,
         );

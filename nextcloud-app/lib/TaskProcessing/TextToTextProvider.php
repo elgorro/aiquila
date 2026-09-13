@@ -7,6 +7,7 @@ namespace OCA\AIquila\TaskProcessing;
 
 use Psr\Log\LoggerInterface;
 use OCP\TaskProcessing\ISynchronousProvider;
+use OCP\TaskProcessing\TaskTypes\TextToText;
 
 /**
  * Free-prompt TaskProcessing Provider (core:text2text)
@@ -31,7 +32,7 @@ class TextToTextProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text';
+        return TextToText::ID;
     }
 
     public function getExpectedRuntime(): int {

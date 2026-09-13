@@ -5,13 +5,18 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
+use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
-use OCP\TaskProcessing\TaskTypes\TextToTextChangeTone;
+use OCP\TaskProcessing\ShapeDescriptor;
+use OCP\TaskProcessing\TaskTypes\GenerateEmoji;
 
 /**
- * Change-tone TaskProcessing Provider (core:text2text:changetone)
+ * Emoji generation TaskProcessing Provider (core:generateemoji)
+ *
+ * Used by Nextcloud to suggest an emoji for a text — a Talk conversation
+ * avatar, a Deck board icon and so on.
  */
-class ChangeToneProvider implements ISynchronousProvider {
+class GenerateEmojiProvider implements ISynchronousProvider {
 
     public function __construct(
         private ProviderResolver $providers,
@@ -19,7 +24,7 @@ class ChangeToneProvider implements ISynchronousProvider {
     }
 
     public function getId(): string {
-        return 'aiquila:text2text:changetone';
+        return 'aiquila:generateemoji';
     }
 
     public function getName(): string {
@@ -27,15 +32,21 @@ class ChangeToneProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return TextToTextChangeTone::ID;
+        return GenerateEmoji::ID;
     }
 
     public function getExpectedRuntime(): int {
-        return 30;
+        return 10;
     }
 
     public function getOptionalInputShape(): array {
-        return [];
+        return [
+            'provider' => new ShapeDescriptor(
+                'Provider',
+                'Optional LLM provider id override (e.g. anthropic, mistral)',
+                EShapeType::Text
+            ),
+        ];
     }
 
     public function getOptionalOutputShape(): array {
@@ -68,19 +79,14 @@ class ChangeToneProvider implements ISynchronousProvider {
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $text = $input['input'] ?? '';
-        $tone = $input['tone'] ?? 'formal';
-
         if (!is_string($text) || $text === '') {
             throw new \RuntimeException('No input text provided');
-        }
-        if (!is_string($tone) || $tone === '') {
-            $tone = 'formal';
         }
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId)->ask(
-            "Rewrite the following text in a {$tone} tone. Return only the rewritten text, nothing else:\n\n" . $text,
+        $result = $this->providers->resolve($userId, $this->providers->requestedId($input))->ask(
+            "Pick the single emoji that best represents the following text. Answer with that one emoji character and nothing else — no words, no punctuation, no explanation:\n\n" . $text,
             '',
             $userId,
         );
@@ -89,6 +95,6 @@ class ChangeToneProvider implements ISynchronousProvider {
             throw new \RuntimeException($result['error']);
         }
 
-        return ['output' => $result['response'] ?? ''];
+        return ['output' => trim((string)($result['response'] ?? ''))];
     }
 }
