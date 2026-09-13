@@ -34,7 +34,7 @@ See the [Docker setup guide](https://github.com/elgorro/aiquila/blob/main/docs/m
 
 None. This server has no model of its own and no provider setting — it exposes your
 Nextcloud to whatever MCP client you point at it, and that client brings its own model.
-Provider choice (Hetzner Inference, Claude, Mistral, a local model, DeepSeek) belongs to
+Provider choice (Claude, Hetzner Inference, Mistral, a local model, DeepSeek) belongs to
 the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/installation/aiquila-setup.md), which is a separate component.
 
 ## What It Can Do

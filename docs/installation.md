@@ -64,7 +64,7 @@ make up
 
 ## Path 3: Nextcloud App
 
-Add AI directly inside your Nextcloud UI — chat interface, text processing, and public API. Choose your provider: Hetzner Inference, Claude, Mistral, a local model, or DeepSeek.
+Add AI directly inside your Nextcloud UI — chat interface, text processing, and public API. Choose your provider: Claude, Hetzner Inference, Mistral, a local model, or DeepSeek.
 
 **Prerequisites:** Nextcloud 34, PHP 8.4+, and an API key for one of the supported AI providers — or none at all, if you run a local model. See [Nextcloud compatibility](nextcloud-compatibility.md) for the supported version window.
 
