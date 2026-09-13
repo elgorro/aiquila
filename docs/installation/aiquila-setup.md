@@ -77,7 +77,7 @@ php occ aiquila:configure --model claude-sonnet-4-6
 AIquila provides three main features:
 
 1. **Chat Interface**: Interactive chat with your AI provider at `/apps/aiquila`
-2. **Text Processing Provider**: Native integration with Nextcloud Assistant
+2. **TaskProcessing Provider**: Native integration with the Nextcloud Assistant
 3. **Public API**: RESTful endpoints for other apps to use AIquila
 
 ## Installation
@@ -237,17 +237,39 @@ Attached files appear as chips above the text input (with thumbnails for images)
 
 ### 2. Nextcloud Assistant Integration
 
-AIquila automatically registers as a Text Processing Provider, making it available throughout Nextcloud:
+AIquila registers itself against Nextcloud's TaskProcessing framework, so it shows up
+wherever the server offers an AI action — the Assistant, the Files and Photos context
+menus, Text, Talk and anything else built on the same API. No extra configuration is
+needed.
 
-- Accessible via Nextcloud's native Assistant
-- Works with any feature using text processing
-- No additional configuration needed
-- Seamlessly integrated into workflows
+| Task type | What it does |
+|---|---|
+| `core:text2text` | Free-form prompt |
+| `core:text2text:chat` | Multi-turn chat, with history and a system prompt |
+| `core:text2text:summary` | Summarize |
+| `core:text2text:headline` | Suggest a headline |
+| `core:text2text:topics` | Extract topics |
+| `core:text2text:translate` | Translate |
+| `core:text2text:proofread` | Proofread |
+| `core:text2text:changetone` | Change tone |
+| `core:text2text:simplification` | Simplify |
+| `core:text2text:reformulation` | Reformulate |
+| `core:text2text:formalization` | Make formal |
+| `core:text2text:reformatparagraphs` | Split into topic-separated paragraphs (Nextcloud 34+) |
+| `core:contextwrite` | Write about a subject in the voice of a sample |
+| `core:generateemoji` | Suggest an emoji for a text |
+| `core:analyze-images` | Ask a question about one or more images |
+| `core:image2text:ocr` | Extract the text visible in images |
 
 Assistant actions run on whichever AI provider the user has selected — the same
-choice that drives chat — within what the admin allows. The image actions
-("Describe this image", "Analyze images") need a vision-capable provider; with a
-text-only one selected they fail with a message naming the alternatives.
+choice that drives chat — within what the admin allows. A task may also pin a
+provider explicitly through the optional `provider` input. The image actions need a
+vision-capable provider; with a text-only one selected they fail with a message naming
+the alternatives.
+
+Speech and audio (`core:audio2text`, `core:text2speech`), image generation
+(`core:text2image`) and the Context Agent task types are not served by AIquila — install
+a dedicated provider app for those.
 
 ### 3. Public API
 
