@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCP\TaskProcessing\ISynchronousProvider;
+use OCP\TaskProcessing\TaskTypes\TextToTextTopics;
 
 /**
  * Topics TaskProcessing Provider (core:text2text:topics)
@@ -26,7 +27,7 @@ class TopicsProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:topics';
+        return TextToTextTopics::ID;
     }
 
     public function getExpectedRuntime(): int {

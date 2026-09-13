@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCP\TaskProcessing\ISynchronousProvider;
+use OCP\TaskProcessing\TaskTypes\TextToTextChangeTone;
 
 /**
  * Change-tone TaskProcessing Provider (core:text2text:changetone)
@@ -26,7 +27,7 @@ class ChangeToneProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:changetone';
+        return TextToTextChangeTone::ID;
     }
 
     public function getExpectedRuntime(): int {

@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCP\TaskProcessing\ISynchronousProvider;
+use OCP\TaskProcessing\TaskTypes\TextToTextHeadline;
 
 /**
  * Headline TaskProcessing Provider (core:text2text:headline)
@@ -26,7 +27,7 @@ class HeadlineProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:headline';
+        return TextToTextHeadline::ID;
     }
 
     public function getExpectedRuntime(): int {

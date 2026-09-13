@@ -7,6 +7,7 @@ namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\TaskProcessing\ISynchronousProvider;
+use OCP\TaskProcessing\TaskTypes\TextToTextSummary;
 
 /**
  * Summary TaskProcessing Provider (core:text2text:summary)
@@ -27,7 +28,7 @@ class SummaryProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:summary';
+        return TextToTextSummary::ID;
     }
 
     public function getExpectedRuntime(): int {

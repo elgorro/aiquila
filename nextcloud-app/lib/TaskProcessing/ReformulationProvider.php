@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCP\TaskProcessing\ISynchronousProvider;
+use OCP\TaskProcessing\TaskTypes\TextToTextReformulation;
 
 /**
  * Reformulation TaskProcessing Provider (core:text2text:reformulation)
@@ -26,7 +27,7 @@ class ReformulationProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:reformulation';
+        return TextToTextReformulation::ID;
     }
 
     public function getExpectedRuntime(): int {

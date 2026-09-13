@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCP\TaskProcessing\ISynchronousProvider;
+use OCP\TaskProcessing\TaskTypes\TextToTextTranslate;
 
 /**
  * Translate TaskProcessing Provider (core:text2text:translate)
@@ -26,7 +27,7 @@ class TranslateProvider implements ISynchronousProvider {
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:translate';
+        return TextToTextTranslate::ID;
     }
 
     public function getExpectedRuntime(): int {
