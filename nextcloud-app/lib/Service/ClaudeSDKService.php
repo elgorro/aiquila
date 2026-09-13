@@ -30,6 +30,7 @@ use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\ProviderActionsInterface;
 use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
+use OCA\AIquila\Service\Provider\UnsupportedModalities;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
@@ -42,6 +43,9 @@ use Psr\Log\LoggerInterface;
  * Provides better error handling, type safety, and streaming support.
  */
 class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface {
+    // Anthropic publishes no transcription, speech or image-generation endpoint.
+    use UnsupportedModalities;
+
     private IConfig $config;
     private LoggerInterface $logger;
     private CredentialService $credentials;

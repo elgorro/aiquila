@@ -62,6 +62,14 @@ class Application extends App implements IBootstrap {
         $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ImageToTextProvider::class);
         $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\AnalyzeImagesProvider::class);
 
+        // Audio and image-generation providers. Only providers declaring the
+        // matching capability can serve these; the resolver fails with a message
+        // naming the alternatives when the user's provider cannot.
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\AudioToTextProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\TextToSpeechProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\TextToImageProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\AudioToAudioChatProvider::class);
+
         // Text-to-text providers
         $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\TextToTextProvider::class);
         $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\SummaryProvider::class);

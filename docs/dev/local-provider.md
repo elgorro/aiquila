@@ -60,15 +60,37 @@ none of it is user-settable (see [Security](#security)).
 | Max response tokens | `max_tokens_local` | `4096` | No per-model ceiling table — local model ids are arbitrary tags. |
 | Request timeout | `local_timeout` | `300` | Applies to streaming and non-streaming. The shared `api_timeout` (30 s) is far too low for CPU inference. |
 | Accepts images | `local_vision` | `no` | Only enable for a multimodal model (llava, llama3.2-vision, qwen2-vl, …). Images are sent as `image_url` data URIs. |
+| Transcribes audio | `local_audio_in` | `no` | Only enable when the backend serves `/v1/audio/transcriptions`. |
+| Transcription model | `local_stt_model` | `whisper-1` | The speech-to-text tag as the backend reports it. |
+| Generates speech | `local_audio_out` | `no` | Only enable when the backend serves `/v1/audio/speech`. |
+| Speech model | `local_tts_model` | `tts-1` | The text-to-speech tag as the backend reports it. |
+| Speech voice | `local_tts_voice` | *(empty)* | Blank sends no voice and lets the backend choose. |
 | Allow local addresses | `local_allow_local_address` | `yes` | See below. |
 
 Setting **Local model** as the default provider (or a user picking it in personal
 settings) routes chat, tools and streaming through it. AIquila's TaskProcessing
 providers resolve the same way — they go through `LLMProviderFactory`, so Assistant
 actions and the MCP server's `assistant` tool follow the same choice. The exception
-is the image actions: they need `local_vision` set to **yes** (and a multimodal
-model behind it), and otherwise refuse with a message naming the vision-capable
-providers that are available instead.
+is anything beyond plain text, which is opt-in per deployment.
+
+The OpenAI-compatible dialect these backends share stops at chat completions, and
+Nextcloud cannot tell which server is listening, so each extra modality is an
+admin flag rather than a guess:
+
+- **Images in** need `local_vision` set to **yes** and a multimodal model behind it.
+- **Transcription** needs `local_audio_in`. Speaches, LocalAI and whisper.cpp's
+  server expose `/v1/audio/transcriptions`; plain Ollama and LM Studio do not.
+- **Generated speech** needs `local_audio_out`, and a backend serving
+  `/v1/audio/speech`.
+- **Generated images** are not offered locally at all: there is no route the
+  OpenAI-compatible backends agree on, so `image_out` stays false and the
+  Assistant's image-generation action never lands here.
+
+Voice chat needs both audio flags on, since one provider has to hold both halves
+of the chain. An action whose flag is off refuses with a message naming the
+providers that do offer it. The audio calls reuse the same request options as
+chat, so the local-address allowance, the TLS settings and the auth mode all
+apply to them unchanged.
 
 Configuration goes through the schema-driven endpoints
 `GET /api/admin/providers` and `POST /api/admin/providers/local`, which read and

@@ -124,6 +124,56 @@ API keys are marked `sensitive`. They live in `CredentialService`, never in
 only whether a key exists in the requested scope, which is how the personal page
 distinguishes your own key from an inherited instance one.
 
+## Capability flags
+
+`getCapabilities()` returns a fixed-shape array of booleans, built through
+`ProviderSettingsSchema::capabilities()` so every provider carries every key
+whether or not it declares one. Two things read it: the chips on the provider
+card, and the guards that refuse work a provider cannot do.
+
+| Flag | Chip | Means | Declared by |
+|---|---|---|---|
+| `vision` | vision | Accepts image input | Claude, Mistral; Hetzner per model; Local per admin flag |
+| `tools` | tools | Runs an agentic tool loop | all but a bare local backend |
+| `streaming` | — | Streams tokens (no chip; everything streams) | all |
+| `thinking` | thinking | Extended thinking blocks | Claude |
+| `effort` | effort | Has a reasoning-effort knob | Claude, Mistral |
+| `native_mcp` | native MCP | Server-side MCP connector | Claude, Mistral |
+| `documents` | documents | Accepts PDFs as a document block | Claude |
+| `audio_in` | transcription | Transcribes audio | Mistral; Local per admin flag |
+| `audio_out` | speech | Generates speech | Mistral; Local per admin flag |
+| `image_out` | image generation | Generates images | Mistral |
+
+Adding a key means four edits that have to land together: the defaults in
+`ProviderSettingsSchema::capabilities()`, the `@return array{…}` docblock on both
+that method and `LLMProviderInterface::getCapabilities()` — psalm compares them —
+and `CAPABILITY_LABELS` in `ProviderCard.vue`. A flag left out of that last map
+is simply never chipped, which is how `streaming` stays quiet.
+
+`AbstractOpenAiCompatibleProvider` derives its flags from overridable hooks
+(`supportsVisionInput()`, `supportsAudioInput()`, `supportsAudioOutput()`,
+`supportsImageOutput()`), so an OpenAI-compatible subclass opts in by overriding
+a hook rather than by rewriting the array.
+
+## Capabilities that gate work
+
+A flag is not decoration: `ProviderResolver` turns it into a precondition for
+TaskProcessing runs, through `resolveVisionCapable()`, `resolveAudioCapable()`,
+`resolveSpeechCapable()`, `resolveImageGenCapable()` and
+`resolveVoiceChatCapable()` (which needs both audio halves on one provider).
+A provider missing the flag is an error naming the alternatives, never a quiet
+hand-off to another provider — the data is supposed to go where the user chose
+it would.
+
+The flags are asked per run rather than at registration time, because two of
+them are not static: Hetzner derives `vision` from the selected model, and the
+local provider derives `vision`, `audio_in` and `audio_out` from admin flags.
+
+Providers with no endpoint for a modality use the `UnsupportedModalities` trait,
+which answers `transcribeAudio()`, `synthesizeSpeech()` and `generateImages()`
+with the ordinary `{error: string}` shape naming the provider. A concrete class
+method overrides the trait, so implementing one is just declaring it.
+
 ## Adding a provider
 
 1. Implement `LLMProviderInterface`, or extend

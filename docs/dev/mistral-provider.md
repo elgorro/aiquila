@@ -147,6 +147,54 @@ stripping it costs coherence across turns.
 > path drops it too (`toConversationInputs()` keeps text/image/document blocks
 > only).
 
+## Audio and image generation
+
+Mistral is the only hosted provider here with endpoints beyond text and vision,
+so it is the one that backs the Assistant's transcription, speech and
+image-generation actions. Each runs on its own model, configured separately from
+the chat model:
+
+| Setting | Default | Used for |
+|---|---|---|
+| `mistral_transcribe_model` | `voxtral-mini-latest` | `core:audio2text`, and the listening half of voice chat |
+| `mistral_tts_model` | `voxtral-mini-tts-2603` | `core:text2speech`, and the speaking half of voice chat |
+| `mistral_tts_voice` | — | Preset voice id; blank lets Mistral choose |
+| `mistral_image_model` | `mistral-medium-latest` | The conversation model that drives image generation |
+
+All four are admin-scope. Audio calls get a 300s timeout rather than the shared
+`api_timeout`: transcribing an hour of speech routinely outlasts 30 seconds.
+
+### Transcription
+
+`POST /v1/audio/transcriptions`, multipart rather than JSON. The recording
+travels as a file part, and the endpoint reads the container format from the
+part's **filename** rather than from a declared MIME type — so
+`AudioLimits::filenameFor()` gives a recording stored without a usable extension
+one derived from its type before upload. `AudioLimits` also refuses an
+unsupported container or an oversized file before anything is read into memory,
+so the failure names the problem instead of arriving as a bare 4xx.
+
+### Speech
+
+`POST /v1/audio/speech`, asking for `mp3`. Mistral documents a JSON body
+carrying base64 under `audio_data`, while the OpenAI-shaped route it mirrors
+answers with the bytes directly; `decodeSpeechBody()` accepts either. The result
+is raw bytes, which is what TaskProcessing wants — file outputs are returned as
+strings and the framework does the storing.
+
+### Image generation
+
+Mistral has no plain images endpoint. Generation is a server-side tool the model
+calls, reached through the same Conversations API the native MCP connector
+already uses — `buildConversationBody()` posts `model` + `inputs` + `tools`
+inline, so **no agent has to be created**; `[{"type": "image_generation"}]` is
+just another tool entry. The response carries `tool_file` chunks naming files,
+which are then fetched one by one from `GET /v1/files/{id}/content`.
+
+Because the model, not the caller, decides how many files the tool emits, the
+requested count is phrased into the prompt and the result is whatever came back,
+trimmed to the request. Callers handle a shorter list.
+
 ## Verifying MCP works with Mistral (#136)
 
 The AIquila MCP server is provider-agnostic — it just exposes Nextcloud tools

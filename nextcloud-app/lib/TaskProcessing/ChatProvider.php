@@ -88,7 +88,7 @@ class ChatProvider implements ISynchronousProvider {
         $system = $input['system_prompt'] ?? '';
         $system = is_string($system) ? $system : '';
 
-        $messages = $this->toMessages($input['history'] ?? []);
+        $messages = ChatHistory::toMessages($input['history'] ?? []);
         $messages[] = ['role' => 'user', 'content' => $message];
 
         $reportProgress(0.1);
@@ -104,34 +104,5 @@ class ChatProvider implements ISynchronousProvider {
         }
 
         return ['output' => $result['response'] ?? ''];
-    }
-
-    /**
-     * Turn the task type's flat history into alternating chat turns.
-     *
-     * Nextcloud documents the list as "the history of chat messages before the
-     * current message, starting with a message by the user", so the role is
-     * positional: even index is the user, odd index is the assistant.
-     *
-     * @param mixed $history
-     * @return list<array{role: string, content: string}>
-     */
-    private function toMessages(mixed $history): array {
-        if (!is_array($history)) {
-            return [];
-        }
-
-        $messages = [];
-        foreach (array_values($history) as $i => $entry) {
-            if (!is_string($entry) || $entry === '') {
-                continue;
-            }
-            $messages[] = [
-                'role' => $i % 2 === 0 ? 'user' : 'assistant',
-                'content' => $entry,
-            ];
-        }
-
-        return $messages;
     }
 }

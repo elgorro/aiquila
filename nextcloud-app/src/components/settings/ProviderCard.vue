@@ -102,6 +102,9 @@ const CAPABILITY_LABELS = {
 	effort: 'effort',
 	native_mcp: 'native MCP',
 	documents: 'documents',
+	audio_in: 'transcription',
+	audio_out: 'speech',
+	image_out: 'image generation',
 }
 
 /**
