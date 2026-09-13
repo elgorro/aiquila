@@ -64,7 +64,7 @@ services:
         max-file: "3"
 
   socket-proxy:
-    image: tecnativa/docker-socket-proxy:0.3
+    image: tecnativa/docker-socket-proxy:v0.5.0
     container_name: aiq-socket-proxy
     restart: unless-stopped
     environment:
