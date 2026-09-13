@@ -167,7 +167,7 @@ export const listMessagesTool = {
     openWorldHint: false,
   },
   description:
-    'List recent messages in a Talk conversation. Returns message content with timestamps and authors.',
+    'List recent messages in a Talk conversation. Returns message content with timestamps and authors. Reading does not mark the conversation as read.',
   inputSchema: z.object({
     token: z.string().describe('Conversation token (from list_conversations)'),
     limit: z.number().optional().describe('Number of messages to retrieve (default 50, max 200)'),
@@ -190,6 +190,9 @@ export const listMessagesTool = {
       const queryParams: Record<string, string> = {
         lookIntoFuture: '0',
         limit: String(Math.min(args.limit ?? 50, 200)),
+        // Talk defaults setReadMarker=1; keep this tool read-only so listing
+        // messages does not clear the conversation's unread badge.
+        setReadMarker: '0',
       };
       if (args.lastKnownMessageId) {
         queryParams.lastKnownMessageId = String(args.lastKnownMessageId);
