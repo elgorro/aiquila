@@ -47,7 +47,7 @@ On first run, Docker downloads images (~2-3 GB) and the entrypoint script automa
 1. Waits for Nextcloud to initialize
 2. Extracts and installs the AIquila app from the tarball
 3. Creates the test user
-4. Configures the Claude API key
+4. Configures the AI provider API key
 5. Enables debug mode
 
 Watch progress:

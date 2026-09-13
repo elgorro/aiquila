@@ -3,7 +3,7 @@
     "info": {
         "title": "aiquila-full",
         "version": "0.0.1",
-        "description": "Connect Nextcloud with Claude AI — chat, MCP tools, and voice",
+        "description": "Private AI in your Nextcloud — chat, agents and MCP tools, with the AI provider you choose",
         "license": {
             "name": "AGPL-3.0-or-later"
         }
