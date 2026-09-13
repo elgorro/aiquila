@@ -83,7 +83,7 @@ function resolveRichMessage(
   if (!params) return message;
   let resolved = message;
   for (const [key, param] of Object.entries(params)) {
-    resolved = resolved.replace(`{${key}}`, param.name ?? param.id);
+    resolved = resolved.replaceAll(`{${key}}`, param.name ?? param.id);
   }
   return resolved;
 }

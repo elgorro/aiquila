@@ -112,6 +112,26 @@ describe('Talk Tools', () => {
       expect(result.content[0].text).toContain('Alice: Hello Bob!');
     });
 
+    it('should resolve a placeholder that repeats in one message', async () => {
+      mockOCS([
+        {
+          id: 1,
+          actorId: 'alice',
+          actorDisplayName: 'Alice',
+          message: '{user1} added {user1} to the call',
+          messageParameters: { user1: { type: 'user', id: 'bob', name: 'Bob' } },
+          timestamp: 1700000000,
+          systemMessage: '',
+        },
+      ]);
+
+      const { listMessagesTool } = await import('../tools/apps/talk.js');
+      const result = await listMessagesTool.handler({ token: 'abc123' });
+
+      expect(result.content[0].text).toContain('Bob added Bob to the call');
+      expect(result.content[0].text).not.toContain('{user1}');
+    });
+
     it('should filter system messages by default', async () => {
       mockOCS([
         {
