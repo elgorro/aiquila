@@ -483,4 +483,93 @@ class LocalProviderTest extends TestCase {
         }
         $this->tempFiles = [];
     }
+
+    // ── Audio (opt-in, like vision) ─────────────────────────────────────
+
+    public function testAudioCapabilitiesAreOffUntilTheAdminEnablesThem(): void {
+        $capabilities = $this->provider()->getCapabilities();
+        $this->assertFalse($capabilities['audio_in']);
+        $this->assertFalse($capabilities['audio_out']);
+        // No OpenAI-compatible server exposes a portable image route.
+        $this->assertFalse($capabilities['image_out']);
+    }
+
+    public function testAudioCapabilitiesFollowTheAdminFlags(): void {
+        $capabilities = $this->provider(['local_audio_in' => 'yes', 'local_audio_out' => 'yes'])->getCapabilities();
+        $this->assertTrue($capabilities['audio_in']);
+        $this->assertTrue($capabilities['audio_out']);
+        $this->assertFalse($capabilities['image_out']);
+    }
+
+    public function testTranscriptionRefusedUnlessEnabled(): void {
+        $this->client->expects($this->never())->method('post');
+
+        $this->assertSame(
+            ['error' => 'Local model is not configured to transcribe audio. Enable it in the AIquila admin settings.'],
+            $this->provider()->transcribeAudio('raw', 'audio/mpeg', 'memo.mp3'),
+        );
+    }
+
+    public function testTranscriptionPostsMultipartToTheConfiguredEndpoint(): void {
+        $provider = $this->provider(['local_audio_in' => 'yes', 'local_stt_model' => 'Systran/faster-whisper-small']);
+        $url = null;
+        $options = null;
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$url, &$options): IResponse {
+                $url = $u;
+                $options = $o;
+                return $this->jsonResponse(['text' => 'Hello there.']);
+            }
+        );
+
+        $result = $provider->transcribeAudio('raw-bytes', 'audio/mpeg', 'memo.mp3', null, ['language' => 'en']);
+
+        $this->assertSame(['response' => 'Hello there.'], $result);
+        $this->assertSame('http://localhost:11434/v1/audio/transcriptions', $url);
+        $this->assertArrayNotHasKey('Content-Type', $options['headers']);
+        // The local-address allowance still applies: these are the same requestOptions().
+        $this->assertTrue($options['nextcloud']['allow_local_address']);
+        $this->assertSame([
+            ['name' => 'model', 'contents' => 'Systran/faster-whisper-small'],
+            ['name' => 'file', 'contents' => 'raw-bytes', 'filename' => 'memo.mp3'],
+            ['name' => 'language', 'contents' => 'en'],
+        ], $options['multipart']);
+    }
+
+    public function testSpeechRefusedUnlessEnabled(): void {
+        $this->client->expects($this->never())->method('post');
+
+        $this->assertSame(
+            ['error' => 'Local model is not configured to generate speech. Enable it in the AIquila admin settings.'],
+            $this->provider()->synthesizeSpeech('Hello'),
+        );
+    }
+
+    public function testSpeechPostsTheOpenAiBodyAndReturnsRawBytes(): void {
+        $provider = $this->provider([
+            'local_audio_out' => 'yes',
+            'local_tts_model' => 'kokoro',
+            'local_tts_voice' => 'af_sky',
+        ]);
+        $url = null;
+        $body = null;
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$url, &$body): IResponse {
+                $url = $u;
+                $body = json_decode($o['body'], true);
+                $response = $this->createMock(IResponse::class);
+                $response->method('getBody')->willReturn('mp3-bytes');
+                return $response;
+            }
+        );
+
+        $result = $provider->synthesizeSpeech('Read this out.');
+
+        $this->assertSame(['audio' => 'mp3-bytes', 'mimeType' => 'audio/mpeg'], $result);
+        $this->assertSame('http://localhost:11434/v1/audio/speech', $url);
+        $this->assertSame('kokoro', $body['model']);
+        $this->assertSame('af_sky', $body['voice']);
+        $this->assertSame('Read this out.', $body['input']);
+        $this->assertSame('mp3', $body['response_format']);
+    }
 }

@@ -46,6 +46,10 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
 
     public const DEFAULT_MAX_TOKENS = 4096;
 
+    /** Offered as a placeholder only; the admin names whatever their backend loaded. */
+    public const DEFAULT_STT_MODEL = 'whisper-1';
+    public const DEFAULT_TTS_MODEL = 'tts-1';
+
     /** Local inference is slow; well above the 30s shared `api_timeout`. */
     public const DEFAULT_TIMEOUT = 300;
 
@@ -183,6 +187,46 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
                 'Only enable when the loaded model is multimodal; Nextcloud cannot detect this.',
             ),
             ProviderSettingsSchema::checkbox(
+                'local_audio_in',
+                'local_audio_in',
+                'Transcribe audio with this endpoint',
+                'Only enable when the backend serves /v1/audio/transcriptions — Speaches, LocalAI and whisper.cpp\'s server do; plain Ollama and LM Studio do not.',
+                group: ProviderSettingsSchema::GROUP_ADVANCED,
+            ),
+            ProviderSettingsSchema::text(
+                'local_stt_model',
+                'local_stt_model',
+                'Transcription model',
+                'The speech-to-text model tag as the backend reports it.',
+                group: ProviderSettingsSchema::GROUP_ADVANCED,
+                placeholder: self::DEFAULT_STT_MODEL,
+                visibleIf: ['field' => 'local_audio_in', 'in' => [true]],
+            ),
+            ProviderSettingsSchema::checkbox(
+                'local_audio_out',
+                'local_audio_out',
+                'Generate speech with this endpoint',
+                'Only enable when the backend serves /v1/audio/speech.',
+                group: ProviderSettingsSchema::GROUP_ADVANCED,
+            ),
+            ProviderSettingsSchema::text(
+                'local_tts_model',
+                'local_tts_model',
+                'Speech model',
+                'The text-to-speech model tag as the backend reports it.',
+                group: ProviderSettingsSchema::GROUP_ADVANCED,
+                placeholder: self::DEFAULT_TTS_MODEL,
+                visibleIf: ['field' => 'local_audio_out', 'in' => [true]],
+            ),
+            ProviderSettingsSchema::text(
+                'local_tts_voice',
+                'local_tts_voice',
+                'Speech voice',
+                'The voice id the backend offers. Left blank, none is sent and the backend picks its default.',
+                group: ProviderSettingsSchema::GROUP_ADVANCED,
+                visibleIf: ['field' => 'local_audio_out', 'in' => [true]],
+            ),
+            ProviderSettingsSchema::checkbox(
                 'local_allow_local_address',
                 'local_allow_local_address',
                 'Allow local and private addresses',
@@ -278,6 +322,73 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
 
     protected function supportsVisionInput(?string $userId = null): bool {
         return $this->config->getAppValue(self::APP_NAME, 'local_vision', 'no') === 'yes';
+    }
+
+    /**
+     * Audio is opt-in for the same reason vision is: the OpenAI-compatible
+     * dialect these backends share stops at chat completions. Speaches, LocalAI
+     * and whisper.cpp's server add the audio routes; Ollama and LM Studio do
+     * not, and Nextcloud cannot tell which is listening.
+     */
+    protected function supportsAudioInput(?string $userId = null): bool {
+        return $this->config->getAppValue(self::APP_NAME, 'local_audio_in', 'no') === 'yes';
+    }
+
+    protected function supportsAudioOutput(?string $userId = null): bool {
+        return $this->config->getAppValue(self::APP_NAME, 'local_audio_out', 'no') === 'yes';
+    }
+
+    public function transcribeAudio(string $audioData, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array {
+        if (!$this->supportsAudioInput($userId)) {
+            return ['error' => $this->getLabel() . ' is not configured to transcribe audio. Enable it in the AIquila admin settings.'];
+        }
+        $parts = [
+            ['name' => 'model', 'contents' => $this->config->getAppValue(self::APP_NAME, 'local_stt_model', self::DEFAULT_STT_MODEL)],
+            ['name' => 'file', 'contents' => $audioData, 'filename' => $filename],
+        ];
+        $language = $options['language'] ?? '';
+        if (is_string($language) && $language !== '') {
+            $parts[] = ['name' => 'language', 'contents' => $language];
+        }
+
+        try {
+            $response = $this->postMultipart('/audio/transcriptions', $parts, $userId);
+            $decoded = json_decode((string)$response->getBody(), true);
+            if (!is_array($decoded) || !isset($decoded['text']) || !is_string($decoded['text'])) {
+                return ['error' => $this->getLabel() . ' returned no transcript.'];
+            }
+            return ['response' => $decoded['text']];
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila Local: transcription failed', ['error' => $e->getMessage()]);
+            return ['error' => $this->errorMessage($e)];
+        }
+    }
+
+    public function synthesizeSpeech(string $text, ?string $userId = null, array $options = []): array {
+        if (!$this->supportsAudioOutput($userId)) {
+            return ['error' => $this->getLabel() . ' is not configured to generate speech. Enable it in the AIquila admin settings.'];
+        }
+        $body = [
+            'model' => $this->config->getAppValue(self::APP_NAME, 'local_tts_model', self::DEFAULT_TTS_MODEL),
+            'input' => $text,
+            'response_format' => 'mp3',
+        ];
+        $voice = $options['voice'] ?? $this->config->getAppValue(self::APP_NAME, 'local_tts_voice', '');
+        if (is_string($voice) && $voice !== '') {
+            $body['voice'] = $voice;
+        }
+
+        try {
+            $response = $this->postJsonTo('/audio/speech', $body, $userId);
+            $audio = (string)$response->getBody();
+            if ($audio === '') {
+                return ['error' => $this->getLabel() . ' returned no audio.'];
+            }
+            return ['audio' => $audio, 'mimeType' => 'audio/mpeg'];
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila Local: speech synthesis failed', ['error' => $e->getMessage()]);
+            return ['error' => $this->errorMessage($e)];
+        }
     }
 
     /** Ollama does not accept `tool_choice`; the other backends tolerate its absence. */
