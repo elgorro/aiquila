@@ -5,35 +5,32 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\TaskProcessing\ISynchronousProvider;
 
 /**
- * Claude summary TaskProcessing Provider (core:text2text:summary)
+ * Formalization TaskProcessing Provider (core:text2text:formalization)
  */
-class ClaudeSummaryProvider implements ISynchronousProvider {
+class FormalizationProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ClaudeSDKService $claudeService,
+        private ProviderResolver $providers,
     ) {
     }
 
     public function getId(): string {
-        return 'aiquila:text2text:summary';
+        return 'aiquila:text2text:formalization';
     }
 
     public function getName(): string {
-        return 'Claude (AIquila)';
+        return 'AIquila';
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:summary';
+        return 'core:text2text:formalization';
     }
 
     public function getExpectedRuntime(): int {
-        // Batch round-trip: typically a few seconds, can stretch to a few minutes
-        // under load. The framework uses this to size its job-runner timeout.
-        return 120;
+        return 30;
     }
 
     public function getOptionalInputShape(): array {
@@ -74,7 +71,13 @@ class ClaudeSummaryProvider implements ISynchronousProvider {
             throw new \RuntimeException('No input text provided');
         }
 
-        $result = $this->claudeService->summarizeViaBatch($text, $userId, $reportProgress);
+        $reportProgress(0.1);
+
+        $result = $this->providers->resolve($userId)->ask(
+            "Rewrite the following text in a formal, professional tone. Return only the formalized text, nothing else:\n\n" . $text,
+            '',
+            $userId,
+        );
 
         if (isset($result['error'])) {
             throw new \RuntimeException($result['error']);

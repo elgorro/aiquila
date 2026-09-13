@@ -21,14 +21,15 @@
 
 Admins enable the providers they want, and can restrict them per user or group:
 
-- **Claude (Anthropic)** — The default, and the most deeply integrated: vision, thinking budgets, native MCP connector, and the Nextcloud Assistant integrations.
+- **Claude (Anthropic)** — The default, and the most deeply integrated: vision, thinking budgets, native MCP connector, and PDF handling with citations.
 - **Hetzner Inference** — OpenAI-compatible API from the German provider Hetzner. Currently an experimental service, free while experimental; Hetzner states it does not store request and response content.
 - **Mistral** — French provider, also supporting the native MCP connector. EU-only processing is available through Mistral's regional inference endpoints.
 - **Local model** — Ollama, LM Studio or llama.cpp on your own hardware. Nothing leaves your infrastructure.
 - **DeepSeek** — OpenAI-compatible API.
 
 API keys are stored encrypted, and base URLs are admin-only settings. Provider choice
-applies to chat; the Nextcloud Assistant integrations currently run on Claude only.
+applies to chat and to the Nextcloud Assistant integrations alike. Assistant actions
+that send images need a vision-capable provider.
 
 ### MCP Server
 

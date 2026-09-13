@@ -63,9 +63,12 @@ none of it is user-settable (see [Security](#security)).
 | Allow local addresses | `local_allow_local_address` | `yes` | See below. |
 
 Setting **Local model** as the default provider (or a user picking it in personal
-settings) routes chat, tools and streaming through it. The TaskProcessing
-providers and the MCP server's `assistant` tool follow automatically — they call
-Nextcloud's TaskProcessing, which resolves the active provider.
+settings) routes chat, tools and streaming through it. AIquila's TaskProcessing
+providers resolve the same way — they go through `LLMProviderFactory`, so Assistant
+actions and the MCP server's `assistant` tool follow the same choice. The exception
+is the image actions: they need `local_vision` set to **yes** (and a multimodal
+model behind it), and otherwise refuse with a message naming the vision-capable
+providers that are available instead.
 
 Configuration goes through the schema-driven endpoints
 `GET /api/admin/providers` and `POST /api/admin/providers/local`, which read and

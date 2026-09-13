@@ -6,26 +6,25 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\ImageOptimizer;
-use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\ShapeDescriptor;
 use Psr\Log\LoggerInterface;
 
 /**
- * Claude Vision TaskProcessing Provider (single image)
+ * Single-image vision TaskProcessing Provider
  *
- * Registers Claude as an image-to-text (vision) provider in Nextcloud's
+ * Registers AIquila as an image-to-text (vision) provider in Nextcloud's
  * TaskProcessing framework (NC 29+). This enables "Describe this image"
  * actions in Files, Photos, and the Nextcloud Assistant.
  *
  * Input:  image (binary)
  * Output: output (string)
  */
-class ClaudeImageToTextProvider implements ISynchronousProvider {
+class ImageToTextProvider implements ISynchronousProvider {
 
     public function __construct(
-        private LLMProviderFactory $providerFactory,
+        private ProviderResolver $providers,
         private ImageOptimizer $imageOptimizer,
         private LoggerInterface $logger,
     ) {
@@ -103,14 +102,14 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
 
         $mimeType = $this->detectMimeType($imageData);
 
-        $this->logger->debug('Claude ImageToText: Processing image', [
+        $this->logger->debug('AIquila ImageToText: Processing image', [
             'mime_type' => $mimeType,
             'prompt_length' => strlen($prompt),
         ]);
 
         $reportProgress(0.3);
 
-        // Optimize image for Claude Vision
+        // Optimize image for the provider's vision endpoint
         if ($this->imageOptimizer->isSupported($mimeType)) {
             $optimized = $this->imageOptimizer->optimize($imageData, $mimeType);
             $base64 = $optimized['data'];
@@ -121,12 +120,10 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
 
         $reportProgress(0.5);
 
-        $requested = !empty($input['provider']) && is_string($input['provider']) ? $input['provider'] : null;
-        // getProviderForUser() applies the admin's access rules: a provider the
-        // user may not use falls through to the one they may, rather than being
-        // reachable through the task-processing API.
-        $provider = $this->providerFactory->getProviderForUser($userId, $requested);
-        $providerId = $provider->getId();
+        // The resolver applies the admin's access rules: a provider the user may
+        // not use falls through to the one they may, rather than being reachable
+        // through the task-processing API.
+        $provider = $this->providers->resolveVisionCapable($userId, $this->providers->requestedId($input));
 
         $result = $provider->askWithImage(
             $prompt,
@@ -136,7 +133,7 @@ class ClaudeImageToTextProvider implements ISynchronousProvider {
         );
 
         if (isset($result['error'])) {
-            $this->logger->error('AIquila ImageToText: Error', ['error' => $result['error'], 'provider' => $providerId]);
+            $this->logger->error('AIquila ImageToText: Error', ['error' => $result['error'], 'provider' => $provider->getId()]);
             throw new \RuntimeException($result['error']);
         }
 

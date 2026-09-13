@@ -5,33 +5,32 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\ClaudeSDKService;
 use OCP\TaskProcessing\ISynchronousProvider;
 
 /**
- * Claude headline TaskProcessing Provider (core:text2text:headline)
+ * Proofread TaskProcessing Provider (core:text2text:proofread)
  */
-class ClaudeHeadlineProvider implements ISynchronousProvider {
+class ProofreadProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ClaudeSDKService $claudeService,
+        private ProviderResolver $providers,
     ) {
     }
 
     public function getId(): string {
-        return 'aiquila:text2text:headline';
+        return 'aiquila:text2text:proofread';
     }
 
     public function getName(): string {
-        return 'Claude (AIquila)';
+        return 'AIquila';
     }
 
     public function getTaskTypeId(): string {
-        return 'core:text2text:headline';
+        return 'core:text2text:proofread';
     }
 
     public function getExpectedRuntime(): int {
-        return 15;
+        return 30;
     }
 
     public function getOptionalInputShape(): array {
@@ -74,8 +73,8 @@ class ClaudeHeadlineProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->claudeService->ask(
-            "Generate a concise, descriptive headline for the following text. Return only the headline, nothing else:\n\n" . $text,
+        $result = $this->providers->resolve($userId)->ask(
+            "Proofread the following text for grammar and spelling mistakes. Return the corrected text only, nothing else:\n\n" . $text,
             '',
             $userId,
         );
