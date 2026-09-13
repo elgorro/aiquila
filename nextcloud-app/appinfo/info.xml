@@ -52,7 +52,7 @@ AIquila includes a [Model Context Protocol](https://modelcontextprotocol.io) ser
 
 Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Model Context Protocol](https://modelcontextprotocol.io), and the open and commercial AI providers listed above.
     ]]></description>
-    <version>0.4.10</version>
+    <version>0.4.11</version>
     <licence>AGPL-3.0-or-later</licence>
     <author mail="aiquila@mailbox.org">elgorro</author>
     <documentation>
