@@ -4,26 +4,41 @@
     <id>aiquila</id>
     <name>AIquila</name>
     <namespace>AIquila</namespace>
-    <summary>Connect Nextcloud with Claude AI — chat, MCP tools, and voice</summary>
+    <summary>Private AI in your Nextcloud — chat, agents and MCP tools, with the AI provider you choose</summary>
     <description><![CDATA[
-**AIquila** connects your [Nextcloud](https://nextcloud.com) with [Claude AI](https://www.anthropic.com/claude) — private, self-hosted, and under your control.
+**AIquila** brings AI into your [Nextcloud](https://nextcloud.com) — private, self-hosted, and under your control. You choose which AI provider processes your data, including models running entirely on your own hardware.
 
 ### Nextcloud App
 
-- **Chat** — Converse with Claude about your files and documents
-- **Summarize** — Generate concise summaries of any document
-- **Create & Edit** — Draft, rewrite, and refine content with AI assistance
-- **Text Tools** — Spellcheck, rephrase, and improve your writing
+- **Chat** — Converse with an AI assistant about your files and documents
+- **Projects** — Scope a conversation to selected folders, so the assistant only sees what you choose
+- **Coworkers** — Save repeatable AI jobs and run them on demand or on a schedule
+- **Summarise & rewrite** — Condense, draft, rephrase and proofread text
+- **Model picker** — Switch provider and model per conversation
+- **Usage metrics** — Token and conversation counters exported via OpenMetrics
+
+### Choose your AI provider
+
+Admins enable the providers they want, and can restrict them per user or group:
+
+- **Hetzner Inference** — OpenAI-compatible API from the German provider Hetzner. Currently an experimental service, free while experimental; Hetzner states it does not store request and response content.
+- **Claude (Anthropic)** — The default, and the most deeply integrated: vision, thinking budgets, native MCP connector, and the Nextcloud Assistant integrations.
+- **Mistral** — French provider, also supporting the native MCP connector. EU-only processing is available through Mistral's regional inference endpoints.
+- **Local model** — Ollama, LM Studio or llama.cpp on your own hardware. Nothing leaves your infrastructure.
+- **DeepSeek** — OpenAI-compatible API.
+
+API keys are stored encrypted, and base URLs are admin-only settings. Provider choice
+applies to chat; the Nextcloud Assistant integrations currently run on Claude only.
 
 ### MCP Server
 
-AIquila includes a [Model Context Protocol](https://modelcontextprotocol.io) server with 100+ tools that gives Claude Desktop, Claude Code, Claude.ai, and the Claude mobile app direct access to your Nextcloud:
+AIquila includes a [Model Context Protocol](https://modelcontextprotocol.io) server with 311 tools that gives any MCP client — Claude Desktop, Claude Code, Claude.ai and the Claude mobile app, Cursor, VS Code and others — direct access to your Nextcloud:
 
 - **Files** — Browse, read, write, search, and share
 - **Calendar & Tasks** — View, create, and manage events and to-dos
 - **Contacts & Mail** — Read and manage address books, accounts, and messages
 - **Notes & Recipes** — Create and edit Markdown notes and recipes
-- **Bookmarks & Maps** — Manage bookmarks, GPS tracks, favorites, and photos
+- **Bookmarks & Maps** — Manage bookmarks, GPS tracks, favourites, and photos
 
 ### Resources
 
@@ -34,7 +49,7 @@ AIquila includes a [Model Context Protocol](https://modelcontextprotocol.io) ser
 
 ---
 
-Made possible by [Claude](https://www.anthropic.com/claude) from [Anthropic](https://www.anthropic.com) and the [Nextcloud](https://nextcloud.com) open-source community.
+Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Model Context Protocol](https://modelcontextprotocol.io), and the open and commercial AI providers listed above.
     ]]></description>
     <version>0.4.9</version>
     <licence>AGPL-3.0-or-later</licence>

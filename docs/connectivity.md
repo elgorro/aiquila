@@ -77,7 +77,7 @@ HTTP-based clients also require OAuth 2.0 authentication. See the **[OAuth 2.0 S
 
 Path: **Settings → Administration → AIquila**
 
-- **API Key**: Claude API key (starts with `sk-ant-`)
+- **API Key**: the API key for your chosen provider (a Claude key starts with `sk-ant-`)
 - This key is used for all users who don't have a personal key
 
 ### User Settings

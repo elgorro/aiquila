@@ -64,9 +64,9 @@ make up
 
 ## Path 3: Nextcloud App
 
-Add Claude AI directly inside your Nextcloud UI — chat interface, text processing, and public API.
+Add AI directly inside your Nextcloud UI — chat interface, text processing, and public API. Choose your provider: Hetzner Inference, Claude, Mistral, a local model, or DeepSeek.
 
-**Prerequisites:** Nextcloud 34, PHP 8.4+, Claude API key. See [Nextcloud compatibility](nextcloud-compatibility.md) for the supported version window.
+**Prerequisites:** Nextcloud 34, PHP 8.4+, and an API key for one of the supported AI providers — or none at all, if you run a local model. See [Nextcloud compatibility](nextcloud-compatibility.md) for the supported version window.
 
 ```bash
 # 1. Install from Nextcloud App Store (recommended)
@@ -159,6 +159,6 @@ Use an MCP-compatible mobile app with voice input to manage Nextcloud hands-free
 ## What's next?
 
 - **[Full Documentation](README.md)** — architecture, configuration, and all guides
-- **[MCP Tools Reference](mcp/README.md#tools-reference)** — 100+ tools across 20 modules
+- **[MCP Tools Reference](mcp/README.md#tools-reference)** — 311 tools across 43 categories
 - **[Internal API](internal-api.md)** — integrate AIquila into your own Nextcloud apps
 - **[Connectivity Guide](connectivity.md)** — network and connection troubleshooting

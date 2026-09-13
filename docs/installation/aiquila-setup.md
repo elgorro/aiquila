@@ -70,7 +70,7 @@ php occ aiquila:configure --model claude-sonnet-4-6
 - PHP 8.4 or higher with Composer
 - Node.js 26 or higher (for building frontend)
 - npm 10 or higher
-- Claude API key from [console.anthropic.com](https://console.anthropic.com)
+- An API key for one of the supported providers — e.g. Claude from [console.anthropic.com](https://console.anthropic.com), Hetzner Inference from [experiments.hetzner.com](https://experiments.hetzner.com/inference), or Mistral. A local model (Ollama, LM Studio, llama.cpp) needs no key.
 
 ## What You Get
 

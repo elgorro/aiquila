@@ -46,7 +46,7 @@ Nextcloud apps and administration:
 - **File Tags** — Personal and system tag management
 - **AIquila** — Configure and test Claude integration
 
-**Total: 100+ tools across 20 modules**
+**Total: 311 tools across 43 categories**
 
 ## Tools Reference
 
