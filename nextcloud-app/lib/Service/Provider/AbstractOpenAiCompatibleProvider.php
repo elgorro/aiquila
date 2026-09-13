@@ -7,6 +7,7 @@ namespace OCA\AIquila\Service\Provider;
 
 use OCA\AIquila\Service\CredentialService;
 use OCP\Http\Client\IClientService;
+use OCP\Http\Client\IResponse;
 use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 
@@ -31,6 +32,9 @@ use Psr\Log\LoggerInterface;
  * runs against Mistral's Conversations API, which diverges too far to share.
  */
 abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface {
+    // Subclasses that do have an audio endpoint declare the methods themselves.
+    use UnsupportedModalities;
+
     protected const APP_NAME = 'aiquila';
     protected const DEFAULT_STREAM_TIMEOUT = 300;
 
@@ -49,6 +53,21 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
 
     /** Whether the backend accepts image input (sent as `image_url` data URIs). */
     protected function supportsVisionInput(?string $userId = null): bool {
+        return false;
+    }
+
+    /** Whether the backend exposes `POST {base}/audio/transcriptions`. */
+    protected function supportsAudioInput(?string $userId = null): bool {
+        return false;
+    }
+
+    /** Whether the backend exposes `POST {base}/audio/speech`. */
+    protected function supportsAudioOutput(?string $userId = null): bool {
+        return false;
+    }
+
+    /** Whether the backend can generate images. No OpenAI-compatible server here does. */
+    protected function supportsImageOutput(?string $userId = null): bool {
         return false;
     }
 
@@ -137,6 +156,9 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
             'tools' => true,
             'streaming' => true,
             'native_mcp' => $this->supportsNativeMcp(),
+            'audio_in' => $this->supportsAudioInput(),
+            'audio_out' => $this->supportsAudioOutput(),
+            'image_out' => $this->supportsImageOutput(),
         ]);
     }
 
@@ -464,6 +486,53 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
             throw new \RuntimeException($this->getLabel() . ' returned a non-JSON response');
         }
         return $decoded;
+    }
+
+    /**
+     * POST multipart/form-data to a non-chat endpoint (audio transcription).
+     *
+     * Guzzle writes the Content-Type itself, boundary and all, so the JSON one
+     * from headers() has to come off — leaving it on produces a body the far
+     * end cannot parse.
+     *
+     * @param list<array{name: string, contents: string, filename?: string}> $parts
+     */
+    protected function postMultipart(string $path, array $parts, ?string $userId): IResponse {
+        if (!$this->isConfigured($userId)) {
+            throw new \RuntimeException($this->notConfiguredMessage());
+        }
+        $options = $this->requestOptions($userId, [
+            'multipart' => $parts,
+            'timeout' => $this->audioTimeout(),
+        ]);
+        unset($options['headers']['Content-Type']);
+        return $this->clientService->newClient()->post($this->apiBase() . $path, $options);
+    }
+
+    /**
+     * POST JSON to a non-chat endpoint, handing back the response untouched.
+     *
+     * Unlike requestJson(), this does not decode: speech endpoints answer with
+     * audio bytes, not JSON.
+     *
+     * @param array<string, mixed> $body
+     */
+    protected function postJsonTo(string $path, array $body, ?string $userId): IResponse {
+        if (!$this->isConfigured($userId)) {
+            throw new \RuntimeException($this->notConfiguredMessage());
+        }
+        return $this->clientService->newClient()->post($this->apiBase() . $path, $this->requestOptions($userId, [
+            'body' => json_encode($body),
+            'timeout' => $this->audioTimeout(),
+        ]));
+    }
+
+    /**
+     * Timeout for audio work. Transcribing a long recording routinely outlasts
+     * the chat timeout, so these calls get the streaming budget instead.
+     */
+    protected function audioTimeout(): int {
+        return max($this->requestTimeout(), $this->streamTimeout());
     }
 
     /**

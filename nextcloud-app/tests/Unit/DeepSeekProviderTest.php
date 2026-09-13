@@ -59,6 +59,22 @@ class DeepSeekProviderTest extends TestCase {
         $this->assertFalse($this->provider->supportsNativeMcp());
     }
 
+    /**
+     * DeepSeek publishes no audio or image endpoint, so it says so rather than
+     * pretending — the same {error: string} shape every other call uses.
+     */
+    public function testNonTextModalitiesAreDeclaredUnsupportedAndNeverCallTheApi(): void {
+        $capabilities = $this->provider->getCapabilities();
+        $this->assertFalse($capabilities['audio_in']);
+        $this->assertFalse($capabilities['audio_out']);
+        $this->assertFalse($capabilities['image_out']);
+
+        $this->client->expects($this->never())->method('post');
+        $this->assertSame(['error' => 'DeepSeek cannot transcribe audio.'], $this->provider->transcribeAudio('raw', 'audio/mpeg', 'a.mp3', 'u'));
+        $this->assertSame(['error' => 'DeepSeek cannot generate speech.'], $this->provider->synthesizeSpeech('hi', 'u'));
+        $this->assertSame(['error' => 'DeepSeek cannot generate images.'], $this->provider->generateImages('a cat', 1, 'u'));
+    }
+
     public function testChatReturnsResponseAndMapsUsage(): void {
         $this->client->method('post')->willReturn($this->jsonResponse([
             'choices' => [['message' => ['content' => 'Hello!'], 'finish_reason' => 'stop']],

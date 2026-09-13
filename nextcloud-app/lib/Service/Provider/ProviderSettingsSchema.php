@@ -357,10 +357,10 @@ final class ProviderSettingsSchema {
      * Capability descriptor with every flag defaulted to false, so callers can
      * spread in only what they support and the shape stays complete.
      *
-     * @return array{vision: bool, tools: bool, streaming: bool, thinking: bool, effort: bool, native_mcp: bool, documents: bool}
+     * @return array{vision: bool, tools: bool, streaming: bool, thinking: bool, effort: bool, native_mcp: bool, documents: bool, audio_in: bool, audio_out: bool, image_out: bool}
      */
     public static function capabilities(array $overrides = []): array {
-        /** @var array{vision: bool, tools: bool, streaming: bool, thinking: bool, effort: bool, native_mcp: bool, documents: bool} $merged */
+        /** @var array{vision: bool, tools: bool, streaming: bool, thinking: bool, effort: bool, native_mcp: bool, documents: bool, audio_in: bool, audio_out: bool, image_out: bool} $merged */
         $merged = array_merge([
             'vision' => false,
             'tools' => false,
@@ -369,6 +369,9 @@ final class ProviderSettingsSchema {
             'effort' => false,
             'native_mcp' => false,
             'documents' => false,
+            'audio_in' => false,
+            'audio_out' => false,
+            'image_out' => false,
         ], $overrides);
         return $merged;
     }

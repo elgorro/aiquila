@@ -62,7 +62,7 @@ interface LLMProviderInterface {
      * UI and for provider-aware validation (e.g. whether `effort` is a
      * meaningful option at all).
      *
-     * @return array{vision: bool, tools: bool, streaming: bool, thinking: bool, effort: bool, native_mcp: bool, documents: bool}
+     * @return array{vision: bool, tools: bool, streaming: bool, thinking: bool, effort: bool, native_mcp: bool, documents: bool, audio_in: bool, audio_out: bool, image_out: bool}
      */
     public function getCapabilities(): array;
 
@@ -154,4 +154,45 @@ interface LLMProviderInterface {
 
     /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
     public function summarize(string $content, ?string $userId = null): array;
+
+    // ── Non-text modalities ─────────────────────────────────────────────────
+    //
+    // Most providers have no endpoint for these. Rather than throwing, they
+    // return the same {error: string} shape as every other call, carrying a
+    // message that names the provider — see the UnsupportedModalities trait.
+    // Whether a provider can serve one is asked through getCapabilities():
+    // 'audio_in', 'audio_out' and 'image_out' respectively.
+
+    /**
+     * Transcribe an audio recording to text.
+     *
+     * $filename is passed to the provider because transcription endpoints
+     * routinely sniff the container format from the extension rather than from
+     * the declared MIME type.
+     *
+     * @param array{language?: string} $options
+     * @return array{response: string, usage?: array}|array{error: string}
+     */
+    public function transcribeAudio(string $audioData, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array;
+
+    /**
+     * Synthesize speech from text, returning the raw audio bytes and the MIME
+     * type they are in — TaskProcessing stores file outputs as bytes, so no
+     * provider ever deals in file handles here.
+     *
+     * @param array{voice?: string} $options
+     * @return array{audio: string, mimeType: string, usage?: array}|array{error: string}
+     */
+    public function synthesizeSpeech(string $text, ?string $userId = null, array $options = []): array;
+
+    /**
+     * Generate up to $count images from a prompt, as raw bytes.
+     *
+     * $count is a request, not a guarantee: providers that generate through a
+     * model-driven tool cannot bind the number exactly, so callers must handle
+     * a shorter list.
+     *
+     * @return array{images: list<string>, mimeType: string, usage?: array}|array{error: string}
+     */
+    public function generateImages(string $prompt, int $count = 1, ?string $userId = null, array $options = []): array;
 }
