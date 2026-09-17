@@ -67,6 +67,12 @@ class ConfigureCommand extends Base {
                 'Pin the thinking budget in tokens (>= ' . ClaudeSDKService::MIN_THINKING_BUDGET . ', empty string for adaptive)'
             )
             ->addOption(
+                'auto-cache',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Let the API place a cache breakpoint on the growing end of a conversation (on|off, default: on)'
+            )
+            ->addOption(
                 'timeout',
                 null,
                 InputOption::VALUE_REQUIRED,
@@ -228,6 +234,18 @@ class ConfigureCommand extends Base {
             $updated = true;
         }
 
+        // Set automatic prompt caching
+        $autoCache = $input->getOption('auto-cache');
+        if ($autoCache !== null) {
+            if (!in_array($autoCache, ['on', 'off'], true)) {
+                $output->writeln('<error>Auto cache must be "on" or "off"</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'auto_cache', $autoCache === 'on' ? '1' : '0');
+            $output->writeln('<info>✓ Automatic prompt caching updated to: ' . $autoCache . '</info>');
+            $updated = true;
+        }
+
         // Set timeout
         $timeout = $input->getOption('timeout');
         if ($timeout !== null) {
@@ -262,6 +280,7 @@ class ConfigureCommand extends Base {
         $effort = $this->config->getAppValue(self::APP_NAME, 'effort', '');
         $thinking = in_array($this->config->getAppValue(self::APP_NAME, 'thinking', 'false'), ['true', '1'], true);
         $thinkingBudget = $this->config->getAppValue(self::APP_NAME, 'thinking_budget', '');
+        $autoCache = in_array($this->config->getAppValue(self::APP_NAME, 'auto_cache', '1'), ['true', '1'], true);
         $timeout = $this->config->getAppValue(self::APP_NAME, 'api_timeout', '30');
 
         $output->writeln('');
@@ -280,6 +299,7 @@ class ConfigureCommand extends Base {
         $output->writeln('  Effort:     <comment>' . ($effort !== '' ? $effort : '(model default)') . '</comment>');
         $output->writeln('  Thinking:   <comment>' . ($thinking ? 'on' : 'off') . '</comment>');
         $output->writeln('  Budget:     <comment>' . ($thinkingBudget !== '' ? $thinkingBudget . ' tokens' : '(adaptive)') . '</comment>');
+        $output->writeln('  Auto cache: <comment>' . ($autoCache ? 'on' : 'off') . '</comment>');
         $output->writeln('  Timeout:    <comment>' . $timeout . ' seconds</comment>');
         $output->writeln('');
 

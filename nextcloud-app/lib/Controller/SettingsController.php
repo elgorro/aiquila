@@ -264,6 +264,7 @@ class SettingsController extends Controller {
      * @param string|null $native_mcp_extra_token Bearer token for the extra MCP server ('' clears, null keeps unchanged)
      * @param string|null $mistral_connector_ids Comma/space-separated Mistral connector IDs for the native-MCP path (trimmed; null keeps unchanged)
      * @param string|null $search_enabled Expose AIquila conversations to unified search ('1' enabled, '0' disabled, null keeps unchanged)
+     * @param string|null $auto_cache Top-level automatic prompt caching ('1' enabled, '0' disabled, null keeps unchanged)
      *
      * 200: Admin settings saved successfully
      *
@@ -277,7 +278,8 @@ class SettingsController extends Controller {
         ?string $native_mcp_extra_url = null,
         ?string $native_mcp_extra_token = null,
         ?string $mistral_connector_ids = null,
-        ?string $search_enabled = null
+        ?string $search_enabled = null,
+        ?string $auto_cache = null
     ): JSONResponse {
         if ($provider !== null && $provider !== '') {
             $this->config->setAppValue($this->appName, 'provider', $provider);
@@ -307,6 +309,9 @@ class SettingsController extends Controller {
         }
         if ($search_enabled !== null) {
             $this->config->setAppValue($this->appName, 'search_enabled', $search_enabled === '1' ? '1' : '0');
+        }
+        if ($auto_cache !== null) {
+            $this->config->setAppValue($this->appName, 'auto_cache', $auto_cache === '1' ? '1' : '0');
         }
 
         return new JSONResponse(['status' => 'ok']);

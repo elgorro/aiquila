@@ -14,8 +14,8 @@ use OCP\Settings\ISettings;
  *
  * Provider configuration is fetched from /api/admin/providers, which renders
  * whatever schema each provider declares — so nothing about providers is built
- * here. Only `search_enabled` is passed through, to spare the page a second
- * round trip for one boolean.
+ * here. Only the plain instance booleans are passed through, to spare the page a
+ * second round trip for them.
  */
 class AdminSettings implements ISettings {
     public function __construct(
@@ -26,6 +26,7 @@ class AdminSettings implements ISettings {
     public function getForm(): TemplateResponse {
         return new TemplateResponse('aiquila', 'admin', [
             'search_enabled' => $this->config->getAppValue('aiquila', 'search_enabled', '0') === '1',
+            'auto_cache' => in_array($this->config->getAppValue('aiquila', 'auto_cache', '1'), ['true', '1'], true),
         ], '');
     }
 
