@@ -90,6 +90,7 @@ Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Mode
         <command>OCA\AIquila\Command\McpAddCommand</command>
         <command>OCA\AIquila\Command\DoctorCommand</command>
         <command>OCA\AIquila\Command\MetadataSaltCommand</command>
+        <command>OCA\AIquila\Command\BenchmarkTierCommand</command>
     </commands>
     <openmetrics>
         <exporter>OCA\AIquila\OpenMetrics\TokensUsedExporter</exporter>
