@@ -69,7 +69,8 @@
                                             "projectId",
                                             "effort",
                                             "thinking",
-                                            "thinkingBudget"
+                                            "thinkingBudget",
+                                            "speedFast"
                                         ],
                                         "properties": {
                                             "id": {
@@ -114,6 +115,10 @@
                                             "thinkingBudget": {
                                                 "type": "integer",
                                                 "format": "int64",
+                                                "nullable": true
+                                            },
+                                            "speedFast": {
+                                                "type": "boolean",
                                                 "nullable": true
                                             }
                                         }
@@ -211,7 +216,8 @@
                                         "projectId",
                                         "effort",
                                         "thinking",
-                                        "thinkingBudget"
+                                        "thinkingBudget",
+                                        "speedFast"
                                     ],
                                     "properties": {
                                         "id": {
@@ -256,6 +262,10 @@
                                         "thinkingBudget": {
                                             "type": "integer",
                                             "format": "int64",
+                                            "nullable": true
+                                        },
+                                        "speedFast": {
+                                            "type": "boolean",
                                             "nullable": true
                                         }
                                     }
@@ -384,6 +394,7 @@
                                         "effort",
                                         "thinking",
                                         "thinkingBudget",
+                                        "speedFast",
                                         "messages"
                                     ],
                                     "properties": {
@@ -429,6 +440,10 @@
                                         "thinkingBudget": {
                                             "type": "integer",
                                             "format": "int64",
+                                            "nullable": true
+                                        },
+                                        "speedFast": {
+                                            "type": "boolean",
                                             "nullable": true
                                         },
                                         "messages": {
@@ -598,7 +613,7 @@
             },
             "put": {
                 "operationId": "conversation-update",
-                "summary": "Update a conversation (title, project link, effort and/or thinking override)",
+                "summary": "Update a conversation (title, project link, effort, thinking and/or fast-mode override)",
                 "tags": [
                     "conversation"
                 ],
@@ -646,6 +661,12 @@
                                         "nullable": true,
                                         "default": null,
                                         "description": "Explicit thinking budget in tokens (empty string clears)"
+                                    },
+                                    "speedFast": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Fast-mode override ('on'/'off'; empty string clears)"
                                     }
                                 }
                             }
@@ -692,7 +713,8 @@
                                         "projectId",
                                         "effort",
                                         "thinking",
-                                        "thinkingBudget"
+                                        "thinkingBudget",
+                                        "speedFast"
                                     ],
                                     "properties": {
                                         "id": {
@@ -738,6 +760,10 @@
                                             "type": "integer",
                                             "format": "int64",
                                             "nullable": true
+                                        },
+                                        "speedFast": {
+                                            "type": "boolean",
+                                            "nullable": true
                                         }
                                     }
                                 }
@@ -745,7 +771,7 @@
                         }
                     },
                     "400": {
-                        "description": "Invalid effort, thinking or thinkingBudget value",
+                        "description": "Invalid effort, thinking, thinkingBudget or speedFast value",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1199,7 +1225,8 @@
                                         "projectId",
                                         "effort",
                                         "thinking",
-                                        "thinkingBudget"
+                                        "thinkingBudget",
+                                        "speedFast"
                                     ],
                                     "properties": {
                                         "id": {
@@ -1244,6 +1271,10 @@
                                         "thinkingBudget": {
                                             "type": "integer",
                                             "format": "int64",
+                                            "nullable": true
+                                        },
+                                        "speedFast": {
+                                            "type": "boolean",
                                             "nullable": true
                                         }
                                     }
@@ -1393,7 +1424,8 @@
                                         "projectId",
                                         "effort",
                                         "thinking",
-                                        "thinkingBudget"
+                                        "thinkingBudget",
+                                        "speedFast"
                                     ],
                                     "properties": {
                                         "id": {
@@ -1438,6 +1470,10 @@
                                         "thinkingBudget": {
                                             "type": "integer",
                                             "format": "int64",
+                                            "nullable": true
+                                        },
+                                        "speedFast": {
+                                            "type": "boolean",
                                             "nullable": true
                                         }
                                     }

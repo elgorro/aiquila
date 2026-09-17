@@ -1690,6 +1690,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             'effort' => true,
             'native_mcp' => true,
             'documents' => true,
+            'fast_mode' => true,
         ]);
     }
 

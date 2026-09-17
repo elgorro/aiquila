@@ -62,7 +62,7 @@ interface LLMProviderInterface {
      * UI and for provider-aware validation (e.g. whether `effort` is a
      * meaningful option at all).
      *
-     * @return array{vision: bool, tools: bool, streaming: bool, thinking: bool, effort: bool, native_mcp: bool, documents: bool, audio_in: bool, audio_out: bool, image_out: bool}
+     * @return array{vision: bool, tools: bool, streaming: bool, thinking: bool, effort: bool, native_mcp: bool, documents: bool, audio_in: bool, audio_out: bool, image_out: bool, fast_mode: bool}
      */
     public function getCapabilities(): array;
 

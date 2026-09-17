@@ -130,6 +130,12 @@ const SLASH_COMMANDS = [
 		icon: '🎚️',
 		description: 'Cap thinking at a fixed number of tokens (e.g. /thinking-budget:8000; no value or "off" returns to adaptive)',
 	},
+	{
+		id: 'fast',
+		label: '/fast',
+		icon: '🚀',
+		description: 'Faster output at premium pricing, on Opus 5 and Opus 4.8 only (/fast:on or /fast:off; no value resets to the instance default)',
+	},
 ]
 
 export default {
@@ -248,6 +254,9 @@ export default {
 				break
 			case 'thinking-budget':
 				this.$emit('command', { type: 'set-thinking-budget', args })
+				break
+			case 'fast':
+				this.$emit('command', { type: 'set-fast', args })
 				break
 			}
 		},

@@ -307,6 +307,9 @@ export default {
 			case 'set-thinking-budget':
 				this.setThinkingBudget(args || '')
 				break
+			case 'set-fast':
+				this.setFast(args || '')
+				break
 			case 'add-project':
 				if (args) {
 					const id = parseInt(args, 10)
@@ -382,6 +385,28 @@ export default {
 			} catch (err) {
 				this.noticeIsError = true
 				this.notice = err.response?.data?.error || t('aiquila', 'Failed to set thinking budget')
+			}
+		},
+		async setFast(value) {
+			if (!['on', 'off', ''].includes(value)) {
+				this.noticeIsError = true
+				this.notice = t('aiquila', 'Usage: /fast:on or /fast:off')
+				return
+			}
+			try {
+				const { data } = await updateConversation(this.conversation.id, { speedFast: value })
+				this.$emit('conversation-updated', data)
+				this.noticeIsError = false
+				if (value === '') {
+					this.notice = t('aiquila', 'Fast mode reset to the instance default for this conversation — applies to new messages only')
+				} else if (value === 'on') {
+					this.notice = t('aiquila', 'Fast mode on for this conversation — roughly twice the price per token; applies to new messages only')
+				} else {
+					this.notice = t('aiquila', 'Fast mode off for this conversation — applies to new messages only')
+				}
+			} catch (err) {
+				this.noticeIsError = true
+				this.notice = err.response?.data?.error || t('aiquila', 'Failed to set fast mode')
 			}
 		},
 		async detachProject() {
