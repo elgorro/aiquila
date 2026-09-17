@@ -166,8 +166,10 @@ sudo -u www-data php occ app:enable aiquila
      **Refresh models** to re-query it.
    - **Advanced** — max output tokens, request timeout, and any
      provider-specific options. On the Claude card this is also where
-     **effort** and **adaptive thinking** defaults live; they are Anthropic
-     concepts and do not apply to the other providers.
+     **effort**, **adaptive thinking**, **service tier** and **fast mode**
+     defaults live; they are Anthropic concepts and do not apply to the other
+     providers. See [Latency and capacity](#latency-and-capacity) for the last
+     two, both of which do nothing on the default model.
 4. Click **Save**, then **Test connection** to send a live request and confirm
    the key reaches the provider.
 
@@ -188,6 +190,41 @@ e.g. `Settings → Administration → AIquila#mcp`.
 Endpoint URLs stay admin-only deliberately: Nextcloud makes outbound requests to
 whatever is stored there, so a user-settable endpoint would be a server-side
 request forgery vector.
+
+#### Latency and capacity
+
+Two Claude-only settings under **Advanced** trade money for speed. Both are off
+by default, and **neither has any effect on the default model**, so check the
+model before concluding a setting is broken.
+
+| Setting | What it does | Where it applies | Cost |
+|---|---|---|---|
+| **Service tier** | `auto` lets a request use priority capacity; `standard_only` never does. Blank leaves your Anthropic account's own default in charge. | Only if your organisation has purchased Priority Tier. Priority Tier is not offered on Opus 5, Sonnet 5 or the Fable models. | None |
+| **Fast mode** | Generates output roughly 2.5x faster. | Opus 5 and Opus 4.8 only; silently ignored elsewhere. Not available for batched work. | Roughly double the price per token |
+
+Fast mode has its own rate limit, separate from the model's standard one.
+
+Both are also settable from the command line:
+
+```bash
+occ aiquila:configure --service-tier=standard_only --fast=on
+occ aiquila:configure --show
+```
+
+Users can pin fast mode for a single conversation with `/fast:on` and
+`/fast:off`; `/fast` with no value returns the conversation to the instance
+default. The service tier is instance-wide and has no per-conversation form.
+
+Since the real numbers depend on your account and your traffic, measure rather
+than guess:
+
+```bash
+occ aiquila:benchmark-tier --model claude-opus-5 --runs 5
+```
+
+It reports p50/p95 latency and output tokens per second for each variant the
+model can run, plus the tier the API says it actually served. The requests are
+real and are billed to your account, so it asks before starting.
 
 ### 6. Pick a provider per conversation
 

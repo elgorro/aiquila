@@ -143,6 +143,7 @@ card, and the guards that refuse work a provider cannot do.
 | `audio_in` | transcription | Transcribes audio | Mistral; Local per admin flag |
 | `audio_out` | speech | Generates speech | Mistral; Local per admin flag |
 | `image_out` | image generation | Generates images | Mistral |
+| `fast_mode` | — | Has a premium fast-inference mode (no chip; it depends on the model, not the provider) | Claude |
 
 Adding a key means four edits that have to land together: the defaults in
 `ProviderSettingsSchema::capabilities()`, the `@return array{…}` docblock on both
