@@ -1620,6 +1620,28 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                     . 'conversation with /thinking-budget.',
                 group: ProviderSettingsSchema::GROUP_BASIC,
             ),
+            ProviderSettingsSchema::select(
+                'service_tier',
+                'service_tier',
+                'Service tier',
+                'Whether requests may use priority capacity. "auto" only changes anything if your Anthropic '
+                    . 'organisation has purchased Priority Tier — otherwise it is served at standard capacity '
+                    . 'anyway, at the same price. "standard_only" never uses priority capacity. Priority Tier is '
+                    . 'not offered on Opus 5, Sonnet 5 or the Fable models, so it has no effect on this app\'s '
+                    . 'default model. Blank leaves your account default in charge.',
+                array_merge([''], ClaudeModels::ALL_SERVICE_TIERS),
+                group: ProviderSettingsSchema::GROUP_ADVANCED,
+            ),
+            ProviderSettingsSchema::checkbox(
+                'speed_fast',
+                'speed_fast',
+                'Fast mode (premium pricing)',
+                'Generates output roughly 2.5x faster at about twice the token price. Available on Opus 5 and '
+                    . 'Opus 4.8 only and silently ignored on every other model, including the default. Fast mode '
+                    . 'has its own rate limit. Overridable per conversation with /fast.',
+                storage: ProviderSettingsSchema::STORAGE_BOOL,
+                group: ProviderSettingsSchema::GROUP_ADVANCED,
+            ),
             ProviderSettingsSchema::maxTokens('max_tokens', ClaudeModels::DEFAULT_MAX_TOKENS),
             ProviderSettingsSchema::timeout('api_timeout', 30, 'Shared across all hosted providers.'),
             ProviderSettingsSchema::checkbox(

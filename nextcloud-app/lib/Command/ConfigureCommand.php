@@ -67,6 +67,18 @@ class ConfigureCommand extends Base {
                 'Pin the thinking budget in tokens (>= ' . ClaudeSDKService::MIN_THINKING_BUDGET . ', empty string for adaptive)'
             )
             ->addOption(
+                'service-tier',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Set the service tier (' . implode('|', ClaudeModels::ALL_SERVICE_TIERS) . ', empty string to use the account default)'
+            )
+            ->addOption(
+                'fast',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Enable fast mode by default — premium pricing, Opus 5 / Opus 4.8 only (on|off)'
+            )
+            ->addOption(
                 'timeout',
                 null,
                 InputOption::VALUE_REQUIRED,
@@ -228,6 +240,33 @@ class ConfigureCommand extends Base {
             $updated = true;
         }
 
+        // Set the service tier
+        $serviceTier = $input->getOption('service-tier');
+        if ($serviceTier !== null) {
+            if ($serviceTier !== '' && !ClaudeModels::isAllowedServiceTier($serviceTier)) {
+                $output->writeln('<error>Service tier must be one of: ' . implode(', ', ClaudeModels::ALL_SERVICE_TIERS) . ' (or empty to use the account default)</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'service_tier', $serviceTier);
+            $output->writeln('<info>✓ Service tier ' . ($serviceTier === '' ? 'cleared — using the account default' : 'updated to: ' . $serviceTier) . '</info>');
+            $updated = true;
+        }
+
+        // Set the fast-mode default
+        $fast = $input->getOption('fast');
+        if ($fast !== null) {
+            if (!in_array($fast, ['on', 'off'], true)) {
+                $output->writeln('<error>Fast mode must be "on" or "off"</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'speed_fast', $fast === 'on' ? 'true' : 'false');
+            $output->writeln('<info>✓ Fast mode default updated to: ' . $fast . '</info>');
+            if ($fast === 'on') {
+                $output->writeln('<comment>  Fast mode costs roughly twice as much per token and only applies on Opus 5 and Opus 4.8.</comment>');
+            }
+            $updated = true;
+        }
+
         // Set timeout
         $timeout = $input->getOption('timeout');
         if ($timeout !== null) {
@@ -262,6 +301,8 @@ class ConfigureCommand extends Base {
         $effort = $this->config->getAppValue(self::APP_NAME, 'effort', '');
         $thinking = in_array($this->config->getAppValue(self::APP_NAME, 'thinking', 'false'), ['true', '1'], true);
         $thinkingBudget = $this->config->getAppValue(self::APP_NAME, 'thinking_budget', '');
+        $serviceTier = $this->config->getAppValue(self::APP_NAME, 'service_tier', '');
+        $fast = in_array($this->config->getAppValue(self::APP_NAME, 'speed_fast', 'false'), ['true', '1'], true);
         $timeout = $this->config->getAppValue(self::APP_NAME, 'api_timeout', '30');
 
         $output->writeln('');
@@ -280,6 +321,8 @@ class ConfigureCommand extends Base {
         $output->writeln('  Effort:     <comment>' . ($effort !== '' ? $effort : '(model default)') . '</comment>');
         $output->writeln('  Thinking:   <comment>' . ($thinking ? 'on' : 'off') . '</comment>');
         $output->writeln('  Budget:     <comment>' . ($thinkingBudget !== '' ? $thinkingBudget . ' tokens' : '(adaptive)') . '</comment>');
+        $output->writeln('  Tier:       <comment>' . ($serviceTier !== '' ? $serviceTier : '(account default)') . '</comment>');
+        $output->writeln('  Fast mode:  <comment>' . ($fast ? 'on' : 'off') . '</comment>');
         $output->writeln('  Timeout:    <comment>' . $timeout . ' seconds</comment>');
         $output->writeln('');
 
