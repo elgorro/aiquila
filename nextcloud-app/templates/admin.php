@@ -5,4 +5,5 @@
 
 <div id="aiquila-admin-settings"
      class="section"
-     data-search-enabled="<?php echo $_['search_enabled'] ? '1' : '0'; ?>"></div>
+     data-search-enabled="<?php echo $_['search_enabled'] ? '1' : '0'; ?>"
+     data-auto-cache="<?php echo $_['auto_cache'] ? '1' : '0'; ?>"></div>

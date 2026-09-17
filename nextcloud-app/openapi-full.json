@@ -6661,6 +6661,12 @@
                                         "nullable": true,
                                         "default": null,
                                         "description": "Expose AIquila conversations to unified search ('1' enabled, '0' disabled, null keeps unchanged)"
+                                    },
+                                    "auto_cache": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Top-level automatic prompt caching ('1' enabled, '0' disabled, null keeps unchanged)"
                                     }
                                 }
                             }
