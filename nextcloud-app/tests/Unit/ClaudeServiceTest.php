@@ -550,12 +550,26 @@ class ClaudeServiceTest extends TestCase {
         $this->assertArrayHasKey('cache_control', $params['tools'][0]);
     }
 
-    public function testChatRequestsAutomaticCacheControl(): void {
+    public function testChatRequestsAutomaticCacheControlOnceHistoryExists(): void {
         $this->configWithApiKey();
 
-        $this->testable->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->testable->chat([
+            ['role' => 'user', 'content' => 'Hi'],
+            ['role' => 'assistant', 'content' => 'Hello'],
+            ['role' => 'user', 'content' => 'And now?'],
+        ], null, 'testuser');
 
         $this->assertSame(['type' => 'ephemeral'], $this->testable->lastCreateParams['cache_control']);
+    }
+
+    public function testChatOmitsAutomaticCacheControlForASingleMessage(): void {
+        $this->configWithApiKey();
+
+        // ChatController's mixed image+PDF branch reaches chat() with one
+        // message full of base64; caching it would bill a write nothing reads.
+        $this->testable->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+
+        $this->assertArrayNotHasKey('cache_control', $this->testable->lastCreateParams);
     }
 
     public function testSingleShotCallsOmitAutomaticCacheControl(): void {
@@ -571,7 +585,11 @@ class ClaudeServiceTest extends TestCase {
     public function testAutomaticCacheControlOmittedWhenDisabled(): void {
         $this->configWithApiKey(null, ['auto_cache' => '0']);
 
-        $this->testable->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->testable->chat([
+            ['role' => 'user', 'content' => 'Hi'],
+            ['role' => 'assistant', 'content' => 'Hello'],
+            ['role' => 'user', 'content' => 'And now?'],
+        ], null, 'testuser');
 
         $this->assertArrayNotHasKey('cache_control', $this->testable->lastCreateParams);
     }

@@ -52,9 +52,16 @@ back — a pure surcharge. So only the multi-turn entry points opt in:
 
 | Opts in | Does not |
 |---|---|
-| `chat()` | `ask()`, `askStream()` |
+| `chat()`, once the conversation has history | `ask()`, `askStream()` |
 | `chatWithTools()`, `chatWithToolsStream()` | `askWithDocument()`, `askWithImage()`, `askWithImages()` |
 | `chatWithNativeMcp()`, `chatWithNativeMcpCollect()` | `submitBatch()` |
+
+`chat()` is the one that needs a second test. It serves real conversations, but
+also one-shot requests that merely need structured content blocks — the mixed
+image + PDF branch of `/api/ask` reaches it with a single user message carrying
+large base64 payloads. A lone user message has nothing a later request can read
+back, so history, not the method name, decides: `chat()` opts in from the second
+message onwards.
 
 The automatic breakpoint consumes one of the four slots, so it stands down when
 the explicit markers have already taken all four rather than letting the request

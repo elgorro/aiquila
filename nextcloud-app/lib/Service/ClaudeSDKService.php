@@ -1006,8 +1006,13 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             if ($system !== null) {
                 $options['system'] = $system;
             }
-            // Multi-turn: let the API keep a breakpoint on the growing tail.
-            $options['auto_cache'] = true;
+            // chat() serves both real conversations and one-shot requests that
+            // just happen to need structured content blocks (ChatController's
+            // mixed image+PDF branch). Only the former has a prefix a later
+            // request can read back, and the latter's blocks are large base64
+            // payloads — exactly what must not be written to cache for nothing.
+            // History is the discriminator: a lone user message is a one-shot.
+            $options['auto_cache'] = count($messages) > 1;
 
             $this->logger->debug('AIquila SDK: chat() request', [
                 'model'        => $this->getModel($userId),
