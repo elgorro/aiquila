@@ -205,6 +205,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      *   thinking       (bool)   – per-conversation adaptive-thinking override
      *   thinking_budget (int)   – explicit thinking budget in tokens; switches
      *                             thinking from adaptive to enabled mode
+     *   service_tier   (string) – 'auto' or 'standard_only'; whether the request
+     *                             may use purchased priority capacity
+     *   speed          (bool)   – per-conversation fast-mode override; true asks
+     *                             for `speed: fast` at premium pricing
      */
     /**
      * Model for a single request.
@@ -262,6 +266,20 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
         if ($caps['supports_effort']) {
             $params['outputConfig'] = ['effort' => $this->resolveEffort($model, $options['effort'] ?? null)];
+        }
+
+        // Priority capacity routing. Left unset by default so the account's own
+        // Anthropic default applies; no model rejects either value.
+        $serviceTier = $this->resolveServiceTier($options['service_tier'] ?? null);
+        if ($serviceTier !== null) {
+            $params['service_tier'] = $serviceTier;
+        }
+
+        // Fast mode. Only ever written as 'fast' — `speed: standard` is the
+        // default, so sending it would change the request body (and with it the
+        // prompt-cache prefix) for no behavioural gain.
+        if ($this->resolveSpeed($options, $model)) {
+            $params['speed'] = 'fast';
         }
 
         // System prompt — cache by default; caller can opt out with cache_system: false.
@@ -398,6 +416,68 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     }
 
     /**
+     * Resolve the service tier for a request: per-request override → admin
+     * default (app config `service_tier`, blank = unset) → null, which leaves
+     * the account's Anthropic default in charge.
+     *
+     * Values outside the API's enum fall through to the next level rather than
+     * throwing: unlike a thinking budget, a wrong tier here cannot be validated
+     * against anything the caller can fix, and refusing the request would be a
+     * harsher failure than simply not asking for priority capacity.
+     */
+    private function resolveServiceTier(?string $override): ?string {
+        if ($override !== null && ClaudeModels::isAllowedServiceTier($override)) {
+            return $override;
+        }
+        $adminDefault = $this->config->getAppValue($this->appName, 'service_tier', '');
+        if ($adminDefault !== '' && ClaudeModels::isAllowedServiceTier($adminDefault)) {
+            return $adminDefault;
+        }
+        return null;
+    }
+
+    /**
+     * Whether this request should ask for fast mode: per-request override →
+     * admin default (app config `speed_fast`, default off).
+     *
+     * Fast mode is Opus 5 / Opus 4.8 only and the API rejects the combination
+     * at create time, so the model gate is applied here. A per-request `true`
+     * on an unsupported model throws — the caller pinned something specific and
+     * silently dropping it would hide the mistake — while an *admin* default is
+     * logged and ignored, so one instance setting cannot break every request
+     * made on a model that has no fast mode.
+     *
+     * @throws \InvalidArgumentException when the request asks for fast mode on
+     *                                   a model that does not support it
+     */
+    private function resolveSpeed(array $options, string $model): bool {
+        $override = $options['speed'] ?? null;
+        if ($override !== null) {
+            if (!$override) {
+                return false;
+            }
+            if (!ClaudeModels::supportsFastMode($model)) {
+                throw new \InvalidArgumentException(
+                    sprintf('Model %s does not support fast mode; it is available on Opus 5 and Opus 4.8 only.', $model)
+                );
+            }
+            return true;
+        }
+
+        $adminDefault = in_array($this->config->getAppValue($this->appName, 'speed_fast', 'false'), ['true', '1'], true);
+        if (!$adminDefault) {
+            return false;
+        }
+        if (!ClaudeModels::supportsFastMode($model)) {
+            $this->logger->debug('AIquila SDK: Ignoring fast-mode default on a model without fast mode', [
+                'model' => $model,
+            ]);
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * Upload bytes to Anthropic's beta Files API and return the resulting
      * BetaFileMetadata. Overridable for testing.
      */
@@ -423,19 +503,40 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     }
 
     /**
-     * Build per-request options (extra headers etc.). Returns null when none
-     * are needed. Today this only enables the Files API beta header when the
-     * messages reference an uploaded file_id.
+     * Build per-request options (extra headers, extra body params). Returns
+     * null when none are needed.
+     *
+     * Two things ride through here:
+     *
+     *  - the Files API beta header, when the messages reference an uploaded
+     *    file_id;
+     *  - fast mode, which the GA `messages->create()` signature has no argument
+     *    for. `speed` is a plain top-level body field, so it goes in as an
+     *    extra body param (merged by the SDK in Core\BaseClient) together with
+     *    its beta flag. That keeps the GA endpoint — and its `Message` return
+     *    type — instead of moving every call to `beta->messages`.
+     *
+     * Beta flags accumulate into a single comma-separated header: a fast-mode
+     * request that also carries an uploaded file needs both.
      */
     protected function requestOptionsForMessages(array $params): ?array {
+        $betas = [];
+        $options = [];
+
         if ($this->messagesReferenceFileId($params['messages'] ?? [])) {
-            return [
-                'extraHeaders' => [
-                    'anthropic-beta' => AnthropicBeta::FILES_API_2025_04_14->value,
-                ],
-            ];
+            $betas[] = AnthropicBeta::FILES_API_2025_04_14->value;
         }
-        return null;
+
+        if (($params['speed'] ?? null) === 'fast') {
+            $betas[] = AnthropicBeta::FAST_MODE_2026_02_01->value;
+            $options['extraBodyParams'] = ['speed' => 'fast'];
+        }
+
+        if ($betas !== []) {
+            $options['extraHeaders'] = ['anthropic-beta' => implode(',', $betas)];
+        }
+
+        return $options === [] ? null : $options;
     }
 
     /**
@@ -492,6 +593,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             topK: $params['top_k'] ?? null,
             stopSequences: $params['stop_sequences'] ?? null,
             tools: $params['tools'] ?? null,
+            serviceTier: $params['service_tier'] ?? null,
             metadata: $this->metadataParam($params),
             requestOptions: $this->requestOptionsForMessages($params),
         );
@@ -631,6 +733,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             topK: $params['top_k'] ?? null,
             stopSequences: $params['stop_sequences'] ?? null,
             tools: $params['tools'] ?? null,
+            serviceTier: $params['service_tier'] ?? null,
             metadata: $this->metadataParam($params),
             requestOptions: $this->requestOptionsForMessages($params),
         );
@@ -781,7 +884,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     /**
      * Extract usage data from a Message response, including cache tokens.
      *
-     * @return array{input_tokens: int, output_tokens: int, cache_creation_tokens: int|null, cache_read_tokens: int|null}
+     * @return array{input_tokens: int, output_tokens: int, cache_creation_tokens: int|null, cache_read_tokens: int|null, service_tier: string|null}
      */
     private function extractUsage(Message $response): array {
         return [
@@ -789,6 +892,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             'output_tokens' => $response->usage->outputTokens ?? 0,
             'cache_creation_tokens' => $response->usage->cacheCreationInputTokens,
             'cache_read_tokens' => $response->usage->cacheReadInputTokens,
+            // Which tier actually served the request ('standard'/'priority'/
+            // 'batch') — not necessarily the one asked for. Null on providers
+            // or SDK paths that do not report it.
+            'service_tier' => $response->usage->serviceTier ?? null,
         ];
     }
 
@@ -1215,6 +1322,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         if (isset($params['stop_sequences'])) {
             $out['stopSequences'] = $params['stop_sequences'];
         }
+        if (isset($params['service_tier'])) {
+            $out['serviceTier'] = $params['service_tier'];
+        }
+        // `speed` is deliberately not forwarded: fast mode is not available on
+        // the Batch API, and batch work is not latency-sensitive anyway.
         // The SDK model wants a Metadata object here, not our snake_case array.
         $metadata = $this->metadataParam($params);
         if ($metadata !== null) {
@@ -2029,12 +2141,22 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      *                 verify through the generic array docblock
      */
     protected function callBetaCreateStreamWithMcp(Client $client, array $params, array $mcpServers): BaseStream {
+        // Already on the beta endpoint, so service_tier and speed are ordinary
+        // named arguments here rather than extra body params.
+        $fast = ($params['speed'] ?? null) === 'fast';
+        $betas = [AnthropicBeta::MCP_CLIENT_2025_11_20];
+        if ($fast) {
+            $betas[] = AnthropicBeta::FAST_MODE_2026_02_01;
+        }
+
         return $client->beta->messages->createStream(
             maxTokens: $params['max_tokens'],
             messages: $params['messages'],
             model: $params['model'],
             mcpServers: $mcpServers,
             outputConfig: $params['outputConfig'] ?? null,
+            serviceTier: $params['service_tier'] ?? null,
+            speed: $fast ? 'fast' : null,
             stopSequences: $params['stop_sequences'] ?? null,
             system: $params['system'] ?? null,
             temperature: $params['temperature'] ?? null,
@@ -2043,7 +2165,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             topK: $params['top_k'] ?? null,
             topP: $params['top_p'] ?? null,
             metadata: $this->betaMetadataParam($params),
-            betas: [AnthropicBeta::MCP_CLIENT_2025_11_20],
+            betas: $betas,
         );
     }
 

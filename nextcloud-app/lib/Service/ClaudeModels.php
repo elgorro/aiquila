@@ -236,4 +236,43 @@ class ClaudeModels {
     public static function supportsSamplingParams(string $model): bool {
         return !isset(self::NO_SAMPLING_PARAMS[$model]);
     }
+
+    // ── Service tier ──────────────────────────────────────────────────────
+
+    /**
+     * Every `service_tier` value the Messages API accepts; used for settings
+     * validation. Mirrors Anthropic\Messages\MessageCreateParams\ServiceTier.
+     *
+     * There is deliberately no per-model table here. `standard_only` is valid
+     * everywhere, and `auto` degrades to standard capacity rather than failing
+     * when the model or the organisation has no priority capacity — so a static
+     * list would only go stale without ever preventing an error.
+     */
+    public const ALL_SERVICE_TIERS = ['auto', 'standard_only'];
+
+    public static function isAllowedServiceTier(string $tier): bool {
+        return in_array($tier, self::ALL_SERVICE_TIERS, true);
+    }
+
+    // ── Fast mode (speed) ─────────────────────────────────────────────────
+
+    /**
+     * Models that accept `speed: fast`. Unlike thinking and effort, the Models
+     * API exposes no capability flag for this, so the table is hand-maintained;
+     * an unsupported combination is rejected by the API at create time.
+     */
+    private const SUPPORTS_FAST_MODE = [
+        self::OPUS_5   => true,
+        self::OPUS_4_8 => true,
+    ];
+
+    /**
+     * Whether a model accepts fast mode (`speed: fast`, beta
+     * fast-mode-2026-02-01) — roughly 2.5x the output token rate at premium
+     * pricing. Claude API only; not available on Bedrock, Vertex, Foundry or
+     * the Batch API.
+     */
+    public static function supportsFastMode(string $model): bool {
+        return self::SUPPORTS_FAST_MODE[$model] ?? false;
+    }
 }
