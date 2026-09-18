@@ -24,6 +24,7 @@ class CapabilityTestableService extends ClaudeSDKService {
     private ?ModelInfo $retrieveResult = null;
     private ?\Exception $retrieveException = null;
     public ?array $lastCreateParams = null;
+    public ?array $lastRequestOptions = null;
 
     public function setRetrieveModelInfo(ModelInfo $info): void {
         $this->retrieveResult = $info;
@@ -40,6 +41,9 @@ class CapabilityTestableService extends ClaudeSDKService {
 
     protected function callCreate(Client $client, array $params): \Anthropic\Messages\Message {
         $this->lastCreateParams = $params;
+        // The real callCreate() hands these to the SDK; capture them so tests
+        // can assert on beta headers and extra body params.
+        $this->lastRequestOptions = $this->requestOptionsForMessages($params);
         $stub = (new \ReflectionClass(\Anthropic\Messages\Message::class))->newInstanceWithoutConstructor();
         $ref  = new \ReflectionClass($stub);
 
@@ -627,5 +631,117 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $this->assertEquals(200, $result['usage']['cache_read_tokens']);
         $this->assertEquals(100, $result['usage']['input_tokens']);
         $this->assertEquals(30, $result['usage']['output_tokens']);
+    }
+
+    // ── service_tier ──────────────────────────────────────────────────────
+
+    public function testServiceTierOmittedByDefault(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertArrayNotHasKey('service_tier', $service->lastCreateParams);
+    }
+
+    public function testAdminServiceTierDefaultIsSent(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5, ['service_tier' => 'standard_only']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertSame('standard_only', $service->lastCreateParams['service_tier']);
+    }
+
+    public function testServiceTierOverrideWinsOverAdminDefault(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5, ['service_tier' => 'standard_only']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['service_tier' => 'auto']);
+        $this->assertSame('auto', $service->lastCreateParams['service_tier']);
+    }
+
+    /**
+     * A tier the API would reject is dropped rather than throwing: the caller
+     * cannot act on the error, and losing priority capacity beats losing the
+     * whole request.
+     */
+    public function testInvalidServiceTierFallsThrough(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5, ['service_tier' => 'standard_only']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['service_tier' => 'priority']);
+        $this->assertSame('standard_only', $service->lastCreateParams['service_tier']);
+    }
+
+    public function testInvalidAdminServiceTierIsIgnored(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5, ['service_tier' => 'nonsense']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertArrayNotHasKey('service_tier', $service->lastCreateParams);
+    }
+
+    // ── fast mode ─────────────────────────────────────────────────────────
+
+    public function testFastModeSetsParamHeaderAndBody(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['speed' => true]);
+
+        $this->assertSame('fast', $service->lastCreateParams['speed']);
+        // The GA create() has no speed argument, so it has to travel as an
+        // extra body param alongside its beta flag.
+        $this->assertSame(['speed' => 'fast'], $service->lastRequestOptions['extraBodyParams']);
+        $this->assertSame('fast-mode-2026-02-01', $service->lastRequestOptions['extraHeaders']['anthropic-beta']);
+    }
+
+    public function testFastModeOffIsNotSerialisedAsStandard(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5, ['speed_fast' => 'true']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['speed' => false]);
+
+        $this->assertArrayNotHasKey('speed', $service->lastCreateParams);
+        $this->assertNull($service->lastRequestOptions);
+    }
+
+    public function testFastModeAdminDefaultApplies(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_4_8, ['speed_fast' => 'true']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertSame('fast', $service->lastCreateParams['speed']);
+    }
+
+    /**
+     * An explicit request for something the model cannot do is an error. The
+     * public entry points turn it into an error result rather than letting it
+     * escape, the same way an unsupported thinking budget does.
+     */
+    public function testFastModeOverrideOnUnsupportedModelFails(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5);
+        $result = $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['speed' => true]);
+        $this->assertStringContainsString('does not support fast mode', $result['error']);
+        $this->assertNull($service->lastCreateParams);
+    }
+
+    /** The same as an admin default is dropped, so one setting cannot break every request. */
+    public function testFastModeAdminDefaultOnUnsupportedModelIsIgnored(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5, ['speed_fast' => 'true']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertArrayNotHasKey('speed', $service->lastCreateParams);
+    }
+
+    /**
+     * Both beta flags have to survive together. The seam used to return one
+     * header, so whichever flag was added second would have silently replaced
+     * the other.
+     */
+    public function testFastModeAndFilesApiBetasAreBothSent(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5);
+        $service->chat([[
+            'role' => 'user',
+            'content' => [['type' => 'document', 'source' => ['type' => 'file', 'file_id' => 'file_123']]],
+        ]], null, 'testuser', ['speed' => true]);
+
+        $header = $service->lastRequestOptions['extraHeaders']['anthropic-beta'];
+        $this->assertStringContainsString('files-api-2025-04-14', $header);
+        $this->assertStringContainsString('fast-mode-2026-02-01', $header);
+        $this->assertCount(2, explode(',', $header));
+    }
+
+    public function testFilesApiBetaAloneCarriesNoSpeedBody(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5);
+        $service->chat([[
+            'role' => 'user',
+            'content' => [['type' => 'document', 'source' => ['type' => 'file', 'file_id' => 'file_123']]],
+        ]], null, 'testuser');
+
+        $this->assertSame('files-api-2025-04-14', $service->lastRequestOptions['extraHeaders']['anthropic-beta']);
+        $this->assertArrayNotHasKey('extraBodyParams', $service->lastRequestOptions);
     }
 }

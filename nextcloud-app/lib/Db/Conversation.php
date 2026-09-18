@@ -29,6 +29,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setThinking(?bool $thinking)
  * @method int|null getThinkingBudget()
  * @method void setThinkingBudget(?int $thinkingBudget)
+ * @method bool|null getSpeedFast()
+ * @method void setSpeedFast(?bool $speedFast)
  */
 class Conversation extends Entity implements \JsonSerializable {
     protected string $userId = '';
@@ -43,6 +45,8 @@ class Conversation extends Entity implements \JsonSerializable {
     protected ?bool $thinking = null;
     /** Explicit thinking budget in tokens; null keeps thinking adaptive. */
     protected ?int $thinkingBudget = null;
+    /** Fast-mode pin; null follows the instance default, false opts out of it. */
+    protected ?bool $speedFast = null;
 
     public function __construct() {
         $this->addType('userId', 'string');
@@ -55,10 +59,11 @@ class Conversation extends Entity implements \JsonSerializable {
         $this->addType('effort', 'string');
         $this->addType('thinking', 'boolean');
         $this->addType('thinkingBudget', 'integer');
+        $this->addType('speedFast', 'boolean');
     }
 
     /**
-     * @return array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, thinkingBudget: ?int}
+     * @return array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, thinkingBudget: ?int, speedFast: ?bool}
      */
     public function jsonSerialize(): array {
         return [
@@ -73,6 +78,7 @@ class Conversation extends Entity implements \JsonSerializable {
             'effort' => $this->getEffort(),
             'thinking' => $this->getThinking(),
             'thinkingBudget' => $this->getThinkingBudget(),
+            'speedFast' => $this->getSpeedFast(),
         ];
     }
 }

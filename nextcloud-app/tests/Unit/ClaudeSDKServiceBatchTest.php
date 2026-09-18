@@ -102,9 +102,11 @@ class BatchTestableService extends ClaudeSDKService {
 }
 
 class ClaudeSDKServiceBatchTest extends TestCase {
-    private function makeService(): BatchTestableService {
+    private function makeService(array $appConfig = []): BatchTestableService {
         $config = $this->createMock(IConfig::class);
-        $config->method('getAppValue')->willReturnCallback(fn ($app, $key, $default) => $default);
+        $config->method('getAppValue')->willReturnCallback(
+            fn ($app, $key, $default) => $appConfig[$key] ?? $default
+        );
         $config->method('getUserValue')->willReturnCallback(fn ($u, $a, $k, $d) => $d);
         $logger = $this->createMock(LoggerInterface::class);
         $credentials = $this->createMock(CredentialService::class);
@@ -174,5 +176,26 @@ class ClaudeSDKServiceBatchTest extends TestCase {
         $metadata = $svc->lastBatchRequests[0]['params']['metadata'];
         $this->assertInstanceOf(Metadata::class, $metadata);
         $this->assertSame('deadbeef', $metadata->userID);
+    }
+
+    /** Batches accept a service tier, and it has to survive the key translation. */
+    public function testBatchParamsCarryServiceTier(): void {
+        $svc = $this->makeService(['service_tier' => 'standard_only']);
+        $svc->summarizeViaBatch('document body', 'testuser', null);
+
+        $this->assertSame('standard_only', $svc->lastBatchRequests[0]['params']['serviceTier']);
+    }
+
+    /**
+     * Fast mode is not offered on the Batch API, so an instance that defaults
+     * it on must not leak it into batch requests — the API would reject them.
+     */
+    public function testBatchParamsDropFastMode(): void {
+        $svc = $this->makeService(['model' => 'claude-opus-5', 'speed_fast' => 'true']);
+        $svc->summarizeViaBatch('document body', 'testuser', null);
+
+        $params = $svc->lastBatchRequests[0]['params'];
+        $this->assertArrayNotHasKey('speed', $params);
+        $this->assertArrayNotHasKey('speed_fast', $params);
     }
 }
