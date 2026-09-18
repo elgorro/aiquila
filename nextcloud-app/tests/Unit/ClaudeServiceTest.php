@@ -213,12 +213,12 @@ class ClaudeServiceTest extends TestCase {
         );
     }
 
-    private function configWithApiKey(?string $model = null): void {
+    private function configWithApiKey(?string $model = null, array $appValues = []): void {
         $model ??= ClaudeModels::DEFAULT_MODEL;
         $this->credentials->method('getApiKey')->willReturn('test-key');
         $this->config->method('getUserValue')->willReturn('');
         $this->config->method('getAppValue')
-            ->willReturnCallback(fn($app, $key, $default) => match ($key) {
+            ->willReturnCallback(fn($app, $key, $default) => $appValues[$key] ?? match ($key) {
                 'model'      => $model,
                 'max_tokens' => '4096',
                 default      => $default,
@@ -528,6 +528,93 @@ class ClaudeServiceTest extends TestCase {
 
         $params = $this->testable->lastCreateParams;
         $this->assertArrayNotHasKey('cache_control', $params['tools'][0]);
+    }
+
+    // ── Top-level automatic cache_control ──────────────────────────────────
+
+    public function testChatWithToolsRequestsAutomaticCacheControl(): void {
+        $this->configWithApiKey();
+
+        $this->testable->chatWithTools(
+            [['role' => 'user', 'content' => 'Hi']],
+            [['name' => 'tool_a', 'description' => 'A', 'input_schema' => []]],
+            fn(string $name, array $input): array => ['content' => []],
+            'You are helpful.',
+            'testuser'
+        );
+
+        $params = $this->testable->lastCreateParams;
+        $this->assertSame(['type' => 'ephemeral'], $params['cache_control']);
+        // The hybrid: the explicit prefix markers must survive alongside it.
+        $this->assertArrayHasKey('cache_control', $params['system'][0]);
+        $this->assertArrayHasKey('cache_control', $params['tools'][0]);
+    }
+
+    public function testChatRequestsAutomaticCacheControlOnceHistoryExists(): void {
+        $this->configWithApiKey();
+
+        $this->testable->chat([
+            ['role' => 'user', 'content' => 'Hi'],
+            ['role' => 'assistant', 'content' => 'Hello'],
+            ['role' => 'user', 'content' => 'And now?'],
+        ], null, 'testuser');
+
+        $this->assertSame(['type' => 'ephemeral'], $this->testable->lastCreateParams['cache_control']);
+    }
+
+    public function testChatOmitsAutomaticCacheControlForASingleMessage(): void {
+        $this->configWithApiKey();
+
+        // ChatController's mixed image+PDF branch reaches chat() with one
+        // message full of base64; caching it would bill a write nothing reads.
+        $this->testable->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+
+        $this->assertArrayNotHasKey('cache_control', $this->testable->lastCreateParams);
+    }
+
+    public function testSingleShotCallsOmitAutomaticCacheControl(): void {
+        $this->configWithApiKey();
+
+        // A one-off question has no reusable tail, so the automatic breakpoint
+        // would only bill a cache write nothing ever reads back.
+        $this->testable->ask('Hi', '', 'testuser');
+
+        $this->assertArrayNotHasKey('cache_control', $this->testable->lastCreateParams);
+    }
+
+    public function testAutomaticCacheControlOmittedWhenDisabled(): void {
+        $this->configWithApiKey(null, ['auto_cache' => '0']);
+
+        $this->testable->chat([
+            ['role' => 'user', 'content' => 'Hi'],
+            ['role' => 'assistant', 'content' => 'Hello'],
+            ['role' => 'user', 'content' => 'And now?'],
+        ], null, 'testuser');
+
+        $this->assertArrayNotHasKey('cache_control', $this->testable->lastCreateParams);
+    }
+
+    public function testAutomaticCacheControlStandsDownWhenBreakpointsAreExhausted(): void {
+        $this->configWithApiKey();
+
+        // system + tools + two marked image blocks already fill all four slots.
+        $messages = [[
+            'role' => 'user',
+            'content' => [
+                ['type' => 'text', 'text' => 'Compare these', 'cache_control' => ['type' => 'ephemeral']],
+                ['type' => 'text', 'text' => 'and these', 'cache_control' => ['type' => 'ephemeral']],
+            ],
+        ]];
+
+        $this->testable->chatWithTools(
+            $messages,
+            [['name' => 'tool_a', 'description' => 'A', 'input_schema' => []]],
+            fn(string $name, array $input): array => ['content' => []],
+            'You are helpful.',
+            'testuser'
+        );
+
+        $this->assertArrayNotHasKey('cache_control', $this->testable->lastCreateParams);
     }
 
     // ── Files API beta header detection ────────────────────────────────────

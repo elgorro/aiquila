@@ -173,7 +173,8 @@ sudo -u www-data php occ app:enable aiquila
 4. Click **Save**, then **Test connection** to send a live request and confirm
    the key reaches the provider.
 
-The other tabs cover instance defaults (unified search), **MCP servers**, and
+The other tabs cover instance defaults (unified search, [automatic prompt
+caching](../dev/prompt-caching.md)), **MCP servers**, and
 **Advanced** (the native MCP connector). Each tab is linkable by its anchor,
 e.g. `Settings → Administration → AIquila#mcp`.
 

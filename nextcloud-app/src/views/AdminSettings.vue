@@ -35,6 +35,13 @@
 					</NcCheckboxRadioSwitch>
 				</NcSettingsSection>
 
+				<NcSettingsSection :name="t('aiquila', 'Prompt caching')"
+					:description="t('aiquila', 'Lets the API place its own cache breakpoint on the growing end of a conversation, so long tool-using chats re-read their history from cache instead of paying for it again. Only affects Claude models.')">
+					<NcCheckboxRadioSwitch :model-value="autoCache" @update:model-value="saveAutoCache">
+						{{ t('aiquila', 'Automatic prompt caching') }}
+					</NcCheckboxRadioSwitch>
+				</NcSettingsSection>
+
 				<NcSettingsSection :name="t('aiquila', 'Model defaults')"
 					:description="t('aiquila', 'Model, token limits, effort and thinking are configured per provider, because they mean different things to each one. Open a provider card on the Providers tab to change them.')">
 					<NcButton type="secondary" @click="tab = 'providers'">
@@ -150,6 +157,7 @@ export default {
 			providers: [],
 			defaultProvider: '',
 			searchEnabled: false,
+			autoCache: true,
 			savingNativeMcp: false,
 			nativeMcpMessage: '',
 			nativeMcpMessageType: 'success',
@@ -173,7 +181,9 @@ export default {
 		},
 	},
 	async mounted() {
-		this.searchEnabled = document.getElementById('aiquila-admin-settings')?.dataset.searchEnabled === '1'
+		const dataset = document.getElementById('aiquila-admin-settings')?.dataset
+		this.searchEnabled = dataset?.searchEnabled === '1'
+		this.autoCache = dataset?.autoCache !== '0'
 		await Promise.all([this.load(), this.loadNativeMcp()])
 	},
 	methods: {
@@ -209,6 +219,10 @@ export default {
 		async saveSearch(enabled) {
 			this.searchEnabled = enabled
 			await saveAdminSettings({ search_enabled: enabled ? '1' : '0' })
+		},
+		async saveAutoCache(enabled) {
+			this.autoCache = enabled
+			await saveAdminSettings({ auto_cache: enabled ? '1' : '0' })
 		},
 		async loadNativeMcp() {
 			const { data } = await getNativeMcpStatus()

@@ -79,6 +79,12 @@ class ConfigureCommand extends Base {
                 'Enable fast mode by default — premium pricing, Opus 5 / Opus 4.8 only (on|off)'
             )
             ->addOption(
+                'auto-cache',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Let the API place a cache breakpoint on the growing end of a conversation (on|off, default: on)'
+            )
+            ->addOption(
                 'timeout',
                 null,
                 InputOption::VALUE_REQUIRED,
@@ -267,6 +273,18 @@ class ConfigureCommand extends Base {
             $updated = true;
         }
 
+        // Set automatic prompt caching
+        $autoCache = $input->getOption('auto-cache');
+        if ($autoCache !== null) {
+            if (!in_array($autoCache, ['on', 'off'], true)) {
+                $output->writeln('<error>Auto cache must be "on" or "off"</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'auto_cache', $autoCache === 'on' ? '1' : '0');
+            $output->writeln('<info>✓ Automatic prompt caching updated to: ' . $autoCache . '</info>');
+            $updated = true;
+        }
+
         // Set timeout
         $timeout = $input->getOption('timeout');
         if ($timeout !== null) {
@@ -303,6 +321,7 @@ class ConfigureCommand extends Base {
         $thinkingBudget = $this->config->getAppValue(self::APP_NAME, 'thinking_budget', '');
         $serviceTier = $this->config->getAppValue(self::APP_NAME, 'service_tier', '');
         $fast = in_array($this->config->getAppValue(self::APP_NAME, 'speed_fast', 'false'), ['true', '1'], true);
+        $autoCache = in_array($this->config->getAppValue(self::APP_NAME, 'auto_cache', '1'), ['true', '1'], true);
         $timeout = $this->config->getAppValue(self::APP_NAME, 'api_timeout', '30');
 
         $output->writeln('');
@@ -323,6 +342,7 @@ class ConfigureCommand extends Base {
         $output->writeln('  Budget:     <comment>' . ($thinkingBudget !== '' ? $thinkingBudget . ' tokens' : '(adaptive)') . '</comment>');
         $output->writeln('  Tier:       <comment>' . ($serviceTier !== '' ? $serviceTier : '(account default)') . '</comment>');
         $output->writeln('  Fast mode:  <comment>' . ($fast ? 'on' : 'off') . '</comment>');
+        $output->writeln('  Auto cache: <comment>' . ($autoCache ? 'on' : 'off') . '</comment>');
         $output->writeln('  Timeout:    <comment>' . $timeout . ' seconds</comment>');
         $output->writeln('');
 

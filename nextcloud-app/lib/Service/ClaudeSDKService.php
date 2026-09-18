@@ -66,6 +66,13 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      */
     private const STREAMING_THRESHOLD = 16384;
 
+    /**
+     * The API accepts at most four cache_control breakpoints per request and
+     * rejects a fifth with a 400, so the top-level automatic marker is only
+     * added while the explicit markers leave a slot free.
+     */
+    private const MAX_CACHE_BREAKPOINTS = 4;
+
     /** Ids of the settings-card actions handled by runAction(). */
     private const ACTION_REVEAL_SALT = 'reveal_metadata_salt';
     private const ACTION_ROTATE_SALT = 'rotate_metadata_salt';
@@ -196,6 +203,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * Supported $options keys:
      *   system        (string)  – system prompt text
      *   cache_system  (bool)    – apply ephemeral cache_control to system block
+     *   cache_tools   (bool)    – apply ephemeral cache_control to the last tool
+     *   auto_cache    (bool)    – request top-level automatic cache_control, which
+     *                             lets the API place a breakpoint on the growing
+     *                             conversation tail (multi-turn callers only)
      *   temperature   (float)
      *   top_p         (float)
      *   top_k         (int)
@@ -318,7 +329,60 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $params['tools'] = $tools;
         }
 
+        // Top-level automatic cache_control: the API places a breakpoint on the
+        // last cacheable block and moves it forward as the conversation grows, so
+        // a tool loop reads back its own history instead of re-processing it on
+        // every iteration. Only multi-turn callers opt in — on a single-shot call
+        // the breakpoint lands after a one-off tail and bills a cache write that
+        // nothing ever reads.
+        if (($options['auto_cache'] ?? false)
+            && $this->autoCacheEnabled()
+            && $this->countExplicitBreakpoints($params) < self::MAX_CACHE_BREAKPOINTS) {
+            $params['cache_control'] = ['type' => 'ephemeral'];
+        }
+
         return $params;
+    }
+
+    /**
+     * Whether top-level automatic caching is allowed on this instance
+     * (app config `auto_cache`, default on).
+     */
+    private function autoCacheEnabled(): bool {
+        // Checkboxes have persisted as 'true' or '1' over the app's history.
+        return in_array($this->config->getAppValue($this->appName, 'auto_cache', '1'), ['true', '1'], true);
+    }
+
+    /**
+     * Count the cache_control markers this request already carries. The
+     * automatic breakpoint consumes one of the four available slots, so it must
+     * stand down once the explicit markers have taken them all.
+     */
+    private function countExplicitBreakpoints(array $params): int {
+        $count = 0;
+        foreach ([$params['system'] ?? [], $params['tools'] ?? []] as $blocks) {
+            foreach ($blocks as $block) {
+                if (is_array($block) && isset($block['cache_control'])) {
+                    $count++;
+                }
+            }
+        }
+        foreach ($params['messages'] ?? [] as $message) {
+            $content = $message['content'] ?? null;
+            if (!is_array($content)) {
+                continue;
+            }
+            foreach ($content as $block) {
+                if (!is_array($block)) {
+                    continue;
+                }
+                // Document blocks carry the marker on the nested source.
+                if (isset($block['cache_control']) || isset($block['source']['cache_control'])) {
+                    $count++;
+                }
+            }
+        }
+        return $count;
     }
 
     /**
@@ -585,6 +649,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             maxTokens: $params['max_tokens'],
             messages: $params['messages'],
             model: $params['model'],
+            cacheControl: $params['cache_control'] ?? null,
             system: $params['system'] ?? null,
             thinking: $params['thinking'] ?? null,
             outputConfig: $params['outputConfig'] ?? null,
@@ -725,6 +790,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             maxTokens: $params['max_tokens'],
             messages: $params['messages'],
             model: $params['model'],
+            cacheControl: $params['cache_control'] ?? null,
             system: $params['system'] ?? null,
             thinking: $params['thinking'] ?? null,
             outputConfig: $params['outputConfig'] ?? null,
@@ -1047,6 +1113,13 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             if ($system !== null) {
                 $options['system'] = $system;
             }
+            // chat() serves both real conversations and one-shot requests that
+            // just happen to need structured content blocks (ChatController's
+            // mixed image+PDF branch). Only the former has a prefix a later
+            // request can read back, and the latter's blocks are large base64
+            // payloads — exactly what must not be written to cache for nothing.
+            // History is the discriminator: a lone user message is a one-shot.
+            $options['auto_cache'] = count($messages) > 1;
 
             $this->logger->debug('AIquila SDK: chat() request', [
                 'model'        => $this->getModel($userId),
@@ -1110,6 +1183,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $options['system'] = $system;
         }
         $options['tools'] = $tools;
+        // Multi-turn: let the API keep a breakpoint on the growing tail.
+        $options['auto_cache'] = true;
 
         $totalInputTokens = 0;
         $totalOutputTokens = 0;
@@ -1939,6 +2014,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $options['system'] = $system;
         }
         $options['tools'] = $tools;
+        // Multi-turn: let the API keep a breakpoint on the growing tail.
+        $options['auto_cache'] = true;
 
         $totalInput = 0;
         $totalOutput = 0;
@@ -2176,6 +2253,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             maxTokens: $params['max_tokens'],
             messages: $params['messages'],
             model: $params['model'],
+            cacheControl: $params['cache_control'] ?? null,
             mcpServers: $mcpServers,
             outputConfig: $params['outputConfig'] ?? null,
             serviceTier: $params['service_tier'] ?? null,
@@ -2234,6 +2312,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         // Tools are advertised by the MCP servers themselves under the
         // beta connector; do not pre-merge user-defined tool schemas.
         unset($options['tools']);
+        // Multi-turn: let the API keep a breakpoint on the growing tail.
+        $options['auto_cache'] = true;
 
         $params = $this->buildRequestParams($messages, $userId, $options);
 
