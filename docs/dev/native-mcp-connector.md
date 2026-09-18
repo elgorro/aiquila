@@ -99,6 +99,10 @@ off, no MCP server is HTTPS-reachable, or the deployment opts out of the
 beta. We do **not** plan to remove `chatWithTools()` /
 `chatWithToolsStream()` while the connector is beta.
 
+Moving the loop itself to Anthropic — Managed Agents sessions rather than
+the `mcp_servers` parameter — is a separate question, and a settled one:
+see [Managed Agents](managed-agents.md).
+
 ## Smoke testing
 
 `docker/standalone/scripts/test-native-mcp.sh` parallels `test-tools.sh`:
