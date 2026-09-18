@@ -3,6 +3,7 @@
 namespace OCA\AIquila\Tests\Unit\Listener;
 
 use OCA\AIquila\Listener\TaskSuccessfulListener;
+use OCP\IConfig;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\Notification\INotification;
 use OCP\TaskProcessing\Events\TaskSuccessfulEvent;
@@ -15,16 +16,23 @@ use Psr\Log\LoggerInterface;
 class TaskSuccessfulListenerTest extends TestCase {
     private INotificationManager $notificationManager;
     private ITaskProcessingManager $taskProcessingManager;
+    private IConfig $config;
     private LoggerInterface $logger;
+    /** Stubbed preference value; null lets getUserValue return its own default. */
+    private ?string $prefValue = null;
     private TaskSuccessfulListener $listener;
 
     protected function setUp(): void {
         $this->notificationManager = $this->createMock(INotificationManager::class);
         $this->taskProcessingManager = $this->createMock(ITaskProcessingManager::class);
         $this->logger = $this->createMock(LoggerInterface::class);
+        $this->config = $this->createMock(IConfig::class);
+        $this->config->method('getUserValue')
+            ->willReturnCallback(fn (string $u, string $a, string $k, $d = '') => $this->prefValue ?? $d);
         $this->listener = new TaskSuccessfulListener(
             $this->notificationManager,
             $this->taskProcessingManager,
+            $this->config,
             $this->logger,
         );
     }
@@ -50,6 +58,9 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testIgnoresNonAiquilaProvider(): void {
+        // These assertions are about the provider/notification path, so opt in.
+        $this->prefValue = '1';
+
         $this->mockPreferredProvider('other_app:text2text');
 
         $task = $this->makeTask();
@@ -73,6 +84,9 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testCreatesNotificationOnSuccess(): void {
+        // These assertions are about the provider/notification path, so opt in.
+        $this->prefValue = '1';
+
         $this->mockPreferredProvider('aiquila:text2text');
 
         $task = $this->makeTask('core:text2text:summary', id: 42);
@@ -98,6 +112,9 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testUnknownTaskTypeIsSkippedSilently(): void {
+        // These assertions are about the provider/notification path, so opt in.
+        $this->prefValue = '1';
+
         // A task type with no registered provider is not ours: skip without
         // notifying and without logging an error.
         $this->taskProcessingManager->method('getPreferredProvider')
@@ -114,6 +131,9 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testUnexpectedErrorIsLoggedNotPropagated(): void {
+        // These assertions are about the provider/notification path, so opt in.
+        $this->prefValue = '1';
+
         // Anything other than "no provider" is unexpected: it must be logged by
         // the guarded handle() and must not propagate to break the event chain.
         $this->taskProcessingManager->method('getPreferredProvider')
@@ -129,6 +149,9 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testNotificationFailureDoesNotBreakTheEventChain(): void {
+        // These assertions are about the provider/notification path, so opt in.
+        $this->prefValue = '1';
+
         // This listener runs before other apps' listeners in the same event
         // chain, so a failure while notifying must be logged and swallowed.
         $this->mockPreferredProvider('aiquila:text2text');
@@ -150,6 +173,30 @@ class TaskSuccessfulListenerTest extends TestCase {
             ->willThrowException(new \RuntimeException('boom'));
         $this->logger->expects($this->once())->method('error');
 
+        $this->listener->handle($event);
+    }
+
+    public function testSuccessNotificationsAreOffByDefault(): void {
+        // AIquila never schedules the tasks it serves, so silence is the default.
+        $this->mockPreferredProvider('aiquila:text2text');
+
+        $event = $this->createMock(TaskSuccessfulEvent::class);
+        $event->method('getTask')->willReturn($this->makeTask());
+
+        $this->notificationManager->expects($this->never())->method('notify');
+        $this->listener->handle($event);
+    }
+
+    public function testPreferenceIsCheckedBeforeTheProviderLookup(): void {
+        // Resolving the provider costs a manager call; the opt-out must not pay it.
+        $this->prefValue = '0';
+
+        $this->taskProcessingManager->expects($this->never())->method('getPreferredProvider');
+
+        $event = $this->createMock(TaskSuccessfulEvent::class);
+        $event->method('getTask')->willReturn($this->makeTask());
+
+        $this->notificationManager->expects($this->never())->method('notify');
         $this->listener->handle($event);
     }
 

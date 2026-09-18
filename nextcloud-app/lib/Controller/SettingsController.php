@@ -76,7 +76,7 @@ class SettingsController extends Controller {
      * 200: User settings and available models
      * 403: No provider is permitted for this user
      *
-     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_OK, array{provider: string, userProvider: string, providers: list<array{id: string, label: string, configured: bool, hasUserKey: bool, userModel: string, availableModels: list<string>}>, hasUserKey: bool, userModel: string, availableModels: list<string>, defaultSystemPrompt: string, defaultVerbose: bool, nativeMcpUserOverride: string, nativeMcpAdminDefault: bool, nativeMcpEffective: bool}, array{}>
+     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_OK, array{provider: string, userProvider: string, providers: list<array{id: string, label: string, configured: bool, hasUserKey: bool, userModel: string, availableModels: list<string>}>, hasUserKey: bool, userModel: string, availableModels: list<string>, defaultSystemPrompt: string, defaultVerbose: bool, taskSuccessNotifications: bool, taskFailureNotifications: bool, nativeMcpUserOverride: string, nativeMcpAdminDefault: bool, nativeMcpEffective: bool}, array{}>
      *
      * @NoAdminRequired
      */
@@ -123,6 +123,11 @@ class SettingsController extends Controller {
         $defaultSystemPrompt = $this->config->getUserValue($this->userId, $this->appName, 'default_system_prompt', '');
         $defaultVerbose = $this->config->getUserValue($this->userId, $this->appName, 'default_verbose', '0') === '1';
 
+        // Notifications for tasks other apps scheduled. Success is opt-in;
+        // failure defaults on because it points at AIquila's own configuration.
+        $taskSuccessNotifications = $this->config->getUserValue($this->userId, $this->appName, 'task_success_notifications', '0') === '1';
+        $taskFailureNotifications = $this->config->getUserValue($this->userId, $this->appName, 'task_failure_notifications', '1') === '1';
+
         // Native MCP connector toggle. User value is '1', '0', or '' (inherit admin).
         $userNativeMcp = $this->config->getUserValue($this->userId, $this->appName, 'native_mcp_enabled', '');
         $adminNativeMcp = $this->config->getAppValue($this->appName, 'native_mcp_enabled', '0') === '1';
@@ -136,6 +141,8 @@ class SettingsController extends Controller {
             'availableModels'     => $availableModels,
             'defaultSystemPrompt' => $defaultSystemPrompt,
             'defaultVerbose'      => $defaultVerbose,
+            'taskSuccessNotifications' => $taskSuccessNotifications,
+            'taskFailureNotifications' => $taskFailureNotifications,
             'nativeMcpUserOverride' => $userNativeMcp,         // '', '1', or '0'
             'nativeMcpAdminDefault' => $adminNativeMcp,
             'nativeMcpEffective'    => $this->nativeMcp->isEnabledForUser($this->userId),
@@ -150,6 +157,8 @@ class SettingsController extends Controller {
      * @param string|null $provider Active provider override ('' clears, e.g. 'anthropic'/'mistral', null keeps unchanged). Also scopes api_key/model in this call.
      * @param string|null $default_system_prompt Default system prompt (null to keep unchanged)
      * @param string|null $default_verbose Enable verbose mode by default ('1' or null to keep unchanged)
+     * @param string|null $task_success_notifications Notify when an AI task completes ('1'/'0', null to keep unchanged)
+     * @param string|null $task_failure_notifications Notify when an AI task fails ('1'/'0', null to keep unchanged)
      * @param string|null $native_mcp_enabled User override for native-MCP ('1' opt in, '0' opt out, '' clears override, null keeps unchanged)
      *
      * 200: Settings saved successfully
@@ -168,6 +177,8 @@ class SettingsController extends Controller {
         ?string $provider = null,
         ?string $default_system_prompt = null,
         ?string $default_verbose = null,
+        ?string $task_success_notifications = null,
+        ?string $task_failure_notifications = null,
         ?string $native_mcp_enabled = null
     ): JSONResponse {
         // Provider override: '' clears (inherit admin default), non-empty sets it.
@@ -236,6 +247,14 @@ class SettingsController extends Controller {
 
         if ($default_verbose !== null) {
             $this->config->setUserValue($this->requireUserId(), $this->appName, 'default_verbose', $default_verbose === '1' ? '1' : '0');
+        }
+
+        if ($task_success_notifications !== null) {
+            $this->config->setUserValue($this->requireUserId(), $this->appName, 'task_success_notifications', $task_success_notifications === '1' ? '1' : '0');
+        }
+
+        if ($task_failure_notifications !== null) {
+            $this->config->setUserValue($this->requireUserId(), $this->appName, 'task_failure_notifications', $task_failure_notifications === '1' ? '1' : '0');
         }
 
         if ($native_mcp_enabled !== null) {

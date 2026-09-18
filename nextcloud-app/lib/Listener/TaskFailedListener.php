@@ -7,6 +7,7 @@ namespace OCA\AIquila\Listener;
 
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
+use OCP\IConfig;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\TaskProcessing\Events\TaskFailedEvent;
 use OCP\TaskProcessing\IManager as ITaskProcessingManager;
@@ -22,6 +23,7 @@ class TaskFailedListener implements IEventListener {
     public function __construct(
         private INotificationManager $notificationManager,
         private ITaskProcessingManager $taskProcessingManager,
+        private IConfig $config,
         private LoggerInterface $logger,
     ) {
     }
@@ -43,12 +45,19 @@ class TaskFailedListener implements IEventListener {
     }
 
     private function notifyTaskFailure(Task $task): void {
-        if (!$this->isAiquilaTask($task)) {
+        $userId = $task->getUserId();
+        if ($userId === null) {
             return;
         }
 
-        $userId = $task->getUserId();
-        if ($userId === null) {
+        // On by default, unlike success: a failure here points at AIquila's own
+        // configuration - a bad API key, an exhausted quota, an unreachable
+        // endpoint - which is ours to report, not the scheduling app's.
+        if (!$this->notificationsEnabled($userId, 'task_failure_notifications', '1')) {
+            return;
+        }
+
+        if (!$this->isAiquilaTask($task)) {
             return;
         }
 

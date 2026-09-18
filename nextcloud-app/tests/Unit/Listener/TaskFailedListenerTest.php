@@ -3,6 +3,7 @@
 namespace OCA\AIquila\Tests\Unit\Listener;
 
 use OCA\AIquila\Listener\TaskFailedListener;
+use OCP\IConfig;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\Notification\INotification;
 use OCP\TaskProcessing\Events\TaskFailedEvent;
@@ -15,16 +16,23 @@ use Psr\Log\LoggerInterface;
 class TaskFailedListenerTest extends TestCase {
     private INotificationManager $notificationManager;
     private ITaskProcessingManager $taskProcessingManager;
+    private IConfig $config;
     private LoggerInterface $logger;
+    /** Stubbed preference value; null lets getUserValue return its own default. */
+    private ?string $prefValue = null;
     private TaskFailedListener $listener;
 
     protected function setUp(): void {
         $this->notificationManager = $this->createMock(INotificationManager::class);
         $this->taskProcessingManager = $this->createMock(ITaskProcessingManager::class);
         $this->logger = $this->createMock(LoggerInterface::class);
+        $this->config = $this->createMock(IConfig::class);
+        $this->config->method('getUserValue')
+            ->willReturnCallback(fn (string $u, string $a, string $k, $d = '') => $this->prefValue ?? $d);
         $this->listener = new TaskFailedListener(
             $this->notificationManager,
             $this->taskProcessingManager,
+            $this->config,
             $this->logger,
         );
     }
@@ -185,6 +193,40 @@ class TaskFailedListenerTest extends TestCase {
             ->willThrowException(new \RuntimeException('boom'));
         $this->logger->expects($this->once())->method('error');
 
+        $this->listener->handle($event);
+    }
+
+    public function testFailureNotificationsAreOnByDefault(): void {
+        // A failure points at AIquila's own configuration, so it is reported
+        // without the user having to opt in.
+        $this->mockPreferredProvider('aiquila:text2text');
+
+        $event = $this->createMock(TaskFailedEvent::class);
+        $event->method('getTask')->willReturn($this->makeTask(7, 'quota exceeded'));
+
+        $notification = $this->createMock(INotification::class);
+        $notification->method('setApp')->willReturn($notification);
+        $notification->method('setUser')->willReturn($notification);
+        $notification->method('setDateTime')->willReturn($notification);
+        $notification->method('setObject')->willReturn($notification);
+        $notification->method('setSubject')->willReturn($notification);
+
+        $this->notificationManager->method('createNotification')->willReturn($notification);
+        $this->notificationManager->expects($this->once())->method('notify')->with($notification);
+
+        $this->listener->handle($event);
+    }
+
+    public function testFailureNotificationsCanBeTurnedOff(): void {
+        // Opting out must also skip the provider lookup, which costs a manager call.
+        $this->prefValue = '0';
+
+        $this->taskProcessingManager->expects($this->never())->method('getPreferredProvider');
+
+        $event = $this->createMock(TaskFailedEvent::class);
+        $event->method('getTask')->willReturn($this->makeTask(7, 'quota exceeded'));
+
+        $this->notificationManager->expects($this->never())->method('notify');
         $this->listener->handle($event);
     }
 }
