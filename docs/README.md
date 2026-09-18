@@ -65,6 +65,9 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[Provider settings schema](dev/provider-settings.md)** — how providers describe their own configuration, and how to add one
 - **[Local model provider](dev/local-provider.md)** — self-hosted inference via Ollama, LM Studio or llama.cpp
 - **[Hetzner Inference provider](dev/hetzner-provider.md)** — EU-hosted open-weight models via Hetzner's experimental API
+- **[Mistral provider](dev/mistral-provider.md)** — the Mistral wire format, connectors and document handling
+- **[Native MCP connector](dev/native-mcp-connector.md)** — letting Anthropic connect to MCP servers directly instead of looping in PHP
+- **[Managed Agents](dev/managed-agents.md)** — why the agentic loop stays in PHP, and what would change that
 - **[Request metadata](dev/request-metadata.md)** — the hashed `metadata.user_id` sent to Anthropic, and how to resolve it
 - **[Prompt caching](dev/prompt-caching.md)** — where cache breakpoints are placed, and how to read the cache-hit numbers
 - **[Batch processing](dev/batch-processing.md)** — the Message Batches transport, the bulk cowork tasks, and the extended-output switch
@@ -134,6 +137,8 @@ docs/
 │   ├── local-provider.md            # Ollama / LM Studio / llama.cpp
 │   ├── hetzner-provider.md          # Hetzner Inference provider
 │   ├── mistral-provider.md          # Mistral provider
+│   ├── native-mcp-connector.md      # Anthropic-side MCP tool execution
+│   ├── managed-agents.md            # Hosted agent loop: evaluation and position
 │   ├── request-metadata.md          # Hashed metadata.user_id
 │   ├── prompt-caching.md            # Cache breakpoint placement
 │   ├── batch-processing.md          # Message Batches & bulk cowork tasks
