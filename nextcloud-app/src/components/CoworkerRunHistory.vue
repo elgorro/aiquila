@@ -9,7 +9,7 @@
 		<p v-else-if="runs.length === 0" class="muted">{{ t('aiquila', 'No runs yet.') }}</p>
 		<ul v-else class="runs">
 			<li v-for="run in runs" :key="run.id" class="run">
-				<span class="status" :class="run.status">{{ run.status }}</span>
+				<span class="status" :class="run.status">{{ statusLabel(run.status) }}</span>
 				<span class="progress">{{ run.itemsProcessed }}/{{ run.itemsTotal }}</span>
 				<span class="when">{{ formatTime(run.startedAt) }}</span>
 				<span v-if="run.error" class="err" :title="run.error">{{ run.error }}</span>
@@ -38,6 +38,11 @@ export default {
 		this.refresh()
 	},
 	methods: { t,
+		// 'pending' reads as "something is stuck" on its own; the run is
+		// waiting on a batch that Anthropic may take hours to return.
+		statusLabel(status) {
+			return status === 'pending' ? t('aiquila', 'Waiting for batch') : status
+		},
 		async refresh() {
 			this.loading = true
 			try {
@@ -70,6 +75,9 @@ export default {
 .status.success { color: var(--color-success); }
 .status.error { color: var(--color-error); }
 .status.running { color: var(--color-warning); }
+/* Neutral rather than warning: a pending run is healthy, just slow — its
+   batch is with Anthropic and may take hours. */
+.status.pending { color: var(--color-text-lighter); }
 .when { color: var(--color-text-lighter); }
 .summary, .err { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
 .err { color: var(--color-error); }

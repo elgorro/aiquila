@@ -101,6 +101,7 @@ Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Mode
     <background-jobs>
         <job>OCA\AIquila\BackgroundJob\CleanupAnthropicFilesJob</job>
         <job>OCA\AIquila\BackgroundJob\CoworkerRunJob</job>
+        <job>OCA\AIquila\BackgroundJob\CoworkerBatchPollJob</job>
     </background-jobs>
     <navigations>
         <navigation>
