@@ -284,6 +284,7 @@ needed.
 |---|---|
 | `core:text2text` | Free-form prompt |
 | `core:text2text:chat` | Multi-turn chat, with history and a system prompt |
+| `core:text2text:chatwithtools` | Multi-turn chat where the caller supplies the tools and runs them |
 | `core:text2text:summary` | Summarize |
 | `core:text2text:headline` | Suggest a headline |
 | `core:text2text:topics` | Extract topics |
