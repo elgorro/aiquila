@@ -26,6 +26,7 @@
     <stubs>
         <file name="tests/stubs/oc-private.php"/>
         <file name="tests/stubs/oc-global.php"/>
+        <file name="tests/stubs/guzzle.php"/>
     </stubs>
     <issueHandlers>
         <LessSpecificReturnStatement errorLevel="error"/>

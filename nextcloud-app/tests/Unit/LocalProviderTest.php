@@ -274,6 +274,28 @@ class LocalProviderTest extends TestCase {
         $this->assertSame('done', end($events)['type']);
     }
 
+    /**
+     * A connection that drops mid-generation ends the read loop exactly like a
+     * finished one does. Without `[DONE]` or a finish_reason to tell them
+     * apart, a truncated answer would be handed to the user as a complete one.
+     */
+    public function testTruncatedStreamIsReportedAsAnErrorNotDone(): void {
+        $provider = $this->provider();
+        $sse = "data: {\"choices\":[{\"delta\":{\"content\":\"Half an ans\"}}]}\n";
+        $response = $this->createMock(IResponse::class);
+        $response->method('getBody')->willReturn($sse);
+        $this->client->method('post')->willReturn($response);
+
+        $events = iterator_to_array($provider->chatWithToolsStream([['role' => 'user', 'content' => 'hi']], [], fn() => []));
+
+        $deltas = array_values(array_filter($events, fn($e) => $e['type'] === 'text_delta'));
+        $this->assertSame('Half an ans', $deltas[0]['text']);
+
+        $last = end($events);
+        $this->assertSame('error', $last['type']);
+        $this->assertStringContainsString('dropped before the reply was complete', $last['error']);
+    }
+
     public function testStreamingWithoutEndpointYieldsError(): void {
         $provider = $this->provider(['local_base_url' => '']);
 

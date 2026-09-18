@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Service\Provider;
 
+use OCA\AIquila\Http\SseStreaming;
 use OCA\AIquila\Service\CredentialService;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -26,7 +27,9 @@ use Psr\Log\LoggerInterface;
  *
  * HTTP uses Nextcloud's IClientService (proxy/cert aware). Streaming relies on
  * the `stream => true` option, under which Response::getBody() yields a raw PHP
- * stream resource we read incrementally for Server-Sent Events.
+ * stream resource we read incrementally for Server-Sent Events — see
+ * openStream() for the two request options that make that stream actually
+ * arrive incrementally.
  *
  * MistralProvider deliberately does not extend this class: its native MCP path
  * runs against Mistral's Conversations API, which diverges too far to share.
@@ -34,6 +37,7 @@ use Psr\Log\LoggerInterface;
 abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface {
     // Subclasses that do have an audio endpoint declare the methods themselves.
     use UnsupportedModalities;
+    use SseStreaming;
 
     protected const APP_NAME = 'aiquila';
     protected const DEFAULT_STREAM_TIMEOUT = 300;
@@ -338,6 +342,7 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
             /** @var array<int, array{id: string, name: string, arguments: string}> $toolAcc */
             $toolAcc = [];
             $finishReason = null;
+            $sawDone = false;
 
             try {
                 $stream = $this->openStream($body, $userId);
@@ -356,6 +361,7 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
                         }
                         $payload = trim(substr($line, 5));
                         if ($payload === '[DONE]') {
+                            $sawDone = true;
                             break 2;
                         }
                         $event = json_decode($payload, true);
@@ -405,6 +411,19 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
             } catch (\Throwable $e) {
                 $this->logger->error('AIquila ' . $this->getLabel() . ': chatWithToolsStream failed', ['error' => $e->getMessage()]);
                 yield ['type' => 'error', 'error' => $this->errorMessage($e), 'usage' => $this->finalizeUsage($total)];
+                return;
+            }
+
+            // A well-behaved server ends with `[DONE]`, or at least with a
+            // finish_reason. Reaching EOF without either means the connection
+            // dropped mid-generation: report that rather than passing the
+            // truncated text off as a finished reply.
+            if (!$sawDone && $finishReason === null) {
+                yield [
+                    'type' => 'error',
+                    'error' => 'The connection to ' . $this->getLabel() . ' dropped before the reply was complete.',
+                    'usage' => $this->finalizeUsage($total),
+                ];
                 return;
             }
 
@@ -539,6 +558,9 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
      * Open a streaming chat-completions request. Returns a readable PHP stream
      * resource (Nextcloud detaches the body when `stream => true`).
      *
+     * See the SseStreaming trait for the transport options that make that
+     * stream arrive incrementally rather than in one piece at the end.
+     *
      * @return resource
      */
     protected function openStream(array $body, ?string $userId) {
@@ -547,11 +569,12 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
             'body' => json_encode($body),
             'stream' => true,
             'timeout' => $this->streamTimeout(),
-        ]);
+        ] + $this->sseTransportOptions());
         $options['headers'] += ['Accept' => 'text/event-stream'];
         $response = $client->post($this->apiBase() . '/chat/completions', $options);
         $stream = $response->getBody();
         if (!is_string($stream) && is_resource($stream)) {
+            $this->tuneSseStream($stream);
             return $stream;
         }
 
