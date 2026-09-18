@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "7a57e2bb87f6b9f93c99bdf612c39eb7",
+    "content-hash": "3db02b63be2b7007689d5d50d85049d2",
     "packages": [
         {
             "name": "anthropic-ai/sdk",
@@ -2739,30 +2739,34 @@
         },
         {
             "name": "nextcloud/ocp",
-            "version": "v34.0.4",
+            "version": "v35.0.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nextcloud-deps/ocp.git",
-                "reference": "f316bffe9b506532d1aafcf817d8d17f3bbe2cde"
+                "reference": "94d85a0ba6b3b3911c25b2eddb0ca0fe5691acbf"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nextcloud-deps/ocp/zipball/f316bffe9b506532d1aafcf817d8d17f3bbe2cde",
-                "reference": "f316bffe9b506532d1aafcf817d8d17f3bbe2cde",
+                "url": "https://api.github.com/repos/nextcloud-deps/ocp/zipball/94d85a0ba6b3b3911c25b2eddb0ca0fe5691acbf",
+                "reference": "94d85a0ba6b3b3911c25b2eddb0ca0fe5691acbf",
                 "shasum": ""
             },
             "require": {
-                "php": "~8.2 || ~8.3 || ~8.4 || ~8.5",
+                "php": "~8.3 || ~8.4 || ~8.5",
                 "psr/clock": "^1.0",
                 "psr/container": "^2.0.2",
                 "psr/event-dispatcher": "^1.0",
                 "psr/http-client": "^1.0.3",
-                "psr/log": "^3.0.2"
+                "psr/log": "^3.0.2",
+                "symfony/polyfill-intl-normalizer": "^1.38",
+                "symfony/polyfill-php84": "^1.38",
+                "symfony/polyfill-php85": "^1.41",
+                "symfony/polyfill-php86": "^1.41"
             },
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-stable34": "34.0.0-dev"
+                    "dev-stable35": "35.0.0-dev"
                 }
             },
             "notification-url": "https://packagist.org/downloads/",
@@ -2782,9 +2786,9 @@
             "description": "Composer package containing Nextcloud's public OCP API and the unstable NCU API",
             "support": {
                 "issues": "https://github.com/nextcloud-deps/ocp/issues",
-                "source": "https://github.com/nextcloud-deps/ocp/tree/v34.0.4"
+                "source": "https://github.com/nextcloud-deps/ocp/tree/v35.0.0"
             },
-            "time": "2026-09-02T01:51:50+00:00"
+            "time": "2026-09-04T01:52:36+00:00"
         },
         {
             "name": "nextcloud/openapi-extractor",
@@ -5811,6 +5815,86 @@
                 }
             ],
             "time": "2026-07-01T12:47:55+00:00"
+        },
+        {
+            "name": "symfony/polyfill-php86",
+            "version": "v1.41.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/symfony/polyfill-php86.git",
+                "reference": "6bc356ed3d8dbfeea8f0de235e34d670704e880e"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/symfony/polyfill-php86/zipball/6bc356ed3d8dbfeea8f0de235e34d670704e880e",
+                "reference": "6bc356ed3d8dbfeea8f0de235e34d670704e880e",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7.2"
+            },
+            "type": "library",
+            "extra": {
+                "thanks": {
+                    "url": "https://github.com/symfony/polyfill",
+                    "name": "symfony/polyfill"
+                }
+            },
+            "autoload": {
+                "files": [
+                    "bootstrap.php"
+                ],
+                "psr-4": {
+                    "Symfony\\Polyfill\\Php86\\": ""
+                },
+                "classmap": [
+                    "Resources/stubs"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Nicolas Grekas",
+                    "email": "p@tchwork.com"
+                },
+                {
+                    "name": "Symfony Community",
+                    "homepage": "https://symfony.com/contributors"
+                }
+            ],
+            "description": "Symfony polyfill backporting some PHP 8.6+ features to lower PHP versions",
+            "homepage": "https://symfony.com",
+            "keywords": [
+                "compatibility",
+                "polyfill",
+                "portable",
+                "shim"
+            ],
+            "support": {
+                "source": "https://github.com/symfony/polyfill-php86/tree/v1.41.0"
+            },
+            "funding": [
+                {
+                    "url": "https://symfony.com/sponsor",
+                    "type": "custom"
+                },
+                {
+                    "url": "https://github.com/fabpot",
+                    "type": "github"
+                },
+                {
+                    "url": "https://github.com/nicolas-grekas",
+                    "type": "github"
+                },
+                {
+                    "url": "https://tidelift.com/funding/github/packagist/symfony/symfony",
+                    "type": "tidelift"
+                }
+            ],
+            "time": "2026-07-02T13:42:24+00:00"
         },
         {
             "name": "symfony/string",

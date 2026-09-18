@@ -88,6 +88,7 @@ class Application extends App implements IBootstrap {
         $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ReformulationProvider::class);
         $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\FormalizationProvider::class);
         $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ChatProvider::class);
+        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ChatWithToolsProvider::class);
         $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ContextWriteProvider::class);
         $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\GenerateEmojiProvider::class);
 

@@ -1306,6 +1306,60 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     }
 
     /**
+     * One model turn with tools, returning the requested calls instead of
+     * running them. See LLMProviderInterface::chatToolsTurn().
+     *
+     * @param array $tools Anthropic-format tool definitions
+     * @return array{response: string, tool_calls: list<array{id: string, name: string, arguments: array}>, usage?: array}|array{error: string}
+     */
+    public function chatToolsTurn(array $messages, array $tools, ?string $system = null, ?string $userId = null, array $options = []): array {
+        try {
+            $client = $this->getClient($userId);
+        } catch (\Throwable $e) {
+            return $this->handleException($e, 'chatToolsTurn');
+        }
+
+        if ($system !== null) {
+            $options['system'] = $system;
+        }
+        $options['tools'] = $tools;
+
+        try {
+            $params = $this->buildRequestParams($messages, $userId, $options);
+            $response = $this->createMessage($client, $params);
+        } catch (\Throwable $e) {
+            return $this->handleException($e, 'chatToolsTurn');
+        }
+
+        $this->logResponseMetadata($response);
+
+        $textParts = [];
+        $calls = [];
+        foreach ($response->content as $block) {
+            if ($block->type === 'text') {
+                $textParts[] = $block->text;
+            } elseif ($block->type === 'tool_use') {
+                $calls[] = [
+                    'id' => (string)$block->id,
+                    'name' => (string)$block->name,
+                    'arguments' => is_array($block->input) ? $block->input : (array)$block->input,
+                ];
+            }
+        }
+
+        return [
+            'response' => implode('', $textParts),
+            'tool_calls' => $calls,
+            'usage' => [
+                'input_tokens' => $response->usage->inputTokens ?? 0,
+                'output_tokens' => $response->usage->outputTokens ?? 0,
+                'cache_creation_tokens' => ($response->usage->cacheCreationInputTokens ?? 0) ?: null,
+                'cache_read_tokens' => ($response->usage->cacheReadInputTokens ?? 0) ?: null,
+            ],
+        ];
+    }
+
+    /**
      * Summarize content using Claude
      *
      * @param string $content Content to summarize

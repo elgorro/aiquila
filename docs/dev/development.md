@@ -89,6 +89,26 @@ cd nextcloud-app
 composer install  # If available
 ```
 
+### Frontend dependencies
+
+The Vue frontend is bundled by Vite; Nextcloud ships no shared runtime for it, so
+every library the app imports must be declared in `nextcloud-app/package.json`.
+A package that is only reachable through someone else's dependency tree works
+until that dependency drops it — declare what you `import`.
+
+Two constraints are worth knowing before bumping anything:
+
+- **`@nextcloud/vue` pins `@nextcloud/files`.** Each `@nextcloud/vue` release
+  peer-requires a specific `@nextcloud/files` major, so the two move together.
+  Check with `npm view @nextcloud/vue@<version> peerDependencies`.
+- **The `@nextcloud/*` family declares support only up to Node 24**, while this
+  repo builds on Node 26. `npm install` therefore prints `EBADENGINE` warnings for
+  those packages. They are advisory — the builds and tests pass — but an
+  `engine-strict` install would fail on them.
+
+Use `npm view <pkg> dist-tags` to find the current release. `npm outdated`
+misreports the "Latest" column for the `@nextcloud/*` packages.
+
 ### Linking to Nextcloud
 
 ```bash
