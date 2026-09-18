@@ -126,6 +126,23 @@ interface LLMProviderInterface {
     public function chatWithTools(array $messages, array $tools, callable $toolExecutor, ?string $system = null, ?string $userId = null, array $options = [], int $maxIterations = 10): array;
 
     /**
+     * One turn of a tool-calling exchange, with the tool calls handed back
+     * instead of executed.
+     *
+     * chatWithTools() owns the whole agentic loop: it calls the tools itself and
+     * only ever returns prose. Nextcloud's `core:text2text:chatwithtools` task
+     * type inverts that — the *caller* runs the tools and feeds the results back
+     * on the next task — so the loop has to stop after one model turn and report
+     * what the model asked for. Hence a separate method rather than
+     * chatWithTools() with $maxIterations = 1, which would still execute the
+     * calls before returning.
+     *
+     * @param array $tools Anthropic-format tool definitions ({name, description, input_schema})
+     * @return array{response: string, tool_calls: list<array{id: string, name: string, arguments: array}>, usage?: array}|array{error: string}
+     */
+    public function chatToolsTurn(array $messages, array $tools, ?string $system = null, ?string $userId = null, array $options = []): array;
+
+    /**
      * Streaming agentic loop. Yields normalized event arrays:
      *   ['type' => 'text_delta',  'text' => string]
      *   ['type' => 'tool_use',    'id' => string, 'name' => string, 'input' => array]
