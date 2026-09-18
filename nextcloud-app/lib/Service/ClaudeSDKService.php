@@ -1373,8 +1373,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     /** Requests per batch. The API allows far more; this is a cost guard. */
     public const MAX_BATCH_REQUESTS = 500;
 
-    /** The user whose batch is being submitted; see submitBatch(). */
-    private ?string $batchUserId = null;
+    /** Whether the batch being submitted carries the extended-output beta. */
+    private bool $batchExtendedOutput = false;
 
     /**
      * Submit N message requests as a single batch and return its id.
@@ -1400,7 +1400,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         }
 
         $seen = [];
-        $payload = [];
+        $built = [];
         foreach ($requests as $request) {
             $customId = (string)($request['custom_id'] ?? '');
             // The API's own constraint. Enforced here so a bad id fails before
@@ -1413,24 +1413,37 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             }
             $seen[$customId] = true;
 
+            $built[$customId] = $this->buildRequestParams($request['messages'], $userId, $request['options'] ?? []);
+        }
+
+        // The beta header is one HTTP option for the whole batch, so it can
+        // only go on when *every* request in the batch names a model that
+        // accepts it — and each request's ceiling has to be derived from the
+        // model it actually carries, which a per-request `model` option may
+        // have pinned to something other than the instance default.
+        $extended = $this->extendedBatchOutputEnabled();
+        foreach ($built as $params) {
+            if (!ClaudeModels::supportsExtendedOutput((string)$params['model'])) {
+                $extended = false;
+                break;
+            }
+        }
+
+        $payload = [];
+        foreach ($built as $customId => $params) {
             $payload[] = [
                 'custom_id' => $customId,
-                'params' => $this->toBatchParams(
-                    $this->buildRequestParams($request['messages'], $userId, $request['options'] ?? []),
-                    $userId
-                ),
+                'params' => $this->toBatchParams($params, $userId, $extended),
             ];
         }
 
-        // callBatchCreate() cannot take the user as a parameter without
-        // breaking subclasses that override the seam, but the beta header it
-        // resolves has to agree with the ceiling toBatchParams() just applied
-        // — a per-user model can differ from the instance default. Park it.
-        $this->batchUserId = $userId;
+        // callBatchCreate() cannot take this as a parameter without breaking
+        // subclasses that override the seam, so it is parked for the call.
+        $this->batchExtendedOutput = $extended;
         try {
             $batch = $this->callBatchCreate($this->getClient($userId), $payload);
         } finally {
-            $this->batchUserId = null;
+            $this->batchExtendedOutput = false;
         }
         $this->logger->info('AIquila SDK: batch submitted', [
             'batch_id' => $batch->id,
@@ -1507,11 +1520,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * buildRequestParams() into the camelCase shape required by
      * BatchCreateParams\Request\Params.
      */
-    private function toBatchParams(array $params, ?string $userId = null): array {
+    private function toBatchParams(array $params, ?string $userId = null, bool $extended = false): array {
         $out = [
             // Not $params['max_tokens']: that was clamped for the synchronous
             // API. Batches may go higher when the extended-output beta applies.
-            'maxTokens' => $this->batchMaxTokens($userId),
+            'maxTokens' => $this->batchMaxTokens((string)$params['model'], $userId, $extended),
             'messages'  => $params['messages'],
             'model'     => $params['model'],
         ];
@@ -1655,7 +1668,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
     /**
      * Request options for a batch create: the extended-output beta header when
-     * the switch is on and the model accepts it, otherwise nothing.
+     * submitBatch() decided this batch qualifies, otherwise nothing.
      *
      * Only `create` needs it. Retrieving a batch and streaming its results
      * parse into the same GA types either way, so adding the header there
@@ -1663,11 +1676,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      *
      * @return array{extraHeaders: array<string, string>}|null
      */
-    protected function batchRequestOptions(?string $userId = null): ?array {
-        if (!$this->extendedBatchOutputEnabled()) {
-            return null;
-        }
-        if (!ClaudeModels::supportsExtendedOutput($this->getModel($userId ?? $this->batchUserId))) {
+    protected function batchRequestOptions(): ?array {
+        if (!$this->batchExtendedOutput) {
             return null;
         }
         return ['extraHeaders' => ['anthropic-beta' => AnthropicBeta::OUTPUT_300K_2026_03_24->value]];
@@ -1694,14 +1704,18 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * stored value against the extended ceiling when the beta applies. It
      * lifts a cap rather than setting one: an instance still on the default
      * max_tokens sees no difference until that is raised too.
+     *
+     * Takes the model explicitly rather than reading the configured one,
+     * because a per-request `model` option can pin a different one and the
+     * ceiling has to match what is actually being sent.
      */
-    private function batchMaxTokens(?string $userId = null): int {
-        if ($this->batchRequestOptions($userId) === null) {
-            return $this->getMaxTokens($userId);
-        }
-
+    private function batchMaxTokens(string $model, ?string $userId, bool $extended): int {
         $stored = (int)$this->config->getAppValue($this->appName, 'max_tokens', (string)ClaudeModels::DEFAULT_MAX_TOKENS);
-        return min($stored, ClaudeModels::getExtendedMaxTokenCeiling($this->getModel($userId)));
+        $ceiling = $extended
+            ? ClaudeModels::getExtendedMaxTokenCeiling($model)
+            : $this->resolveModelCapabilities($model, $userId)['max_tokens'];
+
+        return min($stored, $ceiling);
     }
 
     /**

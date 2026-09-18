@@ -49,8 +49,17 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
      */
     protected const BATCH_DEADLINE_SECONDS = 26 * 3600;
 
-    /** @var list<string> Mime prefixes and exact types this family reads. */
-    protected const DEFAULT_MIME_TYPES = ['text/', 'application/pdf', 'application/json'];
+    /**
+     * Mime prefixes and exact types this family reads.
+     *
+     * Text only. A PDF's bytes are not text, and inlining them into a prompt
+     * would send the model binary rather than a document — the Messages API
+     * wants a base64 `document` block for that, which a batch request here
+     * does not build. `application/pdf` is therefore deliberately absent.
+     *
+     * @var list<string>
+     */
+    protected const DEFAULT_MIME_TYPES = ['text/', 'application/json'];
 
     public function __construct(
         protected readonly IRootFolder $rootFolder,
@@ -412,6 +421,12 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
         } catch (\Throwable) {
             return null;
         }
+        // A batch is submitted as one request for the whole folder, outside any
+        // per-file guard, so one binary file reaching the payload would take
+        // the entire run down rather than just itself.
+        if (!mb_check_encoding($content, 'UTF-8')) {
+            return null;
+        }
         return trim($content) === '' ? null : $content;
     }
 
@@ -490,9 +505,10 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
     /**
      * The documents under the coworker's input path that still need work.
      *
-     * A source whose output is at least as new as itself is skipped: these
-     * coworkers run on a schedule, and without this a nightly run would
-     * re-bill the whole folder every night.
+     * A source whose output is at least as new as itself is skipped, as is
+     * anything this task itself wrote: these coworkers run on a schedule, and
+     * without either check a nightly run would re-bill the whole folder and
+     * then start summarising its own summaries.
      *
      * @param array<string, mixed> $options
      * @return list<File>
@@ -501,28 +517,54 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
         $userFolder = $this->rootFolder->getUserFolder($coworker->getUserId());
         $node = $userFolder->get($coworker->getInputPath() ?: '/');
 
-        $mimeTypes = is_array($options['mimeTypes'] ?? null) && $options['mimeTypes'] !== []
-            ? array_values(array_filter($options['mimeTypes'], 'is_string'))
-            : static::DEFAULT_MIME_TYPES;
-        $recursive = (bool)($options['recursive'] ?? true);
+        $context = [
+            'coworker' => $coworker,
+            'options' => $options,
+            'mimeTypes' => is_array($options['mimeTypes'] ?? null) && $options['mimeTypes'] !== []
+                ? array_values(array_filter($options['mimeTypes'], 'is_string'))
+                : static::DEFAULT_MIME_TYPES,
+            'recursive' => (bool)($options['recursive'] ?? true),
+            'force' => (bool)($options['force'] ?? false),
+            'suffix' => $this->outputSuffix($options),
+            'excludeFolderId' => $this->configuredOutputFolderId($coworker, $options),
+        ];
 
         $matches = [];
         if ($node instanceof File) {
-            if ($this->matches($node, $mimeTypes)) {
+            if ($this->isCandidate($node, $context)) {
                 $matches[] = $node;
             }
         } elseif ($node instanceof Folder) {
-            $this->gather($node, $mimeTypes, $recursive, $matches);
+            $this->gather($node, $context, $matches);
         }
 
-        if (!(bool)($options['force'] ?? false)) {
-            $matches = array_values(array_filter(
-                $matches,
-                fn (File $file): bool => !$this->alreadyDone($coworker, $file, $options)
-            ));
-        }
+        return $matches;
+    }
 
-        return array_slice($matches, 0, static::MAX_ITEMS_PER_RUN);
+    /**
+     * Whether one file is work this run should do.
+     *
+     * Three separate reasons to say no, and they have to be asked here rather
+     * than after the walk, because the walk stops at MAX_ITEMS_PER_RUN: a
+     * filter applied afterwards would let the first 200 already-finished files
+     * fill the quota and permanently starve everything after them.
+     *
+     * @param array{coworker: Coworker, options: array<string, mixed>, mimeTypes: list<string>, recursive: bool, force: bool, suffix: string, excludeFolderId: int|null} $context
+     */
+    private function isCandidate(File $file, array $context): bool {
+        if (!$this->matches($file, $context['mimeTypes'])) {
+            return false;
+        }
+        // Our own output is text too, and it lands in the tree we are walking.
+        // Left in, each run would feed the previous run's output back through
+        // and grow another generation of a.summary.summary.md every night.
+        if ($context['suffix'] !== '' && str_ends_with($file->getName(), $context['suffix'])) {
+            return false;
+        }
+        if ($context['force']) {
+            return true;
+        }
+        return !$this->alreadyDone($context['coworker'], $file, $context['options']);
     }
 
     /** @param list<string> $mimeTypes */
@@ -538,20 +580,45 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
     }
 
     /**
-     * @param list<string> $mimeTypes
+     * The configured output folder's id, so the walk can skip it.
+     *
+     * The shipped summarize template writes to /Documents/Summaries while
+     * reading /Documents recursively, so without this the output folder is
+     * part of its own input.
+     *
+     * @param array<string, mixed> $options
+     */
+    private function configuredOutputFolderId(Coworker $coworker, array $options): ?int {
+        $configured = (string)($options['outputFolder'] ?? $coworker->getOutputPath() ?? '');
+        if ($configured === '') {
+            return null;
+        }
+        try {
+            $node = $this->rootFolder->getUserFolder($coworker->getUserId())->get($configured);
+        } catch (\Throwable) {
+            return null;
+        }
+        return $node instanceof Folder ? $node->getId() : null;
+    }
+
+    /**
+     * @param array{coworker: Coworker, options: array<string, mixed>, mimeTypes: list<string>, recursive: bool, force: bool, suffix: string, excludeFolderId: int|null} $context
      * @param list<File> $matches
      */
-    private function gather(Folder $folder, array $mimeTypes, bool $recursive, array &$matches): void {
+    private function gather(Folder $folder, array $context, array &$matches): void {
         foreach ($folder->getDirectoryListing() as $child) {
             if (count($matches) >= static::MAX_ITEMS_PER_RUN) {
                 return;
             }
             if ($child instanceof File) {
-                if ($this->matches($child, $mimeTypes)) {
+                if ($this->isCandidate($child, $context)) {
                     $matches[] = $child;
                 }
-            } elseif ($recursive && $child instanceof Folder) {
-                $this->gather($child, $mimeTypes, $recursive, $matches);
+            } elseif ($context['recursive'] && $child instanceof Folder) {
+                if ($context['excludeFolderId'] !== null && $child->getId() === $context['excludeFolderId']) {
+                    continue;
+                }
+                $this->gather($child, $context, $matches);
             }
         }
     }

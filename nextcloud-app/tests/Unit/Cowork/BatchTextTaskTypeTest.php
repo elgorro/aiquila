@@ -342,4 +342,113 @@ class BatchTextTaskTypeTest extends TestCase {
         $this->expectException(\RuntimeException::class);
         $this->task->resume($this->coworker(), $this->newRun(), [], $this->progress());
     }
+
+    // ── Regressions ───────────────────────────────────────────────────────
+
+    /**
+     * A .summary.md is text and lands in the tree being walked. Left in, each
+     * run feeds the last run's output back through and grows another
+     * generation — a.summary.summary.md, then a.summary.summary.summary.md.
+     */
+    public function testOwnOutputIsNotPickedUpAsInput(): void {
+        $this->inputFolder([
+            $this->file(11, 'a.txt', 'text/plain', 'body'),
+            $this->file(12, 'a.summary.md', 'text/markdown', 'an earlier summary'),
+        ]);
+        $this->provider->method('submitBatch')->willReturn('batch_01ABC');
+
+        $result = $this->task->run($this->coworker(), $this->newRun(), $this->progress());
+
+        $this->assertSame(['f11' => 11], $result['state']['file_ids']);
+    }
+
+    /**
+     * The shipped summarize template writes to /Documents/Summaries while
+     * reading /Documents recursively, so the output folder is inside its own
+     * input unless the walk skips it.
+     */
+    public function testTheConfiguredOutputFolderIsExcludedFromTheWalk(): void {
+        $outputFolder = $this->createMock(Folder::class);
+        $outputFolder->method('getId')->willReturn(99);
+        $outputFolder->method('getDirectoryListing')->willReturn([
+            $this->file(12, 'stale.md', 'text/markdown', 'output from an earlier run'),
+        ]);
+
+        $input = $this->createMock(Folder::class);
+        $input->method('getDirectoryListing')->willReturn([
+            $this->file(11, 'a.txt', 'text/plain', 'body'),
+            $outputFolder,
+        ]);
+
+        $this->userFolder->method('get')->willReturnCallback(
+            fn (string $path): Folder => $path === '/Documents' ? $input : $outputFolder
+        );
+        $this->provider->method('submitBatch')->willReturn('batch_01ABC');
+
+        $result = $this->task->run(
+            $this->coworker(['outputFolder' => '/Documents/Summaries']),
+            $this->newRun(),
+            $this->progress()
+        );
+
+        $this->assertSame(['f11' => 11], $result['state']['file_ids']);
+    }
+
+    /**
+     * The walk stops at MAX_ITEMS_PER_RUN. If already-finished files are
+     * filtered out only afterwards, the first 200 fill the quota every night
+     * and file 201 is never reached on any run.
+     */
+    public function testFinishedFilesDoNotConsumeTheRunQuota(): void {
+        $files = [];
+        for ($i = 0; $i < 250; $i++) {
+            $name = sprintf('doc%03d', $i);
+            // The first 240 already have a fresh summary.
+            if ($i < 240) {
+                $this->written[$name . '.summary.md'] = 'done';
+            }
+            $files[] = $this->file(1000 + $i, $name . '.txt', 'text/plain', 'body', $i < 240 ? 0 : 100);
+        }
+        $this->inputFolder($files);
+        $this->provider->method('submitBatch')->willReturn('batch_01ABC');
+
+        $result = $this->task->run($this->coworker(), $this->newRun(), $this->progress());
+
+        // The 10 unfinished ones must all be reached, not starved behind 200
+        // finished ones.
+        $this->assertSame(10, $result['itemsTotal']);
+        $this->assertArrayHasKey('f1240', $result['state']['file_ids']);
+        $this->assertArrayHasKey('f1249', $result['state']['file_ids']);
+    }
+
+    /**
+     * A batch is submitted as one request for the whole folder, outside any
+     * per-file guard, so one binary file in the payload would take the entire
+     * run down rather than just itself.
+     */
+    public function testNonTextContentIsSkippedRatherThanInlined(): void {
+        $this->inputFolder([
+            $this->file(11, 'a.txt', 'text/plain', 'body'),
+            $this->file(12, 'weird.txt', 'text/plain', "\xff\xfe\x00binary"),
+        ]);
+        $this->provider->method('submitBatch')->willReturn('batch_01ABC');
+
+        $result = $this->task->run($this->coworker(), $this->newRun(), $this->progress());
+
+        $this->assertSame(['f11' => 11], $result['state']['file_ids']);
+        $this->assertSame(['weird.txt'], $result['state']['skipped']);
+    }
+
+    /** PDF bytes are not text; nothing here builds a document content block. */
+    public function testPdfsAreNotCollectedByDefault(): void {
+        $this->inputFolder([
+            $this->file(11, 'a.txt', 'text/plain', 'body'),
+            $this->file(12, 'report.pdf', 'application/pdf', '%PDF-1.4 binary'),
+        ]);
+        $this->provider->method('submitBatch')->willReturn('batch_01ABC');
+
+        $result = $this->task->run($this->coworker(), $this->newRun(), $this->progress());
+
+        $this->assertSame(['f11' => 11], $result['state']['file_ids']);
+    }
 }

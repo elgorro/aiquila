@@ -173,4 +173,82 @@ class ClaudeSDKServiceBatchBetaTest extends TestCase {
             $svc->getMaxTokens()
         );
     }
+
+    // ── The model actually being sent, not the configured one ─────────────
+
+    /**
+     * A per-request `model` option pins what the request is for. Deriving the
+     * header and the ceiling from the configured model instead would send
+     * `output-300k` and a 300k cap alongside a model whose real ceiling is far
+     * lower — which the API rejects, taking the whole batch with it.
+     */
+    public function testAPinnedUnsupportedModelSuppressesTheHeader(): void {
+        $svc = $this->makeService([
+            'model' => ClaudeModels::OPUS_5,
+            'max_tokens' => '250000',
+            'batch_output_300k' => 'true',
+        ]);
+
+        $svc->submitBatch([[
+            'custom_id' => 'doc-1',
+            'messages' => [['role' => 'user', 'content' => 'body']],
+            'options' => ['model' => ClaudeModels::HAIKU_4_5],
+        ]]);
+
+        $this->assertNull($svc->capturedOptions);
+        $this->assertSame(
+            ClaudeModels::getMaxTokenCeiling(ClaudeModels::HAIKU_4_5),
+            $svc->lastBatchRequests[0]['params']['maxTokens']
+        );
+    }
+
+    /**
+     * The header is one HTTP option for the whole batch, so a single
+     * unsupported model in it has to disqualify all of them.
+     */
+    public function testOneUnsupportedModelDisqualifiesTheWholeBatch(): void {
+        $svc = $this->makeService([
+            'model' => ClaudeModels::OPUS_5,
+            'max_tokens' => '250000',
+            'batch_output_300k' => 'true',
+        ]);
+
+        $svc->submitBatch([
+            ['custom_id' => 'doc-1', 'messages' => [['role' => 'user', 'content' => 'a']]],
+            [
+                'custom_id' => 'doc-2',
+                'messages' => [['role' => 'user', 'content' => 'b']],
+                'options' => ['model' => ClaudeModels::HAIKU_4_5],
+            ],
+        ]);
+
+        $this->assertNull($svc->capturedOptions);
+        foreach ($svc->lastBatchRequests as $request) {
+            $this->assertLessThanOrEqual(
+                ClaudeModels::getMaxTokenCeiling(ClaudeModels::OPUS_5),
+                $request['params']['maxTokens']
+            );
+        }
+    }
+
+    /**
+     * The reverse case: a capable model pinned on an instance whose default is
+     * not capable must still get the header and the raised ceiling.
+     */
+    public function testAPinnedSupportedModelStillGetsTheHeader(): void {
+        $svc = $this->makeService([
+            'model' => ClaudeModels::HAIKU_4_5,
+            'max_tokens' => '250000',
+            'batch_output_300k' => 'true',
+        ]);
+
+        $svc->submitBatch([[
+            'custom_id' => 'doc-1',
+            'messages' => [['role' => 'user', 'content' => 'body']],
+            'options' => ['model' => ClaudeModels::SONNET_5],
+        ]]);
+
+        $this->assertNotNull($svc->capturedOptions);
+        $this->assertSame(250000, $svc->lastBatchRequests[0]['params']['maxTokens']);
+    }
 }

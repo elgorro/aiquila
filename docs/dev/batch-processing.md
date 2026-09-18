@@ -151,14 +151,34 @@ source is tagged `aiquila:summarized` / `aiquila:translated` so processed files
 can be filtered in the Files UI.
 
 Files, rather than tags or comments, because a summary or a translation is prose
-that a system tag cannot hold and a Nextcloud comment truncates. Files also make
-the tasks safe to schedule: a source whose output is at least as new as itself is
-skipped, so a nightly coworker does not re-bill the whole folder every night.
-The `force` option overrides that.
+that a system tag cannot hold and a Nextcloud comment truncates.
+
+Writing output into the tree being read makes three things load-bearing, all
+decided during the walk rather than after it:
+
+- A source whose output is at least as new as itself is skipped, so a nightly
+  coworker does not re-bill the whole folder every night. `force` overrides it.
+- A file whose name already ends in the task's own output suffix is never a
+  source. Otherwise each run would summarise the last run's summaries and grow
+  another `.summary.summary.md` generation every night.
+- The configured output folder is skipped during the walk, since it is normally
+  nested inside the input path.
+
+These checks run *inside* the walk because the walk stops at the item cap.
+Applied afterwards, the first 200 already-finished files would fill the quota
+every night and everything past them would never be reached.
 
 A run is capped at `MAX_ITEMS_PER_RUN` (200) files, and a file larger than
 `maxBytesPerFile` (1 MiB by default) is skipped rather than truncated — half a
 contract summarised as if it were the whole thing is worse than no summary.
+
+**Text only.** The default mime types are the `text/` family and
+`application/json`; PDFs are deliberately excluded, because their bytes are not
+text and nothing on this path builds the base64 `document` block the Messages
+API wants for them. Content that is not valid UTF-8 is skipped for the same
+reason, and because a batch goes out as one request for the whole folder —
+outside any per-file guard — so one binary file would take the entire run down
+rather than just itself.
 
 On a non-Anthropic provider the same tasks fall back to a synchronous per-file
 loop at full price, and the run summary says which path it took.
