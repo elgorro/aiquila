@@ -275,4 +275,45 @@ class ClaudeModels {
     public static function supportsFastMode(string $model): bool {
         return self::SUPPORTS_FAST_MODE[$model] ?? false;
     }
+
+    // ── Extended output on the Batch API ──────────────────────────────────
+
+    /** Output ceiling with the extended-output beta, where the model supports it. */
+    public const EXTENDED_MAX_TOKENS = 300000;
+
+    /**
+     * Models that accept the extended-output beta
+     * (`output-300k-2026-03-24`), which raises the output ceiling on
+     * *batch* requests from 128,000 to 300,000 tokens. The synchronous
+     * Messages API keeps the 128,000 ceiling on every model.
+     *
+     * Hand-maintained for the same reason as SUPPORTS_FAST_MODE: the Models
+     * API reports no capability flag for it. Sending the header on a model
+     * that does not support it risks a 400 on the whole batch, so the table
+     * is deliberately conservative — Fable 5 and everything below Sonnet 4.6
+     * are absent.
+     */
+    private const SUPPORTS_EXTENDED_OUTPUT = [
+        self::OPUS_5     => true,
+        self::OPUS_4_8   => true,
+        self::OPUS_4_7   => true,
+        self::OPUS_4_6   => true,
+        self::SONNET_5   => true,
+        self::SONNET_4_6 => true,
+    ];
+
+    public static function supportsExtendedOutput(string $model): bool {
+        return self::SUPPORTS_EXTENDED_OUTPUT[$model] ?? false;
+    }
+
+    /**
+     * Output ceiling for a batch request sent with the extended-output beta.
+     * Falls back to the ordinary ceiling for models that do not support it,
+     * so callers can use it unconditionally.
+     */
+    public static function getExtendedMaxTokenCeiling(string $model): int {
+        return self::supportsExtendedOutput($model)
+            ? self::EXTENDED_MAX_TOKENS
+            : self::getMaxTokenCeiling($model);
+    }
 }

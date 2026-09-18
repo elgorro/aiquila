@@ -6,8 +6,14 @@ use Anthropic\Client;
 use Anthropic\Messages\Batches\MessageBatch;
 use Anthropic\Messages\Batches\MessageBatchIndividualResponse;
 use Anthropic\Messages\Batches\MessageBatchRequestCounts;
+use Anthropic\Messages\Batches\MessageBatchCanceledResult;
+use Anthropic\Messages\Batches\MessageBatchErroredResult;
+use Anthropic\Messages\Batches\MessageBatchExpiredResult;
 use Anthropic\Messages\Batches\MessageBatchSucceededResult;
+use Anthropic\ErrorResponse;
+use Anthropic\InvalidRequestError;
 use Anthropic\Messages\Message;
+use Anthropic\Messages\RefusalStopDetails;
 use Anthropic\Messages\Metadata;
 use Anthropic\Messages\Usage;
 use OCA\AIquila\Service\ClaudeSDKService;
@@ -32,6 +38,15 @@ class BatchTestableService extends ClaudeSDKService {
     public int $retrieveCalls = 0;
     public int $sleepCalls = 0;
     public ?array $lastBatchRequests = null;
+    public int $cancelCalls = 0;
+    /**
+     * When non-empty, callBatchResults() yields these instead of a single
+     * success — in exactly this order, so a test can feed results back out of
+     * submission order.
+     *
+     * @var list<array{custom_id: string, kind: string, text?: string}>
+     */
+    public array $resultSpecs = [];
 
     protected function getClient(?string $userId = null): Client {
         return (new \ReflectionClass(Client::class))->newInstanceWithoutConstructor();
@@ -51,8 +66,19 @@ class BatchTestableService extends ClaudeSDKService {
     }
 
     protected function callBatchResults(Client $client, string $batchId): iterable {
+        if ($this->resultSpecs !== []) {
+            foreach ($this->resultSpecs as $spec) {
+                yield $this->makeSpecResponse($spec);
+            }
+            return;
+        }
         $customId = $this->lastBatchRequests[0]['custom_id'];
         yield $this->makeIndividualResponse($customId, $this->resultText);
+    }
+
+    protected function callBatchCancel(Client $client, string $batchId): MessageBatch {
+        $this->cancelCalls++;
+        return $this->makeBatch('canceling');
     }
 
     protected function sleepBetweenBatchPolls(): void {
@@ -76,6 +102,64 @@ class BatchTestableService extends ClaudeSDKService {
             requestCounts: $counts,
             resultsURL: $status === 'ended' ? 'https://example.invalid/r' : null,
         );
+    }
+
+    /** @param array{custom_id: string, kind: string, text?: string} $spec */
+    private function makeSpecResponse(array $spec): MessageBatchIndividualResponse {
+        $customId = $spec['custom_id'];
+        switch ($spec['kind']) {
+            case 'refused':
+                return MessageBatchIndividualResponse::with(
+                    customID: $customId,
+                    result: MessageBatchSucceededResult::with(
+                        message: $this->makeMessage('', 'refusal')
+                    ),
+                );
+            case 'errored':
+                $error = new InvalidRequestError();
+                $error->message = 'prompt is too long';
+                return MessageBatchIndividualResponse::with(
+                    customID: $customId,
+                    result: MessageBatchErroredResult::with(
+                        error: ErrorResponse::with(error: $error, requestID: null)
+                    ),
+                );
+            case 'canceled':
+                return MessageBatchIndividualResponse::with(
+                    customID: $customId,
+                    result: new MessageBatchCanceledResult(),
+                );
+            case 'expired':
+                return MessageBatchIndividualResponse::with(
+                    customID: $customId,
+                    result: new MessageBatchExpiredResult(),
+                );
+            default:
+                return $this->makeIndividualResponse($customId, $spec['text'] ?? $this->resultText);
+        }
+    }
+
+    private function makeMessage(string $text, string $stopReason): Message {
+        $msg = (new \ReflectionClass(Message::class))->newInstanceWithoutConstructor();
+        $ref = new \ReflectionClass($msg);
+
+        $textObj = new \stdClass();
+        $textObj->type = 'text';
+        $textObj->text = $text;
+
+        foreach (['content' => [$textObj], 'stopReason' => $stopReason] as $prop => $val) {
+            $ref->getProperty($prop)->setValue($msg, $val);
+        }
+        $ref->getProperty('usage')->setValue($msg, Usage::with(null, null, null, null, 5, 7, null, null, null));
+
+        if ($stopReason === 'refusal') {
+            $ref->getProperty('stopDetails')->setValue(
+                $msg,
+                RefusalStopDetails::with(category: 'cyber', explanation: 'Declined by policy')
+            );
+        }
+
+        return $msg;
     }
 
     private function makeIndividualResponse(string $customId, string $text): MessageBatchIndividualResponse {
@@ -197,5 +281,134 @@ class ClaudeSDKServiceBatchTest extends TestCase {
         $params = $svc->lastBatchRequests[0]['params'];
         $this->assertArrayNotHasKey('speed', $params);
         $this->assertArrayNotHasKey('speed_fast', $params);
+    }
+
+    // ── Multi-request transport ───────────────────────────────────────────
+
+    public function testSubmitBatchBuildsOneEntryPerRequest(): void {
+        $svc = $this->makeService();
+
+        $batchId = $svc->submitBatch([
+            ['custom_id' => 'doc-1', 'messages' => [['role' => 'user', 'content' => 'first']]],
+            ['custom_id' => 'doc-2', 'messages' => [['role' => 'user', 'content' => 'second']]],
+        ]);
+
+        $this->assertSame('batch_test', $batchId);
+        $this->assertSame(1, $svc->createCalls, 'N requests go out as one batch');
+        $this->assertCount(2, $svc->lastBatchRequests);
+        $this->assertSame('doc-1', $svc->lastBatchRequests[0]['custom_id']);
+        $this->assertSame('second', $svc->lastBatchRequests[1]['params']['messages'][0]['content']);
+    }
+
+    public function testSubmitBatchRejectsDuplicateCustomIds(): void {
+        $svc = $this->makeService();
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Duplicate custom_id');
+        $svc->submitBatch([
+            ['custom_id' => 'same', 'messages' => [['role' => 'user', 'content' => 'a']]],
+            ['custom_id' => 'same', 'messages' => [['role' => 'user', 'content' => 'b']]],
+        ]);
+    }
+
+    public function testSubmitBatchRejectsMalformedCustomId(): void {
+        $svc = $this->makeService();
+
+        $this->expectException(\InvalidArgumentException::class);
+        $svc->submitBatch([
+            ['custom_id' => 'has spaces', 'messages' => [['role' => 'user', 'content' => 'a']]],
+        ]);
+    }
+
+    public function testSubmitBatchRejectsAnEmptyBatch(): void {
+        $svc = $this->makeService();
+
+        $this->expectException(\InvalidArgumentException::class);
+        $svc->submitBatch([]);
+    }
+
+    public function testSubmitBatchRejectsMoreRequestsThanTheLimit(): void {
+        $svc = $this->makeService();
+
+        $requests = [];
+        for ($i = 0; $i <= ClaudeSDKService::MAX_BATCH_REQUESTS; $i++) {
+            $requests[] = ['custom_id' => "doc-$i", 'messages' => [['role' => 'user', 'content' => 'x']]];
+        }
+
+        $this->expectException(\InvalidArgumentException::class);
+        $svc->submitBatch($requests);
+    }
+
+    /**
+     * The API makes no ordering promise, so results are keyed by custom_id.
+     * Feeding them back reversed is the only way to catch a positional read.
+     */
+    public function testFetchBatchResultsKeysByCustomIdRegardlessOfOrder(): void {
+        $svc = $this->makeService();
+        $svc->resultSpecs = [
+            ['custom_id' => 'doc-3', 'kind' => 'success', 'text' => 'third'],
+            ['custom_id' => 'doc-1', 'kind' => 'success', 'text' => 'first'],
+            ['custom_id' => 'doc-2', 'kind' => 'success', 'text' => 'second'],
+        ];
+
+        $results = $svc->fetchBatchResults('batch_test');
+
+        $this->assertSame('first', $results['doc-1']['response']);
+        $this->assertSame('second', $results['doc-2']['response']);
+        $this->assertSame('third', $results['doc-3']['response']);
+    }
+
+    public function testFetchBatchResultsTagsEachFailureKind(): void {
+        $svc = $this->makeService();
+        $svc->resultSpecs = [
+            ['custom_id' => 'ok', 'kind' => 'success', 'text' => 'fine'],
+            ['custom_id' => 'no', 'kind' => 'refused'],
+            ['custom_id' => 'bad', 'kind' => 'errored'],
+            ['custom_id' => 'stopped', 'kind' => 'canceled'],
+            ['custom_id' => 'late', 'kind' => 'expired'],
+        ];
+
+        $results = $svc->fetchBatchResults('batch_test');
+
+        $this->assertArrayNotHasKey('error', $results['ok']);
+        // A refusal arrives as a *succeeded* result, so without unpacking it
+        // would read back as an empty response rather than a failure.
+        $this->assertSame('refused', $results['no']['error_type']);
+        $this->assertSame('Declined by policy', $results['no']['error']);
+        $this->assertSame('cyber', $results['no']['refusal_category']);
+        $this->assertSame('errored', $results['bad']['error_type']);
+        $this->assertStringContainsString('prompt is too long', $results['bad']['error']);
+        $this->assertSame('canceled', $results['stopped']['error_type']);
+        $this->assertSame('expired', $results['late']['error_type']);
+    }
+
+    /** A request with no result at all is the caller's to report, not an exception. */
+    public function testFetchBatchResultsOmitsCustomIdsWithNoResult(): void {
+        $svc = $this->makeService();
+        $svc->resultSpecs = [['custom_id' => 'doc-1', 'kind' => 'success', 'text' => 'only one']];
+
+        $results = $svc->fetchBatchResults('batch_test');
+
+        $this->assertArrayHasKey('doc-1', $results);
+        $this->assertArrayNotHasKey('doc-2', $results);
+    }
+
+    public function testGetBatchStatusReportsCounts(): void {
+        $svc = $this->makeService();
+        $svc->retrieveStatuses = ['ended'];
+
+        $status = $svc->getBatchStatus('batch_test');
+
+        $this->assertTrue($status['ended']);
+        $this->assertSame('ended', $status['status']);
+        $this->assertSame(1, $status['counts']['succeeded']);
+        $this->assertSame(0, $status['counts']['processing']);
+    }
+
+    public function testCancelBatchReportsSuccess(): void {
+        $svc = $this->makeService();
+
+        $this->assertTrue($svc->cancelBatch('batch_test'));
+        $this->assertSame(1, $svc->cancelCalls);
     }
 }

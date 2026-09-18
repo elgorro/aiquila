@@ -7,6 +7,7 @@ namespace OCA\AIquila\Service;
 
 use OCA\AIquila\Service\Exception\ValidationException;
 use OCA\AIquila\Cowork\CoworkerTaskRegistry;
+use OCA\AIquila\Cowork\ResumableCoworkerTaskType;
 use OCA\AIquila\Cowork\CronSchedule;
 use OCA\AIquila\Db\Coworker;
 use OCA\AIquila\Db\CoworkerMapper;
@@ -40,7 +41,7 @@ class CoworkerService {
      * @return list<array<string, mixed>>
      */
     public function getTemplates(): array {
-        $shared = [
+        $vision = [
             'task_type' => 'vision:classify',
             'cron_schedule' => '0 3 * * *',
             'input_type' => 'folder',
@@ -48,18 +49,44 @@ class CoworkerService {
             'output_type' => 'system_tags',
             'options' => ['maxTags' => 8, 'recursive' => true],
         ];
+        // The docs family goes out through the Batch API on the Anthropic
+        // provider, so these run at half price — which is why they default to
+        // a nightly schedule over a whole folder rather than on demand.
+        $docs = [
+            'cron_schedule' => '0 2 * * *',
+            'input_type' => 'folder',
+            'input_path' => '/Documents',
+            'output_type' => 'files',
+            'provider' => 'anthropic',
+        ];
+
         return [
-            array_merge($shared, [
+            array_merge($vision, [
                 'id' => 'classify-images-claude',
                 'title' => 'Classify images — Claude vision',
                 'description' => 'Tag images in a folder using Claude vision, nightly.',
                 'provider' => 'anthropic',
             ]),
-            array_merge($shared, [
+            array_merge($vision, [
                 'id' => 'classify-images-mistral',
                 'title' => 'Classify images — Mistral vision',
                 'description' => 'Tag images in a folder using Mistral vision, nightly.',
                 'provider' => 'mistral',
+            ]),
+            array_merge($docs, [
+                'id' => 'summarize-documents-claude',
+                'title' => 'Summarize documents — Claude',
+                'description' => 'Write a summary beside every document in a folder, nightly.',
+                'task_type' => 'docs:summarize',
+                'output_path' => '/Documents/Summaries',
+                'options' => ['style' => 'brief', 'recursive' => true],
+            ]),
+            array_merge($docs, [
+                'id' => 'translate-documents-claude',
+                'title' => 'Translate documents — Claude',
+                'description' => 'Translate every document in a folder into one language, nightly.',
+                'task_type' => 'docs:translate',
+                'options' => ['targetLanguage' => 'German', 'recursive' => true],
             ]),
         ];
     }
@@ -180,38 +207,128 @@ class CoworkerService {
      * scheduling/status fields. Never throws — failures are captured on the run.
      */
     public function execute(Coworker $coworker): CoworkerRun {
+        // A coworker whose previous batch has not come back yet must not start
+        // another: that would bill the same folder twice and race two runs
+        // onto the same output files. Skipping is the whole handling — the
+        // poll job is already watching the open run.
+        $open = $this->runMapper->findPendingForCoworker($coworker->getId());
+        if ($open !== null) {
+            $this->logger->info('AIquila Cowork: previous run still pending, skipping', [
+                'coworker' => $coworker->getId(),
+                'run' => $open->getId(),
+            ]);
+            return $open;
+        }
+
         $now = $this->timeFactory->getTime();
         $run = new CoworkerRun();
         $run->setCoworkerId($coworker->getId());
         $run->setUserId($coworker->getUserId());
-        $run->setStatus('running');
+        $run->setStatus(CoworkerRun::STATUS_RUNNING);
         $run->setStartedAt($now);
         $run = $this->runMapper->insert($run);
 
         try {
             $taskType = $this->registry->get($coworker->getTaskType());
-            $progress = function (int $processed, int $total) use ($run): void {
-                $run->setItemsProcessed($processed);
-                $run->setItemsTotal($total);
-                $this->runMapper->update($run);
-            };
-            $result = $taskType->run($coworker, $run, $progress);
+            $result = $taskType->run($coworker, $run, $this->progressCallback($run));
+        } catch (\Throwable $e) {
+            return $this->finishRun($coworker, $run, null, $e);
+        }
 
+        return $this->finishRun($coworker, $run, $result, null);
+    }
+
+    /**
+     * Continue a run that reported `pending`, and terminalise it if it is done.
+     *
+     * Never throws: a failure here is captured on the run exactly as it would
+     * be in execute(), because the caller is a background job.
+     */
+    public function resumePending(CoworkerRun $run): CoworkerRun {
+        try {
+            $coworker = $this->mapper->findByIdAndUser($run->getCoworkerId(), $run->getUserId());
+        } catch (\Throwable $e) {
+            // The coworker was deleted while its batch was in flight. Nothing
+            // can finish the run, so close it rather than leaving it pending
+            // for the poll job to pick up forever.
+            $run->setStatus(CoworkerRun::STATUS_ERROR);
+            $run->setError('Coworker no longer exists');
+            $run->setState(null);
+            $run->setFinishedAt($this->timeFactory->getTime());
+            $this->runMapper->update($run);
+            return $run;
+        }
+
+        try {
+            $taskType = $this->registry->get($coworker->getTaskType());
+            if (!$taskType instanceof ResumableCoworkerTaskType) {
+                throw new \RuntimeException(
+                    'Task type ' . $coworker->getTaskType() . ' cannot resume a pending run'
+                );
+            }
+            $result = $taskType->resume(
+                $coworker,
+                $run,
+                $run->getDecodedState(),
+                $this->progressCallback($run)
+            );
+        } catch (\Throwable $e) {
+            return $this->finishRun($coworker, $run, null, $e);
+        }
+
+        return $this->finishRun($coworker, $run, $result, null);
+    }
+
+    /** @return callable(int, int): void */
+    private function progressCallback(CoworkerRun $run): callable {
+        return function (int $processed, int $total) use ($run): void {
+            $run->setItemsProcessed($processed);
+            $run->setItemsTotal($total);
+            $this->runMapper->update($run);
+        };
+    }
+
+    /**
+     * Persist the outcome of one run() or resume() call.
+     *
+     * A `pending` result leaves the run open — no finished_at, no last_run_at,
+     * no next-run recomputation — because the work has not happened yet and
+     * the coworker has nothing to report.
+     *
+     * @param array{itemsTotal?: int, itemsProcessed?: int, summary?: string, pending?: bool, state?: array<string, mixed>}|null $result
+     */
+    private function finishRun(
+        Coworker $coworker,
+        CoworkerRun $run,
+        ?array $result,
+        ?\Throwable $error,
+    ): CoworkerRun {
+        if ($error !== null) {
+            $run->setStatus(CoworkerRun::STATUS_ERROR);
+            $run->setError($error->getMessage());
+            $run->setState(null);
+            $coworker->setLastStatus(CoworkerRun::STATUS_ERROR);
+            $coworker->setLastError($error->getMessage());
+            $this->logger->error('AIquila Cowork: run failed', [
+                'coworker' => $coworker->getId(),
+                'error' => $error->getMessage(),
+            ]);
+        } elseif (($result['pending'] ?? false) === true) {
             $run->setItemsTotal((int)($result['itemsTotal'] ?? 0));
             $run->setItemsProcessed((int)($result['itemsProcessed'] ?? 0));
             $run->setSummary((string)($result['summary'] ?? ''));
-            $run->setStatus('success');
-            $coworker->setLastStatus('success');
+            $run->setStatus(CoworkerRun::STATUS_PENDING);
+            $run->setDecodedState($result['state'] ?? []);
+            $this->runMapper->update($run);
+            return $run;
+        } else {
+            $run->setItemsTotal((int)($result['itemsTotal'] ?? 0));
+            $run->setItemsProcessed((int)($result['itemsProcessed'] ?? 0));
+            $run->setSummary((string)($result['summary'] ?? ''));
+            $run->setStatus(CoworkerRun::STATUS_SUCCESS);
+            $run->setState(null);
+            $coworker->setLastStatus(CoworkerRun::STATUS_SUCCESS);
             $coworker->setLastError(null);
-        } catch (\Throwable $e) {
-            $run->setStatus('error');
-            $run->setError($e->getMessage());
-            $coworker->setLastStatus('error');
-            $coworker->setLastError($e->getMessage());
-            $this->logger->error('AIquila Cowork: run failed', [
-                'coworker' => $coworker->getId(),
-                'error' => $e->getMessage(),
-            ]);
         }
 
         $finishedAt = $this->timeFactory->getTime();

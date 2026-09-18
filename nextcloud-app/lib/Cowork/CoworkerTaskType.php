@@ -39,8 +39,13 @@ interface CoworkerTaskType {
      * Implementations should call $progress(int $processed, int $total) as they
      * make progress so the run row reflects live status.
      *
+     * A task whose work cannot finish inside this call — one that hands the
+     * items to an API that answers hours later — may instead return
+     * `pending: true` along with a `state` array to resume from, and finish
+     * on a later tick. See {@see ResumableCoworkerTaskType}.
+     *
      * @param callable(int, int): void $progress
-     * @return array{itemsTotal: int, itemsProcessed: int, summary: string}
+     * @return array{itemsTotal: int, itemsProcessed: int, summary: string, pending?: bool, state?: array<string, mixed>}
      */
     public function run(Coworker $coworker, CoworkerRun $run, callable $progress): array;
 }

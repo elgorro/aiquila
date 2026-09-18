@@ -91,6 +91,7 @@ Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Mode
         <command>OCA\AIquila\Command\DoctorCommand</command>
         <command>OCA\AIquila\Command\MetadataSaltCommand</command>
         <command>OCA\AIquila\Command\BenchmarkTierCommand</command>
+        <command>OCA\AIquila\Command\BenchmarkBatchCommand</command>
     </commands>
     <openmetrics>
         <exporter>OCA\AIquila\OpenMetrics\TokensUsedExporter</exporter>
@@ -101,6 +102,7 @@ Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Mode
     <background-jobs>
         <job>OCA\AIquila\BackgroundJob\CleanupAnthropicFilesJob</job>
         <job>OCA\AIquila\BackgroundJob\CoworkerRunJob</job>
+        <job>OCA\AIquila\BackgroundJob\CoworkerBatchPollJob</job>
     </background-jobs>
     <navigations>
         <navigation>

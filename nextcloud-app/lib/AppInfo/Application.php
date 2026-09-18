@@ -4,6 +4,8 @@
 namespace OCA\AIquila\AppInfo;
 
 use OCA\AIquila\Cowork\CoworkerTaskRegistry;
+use OCA\AIquila\Cowork\DocsSummarizeFolderTaskType;
+use OCA\AIquila\Cowork\DocsTranslateFolderTaskType;
 use OCA\AIquila\Cowork\VisionClassifyImagesTaskType;
 use OCA\AIquila\Public\IAIquila;
 use OCA\AIquila\Public\ICoworkManager;
@@ -53,8 +55,12 @@ class Application extends App implements IBootstrap {
         $context->registerService(CoworkerTaskRegistry::class, function (ContainerInterface $c) {
             $visionClassify = $c->get(VisionClassifyImagesTaskType::class);
             assert($visionClassify instanceof VisionClassifyImagesTaskType);
+            $docsSummarize = $c->get(DocsSummarizeFolderTaskType::class);
+            assert($docsSummarize instanceof DocsSummarizeFolderTaskType);
+            $docsTranslate = $c->get(DocsTranslateFolderTaskType::class);
+            assert($docsTranslate instanceof DocsTranslateFolderTaskType);
 
-            return new CoworkerTaskRegistry([$visionClassify]);
+            return new CoworkerTaskRegistry([$visionClassify, $docsSummarize, $docsTranslate]);
         });
 
         // Register AIquila TaskProcessing Providers for Nextcloud Assistant integration

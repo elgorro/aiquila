@@ -56,6 +56,10 @@ back — a pure surcharge. So only the multi-turn entry points opt in:
 | `chatWithTools()`, `chatWithToolsStream()` | `askWithDocument()`, `askWithImage()`, `askWithImages()` |
 | `chatWithNativeMcp()`, `chatWithNativeMcpCollect()` | `submitBatch()` |
 
+Batch requests are the clearest case of the surcharge: `toBatchParams()` drops
+`cache_control` outright, because the requests in a batch are independent and
+nothing reads a breakpoint back. See [Batch processing](batch-processing.md).
+
 `chat()` is the one that needs a second test. It serves real conversations, but
 also one-shot requests that merely need structured content blocks — the mixed
 image + PDF branch of `/api/ask` reaches it with a single user message carrying

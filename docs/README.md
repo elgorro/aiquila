@@ -67,6 +67,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[Hetzner Inference provider](dev/hetzner-provider.md)** — EU-hosted open-weight models via Hetzner's experimental API
 - **[Request metadata](dev/request-metadata.md)** — the hashed `metadata.user_id` sent to Anthropic, and how to resolve it
 - **[Prompt caching](dev/prompt-caching.md)** — where cache breakpoints are placed, and how to read the cache-hit numbers
+- **[Batch processing](dev/batch-processing.md)** — the Message Batches transport, the bulk cowork tasks, and the extended-output switch
 - **[OpenAPI](dev/openapi.md)** — OpenAPI documentation
 - **MCP Development** — [Architecture](mcp/development/architecture.md) | [Adding Tools](mcp/development/adding-tools.md) | [Adding Apps](mcp/development/adding-apps.md)
 
@@ -130,6 +131,12 @@ docs/
 │   ├── ci-cd.md                     # CI/CD setup
 │   ├── mcp-server-architecture.md   # MCP technical architecture
 │   ├── provider-settings.md         # Provider settings schema
+│   ├── local-provider.md            # Ollama / LM Studio / llama.cpp
+│   ├── hetzner-provider.md          # Hetzner Inference provider
+│   ├── mistral-provider.md          # Mistral provider
+│   ├── request-metadata.md          # Hashed metadata.user_id
+│   ├── prompt-caching.md            # Cache breakpoint placement
+│   ├── batch-processing.md          # Message Batches & bulk cowork tasks
 │   └── openapi.md                   # OpenAPI documentation
 ```
 
