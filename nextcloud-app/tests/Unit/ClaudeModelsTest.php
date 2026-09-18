@@ -187,4 +187,32 @@ class ClaudeModelsTest extends TestCase {
         $this->assertArrayHasKey(ClaudeModels::OPUS_4_6, ClaudeModels::EFFORT_LEVEL);
         $this->assertArrayHasKey(ClaudeModels::SONNET_4_6, ClaudeModels::EFFORT_LEVEL);
     }
+
+    public function testSupportsExtendedOutput(): void {
+        $this->assertTrue(ClaudeModels::supportsExtendedOutput(ClaudeModels::OPUS_5));
+        $this->assertTrue(ClaudeModels::supportsExtendedOutput(ClaudeModels::OPUS_4_8));
+        $this->assertTrue(ClaudeModels::supportsExtendedOutput(ClaudeModels::SONNET_5));
+        $this->assertTrue(ClaudeModels::supportsExtendedOutput(ClaudeModels::SONNET_4_6));
+        // Deliberately excluded — the beta is not documented for these.
+        $this->assertFalse(ClaudeModels::supportsExtendedOutput(ClaudeModels::FABLE_5));
+        $this->assertFalse(ClaudeModels::supportsExtendedOutput(ClaudeModels::HAIKU_4_5));
+        $this->assertFalse(ClaudeModels::supportsExtendedOutput('claude-unknown-model'));
+    }
+
+    public function testGetExtendedMaxTokenCeiling(): void {
+        $this->assertSame(
+            ClaudeModels::EXTENDED_MAX_TOKENS,
+            ClaudeModels::getExtendedMaxTokenCeiling(ClaudeModels::OPUS_5)
+        );
+        // Unsupported models fall back to the ordinary ceiling, so callers
+        // can use the extended accessor unconditionally.
+        $this->assertSame(
+            ClaudeModels::getMaxTokenCeiling(ClaudeModels::FABLE_5),
+            ClaudeModels::getExtendedMaxTokenCeiling(ClaudeModels::FABLE_5)
+        );
+        $this->assertSame(
+            ClaudeModels::getMaxTokenCeiling(ClaudeModels::HAIKU_4_5),
+            ClaudeModels::getExtendedMaxTokenCeiling(ClaudeModels::HAIKU_4_5)
+        );
+    }
 }
