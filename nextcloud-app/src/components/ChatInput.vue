@@ -10,6 +10,14 @@
 			{{ t('aiquila', 'Drop files here') }}
 		</div>
 
+		<div v-if="uploads.length > 0" class="upload-progress">
+			<div v-for="upload in uploads" :key="upload.name" class="upload-row">
+				<span class="upload-name" :title="upload.name">{{ upload.name }}</span>
+				<NcProgressBar :value="upload.percent" />
+				<span class="upload-percent">{{ upload.percent }}%</span>
+			</div>
+		</div>
+
 		<div v-if="attachedFiles.length > 0" class="file-chips">
 			<span v-for="file in attachedFiles"
 				:key="file.path"
@@ -66,14 +74,30 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import NcProgressBar from '@nextcloud/vue/components/NcProgressBar'
 import PaperclipIcon from 'vue-material-design-icons/Paperclip.vue'
-import { getFilePickerBuilder, FilePickerClosed } from '@nextcloud/dialogs'
+import { getFilePickerBuilder, FilePickerClosed, showError } from '@nextcloud/dialogs'
 import { getCurrentUser } from '@nextcloud/auth'
 import axios from '@nextcloud/axios'
 import { generateRemoteUrl } from '@nextcloud/router'
 import '@nextcloud/dialogs/style.css'
 
 import { getFileInfo, getFilePreview, isImageMime } from '../api.js'
+
+// Attachments dropped or pasted into the chat land here.
+const UPLOAD_FOLDER = '/AIquila Uploads'
+
+// Matches the chunk size the Files app uses. Anything bigger than one chunk is
+// uploaded through the chunked endpoint rather than as a single PUT.
+const CHUNK_SIZE = 10 * 1024 * 1024
+
+/**
+ * Percent-encode each segment of a DAV path, leaving the separators alone.
+ * The upload folder has a space in its name, so the raw path is not a URL.
+ */
+function encodeDavPath(path) {
+	return path.split('/').map(encodeURIComponent).join('/')
+}
 
 const SLASH_COMMANDS = [
 	{
@@ -142,6 +166,7 @@ export default {
 	name: 'ChatInput',
 	components: {
 		NcButton,
+		NcProgressBar,
 		PaperclipIcon,
 	},
 	props: {
@@ -161,6 +186,7 @@ export default {
 			filteredCommands: [],
 			dragging: false,
 			dragCounter: 0,
+			uploads: [],
 		}
 	},
 	methods: {
@@ -458,29 +484,137 @@ export default {
 				}
 			}
 		},
+		/**
+		 * Upload a local File into the user's upload folder and return its
+		 * Nextcloud path, or null when the upload failed.
+		 *
+		 * Anything larger than one chunk goes through Nextcloud's chunked upload
+		 * endpoint: a plain PUT of the whole body is capped by the server's
+		 * post_max_size/upload_max_filesize, so a big attachment would otherwise
+		 * just fail. The target name is resolved against what is already there
+		 * first, so two attachments with the same name do not overwrite silently.
+		 */
 		async uploadFile(file) {
 			const user = getCurrentUser()
 			if (!user) return null
 
-			const folder = '/AIquila Uploads'
 			const davBase = generateRemoteUrl('dav/files/' + user.uid)
 
-			// Ensure folder exists
 			try {
-				await axios({ method: 'MKCOL', url: davBase + folder })
+				await axios({ method: 'MKCOL', url: davBase + encodeDavPath(UPLOAD_FOLDER) })
 			} catch {
 				// Folder already exists (405) or other non-fatal error
 			}
 
-			const filePath = folder + '/' + file.name
+			this.uploads.push({ name: file.name, percent: 0 })
+			const entry = this.uploads[this.uploads.length - 1]
+			const onProgress = (percent) => {
+				entry.percent = percent
+			}
+
 			try {
-				await axios.put(davBase + filePath, file, {
-					headers: { 'Content-Type': file.type },
-				})
+				const filePath = await this.freeTargetPath(davBase, file.name)
+				if (file.size > CHUNK_SIZE) {
+					await this.putChunked(davBase, filePath, file, user.uid, onProgress)
+				} else {
+					await this.putWhole(davBase, filePath, file, onProgress)
+				}
 				return filePath
 			} catch (err) {
 				console.error('[AIquila] Failed to upload file:', err)
+				showError(t('aiquila', 'Could not upload {name}', { name: file.name }))
 				return null
+			} finally {
+				const i = this.uploads.indexOf(entry)
+				if (i !== -1) this.uploads.splice(i, 1)
+			}
+		},
+		/**
+		 * The first free path for `name` in the upload folder.
+		 *
+		 * PUT to an occupied path replaces the file without a word, so pasted and
+		 * dropped attachments that happen to share a name would quietly clobber
+		 * each other. Suffix instead, the way the Files app does.
+		 */
+		async freeTargetPath(davBase, name) {
+			const dot = name.lastIndexOf('.')
+			const stem = dot > 0 ? name.slice(0, dot) : name
+			const ext = dot > 0 ? name.slice(dot) : ''
+
+			for (let i = 0; i < 100; i++) {
+				const candidate = UPLOAD_FOLDER + '/' + (i === 0 ? name : `${stem} (${i})${ext}`)
+				try {
+					await axios({ method: 'HEAD', url: davBase + encodeDavPath(candidate) })
+					// 2xx: the name is occupied, try the next suffix.
+				} catch (err) {
+					if (err.response !== undefined && err.response.status !== 404) {
+						// Offline, 5xx, a proxy in the way: the probe says nothing about
+						// whether the name is free, so every further suffix is a guess too.
+						// Stop and take the unique fallback below — overwriting someone's
+						// file is the failure mode worth avoiding here.
+						break
+					}
+					// 404 — nothing there, this name is free.
+					return candidate
+				}
+			}
+
+			// 100 collisions on one name, or a probe we could not trust: fall back to
+			// a name that cannot collide.
+			return UPLOAD_FOLDER + '/' + `${stem}-${Date.now()}${ext}`
+		},
+		async putWhole(davBase, filePath, file, onProgress) {
+			await axios.put(davBase + encodeDavPath(filePath), file, {
+				headers: { 'Content-Type': file.type },
+				onUploadProgress: (e) => {
+					if (e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+				},
+			})
+		},
+		/**
+		 * Nextcloud's chunked upload: build the parts under a temporary upload
+		 * directory, then MOVE its virtual `.file` onto the destination, which is
+		 * what tells the server to assemble them.
+		 */
+		async putChunked(davBase, filePath, file, uid, onProgress) {
+			const uploadId = 'aiquila-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10)
+			const uploadUrl = generateRemoteUrl('dav/uploads/' + uid) + '/' + uploadId
+
+			await axios({ method: 'MKCOL', url: uploadUrl })
+
+			try {
+				const chunks = Math.ceil(file.size / CHUNK_SIZE)
+				for (let i = 0; i < chunks; i++) {
+					const start = i * CHUNK_SIZE
+					const end = Math.min(start + CHUNK_SIZE, file.size)
+					await axios.put(uploadUrl + '/' + String(i).padStart(5, '0'), file.slice(start, end), {
+						headers: { 'Content-Type': 'application/octet-stream' },
+						onUploadProgress: (e) => {
+							const done = start + (e.loaded || 0)
+							onProgress(Math.min(99, Math.round((done / file.size) * 100)))
+						},
+					})
+				}
+
+				await axios({
+					method: 'MOVE',
+					url: uploadUrl + '/.file',
+					headers: {
+						Destination: davBase + encodeDavPath(filePath),
+						'OC-Total-Length': String(file.size),
+						Overwrite: 'F',
+					},
+				})
+				onProgress(100)
+			} catch (err) {
+				// Leaving the parts behind would strand quota, so clear the staging
+				// directory before reporting the failure.
+				try {
+					await axios({ method: 'DELETE', url: uploadUrl })
+				} catch {
+					// Best effort — the original error is the one that matters.
+				}
+				throw err
 			}
 		},
 	},
@@ -509,6 +643,38 @@ export default {
 	color: var(--color-primary-element);
 	z-index: 10;
 	pointer-events: none;
+}
+
+.upload-progress {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 8px;
+}
+
+.upload-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: var(--color-text-maxcontrast);
+}
+
+.upload-name {
+	flex: 0 1 auto;
+	max-width: 40%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.upload-row .progress-bar {
+	flex: 1 1 auto;
+}
+
+.upload-percent {
+	flex: 0 0 auto;
+	font-variant-numeric: tabular-nums;
 }
 
 .file-chips {
