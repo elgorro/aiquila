@@ -13,7 +13,7 @@
     "require-dev": {
         "phpunit/phpunit": "^13.0",
         "nextcloud/openapi-extractor": "^1.8",
-        "nextcloud/ocp": "^34.0",
+        "nextcloud/ocp": "^35.0",
         "doctrine/dbal": "^4.4",
         "vimeo/psalm": "^6.0"
     },

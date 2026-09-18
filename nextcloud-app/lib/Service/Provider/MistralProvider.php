@@ -358,6 +358,40 @@ class MistralProvider implements LLMProviderInterface {
         return ['response' => $finalText ?: 'I was unable to complete the request within the allowed number of tool-use iterations.', 'usage' => $this->finalizeUsage($total), 'citations' => []];
     }
 
+    public function chatToolsTurn(array $messages, array $tools, ?string $system = null, ?string $userId = null, array $options = []): array {
+        $options['tools'] = $tools;
+
+        try {
+            $body = $this->buildBody($messages, $system, $userId, $options);
+            $data = $this->requestJson($body, $userId);
+        } catch (\Throwable $e) {
+            return $this->handleException($e, 'chatToolsTurn');
+        }
+
+        $total = $this->newUsage();
+        $this->accumulateUsage($total, $data['usage'] ?? []);
+
+        $message = $data['choices'][0]['message'] ?? [];
+        $calls = [];
+        foreach ($message['tool_calls'] ?? [] as $tc) {
+            $name = $tc['function']['name'] ?? '';
+            if ($name === '') {
+                continue;
+            }
+            $calls[] = [
+                'id' => (string)($tc['id'] ?? ''),
+                'name' => (string)$name,
+                'arguments' => $this->decodeArguments((string)($tc['function']['arguments'] ?? '')),
+            ];
+        }
+
+        return [
+            'response' => $this->extractMessageText($message['content'] ?? ''),
+            'tool_calls' => $calls,
+            'usage' => $this->finalizeUsage($total),
+        ];
+    }
+
     public function summarize(string $content, ?string $userId = null): array {
         return $this->ask("Summarize the following content concisely:\n\n$content", '', $userId);
     }
