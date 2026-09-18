@@ -234,7 +234,7 @@ class AIquilaService implements IAIquila {
      * Send a notification to a user
      *
      * @param string $userId User to notify
-     * @param string $subject Notification subject
+     * @param string $subject Notification subject key, as handled by AIquilaNotifier
      * @param string $message Notification message
      */
     private function notify(string $userId, string $subject, string $message): void {
@@ -265,7 +265,9 @@ class AIquilaService implements IAIquila {
         $result = $this->ask($prompt, $context, $userId);
 
         if ($notify && isset($result['response'])) {
-            $this->notify($userId, 'Claude AI Response', substr($result['response'], 0, 100));
+            // Must be a subject key AIquilaNotifier knows: it throws on anything
+            // else, and the notification then never renders.
+            $this->notify($userId, 'ask_response', substr($result['response'], 0, 100));
         }
 
         return $result;

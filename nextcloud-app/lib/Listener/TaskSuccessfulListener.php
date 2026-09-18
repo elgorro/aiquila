@@ -7,6 +7,7 @@ namespace OCA\AIquila\Listener;
 
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
+use OCP\IConfig;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\TaskProcessing\Events\TaskSuccessfulEvent;
 use OCP\TaskProcessing\IManager as ITaskProcessingManager;
@@ -22,6 +23,7 @@ class TaskSuccessfulListener implements IEventListener {
     public function __construct(
         private INotificationManager $notificationManager,
         private ITaskProcessingManager $taskProcessingManager,
+        private IConfig $config,
         private LoggerInterface $logger,
     ) {
     }
@@ -44,12 +46,19 @@ class TaskSuccessfulListener implements IEventListener {
     }
 
     private function notifyTaskSuccess(Task $task): void {
-        if (!$this->isAiquilaTask($task)) {
+        $userId = $task->getUserId();
+        if ($userId === null) {
             return;
         }
 
-        $userId = $task->getUserId();
-        if ($userId === null) {
+        // Off unless asked for: the app that scheduled the task is normally
+        // showing the result already. Checked before the provider lookup, which
+        // costs a manager call.
+        if (!$this->notificationsEnabled($userId, 'task_success_notifications', '0')) {
+            return;
+        }
+
+        if (!$this->isAiquilaTask($task)) {
             return;
         }
 

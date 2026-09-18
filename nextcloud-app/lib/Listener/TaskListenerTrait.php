@@ -9,7 +9,8 @@ use OCP\TaskProcessing\Task;
 
 /**
  * Shared helpers for the TaskProcessing event listeners. Using classes must
- * inject OCP\TaskProcessing\IManager as $taskProcessingManager.
+ * inject OCP\TaskProcessing\IManager as $taskProcessingManager and
+ * OCP\IConfig as $config.
  */
 trait TaskListenerTrait {
 
@@ -27,6 +28,16 @@ trait TaskListenerTrait {
         'core:image2text' => 'Image analysis',
         'core:analyze-images' => 'Multi-image analysis',
     ];
+
+    /**
+     * AIquila registers TaskProcessing providers but never schedules a task, so
+     * every task it could notify about was started by another app that usually
+     * shows the result itself. Notifying is therefore a personal opt-in rather
+     * than a default.
+     */
+    private function notificationsEnabled(string $userId, string $key, string $default): bool {
+        return $this->config->getUserValue($userId, 'aiquila', $key, $default) === '1';
+    }
 
     /**
      * OCP\TaskProcessing\Task exposes no provider id, so the provider is resolved

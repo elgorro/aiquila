@@ -59,6 +59,19 @@
 						@update:model-value="v => { defaultVerbose = v; dirty = true }">
 						{{ t('aiquila', 'Show verbose mode by default') }}
 					</NcCheckboxRadioSwitch>
+				</NcSettingsSection>
+
+				<NcSettingsSection :name="t('aiquila', 'Notifications')"
+					:description="t('aiquila', 'AIquila answers AI tasks that other apps start, and those apps normally show you the result themselves. Successful tasks stay quiet unless you ask for them; failures are reported because they usually point at your AIquila configuration.')">
+					<NcCheckboxRadioSwitch :model-value="taskSuccessNotifications"
+						@update:model-value="v => { taskSuccessNotifications = v; dirty = true }">
+						{{ t('aiquila', 'Notify me when an AI task completes') }}
+					</NcCheckboxRadioSwitch>
+
+					<NcCheckboxRadioSwitch :model-value="taskFailureNotifications"
+						@update:model-value="v => { taskFailureNotifications = v; dirty = true }">
+						{{ t('aiquila', 'Notify me when an AI task fails') }}
+					</NcCheckboxRadioSwitch>
 
 					<div class="aiquila-personal__actions">
 						<NcButton type="primary" :disabled="saving || !dirty" @click="saveDefaults">
@@ -139,6 +152,8 @@ export default {
 			adminProvider: '',
 			defaultSystemPrompt: '',
 			defaultVerbose: false,
+			taskSuccessNotifications: false,
+			taskFailureNotifications: true,
 			nativeMcpOverride: '',
 			nativeMcpAdminDefault: false,
 			nativeMcpEffective: false,
@@ -193,6 +208,8 @@ export default {
 
 				this.defaultSystemPrompt = settings.defaultSystemPrompt || ''
 				this.defaultVerbose = !!settings.defaultVerbose
+				this.taskSuccessNotifications = !!settings.taskSuccessNotifications
+				this.taskFailureNotifications = !!settings.taskFailureNotifications
 				this.nativeMcpOverride = settings.nativeMcpUserOverride ?? ''
 				this.nativeMcpAdminDefault = !!settings.nativeMcpAdminDefault
 				this.nativeMcpEffective = !!settings.nativeMcpEffective
@@ -227,6 +244,8 @@ export default {
 				await saveSettings({
 					default_system_prompt: this.defaultSystemPrompt,
 					default_verbose: this.defaultVerbose ? '1' : '0',
+					task_success_notifications: this.taskSuccessNotifications ? '1' : '0',
+					task_failure_notifications: this.taskFailureNotifications ? '1' : '0',
 				})
 				this.dirty = false
 				this.messageType = 'success'

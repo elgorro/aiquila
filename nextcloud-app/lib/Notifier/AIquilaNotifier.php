@@ -56,6 +56,13 @@ class AIquilaNotifier implements INotifier {
                 $notification->setParsedMessage($message);
                 break;
 
+            case 'ask_response':
+                $notification->setParsedSubject(
+                    $this->l10n->t('AIquila response')
+                );
+                $notification->setParsedMessage((string)($params[0] ?? ''));
+                break;
+
             default:
                 throw new \InvalidArgumentException();
         }

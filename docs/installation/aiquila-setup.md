@@ -186,7 +186,9 @@ e.g. `Settings → Administration → AIquila#mcp`.
    your default. Leave a field blank to inherit the instance setting.
    Endpoint URLs are administrator-only.
 3. **Defaults** sets the system prompt and verbose mode new conversations start
-   with; **Connectors** overrides the native MCP connector for your account.
+   with, and holds the two notification toggles: completed AI tasks are silent
+   unless you switch them on, failed ones are reported by default.
+   **Connectors** overrides the native MCP connector for your account.
 
 Endpoint URLs stay admin-only deliberately: Nextcloud makes outbound requests to
 whatever is stored there, so a user-settable endpoint would be a server-side
@@ -326,6 +328,13 @@ spoken message and its reply do not travel to two different vendors.
 The Context Agent task types (`core:contextagent:interaction` and
 `core:contextagent:audiointeraction`) are not served by AIquila — install a dedicated
 provider app for those.
+
+AIquila answers these tasks but never starts them, and the app that did — the
+Assistant, Files, Mail — normally puts the result in front of you already. So a
+successful task notifies nobody unless the user turns it on under
+**Settings → Personal → AIquila → Defaults**. A failed one does notify by default:
+it usually means AIquila itself needs attention, such as a rejected API key, an
+exhausted quota or an unreachable endpoint.
 
 ### 3. Public API
 

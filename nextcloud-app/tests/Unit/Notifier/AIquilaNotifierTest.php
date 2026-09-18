@@ -95,6 +95,26 @@ class AIquilaNotifierTest extends TestCase {
         $this->notifier->prepare($notification, 'en');
     }
 
+    public function testPrepareAskResponse(): void {
+        // The subject AIquilaService::askAsync() sends; it used to be free text,
+        // which landed in the default branch and threw.
+        $notification = $this->createMock(INotification::class);
+        $notification->method('getApp')->willReturn('aiquila');
+        $notification->method('getSubject')->willReturn('ask_response');
+        $notification->method('getSubjectParameters')->willReturn(['Here is the answer']);
+
+        $notification->expects($this->once())->method('setParsedSubject')
+            ->with('AIquila response');
+        $notification->expects($this->once())->method('setParsedMessage')
+            ->with('Here is the answer');
+
+        $notification->method('setParsedSubject')->willReturn($notification);
+        $notification->method('setParsedMessage')->willReturn($notification);
+        $notification->method('setIcon')->willReturn($notification);
+
+        $this->notifier->prepare($notification, 'en');
+    }
+
     public function testPrepareUnknownSubjectThrows(): void {
         $notification = $this->createMock(INotification::class);
         $notification->method('getApp')->willReturn('aiquila');

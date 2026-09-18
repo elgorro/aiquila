@@ -3321,6 +3321,18 @@
                                         "default": null,
                                         "description": "Enable verbose mode by default ('1' or null to keep unchanged)"
                                     },
+                                    "task_success_notifications": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Notify when an AI task completes ('1'/'0', null to keep unchanged)"
+                                    },
+                                    "task_failure_notifications": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "default": null,
+                                        "description": "Notify when an AI task fails ('1'/'0', null to keep unchanged)"
+                                    },
                                     "native_mcp_enabled": {
                                         "type": "string",
                                         "nullable": true,
@@ -3491,6 +3503,8 @@
                                         "availableModels",
                                         "defaultSystemPrompt",
                                         "defaultVerbose",
+                                        "taskSuccessNotifications",
+                                        "taskFailureNotifications",
                                         "nativeMcpUserOverride",
                                         "nativeMcpAdminDefault",
                                         "nativeMcpEffective"
@@ -3555,6 +3569,12 @@
                                             "type": "string"
                                         },
                                         "defaultVerbose": {
+                                            "type": "boolean"
+                                        },
+                                        "taskSuccessNotifications": {
+                                            "type": "boolean"
+                                        },
+                                        "taskFailureNotifications": {
                                             "type": "boolean"
                                         },
                                         "nativeMcpUserOverride": {
