@@ -1327,48 +1327,178 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * for non-interactive paths (`TaskProcessing` runs `process()` from a
      * background job already). Do not use from HTTP request handlers.
      *
-     * @return array{response: string, usage: array, citations: array}|array{error: string}
+     * @return array{response: string, usage: array, citations: array}|array{error: string, error_type: string, refusal_category?: string|null}
      */
     public function summarizeViaBatch(string $content, ?string $userId = null, ?callable $reportProgress = null): array {
         try {
-            $client = $this->getClient($userId);
-
             $messages = [['role' => 'user', 'content' => "Summarize the following content concisely:\n\n$content"]];
-            $batchParams = $this->toBatchParams($this->buildRequestParams($messages, $userId));
-
             $customId = 'aiquila-summary-' . bin2hex(random_bytes(8));
-            $batch = $this->callBatchCreate($client, [['custom_id' => $customId, 'params' => $batchParams]]);
 
-            $this->logger->info('AIquila SDK: batch submitted', [
-                'batch_id' => $batch->id,
-                'custom_id' => $customId,
-            ]);
+            $batchId = $this->submitBatch([['custom_id' => $customId, 'messages' => $messages]], $userId);
             if ($reportProgress !== null) {
                 $reportProgress(0.1);
             }
 
-            $batch = $this->waitForBatch($client, $batch->id, $reportProgress);
-
+            $batch = $this->waitForBatch($this->getClient($userId), $batchId, $reportProgress);
             if ($batch->processingStatus !== 'ended') {
                 throw new \RuntimeException("Batch did not complete: status={$batch->processingStatus}");
             }
 
-            foreach ($this->callBatchResults($client, $batch->id) as $entry) {
-                if ($entry->customID !== $customId) {
-                    continue;
-                }
-                $result = $this->convertBatchResult($entry);
-                if (isset($result['response'])) {
-                    $this->logger->info('AIquila SDK: batch summary completed', [
-                        'batch_id' => $batch->id,
-                        'usage' => $result['usage'] ?? null,
-                    ]);
-                }
-                return $result;
+            $results = $this->fetchBatchResults($batchId, $userId);
+            if (!isset($results[$customId])) {
+                throw new \RuntimeException("Batch result for custom_id $customId not found");
             }
-            throw new \RuntimeException("Batch result for custom_id $customId not found");
+
+            $result = $results[$customId];
+            if (isset($result['response'])) {
+                $this->logger->info('AIquila SDK: batch summary completed', [
+                    'batch_id' => $batchId,
+                    'usage' => $result['usage'] ?? null,
+                ]);
+            }
+            return $result;
         } catch (\Throwable $e) {
             return $this->handleException($e, 'summarizeViaBatch');
+        }
+    }
+
+    // ── Message Batches transport ─────────────────────────────────────────
+    //
+    // Four thin methods rather than one blocking call, because a batch can
+    // take up to 24 hours: a caller that cannot hold a worker open (a cron
+    // job) submits, stores the id, and comes back later. summarizeViaBatch()
+    // above is the exception — one request, run inside a TaskProcessing
+    // worker that already owns a long-running lifecycle, so it may block.
+
+    /** Requests per batch. The API allows far more; this is a cost guard. */
+    public const MAX_BATCH_REQUESTS = 500;
+
+    /** The user whose batch is being submitted; see submitBatch(). */
+    private ?string $batchUserId = null;
+
+    /**
+     * Submit N message requests as a single batch and return its id.
+     *
+     * Each entry carries the `custom_id` the caller will key results by and
+     * the messages to send; `options` is the same per-request option array
+     * ask()/chat() accept, so a caller can pin a model or an effort level per
+     * request.
+     *
+     * @param list<array{custom_id: string, messages: list<array<string, mixed>>, options?: array<string, mixed>}> $requests
+     *
+     * @throws \InvalidArgumentException when the batch is empty, too large, or
+     *                                   carries a malformed or duplicated custom_id
+     */
+    public function submitBatch(array $requests, ?string $userId = null): string {
+        if ($requests === []) {
+            throw new \InvalidArgumentException('Cannot submit an empty batch');
+        }
+        if (count($requests) > self::MAX_BATCH_REQUESTS) {
+            throw new \InvalidArgumentException(
+                'Batch holds ' . count($requests) . ' requests, the limit is ' . self::MAX_BATCH_REQUESTS
+            );
+        }
+
+        $seen = [];
+        $payload = [];
+        foreach ($requests as $request) {
+            $customId = (string)($request['custom_id'] ?? '');
+            // The API's own constraint. Enforced here so a bad id fails before
+            // the whole batch is rejected, naming the offending entry.
+            if (preg_match('/^[a-zA-Z0-9_-]{1,64}$/', $customId) !== 1) {
+                throw new \InvalidArgumentException("Invalid custom_id: '$customId'");
+            }
+            if (isset($seen[$customId])) {
+                throw new \InvalidArgumentException("Duplicate custom_id: '$customId'");
+            }
+            $seen[$customId] = true;
+
+            $payload[] = [
+                'custom_id' => $customId,
+                'params' => $this->toBatchParams(
+                    $this->buildRequestParams($request['messages'], $userId, $request['options'] ?? []),
+                    $userId
+                ),
+            ];
+        }
+
+        // callBatchCreate() cannot take the user as a parameter without
+        // breaking subclasses that override the seam, but the beta header it
+        // resolves has to agree with the ceiling toBatchParams() just applied
+        // — a per-user model can differ from the instance default. Park it.
+        $this->batchUserId = $userId;
+        try {
+            $batch = $this->callBatchCreate($this->getClient($userId), $payload);
+        } finally {
+            $this->batchUserId = null;
+        }
+        $this->logger->info('AIquila SDK: batch submitted', [
+            'batch_id' => $batch->id,
+            'requests' => count($payload),
+        ]);
+
+        return $batch->id;
+    }
+
+    /**
+     * Where a batch has got to. `ended` means every request reached a terminal
+     * state — succeeded, errored, canceled or expired — not that they all
+     * succeeded.
+     *
+     * @return array{status: string, ended: bool, counts: array{processing: int, succeeded: int, errored: int, canceled: int, expired: int}}
+     */
+    public function getBatchStatus(string $batchId, ?string $userId = null): array {
+        $batch = $this->callBatchRetrieve($this->getClient($userId), $batchId);
+        $counts = $batch->requestCounts;
+
+        return [
+            'status' => $batch->processingStatus,
+            'ended'  => $batch->processingStatus === 'ended',
+            'counts' => [
+                'processing' => $counts->processing,
+                'succeeded'  => $counts->succeeded,
+                'errored'    => $counts->errored,
+                'canceled'   => $counts->canceled,
+                'expired'    => $counts->expired,
+            ],
+        ];
+    }
+
+    /**
+     * Every result of an ended batch, keyed by `custom_id`.
+     *
+     * Results arrive in **any order** — the API makes no promise that they
+     * come back in submission order, so they are keyed rather than listed.
+     * Reading them positionally would silently pair a request with another
+     * request's answer.
+     *
+     * A `custom_id` that is simply absent from the map has no result at all;
+     * that is a condition for the caller to report, not an exception here.
+     *
+     * @return array<string, array{response: string, usage: array, citations: array}|array{error: string, error_type: string, refusal_category?: string|null}>
+     */
+    public function fetchBatchResults(string $batchId, ?string $userId = null): array {
+        $results = [];
+        foreach ($this->callBatchResults($this->getClient($userId), $batchId) as $entry) {
+            $results[$entry->customID] = $this->convertBatchResult($entry);
+        }
+        return $results;
+    }
+
+    /**
+     * Ask the API to stop a batch. Requests already in flight still finish and
+     * are still billed, so this is a best-effort stop, not an undo.
+     */
+    public function cancelBatch(string $batchId, ?string $userId = null): bool {
+        try {
+            $this->callBatchCancel($this->getClient($userId), $batchId);
+            return true;
+        } catch (\Throwable $e) {
+            $this->logger->warning('AIquila SDK: batch cancel failed', [
+                'batch_id' => $batchId,
+                'exception' => $e,
+            ]);
+            return false;
         }
     }
 
@@ -1377,9 +1507,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * buildRequestParams() into the camelCase shape required by
      * BatchCreateParams\Request\Params.
      */
-    private function toBatchParams(array $params): array {
+    private function toBatchParams(array $params, ?string $userId = null): array {
         $out = [
-            'maxTokens' => $params['max_tokens'],
+            // Not $params['max_tokens']: that was clamped for the synchronous
+            // API. Batches may go higher when the extended-output beta applies.
+            'maxTokens' => $this->batchMaxTokens($userId),
             'messages'  => $params['messages'],
             'model'     => $params['model'],
         ];
@@ -1439,10 +1571,32 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     /**
      * Convert one MessageBatchIndividualResponse into the array shape used by
      * other ClaudeSDKService entry points.
+     *
+     * Every failure carries an `error_type` alongside the human-readable
+     * `error`, because a caller submitting many requests has to tell the
+     * outcomes apart to report them: an errored request may be worth retrying,
+     * an expired one means the batch ran out of time, and a refused one never
+     * will be. The Batch API offers no server-side refusal `fallbacks` and
+     * returns no `fallback_credit_token`, so a refusal is terminal for that
+     * request — whether to re-issue it synchronously is the caller's decision.
+     *
+     * A refusal arrives as a *succeeded* result whose message stopped with
+     * `refusal`, not as an error, so it has to be unpacked before the text is
+     * read; otherwise it would surface as an empty response.
+     *
+     * @return array{response: string, usage: array, citations: array}|array{error: string, error_type: string, refusal_category?: string|null}
      */
     private function convertBatchResult(MessageBatchIndividualResponse $entry): array {
         $r = $entry->result;
         if ($r instanceof MessageBatchSucceededResult) {
+            if (($r->message->stopReason ?? null) === 'refusal') {
+                return [
+                    'error'            => $r->message->stopDetails->explanation
+                        ?? 'Request refused by the safety classifiers',
+                    'error_type'       => 'refused',
+                    'refusal_category' => $r->message->stopDetails->category ?? null,
+                ];
+            }
             return [
                 'response'  => $this->extractText($r->message),
                 'usage'     => $this->extractUsage($r->message),
@@ -1451,15 +1605,19 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         }
         if ($r instanceof MessageBatchErroredResult) {
             $message = $r->error->error->message ?? 'Batch request errored';
-            return ['error' => $message];
+            $type = $r->error->error->type ?? null;
+            return [
+                'error'      => $type !== null ? "$type: $message" : $message,
+                'error_type' => 'errored',
+            ];
         }
         if ($r instanceof MessageBatchCanceledResult) {
-            return ['error' => 'Batch request canceled'];
+            return ['error' => 'Batch request canceled', 'error_type' => 'canceled'];
         }
         if ($r instanceof MessageBatchExpiredResult) {
-            return ['error' => 'Batch request expired before processing'];
+            return ['error' => 'Batch request expired before processing', 'error_type' => 'expired'];
         }
-        return ['error' => 'Unknown batch result type'];
+        return ['error' => 'Unknown batch result type', 'error_type' => 'unknown'];
     }
 
     /**
@@ -1472,10 +1630,78 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     /**
      * Dispatch a batches->create. Overridable for testing.
      *
+     * The extended-output beta rides on the GA endpoint as a header rather
+     * than going through `$client->beta->messages->batches`: the beta only
+     * changes what the API accepts, and staying on GA keeps one set of result
+     * types and one convertBatchResult(). The header is resolved here rather
+     * than passed in so the seam's signature stays stable for subclasses.
+     *
      * @param list<array{custom_id: string, params: array}> $requests
      */
     protected function callBatchCreate(Client $client, array $requests): MessageBatch {
-        return $client->messages->batches->create($requests);
+        $options = $this->batchRequestOptions();
+        if ($options === null) {
+            return $client->messages->batches->create($requests);
+        }
+        return $client->messages->batches->create($requests, requestOptions: $options);
+    }
+
+    /**
+     * Dispatch a batches->cancel. Overridable for testing.
+     */
+    protected function callBatchCancel(Client $client, string $batchId): MessageBatch {
+        return $client->messages->batches->cancel($batchId);
+    }
+
+    /**
+     * Request options for a batch create: the extended-output beta header when
+     * the switch is on and the model accepts it, otherwise nothing.
+     *
+     * Only `create` needs it. Retrieving a batch and streaming its results
+     * parse into the same GA types either way, so adding the header there
+     * would be noise.
+     *
+     * @return array{extraHeaders: array<string, string>}|null
+     */
+    protected function batchRequestOptions(?string $userId = null): ?array {
+        if (!$this->extendedBatchOutputEnabled()) {
+            return null;
+        }
+        if (!ClaudeModels::supportsExtendedOutput($this->getModel($userId ?? $this->batchUserId))) {
+            return null;
+        }
+        return ['extraHeaders' => ['anthropic-beta' => AnthropicBeta::OUTPUT_300K_2026_03_24->value]];
+    }
+
+    /**
+     * Whether the admin has opted into the extended output ceiling on batch
+     * requests. Historically this flag has been persisted as both 'true' and
+     * '1', hence the two-value check.
+     */
+    private function extendedBatchOutputEnabled(): bool {
+        return in_array(
+            $this->config->getAppValue($this->appName, 'batch_output_300k', 'false'),
+            ['true', '1'],
+            true
+        );
+    }
+
+    /**
+     * Output ceiling for a batch request.
+     *
+     * getMaxTokens() clamps against the model's ordinary 128,000 ceiling, so
+     * turning the beta on would otherwise change nothing. This re-clamps the
+     * stored value against the extended ceiling when the beta applies. It
+     * lifts a cap rather than setting one: an instance still on the default
+     * max_tokens sees no difference until that is raised too.
+     */
+    private function batchMaxTokens(?string $userId = null): int {
+        if ($this->batchRequestOptions($userId) === null) {
+            return $this->getMaxTokens($userId);
+        }
+
+        $stored = (int)$this->config->getAppValue($this->appName, 'max_tokens', (string)ClaudeModels::DEFAULT_MAX_TOKENS);
+        return min($stored, ClaudeModels::getExtendedMaxTokenCeiling($this->getModel($userId)));
     }
 
     /**
@@ -1714,6 +1940,18 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 'Generates output roughly 2.5x faster at about twice the token price. Available on Opus 5 and '
                     . 'Opus 4.8 only and silently ignored on every other model, including the default. Fast mode '
                     . 'has its own rate limit. Overridable per conversation with /fast.',
+                storage: ProviderSettingsSchema::STORAGE_BOOL,
+                group: ProviderSettingsSchema::GROUP_ADVANCED,
+            ),
+            ProviderSettingsSchema::checkbox(
+                'batch_output_300k',
+                'batch_output_300k',
+                'Extended output on batch requests (beta)',
+                'Raises the output ceiling on Batch API requests from 128,000 to 300,000 tokens. Available on '
+                    . 'Opus 5, Opus 4.8/4.7/4.6, Sonnet 5 and Sonnet 4.6, and silently ignored on every other '
+                    . 'model. Interactive requests are unaffected and keep the standard ceiling. It lifts a cap '
+                    . 'rather than setting one, so it changes nothing until "Max output tokens" is also raised '
+                    . 'above 128,000.',
                 storage: ProviderSettingsSchema::STORAGE_BOOL,
                 group: ProviderSettingsSchema::GROUP_ADVANCED,
             ),
