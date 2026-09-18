@@ -17,9 +17,9 @@
 
 		<label class="field">
 			<span>{{ t('aiquila', 'Provider') }}</span>
-			<select v-model="form.model">
-				<option value="anthropic">{{ t('aiquila', 'Claude vision') }}</option>
-				<option value="mistral">{{ t('aiquila', 'Mistral Pixtral') }}</option>
+			<select v-model="form.provider">
+				<option value="anthropic">{{ t('aiquila', 'Claude') }}</option>
+				<option value="mistral">{{ t('aiquila', 'Mistral') }}</option>
 			</select>
 		</label>
 
@@ -81,7 +81,7 @@ export default {
 			form: {
 				title: m.title || '',
 				task_type: m.taskType || (this.taskTypes[0] && this.taskTypes[0].id) || 'vision:classify',
-				model: m.model || 'anthropic',
+				provider: m.provider || 'anthropic',
 				input_path: m.inputPath || '/Photos',
 				cron_schedule: m.cronSchedule || '0 3 * * *',
 				maxTags: options.maxTags || 8,
@@ -97,7 +97,7 @@ export default {
 			const payload = {
 				title: this.form.title,
 				task_type: this.form.task_type,
-				model: this.form.model,
+				provider: this.form.provider,
 				input_type: 'folder',
 				input_path: this.form.input_path,
 				output_type: 'system_tags',
