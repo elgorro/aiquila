@@ -41,7 +41,7 @@ class CoworkerService {
      * @return list<array<string, mixed>>
      */
     public function getTemplates(): array {
-        $shared = [
+        $vision = [
             'task_type' => 'vision:classify',
             'cron_schedule' => '0 3 * * *',
             'input_type' => 'folder',
@@ -49,18 +49,44 @@ class CoworkerService {
             'output_type' => 'system_tags',
             'options' => ['maxTags' => 8, 'recursive' => true],
         ];
+        // The docs family goes out through the Batch API on the Anthropic
+        // provider, so these run at half price — which is why they default to
+        // a nightly schedule over a whole folder rather than on demand.
+        $docs = [
+            'cron_schedule' => '0 2 * * *',
+            'input_type' => 'folder',
+            'input_path' => '/Documents',
+            'output_type' => 'files',
+            'provider' => 'anthropic',
+        ];
+
         return [
-            array_merge($shared, [
+            array_merge($vision, [
                 'id' => 'classify-images-claude',
                 'title' => 'Classify images — Claude vision',
                 'description' => 'Tag images in a folder using Claude vision, nightly.',
                 'provider' => 'anthropic',
             ]),
-            array_merge($shared, [
+            array_merge($vision, [
                 'id' => 'classify-images-mistral',
                 'title' => 'Classify images — Mistral vision',
                 'description' => 'Tag images in a folder using Mistral vision, nightly.',
                 'provider' => 'mistral',
+            ]),
+            array_merge($docs, [
+                'id' => 'summarize-documents-claude',
+                'title' => 'Summarize documents — Claude',
+                'description' => 'Write a summary beside every document in a folder, nightly.',
+                'task_type' => 'docs:summarize',
+                'output_path' => '/Documents/Summaries',
+                'options' => ['style' => 'brief', 'recursive' => true],
+            ]),
+            array_merge($docs, [
+                'id' => 'translate-documents-claude',
+                'title' => 'Translate documents — Claude',
+                'description' => 'Translate every document in a folder into one language, nightly.',
+                'task_type' => 'docs:translate',
+                'options' => ['targetLanguage' => 'German', 'recursive' => true],
             ]),
         ];
     }
