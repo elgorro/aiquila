@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Service\Provider;
 
+use OCA\AIquila\Http\SseStreaming;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\MistralModels;
 use OCP\Http\Client\IClientService;
@@ -25,6 +26,8 @@ use Psr\Log\LoggerInterface;
  * stream resource we read incrementally for Server-Sent Events.
  */
 class MistralProvider implements LLMProviderInterface {
+    use SseStreaming;
+
     private const PROVIDER_ID = 'mistral';
     private const API_BASE = 'https://api.mistral.ai/v1';
     private const CONVERSATIONS_URL = self::API_BASE . '/conversations';
@@ -377,6 +380,7 @@ class MistralProvider implements LLMProviderInterface {
             /** @var array<int, array{id: string, name: string, arguments: string}> $toolAcc */
             $toolAcc = [];
             $finishReason = null;
+            $sawDone = false;
 
             try {
                 $stream = $this->openStream($body, $userId);
@@ -395,6 +399,7 @@ class MistralProvider implements LLMProviderInterface {
                         }
                         $payload = trim(substr($line, 5));
                         if ($payload === '[DONE]') {
+                            $sawDone = true;
                             break 2;
                         }
                         $event = json_decode($payload, true);
@@ -443,6 +448,17 @@ class MistralProvider implements LLMProviderInterface {
             } catch (\Throwable $e) {
                 $this->logger->error('AIquila Mistral: chatWithToolsStream failed', ['error' => $e->getMessage()]);
                 yield ['type' => 'error', 'error' => $this->errorMessage($e), 'usage' => $this->finalizeUsage($total)];
+                return;
+            }
+
+            // EOF without `[DONE]` or a finish_reason means the connection
+            // dropped mid-generation — see AbstractOpenAiCompatibleProvider.
+            if (!$sawDone && $finishReason === null) {
+                yield [
+                    'type' => 'error',
+                    'error' => 'The connection to Mistral dropped before the reply was complete.',
+                    'usage' => $this->finalizeUsage($total),
+                ];
                 return;
             }
 
@@ -502,6 +518,7 @@ class MistralProvider implements LLMProviderInterface {
         // Per-output-index accumulators for streamed connector tool calls.
         /** @var array<int, array{id: string, name: string, arguments: string}> $toolAcc */
         $toolAcc = [];
+        $sawDone = false;
 
         try {
             $stream = $this->openConversationStream($body, $apiKey);
@@ -520,6 +537,7 @@ class MistralProvider implements LLMProviderInterface {
                     }
                     $payload = trim(substr($line, 5));
                     if ($payload === '[DONE]') {
+                        $sawDone = true;
                         break 2;
                     }
                     $event = json_decode($payload, true);
@@ -588,6 +606,15 @@ class MistralProvider implements LLMProviderInterface {
         } catch (\Throwable $e) {
             $this->logger->error('AIquila Mistral: chatWithNativeMcp stream failed', ['error' => $e->getMessage()]);
             yield ['type' => 'error', 'error' => $this->errorMessage($e), 'usage' => $this->finalizeUsage($total)];
+            return;
+        }
+
+        if (!$sawDone) {
+            yield [
+                'type' => 'error',
+                'error' => 'The connection to Mistral dropped before the reply was complete.',
+                'usage' => $this->finalizeUsage($total),
+            ];
             return;
         }
 
@@ -745,9 +772,10 @@ class MistralProvider implements LLMProviderInterface {
             'body' => json_encode($body),
             'stream' => true,
             'timeout' => self::STREAM_TIMEOUT,
-        ]);
+        ] + $this->sseTransportOptions());
         $stream = $response->getBody();
         if (!is_string($stream) && is_resource($stream)) {
+            $this->tuneSseStream($stream);
             return $stream;
         }
 
@@ -885,9 +913,10 @@ class MistralProvider implements LLMProviderInterface {
             'body' => json_encode($body),
             'stream' => true,
             'timeout' => self::STREAM_TIMEOUT,
-        ]);
+        ] + $this->sseTransportOptions());
         $stream = $response->getBody();
         if (!is_string($stream) && is_resource($stream)) {
+            $this->tuneSseStream($stream);
             return $stream;
         }
 

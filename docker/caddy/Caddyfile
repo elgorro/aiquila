@@ -10,6 +10,11 @@ https://localhost {
 		header_up X-Real-IP {remote_host}
 		header_up X-Forwarded-For {remote_host}
 		header_up X-Forwarded-Proto https
+
+		# Never buffer a response. Caddy already streams text/event-stream by
+		# content type, but AIquila's chat stream depends on it, so it is
+		# pinned rather than inherited from the default heuristics.
+		flush_interval -1
 	}
 }
 

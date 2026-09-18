@@ -69,6 +69,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[Native MCP connector](dev/native-mcp-connector.md)** — letting Anthropic connect to MCP servers directly instead of looping in PHP
 - **[Managed Agents](dev/managed-agents.md)** — why the agentic loop stays in PHP, and what would change that
 - **[Request metadata](dev/request-metadata.md)** — the hashed `metadata.user_id` sent to Anthropic, and how to resolve it
+- **[Streaming responses](dev/streaming.md)** — how chat replies reach the browser as they are written, and what buffers them
 - **[Prompt caching](dev/prompt-caching.md)** — where cache breakpoints are placed, and how to read the cache-hit numbers
 - **[Batch processing](dev/batch-processing.md)** — the Message Batches transport, the bulk cowork tasks, and the extended-output switch
 - **[OpenAPI](dev/openapi.md)** — OpenAPI documentation
@@ -140,6 +141,7 @@ docs/
 │   ├── native-mcp-connector.md      # Anthropic-side MCP tool execution
 │   ├── managed-agents.md            # Hosted agent loop: evaluation and position
 │   ├── request-metadata.md          # Hashed metadata.user_id
+│   ├── streaming.md                 # Server-Sent Events path and buffering
 │   ├── prompt-caching.md            # Cache breakpoint placement
 │   ├── batch-processing.md          # Message Batches & bulk cowork tasks
 │   └── openapi.md                   # OpenAPI documentation
