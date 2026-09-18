@@ -6641,6 +6641,10 @@
             "description": "Page Controller for AIquila main interface"
         },
         {
+            "name": "stream_probe",
+            "description": "A miniature Server-Sent Events endpoint whose only job is to be measured. The chat stream cannot double as a diagnostic: it needs a configured provider, a conversation and an LLM round trip, and it bills the account. This one emits a few empty ticks a fixed interval apart, so the StreamingNotBuffered setup check can tell whether something between PHP and the client is holding the response back — the failure that turns streaming chat into a long wait followed by the whole reply at once. It is a public page because the setup check requests it over the loopback without a session. It reveals nothing: the payload is a tick index and a server timestamp."
+        },
+        {
             "name": "provider_settings",
             "description": "Schema-driven read/write of provider configuration for the settings pages. Both the admin and the personal page render whatever LLMProviderInterface::getSettingsSchema() describes, so this controller never names a provider or a config key — adding a provider requires no change here. The admin/user split is enforced twice over: the admin routes carry no #[NoAdminRequired] (so Nextcloud requires an admin), and ProviderSettingsService::writeUser() additionally drops any field whose scope is not user-writable. That second check is what keeps endpoint URLs — which decide where the server sends outbound requests — out of reach of the personal page even if a route were ever mis-annotated. Provider *access* is enforced on top of that: index() only describes providers the current user is permitted to use, and update() refuses one they are not, so the personal page can neither see nor select a provider an admin blocked."
         },

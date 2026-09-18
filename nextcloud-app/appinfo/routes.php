@@ -11,6 +11,8 @@ return [
         ['name' => 'conversation#destroy', 'url' => '/api/conversations/{id}',          'verb' => 'DELETE'],
         ['name' => 'conversation#message',   'url' => '/api/conversations/{id}/messages',  'verb' => 'POST'],
         ['name' => 'conversation#messageStream', 'url' => '/api/conversations/{id}/messages/stream', 'verb' => 'POST'],
+        // Diagnostic SSE endpoint measured by the StreamingNotBuffered setup check.
+        ['name' => 'streamProbe#probe', 'url' => '/api/stream-probe', 'verb' => 'GET'],
         ['name' => 'conversation#setModel',  'url' => '/api/conversations/{id}/model',      'verb' => 'PUT'],
         ['name' => 'conversation#duplicate', 'url' => '/api/conversations/{id}/duplicate', 'verb' => 'POST'],
         ['name' => 'conversation#search',    'url' => '/api/conversations/search',         'verb' => 'GET'],
