@@ -835,23 +835,37 @@ class ConversationController extends Controller {
                 $options,
             );
 
-        foreach ($eventStream as $event) {
-            switch ($event['type'] ?? null) {
-                case 'text_delta':
-                    $accumulatedText .= $event['text'] ?? '';
-                    break;
-                case 'done':
-                    $finalCitations = $event['citations'] ?? [];
-                    $finalUsage = $event['usage'] ?? $finalUsage;
-                    break;
-                case 'error':
-                    $errorMessage = $event['error'] ?? 'Stream error';
-                    if (isset($event['usage']) && is_array($event['usage'])) {
-                        $finalUsage = $event['usage'];
-                    }
-                    break;
+        // A provider reports a failed turn as an `error` event, but it can also
+        // throw outright — a transport error mid-generation, a malformed
+        // upstream frame. Both have to end the same way: whatever streamed so
+        // far is persisted below and the client still gets `error` followed by
+        // `persisted`, rather than a stream that simply stops.
+        try {
+            foreach ($eventStream as $event) {
+                switch ($event['type'] ?? null) {
+                    case 'text_delta':
+                        $accumulatedText .= $event['text'] ?? '';
+                        break;
+                    case 'done':
+                        $finalCitations = $event['citations'] ?? [];
+                        $finalUsage = $event['usage'] ?? $finalUsage;
+                        break;
+                    case 'error':
+                        $errorMessage = $event['error'] ?? 'Stream error';
+                        if (isset($event['usage']) && is_array($event['usage'])) {
+                            $finalUsage = $event['usage'];
+                        }
+                        break;
+                }
+                yield $event;
             }
-            yield $event;
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila: conversation stream failed', [
+                'conversationId' => $id,
+                'exception' => $e,
+            ]);
+            $errorMessage = $e->getMessage() !== '' ? $e->getMessage() : $e::class;
+            yield ['type' => 'error', 'error' => $errorMessage];
         }
 
         $latencyMs = (int)(microtime(true) * 1000.0) - $startMs;
