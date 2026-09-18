@@ -25,7 +25,7 @@
 
 		<label class="field">
 			<span>{{ t('aiquila', 'Input folder') }}</span>
-			<input v-model="form.input_path" type="text" placeholder="/Photos">
+			<input v-model="form.input_path" type="text" :placeholder="defaultInputPath">
 		</label>
 
 		<label class="field">
@@ -34,9 +34,28 @@
 			<small>{{ t('aiquila', 'min hour day-of-month month day-of-week. Example: 0 3 * * * = nightly at 03:00.') }}</small>
 		</label>
 
-		<label class="field">
+		<label v-if="isVision" class="field">
 			<span>{{ t('aiquila', 'Max tags per image') }}</span>
 			<input v-model.number="form.maxTags" type="number" min="1" max="30">
+		</label>
+
+		<label v-if="isDocs" class="field">
+			<span>{{ t('aiquila', 'Output folder') }}</span>
+			<input v-model="form.output_path" type="text" :placeholder="t('aiquila', 'Leave empty to write beside each document')">
+		</label>
+
+		<label v-if="isTranslate" class="field">
+			<span>{{ t('aiquila', 'Translate into') }}</span>
+			<input v-model="form.targetLanguage" type="text" :placeholder="t('aiquila', 'German')">
+		</label>
+
+		<label v-if="isSummarize" class="field">
+			<span>{{ t('aiquila', 'Summary style') }}</span>
+			<select v-model="form.style">
+				<option value="brief">{{ t('aiquila', 'Brief') }}</option>
+				<option value="detailed">{{ t('aiquila', 'Detailed') }}</option>
+				<option value="bullets">{{ t('aiquila', 'Bullet points') }}</option>
+			</select>
 		</label>
 
 		<label class="field checkbox">
@@ -82,28 +101,65 @@ export default {
 				title: m.title || '',
 				task_type: m.taskType || (this.taskTypes[0] && this.taskTypes[0].id) || 'vision:classify',
 				provider: m.provider || 'anthropic',
-				input_path: m.inputPath || '/Photos',
+				input_path: m.inputPath || '',
+				output_path: m.outputPath || '',
 				cron_schedule: m.cronSchedule || '0 3 * * *',
 				maxTags: options.maxTags || 8,
+				targetLanguage: options.targetLanguage || '',
+				style: options.style || 'brief',
 				recursive: options.recursive !== false,
 				is_active: m.isActive !== undefined ? !!m.isActive : true,
 			},
 		}
 	},
+	computed: {
+		// The form serves two task families with different shapes; the task
+		// picker decides which fields mean anything.
+		isVision() {
+			return this.form.task_type.startsWith('vision:')
+		},
+		isDocs() {
+			return this.form.task_type.startsWith('docs:')
+		},
+		isSummarize() {
+			return this.form.task_type === 'docs:summarize'
+		},
+		isTranslate() {
+			return this.form.task_type === 'docs:translate'
+		},
+		defaultInputPath() {
+			return this.isDocs ? '/Documents' : '/Photos'
+		},
+	},
 	methods: { t,
 		async save() {
 			this.saving = true
 			this.error = ''
+			const options = { recursive: this.form.recursive }
+			if (this.isVision) {
+				options.maxTags = this.form.maxTags
+			}
+			if (this.isSummarize) {
+				options.style = this.form.style
+			}
+			if (this.isTranslate) {
+				options.targetLanguage = this.form.targetLanguage
+			}
+
 			const payload = {
 				title: this.form.title,
 				task_type: this.form.task_type,
 				provider: this.form.provider,
 				input_type: 'folder',
-				input_path: this.form.input_path,
-				output_type: 'system_tags',
+				input_path: this.form.input_path || this.defaultInputPath,
+				// Vision tasks write tags; docs tasks write files beside the source.
+				output_type: this.isDocs ? 'files' : 'system_tags',
 				cron_schedule: this.form.cron_schedule,
 				is_active: this.form.is_active,
-				options: { maxTags: this.form.maxTags, recursive: this.form.recursive },
+				options,
+			}
+			if (this.isDocs && this.form.output_path) {
+				payload.output_path = this.form.output_path
 			}
 			try {
 				const res = this.model && this.model.id
