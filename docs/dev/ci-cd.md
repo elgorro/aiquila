@@ -156,6 +156,14 @@ gh workflow run manual-code-review.yml -f pr=504
 
 AIquila uses automated release workflows that trigger when you bump the version number and push to `main`.
 
+> **Never push a tag with `git push` from a release job.** `GITHUB_TOKEN` is a GitHub App
+> token without the `workflows` scope, and the `permissions:` block cannot grant that scope.
+> Git then refuses any ref push whose tree differs from the default branch under
+> `.github/workflows/` — so a second PR touching a workflow, merging in the seconds between
+> a release commit and its tag push, kills the release. All three workflows let
+> `softprops/action-gh-release` create the tag through the Releases API instead, pinned to
+> the right commit with `target_commitish: ${{ github.sha }}`.
+
 ### MCP Server Release (`mcp-release.yml`)
 
 **Triggers:** Automatically when version changes in `mcp-server/package.json` on push to `main`
