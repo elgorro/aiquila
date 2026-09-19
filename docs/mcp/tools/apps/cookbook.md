@@ -13,7 +13,7 @@ The Cookbook tool creates recipe files in markdown format that are compatible wi
 
 ## Available Tools
 
-### add_recipe
+### create_recipe
 
 Add a recipe to your Nextcloud Cookbook.
 

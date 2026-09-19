@@ -19,7 +19,9 @@ The Model Context Protocol (MCP) is an open standard developed by Anthropic that
 ### System Tools
 Core system operations via WebDAV and OCC:
 - **File Operations** (WebDAV) — List, read, write, move, copy, search, and delete files and folders
+- **Bulk & Archives** — Multi-file operations, and creating, listing and extracting archives
 - **File Analysis** — Read binary files (images, PDFs) and analyze images with Claude vision
+- **Trash & Versions** — Restore deleted files, browse and roll back to earlier file versions
 - **System Status** (OCC) — Monitor system status, local time, and run configuration checks
 - **App Management** (OCC) — List, enable, disable, install, and uninstall Nextcloud apps
 - **Security** (OCC) — Verify system and app integrity
@@ -31,7 +33,16 @@ Nextcloud apps and administration:
 - **Calendar** — Full CRUD for events with recurrence, attendees, and alarms (CalDAV)
 - **Tasks** — Full CRUD for tasks with subtasks, priorities, and categories (CalDAV)
 - **Contacts** — Full CRUD for contacts with structured fields (CardDAV)
-- **Mail** — Email accounts, mailboxes, messages, send, and flags
+- **Mail** — Email accounts, mailboxes, messages, send, flags, and attachments
+- **Talk** — Conversations, messages, participants, polls, and reactions
+- **Deck** — Boards, stacks, cards, labels, and assignments
+- **Photos** — Albums, collaborators, favourites, and photo metadata
+- **Circles** — Team circles and their membership
+- **Projects** — Group related files and entities into Nextcloud projects
+- **Coworkers** — Create, run, pause and inspect the AIquila Coworkers (saved AI jobs) and their run history
+- **Text** — Read, write and delete a folder's Text workspace (`Readme.md`), or get a direct-edit URL
+- **Notifications** — Read, mark and dismiss Nextcloud notifications
+- **User Status & Out of Office** — Set status, status message, and absence periods
 - **Bookmarks** — Bookmark CRUD, folder hierarchy, and tag management
 - **Maps** — Favorites, category/device sharing, GPS devices/tracks, photo geotagging, contacts, custom maps, import/export
 - **Notes** — Markdown notes with categories and search
@@ -44,15 +55,19 @@ Nextcloud apps and administration:
 - **Users** — Manage user accounts
 - **Groups** — Manage groups and memberships
 - **File Tags** — Personal and system tag management
-- **AIquila** — Configure and test Claude integration
+- **Announcements, Registration & Terms of Service** — Instance-wide notices, self-service signup settings, and ToS documents
+- **Passman** — List vaults and credential metadata (never secret values)
+- **Translate & Social Sharing** — Translate text, and generate social-network share URLs for a file
+- **Recommendations** — The files Nextcloud suggests for the current user
+- **AIquila** — Configure and test the AI provider integration
 
-**Total: 311 tools across 43 categories**
+**Total: 316 tools across 43 categories**
 
 ## Tools Reference
 
 ### System Tools
 
-#### File Operations (11 tools)
+#### File Operations (15 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_files` | List files and folders | [System Tools](tools/system-tools.md#list_files) |
@@ -66,6 +81,10 @@ Nextcloud apps and administration:
 | `get_file_info` | Get file metadata | [System Tools](tools/system-tools.md) |
 | `search_files` | Search files by name/mime type | [System Tools](tools/system-tools.md) |
 | `analyze_image` | Analyze image with Claude vision | [System Tools](tools/system-tools.md) |
+| `bulk_file_operations` | Execute multiple file operations (move, copy, delete) sequentially in a single call | [System Tools](tools/system-tools.md) |
+| `create_archive` | Create a zip archive in Nextcloud from one or more files and/or folders | [System Tools](tools/system-tools.md) |
+| `extract_archive` | Extract a zip archive in Nextcloud into a destination folder | [System Tools](tools/system-tools.md) |
+| `list_archive` | List the contents of a zip archive in Nextcloud without extracting it | [System Tools](tools/system-tools.md) |
 
 #### System Status & Diagnostics (3 tools)
 | Tool | Description | Documentation |
@@ -133,17 +152,19 @@ Nextcloud apps and administration:
 | `update_contact` | Update a contact | [Contacts](tools/apps/contacts.md#update_contact) |
 | `delete_contact` | Delete a contact | [Contacts](tools/apps/contacts.md#delete_contact) |
 
-#### Mail (8 tools)
+#### Mail (10 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `list_mail_accounts` | List email accounts | [Mail](tools/apps/mail.md#list_mail_accounts) |
-| `list_mailboxes` | List mailboxes/folders | [Mail](tools/apps/mail.md#list_mailboxes) |
-| `list_messages` | List messages in a mailbox | [Mail](tools/apps/mail.md#list_messages) |
-| `read_message` | Read full message content | [Mail](tools/apps/mail.md#read_message) |
-| `send_message` | Send an email | [Mail](tools/apps/mail.md#send_message) |
-| `delete_message` | Delete a message | [Mail](tools/apps/mail.md#delete_message) |
-| `move_message` | Move message to another mailbox | [Mail](tools/apps/mail.md#move_message) |
-| `set_message_flags` | Set read/star/junk flags | [Mail](tools/apps/mail.md#set_message_flags) |
+| `list_mail_accounts` | List all configured email accounts in Nextcloud Mail | [Mail](tools/apps/mail.md#list_mail_accounts) |
+| `list_mailboxes` | List all mailboxes (folders) for a Nextcloud Mail account | [Mail](tools/apps/mail.md#list_mailboxes) |
+| `mail_list_messages` | List email messages in a Nextcloud Mail mailbox | [Mail](tools/apps/mail.md) |
+| `mail_read_message` | Read the full content of an email message by ID | [Mail](tools/apps/mail.md) |
+| `mail_get_attachment` | Download an email attachment by message ID and attachment ID | [Mail](tools/apps/mail.md#mail_get_attachment) |
+| `mail_search_messages` | Search email messages across all mailboxes by subject or sender | [Mail](tools/apps/mail.md) |
+| `mail_send_message` | Send an email message through Nextcloud Mail | [Mail](tools/apps/mail.md) |
+| `mail_delete_message` | Delete an email message by ID | [Mail](tools/apps/mail.md) |
+| `mail_move_message` | Move an email message to a different mailbox/folder | [Mail](tools/apps/mail.md) |
+| `mail_set_message_flags` | Set flags on an email message (mark as read/unread, star/unstar, mark as important or… | [Mail](tools/apps/mail.md) |
 
 #### Bookmarks (13 tools)
 | Tool | Description | Documentation |
@@ -314,13 +335,19 @@ Nextcloud apps and administration:
 | `get_task_result` | Get AI task status/result | [Assistant](tools/apps/assistant.md#get_task_result) |
 | `generate_image` | Generate image from prompt | [Assistant](tools/apps/assistant.md#generate_image) |
 
-#### Shares (4 tools)
+#### Shares (10 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `list_shares` | List file shares | [Shares](tools/apps/shares.md#list_shares) |
-| `create_share` | Create a share | [Shares](tools/apps/shares.md#create_share) |
-| `update_share` | Update a share | [Shares](tools/apps/shares.md#update_share) |
-| `delete_share` | Delete a share | [Shares](tools/apps/shares.md#delete_share) |
+| `list_shares` | List file shares in Nextcloud (for diagnostics and security auditing) | [Shares](tools/apps/shares.md#list_shares) |
+| `create_share` | Create a file or folder share in Nextcloud | [Shares](tools/apps/shares.md) |
+| `update_share` | Update an existing share in Nextcloud | [Shares](tools/apps/shares.md) |
+| `delete_share` | Delete a share in Nextcloud | [Shares](tools/apps/shares.md) |
+| `get_share` | Get detailed information about a specific share by its ID | [Shares](tools/apps/shares.md) |
+| `list_shares_with_me` | List all files and folders shared with the current user | [Shares](tools/apps/shares.md) |
+| `search_sharees` | Search for valid share recipients (users, groups, emails, federated users, circles… | [Shares](tools/apps/shares.md) |
+| `list_pending_shares` | List pending federated/remote shares waiting to be accepted or declined | [Shares](tools/apps/shares.md) |
+| `accept_pending_share` | Accept a pending federated/remote share | [Shares](tools/apps/shares.md) |
+| `decline_pending_share` | Decline a pending federated/remote share | [Shares](tools/apps/shares.md) |
 
 #### Users (4 tools)
 | Tool | Description | Documentation |
@@ -338,7 +365,7 @@ Nextcloud apps and administration:
 | `add_user_to_group` | Add user to group | [Groups](tools/apps/groups.md#add_user_to_group) |
 | `remove_user_from_group` | Remove user from group | [Groups](tools/apps/groups.md#remove_user_from_group) |
 
-#### File Tags (4 tools)
+#### File Tags (6 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `get_file_tags` | Get tags on a file | [System Tools](tools/system-tools.md) |
@@ -354,6 +381,180 @@ Nextcloud apps and administration:
 | `aiquila_show_config` | Show configuration | [AIquila](tools/apps/aiquila.md#aiquila_show_config) |
 | `aiquila_configure` | Configure settings | [AIquila](tools/apps/aiquila.md#aiquila_configure) |
 | `aiquila_test` | Test Claude API | [AIquila](tools/apps/aiquila.md#aiquila_test) |
+#### Talk (10 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `talk_list_conversations` | List all Talk conversations the user has access to | — |
+| `talk_list_messages` | List recent messages in a Talk conversation | — |
+| `talk_send_message` | Send a message to a Talk conversation | — |
+| `talk_create_conversation` | Create a new Talk conversation | — |
+| `talk_list_participants` | List all participants in a Talk conversation with their roles | — |
+| `talk_add_participant` | Add a user, group, or email participant to a Talk conversation | — |
+| `talk_remove_participant` | Remove a participant from a Talk conversation by their attendee ID (from… | — |
+| `talk_delete_message` | Delete a message from a Talk conversation | — |
+| `talk_create_poll` | Create a poll in a Talk conversation | — |
+| `talk_react_to_message` | Add an emoji reaction to a message in a Talk conversation | — |
+
+#### Deck (12 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `deck_list_boards` | List all Deck boards | — |
+| `deck_get_board` | Get details of a Deck board including its labels and access control list (ACL) | — |
+| `deck_create_board` | Create a new Deck board | — |
+| `deck_list_stacks` | List all stacks (columns) of a Deck board, including the cards in each stack | — |
+| `deck_create_stack` | Create a new stack (column) on a Deck board | — |
+| `deck_get_card` | Get full details of a Deck card including description, labels, and assigned users | — |
+| `deck_create_card` | Create a new card in a Deck stack | — |
+| `deck_update_card` | Update an existing Deck card | — |
+| `deck_move_card` | Move a card to a different stack (column) on the same board | — |
+| `deck_archive_card` | Archive or unarchive a Deck card | — |
+| `deck_assign_label` | Assign a label to a Deck card | — |
+| `deck_assign_user` | Assign a user to a Deck card | — |
+
+#### Photos (11 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `photos_list_albums` | List all photo albums owned by the current user | — |
+| `photos_get_album` | Get details of a photo album including its files | — |
+| `photos_create_album` | Create a new photo album | — |
+| `photos_delete_album` | Delete a photo album | — |
+| `photos_rename_album` | Rename a photo album | — |
+| `photos_add_to_album` | Add one or more files to a photo album | — |
+| `photos_remove_from_album` | Remove one or more files from a photo album by file ID (use photos_get_album to find… | — |
+| `photos_get_metadata` | Get photo/video metadata (EXIF) for a file | — |
+| `photos_set_favorite` | Mark or unmark a file as favorite | — |
+| `photos_set_album_location` | Set or update the location metadata on a photo album | — |
+| `photos_add_collaborators` | Add collaborators (users or groups) to a photo album | — |
+
+#### Circles (8 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `circles_list` | List all circles/teams accessible to the current user | — |
+| `circles_get` | Get detailed information about a specific circle/team, including its description… | — |
+| `circles_create` | Create a new circle/team | — |
+| `circles_delete` | Delete a circle/team | — |
+| `circles_list_members` | List all members of a circle/team | — |
+| `circles_add_member` | Add a member to a circle/team | — |
+| `circles_remove_member` | Remove a member from a circle/team | — |
+| `circles_search` | Search for circles/teams by name | — |
+
+#### Projects (7 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_projects` | List all AIquila projects for the current user | — |
+| `create_project` | Create a new AIquila project | — |
+| `get_project` | Get details of an AIquila project including its file/directory paths | — |
+| `update_project` | Update an AIquila project | — |
+| `delete_project` | Delete an AIquila project | — |
+| `add_project_path` | Add a file or directory path to an AIquila project | — |
+| `remove_project_path` | Remove a file or directory path from an AIquila project | — |
+
+#### Coworkers (12 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_coworkers` | List the current user's coworkers (persistent scheduled AI tasks) with their status… | — |
+| `list_coworker_templates` | List built-in coworker templates (e.g | — |
+| `get_coworker` | Get a single coworker by ID, including its schedule and last run status | — |
+| `create_coworker` | Create a coworker | — |
+| `update_coworker` | Update a coworker's configuration (title, provider, input folder, schedule, options) | — |
+| `delete_coworker` | Delete a coworker and its run history | — |
+| `enable_coworker` | Enable a coworker so it runs on its schedule | — |
+| `disable_coworker` | Disable a coworker so it stops running on its schedule | — |
+| `pause_coworker` | Temporarily pause a coworker without disabling it | — |
+| `resume_coworker` | Resume a paused coworker | — |
+| `run_coworker` | Run a coworker immediately (synchronously) and return the run result | — |
+| `get_coworker_runs` | Get recent run history (progress, status, summary) for a coworker | — |
+
+#### Text (5 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `get_text_workspace` | Get metadata of the Text workspace file (Readme.md) for a folder | — |
+| `read_text_workspace` | Read the content of a folder's Text workspace file (Readme.md) | — |
+| `write_text_workspace` | Create or overwrite a folder's Text workspace file | — |
+| `delete_text_workspace` | Delete the Text workspace file (Readme.md) for a folder | — |
+| `get_text_workspace_edit_url` | Get a one-shot direct-edit URL for a folder's Text workspace | — |
+
+#### Trash (3 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_trash` | List files in the trash / recycle bin | — |
+| `restore_from_trash` | Restore a file from the trash to its original location (use the Key from list_trash) | — |
+| `empty_trash` | Permanently delete all files in the trash (cannot be undone) | — |
+
+#### File Versions (2 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_file_versions` | List previous versions of a file (use get_file_info to find the fileId) | — |
+| `restore_file_version` | Restore a previous version of a file (creates a new current version from the old one) | — |
+
+#### Notifications (4 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_notifications` | List all notifications for the current user | — |
+| `get_notification` | Get details of a specific notification by ID | — |
+| `mark_notification_read` | Mark a notification as read (deletes it) | — |
+| `delete_all_notifications` | Delete all notifications for the current user | — |
+
+#### User Status (5 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `get_user_status` | Get the current user's presence status (online, away, DND, invisible, custom message) | — |
+| `set_user_status` | Set the current user's status type (online, away, dnd, invisible, offline) | — |
+| `set_user_status_message` | Set a custom status message with optional emoji icon and auto-clear time | — |
+| `clear_user_status_message` | Clear the current user's custom status message | — |
+| `list_user_statuses` | List all users' statuses for team presence visibility | — |
+
+#### Out of Office (3 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `get_out_of_office` | Get a user's current out-of-office / absence status (NC 28+) | — |
+| `set_out_of_office` | Set an out-of-office / absence period with status message (NC 28+) | — |
+| `clear_out_of_office` | Clear a user's out-of-office / absence status (NC 28+) | — |
+
+#### Announcements (3 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_announcements` | List announcements from the Nextcloud Announcement Center (org-wide notices such as | — |
+| `create_announcement` | Create a new announcement in the Announcement Center | — |
+| `delete_announcement` | Delete an announcement by its ID | — |
+
+#### Passman (3 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `passman_list_vaults` | List all Passman password vaults | — |
+| `passman_list_credentials` | List credentials (metadata only) in a Passman vault | — |
+| `passman_get_credential_info` | Get non-secret metadata for a single Passman credential (label, id, timestamps, flags) | — |
+
+#### Registration (3 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `get_registration_settings` | Read the Nextcloud Registration app settings (self-service signup configuration), such… | — |
+| `update_registration_settings` | Update one or more Nextcloud Registration app settings | — |
+| `reset_registration_setting` | Reset a Nextcloud Registration app setting to its default by deleting the stored value | — |
+
+#### Social Sharing (1 tool)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `generate_social_share_links` | Generate social-network share URLs (email, X/Twitter, Facebook, Telegram, WhatsApp, | — |
+
+#### Terms of Service (5 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `get_terms_of_service` | Read the Nextcloud Terms of Service admin configuration: all published terms (by | — |
+| `set_terms_of_service` | Create or update the terms of service for a given country/language pair | — |
+| `delete_terms_of_service` | Delete a single terms of service entry by its id (see get_terms_of_service) | — |
+| `reset_terms_signatures` | Reset ALL users' terms of service signatures org-wide, forcing every user to accept | — |
+| `update_terms_settings` | Update the Terms of Service enforcement settings: whether logged-in users must accept | — |
+
+#### Translate (1 tool)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `translate_text` | Translate text between languages using Nextcloud's configured translation provider | — |
+
+#### Recommendations (1 tool)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_recommendations` | List files Nextcloud recommends for the configured user (e.g | — |
 
 ## Architecture
 

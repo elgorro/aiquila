@@ -199,7 +199,7 @@ Each app has its own module following the same pattern as system tools.
 - `create_task` - CalDAV PUT with VTODO
 
 #### Cookbook (cookbook.ts)
-- `add_recipe` - Create markdown recipe files
+- `create_recipe` - Create markdown recipe files
 
 #### Notes (notes.ts)
 - `create_note` - Create markdown note files
