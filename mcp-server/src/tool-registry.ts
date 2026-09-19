@@ -49,6 +49,7 @@ import { formsTools } from './tools/apps/forms.js';
 import { textTools } from './tools/apps/text.js';
 import { recommendationsTools } from './tools/apps/recommendations.js';
 import { socialSharingTools } from './tools/apps/social-sharing.js';
+import { socialTools } from './tools/apps/social.js';
 import { passmanTools } from './tools/apps/passman.js';
 
 type ToolArray = Tool[];
@@ -121,6 +122,7 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
     tools: termsOfServiceTools,
   },
   { category: 'recommendations', appIds: ['recommendations'], tools: recommendationsTools },
+  { category: 'social', appIds: ['social'], tools: socialTools },
   {
     category: 'social_sharing',
     appIds: [

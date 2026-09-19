@@ -13,7 +13,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 
 ## MCP Server
 
-- **[MCP Overview & Tools Reference](mcp/README.md)** — 316 tools across 43 categories
+- **[MCP Overview & Tools Reference](mcp/README.md)** — 342 tools across 44 categories
 - **[Setup Guide](mcp/setup.md)** — installation and MCP client configuration
 - **[OAuth 2.0](mcp/oauth.md)** — OAuth authentication for remote MCP clients
 - **[Standalone Docker](mcp/standalone-docker.md)** — run MCP server in Docker (external Nextcloud)
@@ -32,6 +32,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 | Maps, GPS, tracks, photos, contacts | 40 | [Maps](mcp/tools/apps/maps.md) |
 | Notes | 5 | [Notes](mcp/tools/apps/notes.md) |
 | News (RSS feeds) | 17 | [News](mcp/tools/apps/news.md) |
+| Fediverse (Social) | 26 | [Social](mcp/tools/apps/social.md) |
 | Recipes | 6 | [Cookbook](mcp/tools/apps/cookbook.md) |
 | NC AI tasks & image gen | 4 | [Assistant](mcp/tools/apps/assistant.md) |
 | File shares | 4 | [Shares](mcp/tools/apps/shares.md) |

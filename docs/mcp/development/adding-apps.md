@@ -39,8 +39,11 @@ Add to existing module when:
 Create a new file: `mcp-server/src/tools/apps/your-app.ts`
 
 ```typescript
+// SPDX-License-Identifier: MIT
+
 import { z } from 'zod';
 import { getWebDAVClient } from '../../client/webdav.js';
+import { handleAppError } from '../error-utils.js';
 // Import other clients as needed
 
 /**
@@ -51,18 +54,35 @@ import { getWebDAVClient } from '../../client/webdav.js';
 // Define your tools here
 export const tool1 = {
   name: 'app_tool1',
+  // A short Title Case label; required, and it must differ from `name`
+  title: 'Do The Thing',
+  // All four hints are required — see src/tools/types.ts. A read sets
+  // readOnlyHint and idempotentHint; anything reaching the public internet
+  // sets openWorldHint; anything that changes existing state sets
+  // destructiveHint. Never set readOnlyHint and destructiveHint together.
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   description: 'Description of tool 1',
   inputSchema: z.object({
     param: z.string().describe('Parameter description'),
   }),
   handler: async (args: { param: string }) => {
-    // Tool implementation
-    return {
-      content: [{
-        type: 'text',
-        text: 'Result',
-      }],
-    };
+    try {
+      // Tool implementation
+      return {
+        content: [{ type: 'text' as const, text: 'Result' }],
+      };
+    } catch (error) {
+      // Maps an ApiError status to a friendly message; falls back to the
+      // context string
+      return handleAppError(error, 'Error doing the thing', {
+        404: 'No such thing.',
+      });
+    }
   },
 };
 
@@ -76,28 +96,34 @@ export const tool2 = {
 export const yourAppTools = [tool1, tool2];
 ```
 
-### 3. Register the App in Main Server
+Return Markdown-ish plain text, not raw JSON — see any module in
+`mcp-server/src/tools/apps/` for the house formatting.
 
-**Edit** `mcp-server/src/index.ts`:
+### 3. Register the App in the Tool Registry
+
+**Edit** `mcp-server/src/tool-registry.ts`. `TOOL_REGISTRY` is the single source of
+truth: `createServer()` in `src/server.ts` walks it and registers every tool. There is
+nothing to edit in `src/index.ts`, which only dispatches the transport.
 
 ```typescript
 // Add import at top
 import { yourAppTools } from './tools/apps/your-app.js';
 
-// Add registration in registerTools()
-function registerTools() {
-  // ... existing registrations
-
-  // Register Your App tools
-  yourAppTools.forEach((tool) => {
-    // @ts-expect-error - TS2589: Type instantiation depth limit in MCP SDK
-    server.registerTool(tool.name, {
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-    }, tool.handler);
-  });
-}
+// Add an entry to TOOL_REGISTRY
+export const TOOL_REGISTRY: ToolSetEntry[] = [
+  // ... existing entries
+  { category: 'your_app', appIds: ['your_app'], tools: yourAppTools },
+];
 ```
+
+- `category` is a snake_case name users can pass in `MCP_TOOLS`.
+- `appIds` are the real Nextcloud app ids (they need not match the category — `talk`
+  maps to `['spreed']`). The category registers when **any** of them is enabled, and
+  `appIds: null` means always.
+- `tool-registry.test.ts` enforces the invariants across every module: unique category
+  and tool names, a tool name of at most 64 characters, a non-empty `title` that differs
+  from `name`, never both `readOnlyHint` and `destructiveHint`, and `idempotentHint` on
+  every read-only tool.
 
 ### 4. Create Documentation
 
@@ -271,23 +297,15 @@ export const createCardTool = {
 export const deckTools = [listBoardsTool, createCardTool];
 ```
 
-### Step 2: Register in index.ts
+### Step 2: Register in tool-registry.ts
 
 ```typescript
 import { deckTools } from './tools/apps/deck.js';
 
-function registerTools() {
-  // ... existing registrations
-
-  // Register Deck tools
-  deckTools.forEach((tool) => {
-    // @ts-expect-error - TS2589
-    server.registerTool(tool.name, {
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-    }, tool.handler);
-  });
-}
+export const TOOL_REGISTRY: ToolSetEntry[] = [
+  // ... existing entries
+  { category: 'deck', appIds: ['deck'], tools: deckTools },
+];
 ```
 
 ### Step 3: Create Documentation
