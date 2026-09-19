@@ -18,6 +18,7 @@ import { loginHandler } from '../auth/login.js';
 import { LOGIN_STYLESHEET, LOGIN_STYLESHEET_PATH } from '../auth/login-page-css.js';
 import { isPublicRequest } from './lazy-auth.js';
 import { logger } from '../logger.js';
+import { SUPPORT_NOTICE } from '../support.js';
 import { fetchStatus } from '../client/ocs.js';
 
 const DEFAULT_PORT = 3339;
@@ -484,6 +485,7 @@ export async function startHttp(): Promise<void> {
       logger.info('Internal bearer token configured (MCP_INTERNAL_TOKEN)');
     }
     logger.info('View logs: docker compose logs -f   or   make logs-follow');
+    logger.info(SUPPORT_NOTICE);
     void (async () => {
       // Advisory TLS check — logs a warning if the cert is self-signed or untrusted,
       // but never crashes the server or delays startup.

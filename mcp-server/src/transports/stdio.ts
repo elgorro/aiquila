@@ -4,12 +4,14 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createServer } from '../server.js';
 import { logger } from '../logger.js';
 import { fetchStatus } from '../client/ocs.js';
+import { SUPPORT_NOTICE } from '../support.js';
 
 export async function startStdio(): Promise<void> {
   const server = await createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   logger.info('AIquila MCP server running (stdio transport)');
+  logger.info(SUPPORT_NOTICE);
   void (async () => {
     try {
       const t0 = Date.now();
