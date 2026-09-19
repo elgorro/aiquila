@@ -1,17 +1,44 @@
-# GitHub Labels Configuration
+# GitHub label registry — the source of truth for this repo's labels.
 # Apply with: gh label import .github/labels.yml
+#
+# Three axes: type:* (exactly one per issue), component:* (one or more),
+# priority:* (exactly one). See CONTRIBUTING.md for what they mean.
+#
+# Regenerate from the live set after changing labels via the API:
+#   gh label list --limit 100 --json name,color,description \
+#     --jq '.[] | "- name: \(.name)\n  color: \(.color)\n  description: \(.description)\n"'
 
-- name: bug
-  color: d73a4a
-  description: Something isn't working
+- name: component:infrastructure
+  color: 5319e7
+  description: Docker, Hetzner CLI, CI
 
-- name: enhancement
-  color: a2eeef
-  description: New feature or request
+- name: component:mcp
+  color: 1d76db
+  description: MCP server (mcp-server/)
 
-- name: documentation
-  color: 0075ca
-  description: Improvements or additions to documentation
+- name: component:nextcloud
+  color: 006b75
+  description: Nextcloud app (nextcloud-app/)
+
+- name: dependencies
+  color: 0366d6
+  description: Pull requests that update a dependency file
+
+- name: docker
+  color: 21ceff
+  description: Pull requests that update docker code
+
+- name: duplicate
+  color: cfd3d7
+  description: This issue or pull request already exists
+
+- name: github_actions
+  color: 000000
+  description: Pull requests that update GitHub Actions code
+
+- name: go
+  color: 16e2e2
+  description: Pull requests that update go code
 
 - name: good first issue
   color: 7057ff
@@ -21,26 +48,55 @@
   color: 008672
   description: Extra attention is needed
 
-- name: mcp-server
-  color: 1d76db
-  description: MCP Server component
+- name: invalid
+  color: e4e669
+  description: This doesn't seem right
 
-- name: nextcloud-app
-  color: 5319e7
-  description: Nextcloud App component
+- name: javascript
+  color: 168700
+  description: Pull requests that update javascript code
 
-- name: phase-2
+- name: priority:critical
+  color: b60205
+  description: Blocker — drop other work
+
+- name: priority:high
+  color: d93f0b
+  description: Next up — targeted at the current milestone
+
+- name: priority:low
+  color: 0e8a16
+  description: Nice to have — no committed timeline
+
+- name: priority:medium
   color: fbca04
-  description: Roadmap Phase 2
+  description: Normal — scheduled, not urgent
 
-- name: phase-3
-  color: f9d0c4
-  description: Roadmap Phase 3
+- name: question
+  color: d876e3
+  description: Approach still being decided, not yet implementation
 
-- name: phase-4
-  color: c5def5
-  description: Roadmap Phase 4
+- name: security
+  color: b60205
+  description: Security vulnerability or hardening
+
+- name: type:bug
+  color: d73a4a
+  description: Something isn't working
+
+- name: type:chore
+  color: ededed
+  description: Maintenance, tooling, dependencies, refactors
+
+- name: type:docs
+  color: 0075ca
+  description: Documentation improvements
+
+- name: type:feature
+  color: a2eeef
+  description: New feature or request
 
 - name: wontfix
   color: ffffff
   description: This will not be worked on
+

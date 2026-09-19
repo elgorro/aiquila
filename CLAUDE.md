@@ -266,17 +266,24 @@ GitHub's native **Issue Types** are an organization-only feature and `elgorro` i
 personal account (`gh api orgs/elgorro/issue-types` → 404), so labels are the
 mechanism here. Don't re-propose issue types without also proposing an org transfer.
 
-Every open issue carries a type and a priority; the templates in
-`.github/ISSUE_TEMPLATE/` apply both on creation. To find untyped or unprioritised
-issues after a bulk import:
+Every open issue carries a type and a priority. Each of the four templates in
+`.github/ISSUE_TEMPLATE/` applies one type plus a `priority:medium` baseline, so
+every creation path is covered. To find issues missing either axis after a bulk
+import or a manual creation:
 
 ```bash
 gh issue list --state open --limit 200 --json number,title,labels \
-  --jq '.[] | select([.labels[].name] | any(startswith("priority:")) | not) | "\(.number) \(.title)"'
+  --jq '.[] | select(([.labels[].name] | any(startswith("type:")) | not)
+               or ([.labels[].name] | any(startswith("priority:")) | not))
+        | "\(.number) \(.title)"'
 ```
 
 To rename a label, use `gh label edit <old> --name <new>` — it preserves every
 existing assignment. Creating a new label and deleting the old one loses them all.
+
+`.github/labels.yml` is the checked-in registry. No workflow syncs it, so after
+changing labels through the API, regenerate it (the command is in its header) and
+commit — otherwise `gh label import` will later restore a stale set.
 
 ### Assigning an issue to an external contributor
 

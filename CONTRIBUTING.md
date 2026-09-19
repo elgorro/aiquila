@@ -18,9 +18,10 @@ specific issue.
 
 ## Labels
 
-Issues are classified on three independent axes. The issue templates apply the
-first and the third for you, so opening an issue the normal way needs no label
-picking.
+Issues are classified on three independent axes. There is a template for each
+type — bug report, feature request, chore, documentation — and each one applies
+its type and a default priority for you, so opening an issue the normal way needs
+no label picking.
 
 | Axis | Labels | Who sets it |
 |------|--------|-------------|
