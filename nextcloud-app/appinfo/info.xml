@@ -69,7 +69,8 @@ Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Mode
     <bugs>https://github.com/elgorro/aiquila/issues</bugs>
     <repository>https://github.com/elgorro/aiquila</repository>
     <screenshot>https://raw.githubusercontent.com/elgorro/aiquila/main/nextcloud-app/img/Appstore.png</screenshot>
-    <donation>https://liberapay.com/elgorro/donate</donation>
+    <donation type="other" title="GitHub Sponsors">https://github.com/sponsors/elgorro</donation>
+    <donation type="other" title="Liberapay">https://liberapay.com/elgorro/donate</donation>
     <dependencies>
         <php min-version="8.4" max-version="8.5"/>
         <nextcloud min-version="33" max-version="35"/>
