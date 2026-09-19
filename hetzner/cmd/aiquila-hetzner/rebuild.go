@@ -282,6 +282,7 @@ func runRebuild(cmd *cobra.Command, _ []string) error {
 		domain,
 		grafanaLine,
 	)
+	printSupportNote()
 	return nil
 }
 

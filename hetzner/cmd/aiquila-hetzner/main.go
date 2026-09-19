@@ -1013,6 +1013,12 @@ func askKeepOrDelete() bool {
 	return answer == "y" || answer == "Y"
 }
 
+// printSupportNote prints a single, unobtrusive funding pointer after a
+// successful deployment summary. Success paths only, and never in the JSON log.
+func printSupportNote() {
+	fmt.Println("\nAIquila is free software. Support it: https://github.com/sponsors/elgorro")
+}
+
 func printMCPSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 	grafanaLine := ""
 	if createMonitoring {
@@ -1064,6 +1070,7 @@ func printMCPSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		priceLine,
 		dnsNote,
 	)
+	printSupportNote()
 	return nil
 }
 
@@ -1114,6 +1121,7 @@ func printNCSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		priceLine,
 		dnsNote,
 	)
+	printSupportNote()
 	return nil
 }
 
@@ -1180,6 +1188,7 @@ func printFullSummary(srv *hcloud.Server, serverIP, privKeyPath string) error {
 		priceLine,
 		dnsNote,
 	)
+	printSupportNote()
 	return nil
 }
 
