@@ -160,22 +160,16 @@ jobs:
           # Remove leading whitespace from heredoc indentation
           sed -i 's/^          //' /tmp/release-body.txt
 
-      - name: Create Git tag
-        run: |
-          VERSION=${{ needs.check-version.outputs.version }}
-          TAG_NAME="mcp-v${VERSION}"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git tag -a "${TAG_NAME}" -m "MCP Server Release ${VERSION}"
-          git push origin "${TAG_NAME}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+      # The tag is created by the release API below rather than by `git push`.
+      # GITHUB_TOKEN is a GitHub App token with no `workflows` scope — a scope the
+      # `permissions:` block cannot grant — so git refuses any ref push whose tree
+      # differs from the default branch under `.github/workflows/`. A second PR
+      # touching a workflow merging between this commit and the tag push is enough
+      # to trigger it, which is what broke the 0.4.14 release.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          target_commitish: ${{ github.sha }}
           tag_name: mcp-v${{ needs.check-version.outputs.version }}
           name: MCP Server v${{ needs.check-version.outputs.version }}
           body_path: /tmp/release-body.txt
