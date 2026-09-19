@@ -3,6 +3,9 @@
 Thanks for your interest in AIquila. This guide covers what we expect from a
 contribution so your time isn't wasted on rework.
 
+Code isn't the only way to help: reporting issues, improving the docs and
+[funding the project](README.md#support) all count.
+
 ## Before you write code
 
 **Open an issue first, or comment on an existing one to claim it.**
