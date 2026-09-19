@@ -2,7 +2,7 @@
 name: Feature request
 about: Suggest a new feature for AIquila
 title: '[Feature]: '
-labels: enhancement
+labels: type:feature, priority:medium
 assignees: ''
 ---
 
