@@ -1,7 +1,7 @@
 {
   "name": "aiquila-mcp",
   "version": "0.4.12",
-  "description": "Nextcloud MCP server — 311 tools for files, calendar, contacts, mail, maps, notes, tasks and more",
+  "description": "Nextcloud MCP server — 316 tools: files, calendar, contacts, mail, Talk, Deck, photos, maps, notes",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -31,6 +31,10 @@
     "llm",
     "ai",
     "aiquila",
+    "coworker",
+    "talk",
+    "mail",
+    "nextcloud-mcp",
     "webdav",
     "caldav",
     "carddav",

@@ -13,13 +13,13 @@ Integration with Nextcloud Mail app. Manage email accounts, mailboxes, and messa
 |------|-------------|
 | `list_mail_accounts` | List configured email accounts |
 | `list_mailboxes` | List mailboxes/folders for an account |
-| `list_messages` | List messages in a mailbox |
-| `read_message` | Read full message content |
+| `mail_list_messages` | List messages in a mailbox |
+| `mail_read_message` | Read full message content |
 | `mail_get_attachment` | Download an attachment inline (text/image/PDF) |
-| `send_message` | Send an email |
-| `delete_message` | Delete a message |
-| `move_message` | Move a message to another mailbox |
-| `set_message_flags` | Set message flags (read, starred, etc.) |
+| `mail_send_message` | Send an email |
+| `mail_delete_message` | Delete a message |
+| `mail_move_message` | Move a message to another mailbox |
+| `mail_set_message_flags` | Set message flags (read, starred, etc.) |
 
 ---
 
@@ -59,7 +59,7 @@ Ask Claude: "What mail folders do I have?"
 
 ---
 
-### list_messages
+### mail_list_messages
 
 List email messages in a Nextcloud Mail mailbox. Supports pagination via cursor.
 
@@ -81,7 +81,7 @@ Ask Claude: "Show the next page of messages after message 1234"
 
 ---
 
-### read_message
+### mail_read_message
 
 Read the full content of an email message by ID.
 
@@ -102,11 +102,11 @@ Ask Claude: "Show me the full email from John"
 ### mail_get_attachment
 
 Download an email attachment by message ID and attachment ID and return its content
-inline. Attachment IDs are listed in `read_message` output (shown as `[id: …]`).
+inline. Attachment IDs are listed in `mail_read_message` output (shown as `[id: …]`).
 
 **Parameters:**
-- `messageId` (number, required): The message ID (from `read_message`)
-- `attachmentId` (string, required): The attachment ID shown in `read_message` (e.g. `"2"`)
+- `messageId` (number, required): The message ID (from `mail_read_message`)
+- `attachmentId` (string, required): The attachment ID shown in `mail_read_message` (e.g. `"2"`)
 
 **Returns (depends on the attachment's content type):**
 - **Text / ICS / JSON** — the raw text
@@ -127,7 +127,7 @@ Ask Claude: "Show me the image attached to message 1234"
 
 ---
 
-### send_message
+### mail_send_message
 
 Send an email message through Nextcloud Mail.
 
@@ -151,7 +151,7 @@ Ask Claude: "Email the team at team@example.com about the project update"
 
 ---
 
-### delete_message
+### mail_delete_message
 
 Delete an email message by ID. This typically moves it to trash.
 
@@ -168,7 +168,7 @@ Ask Claude: "Delete message 1234"
 
 ---
 
-### move_message
+### mail_move_message
 
 Move an email message to a different mailbox/folder.
 
@@ -187,7 +187,7 @@ Ask Claude: "Archive message 1234"
 
 ---
 
-### set_message_flags
+### mail_set_message_flags
 
 Set flags on an email message (mark as read/unread, star/unstar, mark as important or junk).
 
