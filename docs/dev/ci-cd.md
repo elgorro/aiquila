@@ -236,7 +236,9 @@ git push origin main
 1. Detects version change in `hetzner/VERSION`
 2. Builds Linux amd64/arm64 Go binaries
 3. Generates SHA-256 checksums
-4. Signs all artifacts with cosign (GitHub OIDC — no secrets needed)
+4. Signs all artifacts with cosign (GitHub OIDC — no secrets needed), one
+   `<artifact>.sigstore.json` bundle each, carrying both the signature and the
+   certificate. Verify with `cosign verify-blob --bundle <artifact>.sigstore.json`
 5. Creates tag `hetzner-vX.X.X` and GitHub Release
 
 **How to release:**

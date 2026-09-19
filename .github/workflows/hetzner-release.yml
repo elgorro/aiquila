@@ -69,15 +69,17 @@ jobs:
           GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=${VERSION}" \
             -o ../dist/aiquila-hetzner-linux-arm64 ./cmd/aiquila-hetzner
 
+      # cosign 3 signs into a Sigstore bundle and ignores --output-signature and
+      # --output-certificate. Left to default the bundle path is empty, and every
+      # signature fails with `create bundle file: open : no such file or directory`
+      # — which is what stalled the 0.4.18 and 0.4.19 releases. One .sigstore.json
+      # per artifact now carries both the signature and the certificate.
       - name: Generate checksums and sign artifacts
         run: |
           cd dist
           sha256sum aiquila-hetzner-linux-amd64 aiquila-hetzner-linux-arm64 > checksums.txt
           for f in aiquila-hetzner-linux-amd64 aiquila-hetzner-linux-arm64 checksums.txt; do
-            cosign sign-blob --yes \
-              --output-signature "${f}.sig" \
-              --output-certificate "${f}.pem" \
-              "${f}"
+            cosign sign-blob --yes --bundle "${f}.sigstore.json" "${f}"
           done
 
       - name: Generate changelog
@@ -146,8 +148,7 @@ jobs:
           **Cosign (cryptographic, proves built by this repo's CI):**
           \`\`\`bash
           cosign verify-blob \\
-            --certificate=aiquila-hetzner-linux-amd64.pem \\
-            --signature=aiquila-hetzner-linux-amd64.sig \\
+            --bundle=aiquila-hetzner-linux-amd64.sigstore.json \\
             --certificate-identity-regexp="https://github.com/${{ github.repository }}/.github/workflows/hetzner-release.yml" \\
             --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \\
             aiquila-hetzner-linux-amd64
@@ -184,14 +185,11 @@ jobs:
           body_path: /tmp/release-body.txt
           files: |
             dist/aiquila-hetzner-linux-amd64
-            dist/aiquila-hetzner-linux-amd64.sig
-            dist/aiquila-hetzner-linux-amd64.pem
+            dist/aiquila-hetzner-linux-amd64.sigstore.json
             dist/aiquila-hetzner-linux-arm64
-            dist/aiquila-hetzner-linux-arm64.sig
-            dist/aiquila-hetzner-linux-arm64.pem
+            dist/aiquila-hetzner-linux-arm64.sigstore.json
             dist/checksums.txt
-            dist/checksums.txt.sig
-            dist/checksums.txt.pem
+            dist/checksums.txt.sigstore.json
           draft: false
           prerelease: false
         env:
