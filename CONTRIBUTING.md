@@ -16,6 +16,32 @@ If you comment on an issue, we can assign it to you — GitHub only permits
 assigning people who are repo collaborators or who have commented on that
 specific issue.
 
+## Labels
+
+Issues are classified on three independent axes. There is a template for each
+type — bug report, feature request, chore, documentation — and each one applies
+its type and a default priority for you, so opening an issue the normal way needs
+no label picking.
+
+| Axis | Labels | Who sets it |
+|------|--------|-------------|
+| Type — what kind of work (exactly one) | `type:bug`, `type:feature`, `type:docs`, `type:chore` | The issue template |
+| Component — what it touches (one or more) | `component:mcp`, `component:nextcloud`, `component:infrastructure` | A maintainer during triage |
+| Priority — how urgent (exactly one) | `priority:critical`, `priority:high`, `priority:medium`, `priority:low` | A maintainer |
+
+Two more labels cut across all three: `security` marks anything with a security
+impact, and `question` marks an issue whose approach is still being decided
+rather than implemented.
+
+**Don't set your own priority.** Templates default every new issue to
+`priority:medium`; a maintainer adjusts it during triage against everything else
+in flight. Nothing is lost by leaving it — if something is genuinely urgent, say
+so in the issue body, which carries far more than a label does.
+
+`dependencies`, `javascript`, `go`, `docker` and `github_actions` are applied
+automatically by Dependabot. `good first issue` and `help wanted` mark work we'd
+welcome an outside contributor picking up.
+
 ## Repository layout
 
 A monorepo with two independently versioned components:

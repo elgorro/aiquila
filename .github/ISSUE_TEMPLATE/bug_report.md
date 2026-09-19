@@ -2,7 +2,7 @@
 name: Bug report
 about: Report a bug to help improve AIquila
 title: '[Bug]: '
-labels: bug
+labels: type:bug, priority:medium
 assignees: ''
 ---
 

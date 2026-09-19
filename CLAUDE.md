@@ -245,6 +245,46 @@ much harder.
 (`.github/workflows/claude-code-review.yml`). `dependabot[bot]` is allow-listed; a new
 bot needs adding there or it fails with `Workflow initiated by non-human actor`.
 
+### Issue labels
+
+Three independent axes, all applied as labels:
+
+| Axis | Labels |
+|---|---|
+| Type (exactly one) | `type:bug`, `type:feature`, `type:docs`, `type:chore` |
+| Component (one or more) | `component:mcp`, `component:nextcloud`, `component:infrastructure` |
+| Priority (exactly one) | `priority:critical`, `priority:high`, `priority:medium`, `priority:low` |
+
+`security` and `question` cut across all three — `question` means the approach is
+still being decided, not that the issue is a support request. `dependencies`,
+`javascript`, `go`, `docker` and `github_actions` come from Dependabot; do not
+rename them, `.github/dependabot.yml` sets no `labels:` key so they rely on
+Dependabot's defaults. Renaming `good first issue` or `help wanted` drops the repo
+out of GitHub's contributor-discovery listings.
+
+GitHub's native **Issue Types** are an organization-only feature and `elgorro` is a
+personal account (`gh api orgs/elgorro/issue-types` → 404), so labels are the
+mechanism here. Don't re-propose issue types without also proposing an org transfer.
+
+Every open issue carries a type and a priority. Each of the four templates in
+`.github/ISSUE_TEMPLATE/` applies one type plus a `priority:medium` baseline, so
+every creation path is covered. To find issues missing either axis after a bulk
+import or a manual creation:
+
+```bash
+gh issue list --state open --limit 200 --json number,title,labels \
+  --jq '.[] | select(([.labels[].name] | any(startswith("type:")) | not)
+               or ([.labels[].name] | any(startswith("priority:")) | not))
+        | "\(.number) \(.title)"'
+```
+
+To rename a label, use `gh label edit <old> --name <new>` — it preserves every
+existing assignment. Creating a new label and deleting the old one loses them all.
+
+`.github/labels.yml` is the checked-in registry. No workflow syncs it, so after
+changing labels through the API, regenerate it (the command is in its header) and
+commit — otherwise `gh label import` will later restore a stale set.
+
 ### Assigning an issue to an external contributor
 
 GitHub only accepts assignees who are repo collaborators **or** who have commented on
