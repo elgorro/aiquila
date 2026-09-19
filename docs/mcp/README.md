@@ -58,10 +58,11 @@ Nextcloud apps and administration:
 - **Announcements, Registration & Terms of Service** — Instance-wide notices, self-service signup settings, and ToS documents
 - **Passman** — List vaults and credential metadata (never secret values)
 - **Translate & Social Sharing** — Translate text, and generate social-network share URLs for a file
+- **Social** — Read and post to the fediverse from a Nextcloud Social account: timelines, posts with media and polls, follows, notifications and search
 - **Recommendations** — The files Nextcloud suggests for the current user
 - **AIquila** — Configure and test the AI provider integration
 
-**Total: 316 tools across 43 categories**
+**Total: 342 tools across 44 categories**
 
 ## Tools Reference
 
@@ -531,6 +532,36 @@ Nextcloud apps and administration:
 | `get_registration_settings` | Read the Nextcloud Registration app settings (self-service signup configuration), such… | — |
 | `update_registration_settings` | Update one or more Nextcloud Registration app settings | — |
 | `reset_registration_setting` | Reset a Nextcloud Registration app setting to its default by deleting the stored value | — |
+
+#### Social (26 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `social_home_timeline` | Posts from the accounts this user follows | [Social](tools/apps/social.md#social_home_timeline) |
+| `social_public_timeline` | Every public post this server knows about | [Social](tools/apps/social.md#social_public_timeline) |
+| `social_hashtag_timeline` | Public posts carrying a hashtag | [Social](tools/apps/social.md#social_hashtag_timeline) |
+| `social_list_timeline` | One list's timeline, or the available lists | [Social](tools/apps/social.md#social_list_timeline) |
+| `social_list_saved_statuses` | This user's favourites or bookmarks | [Social](tools/apps/social.md#social_list_saved_statuses) |
+| `social_get_status` | One post, optionally with its thread | [Social](tools/apps/social.md#social_get_status) |
+| `social_status_history` | The successive versions of an edited post | [Social](tools/apps/social.md#social_status_history) |
+| `social_upload_media` | Stage a Nextcloud file as a media attachment | [Social](tools/apps/social.md#social_upload_media) |
+| `social_post_status` | Publish a post to the fediverse (public, irreversible) | [Social](tools/apps/social.md#social_post_status) |
+| `social_delete_status` | Delete one of this user's own posts | [Social](tools/apps/social.md#social_delete_status) |
+| `social_favourite` | Favourite (star) a post | [Social](tools/apps/social.md#social_favourite--social_unfavourite) |
+| `social_unfavourite` | Remove a favourite | [Social](tools/apps/social.md#social_favourite--social_unfavourite) |
+| `social_boost` | Republish a post to this user's followers | [Social](tools/apps/social.md#social_boost--social_unboost) |
+| `social_unboost` | Undo a boost | [Social](tools/apps/social.md#social_boost--social_unboost) |
+| `social_bookmark` | Save a post privately | [Social](tools/apps/social.md#social_bookmark--social_unbookmark) |
+| `social_unbookmark` | Remove a bookmark | [Social](tools/apps/social.md#social_bookmark--social_unbookmark) |
+| `social_lookup_account` | One account's profile by handle | [Social](tools/apps/social.md#social_lookup_account) |
+| `social_account_statuses` | The posts of one account | [Social](tools/apps/social.md#social_account_statuses) |
+| `social_list_account_follows` | An account's followers, or who it follows | [Social](tools/apps/social.md#social_list_account_follows) |
+| `social_follow_account` | Follow a fediverse account | [Social](tools/apps/social.md#social_follow_account--social_unfollow_account) |
+| `social_unfollow_account` | Unfollow a fediverse account | [Social](tools/apps/social.md#social_follow_account--social_unfollow_account) |
+| `social_list_follow_requests` | Accounts waiting for approval | [Social](tools/apps/social.md#social_list_follow_requests) |
+| `social_respond_follow_request` | Approve or reject a follow request | [Social](tools/apps/social.md#social_respond_follow_request) |
+| `social_list_notifications` | Grouped mentions, follows, favourites and boosts | [Social](tools/apps/social.md#social_list_notifications) |
+| `social_dismiss_notifications` | Dismiss one notification, or clear all | [Social](tools/apps/social.md#social_dismiss_notifications) |
+| `social_search` | Search accounts, hashtags and post content | [Social](tools/apps/social.md#social_search) |
 
 #### Social Sharing (1 tool)
 | Tool | Description | Documentation |

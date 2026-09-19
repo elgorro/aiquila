@@ -13,7 +13,7 @@ AIquila brings AI to your self-hosted Nextcloud. Instead of keeping your files, 
 
 AIquila has three components that can be used independently or together:
 
-**MCP Server** — A [Model Context Protocol](https://modelcontextprotocol.io) server that gives any MCP-compatible AI assistant secure access to your Nextcloud. 316 tools across 43 categories: browse and manage files, keep calendars, tasks and contacts in sync, work in Talk, Deck and Mail, organise photos, notes and bookmarks, and run Coworkers and `occ` administration. It has no model of its own — it exposes Nextcloud to whichever MCP client you connect.
+**MCP Server** — A [Model Context Protocol](https://modelcontextprotocol.io) server that gives any MCP-compatible AI assistant secure access to your Nextcloud. 342 tools across 44 categories: browse and manage files, keep calendars, tasks and contacts in sync, work in Talk, Deck and Mail, organise photos, notes and bookmarks, and run Coworkers and `occ` administration. It has no model of its own — it exposes Nextcloud to whichever MCP client you connect.
 
 **Nextcloud App** — A native Nextcloud application that brings AI directly into the Nextcloud UI. Chat about your documents, summarise and rewrite text, run Coworkers (saved, repeatable AI jobs), and scope a conversation to a Project so the assistant only sees the folders you choose. Admins pick which providers are available, and may restrict them per user or group.
 
