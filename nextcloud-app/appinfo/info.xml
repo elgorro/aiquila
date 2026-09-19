@@ -53,7 +53,7 @@ AIquila includes a [Model Context Protocol](https://modelcontextprotocol.io) ser
 
 Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Model Context Protocol](https://modelcontextprotocol.io), and the open and commercial AI providers listed above.
     ]]></description>
-    <version>0.4.12</version>
+    <version>0.4.13</version>
     <licence>AGPL-3.0-or-later</licence>
     <author mail="aiquila@mailbox.org">elgorro</author>
     <documentation>
@@ -69,7 +69,8 @@ Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Mode
     <bugs>https://github.com/elgorro/aiquila/issues</bugs>
     <repository>https://github.com/elgorro/aiquila</repository>
     <screenshot>https://raw.githubusercontent.com/elgorro/aiquila/main/nextcloud-app/img/Appstore.png</screenshot>
-    <donation>https://liberapay.com/elgorro/donate</donation>
+    <donation type="other" title="GitHub Sponsors">https://github.com/sponsors/elgorro</donation>
+    <donation type="other" title="Liberapay">https://liberapay.com/elgorro/donate</donation>
     <dependencies>
         <php min-version="8.4" max-version="8.5"/>
         <nextcloud min-version="33" max-version="35"/>

@@ -108,6 +108,8 @@
 						<li><a href="https://console.mistral.ai/" target="_blank" rel="noopener noreferrer">Mistral console</a></li>
 						<li><a href="https://platform.deepseek.com/" target="_blank" rel="noopener noreferrer">DeepSeek platform</a></li>
 						<li><a href="https://experiments.hetzner.com/inference" target="_blank" rel="noopener noreferrer">Hetzner Inference</a></li>
+						<li><a href="https://github.com/sponsors/elgorro" target="_blank" rel="noopener noreferrer">{{ t('aiquila', 'Support AIquila on GitHub Sponsors') }}</a></li>
+						<li><a href="https://liberapay.com/elgorro/donate" target="_blank" rel="noopener noreferrer">{{ t('aiquila', 'Support AIquila on Liberapay') }}</a></li>
 					</ul>
 				</NcSettingsSection>
 			</template>

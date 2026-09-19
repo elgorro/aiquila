@@ -62,6 +62,18 @@ confirm the approach before you invest the effort.
 The guide covers branch and commit conventions, the checks CI runs per component,
 and what to expect from CI on a pull request from a fork.
 
+## Support
+
+AIquila is free software and developed in the open. If it is useful to you, funding
+covers the running costs behind it — test servers, CI minutes, domains and the App
+Store presence:
+
+- [GitHub Sponsors](https://github.com/sponsors/elgorro)
+- [Liberapay](https://liberapay.com/elgorro/donate)
+
+Contributing time — issues, pull requests, documentation, or simply telling other
+people about the project — helps just as much.
+
 ## License
 
 AGPL-3.0 (Nextcloud App) / MIT (MCP Server)

@@ -8,6 +8,15 @@ AIquila is built on these excellent open-source projects and services.
 |-------------|------|
 | [Petre Chikviladze](https://www.instagram.com/chikviladzepetre) | App logo design |
 
+## Supporters
+
+People who fund the running costs of the project, through
+[GitHub Sponsors](https://github.com/sponsors/elgorro) or
+[Liberapay](https://liberapay.com/elgorro/donate). Support is always optional and
+anonymous by default — ask in an issue or discussion to be listed here.
+
+No supporters are listed yet.
+
 ## Core platforms
 | Project | Version | Role |
 |---------|---------|------|

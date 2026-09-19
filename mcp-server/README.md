@@ -136,6 +136,12 @@ Optional Nextcloud apps unlock additional tool categories: Tasks, Calendar, Cont
 - [Architecture](https://github.com/elgorro/aiquila/blob/main/docs/dev/mcp-server-architecture.md) — design and internals
 - [Full Documentation](https://github.com/elgorro/aiquila/blob/main/docs/) — complete docs index
 
+## Support
+
+AIquila is free software. If it is useful to you, you can fund its development via
+[GitHub Sponsors](https://github.com/sponsors/elgorro) or
+[Liberapay](https://liberapay.com/elgorro/donate).
+
 ## License
 
 MIT — part of the [AIquila project](https://github.com/elgorro/aiquila).

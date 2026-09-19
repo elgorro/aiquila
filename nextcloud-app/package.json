@@ -1,6 +1,6 @@
 {
   "name": "aiquila",
-  "version": "0.4.12",
+  "version": "0.4.13",
   "description": "Private AI in your Nextcloud — chat, Coworkers and MCP tools",
   "type": "module",
   "main": "src/main.js",
