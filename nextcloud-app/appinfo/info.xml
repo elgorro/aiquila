@@ -33,13 +33,14 @@ that send images need a vision-capable provider.
 
 ### MCP Server
 
-AIquila includes a [Model Context Protocol](https://modelcontextprotocol.io) server with 311 tools that gives any MCP client — Claude Desktop, Claude Code, Claude.ai and the Claude mobile app, Cursor, VS Code and others — direct access to your Nextcloud:
+AIquila includes a [Model Context Protocol](https://modelcontextprotocol.io) server with 316 tools that gives any MCP client — Claude Desktop, Claude Code, Claude.ai and the Claude mobile app, Cursor, VS Code and others — direct access to your Nextcloud:
 
-- **Files** — Browse, read, write, search, and share
-- **Calendar & Tasks** — View, create, and manage events and to-dos
-- **Contacts & Mail** — Read and manage address books, accounts, and messages
-- **Notes & Recipes** — Create and edit Markdown notes and recipes
-- **Bookmarks & Maps** — Manage bookmarks, GPS tracks, favourites, and photos
+- **Files & sharing** — Browse, read, write, search, share, tag, and restore from trash or older versions
+- **Calendar, Tasks & Contacts** — Events, to-dos and address books over CalDAV and CardDAV, plus Deck boards and Projects
+- **Talk, Mail & Notifications** — Conversations, polls and reactions, mail accounts and messages, notification triage
+- **Photos & Maps** — Albums and metadata, GPS tracks and devices, favourites, and photo geotagging
+- **Notes, News, Recipes & Bookmarks** — Markdown notes, RSS feeds, recipes, and bookmark folders and tags
+- **Coworkers & administration** — Run saved AI jobs, manage users, groups and apps, run `occ`, and check integrity
 
 ### Resources
 

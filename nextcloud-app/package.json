@@ -1,7 +1,7 @@
 {
   "name": "aiquila",
   "version": "0.4.12",
-  "description": "Claude AI Integration for Nextcloud",
+  "description": "Private AI in your Nextcloud — chat, Coworkers and MCP tools",
   "type": "module",
   "main": "src/main.js",
   "scripts": {
@@ -12,8 +12,12 @@
   "keywords": [
     "nextcloud",
     "claude",
+    "mistral",
+    "ollama",
     "ai",
-    "anthropic"
+    "anthropic",
+    "mcp",
+    "coworker"
   ],
   "author": "AIquila",
   "license": "AGPL-3.0",
