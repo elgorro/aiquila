@@ -4,7 +4,7 @@ Thanks for your interest in AIquila. This guide covers what we expect from a
 contribution so your time isn't wasted on rework.
 
 Code isn't the only way to help: reporting issues, improving the docs and
-[funding the project](README.md#support) all count.
+[funding the project](#supporting-the-project) all count.
 
 ## Before you write code
 
@@ -173,6 +173,20 @@ mark against the contribution.
 The bar is the same either way: you are responsible for the code you submit.
 Understand what it does, verify it actually works, and don't open a pull request
 you couldn't explain or defend in review.
+
+## Supporting the project
+
+AIquila is free software, developed in the open, and the running costs behind it
+are real — test servers, CI minutes, domains and the App Store presence. If the
+project is useful to you and you would rather contribute money than time:
+
+- [GitHub Sponsors](https://github.com/sponsors/elgorro)
+- [Liberapay](https://liberapay.com/elgorro/donate)
+
+Both are linked from the **Sponsor** button at the top of the repository.
+Sponsorship buys no influence over the roadmap and no priority in review — a
+well-argued issue does more for either. Supporters who want to be named are
+listed in [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md#supporters).
 
 ## Questions
 
