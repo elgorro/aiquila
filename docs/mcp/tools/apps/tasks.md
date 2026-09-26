@@ -16,13 +16,16 @@ List all task lists available in Nextcloud Tasks — every calendar collection t
 (`VTODO`). Event-only calendars are left out; use `list_calendars` to see those.
 
 **Parameters:**
-None
+- `detailed` (boolean, optional): Also show the component types each list supports (events, tasks,
+  journals) and its CTag, the collection's sync token that changes whenever its contents change.
+  Default: `false`
 
 **Returns:**
 One entry per task list, ordered as in Nextcloud, with:
 - Display name, color, and `(disabled)` if the list is hidden in Nextcloud
 - `calendarName` — the URL slug to pass as `calendarName` to the other task tools
 - CalDAV URL
+- With `detailed: true`: `Supports:` and `CTag:` lines
 
 ```
 Task lists (2 found):

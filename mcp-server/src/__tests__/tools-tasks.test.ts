@@ -27,6 +27,7 @@ describe('Task Tools', () => {
       <d:displayname>Personal</d:displayname>
       <x1:calendar-color>#0082c9</x1:calendar-color>
       <x1:calendar-order>2</x1:calendar-order>
+      <cs:getctag>http://sabre.io/ns/sync/42</cs:getctag>
       <cal:supported-calendar-component-set><cal:comp name="VEVENT"/><cal:comp name="VTODO"/></cal:supported-calendar-component-set>
     </d:prop></d:propstat>
   </d:response>
@@ -72,6 +73,34 @@ describe('Task Tools', () => {
       expect(text).not.toContain('Birthdays');
       // Sorted by calendar-order
       expect(text.indexOf('House & Garden')).toBeLessThan(text.indexOf('Personal'));
+    });
+
+    it('omits supported components and ctag by default', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(propfindResponse),
+      });
+
+      const { listTaskListsTool } = await import('../tools/apps/tasks.js');
+      const result = await listTaskListsTool.handler();
+
+      expect(result.content[0].text).not.toContain('Supports:');
+      expect(result.content[0].text).not.toContain('CTag:');
+    });
+
+    it('includes supported components and ctag when detailed', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(propfindResponse),
+      });
+
+      const { listTaskListsTool } = await import('../tools/apps/tasks.js');
+      const result = await listTaskListsTool.handler({ detailed: true });
+      const text = result.content[0].text;
+
+      expect(text).toContain('Supports: events, tasks');
+      expect(text).toContain('CTag: http://sabre.io/ns/sync/42');
+      expect(text).toContain('Supports: tasks\n');
     });
 
     it('reports when no collection supports tasks', async () => {

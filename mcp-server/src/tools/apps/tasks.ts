@@ -287,13 +287,21 @@ function formatTask(task: ParsedTask): string {
  * Format a task list (VTODO-capable calendar) for human-readable display.
  * `calendarName` is the URL slug the other task tools expect.
  */
-function formatTaskList(cal: ParsedCalendar): string {
+function formatTaskList(cal: ParsedCalendar, detailed = false): string {
   const slug = cal.url.split('/').filter(Boolean).pop() ?? '';
   let line = decodeXmlEntities(cal.displayName);
   if (cal.color) line += ` [${cal.color}]`;
   if (!cal.enabled) line += ' (disabled)';
   line += `\n    calendarName: ${slug}`;
   line += `\n    URL: ${cal.url}`;
+  if (detailed) {
+    const parts: string[] = [];
+    if (cal.supportsEvents) parts.push('events');
+    if (cal.supportsTasks) parts.push('tasks');
+    if (cal.supportsJournals) parts.push('journals');
+    line += `\n    Supports: ${parts.join(', ')}`;
+    if (cal.ctag) line += `\n    CTag: ${decodeXmlEntities(cal.ctag)}`;
+  }
   return line;
 }
 
@@ -378,9 +386,16 @@ export const listTaskListsTool = {
     openWorldHint: false,
   },
   description:
-    "List all task lists in Nextcloud Tasks (calendars that support tasks). Returns each list's display name, color, URL and calendarName (the value to pass to the other task tools).",
-  inputSchema: z.object({}),
-  handler: async () => {
+    "List all task lists in Nextcloud Tasks (calendars that support tasks). Returns each list's display name, color, URL and calendarName (the value to pass to the other task tools). Set detailed for supported component types and the CTag.",
+  inputSchema: z.object({
+    detailed: z
+      .boolean()
+      .optional()
+      .describe(
+        'Also include the component types each list supports (events, tasks, journals) and its CTag sync token (default false)'
+      ),
+  }),
+  handler: async (args: { detailed?: boolean } = {}) => {
     try {
       const config = getNextcloudConfig();
       const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/`;
@@ -419,7 +434,7 @@ export const listTaskListsTool = {
         };
       }
 
-      const formatted = taskLists.map(formatTaskList).join('\n\n');
+      const formatted = taskLists.map((cal) => formatTaskList(cal, args.detailed)).join('\n\n');
       return {
         content: [
           {
