@@ -474,7 +474,7 @@ class ConversationController extends Controller {
 
                 $model = $conversation->getModel();
                 if (!ClaudeModels::supportsFastMode(ClaudeModels::resolveModel($model))) {
-                    return $this->clientError(400, 'Model ' . $model . ' does not support fast mode; it is available on Opus 5 and Opus 4.8 only');
+                    return $this->clientError(400, 'Model ' . $model . ' does not support fast mode; it is available on Opus 5.5, Opus 5 and Opus 4.8 only');
                 }
             }
             $conversation->setSpeedFast($speedFast === '' ? null : $speedFast === 'on');

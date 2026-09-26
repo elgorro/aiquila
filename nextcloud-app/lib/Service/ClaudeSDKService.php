@@ -604,7 +604,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * Whether this request should ask for fast mode: per-request override →
      * admin default (app config `speed_fast`, default off).
      *
-     * Fast mode is Opus 5 / Opus 4.8 only and the API rejects the combination
+     * Fast mode is Opus 5.5 / Opus 5 / Opus 4.8 only and the API rejects the combination
      * at create time, so the model gate is applied here. A per-request `true`
      * on an unsupported model throws — the caller pinned something specific and
      * silently dropping it would hide the mistake — while an *admin* default is
@@ -622,7 +622,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             }
             if (!ClaudeModels::supportsFastMode($model)) {
                 throw new \InvalidArgumentException(
-                    sprintf('Model %s does not support fast mode; it is available on Opus 5 and Opus 4.8 only.', $model)
+                    sprintf('Model %s does not support fast mode; it is available on Opus 5.5, Opus 5 and Opus 4.8 only.', $model)
                 );
             }
             return true;
@@ -2160,7 +2160,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 'speed_fast',
                 'speed_fast',
                 'Fast mode (premium pricing)',
-                'Generates output roughly 2.5x faster at about twice the token price. Available on Opus 5 and '
+                'Generates output roughly 2.5x faster at about twice the token price. Available on Opus 5.5, Opus 5 and '
                     . 'Opus 4.8 only and silently ignored on every other model, including the default. Fast mode '
                     . 'has its own rate limit. Overridable per conversation with /fast.',
                 storage: ProviderSettingsSchema::STORAGE_BOOL,
