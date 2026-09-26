@@ -35,8 +35,16 @@ provider API  ──SSE──▶  LLMProvider::chatWithToolsStream()   (PHP gene
 
 `error` is always followed by `persisted`, so a failed turn still leaves the
 user whatever text arrived before it went wrong, suffixed with
-`_(stream interrupted: …)_`. The frontend falls back to the non-streaming
-`POST /api/conversations/{id}/messages` if the stream cannot be opened at all.
+`_(stream interrupted: …)_`.
+
+The frontend falls back to the non-streaming
+`POST /api/conversations/{id}/messages` if the stream cannot be opened at all,
+or if it ends without a `persisted` event. That endpoint sends the same turn
+and returns it as a single JSON response. It is a supported endpoint, not a
+leftover: it keeps chat working on installs whose proxy breaks the stream (see
+[Checking an instance](#checking-an-instance)), and it is the simpler choice for
+scripts and API clients. It is also the only chat endpoint in the OpenAPI spec,
+because an SSE body has no JSON schema to describe.
 
 ## What buffering looks like
 

@@ -449,6 +449,13 @@ class ConversationController extends Controller {
     /**
      * Send a message in a conversation and get Claude's response
      *
+     * Returns the whole turn as one JSON response. The web UI sends turns
+     * through the streaming variant (POST /api/conversations/{id}/messages/stream,
+     * server-sent events) and falls back to this endpoint when a stream cannot
+     * be opened, e.g. behind a reverse proxy that buffers text/event-stream.
+     * This endpoint is supported and suits scripts and API clients that want
+     * a single response rather than an event stream.
+     *
      * @param int $id Conversation ID
      * @param string $prompt The user's message
      * @param list<string> $files Optional file paths to attach
