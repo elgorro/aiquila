@@ -153,19 +153,16 @@ See [`docs/dev/openapi.md`](openapi.md) for full annotation rules and CI details
 
 ### Adding a file action
 
-Edit `js/fileactions.js` to register new actions:
+Files-app actions are registered in `src/fileactions.js` with `registerFileAction()`
+from `@nextcloud/files`, which takes a plain `IFileAction` object (`id`,
+`displayName`, `iconSvgInline`, `enabled`, `exec`). `LoadFilesScriptsListener`
+loads the script whenever the Files app dispatches `LoadAdditionalScriptsEvent`.
 
-```javascript
-fileActions.registerAction({
-    name: 'my-action',
-    displayName: t('aiquila', 'My Action'),
-    mime: 'text',
-    permissions: OC.PERMISSION_READ,
-    actionHandler: async function(fileName, context) {
-        // Implementation
-    },
-});
-```
+The script loads on every Files page view, so it is built on its own by
+`vite.files.config.js` (the second half of `npm run build`) and shares no chunks
+with the app bundle. Keep its static imports to `@nextcloud/files` and
+`@nextcloud/l10n`, and `import()` anything heavier, such as Vue components, from
+`exec`.
 
 ### Running tests
 

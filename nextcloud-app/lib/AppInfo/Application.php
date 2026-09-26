@@ -97,6 +97,12 @@ class Application extends App implements IBootstrap {
             \OCP\ContextChat\Events\ContentProviderRegisterEvent::class,
             \OCA\AIquila\Listener\ContextChatProviderListener::class
         );
+
+        // "Ask Claude" file action in the Files app.
+        $context->registerEventListener(
+            \OCA\AIquila\Listener\LoadFilesScriptsListener::EVENT,
+            \OCA\AIquila\Listener\LoadFilesScriptsListener::class
+        );
     }
 
     public function boot(IBootContext $context): void {
