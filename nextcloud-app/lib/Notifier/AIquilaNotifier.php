@@ -9,6 +9,7 @@ use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\Notification\INotification;
 use OCP\Notification\INotifier;
+use OCP\Notification\UnknownNotificationException;
 
 class AIquilaNotifier implements INotifier {
 
@@ -28,7 +29,7 @@ class AIquilaNotifier implements INotifier {
 
     public function prepare(INotification $notification, string $languageCode): INotification {
         if ($notification->getApp() !== 'aiquila') {
-            throw new \InvalidArgumentException();
+            throw new UnknownNotificationException();
         }
 
         $params = $notification->getSubjectParameters();
@@ -60,15 +61,21 @@ class AIquilaNotifier implements INotifier {
                 $notification->setParsedSubject(
                     $this->l10n->t('AIquila response')
                 );
-                $notification->setParsedMessage((string)($params[0] ?? ''));
+                // Nextcloud rejects an empty parsed message.
+                $response = (string)($params[0] ?? '');
+                if ($response !== '') {
+                    $notification->setParsedMessage($response);
+                }
                 break;
 
             default:
-                throw new \InvalidArgumentException();
+                throw new UnknownNotificationException();
         }
 
+        // Nextcloud only accepts absolute icon URLs (for the desktop and
+        // mobile clients) and rejects the whole notification otherwise.
         $notification->setIcon(
-            $this->urlGenerator->imagePath('aiquila', 'app-dark.svg')
+            $this->urlGenerator->getAbsoluteURL($this->urlGenerator->imagePath('aiquila', 'app-dark.svg'))
         );
 
         return $notification;
