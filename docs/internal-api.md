@@ -335,7 +335,7 @@ endpoint, `GET /ocs/v2.php/cloud/capabilities` (authenticated), under the `aiqui
 | `model` | string | Admin default model |
 | `providers` | string[] | TaskProcessing task-type ids AIquila registers a provider for, sorted — e.g. `core:text2text:summary`, `core:audio2text` |
 | `api_configured` | bool | Whether an admin-level Anthropic API key is set |
-| `search_enabled` | bool | Whether the Unified Search provider is enabled |
+| `search_enabled` | bool | Whether AIquila conversations appear in Unified Search — the admin toggle, `true` unless an admin turned it off |
 
 `providers` is derived from the registered provider set
 (`lib/TaskProcessing/ProviderRegistry.php`), so it cannot drift from what the app

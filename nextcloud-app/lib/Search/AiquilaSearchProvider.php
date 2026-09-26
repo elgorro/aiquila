@@ -8,6 +8,7 @@ namespace OCA\AIquila\Search;
 use OCA\AIquila\AppInfo\Application;
 use OCA\AIquila\Db\Message;
 use OCA\AIquila\Db\MessageMapper;
+use OCA\AIquila\Service\SearchSettings;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\IUser;
@@ -21,6 +22,7 @@ class AiquilaSearchProvider implements IProvider {
         private MessageMapper $messageMapper,
         private IURLGenerator $urlGenerator,
         private IL10N $l10n,
+        private SearchSettings $searchSettings,
     ) {
     }
 
@@ -37,6 +39,12 @@ class AiquilaSearchProvider implements IProvider {
     }
 
     public function search(IUser $user, ISearchQuery $query): SearchResult {
+        // Registration happens at boot, before app config is readable, so the
+        // admin toggle is enforced here rather than by skipping registration.
+        if (!$this->searchSettings->isEnabled()) {
+            return SearchResult::complete($this->getName(), []);
+        }
+
         $term = $query->getTerm();
         $limit = $query->getLimit();
         $cursor = (int)$query->getCursor();

@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Settings;
 
+use OCA\AIquila\Service\SearchSettings;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
 use OCP\Settings\ISettings;
@@ -20,12 +21,13 @@ use OCP\Settings\ISettings;
 class AdminSettings implements ISettings {
     public function __construct(
         private readonly IConfig $config,
+        private readonly SearchSettings $searchSettings,
     ) {
     }
 
     public function getForm(): TemplateResponse {
         return new TemplateResponse('aiquila', 'admin', [
-            'search_enabled' => $this->config->getAppValue('aiquila', 'search_enabled', '0') === '1',
+            'search_enabled' => $this->searchSettings->isEnabled(),
             'auto_cache' => in_array($this->config->getAppValue('aiquila', 'auto_cache', '1'), ['true', '1'], true),
         ], '');
     }

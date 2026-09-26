@@ -7,6 +7,7 @@ namespace OCA\AIquila\Capabilities;
 
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\SearchSettings;
 use OCA\AIquila\TaskProcessing\ProviderRegistry;
 use OCP\App\IAppManager;
 use OCP\Capabilities\ICapability;
@@ -22,6 +23,7 @@ class AIquilaCapability implements ICapability {
         private CredentialService $credentialService,
         private IAppManager $appManager,
         private ContainerInterface $container,
+        private SearchSettings $searchSettings,
     ) {
     }
 
@@ -35,7 +37,7 @@ class AIquilaCapability implements ICapability {
                 'model'          => $this->config->getAppValue(self::APP_ID, 'model', ClaudeModels::DEFAULT_MODEL),
                 'providers'      => $this->taskTypeIds(),
                 'api_configured' => $this->credentialService->getApiKey(null) !== '',
-                'search_enabled' => $this->config->getAppValue(self::APP_ID, 'search_enabled', '1') !== '0',
+                'search_enabled' => $this->searchSettings->isEnabled(),
             ],
         ];
     }
