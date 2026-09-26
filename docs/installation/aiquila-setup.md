@@ -320,6 +320,12 @@ You can attach files to your message so Claude can read or analyze them:
 
 Attached files appear as chips above the text input (with thumbnails for images). Pasted and dropped images are automatically uploaded to the `/AIquila Uploads` folder in your Nextcloud files.
 
+An attached file stays in context for the rest of the conversation, so you can ask follow-up questions without attaching it again. Each turn reads the file's current version from Nextcloud. If you delete the file, Claude is told it can no longer be read.
+
+#### Asking about a file from the Files app
+
+In the Files app, open a file's **⋯** menu and choose **Ask AIquila**. This starts a conversation with the file attached, and you can keep asking follow-ups in the dialog. **Open in AIquila** continues the same conversation in the chat.
+
 ### 2. Nextcloud Assistant Integration
 
 AIquila registers itself against Nextcloud's TaskProcessing framework, so it shows up

@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/main.js",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && vite build -c vite.files.config.js",
     "dev": "vite build --mode development --watch",
     "watch": "vite build --mode development --watch"
   },
