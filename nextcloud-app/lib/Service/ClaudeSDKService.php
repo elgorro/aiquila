@@ -30,6 +30,7 @@ use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\ProviderActionsInterface;
 use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
+use OCA\AIquila\Service\Provider\ThinkingProfileInterface;
 use OCA\AIquila\Service\Provider\UnsupportedModalities;
 use OCP\ICache;
 use OCP\ICacheFactory;
@@ -42,7 +43,7 @@ use Psr\Log\LoggerInterface;
  * This is the new implementation using the official SDK.
  * Provides better error handling, type safety, and streaming support.
  */
-class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface {
+class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface, ThinkingProfileInterface {
     // Anthropic publishes no transcription, speech or image-generation endpoint.
     use UnsupportedModalities;
 
@@ -2229,6 +2230,28 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      */
     public function getAllowedEfforts(string $model): array {
         return ClaudeModels::getAllowedEfforts(ClaudeModels::resolveModel($model));
+    }
+
+    public function getThinkingProfile(string $model): array {
+        $model = ClaudeModels::resolveModel($model);
+        $efforts = ClaudeModels::getAllowedEfforts($model);
+        if (!ClaudeModels::supportsThinking($model)) {
+            $thinking = self::THINKING_NONE;
+        } elseif (!ClaudeModels::canDisableThinking($model)) {
+            $thinking = self::THINKING_ALWAYS_ON;
+        } elseif (ClaudeModels::thinkingDefault($model) === ClaudeModels::THINKING_DEFAULT_ADAPTIVE) {
+            $thinking = self::THINKING_ADAPTIVE_BY_DEFAULT;
+        } else {
+            $thinking = self::THINKING_OFF_BY_DEFAULT;
+        }
+        return [
+            'model' => $model,
+            'thinking' => $thinking,
+            'can_disable' => $thinking !== self::THINKING_ALWAYS_ON,
+            'off_max_effort' => ClaudeModels::maxEffortWithThinkingDisabled($model),
+            'efforts' => $efforts,
+            'default_effort' => $efforts !== [] ? ClaudeModels::getEffortLevel($model) : null,
+        ];
     }
 
     public function getConfiguration(): array {

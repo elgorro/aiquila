@@ -88,6 +88,10 @@
 		<p v-if="field.description" class="schema-field__hint">
 			{{ field.description }}
 		</p>
+		<!-- Set by the backend when the current model cannot honour the value. -->
+		<p v-if="field.warning" class="schema-field__warning" role="status">
+			{{ field.warning }}
+		</p>
 	</div>
 </template>
 
@@ -270,6 +274,13 @@ export default {
 .schema-field__hint {
 	margin-top: 4px;
 	color: var(--color-text-maxcontrast);
+	font-size: 0.9em;
+	line-height: 1.4;
+}
+
+.schema-field__warning {
+	margin-top: 4px;
+	color: var(--color-warning-text, var(--color-warning));
 	font-size: 0.9em;
 	line-height: 1.4;
 }

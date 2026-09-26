@@ -9,6 +9,7 @@ use OCA\AIquila\Service\Provider\ProviderAccessService;
 use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 use OCA\AIquila\Service\Provider\ProviderSettingsService;
+use OCA\AIquila\Service\Provider\ThinkingProfileInterface;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
@@ -153,6 +154,78 @@ class ProviderSettingsServiceTest extends TestCase {
         $this->assertNotContains('test_base_url', $fieldIds);
         $this->assertNotContains('max_tokens', $fieldIds);
         $this->assertContains('model', $fieldIds);
+    }
+
+    // ── Per-model thinking warnings ─────────────────────────────────────
+
+    /**
+     * @param array<string, string> $appValues
+     */
+    private function describeWithProfile(array $profile, array $appValues): array {
+        $provider = $this->createMockForIntersectionOfInterfaces([LLMProviderInterface::class, ThinkingProfileInterface::class]);
+        $provider->method('getId')->willReturn('testprovider');
+        $provider->method('getLabel')->willReturn('Test provider');
+        $provider->method('getCapabilities')->willReturn(ProviderSettingsSchema::capabilities());
+        $provider->method('isConfigured')->willReturn(true);
+        $provider->method('getModel')->willReturn($profile['model']);
+        $provider->method('getThinkingProfile')->willReturn($profile);
+        $provider->method('getSettingsSchema')->willReturn([
+            ProviderSettingsSchema::select('effort', 'effort', 'Effort', '', ['', 'low', 'high', 'xhigh', 'max']),
+            ProviderSettingsSchema::select('thinking', 'thinking', 'Thinking', '', ['', 'on', 'off']),
+        ]);
+        $this->config->method('getAppValue')
+            ->willReturnCallback(fn($app, $key, $default = '') => $appValues[$key] ?? $default);
+
+        return $this->service->describe($provider, null, admin: true);
+    }
+
+    private static function profile(string $model, string $thinking, bool $canDisable, ?string $offMax, array $efforts): array {
+        return [
+            'model' => $model,
+            'thinking' => $thinking,
+            'can_disable' => $canDisable,
+            'off_max_effort' => $offMax,
+            'efforts' => $efforts,
+            'default_effort' => 'xhigh',
+        ];
+    }
+
+    public function testThinkingOffWarnsOnAlwaysOnModel(): void {
+        $described = $this->describeWithProfile(
+            self::profile('claude-opus-5-5', 'always_on', false, null, ['low', 'high', 'xhigh', 'max']),
+            ['thinking' => 'off'],
+        );
+        $fields = array_column($described['fields'], null, 'id');
+        $this->assertStringContainsString('always thinks', $fields['thinking']['warning']);
+        $this->assertSame('always_on', $described['modelProfile']['thinking']);
+    }
+
+    public function testThinkingOffWarnsAboutEffortCap(): void {
+        $described = $this->describeWithProfile(
+            self::profile('claude-opus-5', 'adaptive_by_default', true, 'high', ['low', 'high', 'xhigh', 'max']),
+            ['thinking' => 'off'],
+        );
+        $fields = array_column($described['fields'], null, 'id');
+        $this->assertStringContainsString('at most at effort "high"', $fields['thinking']['warning']);
+    }
+
+    public function testUnsupportedEffortWarns(): void {
+        $described = $this->describeWithProfile(
+            self::profile('claude-sonnet-4-6', 'off_by_default', true, null, ['low', 'high', 'max']),
+            ['effort' => 'xhigh'],
+        );
+        $fields = array_column($described['fields'], null, 'id');
+        $this->assertStringContainsString('does not accept "xhigh"', $fields['effort']['warning']);
+        $this->assertArrayNotHasKey('warning', $fields['thinking']);
+    }
+
+    public function testNoProfileWithoutInterface(): void {
+        $provider = $this->provider($this->mixedScopeSchema());
+        $provider->method('getCapabilities')->willReturn(ProviderSettingsSchema::capabilities());
+        $provider->method('getModel')->willReturn('default-model');
+        $this->cache->method('get')->willReturn(['default-model']);
+
+        $this->assertNull($this->service->describe($provider, null, admin: true)['modelProfile']);
     }
 
     // ── Value validation ────────────────────────────────────────────────
