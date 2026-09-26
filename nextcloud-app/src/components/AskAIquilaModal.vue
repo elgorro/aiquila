@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <template>
 	<NcModal size="large"
-		:name="t('aiquila', 'Ask Claude about {filename}', { filename: file.basename })"
+		:name="t('aiquila', 'Ask AIquila about {filename}', { filename: file.basename })"
 		@close="onClose">
 		<div class="aiquila-modal-content">
 			<NcNoteCard v-if="isLargeFile" type="warning">
@@ -95,7 +95,7 @@ import {
 } from '../api.js'
 
 export default {
-	name: 'AskClaudeModal',
+	name: 'AskAIquilaModal',
 
 	components: {
 		NcModal,
@@ -188,7 +188,7 @@ export default {
 				this.prompt = prompt
 				this.error = err.response?.data?.error
 					|| err.message
-					|| t('aiquila', 'Failed to communicate with Claude')
+					|| t('aiquila', 'Failed to get a response')
 			} finally {
 				this.draft = null
 				this.loading = false

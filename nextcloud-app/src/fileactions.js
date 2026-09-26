@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /**
- * "Ask Claude" action in the Files app. Loaded on the Files page by
+ * "Ask AIquila" action in the Files app. Loaded on the Files page by
  * LoadFilesScriptsListener; the modal and Vue are imported on first use so
  * the Files page only pays for the action registration.
  */
@@ -14,8 +14,8 @@ const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
 </svg>`
 
 registerFileAction({
-	id: 'aiquila-ask-claude',
-	displayName: () => t('aiquila', 'Ask Claude'),
+	id: 'aiquila-ask',
+	displayName: () => t('aiquila', 'Ask AIquila'),
 	iconSvgInline: () => ICON,
 	order: 10,
 
@@ -25,14 +25,14 @@ registerFileAction({
 		&& (nodes[0].permissions & Permission.READ) !== 0,
 
 	async exec({ nodes }) {
-		const [{ createApp }, { default: AskClaudeModal }] = await Promise.all([
+		const [{ createApp }, { default: AskAIquilaModal }] = await Promise.all([
 			import('vue'),
-			import('./components/AskClaudeModal.vue'),
+			import('./components/AskAIquilaModal.vue'),
 		])
 
 		const container = document.createElement('div')
 		document.body.appendChild(container)
-		const app = createApp(AskClaudeModal, {
+		const app = createApp(AskAIquilaModal, {
 			file: nodes[0],
 			onClose: () => {
 				app.unmount()

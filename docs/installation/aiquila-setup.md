@@ -324,7 +324,7 @@ An attached file stays in context for the rest of the conversation, so you can a
 
 #### Asking about a file from the Files app
 
-In the Files app, open a file's **⋯** menu and choose **Ask Claude**. This starts a conversation with the file attached, and you can keep asking follow-ups in the dialog. **Open in AIquila** continues the same conversation in the chat.
+In the Files app, open a file's **⋯** menu and choose **Ask AIquila**. This starts a conversation with the file attached, and you can keep asking follow-ups in the dialog. **Open in AIquila** continues the same conversation in the chat.
 
 ### 2. Nextcloud Assistant Integration
 

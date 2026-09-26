@@ -11,7 +11,7 @@ use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 
 /**
- * Loads the "Ask Claude" file action into the Files app.
+ * Loads the "Ask AIquila" file action into the Files app.
  *
  * Registered for the Files app's LoadAdditionalScriptsEvent, which it
  * dispatches while rendering its page. That class lives in the Files app
