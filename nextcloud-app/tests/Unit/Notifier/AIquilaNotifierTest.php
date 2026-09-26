@@ -6,6 +6,7 @@ use OCA\AIquila\Notifier\AIquilaNotifier;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\Notification\INotification;
+use OCP\Notification\UnknownNotificationException;
 use PHPUnit\Framework\TestCase;
 
 class AIquilaNotifierTest extends TestCase {
@@ -20,6 +21,9 @@ class AIquilaNotifierTest extends TestCase {
             fn(string $text, array $params = []) => $params ? vsprintf($text, $params) : $text
         );
         $this->urlGenerator->method('imagePath')->willReturn('/apps/aiquila/img/app-dark.svg');
+        $this->urlGenerator->method('getAbsoluteURL')->willReturnCallback(
+            static fn (string $url) => 'https://cloud.example' . $url
+        );
         $this->notifier = new AIquilaNotifier($this->urlGenerator, $this->l10n);
     }
 
@@ -35,7 +39,7 @@ class AIquilaNotifierTest extends TestCase {
         $notification = $this->createMock(INotification::class);
         $notification->method('getApp')->willReturn('other_app');
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(UnknownNotificationException::class);
         $this->notifier->prepare($notification, 'en');
     }
 
@@ -50,7 +54,8 @@ class AIquilaNotifierTest extends TestCase {
         $notification->expects($this->once())->method('setParsedMessage')
             ->with('Your Summarization task has completed successfully.');
         $notification->expects($this->once())->method('setIcon')
-            ->with('/apps/aiquila/img/app-dark.svg');
+            // Nextcloud rejects relative icon URLs, dropping the notification.
+            ->with('https://cloud.example/apps/aiquila/img/app-dark.svg');
 
         // Chain methods return self
         $notification->method('setParsedSubject')->willReturn($notification);
@@ -115,12 +120,26 @@ class AIquilaNotifierTest extends TestCase {
         $this->notifier->prepare($notification, 'en');
     }
 
+    public function testPrepareAskResponseWithoutTextSetsNoMessage(): void {
+        // Nextcloud throws on an empty parsed message, which would drop the notification.
+        $notification = $this->createMock(INotification::class);
+        $notification->method('getApp')->willReturn('aiquila');
+        $notification->method('getSubject')->willReturn('ask_response');
+        $notification->method('getSubjectParameters')->willReturn([]);
+
+        $notification->expects($this->once())->method('setParsedSubject')->willReturn($notification);
+        $notification->expects($this->never())->method('setParsedMessage');
+        $notification->method('setIcon')->willReturn($notification);
+
+        $this->notifier->prepare($notification, 'en');
+    }
+
     public function testPrepareUnknownSubjectThrows(): void {
         $notification = $this->createMock(INotification::class);
         $notification->method('getApp')->willReturn('aiquila');
         $notification->method('getSubject')->willReturn('unknown_subject');
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(UnknownNotificationException::class);
         $this->notifier->prepare($notification, 'en');
     }
 }

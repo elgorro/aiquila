@@ -7,6 +7,9 @@ use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use OCA\AIquila\TaskProcessing\ProviderResolver;
 use OCA\AIquila\TaskProcessing\TranslateProvider;
+use OCP\IL10N;
+use OCP\L10N\IFactory;
+use OCP\TaskProcessing\ShapeEnumValue;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -19,7 +22,72 @@ class TranslateProviderTest extends TestCase {
 
     protected function setUp(): void {
         $this->factory = $this->createMock(LLMProviderFactory::class);
-        $this->provider = new TranslateProvider(new ProviderResolver($this->factory));
+        $l10n = $this->createStub(IL10N::class);
+        $l10n->method('t')->willReturnArgument(0);
+        $l10nFactory = $this->createStub(IFactory::class);
+        $l10nFactory->method('getLanguages')->willReturn([
+            'commonLanguages' => [
+                ['code' => 'en', 'name' => 'English (US)'],
+                ['code' => 'de', 'name' => 'Deutsch'],
+            ],
+            'otherLanguages' => [
+                ['code' => 'fr', 'name' => 'Français'],
+                ['code' => 'de', 'name' => 'Deutsch (duplicate)'],
+            ],
+        ]);
+        $this->provider = new TranslateProvider(new ProviderResolver($this->factory), $l10nFactory, $l10n);
+    }
+
+    /** @param list<ShapeEnumValue> $values */
+    private static function values(array $values): array {
+        return array_map(static fn (ShapeEnumValue $v) => $v->getValue(), $values);
+    }
+
+    public function testLanguagesComeFromTheServerWithDetectOnlyAsOrigin(): void {
+        $enums = $this->provider->getInputShapeEnumValues();
+
+        // The Assistant takes origin_language[0] as its default when none is set.
+        $this->assertSame(['detect_language', 'en', 'de', 'fr'], self::values($enums['origin_language']));
+        $this->assertSame(['en', 'de', 'fr'], self::values($enums['target_language']));
+        $this->assertSame('Deutsch', $enums['target_language'][1]->getName());
+    }
+
+    public function testOriginDefaultsToDetection(): void {
+        $this->assertSame(['origin_language' => 'detect_language'], $this->provider->getInputShapeDefaults());
+    }
+
+    public function testLanguageCodesReachThePromptAsNames(): void {
+        $local = $this->createMock(LLMProviderInterface::class);
+        $local->expects($this->once())
+            ->method('ask')
+            ->with($this->stringContains('from Deutsch to Français'))
+            ->willReturn(['response' => 'Bonjour']);
+        $this->factory->method('getProviderForUser')->willReturn($local);
+
+        $this->provider->process('alice', [
+            'input' => 'Guten Tag',
+            'origin_language' => 'de',
+            'target_language' => 'fr',
+        ], static fn (float $p) => null);
+    }
+
+    public function testDetectLanguageLeavesTheSourceToTheModel(): void {
+        $local = $this->createMock(LLMProviderInterface::class);
+        $local->expects($this->once())
+            ->method('ask')
+            ->with($this->logicalAnd(
+                $this->logicalNot($this->stringContains(' from ')),
+                $this->logicalNot($this->stringContains('detect_language')),
+                $this->stringContains('to Français'),
+            ))
+            ->willReturn(['response' => 'Bonjour']);
+        $this->factory->method('getProviderForUser')->willReturn($local);
+
+        $this->provider->process('alice', [
+            'input' => 'Guten Tag',
+            'origin_language' => 'detect_language',
+            'target_language' => 'fr',
+        ], static fn (float $p) => null);
     }
 
     public function testIdAndTaskTypeAreUnchangedByTheRename(): void {
