@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\TaskTypes\TextToTextHeadline;
 
@@ -78,6 +79,7 @@ class HeadlineProvider implements ISynchronousProvider {
             "Generate a concise, descriptive headline for the following text. Return only the headline, nothing else:\n\n" . $text,
             '',
             $userId,
+            LLMProviderInterface::TASK_OPTIONS,
         );
 
         if (isset($result['error'])) {

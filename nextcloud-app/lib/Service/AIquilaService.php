@@ -4,6 +4,7 @@
 namespace OCA\AIquila\Service;
 
 use OCA\AIquila\Public\IAIquila;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\Files\NotFoundException;
 use OCP\Notification\IManager as INotificationManager;
 use Psr\Log\LoggerInterface;
@@ -52,7 +53,7 @@ class AIquilaService implements IAIquila {
         ]);
 
         try {
-            $result = $this->claudeSDKService->ask($prompt, $context, $userId);
+            $result = $this->claudeSDKService->ask($prompt, $context, $userId, LLMProviderInterface::TASK_OPTIONS);
 
             if (isset($result['error'])) {
                 $this->logger->error('AIquila: Claude API error', ['error' => $result['error']]);
@@ -119,14 +120,16 @@ class AIquilaService implements IAIquila {
                     $prompt,
                     $optimized['data'],
                     $optimized['mimeType'],
-                    $userId
+                    $userId,
+                    null,
+                    LLMProviderInterface::TASK_OPTIONS,
                 );
             }
 
             // Text and other files: pass content as context
             $context = "File: {$fileData['name']} ({$mimeType}, {$fileData['size']} bytes)\n\n"
                      . $fileData['content'];
-            return $this->claudeSDKService->ask($prompt, $context, $userId);
+            return $this->claudeSDKService->ask($prompt, $context, $userId, LLMProviderInterface::TASK_OPTIONS);
 
         } catch (NotFoundException $e) {
             return ['error' => 'File not found: ' . $filePath];
@@ -180,9 +183,9 @@ class AIquilaService implements IAIquila {
             // Images only
             if (!empty($images) && empty($textParts)) {
                 if (count($images) === 1) {
-                    return $this->claudeSDKService->askWithImage($prompt, $images[0]['base64'], $images[0]['mimeType'], $userId);
+                    return $this->claudeSDKService->askWithImage($prompt, $images[0]['base64'], $images[0]['mimeType'], $userId, null, LLMProviderInterface::TASK_OPTIONS);
                 }
-                return $this->claudeSDKService->askWithImages($prompt, $images, $userId);
+                return $this->claudeSDKService->askWithImages($prompt, $images, $userId, null, LLMProviderInterface::TASK_OPTIONS);
             }
 
             // Text only or mixed — use text context
@@ -190,10 +193,10 @@ class AIquilaService implements IAIquila {
             if (!empty($images)) {
                 // Mixed: use askWithImages and prepend text context to prompt
                 $promptWithContext = $context . "\n\n" . $prompt;
-                return $this->claudeSDKService->askWithImages($promptWithContext, $images, $userId);
+                return $this->claudeSDKService->askWithImages($promptWithContext, $images, $userId, null, LLMProviderInterface::TASK_OPTIONS);
             }
 
-            return $this->claudeSDKService->ask($prompt, $context, $userId);
+            return $this->claudeSDKService->ask($prompt, $context, $userId, LLMProviderInterface::TASK_OPTIONS);
 
         } catch (NotFoundException $e) {
             return ['error' => 'File not found: ' . $e->getMessage()];

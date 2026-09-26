@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\ShapeDescriptor;
@@ -122,6 +123,7 @@ class ChatWithToolsProvider implements ISynchronousProvider {
             $this->toInternalTools($input['tools'] ?? ''),
             $system !== '' ? $system : null,
             $userId,
+            LLMProviderInterface::TASK_OPTIONS,
         );
 
         if (isset($result['error'])) {

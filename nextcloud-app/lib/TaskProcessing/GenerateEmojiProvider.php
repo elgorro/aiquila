@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\ShapeDescriptor;
@@ -89,6 +90,7 @@ class GenerateEmojiProvider implements ISynchronousProvider {
             "Pick the single emoji that best represents the following text. Answer with that one emoji character and nothing else — no words, no punctuation, no explanation:\n\n" . $text,
             '',
             $userId,
+            LLMProviderInterface::TASK_OPTIONS,
         );
 
         if (isset($result['error'])) {

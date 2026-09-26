@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\ClaudeSDKService;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\TaskTypes\TextToTextSummary;
 
@@ -84,7 +85,7 @@ class SummaryProvider implements ISynchronousProvider {
             $result = $provider->summarizeViaBatch($text, $userId, $reportProgress);
         } else {
             $reportProgress(0.1);
-            $result = $provider->ask("Summarize the following content concisely:\n\n" . $text, '', $userId);
+            $result = $provider->ask("Summarize the following content concisely:\n\n" . $text, '', $userId, LLMProviderInterface::TASK_OPTIONS);
         }
 
         if (isset($result['error'])) {

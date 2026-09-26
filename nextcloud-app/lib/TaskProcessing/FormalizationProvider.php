@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\TaskTypes\TextToTextFormalization;
 
@@ -78,6 +79,7 @@ class FormalizationProvider implements ISynchronousProvider {
             "Rewrite the following text in a formal, professional tone. Return only the formalized text, nothing else:\n\n" . $text,
             '',
             $userId,
+            LLMProviderInterface::TASK_OPTIONS,
         );
 
         if (isset($result['error'])) {

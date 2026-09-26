@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\TaskTypes\TextToText;
 
@@ -83,7 +84,7 @@ class TextToTextProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId)->ask($prompt, '', $userId);
+        $result = $this->providers->resolve($userId)->ask($prompt, '', $userId, LLMProviderInterface::TASK_OPTIONS);
 
         if (isset($result['error'])) {
             throw new \RuntimeException($result['error']);

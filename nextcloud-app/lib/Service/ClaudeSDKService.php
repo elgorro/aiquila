@@ -1514,7 +1514,12 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $messages = [['role' => 'user', 'content' => "Summarize the following content concisely:\n\n$content"]];
             $customId = 'aiquila-summary-' . bin2hex(random_bytes(8));
 
-            $batchId = $this->submitBatch([['custom_id' => $customId, 'messages' => $messages]], $userId);
+            // Batch work is background work by definition.
+            $batchId = $this->submitBatch([[
+                'custom_id' => $customId,
+                'messages' => $messages,
+                'options' => self::TASK_OPTIONS,
+            ]], $userId);
             if ($reportProgress !== null) {
                 $reportProgress(0.1);
             }
@@ -2271,9 +2276,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string $mimeType Image mime type (image/jpeg, image/png, image/gif, image/webp)
      * @param string|null $userId User ID for API key
      * @param string|null $fileId Optional Anthropic Files API file_id. When provided, the image source is `{type:'file', file_id}` instead of inline base64.
+     * @param array $options Request options, as for buildRequestParams()
      * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
-    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null): array {
+    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null, array $options = []): array {
         try {
             $client = $this->getClient($userId);
 
@@ -2297,7 +2303,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                     ],
                 ],
             ];
-            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId));
+            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId, $options));
 
             $usage = $this->extractUsage($response);
 
@@ -2325,9 +2331,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param array<array{base64: string, mimeType: string, ...}> $images Image data array
      * @param string|null $userId User ID for API key
      * @param array<int, string|null>|null $fileIds Optional per-image Anthropic Files API file_ids, indexed parallel to $images. A non-null entry triggers a `{type:'file', file_id}` source for that image; null entries fall back to inline base64.
+     * @param array $options Request options, as for buildRequestParams()
      * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
-    public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null): array {
+    public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null, array $options = []): array {
         if (empty($images)) {
             return ['error' => 'No images provided'];
         }
@@ -2363,7 +2370,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                     'content' => $content,
                 ],
             ];
-            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId));
+            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId, $options));
 
             $usage = $this->extractUsage($response);
 

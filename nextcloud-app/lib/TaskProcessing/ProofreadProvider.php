@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\TaskTypes\TextToTextProofread;
 
@@ -78,6 +79,7 @@ class ProofreadProvider implements ISynchronousProvider {
             "Proofread the following text for grammar and spelling mistakes. Return the corrected text only, nothing else:\n\n" . $text,
             '',
             $userId,
+            LLMProviderInterface::TASK_OPTIONS,
         );
 
         if (isset($result['error'])) {

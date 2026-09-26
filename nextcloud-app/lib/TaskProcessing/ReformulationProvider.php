@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\TaskTypes\TextToTextReformulation;
 
@@ -78,6 +79,7 @@ class ReformulationProvider implements ISynchronousProvider {
             "Reformulate the following text while keeping the same meaning. Return only the reformulated text, nothing else:\n\n" . $text,
             '',
             $userId,
+            LLMProviderInterface::TASK_OPTIONS,
         );
 
         if (isset($result['error'])) {

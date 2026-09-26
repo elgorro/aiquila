@@ -158,6 +158,51 @@ class BatchTextTaskTypeTest extends TestCase {
         $this->assertStringContainsString('first body', $captured[0]['messages'][0]['content']);
     }
 
+    /** The coworker's own model, effort and thinking ride on every request. */
+    public function testRunCarriesTheCoworkersModelEffortAndThinking(): void {
+        $this->inputFolder([$this->file(11, 'a.txt', 'text/plain', 'body')]);
+        $this->provider->method('getId')->willReturn('anthropic');
+
+        $captured = null;
+        $this->provider->method('submitBatch')
+            ->willReturnCallback(function (array $requests) use (&$captured): string {
+                $captured = $requests;
+                return 'batch_01ABC';
+            });
+
+        $coworker = $this->coworker(['effort' => 'low', 'thinking' => 'off']);
+        $coworker->setProvider('anthropic');
+        $coworker->setModel('claude-sonnet-5');
+        $this->task->run($coworker, $this->newRun(), $this->progress());
+
+        $this->assertSame([
+            'context' => 'task',
+            'model' => 'claude-sonnet-5',
+            'effort' => 'low',
+            'thinking' => 'off',
+        ], $captured[0]['options']);
+    }
+
+    /** A model pinned for another provider must not leak into this one. */
+    public function testModelIsDroppedWhenThePinnedProviderIsNotUsed(): void {
+        $this->inputFolder([$this->file(11, 'a.txt', 'text/plain', 'body')]);
+        $this->provider->method('getId')->willReturn('anthropic');
+
+        $captured = null;
+        $this->provider->method('submitBatch')
+            ->willReturnCallback(function (array $requests) use (&$captured): string {
+                $captured = $requests;
+                return 'batch_01ABC';
+            });
+
+        $coworker = $this->coworker();
+        $coworker->setProvider('mistral');
+        $coworker->setModel('mistral-large-latest');
+        $this->task->run($coworker, $this->newRun(), $this->progress());
+
+        $this->assertSame(['context' => 'task'], $captured[0]['options']);
+    }
+
     public function testNonMatchingMimeTypesAreIgnored(): void {
         $this->inputFolder([
             $this->file(11, 'a.txt', 'text/plain', 'body'),

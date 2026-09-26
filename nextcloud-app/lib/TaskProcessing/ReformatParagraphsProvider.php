@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\ShapeDescriptor;
@@ -91,6 +92,7 @@ class ReformatParagraphsProvider implements ISynchronousProvider {
             "Reformat the following text into multiple paragraphs, each covering one topic. Keep the wording and meaning unchanged — only change where the paragraph breaks fall. Return only the reformatted text, nothing else:\n\n" . $text,
             '',
             $userId,
+            LLMProviderInterface::TASK_OPTIONS,
         );
 
         if (isset($result['error'])) {

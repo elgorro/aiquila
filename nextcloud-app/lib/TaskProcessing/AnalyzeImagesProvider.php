@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\ImageOptimizer;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\Files\File;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
@@ -131,6 +132,7 @@ class AnalyzeImagesProvider implements ISynchronousProvider {
                 $images[0]['mimeType'],
                 $userId,
                 $fileIds[0],
+                LLMProviderInterface::TASK_OPTIONS,
             );
         } else {
             $result = $provider->askWithImages(
@@ -138,6 +140,7 @@ class AnalyzeImagesProvider implements ISynchronousProvider {
                 $images,
                 $userId,
                 $fileIds,
+                LLMProviderInterface::TASK_OPTIONS,
             );
         }
 

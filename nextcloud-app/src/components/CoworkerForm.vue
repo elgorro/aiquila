@@ -23,6 +23,37 @@
 			</select>
 		</label>
 
+		<!--
+			Claude only: Mistral's effort vocabulary differs and it has no
+			thinking switch. Blank everywhere means "use the background-task
+			defaults from the admin settings".
+		-->
+		<template v-if="isClaude">
+			<label class="field">
+				<span>{{ t('aiquila', 'Model') }}</span>
+				<input v-model="form.model" type="text" :placeholder="t('aiquila', 'Leave empty for the default model')">
+			</label>
+
+			<label class="field">
+				<span>{{ t('aiquila', 'Effort') }}</span>
+				<select v-model="form.effort">
+					<option value="">{{ t('aiquila', 'Default') }}</option>
+					<option v-for="e in efforts" :key="e" :value="e">{{ e }}</option>
+				</select>
+				<small>{{ t('aiquila', 'Routine work rarely needs more than "low" or "medium".') }}</small>
+			</label>
+
+			<label class="field">
+				<span>{{ t('aiquila', 'Thinking') }}</span>
+				<select v-model="form.thinking">
+					<option value="">{{ t('aiquila', 'Default') }}</option>
+					<option value="auto">{{ t('aiquila', 'Follow the model') }}</option>
+					<option value="on">{{ t('aiquila', 'On') }}</option>
+					<option value="off">{{ t('aiquila', 'Off (where the model allows it)') }}</option>
+				</select>
+			</label>
+		</template>
+
 		<label class="field">
 			<span>{{ t('aiquila', 'Input folder') }}</span>
 			<input v-model="form.input_path" type="text" :placeholder="defaultInputPath">
@@ -108,6 +139,9 @@ export default {
 				targetLanguage: options.targetLanguage || '',
 				style: options.style || 'brief',
 				recursive: options.recursive !== false,
+				model: m.model || '',
+				effort: options.effort || '',
+				thinking: options.thinking || '',
 				is_active: m.isActive !== undefined ? !!m.isActive : true,
 			},
 		}
@@ -127,6 +161,12 @@ export default {
 		isTranslate() {
 			return this.form.task_type === 'docs:translate'
 		},
+		isClaude() {
+			return this.form.provider === 'anthropic'
+		},
+		efforts() {
+			return ['low', 'medium', 'high', 'xhigh', 'max']
+		},
 		defaultInputPath() {
 			return this.isDocs ? '/Documents' : '/Photos'
 		},
@@ -145,6 +185,12 @@ export default {
 			if (this.isTranslate) {
 				options.targetLanguage = this.form.targetLanguage
 			}
+			if (this.isClaude && this.form.effort) {
+				options.effort = this.form.effort
+			}
+			if (this.isClaude && this.form.thinking) {
+				options.thinking = this.form.thinking
+			}
 
 			const payload = {
 				title: this.form.title,
@@ -156,6 +202,8 @@ export default {
 				output_type: this.isDocs ? 'files' : 'system_tags',
 				cron_schedule: this.form.cron_schedule,
 				is_active: this.form.is_active,
+				// A model id belongs to one provider; drop it when switching away.
+				model: this.isClaude ? this.form.model : '',
 				options,
 			}
 			if (this.isDocs && this.form.output_path) {

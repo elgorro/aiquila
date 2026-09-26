@@ -9,6 +9,7 @@ use OCA\AIquila\Db\Coworker;
 use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
@@ -161,6 +162,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
             $requests[] = [
                 'custom_id' => $customId,
                 'messages' => [['role' => 'user', 'content' => $this->buildPrompt($content, $options)]],
+                'options' => CoworkerRequestOptions::build($coworker, $provider, $options),
             ];
             $fileIds[$customId] = $file->getId();
         }
@@ -315,7 +317,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
      */
     private function runSynchronously(
         Coworker $coworker,
-        object $provider,
+        LLMProviderInterface $provider,
         array $files,
         array $options,
         callable $progress,
@@ -337,7 +339,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
                     continue;
                 }
 
-                $result = $provider->ask($this->buildPrompt($content, $options), '', $userId);
+                $result = $provider->ask($this->buildPrompt($content, $options), '', $userId, CoworkerRequestOptions::build($coworker, $provider, $options));
                 if (isset($result['error'])) {
                     $failures['errored'][] = $file->getName() . ' — ' . $result['error'];
                     continue;

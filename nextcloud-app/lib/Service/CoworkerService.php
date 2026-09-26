@@ -66,6 +66,8 @@ class CoworkerService {
                 'title' => 'Classify images — Claude vision',
                 'description' => 'Tag images in a folder using Claude vision, nightly.',
                 'provider' => 'anthropic',
+                // Tagging is routine work: low effort keeps it cheap.
+                'options' => $vision['options'] + ['effort' => 'low'],
             ]),
             array_merge($vision, [
                 'id' => 'classify-images-mistral',
@@ -79,14 +81,14 @@ class CoworkerService {
                 'description' => 'Write a summary beside every document in a folder, nightly.',
                 'task_type' => 'docs:summarize',
                 'output_path' => '/Documents/Summaries',
-                'options' => ['style' => 'brief', 'recursive' => true],
+                'options' => ['style' => 'brief', 'recursive' => true, 'effort' => 'medium'],
             ]),
             array_merge($docs, [
                 'id' => 'translate-documents-claude',
                 'title' => 'Translate documents — Claude',
                 'description' => 'Translate every document in a folder into one language, nightly.',
                 'task_type' => 'docs:translate',
-                'options' => ['targetLanguage' => 'German', 'recursive' => true],
+                'options' => ['targetLanguage' => 'German', 'recursive' => true, 'effort' => 'medium'],
             ]),
         ];
     }

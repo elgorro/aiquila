@@ -102,15 +102,23 @@ interface LLMProviderInterface {
     /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
     public function ask(string $prompt, string $context = '', ?string $userId = null, array $options = []): array;
 
+    /**
+     * Request options for background surfaces — Assistant tasks, coworkers,
+     * other apps calling IAIquila. Providers with separate defaults for such
+     * work (Anthropic's task_effort / task_thinking) pick them up; the rest
+     * ignore the key.
+     */
+    public const TASK_OPTIONS = ['context' => 'task'];
+
     /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
-    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null): array;
+    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null, array $options = []): array;
 
     /**
      * @param array<array{base64: string, mimeType: string, ...}> $images
      * @param array<int, string|null>|null $fileIds
      * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
-    public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null): array;
+    public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null, array $options = []): array;
 
     /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
     public function askWithDocument(string $prompt, string $documentData, string $mediaType, string $title = '', ?string $userId = null, bool $cacheDoc = true, bool $citations = true, ?string $fileId = null): array;
