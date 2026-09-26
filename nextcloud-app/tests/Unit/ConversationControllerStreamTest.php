@@ -149,6 +149,25 @@ class ConversationControllerStreamTest extends TestCase {
         $this->assertSame('Hello world', $this->assistantContent());
     }
 
+    public function testThinkingIsForwardedAndItsSummaryPersisted(): void {
+        $events = $this->drain([
+            ['type' => 'thinking_start'],
+            ['type' => 'thinking_delta', 'text' => 'Weighing '],
+            ['type' => 'thinking_delta', 'text' => 'options.'],
+            ['type' => 'thinking_stop', 'duration_ms' => 1200],
+            ['type' => 'text_delta', 'text' => 'Answer'],
+            ['type' => 'done', 'usage' => [], 'citations' => []],
+        ]);
+
+        $this->assertSame(
+            ['user_message', 'thinking_start', 'thinking_delta', 'thinking_delta', 'thinking_stop', 'text_delta', 'done', 'persisted'],
+            $this->types($events)
+        );
+        $this->assertSame('Answer', $this->assistantContent());
+        $persisted = end($events)['assistantMessage'];
+        $this->assertSame('Weighing options.', $persisted['thinkingSummary']);
+    }
+
     /** The first prompt names the conversation, as the non-streaming path does. */
     public function testFirstTurnSetsTheTitle(): void {
         $this->drain([['type' => 'done', 'usage' => [], 'citations' => []]], 'What is a raincoat?');

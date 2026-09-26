@@ -31,6 +31,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setCitations(?string $citations)
  * @method string|null getDocuments()
  * @method void setDocuments(?string $documents)
+ * @method string|null getThinkingSummary()
+ * @method void setThinkingSummary(?string $thinkingSummary)
  */
 class Message extends Entity implements \JsonSerializable {
     protected int $conversationId = 0;
@@ -44,6 +46,8 @@ class Message extends Entity implements \JsonSerializable {
     protected ?int $latencyMs = null;
     protected ?string $citations = null;
     protected ?string $documents = null;
+    /** Readable summary of the model's thinking for an assistant message; null when it did not think. */
+    protected ?string $thinkingSummary = null;
 
     public function __construct() {
         $this->addType('conversationId', 'integer');
@@ -57,10 +61,11 @@ class Message extends Entity implements \JsonSerializable {
         $this->addType('latencyMs', 'integer');
         $this->addType('citations', 'string');
         $this->addType('documents', 'string');
+        $this->addType('thinkingSummary', 'string');
     }
 
     /**
-     * @return array{id: int, conversationId: int, role: string, content: string, inputTokens: ?int, outputTokens: ?int, cacheCreationTokens: ?int, cacheReadTokens: ?int, latencyMs: ?int, citations: ?array<string, mixed>, documents: ?array<string, mixed>, createdAt: int}
+     * @return array{id: int, conversationId: int, role: string, content: string, inputTokens: ?int, outputTokens: ?int, cacheCreationTokens: ?int, cacheReadTokens: ?int, latencyMs: ?int, citations: ?array<string, mixed>, documents: ?array<string, mixed>, thinkingSummary: ?string, createdAt: int}
      */
     public function jsonSerialize(): array {
         $citationsJson = $this->getCitations();
@@ -87,6 +92,7 @@ class Message extends Entity implements \JsonSerializable {
             'latencyMs' => $this->getLatencyMs(),
             'citations' => $citations,
             'documents' => $documents,
+            'thinkingSummary' => $this->getThinkingSummary(),
             'createdAt' => $this->getCreatedAt(),
         ];
     }

@@ -27,6 +27,16 @@ export function updateConversation(id, data) {
 }
 
 /**
+ * Effective thinking and effort for the next message in a conversation, after
+ * every default and model rule is applied.
+ *
+ * @param {number} id conversation id
+ */
+export function getConversationThinking(id) {
+	return axios.get(url(`/api/conversations/${id}/thinking`))
+}
+
+/**
  * Pin a provider and/or model on a conversation.
  *
  * An empty `provider` unpins it, so the conversation follows the user's

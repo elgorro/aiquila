@@ -24,6 +24,7 @@ use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
+use OCA\AIquila\Service\Provider\ThinkingProfileInterface;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -230,12 +231,72 @@ class ConversationController extends Controller {
 
         if ($model !== null && $model !== '') {
             $conversation->setModel($model);
+
+            // A pinned effort the new model rejects would fall back silently on
+            // every request; drop it so the conversation shows the real value.
+            $effort = $conversation->getEffort();
+            if ($effort !== null
+                && !in_array($effort, $this->resolveProvider($conversation)->getAllowedEfforts($model), true)) {
+                $conversation->setEffort(null);
+            }
         }
 
         $conversation->setUpdatedAt(time());
         $this->conversationMapper->update($conversation);
 
         return new JSONResponse($conversation->jsonSerialize());
+    }
+
+    /**
+     * Effective thinking and effort for the next message in a conversation
+     *
+     * Resolves the conversation's overrides, the user's and the instance
+     * defaults, and the rules of the model that would answer — some models
+     * always think, others cap the effort when thinking is off.
+     *
+     * @param int $id Conversation ID
+     *
+     * 200: Effective state. `state` is adaptive, budget, off or none (the provider has no thinking)
+     * 403: No provider is permitted for this user
+     * 404: Conversation not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{model: string, mode: string, state: string, alwaysOn: bool, effort: ?string, budget: ?int, adjustments: list<string>}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     */
+    #[NoAdminRequired]
+    #[OpenAPI]
+    public function thinking(int $id): JSONResponse {
+        if (!$this->providerFactory->hasPermittedProvider($this->userId)) {
+            return $this->noProviderAvailable();
+        }
+        try {
+            $conversation = $this->conversationMapper->findByIdAndUser($id, $this->requireUserId());
+        } catch (DoesNotExistException $e) {
+            return $this->clientError(404, 'Conversation not found');
+        }
+
+        $provider = $this->resolveProvider($conversation);
+        if (!($provider instanceof ThinkingProfileInterface)) {
+            return new JSONResponse([
+                'model' => $provider->getModel($this->userId),
+                'mode' => 'auto',
+                'state' => 'none',
+                'alwaysOn' => false,
+                'effort' => $conversation->getEffort(),
+                'budget' => null,
+                'adjustments' => [],
+            ]);
+        }
+
+        $state = $provider->describeThinking($this->userId, $this->conversationOptions($conversation));
+        return new JSONResponse([
+            'model' => $state['model'],
+            'mode' => $state['mode'],
+            'state' => $state['state'],
+            'alwaysOn' => $state['always_on'],
+            'effort' => $state['effort'],
+            'budget' => $state['budget'],
+            'adjustments' => $state['adjustments'],
+        ]);
     }
 
     /**
@@ -246,7 +307,7 @@ class ConversationController extends Controller {
      * 200: Conversation with messages
      * 404: Conversation not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, thinkingBudget: ?int, speedFast: ?bool, messages: list<array{id: int, conversationId: int, role: string, content: string, inputTokens: ?int, outputTokens: ?int, cacheCreationTokens: ?int, cacheReadTokens: ?int, latencyMs: ?int, citations: ?array<string, mixed>, documents: ?array<string, mixed>, createdAt: int, files: list<array{id: int, messageId: int, filePath: string, fileName: string, mimeType: ?string, createdAt: int}>}>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, userId: string, title: ?string, model: string, provider: ?string, createdAt: int, updatedAt: int, projectId: ?int, effort: ?string, thinking: ?bool, thinkingBudget: ?int, speedFast: ?bool, messages: list<array{id: int, conversationId: int, role: string, content: string, inputTokens: ?int, outputTokens: ?int, cacheCreationTokens: ?int, cacheReadTokens: ?int, latencyMs: ?int, citations: ?array<string, mixed>, documents: ?array<string, mixed>, thinkingSummary: ?string, createdAt: int, files: list<array{id: int, messageId: int, filePath: string, fileName: string, mimeType: ?string, createdAt: int}>}>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
@@ -344,10 +405,22 @@ class ConversationController extends Controller {
         }
 
         if ($thinking !== null) {
-            if (!in_array($thinking, ['on', 'off', ''], true)) {
-                return $this->clientError(400, 'Thinking must be "on", "off" or empty');
+            if (!in_array($thinking, ['on', 'off', 'auto', ''], true)) {
+                return $this->clientError(400, 'Thinking must be "on", "off", "auto" or empty');
             }
-            $conversation->setThinking($thinking === '' ? null : $thinking === 'on');
+            if ($thinking === 'off') {
+                // Some models cannot stop thinking at all. Saying so beats
+                // storing an "off" that every request would quietly ignore.
+                $provider = $this->resolveProvider($conversation);
+                if ($provider instanceof ThinkingProfileInterface) {
+                    $model = $provider->describeThinking($this->userId, $this->conversationOptions($conversation))['model'];
+                    if (!$provider->getThinkingProfile($model)['can_disable']) {
+                        return $this->clientError(400, $model . ' always thinks, so thinking cannot be turned off. Lower the effort with /effort instead.');
+                    }
+                }
+            }
+            // "auto" and blank both hand the decision back to the defaults.
+            $conversation->setThinking(in_array($thinking, ['', 'auto'], true) ? null : $thinking === 'on');
         }
 
         if ($thinkingBudget !== null && $thinkingBudget !== '') {
@@ -819,6 +892,7 @@ class ConversationController extends Controller {
 
         // 4. Drive the streaming generator, accumulating final state.
         $accumulatedText = '';
+        $accumulatedThinking = '';
         $finalCitations = [];
         $finalUsage = ['input_tokens' => 0, 'output_tokens' => 0, 'cache_creation_tokens' => null, 'cache_read_tokens' => null];
         $errorMessage = null;
@@ -852,6 +926,9 @@ class ConversationController extends Controller {
                 switch ($event['type'] ?? null) {
                     case 'text_delta':
                         $accumulatedText .= $event['text'] ?? '';
+                        break;
+                    case 'thinking_delta':
+                        $accumulatedThinking .= $event['text'] ?? '';
                         break;
                     case 'done':
                         $finalCitations = $event['citations'] ?? [];
@@ -894,6 +971,9 @@ class ConversationController extends Controller {
         $assistantMsg->setCacheCreationTokens($finalUsage['cache_creation_tokens'] ?? null);
         $assistantMsg->setCacheReadTokens($finalUsage['cache_read_tokens'] ?? null);
         $assistantMsg->setLatencyMs($latencyMs);
+        if ($accumulatedThinking !== '') {
+            $assistantMsg->setThinkingSummary($accumulatedThinking);
+        }
         if (!empty($finalCitations)) {
             $assistantMsg->setCitations(json_encode($finalCitations) ?: null);
             if (!empty($documentsIndex)) {
@@ -962,6 +1042,8 @@ class ConversationController extends Controller {
         );
         $newConv->setEffort($original->getEffort());
         $newConv->setThinking($original->getThinking());
+        $newConv->setThinkingBudget($original->getThinkingBudget());
+        $newConv->setSpeedFast($original->getSpeedFast());
         $newConv->setProjectId($original->getProjectId());
         $newConv->setCreatedAt($now);
         $newConv->setUpdatedAt($now);
@@ -1196,6 +1278,9 @@ class ConversationController extends Controller {
         if ($conversation->getSpeedFast() !== null) {
             $options['speed'] = $conversation->getSpeedFast();
         }
+        // The chat shows what the model thought, so ask for readable summaries
+        // where the model would otherwise return empty thinking text.
+        $options['thinking_display'] = true;
         return $options;
     }
 

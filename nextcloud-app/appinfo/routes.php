@@ -14,6 +14,7 @@ return [
         // Diagnostic SSE endpoint measured by the StreamingNotBuffered setup check.
         ['name' => 'streamProbe#probe', 'url' => '/api/stream-probe', 'verb' => 'GET'],
         ['name' => 'conversation#setModel',  'url' => '/api/conversations/{id}/model',      'verb' => 'PUT'],
+        ['name' => 'conversation#thinking',  'url' => '/api/conversations/{id}/thinking',   'verb' => 'GET'],
         ['name' => 'conversation#duplicate', 'url' => '/api/conversations/{id}/duplicate', 'verb' => 'POST'],
         ['name' => 'conversation#search',    'url' => '/api/conversations/search',         'verb' => 'GET'],
 
