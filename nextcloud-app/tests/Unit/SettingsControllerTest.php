@@ -8,6 +8,7 @@ use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\ProviderSettingsService;
+use OCA\AIquila\Service\SearchSettings;
 use OCP\IConfig;
 use OCP\IRequest;
 use PHPUnit\Framework\TestCase;
@@ -65,7 +66,8 @@ class SettingsControllerTest extends TestCase {
             $this->credentials,
             $this->nativeMcp,
             $this->providerSettings,
-            $this->createMock(\Psr\Log\LoggerInterface::class)
+            $this->createMock(\Psr\Log\LoggerInterface::class),
+            new SearchSettings($this->config)
         );
     }
 

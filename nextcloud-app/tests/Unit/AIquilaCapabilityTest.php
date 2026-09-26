@@ -6,6 +6,7 @@ use OCA\AIquila\AppInfo\Application;
 use OCA\AIquila\Capabilities\AIquilaCapability;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\SearchSettings;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\IConfig;
@@ -38,6 +39,7 @@ class AIquilaCapabilityTest extends TestCase {
             $this->credentialService,
             $this->appManager,
             $container,
+            new SearchSettings($this->config),
         );
     }
 
@@ -74,7 +76,7 @@ class AIquilaCapabilityTest extends TestCase {
         $this->config->method('getAppValue')
             ->willReturnMap([
                 ['aiquila', 'model', ClaudeModels::DEFAULT_MODEL, ClaudeModels::OPUS_4_7],
-                ['aiquila', 'search_enabled', '1', '1'],
+                ['aiquila', SearchSettings::KEY, SearchSettings::DEFAULT, '1'],
             ]);
         $this->credentialService->method('getApiKey')->willReturn('');
 
@@ -112,7 +114,7 @@ class AIquilaCapabilityTest extends TestCase {
         $this->config->method('getAppValue')
             ->willReturnMap([
                 ['aiquila', 'model', ClaudeModels::DEFAULT_MODEL, ClaudeModels::DEFAULT_MODEL],
-                ['aiquila', 'search_enabled', '1', '0'],
+                ['aiquila', SearchSettings::KEY, SearchSettings::DEFAULT, '0'],
             ]);
         $this->credentialService->method('getApiKey')->willReturn('');
 
@@ -121,13 +123,25 @@ class AIquilaCapabilityTest extends TestCase {
         $this->assertFalse($result['aiquila']['search_enabled']);
     }
 
-    public function testSearchEnabledDefaultsToTrue(): void {
+    public function testSearchEnabledWhenStoredOn(): void {
         $this->appManager->method('getAppVersion')->willReturn('1.0.0');
         $this->config->method('getAppValue')
             ->willReturnMap([
                 ['aiquila', 'model', ClaudeModels::DEFAULT_MODEL, ClaudeModels::DEFAULT_MODEL],
-                ['aiquila', 'search_enabled', '1', '1'],
+                ['aiquila', SearchSettings::KEY, SearchSettings::DEFAULT, '1'],
             ]);
+        $this->credentialService->method('getApiKey')->willReturn('');
+
+        $result = $this->capability->getCapabilities();
+
+        $this->assertTrue($result['aiquila']['search_enabled']);
+    }
+
+    public function testSearchEnabledDefaultsToTrueWhenUnset(): void {
+        $this->appManager->method('getAppVersion')->willReturn('1.0.0');
+        // An unset app value hands back whatever default the reader passed.
+        $this->config->method('getAppValue')
+            ->willReturnCallback(fn (string $app, string $key, string $default): string => $default);
         $this->credentialService->method('getApiKey')->willReturn('');
 
         $result = $this->capability->getCapabilities();

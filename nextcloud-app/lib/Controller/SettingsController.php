@@ -5,6 +5,7 @@ namespace OCA\AIquila\Controller;
 
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\NativeMcpService;
+use OCA\AIquila\Service\SearchSettings;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use OCA\AIquila\Service\Provider\ProviderSettingsService;
@@ -28,6 +29,7 @@ class SettingsController extends Controller {
     private NativeMcpService $nativeMcp;
     private ProviderSettingsService $providerSettings;
     private LoggerInterface $logger;
+    private SearchSettings $searchSettings;
 
     public function __construct(
         string $appName,
@@ -38,7 +40,8 @@ class SettingsController extends Controller {
         CredentialService $credentials,
         NativeMcpService $nativeMcp,
         ProviderSettingsService $providerSettings,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        SearchSettings $searchSettings
     ) {
         parent::__construct($appName, $request);
         $this->config = $config;
@@ -48,6 +51,7 @@ class SettingsController extends Controller {
         $this->credentials = $credentials;
         $this->nativeMcp = $nativeMcp;
         $this->providerSettings = $providerSettings;
+        $this->searchSettings = $searchSettings;
     }
 
     /** Config key holding a user's preferred model for a provider. */
@@ -327,7 +331,7 @@ class SettingsController extends Controller {
             $this->config->setAppValue($this->appName, 'mistral_connector_ids', trim($mistral_connector_ids));
         }
         if ($search_enabled !== null) {
-            $this->config->setAppValue($this->appName, 'search_enabled', $search_enabled === '1' ? '1' : '0');
+            $this->searchSettings->setEnabled($search_enabled === '1');
         }
         if ($auto_cache !== null) {
             $this->config->setAppValue($this->appName, 'auto_cache', $auto_cache === '1' ? '1' : '0');
