@@ -6,16 +6,24 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCP\IL10N;
 use OCP\TaskProcessing\ISynchronousProvider;
+use OCP\TaskProcessing\ShapeEnumValue;
 use OCP\TaskProcessing\TaskTypes\TextToTextChangeTone;
 
 /**
  * Change-tone TaskProcessing Provider (core:text2text:changetone)
+ *
+ * `tone` is an Enum slot; its values are adjectives that read naturally in
+ * the prompt ("in a friendly tone").
  */
 class ChangeToneProvider implements ISynchronousProvider {
 
+    public const DEFAULT_TONE = 'formal';
+
     public function __construct(
         private ProviderResolver $providers,
+        private IL10N $l,
     ) {
     }
 
@@ -44,11 +52,21 @@ class ChangeToneProvider implements ISynchronousProvider {
     }
 
     public function getInputShapeEnumValues(): array {
-        return [];
+        return [
+            'tone' => [
+                new ShapeEnumValue($this->l->t('Formal'), 'formal'),
+                new ShapeEnumValue($this->l->t('Friendly'), 'friendly'),
+                new ShapeEnumValue($this->l->t('Casual'), 'casual'),
+                new ShapeEnumValue($this->l->t('Polite'), 'polite'),
+                new ShapeEnumValue($this->l->t('Humorous'), 'humorous'),
+                new ShapeEnumValue($this->l->t('Confident'), 'confident'),
+                new ShapeEnumValue($this->l->t('Urgent'), 'urgent'),
+            ],
+        ];
     }
 
     public function getInputShapeDefaults(): array {
-        return [];
+        return ['tone' => self::DEFAULT_TONE];
     }
 
     public function getOptionalInputShapeEnumValues(): array {
@@ -69,13 +87,13 @@ class ChangeToneProvider implements ISynchronousProvider {
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $text = $input['input'] ?? '';
-        $tone = $input['tone'] ?? 'formal';
+        $tone = $input['tone'] ?? self::DEFAULT_TONE;
 
         if (!is_string($text) || $text === '') {
             throw new \RuntimeException('No input text provided');
         }
         if (!is_string($tone) || $tone === '') {
-            $tone = 'formal';
+            $tone = self::DEFAULT_TONE;
         }
 
         $reportProgress(0.1);

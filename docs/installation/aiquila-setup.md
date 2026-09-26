@@ -341,9 +341,9 @@ needed.
 | `core:text2text:summary` | Summarize |
 | `core:text2text:headline` | Suggest a headline |
 | `core:text2text:topics` | Extract topics |
-| `core:text2text:translate` | Translate |
+| `core:text2text:translate` | Translate between the server's languages; the source language can be auto-detected |
 | `core:text2text:proofread` | Proofread |
-| `core:text2text:changetone` | Change tone |
+| `core:text2text:changetone` | Change tone (formal, friendly, casual, polite, humorous, confident or urgent) |
 | `core:text2text:simplification` | Simplify |
 | `core:text2text:reformulation` | Reformulate |
 | `core:text2text:formalization` | Make formal |
