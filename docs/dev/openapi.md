@@ -73,6 +73,7 @@ public function process(string $fileId): JSONResponse {
 - **Status-code description lines** (`200: ...`, `400: ...`) are required for every response code below 500.
 - **`Http::STATUS_*` constants** belong only in the PHPDoc `@return` — not in the method body (avoids needing an OCP import in unit tests).
 - The `download()` method is intentionally excluded — it returns `DataDownloadResponse` (binary), which has no JSON schema.
+- `messageStream()` is excluded with `#[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]` for the same reason: its body is a server-sent event stream. Its non-streaming counterpart `message()` is the chat endpoint the spec documents — see [Streaming chat responses](streaming.md).
 
 ## CI enforcement
 
