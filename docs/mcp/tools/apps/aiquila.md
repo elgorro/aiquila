@@ -54,13 +54,17 @@ AIquila Configuration:
 
 ### aiquila_configure
 
-Configure AIquila settings including API key, Claude model, max tokens, and API timeout.
+Configure AIquila settings including API key, Claude model, max tokens, API timeout, and the effort and thinking defaults for chat and background tasks.
 
 **Parameters:**
 - `apiKey` (string, optional): Anthropic API key (starts with `sk-ant-`)
 - `model` (string, optional): Claude model identifier (e.g., `claude-sonnet-4-5-20250929`)
 - `maxTokens` (number, optional): Maximum tokens for responses (1-100000)
 - `timeout` (number, optional): API request timeout in seconds (10-1800)
+- `effort` (string, optional): default effort — `low`, `medium`, `high`, `xhigh` or `max`; an empty string resets to the model default
+- `thinking` (string, optional): default thinking — `auto` (follow the model), `on` or `off`
+- `taskEffort` (string, optional): effort for Assistant tasks and coworkers; an empty string uses the default effort
+- `taskThinking` (string, optional): thinking for Assistant tasks and coworkers — `auto`, `on`, `off`, or an empty string to use the default thinking
 
 **Returns:**
 Instructions for running the configuration command with the specified parameters.
@@ -246,8 +250,10 @@ php occ aiquila:test --user username
 
 ### Model
 Current Claude models:
-- `claude-fable-5` - Most capable; adaptive thinking (always on), xhigh effort
-- `claude-opus-5` - Complex agentic coding and enterprise work; adaptive thinking, xhigh effort
+- `claude-fable-5-1` - Most capable; thinking always on, xhigh effort
+- `claude-fable-5` - Previous Fable; thinking always on, xhigh effort
+- `claude-opus-5-5` - Newest Opus; thinking always on, xhigh effort
+- `claude-opus-5` - Complex agentic coding and enterprise work; adaptive thinking (can be turned off up to effort high), xhigh effort
 - `claude-sonnet-5` - Best speed/intelligence balance; adaptive thinking, medium effort (**default**)
 - `claude-opus-4-8` - Previous-generation Opus; adaptive thinking, xhigh effort
 - `claude-opus-4-7` - Adaptive thinking, xhigh effort
@@ -257,8 +263,11 @@ Current Claude models:
 - `claude-haiku-4-5-20251001` - Fastest, most economical
 - `claude-opus-4-5-20251101` - Older Opus generation
 
-Fable 5, Opus 5, Sonnet 5, and Opus 4.7+ reject the `temperature` / `top_p` / `top_k`
+The Fable models, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7+ reject the `temperature` / `top_p` / `top_k`
 sampling parameters; AIquila omits them automatically for those models.
+
+How "thinking off" behaves per model is described under
+[Thinking and effort](../../../installation/aiquila-setup.md#thinking-and-effort).
 
 ### Max Tokens
 - **Range**: 1 - 100,000

@@ -274,6 +274,14 @@ leaving a field blank inherits the instance setting.
 Anything a user may not set — notably provider endpoint URLs — is admin-only and
 is not offered on the personal page.
 
+### Effort and thinking
+
+Requests made through this API count as background work, like Assistant tasks
+and coworkers: on the Claude provider they use the instance's **Effort for
+background tasks** and **Thinking for background tasks** before the chat
+defaults. See
+[Thinking and effort](../installation/aiquila-setup.md#thinking-and-effort).
+
 ### Provider resolution
 
 `ask()`, `summarize()` and friends resolve the provider per call: a user

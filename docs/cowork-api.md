@@ -58,7 +58,7 @@ Passed in the `$config` / `$changes` array of `register()` and `update()`:
 | `description` | string\|null | Optional. |
 | `task_type` | string | Registered task-type id, e.g. `vision:classify`. |
 | `provider` | string\|null | Provider to pin, e.g. `anthropic`, `mistral`, `hetzner`. `null` follows the run user's setting. Unknown ids are rejected. |
-| `model` | string\|null | Model to pin. `null` uses the provider's default — which is what lets a routine task run a cheap model while chat runs a strong one. |
+| `model` | string\|null | Model to pin. `null` uses the provider's default — which is what lets a routine task run a cheap model while chat runs a strong one. Applies only while the run goes to the pinned `provider`. |
 | `cron_schedule` | string | 5-field cron (`min hour dom month dow`), e.g. `0 3 * * *`. |
 | `input_type` | string | Default `folder`. |
 | `input_path` | string\|null | Nextcloud path resolved against the run user's folder. |
@@ -66,7 +66,7 @@ Passed in the `$config` / `$changes` array of `register()` and `update()`:
 | `output_path` | string\|null | Task-type dependent. |
 | `is_active` | bool | Disabled jobs are not scheduled. |
 | `paused` | bool | Paused jobs are not scheduled but stay configured. |
-| `options` | array | Task-type-specific options (validated by the task type). |
+| `options` | array | Task-type-specific options (validated by the task type). Two keys apply to every task type on the Claude provider: `effort` (`low`…`max`) and `thinking` (`auto`, `on`, `off`). Unset, the instance's background-task defaults apply; a value the model rejects falls back to them. |
 
 Returned coworker arrays additionally include `id`, `userId`, `ownerApp`,
 `lastRunAt`, `nextRunAt`, `lastStatus`, `lastError`, `createdAt`, `updatedAt`.

@@ -112,6 +112,35 @@ describe('AIquila Internal Tools', () => {
       ]);
     });
 
+    it('should pass effort and thinking, keeping empty strings as resets', async () => {
+      mockExecuteOCC.mockResolvedValue({ success: true, exitCode: 0, stdout: 'ok', stderr: '' });
+
+      const { configureTool } = await import('../tools/apps/aiquila.js');
+      await configureTool.handler({
+        effort: '',
+        thinking: 'off',
+        taskEffort: 'low',
+        taskThinking: '',
+      });
+
+      expect(mockExecuteOCC).toHaveBeenCalledWith('aiquila:configure', [
+        '--effort',
+        '',
+        '--thinking',
+        'off',
+        '--task-effort',
+        'low',
+        '--task-thinking',
+        '',
+      ]);
+    });
+
+    it('should reject an unknown thinking mode', async () => {
+      const { configureTool } = await import('../tools/apps/aiquila.js');
+      expect(configureTool.inputSchema.safeParse({ thinking: 'maybe' }).success).toBe(false);
+      expect(configureTool.inputSchema.safeParse({ thinking: 'auto' }).success).toBe(true);
+    });
+
     it('should handle errors', async () => {
       mockExecuteOCC.mockResolvedValue({
         success: false,

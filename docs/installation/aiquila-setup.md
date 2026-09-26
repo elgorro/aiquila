@@ -164,10 +164,13 @@ sudo -u www-data php occ app:enable aiquila
      key is optional (Ollama needs none).
    - **Default model** — the live model list from the provider, with
      **Refresh models** to re-query it.
+   - **Effort** and **thinking** (Claude card) — the defaults for chat. See
+     [Thinking and effort](#thinking-and-effort); the card states how the
+     selected model treats both and flags a value it cannot honour.
    - **Advanced** — max output tokens, request timeout, and any
-     provider-specific options. On the Claude card this is also where
-     **effort**, **adaptive thinking**, **service tier** and **fast mode**
-     defaults live; they are Anthropic concepts and do not apply to the other
+     provider-specific options. On the Claude card this is also where the
+     **background task** effort and thinking, **service tier** and **fast mode**
+     live; they are Anthropic concepts and do not apply to the other
      providers. See [Latency and capacity](#latency-and-capacity) for the last
      two, both of which do nothing on the default model.
 4. Click **Save**, then **Test connection** to send a live request and confirm
@@ -183,7 +186,8 @@ e.g. `Settings → Administration → AIquila#mcp`.
 1. Go to **Settings → Personal → AIquila**
 2. The **Providers** tab shows the same cards, limited to what you may change:
    your own API key and preferred model per provider, plus which provider is
-   your default. Leave a field blank to inherit the instance setting.
+   your default. On the Claude card you can also set your own default effort
+   and thinking. Leave a field blank to inherit the instance setting.
    Endpoint URLs are administrator-only.
 3. **Defaults** sets the system prompt and verbose mode new conversations start
    with, and holds the two notification toggles: completed AI tasks are silent
@@ -194,6 +198,46 @@ Endpoint URLs stay admin-only deliberately: Nextcloud makes outbound requests to
 whatever is stored there, so a user-settable endpoint would be a server-side
 request forgery vector.
 
+#### Thinking and effort
+
+**Effort** sets how much work Claude puts into a response; lower is faster and
+cheaper. **Thinking** is whether Claude reasons before answering. It takes
+three values:
+
+| Value | Meaning |
+|---|---|
+| *blank* (auto) | Follow the model. The Fable models, Opus 5, Opus 5.5 and Sonnet 5 think adaptively on their own; Opus 4.x and Sonnet 4.6 do not. |
+| `on` | Adaptive thinking on every model that supports it. |
+| `off` | No thinking, where the model allows it. |
+
+"Off" does not mean the same thing on every model:
+
+| Model | Thinking off |
+|---|---|
+| Fable 5.1, Fable 5, Opus 5.5 | Not possible — these models always think. Lower the effort to make them cheaper. |
+| Opus 5 | Possible up to effort `high`; a higher effort is lowered to `high` while thinking is off. |
+| Sonnet 5 | Possible at any effort. |
+| Opus 4.x, Sonnet 4.6 | Possible; it is also their default. |
+
+Each request takes the first value set, in this order: the conversation
+(`/effort`, `/thinking`) → your personal setting → the instance default → the
+model's default. A value the model does not accept is skipped.
+
+Assistant tasks (proofread, headline, summary, …), coworkers and other apps
+using AIquila have their own admin defaults, **Effort for background tasks** and
+**Thinking for background tasks**, which apply before the chat defaults. Routine
+work rarely needs more than `low` or `medium`. A coworker can override both in
+its own settings.
+
+```bash
+occ aiquila:configure --effort=high --thinking=auto
+occ aiquila:configure --task-effort=low --task-thinking=off
+```
+
+In the chat, the header shows what the next message will actually do — for
+example *Thinking: always on · effort xhigh* — and a reply that involved
+thinking carries a collapsible summary of it.
+
 #### Latency and capacity
 
 Two Claude-only settings under **Advanced** trade money for speed. Both are off
@@ -203,7 +247,7 @@ model before concluding a setting is broken.
 | Setting | What it does | Where it applies | Cost |
 |---|---|---|---|
 | **Service tier** | `auto` lets a request use priority capacity; `standard_only` never does. Blank leaves your Anthropic account's own default in charge. | Only if your organisation has purchased Priority Tier. Priority Tier is not offered on Opus 5, Sonnet 5 or the Fable models. | None |
-| **Fast mode** | Generates output roughly 2.5x faster. | Opus 5 and Opus 4.8 only; silently ignored elsewhere. Not available for batched work. | Roughly double the price per token |
+| **Fast mode** | Generates output roughly 2.5x faster. | Opus 5.5, Opus 5 and Opus 4.8 only; silently ignored elsewhere. Not available for batched work. | Roughly double the price per token |
 
 Fast mode has its own rate limit, separate from the model's standard one.
 
