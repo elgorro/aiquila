@@ -316,6 +316,26 @@ Two methods matter for callers:
 `GET /api/admin/principals?search=` backs the user/group pickers; it is
 admin-only.
 
+## Capabilities
+
+Clients outside Nextcloud can discover AIquila through the standard capabilities
+endpoint, `GET /ocs/v2.php/cloud/capabilities` (authenticated), under the `aiquila` key:
+
+| Key | Type | Meaning |
+|---|---|---|
+| `version` | string | Installed app version |
+| `model` | string | Admin default model |
+| `providers` | string[] | TaskProcessing task-type ids AIquila registers a provider for, sorted — e.g. `core:text2text:summary`, `core:audio2text` |
+| `api_configured` | bool | Whether an admin-level Anthropic API key is set |
+| `search_enabled` | bool | Whether the Unified Search provider is enabled |
+
+`providers` is derived from the registered provider set
+(`lib/TaskProcessing/ProviderRegistry.php`), so it cannot drift from what the app
+actually offers. It lists what AIquila *can* serve, not what it serves for a given
+user: another app may be the preferred provider for a task type, and a task type the
+running Nextcloud does not ship (e.g. `core:text2text:reformatparagraphs` before 34)
+is listed but never offered. Pass these ids to the TaskProcessing API to schedule work.
+
 ## Error Handling
 
 Always check for errors in the response:

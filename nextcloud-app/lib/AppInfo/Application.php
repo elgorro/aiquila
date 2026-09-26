@@ -11,6 +11,7 @@ use OCA\AIquila\Public\IAIquila;
 use OCA\AIquila\Public\ICoworkManager;
 use OCA\AIquila\Service\AIquilaService;
 use OCA\AIquila\Service\CoworkManager;
+use OCA\AIquila\TaskProcessing\ProviderRegistry;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -64,37 +65,9 @@ class Application extends App implements IBootstrap {
         });
 
         // Register AIquila TaskProcessing Providers for Nextcloud Assistant integration
-        // Vision providers
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ImageToTextProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\AnalyzeImagesProvider::class);
-
-        // Audio and image-generation providers. Only providers declaring the
-        // matching capability can serve these; the resolver fails with a message
-        // naming the alternatives when the user's provider cannot.
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\AudioToTextProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\TextToSpeechProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\TextToImageProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\AudioToAudioChatProvider::class);
-
-        // Text-to-text providers
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\TextToTextProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\SummaryProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\HeadlineProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\TopicsProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\TranslateProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ProofreadProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ChangeToneProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\SimplificationProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ReformulationProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\FormalizationProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ChatProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ChatWithToolsProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ContextWriteProvider::class);
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\GenerateEmojiProvider::class);
-
-        // Nextcloud 34+ only; on 33 the task type is not registered and this
-        // provider is never offered.
-        $context->registerTaskProcessingProvider(\OCA\AIquila\TaskProcessing\ReformatParagraphsProvider::class);
+        foreach (ProviderRegistry::PROVIDERS as $provider) {
+            $context->registerTaskProcessingProvider($provider);
+        }
 
         // Register notification formatter for AIquila task notifications
         $context->registerNotifierService(\OCA\AIquila\Notifier\AIquilaNotifier::class);

@@ -2,6 +2,7 @@
 
 namespace OCA\AIquila\Tests\Unit\TaskProcessing;
 
+use OCA\AIquila\TaskProcessing\ProviderRegistry;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -38,13 +39,12 @@ class RegisteredProvidersTest extends TestCase {
     }
 
     public function testEveryProviderIsRegisteredInApplication(): void {
-        $application = file_get_contents(__DIR__ . '/../../../lib/AppInfo/Application.php');
-        $this->assertIsString($application);
-
+        // Application::register() registers ProviderRegistry::PROVIDERS as-is;
+        // AIquilaCapabilityTest pins that side.
         foreach ($this->providerClasses() as $class) {
-            $this->assertStringContainsString(
-                'registerTaskProcessingProvider(\\' . $class . '::class)',
-                $application,
+            $this->assertContains(
+                $class,
+                ProviderRegistry::PROVIDERS,
                 $class . ' exists but is never registered'
             );
         }
