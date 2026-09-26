@@ -58,6 +58,17 @@ class TestableClaudeSDKService extends ClaudeSDKService {
     /** Captured params from the last callCreateStream() call */
     public ?array $lastStreamParams = null;
 
+    /**
+     * Queued responses for successive callCreate() calls: each entry is
+     * [content blocks (stdClass), stop reason]. Empty falls back to the stub text.
+     *
+     * @var list<array{list<\stdClass>, string}>
+     */
+    public array $stubResponses = [];
+
+    /** Params of every callCreate() call, in order. */
+    public array $createCalls = [];
+
     public function throwOnCreate(\Exception $e): void {
         $this->createException = $e;
     }
@@ -73,9 +84,14 @@ class TestableClaudeSDKService extends ClaudeSDKService {
 
     protected function callCreate(Client $client, array $params): Message {
         $this->lastCreateParams = $params;
+        $this->createCalls[] = $params;
         $this->lastRequestOptions = $this->requestOptionsForMessages($params);
         if ($this->createException !== null) {
             throw $this->createException;
+        }
+        if ($this->stubResponses !== []) {
+            [$content, $stopReason] = array_shift($this->stubResponses);
+            return $this->makeStubMessage('', $content, $stopReason);
         }
         return $this->makeStubMessage($this->stubResponseText);
     }
@@ -133,7 +149,7 @@ class TestableClaudeSDKService extends ClaudeSDKService {
         return (new \ReflectionClass(Client::class))->newInstanceWithoutConstructor();
     }
 
-    private function makeStubMessage(string $text = ''): Message {
+    private function makeStubMessage(string $text = '', ?array $content = null, string $stopReason = 'end_turn'): Message {
         $stub = (new \ReflectionClass(Message::class))->newInstanceWithoutConstructor();
         $ref  = new \ReflectionClass($stub);
 
@@ -148,7 +164,11 @@ class TestableClaudeSDKService extends ClaudeSDKService {
             $contentItems[] = $textObj;
         }
 
-        foreach (['content' => $contentItems, 'stopReason' => 'end_turn'] as $prop => $val) {
+        if ($content !== null) {
+            $contentItems = $content;
+        }
+
+        foreach (['content' => $contentItems, 'stopReason' => $stopReason] as $prop => $val) {
             $p = $ref->getProperty($prop);
             $p->setValue($stub, $val);
         }
@@ -615,6 +635,85 @@ class ClaudeServiceTest extends TestCase {
         );
 
         $this->assertArrayNotHasKey('cache_control', $this->testable->lastCreateParams);
+    }
+
+    // ── Thinking blocks in tool loops ──────────────────────────────────────
+
+    public function testChatWithToolsReplaysThinkingBlocksVerbatim(): void {
+        $this->configWithApiKey();
+
+        $thinking = (object)['type' => 'thinking', 'thinking' => 'Need the file list.', 'signature' => 'sig-abc'];
+        $redacted = (object)['type' => 'redacted_thinking', 'data' => 'opaque'];
+        $toolUse = (object)['type' => 'tool_use', 'id' => 'tu_1', 'name' => 'tool_a', 'input' => ['q' => 'x']];
+        $this->testable->stubResponses = [
+            [[$thinking, $redacted, $toolUse], 'tool_use'],
+            [[(object)['type' => 'text', 'text' => 'Done.']], 'end_turn'],
+        ];
+
+        $result = $this->testable->chatWithTools(
+            [['role' => 'user', 'content' => 'Hi']],
+            [['name' => 'tool_a', 'description' => 'A', 'input_schema' => []]],
+            fn(string $name, array $input): array => ['content' => [['type' => 'text', 'text' => 'ok']]],
+            null,
+            'testuser'
+        );
+
+        $this->assertSame('Done.', $result['response']);
+        $replayed = $this->testable->createCalls[1]['messages'][1];
+        $this->assertSame('assistant', $replayed['role']);
+        $this->assertSame([
+            ['type' => 'thinking', 'thinking' => 'Need the file list.', 'signature' => 'sig-abc'],
+            ['type' => 'redacted_thinking', 'data' => 'opaque'],
+            ['type' => 'tool_use', 'id' => 'tu_1', 'name' => 'tool_a', 'input' => ['q' => 'x']],
+        ], $replayed['content']);
+    }
+
+    public function testChatWithToolsStreamReplaysThinkingAndEmitsEvents(): void {
+        $this->configWithApiKey();
+
+        $this->testable->stubStreamEvents = [
+            $this->evMessageStart(),
+            TestableClaudeSDKService::streamEvent('content_block_start', ['index' => 0, 'contentBlock' => (object)['type' => 'thinking']]),
+            TestableClaudeSDKService::streamEvent('content_block_delta', ['index' => 0, 'delta' => (object)['type' => 'thinking_delta', 'thinking' => 'Checking files.']]),
+            TestableClaudeSDKService::streamEvent('content_block_delta', ['index' => 0, 'delta' => (object)['type' => 'signature_delta', 'signature' => 'sig-1']]),
+            $this->evBlockStop(0),
+            $this->evToolUse(1, 'tu_1', 'search_files'),
+            $this->evJsonDelta(1, '{}'),
+            $this->evBlockStop(1),
+            $this->evMessageDelta('tool_use'),
+        ];
+
+        $service = $this->testable;
+        $toolExecutor = function (string $name, array $input) use ($service) {
+            $service->stubStreamEvents = [
+                $this->evMessageStart(),
+                $this->evText(0),
+                $this->evTextDelta(0, 'Found it.'),
+                $this->evBlockStop(0),
+                $this->evMessageDelta('end_turn'),
+            ];
+            return ['content' => [['type' => 'text', 'text' => 'r1']]];
+        };
+
+        $events = iterator_to_array(
+            $this->testable->chatWithToolsStream(
+                [['role' => 'user', 'content' => 'find']],
+                [['name' => 'search_files', 'description' => 's', 'input_schema' => []]],
+                $toolExecutor,
+                null,
+                'testuser',
+            ),
+            false,
+        );
+
+        $types = array_map(fn($e) => $e['type'], $events);
+        $this->assertSame(['thinking_start', 'thinking_delta', 'thinking_stop', 'tool_use', 'tool_result', 'text_delta', 'done'], $types);
+        $this->assertSame('Checking files.', $events[1]['text']);
+        $this->assertIsInt($events[2]['duration_ms']);
+
+        $replayed = $this->testable->lastStreamParams['messages'][1]['content'];
+        $this->assertSame(['type' => 'thinking', 'thinking' => 'Checking files.', 'signature' => 'sig-1'], $replayed[0]);
+        $this->assertSame('tool_use', $replayed[1]['type']);
     }
 
     // ── Files API beta header detection ────────────────────────────────────

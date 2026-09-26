@@ -812,6 +812,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                         $block->name = $cb->name ?? '';
                         $block->input = [];
                         $jsonBuffers[$idx] = '';
+                    } elseif ($block->type === 'thinking') {
+                        $block->thinking = $cb->thinking ?? '';
+                        $block->signature = $cb->signature ?? '';
+                    } elseif ($block->type === 'redacted_thinking') {
+                        $block->data = $cb->data ?? '';
                     }
                     $blocks[$idx] = $block;
                     break;
@@ -829,6 +834,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                         if ($citation !== null) {
                             $blocks[$idx]->citations[] = $citation;
                         }
+                    } elseif ($deltaType === 'thinking_delta' && isset($blocks[$idx])) {
+                        $blocks[$idx]->thinking = ($blocks[$idx]->thinking ?? '') . ($delta->thinking ?? '');
+                    } elseif ($deltaType === 'signature_delta' && isset($blocks[$idx])) {
+                        $blocks[$idx]->signature = $delta->signature ?? '';
                     }
                     break;
 
@@ -1334,18 +1343,14 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 }
             }
 
-            // Build assistant message with the full content (text + tool_use blocks)
+            // Replay the assistant turn in full — thinking blocks included,
+            // unmodified and in order. Models with preserved thinking reject a
+            // tool loop whose earlier turn lost its thinking.
             $assistantContent = [];
             foreach ($response->content as $block) {
-                if ($block->type === 'text') {
-                    $assistantContent[] = ['type' => 'text', 'text' => $block->text];
-                } elseif ($block->type === 'tool_use') {
-                    $assistantContent[] = [
-                        'type' => 'tool_use',
-                        'id' => $block->id,
-                        'name' => $block->name,
-                        'input' => $block->input,
-                    ];
+                $replayed = self::replayableBlock($block);
+                if ($replayed !== null) {
+                    $assistantContent[] = $replayed;
                 }
             }
             $messages[] = ['role' => 'assistant', 'content' => $assistantContent];
@@ -1402,6 +1407,27 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             ],
             'citations' => $allCitations,
         ];
+    }
+
+    /**
+     * A response content block as a request param for replaying the
+     * assistant turn in a tool loop, or null for blocks that are not replayed.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function replayableBlock(object $block): ?array {
+        return match ($block->type ?? null) {
+            'text' => ['type' => 'text', 'text' => $block->text],
+            'thinking' => ['type' => 'thinking', 'thinking' => $block->thinking, 'signature' => $block->signature],
+            'redacted_thinking' => ['type' => 'redacted_thinking', 'data' => $block->data],
+            'tool_use' => [
+                'type' => 'tool_use',
+                'id' => $block->id,
+                'name' => $block->name,
+                'input' => $block->input,
+            ],
+            default => null,
+        };
     }
 
     /**
@@ -2495,8 +2521,13 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                                     'input' => null,
                                 ];
                                 $jsonBuffers[$idx] = '';
+                            } elseif ($cbType === 'thinking') {
+                                $blocks[$idx] = ['type' => 'thinking', 'thinking' => '', 'signature' => '', 'started' => microtime(true)];
+                                yield ['type' => 'thinking_start'];
+                            } elseif ($cbType === 'redacted_thinking') {
+                                $blocks[$idx] = ['type' => 'redacted_thinking', 'data' => $cb->data ?? ''];
                             } else {
-                                // thinking, server tools etc. — preserve type so downstream may handle.
+                                // Server tools etc. — preserve type so downstream may handle.
                                 $blocks[$idx] = ['type' => $cbType ?? 'unknown'];
                             }
                             break;
@@ -2523,8 +2554,19 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                                         $blocks[$idx]['citations'][] = $normalized;
                                     }
                                 }
+                            } elseif ($deltaType === 'thinking_delta') {
+                                $text = $delta->thinking ?? '';
+                                if (isset($blocks[$idx])) {
+                                    $blocks[$idx]['thinking'] = ($blocks[$idx]['thinking'] ?? '') . $text;
+                                }
+                                if ($text !== '') {
+                                    yield ['type' => 'thinking_delta', 'text' => $text];
+                                }
+                            } elseif ($deltaType === 'signature_delta') {
+                                if (isset($blocks[$idx])) {
+                                    $blocks[$idx]['signature'] = $delta->signature ?? '';
+                                }
                             }
-                            // thinking/signature deltas: ignore for now.
                             break;
 
                         case 'content_block_stop':
@@ -2532,6 +2574,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                             if (isset($blocks[$idx]) && $blocks[$idx]['type'] === 'tool_use') {
                                 $json = $jsonBuffers[$idx] ?? '';
                                 $blocks[$idx]['input'] = $json !== '' ? (json_decode($json, true) ?? []) : [];
+                            } elseif (isset($blocks[$idx]) && $blocks[$idx]['type'] === 'thinking') {
+                                yield [
+                                    'type' => 'thinking_stop',
+                                    'duration_ms' => (int)round((microtime(true) - (float)$blocks[$idx]['started']) * 1000.0),
+                                ];
                             }
                             break;
 
@@ -2582,11 +2629,16 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 return;
             }
 
-            // Build assistant message reflecting the full streamed turn.
+            // Build assistant message reflecting the full streamed turn,
+            // thinking blocks included (see chatWithTools()).
             $assistantContent = [];
             foreach ($blocks as $b) {
                 if (($b['type'] ?? null) === 'text') {
                     $assistantContent[] = ['type' => 'text', 'text' => $b['text'] ?? ''];
+                } elseif (($b['type'] ?? null) === 'thinking') {
+                    $assistantContent[] = ['type' => 'thinking', 'thinking' => $b['thinking'], 'signature' => $b['signature']];
+                } elseif (($b['type'] ?? null) === 'redacted_thinking') {
+                    $assistantContent[] = ['type' => 'redacted_thinking', 'data' => $b['data']];
                 } elseif (($b['type'] ?? null) === 'tool_use') {
                     $assistantContent[] = [
                         'type' => 'tool_use',
@@ -2804,6 +2856,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                                 'is_error' => (bool)($cb->isError ?? false),
                             ];
                             $blocks[$idx] = ['type' => 'mcp_tool_result'];
+                        } elseif ($cbType === 'thinking') {
+                            $blocks[$idx] = ['type' => 'thinking', 'started' => microtime(true)];
+                            yield ['type' => 'thinking_start'];
                         } else {
                             $blocks[$idx] = ['type' => $cbType ?? 'unknown'];
                         }
@@ -2831,6 +2886,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                                     $blocks[$idx]['citations'][] = $normalized;
                                 }
                             }
+                        } elseif ($deltaType === 'thinking_delta') {
+                            $text = $delta->thinking ?? '';
+                            if ($text !== '') {
+                                yield ['type' => 'thinking_delta', 'text' => $text];
+                            }
                         }
                         break;
 
@@ -2845,6 +2905,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                                 'name' => $blocks[$idx]['name'],
                                 'input' => $blocks[$idx]['input'],
                                 'server' => $blocks[$idx]['server'] ?? '',
+                            ];
+                        } elseif (isset($blocks[$idx]) && ($blocks[$idx]['type'] ?? null) === 'thinking') {
+                            yield [
+                                'type' => 'thinking_stop',
+                                'duration_ms' => (int)round((microtime(true) - (float)$blocks[$idx]['started']) * 1000.0),
                             ];
                         }
                         break;
