@@ -300,6 +300,26 @@ class ClaudeModels {
         return self::THINKING_POLICY[$model]['off_max_effort'] ?? null;
     }
 
+    /**
+     * Models whose thinking `display` defaults to `omitted` (empty thinking
+     * text), so a readable summary has to be requested with
+     * `display: summarized`. Opus 4.6 and Sonnet 4.6 still summarise by
+     * default and are left alone.
+     */
+    private const THINKING_SUMMARY_OPT_IN = [
+        self::FABLE_5_1 => true,
+        self::FABLE_5   => true,
+        self::OPUS_5_5  => true,
+        self::OPUS_5    => true,
+        self::SONNET_5  => true,
+        self::OPUS_4_8  => true,
+        self::OPUS_4_7  => true,
+    ];
+
+    public static function thinkingSummaryNeedsOptIn(string $model): bool {
+        return self::THINKING_SUMMARY_OPT_IN[$model] ?? false;
+    }
+
     // ── Sampling parameter support ────────────────────────────────────────
 
     /** Models that reject temperature/top_p/top_k with a 400. */

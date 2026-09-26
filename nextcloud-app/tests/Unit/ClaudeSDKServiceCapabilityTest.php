@@ -309,9 +309,10 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
     }
 
     /** Build a service for a given model with cached caps and optional admin config. */
-    private function makeServiceForModel(string $model, array $appConfig = [], bool $supportsEnabledThinking = true): CapabilityTestableService {
+    private function makeServiceForModel(string $model, array $appConfig = [], bool $supportsEnabledThinking = true, array $userConfig = []): CapabilityTestableService {
         $config = $this->createMock(IConfig::class);
-        $config->method('getUserValue')->willReturn('');
+        $config->method('getUserValue')
+            ->willReturnCallback(fn($uid, $app, $key, $default = '') => $userConfig[$key] ?? $default);
         $config->method('getAppValue')
             ->willReturnCallback(fn($app, $key, $default) => match (true) {
                 $key === 'model' => $model,
@@ -401,6 +402,91 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             'thinking_budget' => 2048,
         ]);
         $this->assertArrayNotHasKey('thinking', $service->lastCreateParams);
+    }
+
+    /** Opus 5 rejects {type: disabled} above effort high, so "off" caps the effort. */
+    public function testOpus5ThinkingOffCapsEffortAtHigh(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking' => false, 'effort' => 'max']);
+        $this->assertSame(['type' => 'disabled'], $service->lastCreateParams['thinking']);
+        $this->assertSame('high', $service->lastCreateParams['outputConfig']['effort']);
+    }
+
+    public function testOpus5ThinkingOffKeepsLowerEffort(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking' => false, 'effort' => 'low']);
+        $this->assertSame(['type' => 'disabled'], $service->lastCreateParams['thinking']);
+        $this->assertSame('low', $service->lastCreateParams['outputConfig']['effort']);
+    }
+
+    public function testSonnet5ThinkingOffSendsDisabled(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5, ['thinking' => 'off']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertSame(['type' => 'disabled'], $service->lastCreateParams['thinking']);
+    }
+
+    /** Opus 5.5 cannot stop thinking: never send {type: disabled}, keep the effort. */
+    public function testOpus55ThinkingOffOmitsParam(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5_5);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking' => false]);
+        $this->assertArrayNotHasKey('thinking', $service->lastCreateParams);
+        $this->assertSame('xhigh', $service->lastCreateParams['outputConfig']['effort']);
+    }
+
+    /** The legacy "false" admin value never sent anything; it must keep meaning auto. */
+    public function testLegacyFalseAdminValueIsAuto(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5, ['thinking' => 'false']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertArrayNotHasKey('thinking', $service->lastCreateParams);
+    }
+
+    public function testUserThinkingPreferenceBeatsAdminDefault(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5, ['thinking' => 'on'], true, ['user_thinking' => 'off']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertSame(['type' => 'disabled'], $service->lastCreateParams['thinking']);
+    }
+
+    public function testConversationThinkingBeatsUserPreference(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5, [], true, ['user_thinking' => 'off']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking' => true]);
+        $this->assertSame(['type' => 'adaptive'], $service->lastCreateParams['thinking']);
+    }
+
+    public function testUserEffortPreferenceBeatsAdminDefault(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_4_6, ['effort' => 'max'], true, ['user_effort' => 'low']);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertSame('low', $service->lastCreateParams['outputConfig']['effort']);
+    }
+
+    public function testTaskDefaultsApplyOnlyToTaskRequests(): void {
+        $appConfig = ['effort' => 'high', 'task_effort' => 'low', 'thinking' => 'on', 'task_thinking' => 'off'];
+
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5, $appConfig);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['context' => 'task']);
+        $this->assertSame('low', $service->lastCreateParams['outputConfig']['effort']);
+        $this->assertSame(['type' => 'disabled'], $service->lastCreateParams['thinking']);
+
+        $service = $this->makeServiceForModel(ClaudeModels::SONNET_5, $appConfig);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser');
+        $this->assertSame('high', $service->lastCreateParams['outputConfig']['effort']);
+        $this->assertSame(['type' => 'adaptive'], $service->lastCreateParams['thinking']);
+    }
+
+    public function testThinkingDisplayRequestsSummaries(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5_5);
+        $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['thinking_display' => true]);
+        $this->assertSame(['type' => 'adaptive', 'display' => 'summarized'], $service->lastCreateParams['thinking']);
+    }
+
+    public function testDescribeThinkingReportsCap(): void {
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5);
+        $state = $service->describeThinking('testuser', ['thinking' => false, 'effort' => 'xhigh']);
+        $this->assertSame(ClaudeModels::OPUS_5, $state['model']);
+        $this->assertSame('off', $state['mode']);
+        $this->assertSame('off', $state['state']);
+        $this->assertSame('high', $state['effort']);
+        $this->assertSame(['effort_capped'], $state['adjustments']);
+        $this->assertFalse($state['always_on']);
     }
 
     public function testAdminBudgetDefaultUsedWithoutOverride(): void {

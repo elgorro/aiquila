@@ -213,7 +213,14 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      *   stop_sequences (array)
      *   tools          (array)  – Anthropic-format tool definitions
      *   effort         (string) – per-conversation effort override (low…max)
-     *   thinking       (bool)   – per-conversation adaptive-thinking override
+     *   thinking       (bool|string) – thinking override: true/false from a
+     *                             conversation, or 'auto'/'on'/'off'
+     *   thinking_display (bool) – request readable thinking summaries where
+     *                             the model omits them by default
+     *   context        (string) – 'task' for background surfaces (Assistant
+     *                             tasks, coworkers); picks up task_effort and
+     *                             task_thinking before the chat defaults
+     *   model          (string) – pin a model for this request
      *   thinking_budget (int)   – explicit thinking budget in tokens; switches
      *                             thinking from adaptive to enabled mode
      *   service_tier   (string) – 'auto' or 'standard_only'; whether the request
@@ -258,25 +265,18 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $params['metadata'] = ['user_id' => $userHash];
         }
 
-        // Thinking is opt-in (conversation override or admin default). "Off"
-        // means omitting the param entirely — an explicit {type: 'disabled'}
-        // is rejected with a 400 on Fable 5.
-        //
-        // An explicit budget switches from adaptive to enabled mode, but a
-        // deliberate "thinking off" is the more specific instruction and wins.
-        $thinkingOn = $caps['supports_thinking'] && $this->resolveThinking($options['thinking'] ?? null);
-        $budget = ($options['thinking'] ?? null) === false
-            ? null
-            : $this->resolveThinkingBudget($options, $model, $caps, $params['max_tokens']);
-
-        if ($budget !== null) {
-            $params['thinking'] = ['type' => 'enabled', 'budget_tokens' => $budget];
-        } elseif ($thinkingOn) {
-            $params['thinking'] = ['type' => 'adaptive'];
+        $plan = $this->resolveThinkingPlan($model, $caps, $userId, $options, $params['max_tokens']);
+        if ($plan['thinking'] !== null) {
+            $params['thinking'] = $plan['thinking'];
         }
-
-        if ($caps['supports_effort']) {
-            $params['outputConfig'] = ['effort' => $this->resolveEffort($model, $options['effort'] ?? null)];
+        if ($plan['effort'] !== null) {
+            $params['outputConfig'] = ['effort' => $plan['effort']];
+        }
+        if ($plan['adjustments'] !== []) {
+            $this->logger->debug('AIquila SDK: Adjusted thinking/effort for model', [
+                'model' => $model,
+                'adjustments' => $plan['adjustments'],
+            ]);
         }
 
         // Priority capacity routing. Left unset by default so the account's own
@@ -386,31 +386,130 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     }
 
     /**
-     * Resolve the effort level for a request: conversation override →
-     * admin default (app config `effort`) → model default. Values not
-     * allowed for the model fall through to the next level.
+     * Resolve thinking and effort for one request on one model.
+     *
+     * @param array{supports_thinking: bool, supports_thinking_enabled: bool, supports_effort: bool, ...} $caps
+     *
+     * @return array{thinking: array<string, mixed>|null, effort: string|null, state: string, always_on: bool, adjustments: list<string>, mode: string}
+     *
+     * @throws \InvalidArgumentException when the request asks for a budget the model cannot honour
      */
-    private function resolveEffort(string $model, ?string $override): string {
-        if ($override !== null && ClaudeModels::isAllowedEffort($model, $override)) {
-            return $override;
+    private function resolveThinkingPlan(string $model, array $caps, ?string $userId, array $options, int $maxTokens): array {
+        $mode = $this->resolveThinkingMode($userId, $options);
+        // A deliberate "off" is more specific than any budget, so it wins.
+        $budget = $mode === ThinkingPolicy::MODE_OFF
+            ? null
+            : $this->resolveThinkingBudget($options, $model, $caps, $maxTokens);
+        $effort = $caps['supports_effort']
+            ? $this->resolveEffort($model, $userId, $options)
+            : null;
+
+        $plan = ThinkingPolicy::resolve(
+            $model,
+            $caps['supports_thinking'],
+            $mode,
+            $budget,
+            $effort,
+            (bool)($options['thinking_display'] ?? false),
+        );
+        $plan['mode'] = $mode;
+        return $plan;
+    }
+
+    /**
+     * Effective thinking/effort for a request with these options, without
+     * sending anything — what the chat header badge shows.
+     *
+     * @return array{model: string, mode: string, state: string, always_on: bool, effort: string|null, budget: int|null, adjustments: list<string>}
+     */
+    public function describeThinking(?string $userId, array $options = []): array {
+        $model = $this->resolveRequestModel($userId, $options);
+        $caps = $this->resolveModelCapabilities($model, $userId);
+        try {
+            $plan = $this->resolveThinkingPlan($model, $caps, $userId, $options, $this->getMaxTokens($userId));
+        } catch (\InvalidArgumentException $e) {
+            // A budget the model refuses surfaces when the message is sent;
+            // describe the request as if no budget had been asked for.
+            unset($options['thinking_budget']);
+            $plan = $this->resolveThinkingPlan($model, $caps, $userId, $options, $this->getMaxTokens($userId));
         }
-        $adminDefault = $this->config->getAppValue($this->appName, 'effort', '');
-        if ($adminDefault !== '' && ClaudeModels::isAllowedEffort($model, $adminDefault)) {
-            return $adminDefault;
+        return [
+            'model' => $model,
+            'mode' => $plan['mode'],
+            'state' => $plan['state'],
+            'always_on' => $plan['always_on'],
+            'effort' => $plan['effort'],
+            'budget' => $plan['thinking']['budget_tokens'] ?? null,
+            'adjustments' => $plan['adjustments'],
+        ];
+    }
+
+    /**
+     * Whether this request comes from a background surface (Assistant tasks,
+     * coworkers) rather than an interactive chat.
+     */
+    private function isTaskRequest(array $options): bool {
+        return ($options['context'] ?? null) === 'task';
+    }
+
+    /**
+     * Resolve the effort level for a request: request override → task default
+     * (background requests only) → user preference → admin default → model
+     * default. Values not allowed for the model fall through to the next level.
+     */
+    private function resolveEffort(string $model, ?string $userId, array $options): string {
+        $candidates = [$options['effort'] ?? null];
+        if ($this->isTaskRequest($options)) {
+            $candidates[] = $this->config->getAppValue($this->appName, 'task_effort', '');
+        }
+        if ($userId !== null && $userId !== '') {
+            $candidates[] = $this->config->getUserValue($userId, $this->appName, 'user_effort', '');
+        }
+        $candidates[] = $this->config->getAppValue($this->appName, 'effort', '');
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && $candidate !== '' && ClaudeModels::isAllowedEffort($model, $candidate)) {
+                return $candidate;
+            }
         }
         return ClaudeModels::getEffortLevel($model);
     }
 
     /**
-     * Whether adaptive thinking should be enabled: conversation override →
-     * admin default (app config `thinking`, default off).
+     * Resolve the thinking mode (auto / on / off): request override → task
+     * default (background requests only) → user preference → admin default →
+     * auto. A blank value at any level inherits from the next one.
+     *
+     * The request override is a bool from a conversation (/thinking:on|off)
+     * or a mode string from API callers.
      */
-    private function resolveThinking(?bool $override): bool {
-        if ($override !== null) {
+    private function resolveThinkingMode(?string $userId, array $options): string {
+        $override = $options['thinking'] ?? null;
+        if ($override === true) {
+            return ThinkingPolicy::MODE_ON;
+        }
+        if ($override === false) {
+            return ThinkingPolicy::MODE_OFF;
+        }
+        if (is_string($override) && in_array($override, ThinkingPolicy::MODES, true)) {
             return $override;
         }
-        // Checkboxes have persisted as 'true' or '1' over the app's history.
-        return in_array($this->config->getAppValue($this->appName, 'thinking', 'false'), ['true', '1'], true);
+
+        $sources = [];
+        if ($this->isTaskRequest($options)) {
+            $sources[] = $this->config->getAppValue($this->appName, 'task_thinking', '');
+        }
+        if ($userId !== null && $userId !== '') {
+            $sources[] = $this->config->getUserValue($userId, $this->appName, 'user_thinking', '');
+        }
+        $sources[] = $this->config->getAppValue($this->appName, 'thinking', '');
+
+        foreach ($sources as $raw) {
+            if ($raw !== '') {
+                return ThinkingPolicy::normalizeMode($raw);
+            }
+        }
+        return ThinkingPolicy::MODE_AUTO;
     }
 
     /**
@@ -1967,17 +2066,26 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 'effort',
                 'effort',
                 'Default effort level',
-                'How much work Claude puts into each response. Blank picks a sensible level per model. "xhigh" is only accepted by Fable 5 and Opus 4.7+; elsewhere it falls back to the model default. Overridable per conversation with /effort.',
+                'How much work Claude puts into each response. Blank picks a sensible level per model. "xhigh" is '
+                    . 'accepted by the Fable, Opus 5 and Sonnet 5 families and Opus 4.7+; elsewhere it falls back to the '
+                    . 'model default. Overridable per conversation with /effort.',
                 array_merge([''], ClaudeModels::ALL_EFFORTS),
                 group: ProviderSettingsSchema::GROUP_BASIC,
+                scope: ProviderSettingsSchema::SCOPE_BOTH,
+                userKey: 'user_effort',
             ),
-            ProviderSettingsSchema::checkbox(
+            ProviderSettingsSchema::select(
                 'thinking',
                 'thinking',
-                'Enable adaptive thinking by default',
-                'Lets Claude reason before answering on models that support it. Overridable per conversation with /thinking.',
-                storage: ProviderSettingsSchema::STORAGE_BOOL,
+                'Thinking',
+                'Blank follows the model: Fable, Opus 5, Opus 5.5 and Sonnet 5 think adaptively on their own, older '
+                    . 'models do not. "on" asks for adaptive thinking everywhere. "off" turns it off where the model '
+                    . 'allows it: Fable and Opus 5.5 always think (lower the effort instead), and Opus 5 runs at most '
+                    . 'at effort "high" with thinking off. Overridable per conversation with /thinking.',
+                ['', ThinkingPolicy::MODE_ON, ThinkingPolicy::MODE_OFF],
                 group: ProviderSettingsSchema::GROUP_BASIC,
+                scope: ProviderSettingsSchema::SCOPE_BOTH,
+                userKey: 'user_thinking',
             ),
             ProviderSettingsSchema::number(
                 'thinking_budget',
@@ -1988,6 +2096,21 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                     . 'reply together. Only models that support non-adaptive thinking accept this. Overridable per '
                     . 'conversation with /thinking-budget.',
                 group: ProviderSettingsSchema::GROUP_BASIC,
+            ),
+            ProviderSettingsSchema::select(
+                'task_effort',
+                'task_effort',
+                'Effort for background tasks',
+                'Effort for Assistant tasks (proofread, headline, summary, …) and coworkers. Blank uses the default '
+                    . 'effort above. A lower level makes these routine jobs cheaper and faster.',
+                array_merge([''], ClaudeModels::ALL_EFFORTS),
+            ),
+            ProviderSettingsSchema::select(
+                'task_thinking',
+                'task_thinking',
+                'Thinking for background tasks',
+                'Thinking for Assistant tasks and coworkers. Blank uses the thinking setting above.',
+                ['', ThinkingPolicy::MODE_ON, ThinkingPolicy::MODE_OFF],
             ),
             ProviderSettingsSchema::select(
                 'service_tier',
