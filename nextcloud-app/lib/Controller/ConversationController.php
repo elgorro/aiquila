@@ -589,33 +589,9 @@ class ConversationController extends Controller {
             $fileEntities[] = $mf;
         }
 
-        // 3. Build messages array from full conversation history
-        $allMessages = $this->messageMapper->findByConversation($id);
-        $claudeMessages = [];
-        foreach ($allMessages as $msg) {
-            $claudeMessages[] = [
-                'role' => $msg->getRole(),
-                'content' => $msg->getContent(),
-            ];
-        }
-
-        // 4. If files are attached to THIS message, build structured content blocks
-        //    so images go through Claude Vision and PDFs through document understanding
-        $documentsIndex = [];
-        if (!empty($files)) {
-            $built = $this->buildFileContentBlocks($files);
-            $contentBlocks = $built['blocks'];
-            $documentsIndex = $built['documents'];
-            if (!empty($contentBlocks) && $claudeMessages !== []) {
-                $lastIdx = count($claudeMessages) - 1;
-                $userText = $claudeMessages[$lastIdx]['content'];
-                // Convert plain string content to structured array with file blocks + text
-                $claudeMessages[$lastIdx]['content'] = array_merge(
-                    $contentBlocks,
-                    [['type' => 'text', 'text' => $userText]]
-                );
-            }
-        }
+        // 3-4. Build messages from the full history, re-attaching every file
+        //      sent in this conversation so follow-ups keep their context.
+        ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id);
 
         // 5. Load project system prompt if conversation has a project
         $systemPrompt = null;
@@ -646,26 +622,14 @@ class ConversationController extends Controller {
         $startMs = (int)(microtime(true) * 1000.0);
         $options = $this->conversationOptions($conversation);
         $result = $this->callClaude($claudeMessages, $systemPrompt, $options, $conversation);
+        //    The stale id may belong to a file from any earlier turn, so the
+        //    whole history is rebuilt.
         if (
-            !empty($files)
-            && isset($result['error'])
+            isset($result['error'])
             && ($staleId = $this->filesService->extractStaleFileIdFromError(new \RuntimeException((string)$result['error']))) !== null
             && $this->filesService->evictByFileId($staleId)
         ) {
-            $rebuilt = $this->buildFileContentBlocks($files);
-            if (!empty($rebuilt['blocks']) && $claudeMessages !== []) {
-                $documentsIndex = $rebuilt['documents'];
-                $lastIdx = count($claudeMessages) - 1;
-                $userText = $claudeMessages[$lastIdx]['content'];
-                if (is_array($userText)) {
-                    $textBlock = end($userText) ?: ['type' => 'text', 'text' => ''];
-                    $userText = $textBlock['text'] ?? '';
-                }
-                $claudeMessages[$lastIdx]['content'] = array_merge(
-                    $rebuilt['blocks'],
-                    [['type' => 'text', 'text' => $userText]]
-                );
-            }
+            ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id);
             $result = $this->callClaude($claudeMessages, $systemPrompt, $options, $conversation);
         }
         $latencyMs = (int)(microtime(true) * 1000.0) - $startMs;
@@ -816,25 +780,7 @@ class ConversationController extends Controller {
         yield ['type' => 'user_message', 'userMessage' => $this->serializeMessage($userMsg, $fileEntities)];
 
         // 2. Build messages + system prompt (mirrors message()).
-        $allMessages = $this->messageMapper->findByConversation($id);
-        $claudeMessages = [];
-        foreach ($allMessages as $msg) {
-            $claudeMessages[] = ['role' => $msg->getRole(), 'content' => $msg->getContent()];
-        }
-        $documentsIndex = [];
-        if (!empty($files)) {
-            $built = $this->buildFileContentBlocks($files);
-            $contentBlocks = $built['blocks'];
-            $documentsIndex = $built['documents'];
-            if (!empty($contentBlocks) && $claudeMessages !== []) {
-                $lastIdx = count($claudeMessages) - 1;
-                $userText = $claudeMessages[$lastIdx]['content'];
-                $claudeMessages[$lastIdx]['content'] = array_merge(
-                    $contentBlocks,
-                    [['type' => 'text', 'text' => $userText]]
-                );
-            }
-        }
+        ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id);
 
         $systemPrompt = null;
         $projectId = $conversation->getProjectId();
@@ -1118,26 +1064,55 @@ class ConversationController extends Controller {
     }
 
     /**
-     * Build structured Claude API content blocks from file paths.
+     * Build the provider message list for a conversation from its stored history.
      *
-     * Images are returned as vision-compatible image blocks (optimized),
-     * PDFs as document blocks, and text files as text blocks.
+     * Files attached to any earlier user message are re-attached to that
+     * message on every turn, so a follow-up question still sees the document
+     * it refers to. Files are re-read from Nextcloud each time; unchanged
+     * images and PDFs resolve to the cached Anthropic file_id, and a file
+     * that has since been deleted becomes a "could not be read" note.
      *
-     * @param string[] $files File paths
-     * @return array Claude API content blocks (image/document/text)
+     * @return array{messages: list<array{role: string, content: string|list<array<string, mixed>>}>, documents: list<array{index:int,path:string,title:string,mimeType:string,fileId?:string}>}
      */
+    private function buildHistory(int $conversationId): array {
+        $messages = [];
+        $documents = [];
+        foreach ($this->messageMapper->findByConversation($conversationId) as $msg) {
+            $content = $msg->getContent();
+            if ($msg->getRole() === 'user') {
+                $paths = array_map(
+                    fn(MessageFile $f) => $f->getFilePath(),
+                    $this->messageFileMapper->findByMessage($msg->getId())
+                );
+                if ($paths !== []) {
+                    $built = $this->buildFileContentBlocks($paths, count($documents));
+                    $documents = array_merge($documents, $built['documents']);
+                    if ($built['blocks'] !== []) {
+                        $content = array_merge($built['blocks'], [['type' => 'text', 'text' => $content]]);
+                    }
+                }
+            }
+            $messages[] = ['role' => $msg->getRole(), 'content' => $content];
+        }
+        return ['messages' => $messages, 'documents' => $documents];
+    }
+
     /**
      * Build Anthropic content blocks for the given Nextcloud file paths.
      *
-     * Returns the blocks alongside a documents index — one entry per `type:document`
-     * block in the order Anthropic sees them. The documents index is what citation
-     * `document_index` values resolve against, so the frontend can map a citation
-     * back to a Nextcloud file path and open it.
+     * Images become vision blocks (optimized), PDFs document blocks, and
+     * anything else a text block. Returns the blocks alongside a documents
+     * index — one entry per `type:document` block in the order Anthropic sees
+     * them. The documents index is what citation `document_index` values
+     * resolve against, so the frontend can map a citation back to a Nextcloud
+     * file path and open it.
      *
      * @param string[] $files
+     * @param int $indexOffset Documents already placed earlier in the same
+     *                         request; `document_index` counts across all of them
      * @return array{blocks: array<int, array<string, mixed>>, documents: array<int, array{index:int,path:string,title:string,mimeType:string,fileId?:string}>}
      */
-    private function buildFileContentBlocks(array $files): array {
+    private function buildFileContentBlocks(array $files, int $indexOffset = 0): array {
         $blocks = [];
         $documents = [];
         foreach ($files as $filePath) {
@@ -1185,7 +1160,7 @@ class ConversationController extends Controller {
                         $docBlock['source'] = ['type' => 'file', 'file_id' => $fileId];
                     }
                     $entry = [
-                        'index' => count($documents),
+                        'index' => $indexOffset + count($documents),
                         'path' => $filePath,
                         'title' => $fileData['name'],
                         'mimeType' => 'application/pdf',

@@ -67,6 +67,14 @@ large base64 payloads. A lone user message has nothing a later request can read
 back, so history, not the method name, decides: `chat()` opts in from the second
 message onwards.
 
+Files attached in a conversation are part of that history. Every turn re-sends
+each file on the user message it was attached to, re-read from Nextcloud, so
+follow-up questions still see it. Images and PDFs go by their Files API
+`file_id`, which stays the same while the file's bytes do, and text files go
+inline. An unchanged file therefore renders the same bytes each turn and sits
+inside the cached prefix. Editing it in Nextcloud invalidates the cache from
+that message onwards.
+
 The automatic breakpoint consumes one of the four slots, so it stands down when
 the explicit markers have already taken all four rather than letting the request
 fail.
