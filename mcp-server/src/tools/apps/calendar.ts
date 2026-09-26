@@ -19,7 +19,7 @@ import { getNextcloudConfig } from '../types.js';
 // Types
 // ---------------------------------------------------------------------------
 
-interface ParsedCalendar {
+export interface ParsedCalendar {
   displayName: string;
   url: string;
   ctag?: string;
@@ -298,7 +298,7 @@ function collectAlarmMinutes(alarm: number | null | undefined, alarms?: number[]
 /**
  * Parse calendar collections from a PROPFIND response.
  */
-function parseCalendars(responseXml: string): ParsedCalendar[] {
+export function parseCalendars(responseXml: string): ParsedCalendar[] {
   const calendars: ParsedCalendar[] = [];
 
   const responseBlocks = responseXml.match(/<d:response>[\s\S]*?<\/d:response>/g);
