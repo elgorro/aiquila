@@ -146,7 +146,7 @@ const SLASH_COMMANDS = [
 		id: 'thinking',
 		label: '/thinking',
 		icon: '🧠',
-		description: 'Toggle adaptive thinking for this conversation (/thinking:on or /thinking:off; no value resets to default)',
+		description: 'Thinking for this conversation (/thinking:on, /thinking:off or /thinking:auto to follow the model; no value resets to default). Some models always think.',
 	},
 	{
 		id: 'thinking-budget',

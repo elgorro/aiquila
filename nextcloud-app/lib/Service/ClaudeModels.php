@@ -14,8 +14,14 @@ class ClaudeModels {
 
     // ── Model ID constants ─────────────────────────────────────────────────
 
-    /** Fable 5 – most powerful model, new tier above Opus (adaptive thinking, 128K output, 1M context, xhigh effort) */
+    /** Fable 5.1 – most capable widely released model; successor to Fable 5 (thinking always on, 128K output, 1M context) */
+    public const FABLE_5_1  = 'claude-fable-5-1';
+
+    /** Fable 5 – new tier above Opus (thinking always on, 128K output, 1M context, xhigh effort) */
     public const FABLE_5    = 'claude-fable-5';
+
+    /** Opus 5.5 – successor to Opus 5 (thinking always on, 128K output, 1M context; API default effort is medium) */
+    public const OPUS_5_5   = 'claude-opus-5-5';
 
     /** Opus 5 – for complex agentic coding and enterprise work (adaptive thinking, 128K output, 1M context, xhigh effort) */
     public const OPUS_5     = 'claude-opus-5';
@@ -74,7 +80,9 @@ class ClaudeModels {
     // ── Per-model output token ceilings ────────────────────────────────────
 
     private const MAX_TOKENS_CEILING = [
+        self::FABLE_5_1  => 128000,
         self::FABLE_5    => 128000,
+        self::OPUS_5_5   => 128000,
         self::OPUS_5     => 128000,
         self::SONNET_5   => 128000,
         self::OPUS_4_8   => 128000,
@@ -89,7 +97,9 @@ class ClaudeModels {
     public const DEFAULT_CONTEXT_WINDOW = 200000;
 
     private const CONTEXT_WINDOW = [
+        self::FABLE_5_1  => 1000000,
         self::FABLE_5    => 1000000,
+        self::OPUS_5_5   => 1000000,
         self::OPUS_5     => 1000000,
         self::SONNET_5   => 1000000,
         self::OPUS_4_8   => 1000000,
@@ -101,7 +111,9 @@ class ClaudeModels {
     // ── Capability flags ───────────────────────────────────────────────────
 
     private const SUPPORTS_THINKING = [
+        self::FABLE_5_1  => true,
         self::FABLE_5    => true,
+        self::OPUS_5_5   => true,
         self::OPUS_5     => true,
         self::SONNET_5   => true,
         self::OPUS_4_8   => true,
@@ -111,7 +123,9 @@ class ClaudeModels {
     ];
 
     private const SUPPORTS_EFFORT = [
+        self::FABLE_5_1  => true,
         self::FABLE_5    => true,
+        self::OPUS_5_5   => true,
         self::OPUS_5     => true,
         self::SONNET_5   => true,
         self::OPUS_4_8   => true,
@@ -155,7 +169,9 @@ class ClaudeModels {
      */
     public static function getAllModels(): array {
         return [
+            self::FABLE_5_1,
             self::FABLE_5,
+            self::OPUS_5_5,
             self::OPUS_5,
             self::SONNET_5,
             self::OPUS_4_8,
@@ -171,7 +187,9 @@ class ClaudeModels {
     // ── Per-model effort level (app-level policy) ────────────────────────
 
     public const EFFORT_LEVEL = [
+        self::FABLE_5_1  => 'xhigh',
         self::FABLE_5    => 'xhigh',
+        self::OPUS_5_5   => 'xhigh',
         self::OPUS_5     => 'xhigh',
         self::SONNET_5   => 'medium',
         self::OPUS_4_8   => 'xhigh',
@@ -192,9 +210,11 @@ class ClaudeModels {
     /** Every effort value any model accepts; used for settings validation. */
     public const ALL_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 
-    /** `xhigh` requires Fable 5 / Opus 5 / Sonnet 5 / Opus 4.7+; older models reject it with a 400. */
+    /** `xhigh` requires the Fable 5, Opus 5 and Sonnet 5 families or Opus 4.7+; older models reject it with a 400. */
     private const ALLOWED_EFFORTS = [
+        self::FABLE_5_1  => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::FABLE_5    => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::OPUS_5_5   => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::OPUS_5     => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::SONNET_5   => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::OPUS_4_8   => ['low', 'medium', 'high', 'xhigh', 'max'],
@@ -216,22 +236,108 @@ class ClaudeModels {
         return in_array($effort, self::getAllowedEfforts($model), true);
     }
 
+    // ── Thinking policy (API-enforced) ────────────────────────────────────
+
+    /** Omitting `thinking` runs adaptive thinking. */
+    public const THINKING_DEFAULT_ADAPTIVE = 'adaptive';
+    /** Omitting `thinking` runs without thinking. */
+    public const THINKING_DEFAULT_OFF = 'off';
+
+    /** Thinking cannot be turned off: `{type: disabled}` is a 400 at every effort. */
+    public const THINKING_OFF_NEVER = 'never';
+    /** Turning thinking off means sending `{type: disabled}`. */
+    public const THINKING_OFF_DISABLED = 'disabled';
+    /** Turning thinking off means omitting the parameter. */
+    public const THINKING_OFF_OMIT = 'omit';
+
+    /**
+     * What each thinking-capable model does when `thinking` is omitted, and
+     * how (or whether) it can be turned off. On the 5-series omitting the
+     * parameter no longer means "off", so "off" has to be expressed per model.
+     *
+     * `off_max_effort` is the highest effort the API accepts together with
+     * `{type: disabled}`: Opus 5 rejects the pair at `xhigh` and `max`.
+     *
+     * @var array<string, array{default: string, off: string, off_max_effort?: string}>
+     */
+    private const THINKING_POLICY = [
+        self::FABLE_5_1  => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
+        self::FABLE_5    => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
+        self::OPUS_5_5   => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
+        self::OPUS_5     => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_DISABLED, 'off_max_effort' => 'high'],
+        self::SONNET_5   => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_DISABLED],
+        self::OPUS_4_8   => ['default' => self::THINKING_DEFAULT_OFF, 'off' => self::THINKING_OFF_OMIT],
+        self::OPUS_4_7   => ['default' => self::THINKING_DEFAULT_OFF, 'off' => self::THINKING_OFF_OMIT],
+        self::OPUS_4_6   => ['default' => self::THINKING_DEFAULT_OFF, 'off' => self::THINKING_OFF_OMIT],
+        self::SONNET_4_6 => ['default' => self::THINKING_DEFAULT_OFF, 'off' => self::THINKING_OFF_OMIT],
+    ];
+
+    /**
+     * What the model does when `thinking` is omitted. Models without a policy
+     * entry (no thinking support, or unknown) are treated as off.
+     */
+    public static function thinkingDefault(string $model): string {
+        return self::THINKING_POLICY[$model]['default'] ?? self::THINKING_DEFAULT_OFF;
+    }
+
+    /**
+     * How "thinking off" is expressed for a model: THINKING_OFF_NEVER,
+     * THINKING_OFF_DISABLED or THINKING_OFF_OMIT. Unknown models omit.
+     */
+    public static function thinkingOffMode(string $model): string {
+        return self::THINKING_POLICY[$model]['off'] ?? self::THINKING_OFF_OMIT;
+    }
+
+    public static function canDisableThinking(string $model): bool {
+        return self::thinkingOffMode($model) !== self::THINKING_OFF_NEVER;
+    }
+
+    /**
+     * Highest effort the API accepts with `{type: disabled}`, or null when any
+     * allowed effort is fine.
+     */
+    public static function maxEffortWithThinkingDisabled(string $model): ?string {
+        return self::THINKING_POLICY[$model]['off_max_effort'] ?? null;
+    }
+
+    /**
+     * Models whose thinking `display` defaults to `omitted` (empty thinking
+     * text), so a readable summary has to be requested with
+     * `display: summarized`. Opus 4.6 and Sonnet 4.6 still summarise by
+     * default and are left alone.
+     */
+    private const THINKING_SUMMARY_OPT_IN = [
+        self::FABLE_5_1 => true,
+        self::FABLE_5   => true,
+        self::OPUS_5_5  => true,
+        self::OPUS_5    => true,
+        self::SONNET_5  => true,
+        self::OPUS_4_8  => true,
+        self::OPUS_4_7  => true,
+    ];
+
+    public static function thinkingSummaryNeedsOptIn(string $model): bool {
+        return self::THINKING_SUMMARY_OPT_IN[$model] ?? false;
+    }
+
     // ── Sampling parameter support ────────────────────────────────────────
 
     /** Models that reject temperature/top_p/top_k with a 400. */
     private const NO_SAMPLING_PARAMS = [
-        self::FABLE_5  => true,
-        self::OPUS_5   => true,
-        self::SONNET_5 => true,
-        self::OPUS_4_8 => true,
-        self::OPUS_4_7 => true,
+        self::FABLE_5_1 => true,
+        self::FABLE_5   => true,
+        self::OPUS_5_5  => true,
+        self::OPUS_5    => true,
+        self::SONNET_5  => true,
+        self::OPUS_4_8  => true,
+        self::OPUS_4_7  => true,
     ];
 
     /**
      * Whether a model accepts the temperature/top_p/top_k sampling
-     * parameters. Fable 5, Opus 4.7+, and the 5-series removed them: Opus 5
-     * rejects them outright, Sonnet 5 rejects any non-default value, so we
-     * omit them for both.
+     * parameters. The Fable family, Opus 4.7+ and the 5-series removed them:
+     * Opus 5 rejects them outright, Sonnet 5 rejects any non-default value, so
+     * we omit them for all of them.
      */
     public static function supportsSamplingParams(string $model): bool {
         return !isset(self::NO_SAMPLING_PARAMS[$model]);
@@ -262,6 +368,7 @@ class ClaudeModels {
      * an unsupported combination is rejected by the API at create time.
      */
     private const SUPPORTS_FAST_MODE = [
+        self::OPUS_5_5 => true,
         self::OPUS_5   => true,
         self::OPUS_4_8 => true,
     ];
@@ -290,8 +397,8 @@ class ClaudeModels {
      * Hand-maintained for the same reason as SUPPORTS_FAST_MODE: the Models
      * API reports no capability flag for it. Sending the header on a model
      * that does not support it risks a 400 on the whole batch, so the table
-     * is deliberately conservative — Fable 5 and everything below Sonnet 4.6
-     * are absent.
+     * is deliberately conservative — the Fable family, Opus 5.5 and
+     * everything below Sonnet 4.6 are absent.
      */
     private const SUPPORTS_EXTENDED_OUTPUT = [
         self::OPUS_5     => true,

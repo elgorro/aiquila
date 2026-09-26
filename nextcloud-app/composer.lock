@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "3db02b63be2b7007689d5d50d85049d2",
+    "content-hash": "71297b30209dcb9a0ce18d1eeb426166",
     "packages": [
         {
             "name": "anthropic-ai/sdk",
-            "version": "v0.48.0",
+            "version": "v0.51.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/anthropics/anthropic-sdk-php.git",
-                "reference": "d46e6d8e41266940258a99fe9337e487155437a7"
+                "reference": "1228c4cbce7c99c05cee9d69b6e4394eedd07c89"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/anthropics/anthropic-sdk-php/zipball/d46e6d8e41266940258a99fe9337e487155437a7",
-                "reference": "d46e6d8e41266940258a99fe9337e487155437a7",
+                "url": "https://api.github.com/repos/anthropics/anthropic-sdk-php/zipball/1228c4cbce7c99c05cee9d69b6e4394eedd07c89",
+                "reference": "1228c4cbce7c99c05cee9d69b6e4394eedd07c89",
                 "shasum": ""
             },
             "require": {
@@ -65,9 +65,9 @@
             "description": "Anthropic PHP SDK",
             "support": {
                 "issues": "https://github.com/anthropics/anthropic-sdk-php/issues",
-                "source": "https://github.com/anthropics/anthropic-sdk-php/tree/v0.48.0"
+                "source": "https://github.com/anthropics/anthropic-sdk-php/tree/v0.51.0"
             },
-            "time": "2026-09-10T17:46:36+00:00"
+            "time": "2026-09-22T16:27:10+00:00"
         },
         {
             "name": "nyholm/psr7",

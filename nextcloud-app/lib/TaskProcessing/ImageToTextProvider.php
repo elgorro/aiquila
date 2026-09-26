@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\ImageOptimizer;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\Files\File;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
@@ -133,6 +134,7 @@ class ImageToTextProvider implements ISynchronousProvider {
                 $image['mimeType'],
                 $userId,
                 (string)$file->getId(),
+                LLMProviderInterface::TASK_OPTIONS,
             );
 
             if (isset($result['error'])) {

@@ -66,6 +66,7 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
         $provider = $this->providerFactory->getProviderForUser($userId, $coworker->getProvider());
         $providerId = $provider->getId();
         $prompt = $this->buildPrompt($options);
+        $requestOptions = CoworkerRequestOptions::build($coworker, $provider, $options);
 
         $files = $this->collectFiles($coworker, $options);
         $total = count($files);
@@ -79,7 +80,7 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
             try {
                 $image = $this->imageOptimizer->prepare($file->getContent(), $file->getMimetype());
 
-                $result = $provider->askWithImage($prompt, $image['base64'], $image['mimeType'], $userId, (string)$file->getId());
+                $result = $provider->askWithImage($prompt, $image['base64'], $image['mimeType'], $userId, (string)$file->getId(), $requestOptions);
                 if (isset($result['error'])) {
                     throw new \RuntimeException($result['error']);
                 }

@@ -13,6 +13,17 @@
 	</NcEmptyContent>
 	<div v-else class="chat-view">
 		<div class="chat-header">
+			<!--
+				What the next message will actually do. The same setting means
+				different things per model (some always think, Opus 5 caps effort
+				with thinking off), so the resolved state is shown, not the input.
+			-->
+			<span v-if="thinkingBadge"
+				class="thinking-badge"
+				:class="{ 'thinking-badge--adjusted': thinkingAdjusted }"
+				:title="thinkingBadgeTitle">
+				{{ thinkingBadge }}
+			</span>
 			<ConversationModelPicker :conversation="conversation"
 				@conversation-updated="$emit('conversation-updated', $event)" />
 		</div>
@@ -48,16 +59,24 @@
 						<span v-else>← {{ t('aiquila', 'Tool result received') }}</span>
 					</div>
 				</div>
+				<details v-if="draft.thinking.text || draft.thinking.active" class="draft-thinking" :open="draft.thinking.active">
+					<summary>
+						{{ draft.thinking.active
+							? t('aiquila', 'Thinking…')
+							: t('aiquila', 'Thought for {seconds} s', { seconds: (draft.thinking.ms / 1000).toFixed(1) }) }}
+					</summary>
+					<div v-if="draft.thinking.text" class="draft-thinking__text">{{ draft.thinking.text }}</div>
+				</details>
 				<div v-if="draft.assistantText" class="message-content" style="white-space: pre-wrap;">{{ draft.assistantText }}</div>
-				<div v-else class="chat-loading-inline">
+				<div v-else-if="!draft.thinking.active" class="chat-loading-inline">
 					<NcLoadingIcon :size="20" />
-					<span>{{ t('aiquila', 'Thinking…') }}</span>
+					<span>{{ t('aiquila', 'Working…') }}</span>
 				</div>
 				<div v-if="draft.error" class="draft-error">{{ draft.error }}</div>
 			</div>
 			<div v-if="sending && !draft.active" class="chat-loading">
 				<NcLoadingIcon :size="32" />
-				<span>{{ t('aiquila', 'Thinking…') }}</span>
+				<span>{{ t('aiquila', 'Working…') }}</span>
 			</div>
 			<div v-if="notice" class="chat-notice" :class="{ 'chat-notice-error': noticeIsError }">
 				<span>{{ notice }}</span>
@@ -101,9 +120,21 @@ import ChatIcon from 'vue-material-design-icons/Chat.vue'
 import MessageBubble from './MessageBubble.vue'
 import ChatInput from './ChatInput.vue'
 import ConversationModelPicker from './ConversationModelPicker.vue'
-import { sendMessage, sendMessageStream, updateConversation } from '../api.js'
+import { getConversationThinking, sendMessage, sendMessageStream, updateConversation } from '../api.js'
 
 const DOT_PATTERNS = ['·····', '··●··', '·●●●·', '●●●●●', '·●●●·', '··●··']
+
+/** A fresh streaming draft. */
+function emptyDraft(active = false) {
+	return {
+		active,
+		userMessage: null,
+		assistantText: '',
+		toolEvents: [],
+		error: null,
+		thinking: { active: false, text: '', ms: 0, startedAt: 0 },
+	}
+}
 
 export default {
 	name: 'ChatView',
@@ -140,7 +171,8 @@ export default {
 			showProjectPicker: false,
 			notice: null,
 			noticeIsError: false,
-			draft: { active: false, userMessage: null, assistantText: '', toolEvents: [], error: null },
+			draft: emptyDraft(),
+			thinkingState: null,
 		}
 	},
 	watch: {
@@ -149,6 +181,12 @@ export default {
 				this.$nextTick(() => this.scrollToBottom())
 			},
 			deep: true,
+		},
+		thinkingInputs: {
+			handler() {
+				this.refreshThinking()
+			},
+			immediate: true,
 		},
 		'conversation.id'() {
 			// Reset verbose on conversation switch (keep user preference via settings default)
@@ -169,6 +207,48 @@ export default {
 		},
 	},
 	computed: {
+		/** Everything that can change the effective thinking state. */
+		thinkingInputs() {
+			const c = this.conversation
+			return c ? [c.id, c.provider, c.model, c.effort, c.thinking, c.thinkingBudget].join('|') : ''
+		},
+		thinkingAdjusted() {
+			return (this.thinkingState?.adjustments || []).length > 0
+		},
+		thinkingBadge() {
+			const s = this.thinkingState
+			if (!s || s.state === 'none') {
+				return ''
+			}
+			let label
+			if (s.state === 'budget') {
+				label = t('aiquila', 'Thinking: {budget} tokens', { budget: s.budget })
+			} else if (s.state === 'off') {
+				label = t('aiquila', 'Thinking: off')
+			} else if (s.alwaysOn) {
+				label = t('aiquila', 'Thinking: always on')
+			} else {
+				label = t('aiquila', 'Thinking: adaptive')
+			}
+			return s.effort ? label + ' · ' + t('aiquila', 'effort {effort}', { effort: s.effort }) : label
+		},
+		thinkingBadgeTitle() {
+			const s = this.thinkingState
+			if (!s) {
+				return ''
+			}
+			const notes = []
+			if ((s.adjustments || []).includes('thinking_always_on')) {
+				notes.push(t('aiquila', '{model} always thinks; "off" has no effect. Lower /effort to make it cheaper.', { model: s.model }))
+			}
+			if ((s.adjustments || []).includes('effort_capped')) {
+				notes.push(t('aiquila', 'With thinking off, {model} runs at most at effort "{effort}".', { model: s.model, effort: s.effort }))
+			}
+			if (s.mode === 'auto' && !notes.length) {
+				notes.push(t('aiquila', 'Follows the default for {model}. Change it with /thinking and /effort.', { model: s.model }))
+			}
+			return notes.join(' ')
+		},
 		conversationTokens() {
 			let input = 0
 			let output = 0
@@ -213,7 +293,23 @@ export default {
 			}
 		},
 		resetDraft() {
-			this.draft = { active: false, userMessage: null, assistantText: '', toolEvents: [], error: null }
+			this.draft = emptyDraft()
+		},
+		async refreshThinking() {
+			const id = this.conversation?.id
+			if (!id) {
+				this.thinkingState = null
+				return
+			}
+			try {
+				const { data } = await getConversationThinking(id)
+				// Ignore a late answer for a conversation that is no longer shown.
+				if (this.conversation?.id === id) {
+					this.thinkingState = data
+				}
+			} catch (err) {
+				this.thinkingState = null
+			}
 		},
 		async onSend({ prompt, files }) {
 			this.sending = true
@@ -222,7 +318,7 @@ export default {
 			let assistantMessage = null
 			let conversationUpdate = null
 
-			this.draft = { active: true, userMessage: null, assistantText: '', toolEvents: [], error: null }
+			this.draft = emptyDraft(true)
 
 			try {
 				await sendMessageStream(this.conversation.id, prompt, filePaths, (event) => {
@@ -233,6 +329,17 @@ export default {
 						break
 					case 'text_delta':
 						this.draft.assistantText += event.text || ''
+						break
+					case 'thinking_start':
+						this.draft.thinking.active = true
+						this.draft.thinking.startedAt = Date.now()
+						break
+					case 'thinking_delta':
+						this.draft.thinking.text += event.text || ''
+						break
+					case 'thinking_stop':
+						this.draft.thinking.active = false
+						this.draft.thinking.ms += event.duration_ms ?? (Date.now() - this.draft.thinking.startedAt)
 						break
 					case 'tool_use':
 						this.draft.toolEvents.push({ kind: 'use', name: event.name })
@@ -350,18 +457,18 @@ export default {
 			}
 		},
 		async setThinking(value) {
-			if (!['on', 'off', ''].includes(value)) {
+			if (!['on', 'off', 'auto', ''].includes(value)) {
 				this.noticeIsError = true
-				this.notice = t('aiquila', 'Usage: /thinking:on or /thinking:off')
+				this.notice = t('aiquila', 'Usage: /thinking:on, /thinking:off or /thinking:auto')
 				return
 			}
 			try {
 				const { data } = await updateConversation(this.conversation.id, { thinking: value })
 				this.$emit('conversation-updated', data)
 				this.noticeIsError = false
-				this.notice = value === ''
-					? t('aiquila', 'Adaptive thinking reset to default for this conversation — applies to new messages only')
-					: t('aiquila', 'Adaptive thinking turned {value} for this conversation — applies to new messages only', { value })
+				this.notice = value === '' || value === 'auto'
+					? t('aiquila', 'Thinking reset to default for this conversation — applies to new messages only')
+					: t('aiquila', 'Thinking turned {value} for this conversation — applies to new messages only', { value })
 			} catch (err) {
 				this.noticeIsError = true
 				this.notice = err.response?.data?.error || t('aiquila', 'Failed to set thinking')
@@ -425,8 +532,40 @@ export default {
 .chat-header {
 	display: flex;
 	justify-content: flex-end;
+	align-items: center;
+	gap: 8px;
 	padding: 8px 12px;
 	border-bottom: 1px solid var(--color-border);
+}
+
+.thinking-badge {
+	font-size: 12px;
+	padding: 2px 8px;
+	border-radius: var(--border-radius-pill, 12px);
+	background: var(--color-background-dark);
+	color: var(--color-text-maxcontrast);
+	cursor: help;
+}
+
+.thinking-badge--adjusted {
+	color: var(--color-warning-text, var(--color-warning));
+}
+
+.draft-thinking {
+	margin: 4px 0 8px;
+	font-size: 0.9em;
+	color: var(--color-text-maxcontrast);
+}
+
+.draft-thinking summary {
+	cursor: pointer;
+}
+
+.draft-thinking__text {
+	margin-top: 4px;
+	padding-left: 8px;
+	border-left: 2px solid var(--color-border);
+	white-space: pre-wrap;
 }
 
 .chat-view {

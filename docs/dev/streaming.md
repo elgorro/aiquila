@@ -28,10 +28,18 @@ provider API  ──SSE──▶  LLMProvider::chatWithToolsStream()   (PHP gene
 |---|---|
 | `user_message` | the persisted user message, sent first |
 | `text_delta` | a chunk of assistant text |
+| `thinking_start` / `thinking_delta` / `thinking_stop` | a thinking block opened, a chunk of its readable summary, and its end with `duration_ms` |
 | `tool_use` / `tool_result` | a tool invocation and its output |
 | `done` | terminal: usage totals and citations |
 | `error` | terminal: the turn failed, partially or entirely |
 | `persisted` | always last: the stored assistant message and conversation |
+
+The chat asks for readable thinking summaries (`display: summarized`) on the
+models that otherwise return empty thinking text. The accumulated summary is
+stored with the assistant message as `thinkingSummary`. Within a tool loop the
+thinking blocks themselves, signatures included, are replayed to the model
+unchanged — models with preserved thinking reject a turn whose earlier
+thinking was dropped.
 
 `error` is always followed by `persisted`, so a failed turn still leaves the
 user whatever text arrived before it went wrong, suffixed with

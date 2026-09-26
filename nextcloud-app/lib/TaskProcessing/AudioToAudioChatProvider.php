@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\AudioLimits;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\Files\File;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
@@ -126,6 +127,7 @@ class AudioToAudioChatProvider implements ISynchronousProvider {
             $messages,
             is_string($system) && $system !== '' ? $system : null,
             $userId,
+            LLMProviderInterface::TASK_OPTIONS,
         );
         if (isset($answered['error'])) {
             throw new \RuntimeException($answered['error']);

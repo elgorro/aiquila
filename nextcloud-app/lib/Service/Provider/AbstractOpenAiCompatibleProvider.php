@@ -240,11 +240,11 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
         return $this->chat([['role' => 'user', 'content' => $content]], $options['system'] ?? null, $userId, $options);
     }
 
-    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null): array {
-        return $this->askWithImages($prompt, [['base64' => $base64Image, 'mimeType' => $mimeType]], $userId, $fileId !== null ? [$fileId] : null);
+    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null, array $options = []): array {
+        return $this->askWithImages($prompt, [['base64' => $base64Image, 'mimeType' => $mimeType]], $userId, $fileId !== null ? [$fileId] : null, $options);
     }
 
-    public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null): array {
+    public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null, array $options = []): array {
         if (!$this->supportsVisionInput($userId)) {
             return ['error' => $this->getLabel() . ' is not configured with a vision-capable model. Please switch models or providers.'];
         }
@@ -256,7 +256,7 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
             $content[] = ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $img['mimeType'], 'data' => $img['base64']]];
         }
         $content[] = ['type' => 'text', 'text' => $prompt];
-        return $this->chat([['role' => 'user', 'content' => $content]], null, $userId);
+        return $this->chat([['role' => 'user', 'content' => $content]], null, $userId, $options);
     }
 
     public function askWithDocument(string $prompt, string $documentData, string $mediaType, string $title = '', ?string $userId = null, bool $cacheDoc = true, bool $citations = true, ?string $fileId = null): array {

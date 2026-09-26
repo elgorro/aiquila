@@ -8,6 +8,7 @@ use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
+use OCA\AIquila\Service\ThinkingPolicy;
 use OCP\IConfig;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -58,7 +59,19 @@ class ConfigureCommand extends Base {
                 'thinking',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Enable adaptive thinking by default (on|off)'
+                'Default thinking (auto|on|off; auto follows the model)'
+            )
+            ->addOption(
+                'task-effort',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Effort for background tasks and coworkers (low|medium|high|xhigh|max, empty string to use the default effort)'
+            )
+            ->addOption(
+                'task-thinking',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Thinking for background tasks and coworkers (auto|on|off, empty string to use the default thinking)'
             )
             ->addOption(
                 'thinking-budget',
@@ -220,15 +233,33 @@ class ConfigureCommand extends Base {
             $updated = true;
         }
 
-        // Set adaptive thinking default
-        $thinking = $input->getOption('thinking');
-        if ($thinking !== null) {
-            if (!in_array($thinking, ['on', 'off'], true)) {
-                $output->writeln('<error>Thinking must be "on" or "off"</error>');
+        // Set the thinking defaults (chat and background tasks)
+        foreach (['thinking' => 'thinking', 'task-thinking' => 'task_thinking'] as $option => $key) {
+            $thinking = $input->getOption($option);
+            if ($thinking === null) {
+                continue;
+            }
+            $allowed = $option === 'thinking' ? ThinkingPolicy::MODES : array_merge([''], ThinkingPolicy::MODES);
+            if (!in_array($thinking, $allowed, true)) {
+                $output->writeln('<error>--' . $option . ' must be one of: ' . implode(', ', ThinkingPolicy::MODES) . '</error>');
                 return 1;
             }
-            $this->config->setAppValue(self::APP_NAME, 'thinking', $thinking === 'on' ? 'true' : 'false');
-            $output->writeln('<info>✓ Adaptive thinking default updated to: ' . $thinking . '</info>');
+            // Stored blank for auto, matching the settings UI.
+            $this->config->setAppValue(self::APP_NAME, $key, $thinking === ThinkingPolicy::MODE_AUTO ? '' : $thinking);
+            $output->writeln('<info>✓ ' . ($option === 'thinking' ? 'Thinking' : 'Task thinking') . ' default updated to: '
+                . ($thinking === '' ? '(default thinking)' : $thinking) . '</info>');
+            $updated = true;
+        }
+
+        // Set the effort for background tasks
+        $taskEffort = $input->getOption('task-effort');
+        if ($taskEffort !== null) {
+            if ($taskEffort !== '' && !in_array($taskEffort, ClaudeModels::ALL_EFFORTS, true)) {
+                $output->writeln('<error>Task effort must be one of: ' . implode(', ', ClaudeModels::ALL_EFFORTS) . ' (or empty to reset)</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'task_effort', $taskEffort);
+            $output->writeln('<info>✓ Task effort ' . ($taskEffort === '' ? 'reset to the default effort' : 'updated to: ' . $taskEffort) . '</info>');
             $updated = true;
         }
 
@@ -317,7 +348,9 @@ class ConfigureCommand extends Base {
         $model = $provider->getModel();
         $maxTokens = (string)$provider->getMaxTokens();
         $effort = $this->config->getAppValue(self::APP_NAME, 'effort', '');
-        $thinking = in_array($this->config->getAppValue(self::APP_NAME, 'thinking', 'false'), ['true', '1'], true);
+        $thinking = ThinkingPolicy::normalizeMode($this->config->getAppValue(self::APP_NAME, 'thinking', ''));
+        $taskEffort = $this->config->getAppValue(self::APP_NAME, 'task_effort', '');
+        $taskThinking = $this->config->getAppValue(self::APP_NAME, 'task_thinking', '');
         $thinkingBudget = $this->config->getAppValue(self::APP_NAME, 'thinking_budget', '');
         $serviceTier = $this->config->getAppValue(self::APP_NAME, 'service_tier', '');
         $fast = in_array($this->config->getAppValue(self::APP_NAME, 'speed_fast', 'false'), ['true', '1'], true);
@@ -338,7 +371,9 @@ class ConfigureCommand extends Base {
         $output->writeln('  Model:      <comment>' . $model . '</comment>');
         $output->writeln('  Max Tokens: <comment>' . $maxTokens . '</comment>');
         $output->writeln('  Effort:     <comment>' . ($effort !== '' ? $effort : '(model default)') . '</comment>');
-        $output->writeln('  Thinking:   <comment>' . ($thinking ? 'on' : 'off') . '</comment>');
+        $output->writeln('  Thinking:   <comment>' . ($thinking === ThinkingPolicy::MODE_AUTO ? 'auto (model default)' : $thinking) . '</comment>');
+        $output->writeln('  Task effort:   <comment>' . ($taskEffort !== '' ? $taskEffort : '(default effort)') . '</comment>');
+        $output->writeln('  Task thinking: <comment>' . ($taskThinking !== '' ? ThinkingPolicy::normalizeMode($taskThinking) : '(default thinking)') . '</comment>');
         $output->writeln('  Budget:     <comment>' . ($thinkingBudget !== '' ? $thinkingBudget . ' tokens' : '(adaptive)') . '</comment>');
         $output->writeln('  Tier:       <comment>' . ($serviceTier !== '' ? $serviceTier : '(account default)') . '</comment>');
         $output->writeln('  Fast mode:  <comment>' . ($fast ? 'on' : 'off') . '</comment>');

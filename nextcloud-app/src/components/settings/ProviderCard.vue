@@ -32,6 +32,15 @@
 		</div>
 
 		<!--
+			How thinking and effort behave on the selected model. The same
+			setting means different things per model (some always think), so
+			this is stated once here rather than in every field's help text.
+		-->
+		<p v-if="modelProfileText" class="provider-card__profile">
+			{{ modelProfileText }}
+		</p>
+
+		<!--
 			Capability chips make the cost of switching provider legible before
 			you switch: losing vision or tool use mid-project is otherwise only
 			discoverable by hitting an error.
@@ -166,6 +175,35 @@ export default {
 	computed: {
 		isDefault() {
 			return this.provider.id === this.defaultProvider
+		},
+		modelProfileText() {
+			const p = this.provider.modelProfile
+			if (!p) {
+				return ''
+			}
+			const parts = []
+			switch (p.thinking) {
+			case 'always_on':
+				parts.push(t('aiquila', 'Always thinks — it cannot be turned off; lower the effort to save cost.'))
+				break
+			case 'adaptive_by_default':
+				parts.push(p.off_max_effort
+					? t('aiquila', 'Thinks on its own unless turned off; with thinking off it runs at most at effort "{effort}".', { effort: p.off_max_effort })
+					: t('aiquila', 'Thinks on its own unless turned off.'))
+				break
+			case 'off_by_default':
+				parts.push(t('aiquila', 'Thinks only when thinking is turned on.'))
+				break
+			default:
+				parts.push(t('aiquila', 'No thinking.'))
+			}
+			if (p.efforts && p.efforts.length) {
+				parts.push(t('aiquila', 'Effort: {efforts} (default {effort}).', {
+					efforts: p.efforts.join(', '),
+					effort: p.default_effort,
+				}))
+			}
+			return p.model + ': ' + parts.join(' ')
 		},
 		fields() {
 			return this.provider.fields || []
@@ -449,6 +487,12 @@ export default {
 .provider-card__model {
 	color: var(--color-text-maxcontrast);
 	font-family: var(--font-face-monospace, monospace);
+}
+
+.provider-card__profile {
+	margin: 4px 0 0;
+	color: var(--color-text-maxcontrast);
+	font-size: 0.9em;
 }
 
 .provider-card__caps {

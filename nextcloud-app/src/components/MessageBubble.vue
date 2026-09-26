@@ -4,6 +4,11 @@
 		<div class="message-header">
 			<strong>{{ roleLabel }}</strong>
 		</div>
+		<!-- Collapsed by default: the summary is there to check, not to read every time. -->
+		<details v-if="message.thinkingSummary" class="message-thinking">
+			<summary>{{ t('aiquila', 'Thinking') }}</summary>
+			<div class="message-thinking__text">{{ message.thinkingSummary }}</div>
+		</details>
 		<NcNoteCard v-if="isError" type="error">
 			{{ messageContent }}
 		</NcNoteCard>
@@ -238,6 +243,23 @@ export default {
 
 .message-content.markdown-body {
 	white-space: normal;
+}
+
+.message-thinking {
+	margin: 4px 0 8px;
+	font-size: 0.9em;
+	color: var(--color-text-maxcontrast);
+}
+
+.message-thinking summary {
+	cursor: pointer;
+}
+
+.message-thinking__text {
+	margin-top: 4px;
+	padding-left: 8px;
+	border-left: 2px solid var(--color-border);
+	white-space: pre-wrap;
 }
 
 .message-citations {

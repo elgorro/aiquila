@@ -91,6 +91,13 @@ class ProviderSettingsService {
             $fields[] = $this->describeField($field, $id, $userId, $admin, $provider, $refreshModels);
         }
 
+        $currentModel = $provider->getModel($admin ? null : $userId);
+        $modelProfile = null;
+        if ($provider instanceof ThinkingProfileInterface) {
+            $modelProfile = $provider->getThinkingProfile($currentModel);
+            $fields = array_map(fn(array $f) => $this->withModelWarning($f, $modelProfile), $fields);
+        }
+
         return [
             'id' => $id,
             'label' => $provider->getLabel(),
@@ -99,9 +106,47 @@ class ProviderSettingsService {
             // Distinguishes a personal key from one inherited from the instance.
             'hasKey' => $this->credentials->hasApiKey(null, $id),
             'hasUserKey' => $userId !== null && $this->credentials->hasApiKey($userId, $id),
-            'currentModel' => $provider->getModel($admin ? null : $userId),
+            'currentModel' => $currentModel,
+            // How thinking and effort behave on currentModel; null for
+            // providers without per-model differences.
+            'modelProfile' => $modelProfile,
             'fields' => $fields,
         ];
+    }
+
+    /**
+     * Flag a thinking or effort value the current model cannot honour, so the
+     * card says so instead of the request silently doing something else.
+     *
+     * @param array<string, mixed> $field described field (value / inherited filled in)
+     * @param array{model: string, thinking: string, can_disable: bool, off_max_effort: string|null, efforts: list<string>, default_effort: string|null} $profile
+     * @return array<string, mixed>
+     */
+    private function withModelWarning(array $field, array $profile): array {
+        $value = $field['value'] ?? null;
+        if (($value === null || $value === '') && isset($field['inherited'])) {
+            $value = $field['inherited'];
+        }
+        if (!is_string($value) || $value === '') {
+            return $field;
+        }
+        $model = $profile['model'];
+
+        if (in_array($field['id'] ?? null, ['thinking', 'task_thinking'], true) && $value === 'off') {
+            if (!$profile['can_disable']) {
+                $field['warning'] = sprintf('%s always thinks, so "off" has no effect on it. Lower the effort to make it cheaper.', $model);
+            } elseif ($profile['off_max_effort'] !== null) {
+                $field['warning'] = sprintf('With thinking off, %s runs at most at effort "%s"; a higher effort is lowered to it.', $model, $profile['off_max_effort']);
+            }
+        }
+
+        if (in_array($field['id'] ?? null, ['effort', 'task_effort'], true) && !in_array($value, $profile['efforts'], true)) {
+            $field['warning'] = $profile['efforts'] === []
+                ? sprintf('%s has no effort setting; this value is ignored.', $model)
+                : sprintf('%s does not accept "%s"; its default "%s" is used instead.', $model, $value, (string)$profile['default_effort']);
+        }
+
+        return $field;
     }
 
     /**

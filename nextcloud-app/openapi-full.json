@@ -462,6 +462,7 @@
                                                     "latencyMs",
                                                     "citations",
                                                     "documents",
+                                                    "thinkingSummary",
                                                     "createdAt",
                                                     "files"
                                                 ],
@@ -518,6 +519,10 @@
                                                         "additionalProperties": {
                                                             "type": "object"
                                                         }
+                                                    },
+                                                    "thinkingSummary": {
+                                                        "type": "string",
+                                                        "nullable": true
                                                     },
                                                     "createdAt": {
                                                         "type": "integer",
@@ -1307,6 +1312,158 @@
                     },
                     "403": {
                         "description": "The provider is not permitted for this user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Conversation not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/conversations/{id}/thinking": {
+            "get": {
+                "operationId": "conversation-thinking",
+                "summary": "Effective thinking and effort for the next message in a conversation",
+                "description": "Resolves the conversation's overrides, the user's and the instance defaults, and the rules of the model that would answer — some models always think, others cap the effort when thinking is off.",
+                "tags": [
+                    "conversation"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Conversation ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Effective state. `state` is adaptive, budget, off or none (the provider has no thinking)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "model",
+                                        "mode",
+                                        "state",
+                                        "alwaysOn",
+                                        "effort",
+                                        "budget",
+                                        "adjustments"
+                                    ],
+                                    "properties": {
+                                        "model": {
+                                            "type": "string"
+                                        },
+                                        "mode": {
+                                            "type": "string"
+                                        },
+                                        "state": {
+                                            "type": "string"
+                                        },
+                                        "alwaysOn": {
+                                            "type": "boolean"
+                                        },
+                                        "effort": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "budget": {
+                                            "type": "integer",
+                                            "format": "int64",
+                                            "nullable": true
+                                        },
+                                        "adjustments": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "No provider is permitted for this user",
                         "content": {
                             "application/json": {
                                 "schema": {

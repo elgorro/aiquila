@@ -30,6 +30,7 @@ use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\ProviderActionsInterface;
 use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
+use OCA\AIquila\Service\Provider\ThinkingProfileInterface;
 use OCA\AIquila\Service\Provider\UnsupportedModalities;
 use OCP\ICache;
 use OCP\ICacheFactory;
@@ -42,7 +43,7 @@ use Psr\Log\LoggerInterface;
  * This is the new implementation using the official SDK.
  * Provides better error handling, type safety, and streaming support.
  */
-class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface {
+class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface, ThinkingProfileInterface {
     // Anthropic publishes no transcription, speech or image-generation endpoint.
     use UnsupportedModalities;
 
@@ -213,7 +214,14 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      *   stop_sequences (array)
      *   tools          (array)  – Anthropic-format tool definitions
      *   effort         (string) – per-conversation effort override (low…max)
-     *   thinking       (bool)   – per-conversation adaptive-thinking override
+     *   thinking       (bool|string) – thinking override: true/false from a
+     *                             conversation, or 'auto'/'on'/'off'
+     *   thinking_display (bool) – request readable thinking summaries where
+     *                             the model omits them by default
+     *   context        (string) – 'task' for background surfaces (Assistant
+     *                             tasks, coworkers); picks up task_effort and
+     *                             task_thinking before the chat defaults
+     *   model          (string) – pin a model for this request
      *   thinking_budget (int)   – explicit thinking budget in tokens; switches
      *                             thinking from adaptive to enabled mode
      *   service_tier   (string) – 'auto' or 'standard_only'; whether the request
@@ -258,25 +266,18 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $params['metadata'] = ['user_id' => $userHash];
         }
 
-        // Thinking is opt-in (conversation override or admin default). "Off"
-        // means omitting the param entirely — an explicit {type: 'disabled'}
-        // is rejected with a 400 on Fable 5.
-        //
-        // An explicit budget switches from adaptive to enabled mode, but a
-        // deliberate "thinking off" is the more specific instruction and wins.
-        $thinkingOn = $caps['supports_thinking'] && $this->resolveThinking($options['thinking'] ?? null);
-        $budget = ($options['thinking'] ?? null) === false
-            ? null
-            : $this->resolveThinkingBudget($options, $model, $caps, $params['max_tokens']);
-
-        if ($budget !== null) {
-            $params['thinking'] = ['type' => 'enabled', 'budget_tokens' => $budget];
-        } elseif ($thinkingOn) {
-            $params['thinking'] = ['type' => 'adaptive'];
+        $plan = $this->resolveThinkingPlan($model, $caps, $userId, $options, $params['max_tokens']);
+        if ($plan['thinking'] !== null) {
+            $params['thinking'] = $plan['thinking'];
         }
-
-        if ($caps['supports_effort']) {
-            $params['outputConfig'] = ['effort' => $this->resolveEffort($model, $options['effort'] ?? null)];
+        if ($plan['effort'] !== null) {
+            $params['outputConfig'] = ['effort' => $plan['effort']];
+        }
+        if ($plan['adjustments'] !== []) {
+            $this->logger->debug('AIquila SDK: Adjusted thinking/effort for model', [
+                'model' => $model,
+                'adjustments' => $plan['adjustments'],
+            ]);
         }
 
         // Priority capacity routing. Left unset by default so the account's own
@@ -386,31 +387,130 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     }
 
     /**
-     * Resolve the effort level for a request: conversation override →
-     * admin default (app config `effort`) → model default. Values not
-     * allowed for the model fall through to the next level.
+     * Resolve thinking and effort for one request on one model.
+     *
+     * @param array{supports_thinking: bool, supports_thinking_enabled: bool, supports_effort: bool, ...} $caps
+     *
+     * @return array{thinking: array<string, mixed>|null, effort: string|null, state: string, always_on: bool, adjustments: list<string>, mode: string}
+     *
+     * @throws \InvalidArgumentException when the request asks for a budget the model cannot honour
      */
-    private function resolveEffort(string $model, ?string $override): string {
-        if ($override !== null && ClaudeModels::isAllowedEffort($model, $override)) {
-            return $override;
+    private function resolveThinkingPlan(string $model, array $caps, ?string $userId, array $options, int $maxTokens): array {
+        $mode = $this->resolveThinkingMode($userId, $options);
+        // A deliberate "off" is more specific than any budget, so it wins.
+        $budget = $mode === ThinkingPolicy::MODE_OFF
+            ? null
+            : $this->resolveThinkingBudget($options, $model, $caps, $maxTokens);
+        $effort = $caps['supports_effort']
+            ? $this->resolveEffort($model, $userId, $options)
+            : null;
+
+        $plan = ThinkingPolicy::resolve(
+            $model,
+            $caps['supports_thinking'],
+            $mode,
+            $budget,
+            $effort,
+            (bool)($options['thinking_display'] ?? false),
+        );
+        $plan['mode'] = $mode;
+        return $plan;
+    }
+
+    /**
+     * Effective thinking/effort for a request with these options, without
+     * sending anything — what the chat header badge shows.
+     *
+     * @return array{model: string, mode: string, state: string, always_on: bool, effort: string|null, budget: int|null, adjustments: list<string>}
+     */
+    public function describeThinking(?string $userId, array $options = []): array {
+        $model = $this->resolveRequestModel($userId, $options);
+        $caps = $this->resolveModelCapabilities($model, $userId);
+        try {
+            $plan = $this->resolveThinkingPlan($model, $caps, $userId, $options, $this->getMaxTokens($userId));
+        } catch (\InvalidArgumentException $e) {
+            // A budget the model refuses surfaces when the message is sent;
+            // describe the request as if no budget had been asked for.
+            unset($options['thinking_budget']);
+            $plan = $this->resolveThinkingPlan($model, $caps, $userId, $options, $this->getMaxTokens($userId));
         }
-        $adminDefault = $this->config->getAppValue($this->appName, 'effort', '');
-        if ($adminDefault !== '' && ClaudeModels::isAllowedEffort($model, $adminDefault)) {
-            return $adminDefault;
+        return [
+            'model' => $model,
+            'mode' => $plan['mode'],
+            'state' => $plan['state'],
+            'always_on' => $plan['always_on'],
+            'effort' => $plan['effort'],
+            'budget' => $plan['thinking']['budget_tokens'] ?? null,
+            'adjustments' => $plan['adjustments'],
+        ];
+    }
+
+    /**
+     * Whether this request comes from a background surface (Assistant tasks,
+     * coworkers) rather than an interactive chat.
+     */
+    private function isTaskRequest(array $options): bool {
+        return ($options['context'] ?? null) === 'task';
+    }
+
+    /**
+     * Resolve the effort level for a request: request override → task default
+     * (background requests only) → user preference → admin default → model
+     * default. Values not allowed for the model fall through to the next level.
+     */
+    private function resolveEffort(string $model, ?string $userId, array $options): string {
+        $candidates = [$options['effort'] ?? null];
+        if ($this->isTaskRequest($options)) {
+            $candidates[] = $this->config->getAppValue($this->appName, 'task_effort', '');
+        }
+        if ($userId !== null && $userId !== '') {
+            $candidates[] = $this->config->getUserValue($userId, $this->appName, 'user_effort', '');
+        }
+        $candidates[] = $this->config->getAppValue($this->appName, 'effort', '');
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && $candidate !== '' && ClaudeModels::isAllowedEffort($model, $candidate)) {
+                return $candidate;
+            }
         }
         return ClaudeModels::getEffortLevel($model);
     }
 
     /**
-     * Whether adaptive thinking should be enabled: conversation override →
-     * admin default (app config `thinking`, default off).
+     * Resolve the thinking mode (auto / on / off): request override → task
+     * default (background requests only) → user preference → admin default →
+     * auto. A blank value at any level inherits from the next one.
+     *
+     * The request override is a bool from a conversation (/thinking:on|off)
+     * or a mode string from API callers.
      */
-    private function resolveThinking(?bool $override): bool {
-        if ($override !== null) {
+    private function resolveThinkingMode(?string $userId, array $options): string {
+        $override = $options['thinking'] ?? null;
+        if ($override === true) {
+            return ThinkingPolicy::MODE_ON;
+        }
+        if ($override === false) {
+            return ThinkingPolicy::MODE_OFF;
+        }
+        if (is_string($override) && in_array($override, ThinkingPolicy::MODES, true)) {
             return $override;
         }
-        // Checkboxes have persisted as 'true' or '1' over the app's history.
-        return in_array($this->config->getAppValue($this->appName, 'thinking', 'false'), ['true', '1'], true);
+
+        $sources = [];
+        if ($this->isTaskRequest($options)) {
+            $sources[] = $this->config->getAppValue($this->appName, 'task_thinking', '');
+        }
+        if ($userId !== null && $userId !== '') {
+            $sources[] = $this->config->getUserValue($userId, $this->appName, 'user_thinking', '');
+        }
+        $sources[] = $this->config->getAppValue($this->appName, 'thinking', '');
+
+        foreach ($sources as $raw) {
+            if ($raw !== '') {
+                return ThinkingPolicy::normalizeMode($raw);
+            }
+        }
+        return ThinkingPolicy::MODE_AUTO;
     }
 
     /**
@@ -504,7 +604,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * Whether this request should ask for fast mode: per-request override →
      * admin default (app config `speed_fast`, default off).
      *
-     * Fast mode is Opus 5 / Opus 4.8 only and the API rejects the combination
+     * Fast mode is Opus 5.5 / Opus 5 / Opus 4.8 only and the API rejects the combination
      * at create time, so the model gate is applied here. A per-request `true`
      * on an unsupported model throws — the caller pinned something specific and
      * silently dropping it would hide the mistake — while an *admin* default is
@@ -522,7 +622,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             }
             if (!ClaudeModels::supportsFastMode($model)) {
                 throw new \InvalidArgumentException(
-                    sprintf('Model %s does not support fast mode; it is available on Opus 5 and Opus 4.8 only.', $model)
+                    sprintf('Model %s does not support fast mode; it is available on Opus 5.5, Opus 5 and Opus 4.8 only.', $model)
                 );
             }
             return true;
@@ -713,6 +813,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                         $block->name = $cb->name ?? '';
                         $block->input = [];
                         $jsonBuffers[$idx] = '';
+                    } elseif ($block->type === 'thinking') {
+                        $block->thinking = $cb->thinking ?? '';
+                        $block->signature = $cb->signature ?? '';
+                    } elseif ($block->type === 'redacted_thinking') {
+                        $block->data = $cb->data ?? '';
                     }
                     $blocks[$idx] = $block;
                     break;
@@ -730,6 +835,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                         if ($citation !== null) {
                             $blocks[$idx]->citations[] = $citation;
                         }
+                    } elseif ($deltaType === 'thinking_delta' && isset($blocks[$idx])) {
+                        $blocks[$idx]->thinking = ($blocks[$idx]->thinking ?? '') . ($delta->thinking ?? '');
+                    } elseif ($deltaType === 'signature_delta' && isset($blocks[$idx])) {
+                        $blocks[$idx]->signature = $delta->signature ?? '';
                     }
                     break;
 
@@ -1235,18 +1344,14 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 }
             }
 
-            // Build assistant message with the full content (text + tool_use blocks)
+            // Replay the assistant turn in full — thinking blocks included,
+            // unmodified and in order. Models with preserved thinking reject a
+            // tool loop whose earlier turn lost its thinking.
             $assistantContent = [];
             foreach ($response->content as $block) {
-                if ($block->type === 'text') {
-                    $assistantContent[] = ['type' => 'text', 'text' => $block->text];
-                } elseif ($block->type === 'tool_use') {
-                    $assistantContent[] = [
-                        'type' => 'tool_use',
-                        'id' => $block->id,
-                        'name' => $block->name,
-                        'input' => $block->input,
-                    ];
+                $replayed = self::replayableBlock($block);
+                if ($replayed !== null) {
+                    $assistantContent[] = $replayed;
                 }
             }
             $messages[] = ['role' => 'assistant', 'content' => $assistantContent];
@@ -1303,6 +1408,27 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             ],
             'citations' => $allCitations,
         ];
+    }
+
+    /**
+     * A response content block as a request param for replaying the
+     * assistant turn in a tool loop, or null for blocks that are not replayed.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function replayableBlock(object $block): ?array {
+        return match ($block->type ?? null) {
+            'text' => ['type' => 'text', 'text' => $block->text],
+            'thinking' => ['type' => 'thinking', 'thinking' => $block->thinking, 'signature' => $block->signature],
+            'redacted_thinking' => ['type' => 'redacted_thinking', 'data' => $block->data],
+            'tool_use' => [
+                'type' => 'tool_use',
+                'id' => $block->id,
+                'name' => $block->name,
+                'input' => $block->input,
+            ],
+            default => null,
+        };
     }
 
     /**
@@ -1388,7 +1514,12 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $messages = [['role' => 'user', 'content' => "Summarize the following content concisely:\n\n$content"]];
             $customId = 'aiquila-summary-' . bin2hex(random_bytes(8));
 
-            $batchId = $this->submitBatch([['custom_id' => $customId, 'messages' => $messages]], $userId);
+            // Batch work is background work by definition.
+            $batchId = $this->submitBatch([[
+                'custom_id' => $customId,
+                'messages' => $messages,
+                'options' => self::TASK_OPTIONS,
+            ]], $userId);
             if ($reportProgress !== null) {
                 $reportProgress(0.1);
             }
@@ -1967,17 +2098,26 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 'effort',
                 'effort',
                 'Default effort level',
-                'How much work Claude puts into each response. Blank picks a sensible level per model. "xhigh" is only accepted by Fable 5 and Opus 4.7+; elsewhere it falls back to the model default. Overridable per conversation with /effort.',
+                'How much work Claude puts into each response. Blank picks a sensible level per model. "xhigh" is '
+                    . 'accepted by the Fable, Opus 5 and Sonnet 5 families and Opus 4.7+; elsewhere it falls back to the '
+                    . 'model default. Overridable per conversation with /effort.',
                 array_merge([''], ClaudeModels::ALL_EFFORTS),
                 group: ProviderSettingsSchema::GROUP_BASIC,
+                scope: ProviderSettingsSchema::SCOPE_BOTH,
+                userKey: 'user_effort',
             ),
-            ProviderSettingsSchema::checkbox(
+            ProviderSettingsSchema::select(
                 'thinking',
                 'thinking',
-                'Enable adaptive thinking by default',
-                'Lets Claude reason before answering on models that support it. Overridable per conversation with /thinking.',
-                storage: ProviderSettingsSchema::STORAGE_BOOL,
+                'Thinking',
+                'Blank follows the model: Fable, Opus 5, Opus 5.5 and Sonnet 5 think adaptively on their own, older '
+                    . 'models do not. "on" asks for adaptive thinking everywhere. "off" turns it off where the model '
+                    . 'allows it: Fable and Opus 5.5 always think (lower the effort instead), and Opus 5 runs at most '
+                    . 'at effort "high" with thinking off. Overridable per conversation with /thinking.',
+                ['', ThinkingPolicy::MODE_ON, ThinkingPolicy::MODE_OFF],
                 group: ProviderSettingsSchema::GROUP_BASIC,
+                scope: ProviderSettingsSchema::SCOPE_BOTH,
+                userKey: 'user_thinking',
             ),
             ProviderSettingsSchema::number(
                 'thinking_budget',
@@ -1988,6 +2128,21 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                     . 'reply together. Only models that support non-adaptive thinking accept this. Overridable per '
                     . 'conversation with /thinking-budget.',
                 group: ProviderSettingsSchema::GROUP_BASIC,
+            ),
+            ProviderSettingsSchema::select(
+                'task_effort',
+                'task_effort',
+                'Effort for background tasks',
+                'Effort for Assistant tasks (proofread, headline, summary, …) and coworkers. Blank uses the default '
+                    . 'effort above. A lower level makes these routine jobs cheaper and faster.',
+                array_merge([''], ClaudeModels::ALL_EFFORTS),
+            ),
+            ProviderSettingsSchema::select(
+                'task_thinking',
+                'task_thinking',
+                'Thinking for background tasks',
+                'Thinking for Assistant tasks and coworkers. Blank uses the thinking setting above.',
+                ['', ThinkingPolicy::MODE_ON, ThinkingPolicy::MODE_OFF],
             ),
             ProviderSettingsSchema::select(
                 'service_tier',
@@ -2005,7 +2160,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 'speed_fast',
                 'speed_fast',
                 'Fast mode (premium pricing)',
-                'Generates output roughly 2.5x faster at about twice the token price. Available on Opus 5 and '
+                'Generates output roughly 2.5x faster at about twice the token price. Available on Opus 5.5, Opus 5 and '
                     . 'Opus 4.8 only and silently ignored on every other model, including the default. Fast mode '
                     . 'has its own rate limit. Overridable per conversation with /fast.',
                 storage: ProviderSettingsSchema::STORAGE_BOOL,
@@ -2082,6 +2237,28 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         return ClaudeModels::getAllowedEfforts(ClaudeModels::resolveModel($model));
     }
 
+    public function getThinkingProfile(string $model): array {
+        $model = ClaudeModels::resolveModel($model);
+        $efforts = ClaudeModels::getAllowedEfforts($model);
+        if (!ClaudeModels::supportsThinking($model)) {
+            $thinking = self::THINKING_NONE;
+        } elseif (!ClaudeModels::canDisableThinking($model)) {
+            $thinking = self::THINKING_ALWAYS_ON;
+        } elseif (ClaudeModels::thinkingDefault($model) === ClaudeModels::THINKING_DEFAULT_ADAPTIVE) {
+            $thinking = self::THINKING_ADAPTIVE_BY_DEFAULT;
+        } else {
+            $thinking = self::THINKING_OFF_BY_DEFAULT;
+        }
+        return [
+            'model' => $model,
+            'thinking' => $thinking,
+            'can_disable' => $thinking !== self::THINKING_ALWAYS_ON,
+            'off_max_effort' => ClaudeModels::maxEffortWithThinkingDisabled($model),
+            'efforts' => $efforts,
+            'default_effort' => $efforts !== [] ? ClaudeModels::getEffortLevel($model) : null,
+        ];
+    }
+
     public function getConfiguration(): array {
         return [
             'api_key' => $this->config->getAppValue($this->appName, 'api_key', ''),
@@ -2099,9 +2276,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string $mimeType Image mime type (image/jpeg, image/png, image/gif, image/webp)
      * @param string|null $userId User ID for API key
      * @param string|null $fileId Optional Anthropic Files API file_id. When provided, the image source is `{type:'file', file_id}` instead of inline base64.
+     * @param array $options Request options, as for buildRequestParams()
      * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
-    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null): array {
+    public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null, array $options = []): array {
         try {
             $client = $this->getClient($userId);
 
@@ -2125,7 +2303,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                     ],
                 ],
             ];
-            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId));
+            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId, $options));
 
             $usage = $this->extractUsage($response);
 
@@ -2153,9 +2331,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param array<array{base64: string, mimeType: string, ...}> $images Image data array
      * @param string|null $userId User ID for API key
      * @param array<int, string|null>|null $fileIds Optional per-image Anthropic Files API file_ids, indexed parallel to $images. A non-null entry triggers a `{type:'file', file_id}` source for that image; null entries fall back to inline base64.
+     * @param array $options Request options, as for buildRequestParams()
      * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
-    public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null): array {
+    public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null, array $options = []): array {
         if (empty($images)) {
             return ['error' => 'No images provided'];
         }
@@ -2191,7 +2370,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                     'content' => $content,
                 ],
             ];
-            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId));
+            $response = $this->createMessage($client, $this->buildRequestParams($messages, $userId, $options));
 
             $usage = $this->extractUsage($response);
 
@@ -2372,8 +2551,13 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                                     'input' => null,
                                 ];
                                 $jsonBuffers[$idx] = '';
+                            } elseif ($cbType === 'thinking') {
+                                $blocks[$idx] = ['type' => 'thinking', 'thinking' => '', 'signature' => '', 'started' => microtime(true)];
+                                yield ['type' => 'thinking_start'];
+                            } elseif ($cbType === 'redacted_thinking') {
+                                $blocks[$idx] = ['type' => 'redacted_thinking', 'data' => $cb->data ?? ''];
                             } else {
-                                // thinking, server tools etc. — preserve type so downstream may handle.
+                                // Server tools etc. — preserve type so downstream may handle.
                                 $blocks[$idx] = ['type' => $cbType ?? 'unknown'];
                             }
                             break;
@@ -2400,8 +2584,19 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                                         $blocks[$idx]['citations'][] = $normalized;
                                     }
                                 }
+                            } elseif ($deltaType === 'thinking_delta') {
+                                $text = $delta->thinking ?? '';
+                                if (isset($blocks[$idx])) {
+                                    $blocks[$idx]['thinking'] = ($blocks[$idx]['thinking'] ?? '') . $text;
+                                }
+                                if ($text !== '') {
+                                    yield ['type' => 'thinking_delta', 'text' => $text];
+                                }
+                            } elseif ($deltaType === 'signature_delta') {
+                                if (isset($blocks[$idx])) {
+                                    $blocks[$idx]['signature'] = $delta->signature ?? '';
+                                }
                             }
-                            // thinking/signature deltas: ignore for now.
                             break;
 
                         case 'content_block_stop':
@@ -2409,6 +2604,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                             if (isset($blocks[$idx]) && $blocks[$idx]['type'] === 'tool_use') {
                                 $json = $jsonBuffers[$idx] ?? '';
                                 $blocks[$idx]['input'] = $json !== '' ? (json_decode($json, true) ?? []) : [];
+                            } elseif (isset($blocks[$idx]) && $blocks[$idx]['type'] === 'thinking') {
+                                yield [
+                                    'type' => 'thinking_stop',
+                                    'duration_ms' => (int)round((microtime(true) - (float)$blocks[$idx]['started']) * 1000.0),
+                                ];
                             }
                             break;
 
@@ -2459,11 +2659,16 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 return;
             }
 
-            // Build assistant message reflecting the full streamed turn.
+            // Build assistant message reflecting the full streamed turn,
+            // thinking blocks included (see chatWithTools()).
             $assistantContent = [];
             foreach ($blocks as $b) {
                 if (($b['type'] ?? null) === 'text') {
                     $assistantContent[] = ['type' => 'text', 'text' => $b['text'] ?? ''];
+                } elseif (($b['type'] ?? null) === 'thinking') {
+                    $assistantContent[] = ['type' => 'thinking', 'thinking' => $b['thinking'], 'signature' => $b['signature']];
+                } elseif (($b['type'] ?? null) === 'redacted_thinking') {
+                    $assistantContent[] = ['type' => 'redacted_thinking', 'data' => $b['data']];
                 } elseif (($b['type'] ?? null) === 'tool_use') {
                     $assistantContent[] = [
                         'type' => 'tool_use',
@@ -2681,6 +2886,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                                 'is_error' => (bool)($cb->isError ?? false),
                             ];
                             $blocks[$idx] = ['type' => 'mcp_tool_result'];
+                        } elseif ($cbType === 'thinking') {
+                            $blocks[$idx] = ['type' => 'thinking', 'started' => microtime(true)];
+                            yield ['type' => 'thinking_start'];
                         } else {
                             $blocks[$idx] = ['type' => $cbType ?? 'unknown'];
                         }
@@ -2708,6 +2916,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                                     $blocks[$idx]['citations'][] = $normalized;
                                 }
                             }
+                        } elseif ($deltaType === 'thinking_delta') {
+                            $text = $delta->thinking ?? '';
+                            if ($text !== '') {
+                                yield ['type' => 'thinking_delta', 'text' => $text];
+                            }
                         }
                         break;
 
@@ -2722,6 +2935,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                                 'name' => $blocks[$idx]['name'],
                                 'input' => $blocks[$idx]['input'],
                                 'server' => $blocks[$idx]['server'] ?? '',
+                            ];
+                        } elseif (isset($blocks[$idx]) && ($blocks[$idx]['type'] ?? null) === 'thinking') {
+                            yield [
+                                'type' => 'thinking_stop',
+                                'duration_ms' => (int)round((microtime(true) - (float)$blocks[$idx]['started']) * 1000.0),
                             ];
                         }
                         break;

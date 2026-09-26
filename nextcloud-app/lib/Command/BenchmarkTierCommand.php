@@ -138,7 +138,9 @@ class BenchmarkTierCommand extends Base {
             $output->write(sprintf('  %-14s ', $label));
             $results[$label] = $this->runVariant(
                 $output,
-                $variant['options'] + ['max_tokens_hint' => $maxTokens],
+                // Pin the model: without it every variant ran on the user's or
+                // instance default, whatever --model said.
+                $variant['options'] + ['max_tokens_hint' => $maxTokens, 'model' => $model],
                 $runs,
                 $promptTokens,
                 $maxTokens,
@@ -203,7 +205,7 @@ class BenchmarkTierCommand extends Base {
                 'options' => ['speed' => true],
                 'skip' => ClaudeModels::supportsFastMode($model)
                     ? null
-                    : 'fast mode is available on Opus 5 and Opus 4.8 only',
+                    : 'fast mode is available on Opus 5.5, Opus 5 and Opus 4.8 only',
             ],
         ];
     }

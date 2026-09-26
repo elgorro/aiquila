@@ -13,8 +13,10 @@ class ClaudeModelsTest extends TestCase {
 
     public function testGetAllModelsReturnsCurrentModelsOnly(): void {
         $models = ClaudeModels::getAllModels();
-        $this->assertCount(10, $models);
+        $this->assertCount(12, $models);
+        $this->assertContains(ClaudeModels::FABLE_5_1,  $models);
         $this->assertContains(ClaudeModels::FABLE_5,    $models);
+        $this->assertContains(ClaudeModels::OPUS_5_5,   $models);
         $this->assertContains(ClaudeModels::OPUS_5,     $models);
         $this->assertContains(ClaudeModels::SONNET_5,   $models);
         $this->assertContains(ClaudeModels::OPUS_4_8,   $models);
@@ -30,7 +32,67 @@ class ClaudeModelsTest extends TestCase {
         $this->assertNotContains(ClaudeModels::SONNET_4, $models);
         $this->assertNotContains(ClaudeModels::OPUS_4,   $models);
         // Most capable first
-        $this->assertSame(ClaudeModels::FABLE_5, $models[0]);
+        $this->assertSame(ClaudeModels::FABLE_5_1, $models[0]);
+    }
+
+    public function testFable51AndOpus55Registry(): void {
+        foreach ([ClaudeModels::FABLE_5_1, ClaudeModels::OPUS_5_5] as $model) {
+            $this->assertSame(128000, ClaudeModels::getMaxTokenCeiling($model));
+            $this->assertSame(1000000, ClaudeModels::getContextWindow($model));
+            $this->assertTrue(ClaudeModels::supportsThinking($model));
+            $this->assertTrue(ClaudeModels::supportsEffort($model));
+            $this->assertFalse(ClaudeModels::supportsSamplingParams($model));
+            $this->assertSame(ClaudeModels::ALL_EFFORTS, ClaudeModels::getAllowedEfforts($model));
+            // Set explicitly: Opus 5.5's API default is `medium`.
+            $this->assertSame('xhigh', ClaudeModels::getEffortLevel($model));
+            $this->assertFalse(ClaudeModels::supportsExtendedOutput($model));
+        }
+        $this->assertTrue(ClaudeModels::supportsFastMode(ClaudeModels::OPUS_5_5));
+        $this->assertFalse(ClaudeModels::supportsFastMode(ClaudeModels::FABLE_5_1));
+    }
+
+    /**
+     * @return array<string, array{string, string, string, ?string}>
+     */
+    public static function thinkingPolicyProvider(): array {
+        return [
+            'Fable 5.1 always thinks' => [ClaudeModels::FABLE_5_1, 'adaptive', 'never', null],
+            'Fable 5 always thinks'   => [ClaudeModels::FABLE_5, 'adaptive', 'never', null],
+            'Opus 5.5 always thinks'  => [ClaudeModels::OPUS_5_5, 'adaptive', 'never', null],
+            'Opus 5 disables up to high' => [ClaudeModels::OPUS_5, 'adaptive', 'disabled', 'high'],
+            'Sonnet 5 disables'       => [ClaudeModels::SONNET_5, 'adaptive', 'disabled', null],
+            'Opus 4.8 omit is off'    => [ClaudeModels::OPUS_4_8, 'off', 'omit', null],
+            'Sonnet 4.6 omit is off'  => [ClaudeModels::SONNET_4_6, 'off', 'omit', null],
+            'Haiku 4.5 no policy'     => [ClaudeModels::HAIKU_4_5, 'off', 'omit', null],
+            'unknown model'           => ['claude-unknown-model', 'off', 'omit', null],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('thinkingPolicyProvider')]
+    public function testThinkingPolicy(string $model, string $default, string $off, ?string $maxEffort): void {
+        $this->assertSame($default, ClaudeModels::thinkingDefault($model));
+        $this->assertSame($off, ClaudeModels::thinkingOffMode($model));
+        $this->assertSame($off !== 'never', ClaudeModels::canDisableThinking($model));
+        $this->assertSame($maxEffort, ClaudeModels::maxEffortWithThinkingDisabled($model));
+    }
+
+    public function testEveryThinkingModelHasAPolicy(): void {
+        foreach (ClaudeModels::getAllModels() as $model) {
+            if (!ClaudeModels::supportsThinking($model)) {
+                continue;
+            }
+            $maxEffort = ClaudeModels::maxEffortWithThinkingDisabled($model);
+            if ($maxEffort !== null) {
+                $this->assertTrue(ClaudeModels::isAllowedEffort($model, $maxEffort), $model);
+            }
+            // A thinking model that falls through to the "unknown" default
+            // would be treated as omit-is-off, which is wrong for any 5-series.
+            $this->assertTrue(
+                ClaudeModels::thinkingDefault($model) === 'adaptive'
+                || in_array($model, [ClaudeModels::OPUS_4_8, ClaudeModels::OPUS_4_7, ClaudeModels::OPUS_4_6, ClaudeModels::SONNET_4_6], true),
+                $model
+            );
+        }
     }
 
     public function testGetMaxTokenCeilingFor5Series(): void {

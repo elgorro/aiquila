@@ -102,6 +102,25 @@ no actions need not implement the interface.
 
 See [Request metadata](request-metadata.md).
 
+## Per-model thinking profiles
+
+A provider whose models treat thinking and effort differently implements the
+optional `ThinkingProfileInterface` (Anthropic does). It answers two questions:
+
+- `getThinkingProfile($model)` — static facts: whether the model always thinks,
+  thinks unless told not to, or only when asked; whether "off" is possible and
+  the highest effort allowed with it; the accepted efforts and the default.
+- `describeThinking($userId, $options)` — what a request with these options
+  would actually send, after conversation, user, instance and model defaults
+  and the model's rules are applied. The chat header badge reads it through
+  `GET /api/conversations/{id}/thinking`.
+
+`describe()` attaches the profile of the card's current model as
+`modelProfile`, and adds a `warning` to a thinking or effort field whose value
+that model cannot honour — for instance thinking `off` on a model that always
+thinks. The card shows both; the stored value is left alone, since a different
+model may accept it.
+
 ## Scope is a security boundary
 
 `scope` decides which endpoint may write a field:
