@@ -12,16 +12,29 @@ Integration with Nextcloud Tasks app via CalDAV protocol. Create, list, update, 
 
 ### list_task_lists
 
-List all task lists (calendars) available in Nextcloud Tasks.
+List all task lists available in Nextcloud Tasks — every calendar collection that supports tasks
+(`VTODO`). Event-only calendars are left out; use `list_calendars` to see those.
 
 **Parameters:**
 None
 
 **Returns:**
-XML response from CalDAV containing task list information including:
-- Display names
-- Calendar URLs
-- Supported component types (VTODO for tasks)
+One entry per task list, ordered as in Nextcloud, with:
+- Display name, color, and `(disabled)` if the list is hidden in Nextcloud
+- `calendarName` — the URL slug to pass as `calendarName` to the other task tools
+- CalDAV URL
+
+```
+Task lists (2 found):
+
+House & Garden (disabled)
+    calendarName: house-garden
+    URL: /remote.php/dav/calendars/admin/house-garden/
+
+Personal [#0082c9]
+    calendarName: personal
+    URL: /remote.php/dav/calendars/admin/personal/
+```
 
 **Example Usage:**
 ```
@@ -268,9 +281,9 @@ Content-Type: text/calendar; charset=utf-8
 **Problem**: Task list doesn't exist
 
 **Solution**:
-- Use `list_task_lists` to see available calendars
+- Use `list_task_lists` to see available task lists
 - Create a new task list in Nextcloud Tasks app
-- Use exact calendar name (case-sensitive)
+- Pass the `calendarName` slug shown by `list_task_lists`, not the display name
 
 ---
 

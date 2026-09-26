@@ -13,6 +13,113 @@ describe('Task Tools', () => {
     process.env.NEXTCLOUD_PASSWORD = 'testpass';
   });
 
+  describe('list_task_lists', () => {
+    const propfindResponse = `<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:cal="urn:ietf:params:xml:ns:caldav" xmlns:x1="http://apple.com/ns/ical/" xmlns:x2="http://owncloud.org/ns">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/</d:href>
+    <d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/</d:href>
+    <d:propstat><d:prop>
+      <d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>
+      <d:displayname>Personal</d:displayname>
+      <x1:calendar-color>#0082c9</x1:calendar-color>
+      <x1:calendar-order>2</x1:calendar-order>
+      <cal:supported-calendar-component-set><cal:comp name="VEVENT"/><cal:comp name="VTODO"/></cal:supported-calendar-component-set>
+    </d:prop></d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/birthdays/</d:href>
+    <d:propstat><d:prop>
+      <d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>
+      <d:displayname>Birthdays</d:displayname>
+      <cal:supported-calendar-component-set><cal:comp name="VEVENT"/></cal:supported-calendar-component-set>
+    </d:prop></d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/house-garden/</d:href>
+    <d:propstat><d:prop>
+      <d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>
+      <d:displayname>House &amp; Garden</d:displayname>
+      <x1:calendar-order>1</x1:calendar-order>
+      <x2:calendar-enabled>0</x2:calendar-enabled>
+      <cal:supported-calendar-component-set><cal:comp name="VTODO"/></cal:supported-calendar-component-set>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+    it('returns a parsed list of VTODO-capable collections, not raw XML', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(propfindResponse),
+      });
+
+      const { listTaskListsTool } = await import('../tools/apps/tasks.js');
+      const result = await listTaskListsTool.handler();
+      const text = result.content[0].text;
+
+      expect(result.isError).toBeUndefined();
+      expect(text).not.toContain('<?xml');
+      expect(text).not.toContain('multistatus');
+      expect(text).toContain('Task lists (2 found)');
+      expect(text).toContain('Personal [#0082c9]');
+      expect(text).toContain('calendarName: personal');
+      expect(text).toContain('URL: /remote.php/dav/calendars/admin/personal/');
+      expect(text).toContain('House & Garden (disabled)');
+      expect(text).toContain('calendarName: house-garden');
+      expect(text).not.toContain('Birthdays');
+      // Sorted by calendar-order
+      expect(text.indexOf('House & Garden')).toBeLessThan(text.indexOf('Personal'));
+    });
+
+    it('reports when no collection supports tasks', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        text: () =>
+          Promise.resolve(`<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/birthdays/</d:href>
+    <d:propstat><d:prop>
+      <d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>
+      <cal:supported-calendar-component-set><cal:comp name="VEVENT"/></cal:supported-calendar-component-set>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`),
+      });
+
+      const { listTaskListsTool } = await import('../tools/apps/tasks.js');
+      const result = await listTaskListsTool.handler();
+
+      expect(result.content[0].text).toBe('No task lists found.');
+    });
+
+    it('returns an error on a failed PROPFIND', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: () => Promise.resolve('Unauthorized'),
+      });
+
+      const { listTaskListsTool } = await import('../tools/apps/tasks.js');
+      const result = await listTaskListsTool.handler();
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('401');
+    });
+
+    it('returns an error when the request throws', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Connection refused'));
+
+      const { listTaskListsTool } = await import('../tools/apps/tasks.js');
+      const result = await listTaskListsTool.handler();
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Connection refused');
+    });
+  });
+
   describe('list_tasks', () => {
     it('should return formatted task list with extended fields', async () => {
       const vtodoResponse = `<?xml version="1.0" encoding="UTF-8"?>

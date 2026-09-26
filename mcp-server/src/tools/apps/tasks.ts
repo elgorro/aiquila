@@ -9,6 +9,7 @@ import {
 } from '../../client/caldav.js';
 import { escapeICalValue } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
+import { parseCalendars, type ParsedCalendar } from './calendar.js';
 
 /**
  * Nextcloud Tasks App Tools
@@ -282,6 +283,20 @@ function formatTask(task: ParsedTask): string {
   return line;
 }
 
+/**
+ * Format a task list (VTODO-capable calendar) for human-readable display.
+ * `calendarName` is the URL slug the other task tools expect.
+ */
+function formatTaskList(cal: ParsedCalendar): string {
+  const slug = cal.url.split('/').filter(Boolean).pop() ?? '';
+  let line = decodeXmlEntities(cal.displayName);
+  if (cal.color) line += ` [${cal.color}]`;
+  if (!cal.enabled) line += ' (disabled)';
+  line += `\n    calendarName: ${slug}`;
+  line += `\n    URL: ${cal.url}`;
+  return line;
+}
+
 // ---------------------------------------------------------------------------
 // CalDAV helpers
 // ---------------------------------------------------------------------------
@@ -362,39 +377,68 @@ export const listTaskListsTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: 'List all task lists in Nextcloud Tasks',
+  description:
+    "List all task lists in Nextcloud Tasks (calendars that support tasks). Returns each list's display name, color, URL and calendarName (the value to pass to the other task tools).",
   inputSchema: z.object({}),
   handler: async () => {
-    const config = getNextcloudConfig();
-    const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/`;
+    try {
+      const config = getNextcloudConfig();
+      const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/`;
 
-    const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
-<d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:c="urn:ietf:params:xml:ns:caldav">
+      const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:x1="http://apple.com/ns/ical/" xmlns:x2="http://owncloud.org/ns">
   <d:prop>
     <d:resourcetype />
     <d:displayname />
     <cs:getctag />
+    <x1:calendar-color />
+    <x1:calendar-order />
+    <x2:calendar-enabled />
     <c:supported-calendar-component-set />
   </d:prop>
 </d:propfind>`;
 
-    const response = await fetchCalDAV(calDavUrl, {
-      method: 'PROPFIND',
-      body: propfindBody,
-      headers: {
-        Depth: '1',
-      },
-    });
+      const response = await fetchCalDAV(calDavUrl, {
+        method: 'PROPFIND',
+        body: propfindBody,
+        headers: { Depth: '1' },
+      });
 
-    const responseText = await response.text();
-    return {
-      content: [
-        {
-          type: 'text',
-          text: responseText,
-        },
-      ],
-    };
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`CalDAV PROPFIND failed: ${response.status} - ${errorText}`);
+      }
+
+      const taskLists = parseCalendars(await response.text())
+        .filter((cal) => cal.supportsTasks)
+        .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
+
+      if (taskLists.length === 0) {
+        return {
+          content: [{ type: 'text' as const, text: 'No task lists found.' }],
+        };
+      }
+
+      const formatted = taskLists.map(formatTaskList).join('\n\n');
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Task lists (${taskLists.length} found):\n\n${formatted}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error listing task lists: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   },
 };
 
