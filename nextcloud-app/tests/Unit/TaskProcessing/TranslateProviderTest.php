@@ -7,6 +7,7 @@ use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use OCA\AIquila\TaskProcessing\ProviderResolver;
 use OCA\AIquila\TaskProcessing\TranslateProvider;
+use OCA\AIquila\TaskProcessing\Translation;
 use OCP\IL10N;
 use OCP\L10N\IFactory;
 use OCP\TaskProcessing\ShapeEnumValue;
@@ -35,7 +36,7 @@ class TranslateProviderTest extends TestCase {
                 ['code' => 'de', 'name' => 'Deutsch (duplicate)'],
             ],
         ]);
-        $this->provider = new TranslateProvider(new ProviderResolver($this->factory), $l10nFactory, $l10n);
+        $this->provider = new TranslateProvider(new ProviderResolver($this->factory), new Translation($l10nFactory, $l10n));
     }
 
     /** @param list<ShapeEnumValue> $values */

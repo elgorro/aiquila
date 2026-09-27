@@ -28,6 +28,11 @@ trait TaskListenerTrait {
         'core:text2text:improve' => 'Improvement',
         'core:image2text' => 'Image analysis',
         'core:analyze-images' => 'Multi-image analysis',
+        'core:audio2text' => 'Transcription',
+        'core:audio2text:subtitles' => 'Subtitles',
+        'core:text2speech' => 'Speech generation',
+        'core:audio2audio:chat' => 'Voice chat',
+        'core:audio2audio:translate' => 'Audio translation',
     ];
 
     /**
