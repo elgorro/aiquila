@@ -25,6 +25,7 @@ trait TaskListenerTrait {
         'core:text2text:formalize' => 'Formalization',
         'core:text2text:simplify' => 'Simplification',
         'core:text2text:change-tone' => 'Tone adjustment',
+        'core:text2text:improve' => 'Improvement',
         'core:image2text' => 'Image analysis',
         'core:analyze-images' => 'Multi-image analysis',
     ];

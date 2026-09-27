@@ -7,15 +7,17 @@ use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\TaskProcessing\ChatProvider;
 use OCA\AIquila\TaskProcessing\ContextWriteProvider;
 use OCA\AIquila\TaskProcessing\GenerateEmojiProvider;
+use OCA\AIquila\TaskProcessing\ImproveProvider;
 use OCA\AIquila\TaskProcessing\ProviderResolver;
 use OCA\AIquila\TaskProcessing\ReformatParagraphsProvider;
 use OCP\TaskProcessing\TaskTypes\ContextWrite;
 use OCP\TaskProcessing\TaskTypes\GenerateEmoji;
 use OCP\TaskProcessing\TaskTypes\TextToTextChat;
+use OCP\TaskProcessing\TaskTypes\TextToTextImprove;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The four task types added on top of the original text-to-text set.
+ * The task types added on top of the original text-to-text set.
  */
 class TextProvidersTest extends TestCase {
     private $factory;
@@ -38,10 +40,13 @@ class TextProvidersTest extends TestCase {
             'core:text2text:reformatparagraphs',
             (new ReformatParagraphsProvider($this->resolver))->getTaskTypeId()
         );
+        // Nextcloud 35+; spelled out because the OCP class is absent on 33/34.
+        $this->assertSame('core:text2text:improve', (new ImproveProvider($this->resolver))->getTaskTypeId());
+        $this->assertSame(TextToTextImprove::ID, (new ImproveProvider($this->resolver))->getTaskTypeId());
     }
 
     public function testEveryProviderOffersAProviderOverride(): void {
-        foreach ([ChatProvider::class, GenerateEmojiProvider::class, ContextWriteProvider::class, ReformatParagraphsProvider::class] as $class) {
+        foreach ([ChatProvider::class, GenerateEmojiProvider::class, ContextWriteProvider::class, ReformatParagraphsProvider::class, ImproveProvider::class] as $class) {
             $provider = new $class($this->resolver);
             $this->assertArrayHasKey('provider', $provider->getOptionalInputShape(), $class);
         }
@@ -132,6 +137,58 @@ class TextProvidersTest extends TestCase {
         $this->expectExceptionMessage('rate limited');
         (new ReformatParagraphsProvider($this->resolver))->process('alice', [
             'input' => 'one long wall of text',
+        ], static fn (float $p) => null);
+    }
+
+    public function testImproveSendsInstructionsAndText(): void {
+        $this->llm->expects($this->once())
+            ->method('ask')
+            ->with(
+                $this->logicalAnd($this->stringContains('Make it shorter'), $this->stringContains('a rambling draft')),
+                '',
+                'alice',
+            )
+            ->willReturn(['response' => 'A draft.']);
+
+        $result = (new ImproveProvider($this->resolver))->process('alice', [
+            'input' => 'a rambling draft',
+            'instructions' => 'Make it shorter',
+        ], static fn (float $p) => null);
+
+        $this->assertSame(['output' => 'A draft.'], $result);
+    }
+
+    public function testImproveFallsBackToGeneralInstructions(): void {
+        $this->llm->expects($this->once())
+            ->method('ask')
+            ->with($this->stringContains(ImproveProvider::DEFAULT_INSTRUCTIONS), '', 'alice')
+            ->willReturn(['response' => 'Better.']);
+
+        $result = (new ImproveProvider($this->resolver))->process('alice', [
+            'input' => 'text',
+            'instructions' => '  ',
+        ], static fn (float $p) => null);
+
+        $this->assertSame(['output' => 'Better.'], $result);
+    }
+
+    public function testImproveRejectsEmptyInput(): void {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('No input text provided');
+        (new ImproveProvider($this->resolver))->process('alice', [
+            'input' => '',
+            'instructions' => 'Make it shorter',
+        ], static fn (float $p) => null);
+    }
+
+    public function testImprovePropagatesProviderErrors(): void {
+        $this->llm->method('ask')->willReturn(['error' => 'rate limited']);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('rate limited');
+        (new ImproveProvider($this->resolver))->process('alice', [
+            'input' => 'text',
+            'instructions' => 'Make it shorter',
         ], static fn (float $p) => null);
     }
 

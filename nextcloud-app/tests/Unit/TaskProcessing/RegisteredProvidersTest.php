@@ -29,6 +29,7 @@ class RegisteredProvidersTest extends TestCase {
      */
     private const NEWER_THAN_MIN_VERSION = [
         'core:text2text:reformatparagraphs' => '34.0.0',
+        'core:text2text:improve' => '35.0.0',
     ];
 
     /** @return list<string> */
