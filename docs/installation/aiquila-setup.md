@@ -348,6 +348,7 @@ needed.
 | `core:text2text:reformulation` | Reformulate |
 | `core:text2text:formalization` | Make formal |
 | `core:text2text:reformatparagraphs` | Split into topic-separated paragraphs (Nextcloud 34+) |
+| `core:text2text:improve` | Improve a text following free-form instructions; backs the Assistant's **Improve** button (Nextcloud 35+) |
 | `core:contextwrite` | Write about a subject in the voice of a sample |
 | `core:generateemoji` | Suggest an emoji for a text |
 | `core:analyze-images` | Ask a question about one or more images |

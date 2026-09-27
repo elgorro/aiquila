@@ -45,8 +45,10 @@ final class ProviderRegistry {
         ContextWriteProvider::class,
         GenerateEmojiProvider::class,
 
-        // Nextcloud 34+ only; on 33 the task type is not registered and this
+        // Newer than the declared min-version: reformatparagraphs is Nextcloud
+        // 34+, improve is 35+. Where the task type is not registered the
         // provider is never offered.
         ReformatParagraphsProvider::class,
+        ImproveProvider::class,
     ];
 }
