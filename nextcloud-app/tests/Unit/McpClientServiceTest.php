@@ -154,6 +154,81 @@ class McpClientServiceTest extends TestCase {
         $this->assertStringContainsString('"params":{"name":"list_files"', json_encode($body));
     }
 
+    /**
+     * Regression: MCP clients must acknowledge the initialize response before
+     * sending requests such as tools/list. The notification must not include a
+     * JSON-RPC request ID and must reuse any session ID returned by initialize.
+     */
+    public function testListToolsCompletesInitializationHandshakeBeforeListingTools(): void {
+        $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials);
+
+        $captured = [];
+        $responses = [
+            new MockResponse(
+                json_encode([
+                    'jsonrpc' => '2.0',
+                    'id' => 1,
+                    'result' => ['protocolVersion' => '2025-03-26'],
+                ]),
+                [
+                    'http_code' => 200,
+                    'response_headers' => [
+                        'content-type' => ['application/json'],
+                        'mcp-session-id' => ['session-123'],
+                    ],
+                ]
+            ),
+            new MockResponse('', ['http_code' => 202]),
+            new MockResponse(
+                json_encode([
+                    'jsonrpc' => '2.0',
+                    'id' => 2,
+                    'result' => [
+                        'tools' => [
+                            ['name' => 'list_files', 'description' => 'List files'],
+                        ],
+                    ],
+                ]),
+                [
+                    'http_code' => 200,
+                    'response_headers' => ['content-type' => ['application/json']],
+                ]
+            ),
+        ];
+
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$captured, &$responses): MockResponse {
+            $captured[] = [
+                'method' => $method,
+                'url' => $url,
+                'options' => $options,
+            ];
+            return array_shift($responses);
+        });
+
+        $ref = new \ReflectionProperty(McpClientService::class, 'httpClient');
+        $ref->setValue($service, $client);
+
+        $tools = $service->listTools($server);
+
+        $this->assertCount(1, $tools);
+        $this->assertCount(3, $captured);
+
+        $initializeBody = $this->requestBody($captured[0]['options']);
+        $this->assertSame('initialize', $initializeBody['method']);
+        $this->assertArrayHasKey('id', $initializeBody);
+
+        $initializedBody = $this->requestBody($captured[1]['options']);
+        $this->assertSame('notifications/initialized', $initializedBody['method']);
+        $this->assertArrayNotHasKey('id', $initializedBody);
+        $this->assertSame('session-123', $this->headerValue($captured[1]['options'], 'Mcp-Session-Id'));
+
+        $toolsBody = $this->requestBody($captured[2]['options']);
+        $this->assertSame('tools/list', $toolsBody['method']);
+        $this->assertArrayHasKey('id', $toolsBody);
+        $this->assertSame('session-123', $this->headerValue($captured[2]['options'], 'Mcp-Session-Id'));
+    }
+
     public function testTestConnectionSuccess(): void {
         $server = $this->makeServer();
 
@@ -414,6 +489,48 @@ class McpClientServiceTest extends TestCase {
 
         $ref = new \ReflectionProperty(McpClientService::class, 'httpClient');
         $ref->setValue($this->service, $client);
+    }
+
+    /**
+     * Decode a JSON request body from the MockHttpClient options.
+     *
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
+     */
+    private function requestBody(array $options): array {
+        if (isset($options['json']) && is_array($options['json'])) {
+            return $options['json'];
+        }
+
+        $body = $options['body'] ?? null;
+        if (is_array($body)) {
+            return $body;
+        }
+
+        $decoded = is_string($body) ? json_decode($body, true) : null;
+        $this->assertIsArray($decoded);
+        return $decoded;
+    }
+
+    /**
+     * Read a request header from either associative or "Name: value" form.
+     *
+     * @param array<string, mixed> $options
+     */
+    private function headerValue(array $options, string $name): ?string {
+        foreach ($options['headers'] ?? [] as $key => $value) {
+            if (!is_int($key) && strcasecmp((string)$key, $name) === 0) {
+                return is_array($value) ? ($value[0] ?? null) : (string)$value;
+            }
+
+            $line = is_int($key) ? (string)$value : '';
+            $prefix = $name . ':';
+            if ($line !== '' && strncasecmp($line, $prefix, strlen($prefix)) === 0) {
+                return trim(substr($line, strlen($prefix)));
+            }
+        }
+
+        return null;
     }
 
     /**
