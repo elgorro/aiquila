@@ -354,9 +354,11 @@ needed.
 | `core:analyze-images` | Ask a question about one or more images |
 | `core:image2text:ocr` | Extract the text visible in images |
 | `core:audio2text` | Transcribe a recording |
+| `core:audio2text:subtitles` | Subtitles for a recording or video, as SubRip (default) or WebVTT (Nextcloud 35+) |
 | `core:text2speech` | Read a text out as audio |
 | `core:text2image` | Generate images from a description |
 | `core:audio2audio:chat` | Voice chat: a spoken question answered with spoken audio |
+| `core:audio2audio:translate` | A recording spoken again in another language; the source language can be auto-detected (Nextcloud 35+) |
 
 Assistant actions run on whichever AI provider the user has selected — the same
 choice that drives chat — within what the admin allows. A task may also pin a
@@ -368,8 +370,8 @@ matching capability, shown as a chip on the provider's card in the AIquila setti
 | Action | Needs | Providers that offer it |
 |---|---|---|
 | Image questions and OCR | `vision` | Claude, Mistral, Hetzner (model-dependent), Local (admin flag) |
-| Transcription, voice chat | `transcription` | Mistral, Local (admin flag) |
-| Generated speech, voice chat | `speech` | Mistral, Local (admin flag) |
+| Transcription, subtitles, voice chat, audio translation | `transcription` | Mistral, Local (admin flag) |
+| Generated speech, voice chat, audio translation | `speech` | Mistral, Local (admin flag) |
 | Generated images | `image generation` | Mistral |
 
 Picking a provider without the capability an action needs is an error rather than a
