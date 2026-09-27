@@ -7,54 +7,61 @@ namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\AudioService;
 use OCP\Files\File;
+use OCP\IL10N;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\ShapeDescriptor;
-use OCP\TaskProcessing\TaskTypes\AudioToText;
+use OCP\TaskProcessing\ShapeEnumValue;
 
 /**
- * Transcription TaskProcessing Provider
+ * Subtitles TaskProcessing Provider (core:audio2text:subtitles)
  *
- * Registers AIquila as a core:audio2text provider, which is what the Assistant's
- * "Transcribe audio" action and Talk's voice-message transcription call.
+ * Transcribes a recording or video with segment timestamps and writes them as
+ * a SubRip or WebVTT file. The optional `format` input mirrors the one
+ * Nextcloud's own Whisper provider offers, with SubRip as the default.
  *
- * Input:  input (audio file)
- * Output: output (transcript)
+ * The task type is Nextcloud 35+. The id is spelled out rather than read from
+ * OCP\TaskProcessing\TaskTypes\AudioToTextSubtitles::ID because that class
+ * does not exist on 33 or 34, which the app still declares support for.
+ *
+ * Input:  input (file), optional format (srt|vtt)
+ * Output: output (the subtitles file, as bytes)
  */
-class AudioToTextProvider implements ISynchronousProvider {
+class SubtitlesProvider implements ISynchronousProvider {
 
     public function __construct(
         private ProviderResolver $providers,
         private AudioService $audio,
+        private IL10N $l,
     ) {
     }
 
     public function getId(): string {
-        return 'aiquila:audio2text';
+        return 'aiquila:audio2text:subtitles';
     }
 
     public function getName(): string {
-        return 'AIquila Audio';
+        return 'AIquila';
     }
 
     public function getTaskTypeId(): string {
-        return AudioToText::ID;
+        return 'core:audio2text:subtitles';
     }
 
     public function getExpectedRuntime(): int {
-        return 120;
+        return 180;
     }
 
     public function getOptionalInputShape(): array {
         return [
+            'format' => new ShapeDescriptor(
+                $this->l->t('Format'),
+                $this->l->t('The format of the subtitles file'),
+                EShapeType::Enum
+            ),
             'provider' => new ShapeDescriptor(
                 'Provider',
                 'Optional LLM provider id override (e.g. mistral, local)',
-                EShapeType::Text
-            ),
-            'language' => new ShapeDescriptor(
-                'Language',
-                'Optional ISO 639-1 code of the spoken language, e.g. de. Improves accuracy when known.',
                 EShapeType::Text
             ),
         ];
@@ -73,11 +80,16 @@ class AudioToTextProvider implements ISynchronousProvider {
     }
 
     public function getOptionalInputShapeEnumValues(): array {
-        return [];
+        return [
+            'format' => [
+                new ShapeEnumValue($this->l->t('SubRip (SRT)'), AudioService::SUBTITLES_SRT),
+                new ShapeEnumValue($this->l->t('WebVTT'), AudioService::SUBTITLES_VTT),
+            ],
+        ];
     }
 
     public function getOptionalInputShapeDefaults(): array {
-        return [];
+        return ['format' => AudioService::SUBTITLES_SRT];
     }
 
     public function getOutputShapeEnumValues(): array {
@@ -89,25 +101,18 @@ class AudioToTextProvider implements ISynchronousProvider {
     }
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
-        // The framework resolves Audio slots to File nodes before calling us —
-        // the raw bytes never travel through the task input.
         $file = $input['input'] ?? null;
         if (!$file instanceof File) {
-            throw new \RuntimeException('No audio file provided');
+            throw new \RuntimeException('No audio or video file provided');
         }
 
         $provider = $this->providers->resolveAudioCapable($userId, $this->providers->requestedId($input));
         $reportProgress(0.1);
 
-        $language = $input['language'] ?? '';
-        $transcript = $this->audio->transcribe(
-            $provider,
-            $file,
-            $userId,
-            is_string($language) && $language !== '' ? ['language' => $language] : [],
-        );
+        $segments = $this->audio->segments($provider, $file, $userId);
+        $format = ($input['format'] ?? '') === AudioService::SUBTITLES_VTT ? AudioService::SUBTITLES_VTT : AudioService::SUBTITLES_SRT;
 
         $reportProgress(1.0);
-        return ['output' => $transcript['text']];
+        return ['output' => AudioService::subtitles($segments, $format)];
     }
 }

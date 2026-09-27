@@ -558,6 +558,31 @@ class LocalProviderTest extends TestCase {
         ], $options['multipart']);
     }
 
+    public function testTranscriptionWithTimestampsRequestsVerboseJsonSegments(): void {
+        $provider = $this->provider(['local_audio_in' => 'yes']);
+        $options = null;
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$options): IResponse {
+                $options = $o;
+                return $this->jsonResponse([
+                    'text' => 'Hello there.',
+                    'segments' => [['id' => 0, 'start' => 0, 'end' => 1.2, 'text' => ' Hello there.']],
+                ]);
+            }
+        );
+
+        $result = $provider->transcribeAudio('raw-bytes', 'audio/mpeg', 'memo.mp3', null, ['timestamps' => true]);
+
+        $this->assertSame([
+            ['name' => 'response_format', 'contents' => 'verbose_json'],
+            ['name' => 'timestamp_granularities[]', 'contents' => 'segment'],
+        ], array_slice($options['multipart'], 2));
+        $this->assertSame([
+            'response' => 'Hello there.',
+            'segments' => [['start' => 0.0, 'end' => 1.2, 'text' => ' Hello there.']],
+        ], $result);
+    }
+
     public function testSpeechRefusedUnlessEnabled(): void {
         $this->client->expects($this->never())->method('post');
 

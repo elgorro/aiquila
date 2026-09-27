@@ -5,11 +5,11 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
+use OCA\AIquila\Service\AudioService;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\ShapeDescriptor;
 use OCP\TaskProcessing\TaskTypes\TextToSpeech;
-use Psr\Log\LoggerInterface;
 
 /**
  * Speech-generation TaskProcessing Provider
@@ -26,7 +26,7 @@ class TextToSpeechProvider implements ISynchronousProvider {
 
     public function __construct(
         private ProviderResolver $providers,
-        private LoggerInterface $logger,
+        private AudioService $audio,
     ) {
     }
 
@@ -99,18 +99,14 @@ class TextToSpeechProvider implements ISynchronousProvider {
         $reportProgress(0.1);
 
         $voice = $input['voice'] ?? '';
-        $result = $provider->synthesizeSpeech(
+        $speech = $this->audio->speak(
+            $provider,
             $text,
             $userId,
             is_string($voice) && $voice !== '' ? ['voice' => $voice] : [],
         );
 
-        if (isset($result['error'])) {
-            $this->logger->error('AIquila TextToSpeech: Error', ['error' => $result['error'], 'provider' => $provider->getId()]);
-            throw new \RuntimeException($result['error']);
-        }
-
         $reportProgress(1.0);
-        return ['speech' => $result['audio'] ?? ''];
+        return ['speech' => $speech];
     }
 }

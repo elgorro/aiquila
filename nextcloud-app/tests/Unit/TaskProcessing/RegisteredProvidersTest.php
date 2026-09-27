@@ -3,6 +3,7 @@
 namespace OCA\AIquila\Tests\Unit\TaskProcessing;
 
 use OCA\AIquila\TaskProcessing\ProviderRegistry;
+use OCA\AIquila\TaskProcessing\Translation;
 use OCP\IL10N;
 use OCP\L10N\IFactory;
 use OCP\TaskProcessing\EShapeType;
@@ -30,6 +31,8 @@ class RegisteredProvidersTest extends TestCase {
     private const NEWER_THAN_MIN_VERSION = [
         'core:text2text:reformatparagraphs' => '34.0.0',
         'core:text2text:improve' => '35.0.0',
+        'core:audio2text:subtitles' => '35.0.0',
+        'core:audio2audio:translate' => '35.0.0',
     ];
 
     /** @return list<string> */
@@ -184,6 +187,7 @@ class RegisteredProvidersTest extends TestCase {
             $args[] = match ($type->getName()) {
                 IL10N::class => $l10n,
                 IFactory::class => $l10nFactory,
+                Translation::class => new Translation($l10nFactory, $l10n),
                 default => $this->createStub($type->getName()),
             };
         }
