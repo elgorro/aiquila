@@ -3,7 +3,7 @@ module github.com/elgorro/aiquila/hetzner
 go 1.26.0
 
 require (
-	github.com/hetznercloud/hcloud-go/v2 v2.48.0
+	github.com/hetznercloud/hcloud-go/v2 v2.49.0
 	github.com/pkg/sftp v1.13.11
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.57.0
