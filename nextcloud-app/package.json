@@ -27,7 +27,7 @@
   },
   "overrides": {
     "brace-expansion": "^2.1.4",
-    "dompurify": "^3.4.13",
+    "dompurify": "^3.4.16",
     "esbuild": ">=0.28.1",
     "follow-redirects": "^1.16.0"
   },
