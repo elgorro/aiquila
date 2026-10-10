@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/elgorro-aiquila-badge.png)](https://mseep.ai/app/elgorro-aiquila)
+
 # AIquila
 
 Private AI for your Nextcloud — your data, your server, your choice of AI provider
