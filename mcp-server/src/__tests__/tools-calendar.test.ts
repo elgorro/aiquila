@@ -876,6 +876,65 @@ END:VCALENDAR</c:calendar-data>
       expect(putBody).not.toMatch(/^ORGANIZER/m);
       expect(putBody).not.toMatch(/^ATTENDEE/m);
     });
+
+    it('should edit DTSTART/RRULE in the event, not in an existing VTIMEZONE', async () => {
+      const responseWithTimezone = `<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/event-tz.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"etag-tz1"</d:getetag>
+      <c:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:Europe/Paris
+BEGIN:STANDARD
+DTSTART:19701101T000000
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:19700301T000000
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:event-tz
+SUMMARY:Old title
+DTSTART;TZID=Europe/Paris:20261009T160000
+DTEND;TZID=Europe/Paris:20261009T170000
+RRULE:FREQ=WEEKLY
+END:VEVENT
+END:VCALENDAR</c:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(responseWithTimezone) })
+        .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+
+      const { updateEventTool } = await import('../tools/apps/calendar.js');
+      const result = await updateEventTool.handler({
+        uid: 'event-tz',
+        calendarName: 'personal',
+        dtstart: '20261009T180000',
+        tzid: 'Europe/Paris',
+        rrule: 'FREQ=DAILY',
+      });
+
+      expect(result.content[0].text).toContain('updated successfully');
+      const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body;
+      expect(putBody).toContain('DTSTART;TZID=Europe/Paris:20261009T180000');
+      expect(putBody).toContain('RRULE:FREQ=DAILY');
+      expect(putBody).not.toContain('RRULE:FREQ=WEEKLY');
+      expect(putBody).toContain('DTSTART:19701101T000000');
+      expect(putBody).toContain('DTSTART:19700301T000000');
+      expect(putBody).toContain('RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU');
+      expect(putBody).toContain('RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU');
+    });
   });
 
   describe('delete_event', () => {

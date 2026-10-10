@@ -109,15 +109,24 @@ function toICalDateTime(dateStr: string): string {
   return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 }
 
+// Restrict the edit to the first VEVENT. Properties like DTSTART and RRULE also
+// appear in VTIMEZONE sub-components (STANDARD/DAYLIGHT), which are emitted
+// before the event, so a whole-calendar replace would hit the timezone block.
+function editFirstVEvent(icalData: string, edit: (vevent: string) => string): string {
+  return icalData.replace(/BEGIN:VEVENT[\s\S]*?END:VEVENT/, edit);
+}
+
 function setICalProperty(icalData: string, propName: string, value: string | null): string {
-  const regex = new RegExp(`^${propName}(;[^:]*)?:.*$`, 'm');
-  if (value === null) {
-    return icalData.replace(regex, '').replace(/(\r?\n){2,}/g, '\r\n');
-  }
-  if (regex.test(icalData)) {
-    return icalData.replace(regex, `${propName}:${value}`);
-  }
-  return icalData.replace(/END:VEVENT/, `${propName}:${value}\r\nEND:VEVENT`);
+  return editFirstVEvent(icalData, (vevent) => {
+    const regex = new RegExp(`^${propName}(;[^:]*)?:.*$`, 'm');
+    if (value === null) {
+      return vevent.replace(regex, '').replace(/(\r?\n){2,}/g, '\r\n');
+    }
+    if (regex.test(vevent)) {
+      return vevent.replace(regex, `${propName}:${value}`);
+    }
+    return vevent.replace(/END:VEVENT/, `${propName}:${value}\r\nEND:VEVENT`);
+  });
 }
 
 function setICalDateProperty(
@@ -126,22 +135,24 @@ function setICalDateProperty(
   value: string | null,
   tzid?: string
 ): string {
-  const regex = new RegExp(`^${propName}(;[^:]*)?:.*$`, 'm');
-  if (value === null) {
-    return icalData.replace(regex, '').replace(/(\r?\n){2,}/g, '\r\n');
-  }
-  let formatted: string;
-  if (value.length === 8) {
-    formatted = `${propName};VALUE=DATE:${value}`;
-  } else if (tzid) {
-    formatted = `${propName};TZID=${tzid}:${normalizeLocalICal(value, tzid)}`;
-  } else {
-    formatted = `${propName}:${value}`;
-  }
-  if (regex.test(icalData)) {
-    return icalData.replace(regex, formatted);
-  }
-  return icalData.replace(/END:VEVENT/, `${formatted}\r\nEND:VEVENT`);
+  return editFirstVEvent(icalData, (vevent) => {
+    const regex = new RegExp(`^${propName}(;[^:]*)?:.*$`, 'm');
+    if (value === null) {
+      return vevent.replace(regex, '').replace(/(\r?\n){2,}/g, '\r\n');
+    }
+    let formatted: string;
+    if (value.length === 8) {
+      formatted = `${propName};VALUE=DATE:${value}`;
+    } else if (tzid) {
+      formatted = `${propName};TZID=${tzid}:${normalizeLocalICal(value, tzid)}`;
+    } else {
+      formatted = `${propName}:${value}`;
+    }
+    if (regex.test(vevent)) {
+      return vevent.replace(regex, formatted);
+    }
+    return vevent.replace(/END:VEVENT/, `${formatted}\r\nEND:VEVENT`);
+  });
 }
 
 /**
