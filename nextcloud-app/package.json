@@ -22,8 +22,8 @@
   "author": "AIquila",
   "license": "AGPL-3.0",
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.9",
-    "vite": "^8.3.0"
+    "@vitejs/plugin-vue": "^6.0.10",
+    "vite": "^8.3.4"
   },
   "overrides": {
     "brace-expansion": "^2.1.4",
@@ -39,12 +39,12 @@
     "@nextcloud/initial-state": "^3.0.0",
     "@nextcloud/l10n": "^3.4.1",
     "@nextcloud/router": "^3.2.0",
-    "@nextcloud/vue": "~9.13.0",
+    "@nextcloud/vue": "~9.13.1",
     "highlight.js": "^11.12.0",
-    "marked": "^18.0.13",
-    "vue": "^3.5.43",
-    "vue-material-design-icons": "^5.3.1",
-    "vue-router": "^5.3.1"
+    "marked": "^18.1.1",
+    "vue": "^3.5.44",
+    "vue-material-design-icons": "^5.4.0",
+    "vue-router": "^5.4.0"
   },
   "engines": {
     "node": ">=26.0.0",
