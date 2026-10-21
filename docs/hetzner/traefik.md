@@ -93,6 +93,11 @@ providers:
 Strict-Transport-Security: max-age=15552000; includeSubDomains
 ```
 
+**No request-size middleware on `nc`.** Traefik's `buffering` middleware is its
+only body limit, and it buffers responses as well — that would deliver
+AIquila's streamed chat replies in one piece. Request size is capped by PHP
+instead; see [Nextcloud image and PHP](advanced.md#nextcloud-image-and-php).
+
 ---
 
 ## CrowdSec plugin
