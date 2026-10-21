@@ -65,12 +65,12 @@
     "dist/"
   ],
   "overrides": {
-    "brace-expansion": "^2.0.3",
+    "brace-expansion": "^2.1.7",
     "esbuild": ">=0.28.1",
-    "hono": "^4.13.7"
+    "hono": "^4.13.11"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "jose": "^6.2.12",
     "pino": "^10.3.1",
     "webdav": "^5.10.0",
@@ -84,6 +84,6 @@
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.70.0",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.3"
   }
 }
