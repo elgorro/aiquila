@@ -1,0 +1,32 @@
+name: PHP Images
+
+# Fails when a PHP-based image used by the stacks (Nextcloud, Adminer) ships
+# a PHP older than the latest release of its branch. Upstream images go stale
+# without any change in this repo, so this mostly runs on a schedule.
+#
+# This is deliberately NOT a required status check, which is what makes the
+# `paths:` filter below safe. Do not add it to branch protection: an upstream
+# lag would then block every unrelated PR.
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays 06:17 UTC
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "docker/**"
+      - "hetzner/docker/**"
+      - ".github/workflows/php-images.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: PHP version in images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compare image PHP with latest php.net release
+        run: docker/scripts/check-php-images.sh
