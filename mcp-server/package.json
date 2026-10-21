@@ -67,7 +67,7 @@
   "overrides": {
     "brace-expansion": "^2.0.3",
     "esbuild": ">=0.28.1",
-    "hono": "^4.13.7"
+    "hono": "^4.13.13"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
