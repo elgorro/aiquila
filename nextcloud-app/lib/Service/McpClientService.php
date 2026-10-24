@@ -57,13 +57,13 @@ class McpClientService {
     }
 
     /**
-     * Send a JSON-RPC 2.0 request to an MCP server.
+     * Build the HTTP headers shared by every POST to an MCP server: content
+     * negotiation, auth (refreshing an expired OAuth token first) and the
+     * session ID once `initialize` has returned one.
+     *
+     * @return array<string, string>
      */
-    private function jsonRpc(McpServer $server, string $method, array $params = [], ?int $id = null): array {
-        $id = $id ?? random_int(1, 999999);
-
-        $body = $this->buildRequestBody($method, $params, $id);
-
+    private function buildHeaders(McpServer $server): array {
         $headers = [
             'Content-Type' => 'application/json',
             'Accept' => 'application/json, text/event-stream',
@@ -83,6 +83,18 @@ class McpClientService {
             $headers['Mcp-Session-Id'] = $this->sessions[$serverId];
         }
 
+        return $headers;
+    }
+
+    /**
+     * Send a JSON-RPC 2.0 request to an MCP server.
+     */
+    private function jsonRpc(McpServer $server, string $method, array $params = [], ?int $id = null): array {
+        $id = $id ?? random_int(1, 999999);
+
+        $body = $this->buildRequestBody($method, $params, $id);
+        $headers = $this->buildHeaders($server);
+
         try {
             $response = $this->httpClient->request('POST', $server->getUrl(), [
                 'headers' => $headers,
@@ -90,28 +102,22 @@ class McpClientService {
             ]);
 
             $statusCode = $response->getStatusCode();
-            $contentType = $response->getHeaders(false)['content-type'][0] ?? '';
+            $responseHeaders = $response->getHeaders(false);
 
-            // Handle SSE responses — extract the final JSON-RPC result.
-            // Streamable HTTP servers may return the initialize response as SSE,
-            // and the session ID must be retained for subsequent requests.
+            // Capture session ID from response headers. It must be kept whether
+            // the server answers as JSON or as an SSE stream.
+            $sessionHeaders = $responseHeaders['mcp-session-id'] ?? [];
+            if (!empty($sessionHeaders)) {
+                $this->sessions[$server->getId()] = $sessionHeaders[0];
+            }
+
+            // Handle SSE responses — extract the final JSON-RPC result
+            $contentType = $responseHeaders['content-type'][0] ?? '';
             if (str_contains($contentType, 'text/event-stream')) {
-                $sessionHeaders = $response->getHeaders(false)['mcp-session-id'] ?? [];
-                if (!empty($sessionHeaders)) {
-                    $this->sessions[$serverId] = $sessionHeaders[0];
-                }
-
-                $content = $response->getContent(false);
-                return $this->parseSseResponse($content, $statusCode, $response);
+                return $this->parseSseResponse($response->getContent(false), $statusCode);
             }
 
             $result = $response->toArray(false);
-
-            // Capture session ID from response headers
-            $sessionHeaders = $response->getHeaders(false)['mcp-session-id'] ?? [];
-            if (!empty($sessionHeaders)) {
-                $this->sessions[$serverId] = $sessionHeaders[0];
-            }
 
             if ($statusCode >= 400) {
                 throw new \RuntimeException("HTTP $statusCode: " . (string)json_encode($result));
@@ -145,24 +151,7 @@ class McpClientService {
             $body['params'] = $params;
         }
 
-        $headers = [
-            'Content-Type' => 'application/json',
-            'Accept' => 'application/json, text/event-stream',
-        ];
-
-        if ($server->getAuthType() === 'oauth2' && $server->getOauthAccessToken()) {
-            if ($this->isTokenExpired($server)) {
-                $this->refreshOAuthToken($server);
-            }
-            $headers['Authorization'] = 'Bearer ' . $this->credentials->decryptToken($server->getOauthAccessToken());
-        } elseif ($server->getAuthType() === 'bearer' && $server->getAuthToken()) {
-            $headers['Authorization'] = 'Bearer ' . $this->credentials->decryptToken($server->getAuthToken());
-        }
-
-        $serverId = $server->getId();
-        if (isset($this->sessions[$serverId])) {
-            $headers['Mcp-Session-Id'] = $this->sessions[$serverId];
-        }
+        $headers = $this->buildHeaders($server);
 
         try {
             $response = $this->httpClient->request('POST', $server->getUrl(), [
@@ -187,10 +176,7 @@ class McpClientService {
     /**
      * Parse an SSE response to extract JSON-RPC result.
      */
-    private function parseSseResponse(string $content, int $statusCode, $response): array {
-        // Capture session ID from response headers
-        $sessionHeaders = $response->getHeaders(false)['mcp-session-id'] ?? [];
-
+    private function parseSseResponse(string $content, int $statusCode): array {
         $lastData = null;
         foreach (explode("\n", $content) as $line) {
             $line = trim($line);
@@ -206,11 +192,6 @@ class McpClientService {
         $result = json_decode($lastData, true);
         if ($result === null) {
             throw new \RuntimeException('Invalid JSON in SSE data');
-        }
-
-        // Capture session from SSE response headers too
-        if (!empty($sessionHeaders) && isset($result['id'])) {
-            // We need the server context — session will be captured by caller
         }
 
         if (isset($result['error'])) {
