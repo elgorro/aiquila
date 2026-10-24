@@ -97,10 +97,18 @@ services:
       AIQUILA_TEST_USER: ${NEXTCLOUD_TEST_USER:-testuser}
       AIQUILA_TEST_PASSWORD: ${NEXTCLOUD_TEST_PASSWORD:-AIquila2026!dev}
       AIQUILA_CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
+
+      # PHP limits, written into nextcloud.ini by the upstream entrypoint.
+      # PHP_UPLOAD_LIMIT sets both upload_max_filesize and post_max_size; keep
+      # it in step with request_body max_size in ../caddy/Caddyfile.
+      PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-512M}
+      PHP_UPLOAD_LIMIT: ${PHP_UPLOAD_LIMIT:-512M}
     volumes:
       - nextcloud_data:/var/www/html
+    # Direct ports are bound to localhost: Docker-published ports bypass host
+    # firewalls such as ufw. Only Caddy (443, 3340) is reachable from outside.
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     networks:
       - aiquila-network
     deploy:
@@ -135,7 +143,7 @@ services:
     working_dir: /app
     command: npm run dev
     ports:
-      - "3339:3339"
+      - "127.0.0.1:3339:3339"
     networks:
       - aiquila-network
     deploy:
@@ -175,8 +183,8 @@ services:
     container_name: aiquila-mailhog
     restart: unless-stopped
     ports:
-      - "8025:8025"  # Web UI
-      - "1025:1025"  # SMTP
+      - "127.0.0.1:8025:8025"  # Web UI
+      - "127.0.0.1:1025:1025"  # SMTP
     networks:
       - aiquila-network
     deploy:
@@ -186,10 +194,11 @@ services:
           cpus: '0.5'
           pids: 50
 
-  # Adminer (Database UI)
+  # Adminer (Database UI) — opt-in: `make up-tools` or `docker compose --profile tools up -d`
   adminer:
-    image: adminer:5.4.2
+    image: adminer:6.1.2
     container_name: aiquila-adminer
+    profiles: ["tools"]
     restart: unless-stopped
     depends_on:
       - db
@@ -197,7 +206,7 @@ services:
       ADMINER_DEFAULT_SERVER: db
       ADMINER_DESIGN: pepa-linha
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     networks:
       - aiquila-network
     deploy:

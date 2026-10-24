@@ -57,13 +57,13 @@ class McpClientService {
     }
 
     /**
-     * Send a JSON-RPC 2.0 request to an MCP server.
+     * Build the HTTP headers shared by every POST to an MCP server: content
+     * negotiation, auth (refreshing an expired OAuth token first) and the
+     * session ID once `initialize` has returned one.
+     *
+     * @return array<string, string>
      */
-    private function jsonRpc(McpServer $server, string $method, array $params = [], ?int $id = null): array {
-        $id = $id ?? random_int(1, 999999);
-
-        $body = $this->buildRequestBody($method, $params, $id);
-
+    private function buildHeaders(McpServer $server): array {
         $headers = [
             'Content-Type' => 'application/json',
             'Accept' => 'application/json, text/event-stream',
@@ -83,6 +83,18 @@ class McpClientService {
             $headers['Mcp-Session-Id'] = $this->sessions[$serverId];
         }
 
+        return $headers;
+    }
+
+    /**
+     * Send a JSON-RPC 2.0 request to an MCP server.
+     */
+    private function jsonRpc(McpServer $server, string $method, array $params = [], ?int $id = null): array {
+        $id = $id ?? random_int(1, 999999);
+
+        $body = $this->buildRequestBody($method, $params, $id);
+        $headers = $this->buildHeaders($server);
+
         try {
             $response = $this->httpClient->request('POST', $server->getUrl(), [
                 'headers' => $headers,
@@ -90,21 +102,22 @@ class McpClientService {
             ]);
 
             $statusCode = $response->getStatusCode();
-            $contentType = $response->getHeaders(false)['content-type'][0] ?? '';
+            $responseHeaders = $response->getHeaders(false);
+
+            // Capture session ID from response headers. It must be kept whether
+            // the server answers as JSON or as an SSE stream.
+            $sessionHeaders = $responseHeaders['mcp-session-id'] ?? [];
+            if (!empty($sessionHeaders)) {
+                $this->sessions[$server->getId()] = $sessionHeaders[0];
+            }
 
             // Handle SSE responses — extract the final JSON-RPC result
+            $contentType = $responseHeaders['content-type'][0] ?? '';
             if (str_contains($contentType, 'text/event-stream')) {
-                $content = $response->getContent(false);
-                return $this->parseSseResponse($content, $statusCode, $response);
+                return $this->parseSseResponse($response->getContent(false), $statusCode);
             }
 
             $result = $response->toArray(false);
-
-            // Capture session ID from response headers
-            $sessionHeaders = $response->getHeaders(false)['mcp-session-id'] ?? [];
-            if (!empty($sessionHeaders)) {
-                $this->sessions[$serverId] = $sessionHeaders[0];
-            }
 
             if ($statusCode >= 400) {
                 throw new \RuntimeException("HTTP $statusCode: " . (string)json_encode($result));
@@ -123,12 +136,47 @@ class McpClientService {
     }
 
     /**
+     * Send a JSON-RPC 2.0 notification to an MCP server.
+     *
+     * Notifications have no request ID and therefore do not return a JSON-RPC
+     * result. A successful HTTP response is sufficient; any 4xx/5xx response
+     * is surfaced as an MCP error.
+     */
+    private function jsonRpcNotification(McpServer $server, string $method, array $params = []): void {
+        $body = [
+            'jsonrpc' => '2.0',
+            'method' => $method,
+        ];
+        if ($params !== []) {
+            $body['params'] = $params;
+        }
+
+        $headers = $this->buildHeaders($server);
+
+        try {
+            $response = $this->httpClient->request('POST', $server->getUrl(), [
+                'headers' => $headers,
+                'json' => $body,
+            ]);
+
+            $statusCode = $response->getStatusCode();
+
+            // A notification has no JSON-RPC response body to parse. Accept any
+            // successful HTTP response, including 202/204 with an empty body.
+            if ($statusCode >= 400) {
+                throw new \RuntimeException("HTTP $statusCode: " . $response->getContent(false));
+            }
+        } catch (\RuntimeException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('MCP notification failed: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /**
      * Parse an SSE response to extract JSON-RPC result.
      */
-    private function parseSseResponse(string $content, int $statusCode, $response): array {
-        // Capture session ID from response headers
-        $sessionHeaders = $response->getHeaders(false)['mcp-session-id'] ?? [];
-
+    private function parseSseResponse(string $content, int $statusCode): array {
         $lastData = null;
         foreach (explode("\n", $content) as $line) {
             $line = trim($line);
@@ -144,11 +192,6 @@ class McpClientService {
         $result = json_decode($lastData, true);
         if ($result === null) {
             throw new \RuntimeException('Invalid JSON in SSE data');
-        }
-
-        // Capture session from SSE response headers too
-        if (!empty($sessionHeaders) && isset($result['id'])) {
-            // We need the server context — session will be captured by caller
         }
 
         if (isset($result['error'])) {
@@ -175,6 +218,10 @@ class McpClientService {
                 'version' => '0.1.58',
             ],
         ]);
+
+        // MCP requires the client to acknowledge the initialize response before
+        // sending normal requests such as tools/list or tools/call.
+        $this->jsonRpcNotification($server, 'notifications/initialized');
 
         $this->initialized[$serverId] = true;
 

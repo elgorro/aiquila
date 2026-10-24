@@ -1,4 +1,4 @@
-.PHONY: help build-tarball build up down restart logs logs-nc logs-mcp logs-follow status shell shell-mcp shell-db nc-log test test-mcp clean reset standalone-up standalone-down standalone-logs standalone-test
+.PHONY: help build-tarball build up up-tools down restart logs logs-nc logs-mcp logs-follow status shell shell-mcp shell-db nc-log test test-mcp clean reset standalone-up standalone-down standalone-logs standalone-test
 
 SCRIPTS_DIR := ../scripts
 COMPOSE := docker compose
@@ -10,7 +10,8 @@ help:
 	@echo "Workflow:"
 	@echo "  make build-tarball  - Build aiquila.tar.gz from source (runs on host)"
 	@echo "  make build          - Build Docker image (embeds tarball)"
-	@echo "  make up             - Start all services (builds tarball + image if needed)"
+	@echo "  make up             - Start all services (pulls base image, builds tarball + image if needed)"
+	@echo "  make up-tools       - Start all services plus Adminer (tools profile)"
 	@echo "  make down           - Stop all services"
 	@echo "  make restart        - Restart all services"
 	@echo "  make clean          - Stop services, remove volumes, delete tarball"
@@ -42,9 +43,9 @@ help:
 	@echo "  Nextcloud:  https://localhost"
 	@echo "  MCP Server: https://localhost:3340/mcp"
 	@echo "  MailHog:    http://localhost:8025"
-	@echo "  Adminer:    http://localhost:8081"
+	@echo "  Adminer:    http://localhost:8081  (make up-tools)"
 	@echo ""
-	@echo "Direct HTTP (no TLS):"
+	@echo "Direct HTTP (no TLS, localhost only):"
 	@echo "  Nextcloud:  http://localhost:8080"
 	@echo "  MCP Server: http://localhost:3339/mcp"
 
@@ -56,14 +57,17 @@ build-tarball:
 # Build Docker image (requires tarball)
 build: aiquila.tar.gz
 	@echo "=== Building Docker image ==="
-	$(COMPOSE) build --no-cache
+	$(COMPOSE) build --pull --no-cache
 
 # Ensure tarball exists
 aiquila.tar.gz:
 	@$(MAKE) build-tarball
 
 # Start everything (builds if needed)
+# --pull re-checks the nextcloud base image so upstream security rebuilds
+# land; without it a cached base is reused indefinitely.
 up: aiquila.tar.gz
+	$(COMPOSE) build --pull nextcloud
 	$(COMPOSE) up -d --build
 	@echo ""
 	@echo "=== Starting... ==="
@@ -71,11 +75,17 @@ up: aiquila.tar.gz
 	@echo "Nextcloud:    http://localhost:8080"
 	@echo "MCP Server:   http://localhost:3339"
 	@echo "MailHog:      http://localhost:8025"
+	@echo "Adminer:      make up-tools"
+
+# Start everything plus the opt-in tools (Adminer)
+up-tools: aiquila.tar.gz
+	$(COMPOSE) build --pull nextcloud
+	$(COMPOSE) --profile tools up -d --build
 	@echo "Adminer:      http://localhost:8081"
 
-# Stop all services
+# Stop all services (including opt-in tools)
 down:
-	$(COMPOSE) down
+	$(COMPOSE) --profile tools down
 
 # Restart all services
 restart:
@@ -127,12 +137,13 @@ test-mcp:
 
 # Clean up (stop + remove volumes + delete tarball)
 clean:
-	$(COMPOSE) down -v --remove-orphans
+	$(COMPOSE) --profile tools down -v --remove-orphans
 	rm -f aiquila.tar.gz
 	@echo "Cleaned up."
 
 # Full reset: rebuild everything from scratch
 reset: clean build-tarball
+	$(COMPOSE) build --pull nextcloud
 	$(COMPOSE) up -d --build
 	@echo ""
 	@echo "Full reset complete. Follow logs: make logs-follow"

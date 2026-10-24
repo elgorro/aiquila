@@ -9,10 +9,10 @@ The Docker environment provides a complete, isolated development setup with:
 - **Caddy 2** - Reverse proxy with automatic HTTPS (self-signed certs for dev)
 - **PostgreSQL 18** - Production-grade database
 - **Nextcloud 34** - Test instance with AIquila pre-installed from tarball
-- **Redis 7** - Caching and performance
+- **Redis 8** - Caching and performance
 - **MCP Server** - Development container with hot reload (HTTP transport on port 3339)
 - **MailHog** - Email testing and debugging
-- **Adminer** - Database management UI
+- **Adminer** - Database management UI (opt-in, `make up-tools`)
 
 The AIquila app is installed automatically on first start from a pre-built tarball. No manual setup wizard or app installation is needed.
 
@@ -57,14 +57,19 @@ make logs-follow
 
 ### Access Points
 
-| Service | HTTPS (via Caddy) | Direct HTTP | Credentials |
+| Service | HTTPS (via Caddy) | Direct HTTP (localhost only) | Credentials |
 |---------|-------------------|-------------|-------------|
 | **Nextcloud** | https://localhost | http://localhost:8080 | admin / admin123 |
 | **MCP Server** | https://localhost:3340/mcp | http://localhost:3339/mcp | — |
 | **MailHog UI** | — | http://localhost:8025 | — |
-| **Adminer** | — | http://localhost:8081 | See below |
+| **Adminer** | — | http://localhost:8081 (after `make up-tools`) | See below |
 
 Caddy uses self-signed certificates — expect a browser warning on first visit.
+
+Only Caddy (443, 3340) listens on all interfaces. The direct ports are bound to
+`127.0.0.1`, because Docker-published ports bypass host firewalls such as ufw — a
+ufw rule does not protect a port Docker publishes on `0.0.0.0`. To reach the stack
+from another machine, go through Caddy.
 
 **Adminer:** System `PostgreSQL` · Server `db` · User `nextcloud` · Password from `.env` · Database `nextcloud`
 
@@ -92,6 +97,7 @@ make logs-mcp   # watch MCP server output
 
 ```bash
 make up            # start all services
+make up-tools      # start all services plus Adminer
 make down          # stop all services
 make restart       # restart all services
 make status        # show service status
@@ -103,7 +109,7 @@ make shell-mcp     # shell in MCP container
 make shell-db      # PostgreSQL shell
 make test          # verify AIquila installation
 make test-mcp      # run MCP server tests
-make clean         # stop + remove containers (keeps volumes)
+make clean         # stop + remove containers and volumes, delete tarball
 make reset         # full reset — rebuilds tarball + image from scratch
 ```
 
@@ -121,7 +127,7 @@ php occ aiquila:configure --api-key="sk-ant-..."
 
 ### Database Access
 
-Via Adminer at http://localhost:8081, or:
+Via Adminer at http://localhost:8081 (start it with `make up-tools`), or:
 
 ```bash
 make shell-db
@@ -153,6 +159,29 @@ CLAUDE_API_KEY=sk-ant-api03-xxxxx
 ```
 
 After changing `.env`, restart: `make down && make up`
+
+`PHP_MEMORY_LIMIT` and `PHP_UPLOAD_LIMIT` (both default `512M`) can also be set in
+`.env`. `PHP_UPLOAD_LIMIT` sets `upload_max_filesize` and `post_max_size`; keep it in
+step with `request_body max_size` in `docker/caddy/Caddyfile`, which rejects larger
+bodies before they reach PHP.
+
+### PHP settings
+
+`docker/installation/php-hardening.ini` is baked into the image as
+`conf.d/zz-aiquila-hardening.ini`, after the upstream `nextcloud.ini`. It turns off
+`expose_php` and `display_errors` and lowers `max_input_nesting_level` to 32. Errors
+still reach `data/nextcloud.log` (`loglevel` 0 in `custom.config.php`). The Hetzner
+stacks apply the same settings; see
+[Nextcloud image and PHP](../hetzner/advanced.md#nextcloud-image-and-php).
+
+### Updating base images
+
+The Nextcloud image is built `FROM nextcloud:34-apache`, a floating tag that upstream
+rebuilds for PHP and Nextcloud security releases. `make up`, `make up-tools` and
+`make reset` pass `--pull`, so each run picks up a newer base; `make build` is a full
+`--pull --no-cache` rebuild. A plain `docker compose up --build` reuses the cached
+base and does not. The [PHP Images workflow](ci-cd.md#php-images-workflow-php-imagesyml)
+flags when a pinned image falls behind.
 
 ### Port Conflicts
 
@@ -265,7 +294,7 @@ make reset
 │                                                           │
 │  ┌──────────────┐    ┌──────────────┐                     │
 │  │   MailHog    │    │   Adminer    │                     │
-│  │   :8025      │    │   :8081      │                     │
+│  │   :8025      │    │   :8081 opt  │                     │
 │  └──────────────┘    └──────────────┘                     │
 └───────────────────────────────────────────────────────────┘
 ```

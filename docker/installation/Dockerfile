@@ -6,6 +6,10 @@ COPY aiquila.tar.gz /tmp/aiquila.tar.gz
 # Copy custom Nextcloud configuration (Redis, apps_paths)
 COPY custom.config.php /usr/src/nextcloud/config/custom.config.php
 
+# PHP hardening (expose_php, input nesting, error display). The zz- prefix
+# sorts it after the upstream nextcloud.ini so these values take effect.
+COPY php-hardening.ini /usr/local/etc/php/conf.d/zz-aiquila-hardening.ini
+
 # Keep Server-Sent Events uncompressed. Compression buffers a response, and a
 # buffered chat stream arrives all at once instead of as it is written.
 # deflate.conf selects by response content type, which cannot be matched before

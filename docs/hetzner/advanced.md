@@ -334,22 +334,61 @@ Some variables cannot be changed by simply editing `.env` and restarting:
   the value inside PostgreSQL does not update automatically. After editing `.env` you
   must also update the password inside the database:
   ```bash
-  docker compose exec aiq-nc-db psql -U nextcloud -c "ALTER USER nextcloud PASSWORD 'newpass';"
+  docker compose exec nc-db psql -U nextcloud -c "ALTER USER nextcloud PASSWORD 'newpass';"
   ```
 
 - **`CROWDSEC_BOUNCER_KEY`** — must match the key registered in the CrowdSec local API.
   After changing the value in `.env`, re-register the bouncer:
   ```bash
-  docker compose exec aiq-crowdsec cscli bouncers add traefik-bouncer --key <new-key>
+  docker compose exec crowdsec cscli bouncers add traefik-bouncer --key <new-key>
   ```
 
 - **`NC_MCP_PASSWORD`** (full stack only) — this is a Nextcloud app password. Changing
   it in `.env` alone will not work because the old password still exists in Nextcloud.
   Generate a new app password via OCC and update `.env` to match:
   ```bash
-  docker compose exec aiq-nc php occ user:generate-app-password <nc-mcp-user>
+  docker compose exec nc php occ user:generate-app-password <nc-mcp-user>
   # Copy the output, then update NC_MCP_PASSWORD in .env and restart
   ```
+
+## Nextcloud image and PHP
+
+The `nextcloud` and `full` stacks run the stock `nextcloud:34-apache` image. It is a
+floating tag: upstream rebuilds it for Nextcloud point releases and for PHP security
+releases, but a server keeps running the image it pulled until you pull again.
+
+```bash
+cd /opt/aiquila
+docker compose pull nc
+docker compose up -d nc
+docker compose exec nc php -v
+```
+
+The Compose service is `nc`; `aiq-nc` is the container name, which `docker exec`
+accepts but `docker compose` does not. If you run extra compose files (`-f`) or
+profiles on top of the stack, pass the same flags — and leave out `--remove-orphans`,
+which removes every container the current command line does not define.
+
+### PHP settings
+
+The stack sets these on the `nc` service:
+
+| Setting | Value | Where |
+|---|---|---|
+| `memory_limit` | 512M | `PHP_MEMORY_LIMIT` env |
+| `upload_max_filesize`, `post_max_size` | 512M | `PHP_UPLOAD_LIMIT` env |
+| `expose_php` | Off | `php-hardening` config |
+| `max_input_nesting_level` | 32 (PHP default 64) | `php-hardening` config |
+| `max_input_vars` | 1000 | `php-hardening` config |
+| `display_errors` | Off | `php-hardening` config |
+
+The `php-hardening` config is defined inline at the bottom of `docker-compose.yml`
+and mounted as `conf.d/zz-aiquila-hardening.ini`, so it loads after the image's own
+`nextcloud.ini`. Inline `configs` need Docker Compose 2.23.1 or newer.
+
+`PHP_UPLOAD_LIMIT` is the only request-size cap: Traefik has none on the `nc` router
+(see [Traefik](traefik.md#routing--middlewares)). WebDAV `PUT` uploads stream to
+Nextcloud and are not bound by it; clients chunk large files anyway.
 
 ## Upgrading PostgreSQL to 18
 
