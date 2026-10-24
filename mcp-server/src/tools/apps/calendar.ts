@@ -109,11 +109,20 @@ function toICalDateTime(dateStr: string): string {
   return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 }
 
-// Restrict the edit to the first VEVENT. Properties like DTSTART and RRULE also
-// appear in VTIMEZONE sub-components (STANDARD/DAYLIGHT), which are emitted
-// before the event, so a whole-calendar replace would hit the timezone block.
+// Restrict the edit to the first VEVENT's own properties. Properties like
+// DTSTART and RRULE also appear in VTIMEZONE sub-components (STANDARD/DAYLIGHT),
+// which are emitted before the event, and DESCRIPTION/SUMMARY/ATTENDEE appear in
+// nested VALARMs. Nested components are swapped for placeholder lines while
+// `edit` runs, so only the event itself is touched.
 function editFirstVEvent(icalData: string, edit: (vevent: string) => string): string {
-  return icalData.replace(/BEGIN:VEVENT[\s\S]*?END:VEVENT/, edit);
+  return icalData.replace(/BEGIN:VEVENT[\s\S]*?END:VEVENT/, (vevent) => {
+    const nested: string[] = [];
+    const masked = vevent.replace(
+      /^BEGIN:(?!VEVENT\b)([A-Z-]+)\r?$[\s\S]*?^END:\1\r?$/gm,
+      (block) => `X-AIQUILA-NESTED:${nested.push(block) - 1}`
+    );
+    return edit(masked).replace(/^X-AIQUILA-NESTED:(\d+)$/gm, (_, i) => nested[Number(i)]);
+  });
 }
 
 function setICalProperty(icalData: string, propName: string, value: string | null): string {
@@ -1496,9 +1505,10 @@ export const updateEventTool = {
 
       // Handle attendees
       if (args.attendees !== undefined) {
-        // Remove existing ATTENDEE and ORGANIZER lines
-        modified = modified.replace(/^ATTENDEE[;:].*\r?\n?/gm, '');
-        modified = modified.replace(/^ORGANIZER[;:].*\r?\n?/gm, '');
+        // Remove the event's ATTENDEE and ORGANIZER lines (EMAIL VALARMs keep theirs)
+        modified = editFirstVEvent(modified, (vevent) =>
+          vevent.replace(/^(ATTENDEE|ORGANIZER)[;:].*\r?\n?/gm, '')
+        );
         if (args.attendees !== null && args.attendees.length > 0) {
           let attendeeLines = `ORGANIZER;CN=${config.user}:mailto:${config.user}`;
           for (const attendee of args.attendees) {

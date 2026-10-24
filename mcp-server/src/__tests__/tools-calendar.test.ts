@@ -935,6 +935,84 @@ END:VCALENDAR</c:calendar-data>
       expect(putBody).toContain('RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU');
       expect(putBody).toContain('RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU');
     });
+
+    describe('with a VALARM but no event DESCRIPTION', () => {
+      const responseWithAlarms = `<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/event-alarm.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"etag-alarm1"</d:getetag>
+      <c:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-alarm
+DTSTART:20240315T090000Z
+DTEND:20240315T100000Z
+ORGANIZER;CN=admin:mailto:admin
+ATTENDEE;CN=Alice:mailto:alice@example.com
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder
+TRIGGER:-PT15M
+END:VALARM
+BEGIN:VALARM
+ACTION:EMAIL
+SUMMARY:Alarm subject
+DESCRIPTION:Alarm body
+ATTENDEE:mailto:admin@example.com
+TRIGGER:-PT1H
+END:VALARM
+END:VEVENT
+END:VCALENDAR</c:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      async function updateAndGetBody(args: Record<string, unknown>): Promise<string> {
+        (global.fetch as ReturnType<typeof vi.fn>)
+          .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(responseWithAlarms) })
+          .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+
+        const { updateEventTool } = await import('../tools/apps/calendar.js');
+        const result = await updateEventTool.handler({
+          uid: 'event-alarm',
+          calendarName: 'personal',
+          ...args,
+        });
+        expect(result.content[0].text).toContain('updated successfully');
+        return (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body;
+      }
+
+      // The event's own properties: everything outside the VALARM blocks.
+      const eventOnly = (body: string) =>
+        body.replace(/BEGIN:VEVENT[\s\S]*?END:VEVENT/, (v) =>
+          v.replace(/BEGIN:VALARM[\s\S]*?END:VALARM\r?\n?/g, '')
+        );
+
+      it('adds DESCRIPTION/SUMMARY to the event and leaves the VALARMs alone', async () => {
+        const putBody = await updateAndGetBody({ description: 'Agenda', summary: 'Standup' });
+
+        expect(eventOnly(putBody)).toContain('DESCRIPTION:Agenda');
+        expect(eventOnly(putBody)).toContain('SUMMARY:Standup');
+        expect(putBody).toContain('DESCRIPTION:Reminder');
+        expect(putBody).toContain('SUMMARY:Alarm subject');
+        expect(putBody).toContain('DESCRIPTION:Alarm body');
+      });
+
+      it('does not strip the VALARM DESCRIPTION when clearing the description', async () => {
+        const putBody = await updateAndGetBody({ description: '' });
+
+        expect(putBody).toContain('DESCRIPTION:Reminder');
+        expect(putBody).toContain('DESCRIPTION:Alarm body');
+      });
+
+      it('keeps the EMAIL VALARM attendee when clearing event attendees', async () => {
+        const putBody = await updateAndGetBody({ attendees: null });
+
+        expect(eventOnly(putBody)).not.toMatch(/^(ATTENDEE|ORGANIZER)/m);
+        expect(putBody).toContain('ATTENDEE:mailto:admin@example.com');
+      });
+    });
   });
 
   describe('delete_event', () => {
