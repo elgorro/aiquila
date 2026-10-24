@@ -62,7 +62,7 @@ Nextcloud apps and administration:
 - **Recommendations** — The files Nextcloud suggests for the current user
 - **AIquila** — Configure and test the AI provider integration
 
-**Total: 342 tools across 44 categories**
+**Total: 345 tools across 44 categories**
 
 ## Tools Reference
 
@@ -450,21 +450,24 @@ Nextcloud apps and administration:
 | `add_project_path` | Add a file or directory path to an AIquila project | — |
 | `remove_project_path` | Remove a file or directory path from an AIquila project | — |
 
-#### Coworkers (12 tools)
+#### Coworkers (15 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `list_coworkers` | List the current user's coworkers (persistent scheduled AI tasks) with their status… | — |
-| `list_coworker_templates` | List built-in coworker templates (e.g | — |
-| `get_coworker` | Get a single coworker by ID, including its schedule and last run status | — |
-| `create_coworker` | Create a coworker | — |
-| `update_coworker` | Update a coworker's configuration (title, provider, input folder, schedule, options) | — |
-| `delete_coworker` | Delete a coworker and its run history | — |
-| `enable_coworker` | Enable a coworker so it runs on its schedule | — |
-| `disable_coworker` | Disable a coworker so it stops running on its schedule | — |
-| `pause_coworker` | Temporarily pause a coworker without disabling it | — |
-| `resume_coworker` | Resume a paused coworker | — |
-| `run_coworker` | Run a coworker immediately (synchronously) and return the run result | — |
-| `get_coworker_runs` | Get recent run history (progress, status, summary) for a coworker | — |
+| `list_coworkers` | List your coworkers with state, schedule and last run | [Coworkers](tools/apps/cowork.md#list_coworkers) |
+| `list_coworker_templates` | List built-in coworker templates and task types | [Coworkers](tools/apps/cowork.md#list_coworker_templates) |
+| `get_coworker` | Get one coworker, including its full options and prompt | [Coworkers](tools/apps/cowork.md#get_coworker) |
+| `create_coworker` | Create a coworker from a template or from scratch | [Coworkers](tools/apps/cowork.md#create_coworker) |
+| `update_coworker` | Update a coworker; option changes merge into the stored options | [Coworkers](tools/apps/cowork.md#update_coworker) |
+| `set_coworker_schedule` | Change when a coworker runs (5-field cron) | [Coworkers](tools/apps/cowork.md#set_coworker_schedule) |
+| `delete_coworker` | Delete a coworker and its run history | [Coworkers](tools/apps/cowork.md#delete_coworker) |
+| `enable_coworker` | Enable a coworker so it runs on its schedule | [Coworkers](tools/apps/cowork.md#enable_coworker-disable_coworker-pause_coworker-resume_coworker) |
+| `disable_coworker` | Disable a coworker so it stops running on its schedule | [Coworkers](tools/apps/cowork.md#enable_coworker-disable_coworker-pause_coworker-resume_coworker) |
+| `pause_coworker` | Temporarily pause a coworker without disabling it | [Coworkers](tools/apps/cowork.md#enable_coworker-disable_coworker-pause_coworker-resume_coworker) |
+| `resume_coworker` | Resume a paused coworker | [Coworkers](tools/apps/cowork.md#enable_coworker-disable_coworker-pause_coworker-resume_coworker) |
+| `run_coworker` | Run a coworker immediately and return the run result | [Coworkers](tools/apps/cowork.md#run_coworker) |
+| `stop_coworker` | Cancel the run that is in progress; the schedule is unchanged | [Coworkers](tools/apps/cowork.md#stop_coworker) |
+| `get_coworker_runs` | Get recent run history (progress, status, summary) | [Coworkers](tools/apps/cowork.md#get_coworker_runs) |
+| `get_coworker_run` | Get one run in full: summary, error and per-item log | [Coworkers](tools/apps/cowork.md#get_coworker_run) |
 
 #### Text (5 tools)
 | Tool | Description | Documentation |

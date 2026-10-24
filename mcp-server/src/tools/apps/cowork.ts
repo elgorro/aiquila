@@ -10,7 +10,8 @@ import type { ToolAnnotations } from '../types.js';
  * Steer persistent, scheduled AI tasks ("coworkers") that run server-side in the
  * AIquila Nextcloud app — e.g. image-classification jobs powered by Claude vision
  * or Mistral Pixtral. Lets the assistant create from templates, configure,
- * enable/disable/pause, trigger an immediate run, and inspect run progress.
+ * schedule, enable/disable/pause, run now or stop a run, and inspect run history
+ * and logs.
  */
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
@@ -28,6 +29,13 @@ interface Coworker {
   inputType: string;
   inputPath?: string | null;
   outputType: string;
+  outputPath?: string | null;
+  /** Task-specific options, e.g. maxTags, targetLanguage, effort, tools. */
+  options?: Record<string, unknown>;
+  customPrompt?: string | null;
+  promptId?: number | null;
+  /** App that registered the coworker through ICoworkManager; null for user-created. */
+  ownerApp?: string | null;
   isActive: boolean;
   paused: boolean;
   lastRunAt?: number | null;
@@ -39,6 +47,7 @@ interface Coworker {
 interface CoworkerRun {
   id: number;
   coworkerId: number;
+  /** running | pending | success | error | cancelled */
   status: string;
   itemsTotal: number;
   itemsProcessed: number;
@@ -46,6 +55,18 @@ interface CoworkerRun {
   error?: string | null;
   startedAt: number;
   finishedAt?: number | null;
+}
+
+interface CoworkerRunLogEntry {
+  ts: number;
+  level: string;
+  message: string;
+  item?: string | null;
+}
+
+/** A single run as returned by GET /coworkers/{id}/runs/{runId}. */
+interface CoworkerRunDetail extends CoworkerRun {
+  log?: CoworkerRunLogEntry[];
 }
 
 interface TemplatesResponse {
@@ -77,13 +98,51 @@ function fmtTime(epoch?: number | null): string {
 
 function formatCoworker(c: Coworker): string {
   const state = !c.isActive ? 'disabled' : c.paused ? 'paused' : 'active';
-  const lines = [
-    `- **${c.title}** (ID: ${c.id}) — ${state}`,
+  const opts = c.options ?? {};
+  const lines = [`- **${c.title}** (ID: ${c.id}) — ${state}`];
+  if (c.description) lines.push(`  ${c.description}`);
+  lines.push(
     `  task: ${c.taskType} | provider: ${c.provider ?? 'default'}${c.model ? ` (${c.model})` : ''} | input: ${c.inputPath ?? '/'}`,
-    `  schedule: ${c.cronSchedule} | next run: ${fmtTime(c.nextRunAt)} | last run: ${fmtTime(c.lastRunAt)}${c.lastStatus ? ` (${c.lastStatus})` : ''}`,
-  ];
+    `  output: ${c.outputType}${c.outputPath ? ` → ${c.outputPath}` : ''}`,
+    `  schedule: ${c.cronSchedule} | next run: ${fmtTime(c.nextRunAt)} | last run: ${fmtTime(c.lastRunAt)}${c.lastStatus ? ` (${c.lastStatus})` : ''}`
+  );
+  const tuning = [
+    typeof opts.effort === 'string' && opts.effort ? `effort: ${opts.effort}` : '',
+    typeof opts.thinking === 'string' && opts.thinking ? `thinking: ${opts.thinking}` : '',
+  ].filter(Boolean);
+  if (tuning.length > 0) lines.push(`  ${tuning.join(' | ')}`);
+  if (c.customPrompt) lines.push(`  prompt: ${c.customPrompt.split('\n')[0]}`);
+  else if (c.promptId) lines.push(`  prompt: saved prompt #${c.promptId}`);
+  if (Array.isArray(opts.tools)) {
+    lines.push(`  tools: ${opts.tools.length > 0 ? opts.tools.join(', ') : 'none'}`);
+  }
   if (c.lastError) lines.push(`  ⚠ last error: ${c.lastError}`);
   return lines.join('\n');
+}
+
+function formatRun(r: CoworkerRun): string {
+  const duration =
+    r.finishedAt && r.startedAt ? ` (${Math.max(0, r.finishedAt - r.startedAt)}s)` : '';
+  return `- #${r.id} ${r.status} — ${r.itemsProcessed}/${r.itemsTotal} — ${fmtTime(r.startedAt)}${duration}`;
+}
+
+/**
+ * Error for the coworker routes that newer AIquila app versions add (stop, single run).
+ * The app answers 404 both for an unknown coworker/run and for a route it does not have.
+ */
+function notFoundOr(action: string, error: unknown, notFound: string) {
+  if (error instanceof Error && (error as Error & { statusCode?: number }).statusCode === 404) {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `${notFound}, or the installed AIquila app does not support ${action} yet (update the app).`,
+        },
+      ],
+      isError: true,
+    };
+  }
+  return err(action, error);
 }
 
 // ── Tools ────────────────────────────────────────────────────────────────────
@@ -150,17 +209,129 @@ export const getCoworkerTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: 'Get a single coworker by ID, including its schedule and last run status.',
+  description:
+    'Get a single coworker by ID, including its schedule, last run status, full options and prompt.',
   inputSchema: z.object({ id: z.number().describe('Coworker ID') }),
   handler: async (args: { id: number }) => {
     try {
       const c = await fetchAiquilaAPI<Coworker>(`/coworkers/${args.id}`);
-      return text(formatCoworker(c));
+      const parts = [formatCoworker(c)];
+      if (c.options && Object.keys(c.options).length > 0) {
+        parts.push(`Options:\n${JSON.stringify(c.options, null, 2)}`);
+      }
+      if (c.customPrompt) parts.push(`Prompt:\n${c.customPrompt}`);
+      return text(parts.join('\n\n'));
     } catch (error) {
       return err('getting coworker', error);
     }
   },
 };
+
+/** Fields shared by create_coworker and update_coworker. */
+const coworkerFields = {
+  title: z.string().optional(),
+  description: z.string().optional().describe('Free-text description'),
+  provider: z
+    .string()
+    .optional()
+    .describe(
+      'Provider id: "anthropic", "mistral", "deepseek", "hetzner" or "local"; "" follows the owner setting'
+    ),
+  model: z.string().optional().describe("Model id to run with; omit to use the provider's default"),
+  inputPath: z.string().optional().describe('Folder to process, e.g. "/Photos"'),
+  outputType: z
+    .string()
+    .optional()
+    .describe('Where results go, e.g. "system_tags" (default) or "file"'),
+  outputPath: z.string().optional().describe('Output file or folder when outputType needs one'),
+  cronSchedule: z.string().optional().describe('5-field cron, e.g. "0 3 * * *"'),
+  maxTags: z.number().optional().describe('Max tags per image (vision:classify)'),
+  recursive: z.boolean().optional().describe('Include sub-folders'),
+  effort: z.string().optional().describe('Reasoning effort, e.g. "low"; "" uses the default'),
+  thinking: z
+    .enum(['auto', 'on', 'off'])
+    .optional()
+    .describe('Extended thinking for models that support it'),
+  options: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe(
+      'Task-specific options, e.g. {"targetLanguage":"de"} for docs:translate. Typed fields above take precedence'
+    ),
+  prompt: z
+    .string()
+    .optional()
+    .describe('Custom prompt the coworker runs (agent coworkers, needs a recent AIquila app)'),
+  promptId: z.number().optional().describe('Id of a saved prompt to run instead of `prompt`'),
+  tools: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Allowlist of MCP tool names an agent coworker may call on its unattended runs; [] allows none'
+    ),
+  isActive: z.boolean().optional().describe('Whether the coworker is enabled'),
+};
+
+interface CoworkerFieldArgs {
+  title?: string;
+  description?: string;
+  provider?: string;
+  model?: string;
+  inputPath?: string;
+  outputType?: string;
+  outputPath?: string;
+  cronSchedule?: string;
+  maxTags?: number;
+  recursive?: boolean;
+  effort?: string;
+  thinking?: 'auto' | 'on' | 'off';
+  options?: Record<string, unknown>;
+  prompt?: string;
+  promptId?: number;
+  tools?: string[];
+  isActive?: boolean;
+}
+
+/** Option changes requested by the typed fields and the generic `options` map. */
+function optionChanges(args: CoworkerFieldArgs): Record<string, unknown> {
+  const options: Record<string, unknown> = { ...(args.options ?? {}) };
+  if (args.maxTags !== undefined) options.maxTags = args.maxTags;
+  if (args.recursive !== undefined) options.recursive = args.recursive;
+  if (args.effort !== undefined) options.effort = args.effort;
+  if (args.thinking !== undefined) options.thinking = args.thinking;
+  if (args.tools !== undefined) options.tools = args.tools;
+  return options;
+}
+
+/** Map tool arguments to the snake_case body the AIquila API expects (options excluded). */
+function buildBody(args: CoworkerFieldArgs): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (args.title !== undefined) body.title = args.title;
+  if (args.description !== undefined) body.description = args.description;
+  if (args.provider !== undefined) body.provider = args.provider;
+  if (args.model !== undefined) body.model = args.model;
+  if (args.inputPath !== undefined) {
+    body.input_type = 'folder';
+    body.input_path = args.inputPath;
+  }
+  if (args.outputType !== undefined) body.output_type = args.outputType;
+  if (args.outputPath !== undefined) body.output_path = args.outputPath;
+  if (args.cronSchedule !== undefined) body.cron_schedule = args.cronSchedule;
+  if (args.prompt !== undefined) body.custom_prompt = args.prompt;
+  if (args.promptId !== undefined) body.prompt_id = args.promptId;
+  if (args.isActive !== undefined) body.is_active = args.isActive;
+  return body;
+}
+
+/** Older AIquila apps drop prompt fields silently; say so rather than report success. */
+function promptNotice(args: CoworkerFieldArgs, c: Coworker): string {
+  const ignored =
+    (args.prompt !== undefined && (c.customPrompt ?? '') !== args.prompt) ||
+    (args.promptId !== undefined && c.promptId !== args.promptId);
+  return ignored
+    ? '\n\n⚠ The Nextcloud app ignored the prompt; agent coworkers need a newer AIquila app.'
+    : '';
+}
 
 export const createCoworkerTool = {
   name: 'create_coworker',
@@ -178,56 +349,21 @@ export const createCoworkerTool = {
       .string()
       .optional()
       .describe('Built-in template id (see list_coworker_templates)'),
-    title: z.string().optional(),
     taskType: z.string().optional().describe('Task type id, e.g. "vision:classify"'),
-    provider: z
-      .string()
-      .optional()
-      .describe('Provider id: "anthropic", "mistral", "deepseek", "hetzner" or "local"'),
-    model: z
-      .string()
-      .optional()
-      .describe("Model id to run with; omit to use the provider's default"),
-    inputPath: z.string().optional().describe('Folder to process, e.g. "/Photos"'),
-    cronSchedule: z.string().optional().describe('5-field cron, e.g. "0 3 * * *"'),
-    maxTags: z.number().optional().describe('Max tags per image (vision:classify)'),
-    recursive: z.boolean().optional().describe('Include sub-folders'),
-    isActive: z.boolean().optional().describe('Whether the coworker is enabled'),
+    ...coworkerFields,
   }),
-  handler: async (args: {
-    templateId?: string;
-    title?: string;
-    taskType?: string;
-    provider?: string;
-    model?: string;
-    inputPath?: string;
-    cronSchedule?: string;
-    maxTags?: number;
-    recursive?: boolean;
-    isActive?: boolean;
-  }) => {
+  handler: async (args: CoworkerFieldArgs & { templateId?: string; taskType?: string }) => {
     try {
-      const body: Record<string, unknown> = {};
-      if (args.title !== undefined) body.title = args.title;
+      const body = buildBody(args);
       if (args.taskType !== undefined) body.task_type = args.taskType;
-      if (args.provider !== undefined) body.provider = args.provider;
-      if (args.model !== undefined) body.model = args.model;
-      if (args.inputPath !== undefined) {
-        body.input_type = 'folder';
-        body.input_path = args.inputPath;
-      }
-      if (args.cronSchedule !== undefined) body.cron_schedule = args.cronSchedule;
-      if (args.isActive !== undefined) body.is_active = args.isActive;
-      const options: Record<string, unknown> = {};
-      if (args.maxTags !== undefined) options.maxTags = args.maxTags;
-      if (args.recursive !== undefined) options.recursive = args.recursive;
+      const options = optionChanges(args);
       if (Object.keys(options).length > 0) body.options = options;
 
       const endpoint = args.templateId ? '/coworkers/templates' : '/coworkers';
       if (args.templateId) body.templateId = args.templateId;
 
       const c = await fetchAiquilaAPI<Coworker>(endpoint, { method: 'POST', body });
-      return text(`Coworker created:\n${formatCoworker(c)}`);
+      return text(`Coworker created:\n${formatCoworker(c)}${promptNotice(args, c)}`);
     } catch (error) {
       return err('creating coworker', error);
     }
@@ -244,49 +380,60 @@ export const updateCoworkerTool = {
     openWorldHint: false,
   },
   description:
-    "Update a coworker's configuration (title, provider, input folder, schedule, options).",
+    "Update a coworker's configuration (title, description, provider, input/output, schedule, prompt, tool allowlist, options). Only the given fields change; option changes are merged into the existing options.",
   inputSchema: z.object({
     id: z.number().describe('Coworker ID'),
-    title: z.string().optional(),
-    provider: z
-      .string()
-      .optional()
-      .describe('Provider id; "" unpins so the coworker follows the owner setting'),
-    model: z.string().optional().describe("Model id; omit to use the provider's default"),
-    inputPath: z.string().optional(),
-    cronSchedule: z.string().optional(),
-    maxTags: z.number().optional(),
-    recursive: z.boolean().optional(),
+    ...coworkerFields,
   }),
-  handler: async (args: {
-    id: number;
-    title?: string;
-    provider?: string;
-    model?: string;
-    inputPath?: string;
-    cronSchedule?: string;
-    maxTags?: number;
-    recursive?: boolean;
-  }) => {
+  handler: async (args: CoworkerFieldArgs & { id: number }) => {
     try {
-      const body: Record<string, unknown> = {};
-      if (args.title !== undefined) body.title = args.title;
-      if (args.provider !== undefined) body.provider = args.provider;
-      if (args.model !== undefined) body.model = args.model;
-      if (args.inputPath !== undefined) {
-        body.input_type = 'folder';
-        body.input_path = args.inputPath;
+      const body = buildBody(args);
+      const changes = optionChanges(args);
+      if (Object.keys(changes).length > 0) {
+        // The API replaces options wholesale, so merge onto the stored set.
+        const current = await fetchAiquilaAPI<Coworker>(`/coworkers/${args.id}`);
+        body.options = { ...(current.options ?? {}), ...changes };
       }
-      if (args.cronSchedule !== undefined) body.cron_schedule = args.cronSchedule;
-      const options: Record<string, unknown> = {};
-      if (args.maxTags !== undefined) options.maxTags = args.maxTags;
-      if (args.recursive !== undefined) options.recursive = args.recursive;
-      if (Object.keys(options).length > 0) body.options = options;
 
       const c = await fetchAiquilaAPI<Coworker>(`/coworkers/${args.id}`, { method: 'PUT', body });
-      return text(`Coworker updated:\n${formatCoworker(c)}`);
+      return text(`Coworker updated:\n${formatCoworker(c)}${promptNotice(args, c)}`);
     } catch (error) {
       return err('updating coworker', error);
+    }
+  },
+};
+
+export const setCoworkerScheduleTool = {
+  name: 'set_coworker_schedule',
+  title: 'Set Coworker Schedule',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    "Change when a coworker runs. Takes a 5-field cron expression in the server's time zone and returns the next run time.",
+  inputSchema: z.object({
+    id: z.number().describe('Coworker ID'),
+    cronSchedule: z
+      .string()
+      .describe('5-field cron: minute hour day-of-month month day-of-week, e.g. "30 6 * * 1-5"'),
+  }),
+  handler: async (args: { id: number; cronSchedule: string }) => {
+    try {
+      const c = await fetchAiquilaAPI<Coworker>(`/coworkers/${args.id}`, {
+        method: 'PUT',
+        body: { cron_schedule: args.cronSchedule },
+      });
+      return text(
+        `Schedule for "${c.title}" set to ${c.cronSchedule} — ` +
+          (c.nextRunAt
+            ? `next run: ${fmtTime(c.nextRunAt)}.`
+            : `no run scheduled while the coworker is ${c.isActive ? 'paused' : 'disabled'}.`)
+      );
+    } catch (error) {
+      return err('setting coworker schedule', error);
     }
   },
 };
@@ -403,7 +550,8 @@ export const getCoworkerRunsTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: 'Get recent run history (progress, status, summary) for a coworker.',
+  description:
+    'Get recent run history (progress, status, summary) for a coworker. Use get_coworker_run for the full summary and log of one run.',
   inputSchema: z.object({
     id: z.number().describe('Coworker ID'),
     limit: z.number().optional().describe('Max runs to return (default 20)'),
@@ -416,12 +564,80 @@ export const getCoworkerRunsTool = {
       if (runs.length === 0) return text('No runs yet for this coworker.');
       const lines = runs.map(
         (r) =>
-          `- #${r.id} ${r.status} — ${r.itemsProcessed}/${r.itemsTotal} — ${fmtTime(r.startedAt)}` +
+          formatRun(r) +
           (r.error ? ` — ⚠ ${r.error}` : r.summary ? ` — ${r.summary.split('\n')[0]}` : '')
       );
       return text(lines.join('\n'));
     } catch (error) {
       return err('getting coworker runs', error);
+    }
+  },
+};
+
+export const getCoworkerRunTool = {
+  name: 'get_coworker_run',
+  title: 'Get Coworker Run',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    'Get one coworker run in full: status, duration, complete summary, error and its per-item log.',
+  inputSchema: z.object({
+    id: z.number().describe('Coworker ID'),
+    runId: z.number().describe('Run ID (see get_coworker_runs)'),
+  }),
+  handler: async (args: { id: number; runId: number }) => {
+    try {
+      const r = await fetchAiquilaAPI<CoworkerRunDetail>(
+        `/coworkers/${args.id}/runs/${args.runId}`
+      );
+      const parts = [formatRun(r)];
+      if (r.summary) parts.push(`Summary:\n${r.summary}`);
+      if (r.error) parts.push(`⚠ Error:\n${r.error}`);
+      if (r.log && r.log.length > 0) {
+        const log = r.log.map(
+          (e) => `${fmtTime(e.ts)} [${e.level}]${e.item ? ` ${e.item}:` : ''} ${e.message}`
+        );
+        parts.push(`Log (${r.log.length} entries):\n${log.join('\n')}`);
+      } else {
+        parts.push('Log: no entries.');
+      }
+      return text(parts.join('\n\n'));
+    } catch (error) {
+      return notFoundOr('run detail', error, `Run ${args.runId} of coworker ${args.id} not found`);
+    }
+  },
+};
+
+export const stopCoworkerTool = {
+  name: 'stop_coworker',
+  title: 'Stop Coworker Run',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    "Stop a coworker's in-flight run (running or pending batch) and mark it cancelled. The schedule is untouched — use pause_coworker or disable_coworker to stop future runs.",
+  inputSchema: z.object({ id: z.number().describe('Coworker ID') }),
+  handler: async (args: { id: number }) => {
+    try {
+      const run = await fetchAiquilaAPI<CoworkerRun>(`/coworkers/${args.id}/stop`, {
+        method: 'POST',
+      });
+      return text(
+        `Run #${run.id} ${run.status} after ${run.itemsProcessed}/${run.itemsTotal} item(s).`
+      );
+    } catch (error) {
+      return notFoundOr(
+        'stopping runs',
+        error,
+        `Coworker ${args.id} not found or has no active run`
+      );
     }
   },
 };
@@ -432,11 +648,14 @@ export const coworkTools = [
   getCoworkerTool,
   createCoworkerTool,
   updateCoworkerTool,
+  setCoworkerScheduleTool,
   deleteCoworkerTool,
   enableCoworkerTool,
   disableCoworkerTool,
   pauseCoworkerTool,
   resumeCoworkerTool,
   runCoworkerTool,
+  stopCoworkerTool,
   getCoworkerRunsTool,
+  getCoworkerRunTool,
 ];
