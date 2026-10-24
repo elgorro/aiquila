@@ -229,6 +229,64 @@ class McpClientServiceTest extends TestCase {
         $this->assertSame('session-123', $this->headerValue($captured[2]['options'], 'Mcp-Session-Id'));
     }
 
+    /**
+     * Regression: Streamable HTTP servers may answer initialize with an SSE
+     * stream. The Mcp-Session-Id on that response must still be captured and
+     * sent on every subsequent request.
+     */
+    public function testSessionIdFromSseInitializeResponseIsReused(): void {
+        $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials);
+
+        $captured = [];
+        $responses = [
+            new MockResponse(
+                "event: message\ndata: " . json_encode([
+                    'jsonrpc' => '2.0',
+                    'id' => 1,
+                    'result' => ['protocolVersion' => '2025-03-26'],
+                ]) . "\n\n",
+                [
+                    'http_code' => 200,
+                    'response_headers' => [
+                        'content-type' => ['text/event-stream'],
+                        'mcp-session-id' => ['sse-session-456'],
+                    ],
+                ]
+            ),
+            new MockResponse('', ['http_code' => 202]),
+            new MockResponse(
+                "event: message\ndata: " . json_encode([
+                    'jsonrpc' => '2.0',
+                    'id' => 2,
+                    'result' => ['tools' => [['name' => 'list_files']]],
+                ]) . "\n\n",
+                [
+                    'http_code' => 200,
+                    'response_headers' => ['content-type' => ['text/event-stream']],
+                ]
+            ),
+        ];
+
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$captured, &$responses): MockResponse {
+            $captured[] = $options;
+            return array_shift($responses);
+        });
+
+        $ref = new \ReflectionProperty(McpClientService::class, 'httpClient');
+        $ref->setValue($service, $client);
+
+        $tools = $service->listTools($server);
+
+        $this->assertCount(1, $tools);
+        $this->assertCount(3, $captured);
+        $this->assertNull($this->headerValue($captured[0], 'Mcp-Session-Id'));
+        $this->assertSame('notifications/initialized', $this->requestBody($captured[1])['method']);
+        $this->assertSame('sse-session-456', $this->headerValue($captured[1], 'Mcp-Session-Id'));
+        $this->assertSame('tools/list', $this->requestBody($captured[2])['method']);
+        $this->assertSame('sse-session-456', $this->headerValue($captured[2], 'Mcp-Session-Id'));
+    }
+
     public function testTestConnectionSuccess(): void {
         $server = $this->makeServer();
 
