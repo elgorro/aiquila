@@ -5,13 +5,12 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\AudioLimits;
+use OCA\AIquila\Service\AudioService;
 use OCP\Files\File;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\ShapeDescriptor;
 use OCP\TaskProcessing\TaskTypes\AudioToText;
-use Psr\Log\LoggerInterface;
 
 /**
  * Transcription TaskProcessing Provider
@@ -26,7 +25,7 @@ class AudioToTextProvider implements ISynchronousProvider {
 
     public function __construct(
         private ProviderResolver $providers,
-        private LoggerInterface $logger,
+        private AudioService $audio,
     ) {
     }
 
@@ -97,26 +96,18 @@ class AudioToTextProvider implements ISynchronousProvider {
             throw new \RuntimeException('No audio file provided');
         }
 
-        AudioLimits::assertAcceptable((int)$file->getSize(), $file->getMimetype());
-
         $provider = $this->providers->resolveAudioCapable($userId, $this->providers->requestedId($input));
         $reportProgress(0.1);
 
         $language = $input['language'] ?? '';
-        $result = $provider->transcribeAudio(
-            $file->getContent(),
-            $file->getMimetype(),
-            AudioLimits::filenameFor($file->getName(), $file->getMimetype()),
+        $transcript = $this->audio->transcribe(
+            $provider,
+            $file,
             $userId,
             is_string($language) && $language !== '' ? ['language' => $language] : [],
         );
 
-        if (isset($result['error'])) {
-            $this->logger->error('AIquila AudioToText: Error', ['error' => $result['error'], 'provider' => $provider->getId()]);
-            throw new \RuntimeException($result['error']);
-        }
-
         $reportProgress(1.0);
-        return ['output' => $result['response'] ?? ''];
+        return ['output' => $transcript['text']];
     }
 }

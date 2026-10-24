@@ -1248,6 +1248,9 @@ class MistralProvider implements LLMProviderInterface {
      * The request is multipart rather than JSON: the audio travels as a file
      * part, and the endpoint reads the container format from the filename, so
      * the caller's name is passed through rather than a generic one.
+     *
+     * Mistral refuses `timestamp_granularities` alongside `language`, so a
+     * request for timestamps drops the language and lets Voxtral detect it.
      */
     public function transcribeAudio(string $audioData, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array {
         if ($audioData === '') {
@@ -1258,7 +1261,10 @@ class MistralProvider implements LLMProviderInterface {
             ['name' => 'file', 'contents' => $audioData, 'filename' => $filename],
         ];
         $language = $options['language'] ?? '';
-        if (is_string($language) && $language !== '') {
+        $timestamps = ($options['timestamps'] ?? false) === true;
+        if ($timestamps) {
+            $parts[] = ['name' => 'timestamp_granularities', 'contents' => 'segment'];
+        } elseif (is_string($language) && $language !== '') {
             $parts[] = ['name' => 'language', 'contents' => $language];
         }
 
@@ -1277,10 +1283,14 @@ class MistralProvider implements LLMProviderInterface {
                 return ['error' => 'Mistral returned no transcript.'];
             }
             $usage = $decoded['usage'] ?? null;
-            return [
+            $result = [
                 'response' => $decoded['text'],
                 'usage' => $this->extractUsage(is_array($usage) ? $usage : []),
             ];
+            if ($timestamps) {
+                $result['segments'] = TranscriptSegments::parse($decoded['segments'] ?? null);
+            }
+            return $result;
         } catch (\Throwable $e) {
             return $this->handleException($e, 'transcribeAudio');
         }

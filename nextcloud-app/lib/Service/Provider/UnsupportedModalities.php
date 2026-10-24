@@ -24,7 +24,7 @@ namespace OCA\AIquila\Service\Provider;
 trait UnsupportedModalities {
 
     /**
-     * @return array{response: string, usage?: array}|array{error: string}
+     * @return array{response: string, segments?: list<array{start: float, end: float, text: string}>, usage?: array}|array{error: string}
      */
     public function transcribeAudio(string $audioData, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array {
         return ['error' => $this->getLabel() . ' cannot transcribe audio.'];

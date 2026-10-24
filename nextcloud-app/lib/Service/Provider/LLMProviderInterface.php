@@ -195,8 +195,12 @@ interface LLMProviderInterface {
      * routinely sniff the container format from the extension rather than from
      * the declared MIME type.
      *
-     * @param array{language?: string} $options
-     * @return array{response: string, usage?: array}|array{error: string}
+     * With `timestamps` set, the transcript comes back cut into timed
+     * segments as well — what subtitles are built from. A provider whose
+     * backend has no timings leaves `segments` out rather than failing.
+     *
+     * @param array{language?: string, timestamps?: bool} $options
+     * @return array{response: string, segments?: list<array{start: float, end: float, text: string}>, usage?: array}|array{error: string}
      */
     public function transcribeAudio(string $audioData, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array;
 

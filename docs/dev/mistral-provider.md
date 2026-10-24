@@ -156,8 +156,8 @@ the chat model:
 
 | Setting | Default | Used for |
 |---|---|---|
-| `mistral_transcribe_model` | `voxtral-mini-latest` | `core:audio2text`, and the listening half of voice chat |
-| `mistral_tts_model` | `voxtral-mini-tts-2603` | `core:text2speech`, and the speaking half of voice chat |
+| `mistral_transcribe_model` | `voxtral-mini-latest` | `core:audio2text`, subtitles, and the listening half of voice chat and audio translation |
+| `mistral_tts_model` | `voxtral-mini-tts-2603` | `core:text2speech`, and the speaking half of voice chat and audio translation |
 | `mistral_tts_voice` | — | Preset voice id; blank lets Mistral choose |
 | `mistral_image_model` | `mistral-medium-latest` | The conversation model that drives image generation |
 
@@ -173,6 +173,10 @@ part's **filename** rather than from a declared MIME type — so
 one derived from its type before upload. `AudioLimits` also refuses an
 unsupported container or an oversized file before anything is read into memory,
 so the failure names the problem instead of arriving as a bare 4xx.
+
+Subtitles ask for `timestamp_granularities=segment` and read the timed
+`segments[]` back. Mistral refuses that parameter together with `language`, so a
+timestamped request leaves the language out and Voxtral detects it.
 
 ### Speech
 

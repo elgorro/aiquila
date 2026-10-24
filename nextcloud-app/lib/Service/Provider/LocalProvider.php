@@ -350,12 +350,21 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
         if (is_string($language) && $language !== '') {
             $parts[] = ['name' => 'language', 'contents' => $language];
         }
+        // The OpenAI shape: segment timings only come with verbose_json.
+        $timestamps = ($options['timestamps'] ?? false) === true;
+        if ($timestamps) {
+            $parts[] = ['name' => 'response_format', 'contents' => 'verbose_json'];
+            $parts[] = ['name' => 'timestamp_granularities[]', 'contents' => 'segment'];
+        }
 
         try {
             $response = $this->postMultipart('/audio/transcriptions', $parts, $userId);
             $decoded = json_decode((string)$response->getBody(), true);
             if (!is_array($decoded) || !isset($decoded['text']) || !is_string($decoded['text'])) {
                 return ['error' => $this->getLabel() . ' returned no transcript.'];
+            }
+            if ($timestamps) {
+                return ['response' => $decoded['text'], 'segments' => TranscriptSegments::parse($decoded['segments'] ?? null)];
             }
             return ['response' => $decoded['text']];
         } catch (\Throwable $e) {

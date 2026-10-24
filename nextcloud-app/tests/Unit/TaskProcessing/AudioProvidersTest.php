@@ -3,15 +3,21 @@
 namespace OCA\AIquila\Tests\Unit\TaskProcessing;
 
 use OCA\AIquila\Service\AudioLimits;
+use OCA\AIquila\Service\AudioService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 use OCA\AIquila\TaskProcessing\AudioToAudioChatProvider;
+use OCA\AIquila\TaskProcessing\AudioToAudioTranslateProvider;
 use OCA\AIquila\TaskProcessing\AudioToTextProvider;
 use OCA\AIquila\TaskProcessing\ProviderResolver;
+use OCA\AIquila\TaskProcessing\SubtitlesProvider;
 use OCA\AIquila\TaskProcessing\TextToImageProvider;
 use OCA\AIquila\TaskProcessing\TextToSpeechProvider;
+use OCA\AIquila\TaskProcessing\Translation;
 use OCP\Files\File;
+use OCP\IL10N;
+use OCP\L10N\IFactory;
 use OCP\TaskProcessing\TaskTypes\AudioToAudioChat;
 use OCP\TaskProcessing\TaskTypes\AudioToText;
 use OCP\TaskProcessing\TaskTypes\TextToImage;
@@ -62,11 +68,11 @@ class AudioProvidersTest extends TestCase {
     }
 
     private function audioToText(): AudioToTextProvider {
-        return new AudioToTextProvider($this->resolver, new NullLogger());
+        return new AudioToTextProvider($this->resolver, new AudioService(new NullLogger()));
     }
 
     private function textToSpeech(): TextToSpeechProvider {
-        return new TextToSpeechProvider($this->resolver, new NullLogger());
+        return new TextToSpeechProvider($this->resolver, new AudioService(new NullLogger()));
     }
 
     private function textToImage(): TextToImageProvider {
@@ -74,7 +80,30 @@ class AudioProvidersTest extends TestCase {
     }
 
     private function voiceChat(): AudioToAudioChatProvider {
-        return new AudioToAudioChatProvider($this->resolver, new NullLogger());
+        return new AudioToAudioChatProvider($this->resolver, new AudioService(new NullLogger()));
+    }
+
+    private function l10n(): IL10N {
+        $l10n = $this->createStub(IL10N::class);
+        $l10n->method('t')->willReturnArgument(0);
+        return $l10n;
+    }
+
+    private function subtitles(): SubtitlesProvider {
+        return new SubtitlesProvider($this->resolver, new AudioService(new NullLogger()), $this->l10n());
+    }
+
+    private function audioTranslate(): AudioToAudioTranslateProvider {
+        $l10nFactory = $this->createStub(IFactory::class);
+        $l10nFactory->method('getLanguages')->willReturn([
+            'commonLanguages' => [['code' => 'en', 'name' => 'English'], ['code' => 'de', 'name' => 'Deutsch']],
+            'otherLanguages' => [],
+        ]);
+        return new AudioToAudioTranslateProvider(
+            $this->resolver,
+            new AudioService(new NullLogger()),
+            new Translation($l10nFactory, $this->l10n()),
+        );
     }
 
     private static function noop(): callable {
@@ -99,6 +128,12 @@ class AudioProvidersTest extends TestCase {
         $this->assertSame('aiquila:audio2audio:chat', $this->voiceChat()->getId());
         $this->assertSame(AudioToAudioChat::ID, $this->voiceChat()->getTaskTypeId());
         $this->assertSame('core:audio2audio:chat', $this->voiceChat()->getTaskTypeId());
+
+        // Nextcloud 35+: spelled out, so compared against the literal ids.
+        $this->assertSame('aiquila:audio2text:subtitles', $this->subtitles()->getId());
+        $this->assertSame('core:audio2text:subtitles', $this->subtitles()->getTaskTypeId());
+        $this->assertSame('aiquila:audio2audio:translate', $this->audioTranslate()->getId());
+        $this->assertSame('core:audio2audio:translate', $this->audioTranslate()->getTaskTypeId());
     }
 
     public function testEveryModalityProviderOffersAProviderOverride(): void {
@@ -106,6 +141,8 @@ class AudioProvidersTest extends TestCase {
         $this->assertArrayHasKey('provider', $this->textToSpeech()->getOptionalInputShape());
         $this->assertArrayHasKey('provider', $this->textToImage()->getOptionalInputShape());
         $this->assertArrayHasKey('provider', $this->voiceChat()->getOptionalInputShape());
+        $this->assertArrayHasKey('provider', $this->subtitles()->getOptionalInputShape());
+        $this->assertArrayHasKey('provider', $this->audioTranslate()->getOptionalInputShape());
     }
 
     // ── Transcription ───────────────────────────────────────────────────────
@@ -336,5 +373,147 @@ class AudioProvidersTest extends TestCase {
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Local model cannot generate speech');
         $this->voiceChat()->process('alice', ['input' => $this->audioFile()], self::noop());
+    }
+
+    // ── Subtitles ───────────────────────────────────────────────────────────
+
+    public function testSubtitlesAskForTimestampsAndDefaultToSubRip(): void {
+        $provider = $this->provider(['audio_in' => true]);
+        $provider->expects($this->once())
+            ->method('transcribeAudio')
+            ->with(self::MP3, 'video/mp4', 'talk.mp4', 'alice', ['timestamps' => true])
+            ->willReturn(['response' => 'Hello there.', 'segments' => [
+                ['start' => 0.0, 'end' => 1.5, 'text' => ' Hello'],
+                ['start' => 1.5, 'end' => 2.25, 'text' => ' there.'],
+            ]]);
+        $this->serve($provider);
+
+        $result = $this->subtitles()->process('alice', ['input' => $this->audioFile('talk.mp4', 'video/mp4')], self::noop());
+
+        $this->assertSame(
+            "1\n00:00:00,000 --> 00:00:01,500\nHello\n\n2\n00:00:01,500 --> 00:00:02,250\nthere.\n",
+            $result['output'],
+        );
+    }
+
+    public function testSubtitlesCanBeWebVtt(): void {
+        $provider = $this->provider(['audio_in' => true]);
+        $provider->method('transcribeAudio')->willReturn(['response' => 'Hi', 'segments' => [
+            ['start' => 3.0, 'end' => 4.0, 'text' => 'Hi'],
+        ]]);
+        $this->serve($provider);
+
+        $result = $this->subtitles()->process('alice', ['input' => $this->audioFile(), 'format' => 'vtt'], self::noop());
+
+        $this->assertSame("WEBVTT\n\n00:00:03.000 --> 00:00:04.000\nHi\n", $result['output']);
+    }
+
+    public function testSubtitlesFormatDefaultsToAnOfferedValue(): void {
+        $subtitles = $this->subtitles();
+        $values = array_map(static fn ($v) => $v->getValue(), $subtitles->getOptionalInputShapeEnumValues()['format']);
+        $this->assertSame(['srt', 'vtt'], $values);
+        $this->assertSame('srt', $subtitles->getOptionalInputShapeDefaults()['format']);
+    }
+
+    public function testSubtitlesFailClearlyWhenTheBackendReturnsNoTimings(): void {
+        $provider = $this->provider(['audio_in' => true], 'local', 'Local model');
+        $provider->method('transcribeAudio')->willReturn(['response' => 'Hello', 'segments' => []]);
+        $this->factory->method('getProviderForUser')->willReturn($provider);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Local model returned no timestamps');
+        $this->subtitles()->process('alice', ['input' => $this->audioFile()], self::noop());
+    }
+
+    public function testSubtitlesRefuseAProviderThatCannotTranscribe(): void {
+        $provider = $this->provider([], 'anthropic', 'Anthropic');
+        $provider->expects($this->never())->method('transcribeAudio');
+        $this->factory->method('getProviderForUser')->willReturn($provider);
+        $this->factory->method('getProviderIdsForUser')->willReturn(['anthropic']);
+        $this->factory->method('getProviderById')->willReturnMap([['anthropic', $provider]]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Anthropic cannot transcribe audio');
+        $this->subtitles()->process('alice', ['input' => $this->audioFile()], self::noop());
+    }
+
+    // ── Audio translation ───────────────────────────────────────────────────
+
+    public function testAudioTranslationChainsTranscriptionTranslationAndSpeech(): void {
+        $provider = $this->provider(['audio_in' => true, 'audio_out' => true]);
+        $provider->expects($this->once())
+            ->method('transcribeAudio')
+            ->with(self::MP3, 'audio/mpeg', 'memo.mp3', 'alice', ['language' => 'en'])
+            ->willReturn(['response' => 'Good morning.']);
+        $provider->expects($this->once())
+            ->method('ask')
+            ->with($this->stringContains("from English to Deutsch. Return only the translated text, nothing else:\n\nGood morning."))
+            ->willReturn(['response' => 'Guten Morgen.']);
+        $provider->expects($this->once())
+            ->method('synthesizeSpeech')
+            ->with('Guten Morgen.', 'alice')
+            ->willReturn(['audio' => self::WAV_AUDIO, 'mimeType' => 'audio/mpeg']);
+        $this->serve($provider);
+
+        $result = $this->audioTranslate()->process(
+            'alice',
+            ['input' => $this->audioFile(), 'origin_language' => 'en', 'target_language' => 'de'],
+            self::noop(),
+        );
+
+        $this->assertSame(['audio_output' => self::WAV_AUDIO], $result);
+    }
+
+    public function testAudioTranslationDetectsTheOriginByDefault(): void {
+        $translate = $this->audioTranslate();
+        $this->assertSame('detect_language', $translate->getInputShapeDefaults()['origin_language']);
+
+        $provider = $this->provider(['audio_in' => true, 'audio_out' => true]);
+        $provider->expects($this->once())
+            ->method('transcribeAudio')
+            ->with($this->anything(), $this->anything(), $this->anything(), 'alice', [])
+            ->willReturn(['response' => 'Bonjour.']);
+        $provider->expects($this->once())
+            ->method('ask')
+            ->with($this->stringStartsWith('Translate the following text to Deutsch.'))
+            ->willReturn(['response' => 'Hallo.']);
+        $provider->method('synthesizeSpeech')->willReturn(['audio' => self::WAV_AUDIO, 'mimeType' => 'audio/mpeg']);
+        $this->serve($provider);
+
+        $translate->process(
+            'alice',
+            ['input' => $this->audioFile(), 'origin_language' => 'detect_language', 'target_language' => 'de'],
+            self::noop(),
+        );
+    }
+
+    public function testAudioTranslationStopsWhenNothingWasTranscribed(): void {
+        $provider = $this->provider(['audio_in' => true, 'audio_out' => true]);
+        $provider->method('transcribeAudio')->willReturn(['response' => '']);
+        $provider->expects($this->never())->method('ask');
+        $provider->expects($this->never())->method('synthesizeSpeech');
+        $this->serve($provider);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Nothing could be transcribed from this recording.');
+        $this->audioTranslate()->process('alice', ['input' => $this->audioFile(), 'target_language' => 'de'], self::noop());
+    }
+
+    public function testAudioTranslationRefusesAProviderThatCanOnlyTranscribe(): void {
+        $provider = $this->provider(['audio_in' => true], 'local', 'Local model');
+        $provider->expects($this->never())->method('transcribeAudio');
+        $this->factory->method('getProviderForUser')->willReturn($provider);
+        $this->factory->method('getProviderIdsForUser')->willReturn(['local']);
+        $this->factory->method('getProviderById')->willReturnMap([['local', $provider]]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Local model cannot generate speech');
+        $this->audioTranslate()->process('alice', ['input' => $this->audioFile(), 'target_language' => 'de'], self::noop());
+    }
+
+    public function testAudioTranslationNeedsATargetLanguage(): void {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('No target language provided');
+        $this->audioTranslate()->process('alice', ['input' => $this->audioFile()], self::noop());
     }
 }

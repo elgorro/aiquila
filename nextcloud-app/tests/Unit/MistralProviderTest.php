@@ -418,6 +418,36 @@ class MistralProviderTest extends TestCase {
         ], $options['multipart']);
     }
 
+    public function testTranscribeAudioWithTimestampsAsksForSegmentsInsteadOfTheLanguage(): void {
+        $options = null;
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$options): IResponse {
+                $options = $o;
+                return $this->jsonResponse([
+                    'text' => 'Hallo Welt',
+                    'segments' => [
+                        ['text' => 'Hallo', 'start' => 0.0, 'end' => 0.8, 'type' => 'transcription_segment'],
+                        ['text' => 'untimed', 'start' => null, 'end' => null, 'type' => 'transcription_segment'],
+                        ['text' => ' Welt', 'start' => 0.8, 'end' => 1.4, 'type' => 'transcription_segment'],
+                    ],
+                ]);
+            }
+        );
+
+        $result = $this->provider->transcribeAudio('raw-bytes', 'audio/mpeg', 'memo.mp3', 'u', ['language' => 'de', 'timestamps' => true]);
+
+        // Mistral refuses timestamp_granularities together with language.
+        $this->assertSame([
+            ['name' => 'model', 'contents' => MistralProvider::DEFAULT_TRANSCRIBE_MODEL],
+            ['name' => 'file', 'contents' => 'raw-bytes', 'filename' => 'memo.mp3'],
+            ['name' => 'timestamp_granularities', 'contents' => 'segment'],
+        ], $options['multipart']);
+        $this->assertSame([
+            ['start' => 0.0, 'end' => 0.8, 'text' => 'Hallo'],
+            ['start' => 0.8, 'end' => 1.4, 'text' => ' Welt'],
+        ], $result['segments']);
+    }
+
     public function testTranscribeAudioReportsAMissingTranscript(): void {
         $this->client->method('post')->willReturn($this->jsonResponse(['model' => 'voxtral-mini-latest']));
 

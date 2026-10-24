@@ -6,6 +6,13 @@
 
 # Nextcloud (HTTPS on port 443)
 https://localhost {
+	# Reject oversized bodies before they reach PHP. Keep in step with
+	# PHP_UPLOAD_LIMIT in installation/docker-compose.yml; browser uploads are
+	# chunked well below this.
+	request_body {
+		max_size 512MB
+	}
+
 	reverse_proxy nextcloud:80 {
 		header_up X-Real-IP {remote_host}
 		header_up X-Forwarded-For {remote_host}
@@ -18,7 +25,8 @@ https://localhost {
 	}
 }
 
-# MCP Server (HTTPS on port 3340)
+# MCP Server (HTTPS on port 3340). No body limit here: the MCP server is
+# Node, not PHP, and enforces its own MCP_MAX_FILE_SIZE for write_file.
 https://localhost:3340 {
 	reverse_proxy mcp-server:3339
 }

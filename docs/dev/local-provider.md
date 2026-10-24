@@ -80,14 +80,17 @@ admin flag rather than a guess:
 - **Images in** need `local_vision` set to **yes** and a multimodal model behind it.
 - **Transcription** needs `local_audio_in`. Speaches, LocalAI and whisper.cpp's
   server expose `/v1/audio/transcriptions`; plain Ollama and LM Studio do not.
+  Subtitles additionally need segment timings: they request
+  `response_format=verbose_json`, and a backend that answers without `segments`
+  gets a clear refusal rather than an empty file.
 - **Generated speech** needs `local_audio_out`, and a backend serving
   `/v1/audio/speech`.
 - **Generated images** are not offered locally at all: there is no route the
   OpenAI-compatible backends agree on, so `image_out` stays false and the
   Assistant's image-generation action never lands here.
 
-Voice chat needs both audio flags on, since one provider has to hold both halves
-of the chain. An action whose flag is off refuses with a message naming the
+Voice chat and audio translation need both audio flags on, since one provider
+has to hold both halves of the chain. An action whose flag is off refuses with a message naming the
 providers that do offer it. The audio calls reuse the same request options as
 chat, so the local-address allowance, the TLS settings and the auth mode all
 apply to them unchanged.

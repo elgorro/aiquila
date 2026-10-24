@@ -34,6 +34,10 @@ services:
       OVERWRITECLIURL: https://${NC_DOMAIN}
       # built-in metrics app — token for /metrics?token= endpoint
       NC_METRICS_TOKEN: ${NC_METRICS_TOKEN:-}
+      # PHP limits, written into nextcloud.ini by the upstream entrypoint.
+      # PHP_UPLOAD_LIMIT sets both upload_max_filesize and post_max_size.
+      PHP_MEMORY_LIMIT: 512M
+      PHP_UPLOAD_LIMIT: 512M
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.nc.rule=Host(`${NC_DOMAIN}`)"
@@ -50,6 +54,12 @@ services:
       - "traefik.http.middlewares.crowdsec.plugin.crowdsec-bouncer-traefik-plugin.crowdseclapihost=crowdsec:8080"
     volumes:
       - nc_data:/var/www/html
+    # No request-size middleware in Traefik: its buffering middleware also
+    # buffers responses, which would break the streamed (SSE) chat replies.
+    # PHP_UPLOAD_LIMIT above caps POST bodies instead.
+    configs:
+      - source: php-hardening
+        target: /usr/local/etc/php/conf.d/zz-aiquila-hardening.ini
     networks:
       - aiq-net
     deploy:
@@ -257,6 +267,19 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+# Inline so the stack stays a single compose file (needs Compose >= 2.23.1).
+# Mirrors docker/installation/php-hardening.ini; the zz- prefix sorts it after
+# the upstream nextcloud.ini.
+configs:
+  php-hardening:
+    content: |
+      expose_php = Off
+      max_input_nesting_level = 32
+      max_input_vars = 1000
+      display_errors = Off
+      display_startup_errors = Off
+      log_errors = On
 
 volumes:
   mcp_state:

@@ -5,14 +5,13 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
-use OCA\AIquila\Service\AudioLimits;
+use OCA\AIquila\Service\AudioService;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\Files\File;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\ShapeDescriptor;
 use OCP\TaskProcessing\TaskTypes\AudioToAudioChat;
-use Psr\Log\LoggerInterface;
 
 /**
  * Voice-chat TaskProcessing Provider
@@ -34,7 +33,7 @@ class AudioToAudioChatProvider implements ISynchronousProvider {
 
     public function __construct(
         private ProviderResolver $providers,
-        private LoggerInterface $logger,
+        private AudioService $audio,
     ) {
     }
 
@@ -98,25 +97,10 @@ class AudioToAudioChatProvider implements ISynchronousProvider {
             throw new \RuntimeException('No audio file provided');
         }
 
-        AudioLimits::assertAcceptable((int)$file->getSize(), $file->getMimetype());
-
         $provider = $this->providers->resolveVoiceChatCapable($userId, $this->providers->requestedId($input));
         $reportProgress(0.1);
 
-        $transcribed = $provider->transcribeAudio(
-            $file->getContent(),
-            $file->getMimetype(),
-            AudioLimits::filenameFor($file->getName(), $file->getMimetype()),
-            $userId,
-        );
-        if (isset($transcribed['error'])) {
-            $this->logger->error('AIquila AudioToAudioChat: transcription failed', ['error' => $transcribed['error'], 'provider' => $provider->getId()]);
-            throw new \RuntimeException($transcribed['error']);
-        }
-        $question = $transcribed['response'] ?? '';
-        if (trim($question) === '') {
-            throw new \RuntimeException('Nothing could be transcribed from this recording.');
-        }
+        $question = $this->audio->transcribeRequired($provider, $file, $userId);
         $reportProgress(0.4);
 
         $system = $input['system_prompt'] ?? '';
@@ -138,16 +122,12 @@ class AudioToAudioChatProvider implements ISynchronousProvider {
         }
         $reportProgress(0.7);
 
-        $spoken = $provider->synthesizeSpeech($answer, $userId);
-        if (isset($spoken['error'])) {
-            $this->logger->error('AIquila AudioToAudioChat: speech synthesis failed', ['error' => $spoken['error'], 'provider' => $provider->getId()]);
-            throw new \RuntimeException($spoken['error']);
-        }
+        $spoken = $this->audio->speak($provider, $answer, $userId);
 
         $reportProgress(1.0);
         return [
             'input_transcript' => $question,
-            'output' => $spoken['audio'] ?? '',
+            'output' => $spoken,
             'output_transcript' => $answer,
         ];
     }

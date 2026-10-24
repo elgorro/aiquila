@@ -95,19 +95,19 @@ The Traefik bouncer plugin uses this key to authenticate against the CrowdSec LA
 
 ```bash
 # List active decisions (bans)
-docker compose exec aiq-crowdsec cscli decisions list
+docker compose exec crowdsec cscli decisions list
 
 # Unban an IP
-docker compose exec aiq-crowdsec cscli decisions delete --ip 1.2.3.4
+docker compose exec crowdsec cscli decisions delete --ip 1.2.3.4
 
 # View alerts
-docker compose exec aiq-crowdsec cscli alerts list
+docker compose exec crowdsec cscli alerts list
 
 # List installed collections
-docker compose exec aiq-crowdsec cscli collections list
+docker compose exec crowdsec cscli collections list
 
 # Check bouncer status
-docker compose exec aiq-crowdsec cscli bouncers list
+docker compose exec crowdsec cscli bouncers list
 ```
 
 ---

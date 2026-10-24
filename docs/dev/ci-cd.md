@@ -8,6 +8,7 @@ AIquila uses GitHub Actions for continuous integration and deployment.
 |----------|---------|---------|
 | `test.yml` | PR to main | Run tests, per component |
 | `lint.yml` | PR to main | ESLint + Prettier on the MCP server |
+| `php-images.yml` | Weekly, manual, PRs touching `docker/**` / `hetzner/docker/**` | Flag images that ship an outdated PHP |
 | `claude-code-review.yml` | PR to main | Automatic code review (internal PRs and bots) |
 | `manual-code-review.yml` | Manual dispatch | Maintainer-triggered review, for fork PRs |
 | `claude.yml` | `@claude` mention | Respond to a mention on an issue or PR |
@@ -68,6 +69,28 @@ cd mcp-server
 npm run lint:fix
 npm run format
 ```
+
+## PHP Images Workflow (`php-images.yml`)
+
+Checks that every PHP-based image the stacks use ships the latest PHP release of its
+branch: the `FROM` of `docker/installation/Dockerfile`, Adminer in the installation
+compose file, and `nextcloud` in the Hetzner `nextcloud` / `full` stacks. The refs are
+read from those files, so the check follows the pins. For each one,
+`docker/scripts/check-php-images.sh` reads `PHP_VERSION` from the image config on
+Docker Hub and compares it with php.net's latest release for that branch.
+
+It runs weekly, on demand, and on PRs that touch `docker/**` or `hetzner/docker/**`.
+It is **not** a required check, which is why its trigger may carry a `paths:` filter;
+keep it out of branch protection, or an upstream lag would block every PR.
+
+**When it goes red:** a floating tag (`nextcloud:34-apache`) usually catches up within
+a day of a PHP release — re-run it then. A pinned tag (`adminer:<version>`) needs a
+bump to a release built on the fixed PHP. Run it locally with
+`docker/scripts/check-php-images.sh`, or pass `image:tag` arguments to check other
+images.
+
+Dependabot does not cover this: it compares tags, and a floating tag that is rebuilt
+in place never changes.
 
 ## Dependency Updates (`.github/dependabot.yml`)
 
