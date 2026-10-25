@@ -108,7 +108,7 @@ class DoctorCommand extends Base {
 
         $output->writeln('<comment>4. Text editor</comment>');
         $text = $this->textCheck->run();
-        $output->writeln(($text->getSeverity() === 'success' ? '  <info>✓</info> ' : '  <comment>!</comment> ') . $text->getDescription());
+        $output->writeln((in_array($text->getSeverity(), ['success', 'info'], true) ? '  <info>✓</info> ' : '  <comment>!</comment> ') . $text->getDescription());
         $output->writeln('');
 
         $output->writeln('<comment>5. Anthropic API key</comment>');

@@ -13,8 +13,9 @@ use OCP\TaskProcessing\IManager;
 
 /**
  * Text shows its "Nextcloud Assistant" menu as soon as one of these task types is
- * available — which AIquila makes true — but every entry hands off to the Assistant
- * app's frontend. Without Assistant the menu is there and does nothing when clicked.
+ * available — which AIquila makes true — and every entry hands off to the Assistant
+ * app's frontend. Without Assistant, AIquila supplies a fallback for that frontend
+ * (LoadTextAssistantListener); this check reports which of the two serves the menu.
  */
 class TextAssistantAvailable implements ISetupCheck {
     /** Task types that make Text show its Assistant menu (Text's InitialStateProvider). */
@@ -58,8 +59,8 @@ class TextAssistantAvailable implements ISetupCheck {
             return SetupResult::success($this->l10n->t('No task type that Text offers in its Assistant menu is available.'));
         }
 
-        return SetupResult::warning(
-            $this->l10n->t('The Text editor shows a "Nextcloud Assistant" menu backed by AIquila, but its actions need the Assistant app, which is not enabled. Install and enable the Assistant app so the menu works.')
+        return SetupResult::info(
+            $this->l10n->t('The Assistant app is not enabled, so AIquila provides the AI actions in the Text editor itself. Install the Assistant app for its full task history and notifications.')
         );
     }
 }
