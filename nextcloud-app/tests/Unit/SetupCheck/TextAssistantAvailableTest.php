@@ -51,19 +51,19 @@ class TextAssistantAvailableTest extends TestCase {
         $this->assertSame('success', $this->check->run()->getSeverity());
     }
 
-    public function testWarningWhenTextMenuShownWithoutAssistant(): void {
+    public function testInfoWhenAIquilaServesTheMenu(): void {
         $this->enabledApps(['text' => true]);
         $this->taskManager->method('getAvailableTaskTypes')
             ->willReturn(['core:text2text:summary' => []]);
         $result = $this->check->run();
-        $this->assertSame('warning', $result->getSeverity());
-        $this->assertStringContainsString('Assistant app', $result->getDescription());
+        $this->assertSame('info', $result->getSeverity());
+        $this->assertStringContainsString('AIquila provides', $result->getDescription());
     }
 
     public function testTranslateAloneShowsTheMenu(): void {
         $this->enabledApps(['text' => true]);
         $this->taskManager->method('getAvailableTaskTypes')
             ->willReturn(['core:text2text:translate' => []]);
-        $this->assertSame('warning', $this->check->run()->getSeverity());
+        $this->assertSame('info', $this->check->run()->getSeverity());
     }
 }

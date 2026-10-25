@@ -7,7 +7,8 @@ import pkg from './package.json' with { type: 'json' }
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 /**
- * The "Ask Claude" file action, loaded on every Files page view.
+ * The "Ask Claude" file action, loaded on every Files page view, and the
+ * Text editor's Assistant fallback, loaded wherever Text can open.
  *
  * Built separately from vite.config.js so it shares no chunks with the app
  * bundle: there the bundler would link it to vendor-nextcloud-vue, and every
@@ -16,8 +17,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
  * l10n; the modal and its dependencies load on first click.
  *
  * Runs after the main build and writes next to it without emptying js/dist.
- * The entry is not in the main manifest, so ViteAssets falls back to
- * js/dist/aiquila-files.js, and it has no static stylesheet to link.
+ * The entries are not in the main manifest, so ViteAssets falls back to
+ * js/dist/<entry>.js, and they have no static stylesheet to link.
  */
 export default defineConfig({
 	plugins: [vue()],
@@ -33,6 +34,7 @@ export default defineConfig({
 		rollupOptions: {
 			input: {
 				'aiquila-files': path.resolve(__dirname, 'src/fileactions.js'),
+				'aiquila-text': path.resolve(__dirname, 'src/textassistant.js'),
 			},
 			output: {
 				format: 'es',
