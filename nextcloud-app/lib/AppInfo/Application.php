@@ -87,6 +87,7 @@ class Application extends App implements IBootstrap {
         $context->registerSetupCheck(\OCA\AIquila\SetupCheck\AnthropicApiReachable::class);
         $context->registerSetupCheck(\OCA\AIquila\SetupCheck\PhpExtensions::class);
         $context->registerSetupCheck(\OCA\AIquila\SetupCheck\StreamingNotBuffered::class);
+        $context->registerSetupCheck(\OCA\AIquila\SetupCheck\TextAssistantAvailable::class);
 
         // Register Unified Search provider for AIquila chat conversations
         $context->registerSearchProvider(\OCA\AIquila\Search\AiquilaSearchProvider::class);

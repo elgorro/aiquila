@@ -7,6 +7,7 @@ namespace OCA\AIquila\Command;
 
 use OC\Core\Command\Base;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\SetupCheck\TextAssistantAvailable;
 use OCP\App\IAppManager;
 use OCP\TaskProcessing\IManager;
 use Symfony\Component\Console\Input\InputInterface;
@@ -21,6 +22,7 @@ class DoctorCommand extends Base {
         private IManager $taskManager,
         private IAppManager $appManager,
         private CredentialService $credentials,
+        private TextAssistantAvailable $textCheck,
     ) {
         parent::__construct();
     }
@@ -44,10 +46,10 @@ class DoctorCommand extends Base {
             $output->writeln('  <error>✗</error> aiquila not enabled (run: occ app:enable aiquila)');
             $ok = false;
         }
-        $assistantInstalled = $this->appManager->isInstalled('assistant');
+        $assistantInstalled = $this->appManager->isEnabledForAnyone('assistant');
         $output->writeln($assistantInstalled
-            ? '  <info>✓</info> nextcloud/assistant installed'
-            : '  <comment>·</comment> nextcloud/assistant not installed (optional — AIquila still exposes task types to other consumers)');
+            ? '  <info>✓</info> nextcloud/assistant enabled'
+            : '  <comment>·</comment> nextcloud/assistant not enabled (optional — AIquila still exposes task types to other consumers)');
         $output->writeln('');
 
         $output->writeln('<comment>2. TaskProcessing providers registered</comment>');
@@ -104,7 +106,12 @@ class DoctorCommand extends Base {
         }
         $output->writeln('');
 
-        $output->writeln('<comment>4. Anthropic API key</comment>');
+        $output->writeln('<comment>4. Text editor</comment>');
+        $text = $this->textCheck->run();
+        $output->writeln(($text->getSeverity() === 'success' ? '  <info>✓</info> ' : '  <comment>!</comment> ') . $text->getDescription());
+        $output->writeln('');
+
+        $output->writeln('<comment>5. Anthropic API key</comment>');
         if ($this->credentials->hasApiKey(null)) {
             $output->writeln('  <info>✓</info> API key configured');
         } else {
