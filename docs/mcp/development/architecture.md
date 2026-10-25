@@ -370,6 +370,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 4. **Network Errors** - Connection failures
 5. **Validation Errors** - Invalid parameters (caught by Zod)
 
+### HTTP API Errors
+
+The HTTP clients in `mcp-server/src/client/` throw `ApiError` on a non-2xx response.
+It keeps the status code, status text and raw body (`responseBody`). Tools can map a
+status to a friendly message through `handleAppError`.
+
+Requests to the AIquila app's own REST API (`fetchAiquilaAPI`) add the app's reason to
+the message: `AIquila API error: 400 Bad Request: Invalid cron schedule: nope`. The app
+returns every error as `{"error": "...", "errorId": "..."}`. Its `error` text is
+written by the app, so it is safe to show. When `errorId` is set, it is appended as
+`(error ID …)` so an admin can find the matching entry in the Nextcloud log. The
+client reads only that shape. HTML pages, empty bodies and any other JSON are left out
+of the message, so raw bodies and stack traces never reach the model.
+
 ## Communication Flow
 
 ### 1. MCP Client → MCP Server

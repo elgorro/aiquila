@@ -10,14 +10,54 @@ export class ApiError extends Error {
   public readonly statusCode: number;
   public readonly statusText: string;
   public readonly responseBody: string;
+  public readonly detail: string | undefined;
 
-  constructor(statusCode: number, statusText: string, responseBody: string) {
-    super(`AIquila API error: ${statusCode} ${statusText}`);
+  /**
+   * @param detail Optional reason safe to show the caller, appended to the message.
+   *               Never pass a raw response body here — see {@link aiquilaErrorDetail}.
+   */
+  constructor(statusCode: number, statusText: string, responseBody: string, detail?: string) {
+    super(`AIquila API error: ${statusCode} ${statusText}${detail ? `: ${detail}` : ''}`);
     this.name = 'ApiError';
     this.statusCode = statusCode;
     this.statusText = statusText;
     this.responseBody = responseBody;
+    this.detail = detail;
   }
+}
+
+/** Upper bound on the reason appended to an error message. */
+const MAX_ERROR_DETAIL_LENGTH = 300;
+
+/**
+ * Extract the user-facing reason from an AIquila error response body.
+ *
+ * The app's controllers answer every error with `{"error": "...", "errorId": "..."}`,
+ * where `error` is a fixed message written by the app (never an exception message or
+ * a path) and `errorId` correlates with the Nextcloud log. Only that shape is read;
+ * anything else — an HTML error page, a proxy's body, an empty body — yields undefined,
+ * so raw bodies never reach the message.
+ */
+export function aiquilaErrorDetail(body: string): string | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const { error, errorId } = parsed as { error?: unknown; errorId?: unknown };
+  if (typeof error !== 'string') return undefined;
+
+  let detail = error.replace(/\s+/g, ' ').trim();
+  if (detail === '') return undefined;
+  if (detail.length > MAX_ERROR_DETAIL_LENGTH) {
+    detail = `${detail.slice(0, MAX_ERROR_DETAIL_LENGTH - 1)}…`;
+  }
+  if (typeof errorId === 'string' && /^[0-9a-f]{1,32}$/i.test(errorId)) {
+    detail += ` (error ID ${errorId})`;
+  }
+  return detail;
 }
 
 /**
@@ -33,7 +73,7 @@ export function formatOccError(error: unknown): string {
       case 404:
         return 'OCC endpoint not found. Ensure the AIquila app is installed and enabled.';
       default:
-        return `Request failed (HTTP ${error.statusCode} ${error.statusText}).`;
+        return `Request failed (HTTP ${error.statusCode} ${error.statusText})${error.detail ? `: ${error.detail}` : '.'}`;
     }
   }
   return error instanceof Error ? error.message : String(error);
@@ -98,7 +138,7 @@ export async function fetchAiquilaAPI<T = unknown>(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiError(response.status, response.statusText, text);
+    throw new ApiError(response.status, response.statusText, text, aiquilaErrorDetail(text));
   }
 
   return (await response.json()) as T;
