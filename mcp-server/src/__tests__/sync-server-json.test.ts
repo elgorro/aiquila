@@ -53,4 +53,10 @@ describe('sync-server-json', () => {
       '1.2.3'
     );
   });
+
+  // The MCP Registry rejects a publish (422) when the description exceeds 100 chars.
+  it('keeps the checked-in server.json description within the registry limit', () => {
+    const serverJson = JSON.parse(readFileSync(resolve(__dirname, '../../server.json'), 'utf8'));
+    expect(serverJson.description.length).toBeLessThanOrEqual(100);
+  });
 });
