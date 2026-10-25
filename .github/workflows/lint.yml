@@ -63,6 +63,12 @@ jobs:
         if: steps.filter.outputs.changed == 'true'
         run: npm run lint
 
+      # `npm run build` emits with --noCheck and vitest transpiles without
+      # checking, so this is the only place type errors surface.
+      - name: Type check
+        if: steps.filter.outputs.changed == 'true'
+        run: npm run typecheck
+
       - name: Check Prettier formatting
         if: steps.filter.outputs.changed == 'true'
         run: npx prettier --check src/

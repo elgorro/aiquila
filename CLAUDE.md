@@ -17,11 +17,12 @@ npm run build      # compile TypeScript → dist/
 npm run dev        # hot reload via tsx (stdio transport by default)
 npm test           # vitest unit tests
 npm run lint       # eslint (warnings ok, errors fail CI)
+npm run typecheck  # tsc --noEmit (build skips type checking; CI runs this)
 npm run format     # prettier --write src/  (auto-fix formatting)
 npx prettier --check src/   # check only — run before committing
 ```
 
-**CI requires both `npm run lint` and `npx prettier --check src/` to pass.**
+**CI requires `npm run lint`, `npm run typecheck` and `npx prettier --check src/` to pass.**
 Always run `npm run format` after editing TypeScript files.
 
 HTTP transport locally:

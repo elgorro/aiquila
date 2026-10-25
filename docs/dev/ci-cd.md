@@ -7,7 +7,7 @@ AIquila uses GitHub Actions for continuous integration and deployment.
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `test.yml` | PR to main | Run tests, per component |
-| `lint.yml` | PR to main | ESLint + Prettier on the MCP server |
+| `lint.yml` | PR to main | ESLint, type check and Prettier on the MCP server |
 | `php-images.yml` | Weekly, manual, PRs touching `docker/**` / `hetzner/docker/**` | Flag images that ship an outdated PHP |
 | `claude-code-review.yml` | PR to main | Automatic code review (internal PRs and bots) |
 | `manual-code-review.yml` | Manual dispatch | Maintainer-triggered review, for fork PRs |
@@ -61,6 +61,8 @@ only when a non-Markdown file under `mcp-server/` outside `tests/` changed.
 
 **Checks:**
 - ESLint for TypeScript errors (warnings are allowed, errors fail)
+- `tsc --noEmit` type check (`npm run typecheck`) — the only type check in CI, since
+  `npm run build` emits with `--noCheck` and vitest transpiles without checking
 - Prettier for formatting consistency
 
 **Fix locally before pushing:**
@@ -399,6 +401,7 @@ composer test
 cd mcp-server
 npm run lint       # Check for errors
 npm run lint:fix   # Auto-fix errors
+npm run typecheck  # Type check (tsc --noEmit)
 npm run format     # Format with Prettier
 ```
 
@@ -407,7 +410,7 @@ npm run format     # Format with Prettier
 Before pushing:
 1. `npm run lint` passes
 2. `npm test` passes
-3. `npx tsc --noEmit` passes (no type errors)
+3. `npm run typecheck` passes (no type errors)
 
 ## Troubleshooting
 
