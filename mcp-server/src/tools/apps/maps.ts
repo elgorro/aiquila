@@ -1660,7 +1660,7 @@ export const updateMapTool = {
   inputSchema: z.object({
     id: z.number().describe('Map ID'),
     values: z
-      .record(z.unknown())
+      .record(z.string(), z.unknown())
       .describe("Key-value pairs to update (e.g. { newName: 'My Trip' })"),
   }),
   handler: async (args: { id: number; values: Record<string, unknown> }) => {
