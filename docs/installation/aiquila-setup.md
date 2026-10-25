@@ -333,6 +333,22 @@ wherever the server offers an AI action — the Assistant, the Files and Photos 
 menus, Text, Talk and anything else built on the same API. No extra configuration is
 needed.
 
+#### In the Text editor
+
+The Text editor shows a **Nextcloud Assistant** menu (free prompt, summarize, headline,
+topics, formalize, simplify, reformulate, translate) as soon as AIquila serves the
+matching task types. Select some text, pick an action, and the result can be inserted
+in place of the selection or copied.
+
+Text only provides the menu; each entry opens a dialog that normally comes from the
+**Assistant** app. When Assistant is installed, its dialog is used. When it is not,
+AIquila supplies its own: the same actions, run through the same task queue, with the
+editor's **Insert** buttons. Closing the dialog does not cancel a running action — the
+result is listed under **Show assistant results** in the editor's menu. Assistant adds
+a fuller task history and notifications on top. The admin overview
+(**Settings → Administration → Overview**) and `occ aiquila:doctor` show which of the
+two serves the editor.
+
 | Task type | What it does |
 |---|---|
 | `core:text2text` | Free-form prompt |

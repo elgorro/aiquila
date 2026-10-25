@@ -87,6 +87,7 @@ class Application extends App implements IBootstrap {
         $context->registerSetupCheck(\OCA\AIquila\SetupCheck\AnthropicApiReachable::class);
         $context->registerSetupCheck(\OCA\AIquila\SetupCheck\PhpExtensions::class);
         $context->registerSetupCheck(\OCA\AIquila\SetupCheck\StreamingNotBuffered::class);
+        $context->registerSetupCheck(\OCA\AIquila\SetupCheck\TextAssistantAvailable::class);
 
         // Register Unified Search provider for AIquila chat conversations
         $context->registerSearchProvider(\OCA\AIquila\Search\AiquilaSearchProvider::class);
@@ -103,6 +104,11 @@ class Application extends App implements IBootstrap {
             \OCA\AIquila\Listener\LoadFilesScriptsListener::EVENT,
             \OCA\AIquila\Listener\LoadFilesScriptsListener::class
         );
+
+        // AI actions in the Text editor for users without the Assistant app.
+        foreach (\OCA\AIquila\Listener\LoadTextAssistantListener::EVENTS as $event) {
+            $context->registerEventListener($event, \OCA\AIquila\Listener\LoadTextAssistantListener::class);
+        }
     }
 
     public function boot(IBootContext $context): void {

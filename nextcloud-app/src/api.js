@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import axios from '@nextcloud/axios'
-import { generateUrl } from '@nextcloud/router'
+import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 import { getRequestToken } from '@nextcloud/auth'
 
 const base = '/apps/aiquila'
@@ -246,4 +246,24 @@ export function listCoworkerTemplates() {
 
 export function createCoworkerFromTemplate(templateId, overrides = {}) {
 	return axios.post(url('/api/coworkers/templates'), { templateId, ...overrides })
+}
+
+/** Nextcloud TaskProcessing task types the current user can run. */
+export function listTaskTypes() {
+	return axios.get(generateOcsUrl('taskprocessing/tasktypes'))
+}
+
+/**
+ * Schedule a TaskProcessing task. `appId` and `customId` are the caller's, so
+ * the task shows up in that app's own task list.
+ *
+ * @param {{type: string, input: object, appId: string, customId?: string}} task
+ */
+export function scheduleTask(task) {
+	return axios.post(generateOcsUrl('taskprocessing/schedule'), task)
+}
+
+/** @param {number} id TaskProcessing task id */
+export function getTask(id) {
+	return axios.get(generateOcsUrl('taskprocessing/task/{id}', { id }))
 }
