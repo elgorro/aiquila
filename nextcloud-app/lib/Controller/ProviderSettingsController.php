@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\Controller;
 
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\Provider\Cloud\AbstractCloudClaudeProvider;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LocalProvider;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
@@ -379,11 +380,25 @@ class ProviderSettingsController extends Controller {
         ]);
 
         $service = $this->providerFactory->getProviderById($providerId);
+
+        // A cloud provider authenticating with access keys, a role, a service
+        // account or a pasted token keeps nothing in the API key slot, so the
+        // test runs on the saved configuration instead.
+        if ($service instanceof AbstractCloudClaudeProvider && $service->authMode() !== AbstractCloudClaudeProvider::AUTH_API_KEY) {
+            if (!$service->isConfigured(null)) {
+                return $this->clientError(
+                    Http::STATUS_BAD_REQUEST,
+                    'Save the endpoint and credential settings before testing',
+                );
+            }
+            $api_key = '';
+        }
+        $usesKey = !($service instanceof AbstractCloudClaudeProvider) || $service->authMode() === AbstractCloudClaudeProvider::AUTH_API_KEY;
         $testKey = $api_key !== '' ? $api_key : $this->credentials->getApiKey(null, $providerId);
 
         // Local endpoints (Ollama, llama-server without --api-key) authenticate
         // with nothing at all, so a missing key is only fatal elsewhere.
-        if ($testKey === '' && !($service instanceof LocalProvider)) {
+        if ($usesKey && $testKey === '' && !($service instanceof LocalProvider)) {
             return $this->clientError(Http::STATUS_BAD_REQUEST, 'No API key provided');
         }
         if ($testKey === '' && !$service->isConfigured(null)) {

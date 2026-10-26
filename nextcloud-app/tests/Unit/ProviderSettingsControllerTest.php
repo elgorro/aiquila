@@ -195,4 +195,63 @@ class ProviderSettingsControllerTest extends TestCase {
         $this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
         $this->assertStringContainsString('Unknown action', $response->getData()['error']);
     }
+
+    // ── Test connection on cloud providers ──────────────────────────────
+
+    private function controllerFor(LLMProviderInterface $service, CredentialService $credentials): ProviderSettingsController {
+        $factory = $this->createMock(LLMProviderFactory::class);
+        $factory->method('isKnownProviderId')->willReturn(true);
+        $factory->method('getProviderById')->willReturn($service);
+        return new ProviderSettingsController(
+            'aiquila',
+            $this->createMock(IRequest::class),
+            'admin',
+            $this->config,
+            $factory,
+            $this->settings,
+            $credentials,
+            $this->createMock(IUserManager::class),
+            $this->createMock(IGroupManager::class),
+            $this->createMock(LoggerInterface::class),
+        );
+    }
+
+    public function testCloudProviderWithoutAKeySlotIsTestedOnItsSavedConfiguration(): void {
+        $vertex = $this->createMock(\OCA\AIquila\Service\Provider\Cloud\VertexProvider::class);
+        $vertex->method('authMode')->willReturn('service_account');
+        $vertex->method('isConfigured')->willReturn(true);
+        $vertex->expects($this->once())->method('ask')->willReturn(['response' => 'OK']);
+
+        $credentials = $this->createMock(CredentialService::class);
+        $credentials->method('getApiKey')->willReturn('');
+        // A key typed into the form does not apply to this auth mode.
+        $credentials->expects($this->never())->method('setApiKey');
+
+        $response = $this->controllerFor($vertex, $credentials)->test('vertex', 'stray-key');
+
+        $this->assertSame(200, $response->getStatus());
+    }
+
+    public function testUnconfiguredCloudProviderIsNotTested(): void {
+        $bedrock = $this->createMock(\OCA\AIquila\Service\Provider\Cloud\BedrockProvider::class);
+        $bedrock->method('authMode')->willReturn('default_chain');
+        $bedrock->method('isConfigured')->willReturn(false);
+        $bedrock->expects($this->never())->method('ask');
+
+        $response = $this->controllerFor($bedrock, $this->createMock(CredentialService::class))->test('bedrock');
+
+        $this->assertSame(400, $response->getStatus());
+    }
+
+    public function testCloudProviderInApiKeyModeStillNeedsAKey(): void {
+        $bedrock = $this->createMock(\OCA\AIquila\Service\Provider\Cloud\BedrockProvider::class);
+        $bedrock->method('authMode')->willReturn('api_key');
+        $bedrock->expects($this->never())->method('ask');
+        $credentials = $this->createMock(CredentialService::class);
+        $credentials->method('getApiKey')->willReturn('');
+
+        $response = $this->controllerFor($bedrock, $credentials)->test('bedrock');
+
+        $this->assertSame(400, $response->getStatus());
+    }
 }
