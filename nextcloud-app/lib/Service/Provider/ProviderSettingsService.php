@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\Service\Provider;
 
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\Provider\Cloud\CloudEndpoints;
 use OCP\ICacheFactory;
 use OCP\IConfig;
 use OCP\IGroupManager;
@@ -676,6 +677,13 @@ class ProviderSettingsService {
                 ProviderSettingsSchema::FORMAT_HEADER_NAME => HeaderSpec::requireName($value),
                 ProviderSettingsSchema::FORMAT_HEADERS => HeaderSpec::parse($value),
                 ProviderSettingsSchema::FORMAT_FILE_PATH => $this->requireReadableFile($value),
+                ProviderSettingsSchema::FORMAT_AWS_REGION => CloudEndpoints::requireAwsRegion($value),
+                ProviderSettingsSchema::FORMAT_GCP_LOCATION => CloudEndpoints::requireGcpLocation($value),
+                ProviderSettingsSchema::FORMAT_GCP_PROJECT => CloudEndpoints::requireGcpProject($value),
+                ProviderSettingsSchema::FORMAT_AZURE_RESOURCE => CloudEndpoints::requireAzureResource($value),
+                ProviderSettingsSchema::FORMAT_WORKSPACE_ID => CloudEndpoints::requireWorkspaceId($value),
+                ProviderSettingsSchema::FORMAT_MODEL_ID => CloudEndpoints::requireModelId($value),
+                ProviderSettingsSchema::FORMAT_JSON_OBJECT => $this->requireJsonObject($value),
                 default => null,
             };
         } catch (\InvalidArgumentException $e) {
@@ -699,6 +707,13 @@ class ProviderSettingsService {
             throw new \InvalidArgumentException(
                 '"' . $path . '" does not exist or is not readable by the web server. In Docker it must be mounted into the container.'
             );
+        }
+    }
+
+    /** @throws \InvalidArgumentException */
+    private function requireJsonObject(string $value): void {
+        if (!is_array(json_decode($value, true)) || !str_starts_with(ltrim($value), '{')) {
+            throw new \InvalidArgumentException('paste the whole JSON key file.');
         }
     }
 
@@ -726,7 +741,8 @@ class ProviderSettingsService {
      */
     private function staticModels(LLMProviderInterface $provider): array {
         $models = match ($provider->getId()) {
-            'anthropic' => \OCA\AIquila\Service\ClaudeModels::getAllModels(),
+            // Claude Platform on AWS / Google Cloud use the first-party IDs.
+            'anthropic', 'claude_aws', 'claude_gcp' => \OCA\AIquila\Service\ClaudeModels::getAllModels(),
             'mistral' => \OCA\AIquila\Service\MistralModels::getAllModels(),
             'deepseek' => \OCA\AIquila\Service\DeepSeekModels::getAllModels(),
             'hetzner' => \OCA\AIquila\Service\HetznerModels::getAllModels(),

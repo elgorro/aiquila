@@ -7,6 +7,7 @@ namespace OCA\AIquila\Command;
 
 use OC\Core\Command\Base;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\Provider\Cloud\CloudSdk;
 use OCA\AIquila\SetupCheck\TextAssistantAvailable;
 use OCP\App\IAppManager;
 use OCP\TaskProcessing\IManager;
@@ -23,6 +24,7 @@ class DoctorCommand extends Base {
         private IAppManager $appManager,
         private CredentialService $credentials,
         private TextAssistantAvailable $textCheck,
+        private CloudSdk $cloudSdk,
     ) {
         parent::__construct();
     }
@@ -117,6 +119,22 @@ class DoctorCommand extends Base {
         } else {
             $output->writeln('  <comment>·</comment> no API key (registration still works; task execution will fail until set)');
             $output->writeln('    set via: occ aiquila:configure --api-key "sk-ant-..."');
+        }
+        $output->writeln('');
+
+        // Informational only: no cloud provider needs these for key or token auth.
+        $output->writeln('<comment>6. Cloud SDKs (optional)</comment>');
+        $autoload = $this->cloudSdk->autoloadPath();
+        $output->writeln($autoload === ''
+            ? '  <comment>·</comment> ' . CloudSdk::SYSTEM_CONFIG_KEY . ' not set'
+            : '  <info>·</info> ' . CloudSdk::SYSTEM_CONFIG_KEY . ' = ' . $autoload);
+        foreach ([
+            CloudSdk::AWS => 'SigV4 and the AWS credential chain for the AWS-hosted Claude providers',
+            CloudSdk::GOOGLE => 'service accounts and Application Default Credentials for the Google Cloud providers',
+        ] as $package => $enables) {
+            $output->writeln($this->cloudSdk->isAvailable($package)
+                ? '  <info>✓</info> ' . $package . ' available (' . $enables . ')'
+                : '  <comment>·</comment> ' . $package . ' not installed (needed for ' . $enables . ')');
         }
         $output->writeln('');
 

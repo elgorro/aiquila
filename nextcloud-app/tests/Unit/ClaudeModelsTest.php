@@ -277,4 +277,28 @@ class ClaudeModelsTest extends TestCase {
             ClaudeModels::getExtendedMaxTokenCeiling(ClaudeModels::HAIKU_4_5)
         );
     }
+
+    public function testCanonicalIdMapsCloudSpellingsToFirstPartyIds(): void {
+        $cases = [
+            'anthropic.claude-opus-5-5' => ClaudeModels::OPUS_5_5,
+            'global.anthropic.claude-sonnet-5' => ClaudeModels::SONNET_5,
+            'us-gov.anthropic.claude-opus-4-6-v1' => ClaudeModels::OPUS_4_6,
+            'anthropic.claude-haiku-4-5-20251001-v1:0' => ClaudeModels::HAIKU_4_5,
+            'arn:aws:bedrock:us-east-1:123456789012:inference-profile/eu.anthropic.claude-sonnet-5' => ClaudeModels::SONNET_5,
+            'claude-haiku-4-5@20251001' => ClaudeModels::HAIKU_4_5,
+            'claude-haiku-4-5' => ClaudeModels::HAIKU_4_5,
+            ClaudeModels::OPUS_4_6 => ClaudeModels::OPUS_4_6,
+            'my-deployment' => 'my-deployment',
+        ];
+        foreach ($cases as $in => $out) {
+            $this->assertSame($out, ClaudeModels::canonicalId($in), $in);
+        }
+    }
+
+    public function testLookupsUnderstandCloudIds(): void {
+        $this->assertSame(ClaudeModels::getMaxTokenCeiling(ClaudeModels::SONNET_4_6), ClaudeModels::getMaxTokenCeiling('eu.anthropic.claude-sonnet-4-6'));
+        $this->assertFalse(ClaudeModels::canDisableThinking('anthropic.claude-opus-5-5'));
+        $this->assertFalse(ClaudeModels::supportsSamplingParams('global.anthropic.claude-sonnet-5'));
+        $this->assertSame(ClaudeModels::getAllowedEfforts(ClaudeModels::OPUS_4_6), ClaudeModels::getAllowedEfforts('global.anthropic.claude-opus-4-6-v1'));
+    }
 }

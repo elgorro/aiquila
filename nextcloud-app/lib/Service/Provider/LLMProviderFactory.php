@@ -6,6 +6,12 @@ declare(strict_types=1);
 namespace OCA\AIquila\Service\Provider;
 
 use OCA\AIquila\Service\ClaudeSDKService;
+use OCA\AIquila\Service\Provider\Cloud\BedrockInvokeProvider;
+use OCA\AIquila\Service\Provider\Cloud\BedrockProvider;
+use OCA\AIquila\Service\Provider\Cloud\ClaudePlatformAwsProvider;
+use OCA\AIquila\Service\Provider\Cloud\ClaudePlatformGoogleCloudProvider;
+use OCA\AIquila\Service\Provider\Cloud\FoundryProvider;
+use OCA\AIquila\Service\Provider\Cloud\VertexProvider;
 use OCP\IConfig;
 
 /**
@@ -38,6 +44,12 @@ class LLMProviderFactory {
         private readonly HetznerProvider $hetzner,
         private readonly LocalProvider $local,
         private readonly ProviderAccessService $access,
+        private readonly ClaudePlatformAwsProvider $claudeAws,
+        private readonly ClaudePlatformGoogleCloudProvider $claudeGcp,
+        private readonly BedrockProvider $bedrock,
+        private readonly BedrockInvokeProvider $bedrockInvoke,
+        private readonly VertexProvider $vertex,
+        private readonly FoundryProvider $foundry,
     ) {
     }
 
@@ -45,6 +57,13 @@ class LLMProviderFactory {
     private function providers(): array {
         return [
             $this->anthropic->getId() => $this->anthropic,
+            // Claude through a cloud platform, Anthropic-operated first.
+            $this->claudeAws->getId() => $this->claudeAws,
+            $this->claudeGcp->getId() => $this->claudeGcp,
+            $this->bedrock->getId() => $this->bedrock,
+            $this->bedrockInvoke->getId() => $this->bedrockInvoke,
+            $this->vertex->getId() => $this->vertex,
+            $this->foundry->getId() => $this->foundry,
             $this->mistral->getId() => $this->mistral,
             $this->deepseek->getId() => $this->deepseek,
             $this->hetzner->getId() => $this->hetzner,

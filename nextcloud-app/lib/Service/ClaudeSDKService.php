@@ -81,6 +81,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     public const FEATURE_SERVICE_TIER = 'service_tier';
     /** `metadata.user_id` request parameter. */
     public const FEATURE_METADATA = 'metadata';
+    /** Top-level automatic `cache_control` (explicit breakpoints work everywhere). */
+    public const FEATURE_AUTO_CACHE = 'auto_cache';
 
     private const CAPABILITY_CACHE_TTL = 3600; // 1 hour
     /** Smallest budget the Messages API accepts for thinking type 'enabled'. */
@@ -138,6 +140,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             self::FEATURE_EXTENDED_BATCH_OUTPUT => true,
             self::FEATURE_SERVICE_TIER => true,
             self::FEATURE_METADATA => true,
+            self::FEATURE_AUTO_CACHE => true,
         ];
     }
 
@@ -196,6 +199,15 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @throws \InvalidArgumentException
      */
     protected function validateModel(string $model): string {
+        return $model;
+    }
+
+    /**
+     * The model whose capability tables apply to $model. Identity here, and
+     * ClaudeModels maps platform spellings itself; a platform whose model field
+     * can hold an arbitrary deployment name lets the admin say what is behind it.
+     */
+    protected function capabilityModel(string $model): string {
         return $model;
     }
 
@@ -332,6 +344,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @return array{max_tokens: int, context_window: int, supports_thinking: bool, supports_thinking_enabled: bool, supports_effort: bool}
      */
     private function staticCapabilities(string $model): array {
+        $model = $this->capabilityModel($model);
         return [
             'max_tokens' => ClaudeModels::getMaxTokenCeiling($model),
             'context_window' => ClaudeModels::getContextWindow($model),
@@ -458,7 +471,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
         // Sampling parameters — Fable 5, the 5-series, and Opus 4.7+ reject
         // temperature/top_p/top_k with a 400
-        $samplingKeys = ClaudeModels::supportsSamplingParams($model)
+        $samplingKeys = ClaudeModels::supportsSamplingParams($this->capabilityModel($model))
             ? ['temperature', 'top_p', 'top_k', 'stop_sequences']
             : ['stop_sequences'];
         foreach ($samplingKeys as $key) {
@@ -487,6 +500,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         // the breakpoint lands after a one-off tail and bills a cache write that
         // nothing ever reads.
         if (($options['auto_cache'] ?? false)
+            && $this->hasFeature(self::FEATURE_AUTO_CACHE)
             && $this->autoCacheEnabled()
             && $this->countExplicitBreakpoints($params) < self::MAX_CACHE_BREAKPOINTS) {
             $params['cache_control'] = ['type' => 'ephemeral'];
@@ -546,6 +560,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @throws \InvalidArgumentException when the request asks for a budget the model cannot honour
      */
     private function resolveThinkingPlan(string $model, array $caps, ?string $userId, array $options, int $maxTokens): array {
+        $model = $this->capabilityModel($model);
         $mode = $this->resolveThinkingMode($userId, $options);
         // A deliberate "off" is more specific than any budget, so it wins.
         $budget = $mode === ThinkingPolicy::MODE_OFF
@@ -2431,17 +2446,18 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @return list<string>
      */
     public function getAllowedEfforts(string $model): array {
-        return ClaudeModels::getAllowedEfforts(ClaudeModels::resolveModel($model));
+        return ClaudeModels::getAllowedEfforts($this->capabilityModel(ClaudeModels::resolveModel($model)));
     }
 
     public function getThinkingProfile(string $model): array {
         $model = ClaudeModels::resolveModel($model);
-        $efforts = ClaudeModels::getAllowedEfforts($model);
-        if (!ClaudeModels::supportsThinking($model)) {
+        $base = $this->capabilityModel($model);
+        $efforts = ClaudeModels::getAllowedEfforts($base);
+        if (!ClaudeModels::supportsThinking($base)) {
             $thinking = self::THINKING_NONE;
-        } elseif (!ClaudeModels::canDisableThinking($model)) {
+        } elseif (!ClaudeModels::canDisableThinking($base)) {
             $thinking = self::THINKING_ALWAYS_ON;
-        } elseif (ClaudeModels::thinkingDefault($model) === ClaudeModels::THINKING_DEFAULT_ADAPTIVE) {
+        } elseif (ClaudeModels::thinkingDefault($base) === ClaudeModels::THINKING_DEFAULT_ADAPTIVE) {
             $thinking = self::THINKING_ADAPTIVE_BY_DEFAULT;
         } else {
             $thinking = self::THINKING_OFF_BY_DEFAULT;
@@ -2450,9 +2466,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             'model' => $model,
             'thinking' => $thinking,
             'can_disable' => $thinking !== self::THINKING_ALWAYS_ON,
-            'off_max_effort' => ClaudeModels::maxEffortWithThinkingDisabled($model),
+            'off_max_effort' => ClaudeModels::maxEffortWithThinkingDisabled($base),
             'efforts' => $efforts,
-            'default_effort' => $efforts !== [] ? ClaudeModels::getEffortLevel($model) : null,
+            'default_effort' => $efforts !== [] ? ClaudeModels::getEffortLevel($base) : null,
         ];
     }
 

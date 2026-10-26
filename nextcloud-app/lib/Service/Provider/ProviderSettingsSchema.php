@@ -96,6 +96,19 @@ final class ProviderSettingsSchema {
     public const FORMAT_HEADERS = 'headers';
     /** An absolute path to a file readable by the web server. */
     public const FORMAT_FILE_PATH = 'file_path';
+    /**
+     * Cloud endpoint parts, checked by Cloud\CloudEndpoints. Each of these ends
+     * up in a hostname or URL path, so they are SSRF-relevant like a base URL.
+     */
+    public const FORMAT_AWS_REGION = 'aws_region';
+    public const FORMAT_GCP_LOCATION = 'gcp_location';
+    public const FORMAT_GCP_PROJECT = 'gcp_project';
+    public const FORMAT_AZURE_RESOURCE = 'azure_resource';
+    public const FORMAT_WORKSPACE_ID = 'workspace_id';
+    /** A cloud model ID, inference profile, deployment name or Bedrock ARN. */
+    public const FORMAT_MODEL_ID = 'model_id';
+    /** A JSON object, e.g. a service account key file. */
+    public const FORMAT_JSON_OBJECT = 'json_object';
 
     /** Booleans stored as the literal strings 'yes'/'no' (local provider legacy). */
     public const STORAGE_YESNO = 'yesno';

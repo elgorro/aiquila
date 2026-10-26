@@ -555,4 +555,38 @@ class ProviderSettingsServiceTest extends TestCase {
         }
         $this->fail('no such field: ' . $id);
     }
+
+    // ── Cloud endpoint formats ──────────────────────────────────────────
+
+    public function testCloudEndpointPartsAreValidatedBeforeStorage(): void {
+        $provider = $this->provider([
+            ProviderSettingsSchema::text('region', 'region_test', 'AWS region', '', format: ProviderSettingsSchema::FORMAT_AWS_REGION),
+            ProviderSettingsSchema::text('resource', 'resource_test', 'Foundry resource', '', format: ProviderSettingsSchema::FORMAT_AZURE_RESOURCE),
+            ProviderSettingsSchema::text('model', 'model_test', 'Model', '', format: ProviderSettingsSchema::FORMAT_MODEL_ID),
+        ]);
+        $this->config->expects($this->never())->method('setAppValue');
+
+        foreach ([
+            ['region' => 'us-east-1.evil.example'],
+            ['resource' => 'evil.example/x'],
+            ['model' => '../other'],
+        ] as $values) {
+            try {
+                $this->service->writeAdmin($provider, $values);
+                $this->fail('accepted ' . json_encode($values));
+            } catch (\InvalidArgumentException $e) {
+                $this->addToAssertionCount(1);
+            }
+        }
+    }
+
+    public function testServiceAccountKeyMustBeJson(): void {
+        $provider = $this->provider([
+            ProviderSettingsSchema::secretTextarea('service_account', 'test_sa', 'Key', '', format: ProviderSettingsSchema::FORMAT_JSON_OBJECT),
+        ]);
+        $this->credentials->expects($this->never())->method('setSecret');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->service->writeAdmin($provider, ['service_account' => 'not json']);
+    }
 }
