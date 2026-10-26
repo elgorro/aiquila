@@ -390,6 +390,56 @@ and mounted as `conf.d/zz-aiquila-hardening.ini`, so it loads after the image's 
 (see [Traefik](traefik.md#routing--middlewares)). WebDAV `PUT` uploads stream to
 Nextcloud and are not bound by it; clients chunk large files anyway.
 
+## Background jobs (cron)
+
+The `nextcloud` and `full` stacks run Nextcloud background jobs in a separate
+`nc-cron` service (container `aiq-nc-cron`). It uses the same image, data volume and
+environment as `nc`, but its entrypoint is the image's `/cron.sh`, which runs
+`cron.php` as `www-data` every 5 minutes. Provisioning sets the background-jobs mode
+to **cron** (`occ background:cron`), so a new instance never runs on Nextcloud's
+default AJAX mode.
+
+AJAX mode only runs a job while someone has the web UI open; sync clients and DAV
+traffic never trigger it. AIquila's coworkers and batch folder tasks are background
+jobs (`CoworkerRunJob`, `CoworkerBatchPollJob`), so **they do not run without
+cron**, and neither do core jobs such as version and trash-bin expiry, calendar
+reminders and activity mails.
+
+Check that it is working:
+
+```bash
+cd /opt/aiquila
+docker compose exec -T -u www-data nc php occ config:app:get core backgroundjobs_mode   # cron
+docker compose exec -T -u www-data nc php occ config:app:get core lastcron              # advances every ~5 min
+docker compose logs --tail 20 nc-cron
+```
+
+### Enabling cron on an existing instance
+
+A server whose `/opt/aiquila/docker-compose.yml` has no `nc-cron` service has been
+running on AJAX, and its job queue may hold a large backlog. Switching to cron
+releases all of it at once — including queued version and trash-bin expiry commands,
+which delete data, and calendar reminders that may be months old. Look before you
+switch:
+
+```bash
+cd /opt/aiquila
+# 1. Inspect the backlog
+docker compose exec -T nc-db psql -U nextcloud -d nextcloud -c \
+  "SELECT class, count(*) FROM oc_jobs GROUP BY class ORDER BY 2 DESC LIMIT 20;"
+
+# 2. Decide on retention before the expiry jobs run (defaults to "auto")
+docker compose exec -T -u www-data nc php occ config:system:get versions_retention_obligation
+docker compose exec -T -u www-data nc php occ config:system:get trashbin_retention_obligation
+
+# 3. Add the nc-cron service from hetzner/docker/<stack>/docker-compose.yml to
+#    /opt/aiquila/docker-compose.yml (it reuses the nc environment via &nc-env), then:
+docker compose exec -T -u www-data nc php occ background:cron
+docker compose up -d nc-cron
+```
+
+`aiquila-hetzner deploy` does not re-upload the compose file, so step 3 is manual.
+
 ## Upgrading PostgreSQL to 18
 
 The Nextcloud and full stacks ship **`postgres:18`**. A PostgreSQL *major* upgrade does

@@ -16,6 +16,7 @@ production-ready AIquila stack on Hetzner Cloud with one command.
 - Optional extra OS packages installed via cloud-init
 - Traefik reverse proxy with automatic TLS (Let's Encrypt)
 - CrowdSec intrusion prevention
+- Nextcloud background jobs in cron mode via an `nc-cron` sidecar (`nextcloud` / `full` stacks; see [Background jobs](advanced.md#background-jobs-cron))
 - `.env` generated from your credentials
 - Optional Prometheus + Grafana monitoring stack (MCP stack only)
 - Optional Hetzner DNS A/AAAA record creation

@@ -71,7 +71,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    environment:
+    environment: &nc-env
       # Database
       POSTGRES_HOST: db
       POSTGRES_DB: ${POSTGRES_DB:-nextcloud}
@@ -117,6 +117,28 @@ services:
           memory: 1g
           cpus: '2.0'
           pids: 400
+
+  # Background jobs: the image's /cron.sh runs cron.php every 5 minutes. Reuses
+  # the image built for nextcloud; the install hook sets the mode to "cron".
+  nextcloud-cron:
+    image: aiquila-nextcloud:latest
+    pull_policy: never
+    container_name: aiquila-nextcloud-cron
+    restart: unless-stopped
+    entrypoint: /cron.sh
+    depends_on:
+      - nextcloud
+    environment: *nc-env
+    volumes:
+      - nextcloud_data:/var/www/html
+    networks:
+      - aiquila-network
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+          pids: 100
 
   # MCP Server (Development)
   mcp-server:

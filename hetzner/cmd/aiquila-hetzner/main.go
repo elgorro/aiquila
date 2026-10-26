@@ -829,9 +829,9 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 	}
 	appLog.Info("upload", "files uploaded", "count", len(uploads))
 
-	fmt.Println("\n── Starting NC services (Nextcloud + DB + Redis + Traefik + CrowdSec)")
+	fmt.Println("\n── Starting NC services (Nextcloud + cron + DB + Redis + Traefik + CrowdSec)")
 	// Start NC services first; MCP will start after app password is generated.
-	out, err := provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose up -d nc nc-db nc-redis traefik crowdsec 2>&1")
+	out, err := provision.RunCommand(sshClient, "cd /opt/aiquila && docker compose up -d nc nc-cron nc-db nc-redis traefik crowdsec 2>&1")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, out)
 		return fmt.Errorf("docker compose up (NC): %w", err)
@@ -913,6 +913,7 @@ php occ app:enable metrics && \
 php occ config:system:set trusted_proxies 0 --value="172.16.0.0/12" && \
 php occ config:system:set forwarded_for_headers 0 --value="HTTP_X_FORWARDED_FOR" && \
 php occ config:system:set maintenance_window_start --type=integer --value=1 && \
+php occ background:cron && \
 php occ db:add-missing-indices && \
 php occ maintenance:repair --include-expensive'`
 	out, err := provision.RunCommand(sshClient, installCmd)

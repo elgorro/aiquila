@@ -41,6 +41,10 @@ occ app:install notes
 occ app:install tasks
 echo "[OK] Talk, Notes, and Tasks installed"
 
+# --- Background jobs via the nextcloud-cron service ---
+occ background:cron
+echo "[OK] Background jobs set to cron"
+
 # --- Optional: create test user ---
 if [ -n "${AIQUILA_TEST_USER:-}" ] && [ -n "${AIQUILA_TEST_PASSWORD:-}" ]; then
     echo "[SETUP] Creating test user: $AIQUILA_TEST_USER"

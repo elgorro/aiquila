@@ -1,5 +1,5 @@
 # AIquila Nextcloud — Hetzner Production (Nextcloud-only stack)
-# Nextcloud 34 + PostgreSQL + Redis + Traefik v3 + CrowdSec
+# Nextcloud 34 (+ cron sidecar) + PostgreSQL + Redis + Traefik v3 + CrowdSec
 #
 # AIquila app is installed via OCC at provisioning time (not baked into image).
 #
@@ -18,7 +18,7 @@ services:
         condition: service_healthy
       nc-redis:
         condition: service_started
-    environment:
+    environment: &nc-env
       POSTGRES_HOST: nc-db
       POSTGRES_DB: nextcloud
       POSTGRES_USER: nextcloud
@@ -67,6 +67,39 @@ services:
           memory: 1g
           cpus: '2.0'
           pids: 400
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Background jobs. The image's /cron.sh runs busybox crond with a 5-minute
+  # cron.php crontab for www-data. Same image, volume and env as nc: the
+  # runtime config (redis.config.php, reverse-proxy.config.php) reads the env.
+  # Background-jobs mode is switched to "cron" at provisioning time.
+  nc-cron:
+    image: nextcloud:34-apache
+    container_name: aiq-nc-cron
+    restart: unless-stopped
+    entrypoint: /cron.sh
+    depends_on:
+      - nc
+      - nc-db
+      - nc-redis
+    environment: *nc-env
+    volumes:
+      - nc_data:/var/www/html
+    configs:
+      - source: php-hardening
+        target: /usr/local/etc/php/conf.d/zz-aiquila-hardening.ini
+    networks:
+      - aiq-net
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+          pids: 100
     logging:
       driver: "json-file"
       options:
