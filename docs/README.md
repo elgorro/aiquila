@@ -65,6 +65,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[CI/CD](dev/ci-cd.md)** — continuous integration and deployment
 - **[MCP Server Architecture](dev/mcp-server-architecture.md)** — technical design
 - **[Provider settings schema](dev/provider-settings.md)** — how providers describe their own configuration, and how to add one
+- **[Claude on cloud platforms](dev/cloud-providers.md)** — Claude through Amazon Bedrock, Google Cloud, Microsoft Foundry and Claude Platform on AWS
 - **[Local model provider](dev/local-provider.md)** — self-hosted inference via Ollama, LM Studio or llama.cpp
 - **[Hetzner Inference provider](dev/hetzner-provider.md)** — EU-hosted open-weight models via Hetzner's experimental API
 - **[Mistral provider](dev/mistral-provider.md)** — the Mistral wire format, connectors and document handling
@@ -137,6 +138,7 @@ docs/
 │   ├── ci-cd.md                     # CI/CD setup
 │   ├── mcp-server-architecture.md   # MCP technical architecture
 │   ├── provider-settings.md         # Provider settings schema
+│   ├── cloud-providers.md           # Claude on Bedrock, Google Cloud, Foundry, AWS
 │   ├── local-provider.md            # Ollama / LM Studio / llama.cpp
 │   ├── hetzner-provider.md          # Hetzner Inference provider
 │   ├── mistral-provider.md          # Mistral provider

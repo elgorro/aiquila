@@ -21,11 +21,12 @@ AIquila has three components that can be used independently or together:
 
 ### AI providers
 
-The Nextcloud app supports five providers for chat. Each user can pick a provider and model per conversation, within what the admin allows.
+The Nextcloud app supports these providers for chat. Each user can pick a provider and model per conversation, within what the admin allows.
 
 | Provider | Hosting | Notes |
 |---|---|---|
 | **Claude (Anthropic)** | Anthropic API | The default, and the most deeply integrated: vision, thinking budgets, native MCP connector, and PDF handling with citations. |
+| **Claude on a cloud platform** | Your AWS, Google Cloud or Azure account | The same Claude integration through [Claude Platform on AWS, Claude on Google Cloud, Amazon Bedrock, Vertex AI or Microsoft Foundry](docs/dev/cloud-providers.md), with the platform's billing, IAM and regions. Some platforms lack batches or the native MCP connector. |
 | **Hetzner Inference** | Hetzner (German provider) | OpenAI-compatible. Currently an [experimental Hetzner service](https://docs.hetzner.com/general/company-and-policy/experiments/inference/), free while experimental; Hetzner states it does not store request and response content. Tokens from [experiments.hetzner.com](https://experiments.hetzner.com/inference). |
 | **Mistral** | Mistral API (French provider) | Also supports the native MCP connector. Mistral offers EU-only processing through its regional inference endpoints. |
 | **Local model** | Your own hardware | Ollama, LM Studio or llama.cpp. Nothing leaves your infrastructure. Supports bearer/basic/header auth and mTLS. |

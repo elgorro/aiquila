@@ -154,14 +154,18 @@ sudo -u www-data php occ app:enable aiquila
 
 1. Navigate to **Settings → Administration → AIquila**
 2. The **Providers** tab shows one card per available provider — Claude
-   (Anthropic), Mistral, DeepSeek, Hetzner Inference (EU) and Local model.
+   (Anthropic), Claude through a cloud platform (Claude Platform on AWS, Claude
+   on Google Cloud, Amazon Bedrock, Vertex AI and Microsoft Foundry — see
+   [Claude on cloud platforms](../dev/cloud-providers.md)), Mistral, DeepSeek,
+   Hetzner Inference (EU) and Local model.
    Each card shows whether it is configured, which model it will use, and what
    it can do (vision, tools, thinking, effort, native MCP, documents).
 3. Pick the instance default with the radio on the card, then click
    **Configure** to open it:
    - **API key** — from the provider's console. Stored encrypted in Nextcloud's
      credential manager. The Local model card takes an endpoint URL instead; its
-     key is optional (Ollama needs none).
+     key is optional (Ollama needs none). The cloud cards take a region, project
+     or resource name and offer the platform's own authentication modes.
    - **Default model** — the live model list from the provider, with
      **Refresh models** to re-query it.
    - **Effort** and **thinking** (Claude card) — the defaults for chat. See
@@ -187,7 +191,7 @@ e.g. `Settings → Administration → AIquila#mcp`.
 1. Go to **Settings → Personal → AIquila**
 2. The **Providers** tab shows the same cards, limited to what you may change:
    your own API key and preferred model per provider, plus which provider is
-   your default. On the Claude card you can also set your own default effort
+   your default. Cloud platform credentials are instance-only. On the Claude card you can also set your own default effort
    and thinking. Leave a field blank to inherit the instance setting.
    Endpoint URLs are administrator-only.
 3. **Defaults** sets the system prompt and verbose mode new conversations start

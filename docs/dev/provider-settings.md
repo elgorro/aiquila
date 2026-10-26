@@ -48,7 +48,11 @@ A `format` adds a validation rule on top of the type, applied by
 `ProviderSettingsService::encode()` so the rule lives in one place rather than in
 each provider: `header_name` (a single HTTP header name), `headers` (a
 `Name: value` block, parsed by `HeaderSpec`), `file_path` (an absolute path that
-must exist and be readable by the web-server user). A failure raises
+must exist and be readable by the web-server user), `json_object` (a pasted JSON
+key file), `model_id` (a cloud model ID or ARN), and the cloud endpoint parts
+`aws_region`, `gcp_location`, `gcp_project`, `azure_resource` and
+`workspace_id`, which `Cloud\CloudEndpoints` checks — see
+[Endpoint validation](cloud-providers.md#endpoint-validation). A failure raises
 `InvalidArgumentException`, which the controller turns into a 400 carrying the
 message.
 
@@ -136,7 +140,9 @@ server makes outbound requests to whatever is stored there, so a user-settable
 endpoint would be a server-side request forgery vector.
 
 **Endpoint URLs must stay `SCOPE_ADMIN`.** The default scope is admin, so a
-provider that forgets to declare one fails closed rather than open.
+provider that forgets to declare one fails closed rather than open. The same
+goes for anything a URL is built from — a cloud region, project or resource name
+is an endpoint in all but spelling.
 
 API keys are marked `sensitive`. They live in `CredentialService`, never in
 `IConfig`, and their values are never returned to the client — the API reports
@@ -155,14 +161,14 @@ card, and the guards that refuse work a provider cannot do.
 | `vision` | vision | Accepts image input | Claude, Mistral; Hetzner per model; Local per admin flag |
 | `tools` | tools | Runs an agentic tool loop | all but a bare local backend |
 | `streaming` | — | Streams tokens (no chip; everything streams) | all |
-| `thinking` | thinking | Extended thinking blocks | Claude |
-| `effort` | effort | Has a reasoning-effort knob | Claude, Mistral |
-| `native_mcp` | native MCP | Server-side MCP connector | Claude, Mistral |
-| `documents` | documents | Accepts PDFs as a document block | Claude |
+| `thinking` | thinking | Extended thinking blocks | Claude, on every platform |
+| `effort` | effort | Has a reasoning-effort knob | Claude, on every platform; Mistral |
+| `native_mcp` | native MCP | Server-side MCP connector | Claude API, Claude Platform on AWS and Google Cloud; Mistral |
+| `documents` | documents | Accepts PDFs as a document block | Claude, on every platform |
 | `audio_in` | transcription | Transcribes audio | Mistral; Local per admin flag |
 | `audio_out` | speech | Generates speech | Mistral; Local per admin flag |
 | `image_out` | image generation | Generates images | Mistral |
-| `fast_mode` | — | Has a premium fast-inference mode (no chip; it depends on the model, not the provider) | Claude |
+| `fast_mode` | — | Has a premium fast-inference mode (no chip; it depends on the model, not the provider) | Claude API, Claude on Google Cloud (Anthropic managed) |
 
 Adding a key means four edits that have to land together: the defaults in
 `ProviderSettingsSchema::capabilities()`, the `@return array{…}` docblock on both
@@ -174,6 +180,28 @@ is simply never chipped, which is how `streaming` stays quiet.
 (`supportsVisionInput()`, `supportsAudioInput()`, `supportsAudioOutput()`,
 `supportsImageOutput()`), so an OpenAI-compatible subclass opts in by overriding
 a hook rather than by rewriting the array.
+
+## Platform features
+
+The Claude providers share one implementation, `ClaudeSDKService`, and differ in
+which parts of the Claude API besides the Messages endpoint their platform
+serves. `platformFeatures()` lists them — `files_api`, `batches`, `models_api`,
+`native_mcp`, `fast_mode`, `extended_batch_output`, `service_tier`, `metadata`,
+`auto_cache` — and every code path that touches one asks `hasFeature()` first:
+
+- `supportsBatch()` decides whether summaries and coworkers take the Batch API;
+- `supportsFilesApi()` decides whether attachments are uploaded
+  (`FilesService::acceptsFileIds()`) or sent inline;
+- without `models_api`, `listModels()` returns null, the probe sends a one-token
+  request instead of listing models, and capabilities come from `ClaudeModels`;
+- `service_tier`, `metadata`, `fast_mode` and `auto_cache` decide whether those
+  request fields are sent at all.
+
+The Claude API card has every feature. The cloud cards switch off what their
+platform lacks; see [Claude on cloud platforms](cloud-providers.md). The same
+class reads its settings through `configKey()`: the Claude API card keeps its
+historical unsuffixed keys (`model`, `effort`), and a cloud card suffixes its
+provider id (`model_bedrock`, `effort_bedrock`).
 
 ## Capabilities that gate work
 
@@ -209,6 +237,9 @@ method overrides the trait, so implementing one is just declaring it.
        ]);
    }
    ```
+
+   Claude on another platform is a subclass of `AbstractCloudClaudeProvider`
+   instead — see [Claude on cloud platforms](cloud-providers.md#implementation).
 
 2. Add a model registry (mirror `MistralModels`) for the static fallback.
 3. Register it in `LLMProviderFactory` and add a `staticModels()` arm in
