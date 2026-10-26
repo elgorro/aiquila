@@ -7,6 +7,7 @@ namespace OCA\AIquila\Service;
 
 use OCA\AIquila\Db\FileUpload;
 use OCA\AIquila\Db\FileUploadMapper;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -24,6 +25,15 @@ class FilesService {
         private readonly FileUploadMapper $mapper,
         private readonly LoggerInterface $logger,
     ) {}
+
+    /**
+     * Whether a request to $provider may carry Anthropic file_ids. Claude on a
+     * cloud platform cannot resolve them (the upload went to the Claude API),
+     * so for those callers keep the inline payload and skip the upload.
+     */
+    public static function acceptsFileIds(LLMProviderInterface $provider): bool {
+        return !$provider instanceof ClaudeSDKService || $provider->supportsFilesApi();
+    }
 
     /**
      * Return a cached file_id for $bytes, uploading once if needed.

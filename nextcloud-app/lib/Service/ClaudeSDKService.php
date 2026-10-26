@@ -5,8 +5,10 @@ namespace OCA\AIquila\Service;
 
 use Anthropic\Beta\AnthropicBeta;
 use Anthropic\Beta\Files\BetaFileMetadata;
+use Anthropic\Bedrock\MantleClient;
 use Anthropic\Beta\Messages\BetaMetadata;
 use Anthropic\Client;
+use Anthropic\Core\BaseClient;
 use Anthropic\Core\Contracts\BaseStream;
 use Anthropic\Core\Exceptions\APIConnectionException;
 use Anthropic\Core\Exceptions\APITimeoutException;
@@ -16,6 +18,7 @@ use Anthropic\Core\Exceptions\InternalServerException;
 use Anthropic\Core\Exceptions\PermissionDeniedException;
 use Anthropic\Core\Exceptions\RateLimitException;
 use Anthropic\Core\FileParam;
+use Anthropic\Foundry\Client as FoundryClient;
 use Anthropic\Messages\Batches\MessageBatch;
 use Anthropic\Messages\Batches\MessageBatchCanceledResult;
 use Anthropic\Messages\Batches\MessageBatchErroredResult;
@@ -26,6 +29,7 @@ use Anthropic\Messages\Message;
 use Anthropic\Messages\Metadata;
 use Anthropic\Messages\Usage;
 use Anthropic\Models\ModelInfo;
+use Anthropic\ServiceContracts\MessagesContract;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\ProviderActionsInterface;
 use OCA\AIquila\Service\Provider\ProviderProbe;
@@ -47,12 +51,36 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     // Anthropic publishes no transcription, speech or image-generation endpoint.
     use UnsupportedModalities;
 
-    private IConfig $config;
-    private LoggerInterface $logger;
-    private CredentialService $credentials;
+    protected IConfig $config;
+    protected LoggerInterface $logger;
+    protected CredentialService $credentials;
     private ICache $cache;
     private RequestMetadataService $requestMetadata;
-    private string $appName = 'aiquila';
+    protected string $appName = 'aiquila';
+
+    /**
+     * Platform features — the parts of the Claude API that are not the
+     * Messages endpoint itself. The Claude API has all of them; the cloud
+     * platforms in Provider\Cloud\ each switch off what they do not serve, and
+     * every code path that touches one asks platformFeatures() first instead
+     * of failing against the platform.
+     */
+    /** Files API (beta): upload once, reference by file_id. */
+    public const FEATURE_FILES_API = 'files_api';
+    /** Message Batches API (and with it the batch summary/cowork paths). */
+    public const FEATURE_BATCHES = 'batches';
+    /** Models API: live model list and per-model capabilities. */
+    public const FEATURE_MODELS_API = 'models_api';
+    /** Native MCP connector (beta `mcp-client-2025-11-20`). */
+    public const FEATURE_NATIVE_MCP = 'native_mcp';
+    /** Fast mode (beta `fast-mode-2026-02-01`). */
+    public const FEATURE_FAST_MODE = 'fast_mode';
+    /** Extended batch output (beta `output-300k-2026-03-24`). */
+    public const FEATURE_EXTENDED_BATCH_OUTPUT = 'extended_batch_output';
+    /** `service_tier` request parameter (Priority Tier routing). */
+    public const FEATURE_SERVICE_TIER = 'service_tier';
+    /** `metadata.user_id` request parameter. */
+    public const FEATURE_METADATA = 'metadata';
 
     private const CAPABILITY_CACHE_TTL = 3600; // 1 hour
     /** Smallest budget the Messages API accepts for thinking type 'enabled'. */
@@ -94,8 +122,41 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         return 'Claude (Anthropic)';
     }
 
+    /**
+     * Which platform features this endpoint serves; see the FEATURE_*
+     * constants. The Claude API serves all of them.
+     *
+     * @return array<string, bool>
+     */
+    protected function platformFeatures(): array {
+        return [
+            self::FEATURE_FILES_API => true,
+            self::FEATURE_BATCHES => true,
+            self::FEATURE_MODELS_API => true,
+            self::FEATURE_NATIVE_MCP => true,
+            self::FEATURE_FAST_MODE => true,
+            self::FEATURE_EXTENDED_BATCH_OUTPUT => true,
+            self::FEATURE_SERVICE_TIER => true,
+            self::FEATURE_METADATA => true,
+        ];
+    }
+
+    final public function hasFeature(string $feature): bool {
+        return $this->platformFeatures()[$feature] ?? false;
+    }
+
     public function supportsNativeMcp(): bool {
-        return true;
+        return $this->hasFeature(self::FEATURE_NATIVE_MCP);
+    }
+
+    /** Whether the Message Batches API is available, i.e. the batch paths may be used. */
+    public function supportsBatch(): bool {
+        return $this->hasFeature(self::FEATURE_BATCHES);
+    }
+
+    /** Whether uploads to the Files API are possible; otherwise callers inline base64. */
+    public function supportsFilesApi(): bool {
+        return $this->hasFeature(self::FEATURE_FILES_API);
     }
 
     public function isConfigured(?string $userId = null): bool {
@@ -103,15 +164,75 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     }
 
     /**
-     * Get Anthropic client instance
+     * Config key for a setting of this provider. The Claude API keeps the
+     * unsuffixed keys it has always used; cloud providers namespace theirs
+     * (`model_bedrock`, `user_effort_vertex`, …) so each card has its own.
      */
-    protected function getClient(?string $userId = null): Client {
+    protected function configKey(string $key): string {
+        return $key;
+    }
+
+    /** Instance-scope setting, read through configKey(). */
+    protected function appValue(string $key, string $default = ''): string {
+        return $this->config->getAppValue($this->appName, $this->configKey($key), $default);
+    }
+
+    /** User-scope setting, read through configKey(); '' when unset. */
+    protected function userValue(string $userId, string $key): string {
+        return $this->config->getUserValue($userId, $this->appName, $this->configKey($key), '');
+    }
+
+    /** Model used when nothing is configured. */
+    protected function defaultModel(): string {
+        return ClaudeModels::DEFAULT_MODEL;
+    }
+
+    /**
+     * Gate for every model ID before it is sent. Identity here: on the Claude
+     * API the model only ever travels in the request body. Cloud providers
+     * whose SDK puts it in the URL path override this to reject anything that
+     * is not a plain identifier.
+     *
+     * @throws \InvalidArgumentException
+     */
+    protected function validateModel(string $model): string {
+        return $model;
+    }
+
+    /**
+     * Client for this endpoint. Cloud subclasses return their platform client;
+     * Foundry's and Bedrock Mantle's only implement the Messages endpoint, which
+     * is why the return type is the SDK's common base. Paths that need more go
+     * through getFullClient().
+     */
+    protected function getClient(?string $userId = null): BaseClient {
         $apiKey = $this->getApiKey($userId);
         if (!$apiKey) {
             throw new \RuntimeException('No API key configured');
         }
 
         return new Client(apiKey: $apiKey);
+    }
+
+    /**
+     * Client for the Files, Models, Batches and beta endpoints. Only reached
+     * once the matching platform feature has been checked, so a failure here
+     * is a missing gate, not a configuration problem.
+     */
+    protected function getFullClient(?string $userId = null): Client {
+        $client = $this->getClient($userId);
+        if (!$client instanceof Client) {
+            throw new \RuntimeException($this->getLabel() . ' only serves the Messages API.');
+        }
+        return $client;
+    }
+
+    /** The Messages service of any SDK client this class hands out. */
+    protected function messagesService(BaseClient $client): MessagesContract {
+        if ($client instanceof Client || $client instanceof FoundryClient || $client instanceof MantleClient) {
+            return $client->messages;
+        }
+        throw new \RuntimeException('SDK client ' . $client::class . ' has no Messages service.');
     }
 
     /**
@@ -126,19 +247,30 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      */
     public function getModel(?string $userId = null): string {
         if ($userId) {
-            $userModel = $this->config->getUserValue($userId, $this->appName, 'user_model', '');
-            if ($userModel) return ClaudeModels::resolveModel($userModel);
+            $userModel = $this->userValue($userId, 'user_model');
+            if ($userModel && $this->acceptsModel($userModel)) return ClaudeModels::resolveModel($userModel);
         }
-        return ClaudeModels::resolveModel(
-            $this->config->getAppValue($this->appName, 'model', ClaudeModels::DEFAULT_MODEL)
-        );
+        $model = ClaudeModels::resolveModel($this->appValue('model', $this->defaultModel()));
+        // A stored value the gate refuses (written past the settings API, e.g.
+        // with occ) degrades to the default instead of breaking every caller.
+        return $this->acceptsModel($model) ? $model : $this->defaultModel();
+    }
+
+    private function acceptsModel(string $model): bool {
+        try {
+            $this->validateModel($model);
+            return true;
+        } catch (\InvalidArgumentException $e) {
+            $this->logger->warning('AIquila SDK: Ignoring invalid model id for ' . $this->getId(), ['error' => $e->getMessage()]);
+            return false;
+        }
     }
 
     /**
      * Get configured max tokens, clamped to the model's output ceiling
      */
     public function getMaxTokens(?string $userId = null): int {
-        $stored = (int)$this->config->getAppValue($this->appName, 'max_tokens', (string)ClaudeModels::DEFAULT_MAX_TOKENS);
+        $stored = (int)$this->appValue('max_tokens', (string)ClaudeModels::DEFAULT_MAX_TOKENS);
         $caps = $this->resolveModelCapabilities($this->getModel($userId), $userId);
         return min($stored, $caps['max_tokens']);
     }
@@ -157,8 +289,14 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             return $cached;
         }
 
+        // No Models API on this platform: the static tables are the only answer,
+        // so do not pay for a request that is certain to fail.
+        if (!$this->hasFeature(self::FEATURE_MODELS_API)) {
+            return $this->staticCapabilities($model);
+        }
+
         try {
-            $client = $this->getClient($userId);
+            $client = $this->getFullClient($userId);
             $info = $this->callRetrieveModel($client, $model);
 
             $caps = [
@@ -183,17 +321,27 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 'error' => $e->getMessage(),
             ]);
 
-            return [
-                'max_tokens' => ClaudeModels::getMaxTokenCeiling($model),
-                'context_window' => ClaudeModels::getContextWindow($model),
-                'supports_thinking' => ClaudeModels::supportsThinking($model),
-                // No static table for per-type support: without a live answer we
-                // only claim adaptive, so an explicit budget is refused rather
-                // than sent to a model that may reject it.
-                'supports_thinking_enabled' => false,
-                'supports_effort' => ClaudeModels::supportsEffort($model),
-            ];
+            return $this->staticCapabilities($model);
         }
+    }
+
+    /**
+     * Capabilities from the static registry, for when the Models API cannot
+     * answer. ClaudeModels maps cloud model IDs to the first-party ones itself.
+     *
+     * @return array{max_tokens: int, context_window: int, supports_thinking: bool, supports_thinking_enabled: bool, supports_effort: bool}
+     */
+    private function staticCapabilities(string $model): array {
+        return [
+            'max_tokens' => ClaudeModels::getMaxTokenCeiling($model),
+            'context_window' => ClaudeModels::getContextWindow($model),
+            'supports_thinking' => ClaudeModels::supportsThinking($model),
+            // No static table for per-type support: without a live answer we
+            // only claim adaptive, so an explicit budget is refused rather
+            // than sent to a model that may reject it.
+            'supports_thinking_enabled' => false,
+            'supports_effort' => ClaudeModels::supportsEffort($model),
+        ];
     }
 
     /**
@@ -240,7 +388,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     private function resolveRequestModel(?string $userId, array $options): string {
         $pinned = $options['model'] ?? null;
         if (is_string($pinned) && $pinned !== '') {
-            return ClaudeModels::resolveModel($pinned);
+            return $this->validateModel(ClaudeModels::resolveModel($pinned));
         }
         return $this->getModel($userId);
     }
@@ -261,7 +409,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
         // Pseudonymous attribution for Anthropic's abuse detection. Never the
         // raw UID — see RequestMetadataService.
-        $userHash = $this->requestMetadata->hashUserId($userId);
+        $userHash = $this->hasFeature(self::FEATURE_METADATA)
+            ? $this->requestMetadata->hashUserId($userId)
+            : null;
         if ($userHash !== null) {
             $params['metadata'] = ['user_id' => $userHash];
         }
@@ -351,7 +501,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      */
     private function autoCacheEnabled(): bool {
         // Checkboxes have persisted as 'true' or '1' over the app's history.
-        return in_array($this->config->getAppValue($this->appName, 'auto_cache', '1'), ['true', '1'], true);
+        return in_array($this->appValue('auto_cache', '1'), ['true', '1'], true);
     }
 
     /**
@@ -461,12 +611,12 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     private function resolveEffort(string $model, ?string $userId, array $options): string {
         $candidates = [$options['effort'] ?? null];
         if ($this->isTaskRequest($options)) {
-            $candidates[] = $this->config->getAppValue($this->appName, 'task_effort', '');
+            $candidates[] = $this->appValue('task_effort');
         }
         if ($userId !== null && $userId !== '') {
-            $candidates[] = $this->config->getUserValue($userId, $this->appName, 'user_effort', '');
+            $candidates[] = $this->userValue($userId, 'user_effort');
         }
-        $candidates[] = $this->config->getAppValue($this->appName, 'effort', '');
+        $candidates[] = $this->appValue('effort');
 
         foreach ($candidates as $candidate) {
             if (is_string($candidate) && $candidate !== '' && ClaudeModels::isAllowedEffort($model, $candidate)) {
@@ -498,12 +648,12 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
         $sources = [];
         if ($this->isTaskRequest($options)) {
-            $sources[] = $this->config->getAppValue($this->appName, 'task_thinking', '');
+            $sources[] = $this->appValue('task_thinking');
         }
         if ($userId !== null && $userId !== '') {
-            $sources[] = $this->config->getUserValue($userId, $this->appName, 'user_thinking', '');
+            $sources[] = $this->userValue($userId, 'user_thinking');
         }
-        $sources[] = $this->config->getAppValue($this->appName, 'thinking', '');
+        $sources[] = $this->appValue('thinking');
 
         foreach ($sources as $raw) {
             if ($raw !== '') {
@@ -540,7 +690,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             return $budget;
         }
 
-        $adminDefault = $this->config->getAppValue($this->appName, 'thinking_budget', '');
+        $adminDefault = $this->appValue('thinking_budget');
         if ($adminDefault === '' || !$caps['supports_thinking'] || !$caps['supports_thinking_enabled']) {
             return null;
         }
@@ -590,10 +740,15 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * harsher failure than simply not asking for priority capacity.
      */
     private function resolveServiceTier(?string $override): ?string {
+        // Priority Tier is a Claude API product; other platforms reject or
+        // ignore the field, so it is never sent there.
+        if (!$this->hasFeature(self::FEATURE_SERVICE_TIER)) {
+            return null;
+        }
         if ($override !== null && ClaudeModels::isAllowedServiceTier($override)) {
             return $override;
         }
-        $adminDefault = $this->config->getAppValue($this->appName, 'service_tier', '');
+        $adminDefault = $this->appValue('service_tier');
         if ($adminDefault !== '' && ClaudeModels::isAllowedServiceTier($adminDefault)) {
             return $adminDefault;
         }
@@ -620,6 +775,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             if (!$override) {
                 return false;
             }
+            if (!$this->hasFeature(self::FEATURE_FAST_MODE)) {
+                throw new \InvalidArgumentException(
+                    sprintf('Fast mode is not available on %s.', $this->getLabel())
+                );
+            }
             if (!ClaudeModels::supportsFastMode($model)) {
                 throw new \InvalidArgumentException(
                     sprintf('Model %s does not support fast mode; it is available on Opus 5.5, Opus 5 and Opus 4.8 only.', $model)
@@ -628,8 +788,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             return true;
         }
 
-        $adminDefault = in_array($this->config->getAppValue($this->appName, 'speed_fast', 'false'), ['true', '1'], true);
-        if (!$adminDefault) {
+        $adminDefault = in_array($this->appValue('speed_fast', 'false'), ['true', '1'], true);
+        if (!$adminDefault || !$this->hasFeature(self::FEATURE_FAST_MODE)) {
             return false;
         }
         if (!ClaudeModels::supportsFastMode($model)) {
@@ -660,7 +820,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @return string Anthropic file_id
      */
     public function uploadFile(string $bytes, string $filename, string $mimeType, ?string $userId = null): string {
-        $client = $this->getClient($userId);
+        if (!$this->supportsFilesApi()) {
+            throw new \RuntimeException($this->getLabel() . ' has no Files API.');
+        }
+        $client = $this->getFullClient($userId);
         $param = FileParam::fromString($bytes, $filename, $mimeType);
         $meta = $this->callFilesUpload($client, $param);
         return $meta->id;
@@ -744,8 +907,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         return is_string($userId) ? BetaMetadata::with(userID: $userId) : null;
     }
 
-    protected function callCreate(Client $client, array $params): Message {
-        return $client->messages->create(
+    protected function callCreate(BaseClient $client, array $params): Message {
+        return $this->messagesService($client)->create(
             maxTokens: $params['max_tokens'],
             messages: $params['messages'],
             model: $params['model'],
@@ -769,7 +932,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * requested max_tokens is large enough to risk an HTTP timeout on a plain
      * create call. Callers receive the same Message shape either way.
      */
-    protected function createMessage(Client $client, array $params): Message {
+    protected function createMessage(BaseClient $client, array $params): Message {
         if (($params['max_tokens'] ?? 0) > self::STREAMING_THRESHOLD) {
             return $this->createViaStream($client, $params);
         }
@@ -780,7 +943,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * Run a streaming create call and aggregate the events into a final
      * Message equivalent to what a non-streaming create would have returned.
      */
-    private function createViaStream(Client $client, array $params): Message {
+    private function createViaStream(BaseClient $client, array $params): Message {
         $stream = $this->callCreateStream($client, $params);
 
         /** @var Message|null $base */
@@ -894,8 +1057,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     /**
      * Dispatch a streaming create call. Overridable for testing.
      */
-    protected function callCreateStream(Client $client, array $params): BaseStream {
-        return $client->messages->createStream(
+    protected function callCreateStream(BaseClient $client, array $params): BaseStream {
+        return $this->messagesService($client)->createStream(
             maxTokens: $params['max_tokens'],
             messages: $params['messages'],
             model: $params['model'],
@@ -934,8 +1097,12 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * Returns array of model ID strings, or null on error (caller should fall back).
      */
     public function listModels(?string $userId = null): ?array {
+        if (!$this->hasFeature(self::FEATURE_MODELS_API)) {
+            // The settings service falls back to the configured model.
+            return null;
+        }
         try {
-            $client = $this->getClient($userId);
+            $client = $this->getFullClient($userId);
             $items  = $this->callListModels($client, ['limit' => 1000]);
 
             // Warm capability cache for each model
@@ -954,23 +1121,39 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
     public function probe(?string $userId = null): array {
         $model = $this->getModel($userId);
+        $label = $this->getLabel();
         if (!$this->isConfigured($userId)) {
-            return ProviderProbe::unconfigured('No Anthropic API key configured', $model);
+            return ProviderProbe::unconfigured($this->unconfiguredMessage(), $model);
         }
         try {
-            $client = $this->getClient($userId);
-            $items = $this->callListModels($client, ['limit' => 1000]);
-            return ProviderProbe::fromModels(array_map(fn (ModelInfo $m) => $m->id, $items), $model);
+            if ($this->hasFeature(self::FEATURE_MODELS_API)) {
+                $client = $this->getFullClient($userId);
+                $items = $this->callListModels($client, ['limit' => 1000]);
+                return ProviderProbe::fromModels(array_map(fn (ModelInfo $m) => $m->id, $items), $model);
+            }
+            // No model listing to check against: a one-token request proves the
+            // credentials, the endpoint and the model in one go.
+            $this->callCreate($this->getClient($userId), [
+                'model' => $model,
+                'max_tokens' => 1,
+                'messages' => [['role' => 'user', 'content' => 'ping']],
+            ]);
+            return ProviderProbe::fromModels([$model], $model);
         } catch (AuthenticationException|PermissionDeniedException $e) {
             // The SDK types these, so no message sniffing is needed here.
-            return ProviderProbe::unauthorized('The Anthropic API rejected the key: ' . self::probeDetail($e), $model);
+            return ProviderProbe::unauthorized($label . ' rejected the credentials: ' . self::probeDetail($e), $model);
         } catch (RateLimitException $e) {
-            return ProviderProbe::rateLimited('Anthropic is rate-limiting this key: ' . self::probeDetail($e), $model);
+            return ProviderProbe::rateLimited($label . ' is rate-limiting these credentials: ' . self::probeDetail($e), $model);
         } catch (APIConnectionException|APITimeoutException $e) {
-            return ProviderProbe::unreachable('Could not reach the Anthropic API: ' . self::probeDetail($e), $model);
+            return ProviderProbe::unreachable('Could not reach ' . $label . ': ' . self::probeDetail($e), $model);
         } catch (\Throwable $e) {
-            return ProviderProbe::fromThrowable($e, 'Anthropic API error: ' . self::probeDetail($e), $model);
+            return ProviderProbe::fromThrowable($e, $label . ' error: ' . self::probeDetail($e), $model);
         }
+    }
+
+    /** Status-light text when isConfigured() is false. */
+    protected function unconfiguredMessage(): string {
+        return 'No Anthropic API key configured';
     }
 
     /**
@@ -988,8 +1171,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * Returns ['id' => ..., 'display_name' => ...] or null on error.
      */
     public function retrieveModel(string $modelId, ?string $userId = null): ?array {
+        if (!$this->hasFeature(self::FEATURE_MODELS_API)) {
+            return null;
+        }
         try {
-            $client = $this->getClient($userId);
+            $client = $this->getFullClient($userId);
             $info   = $this->callRetrieveModel($client, $modelId);
 
             $this->cacheModelInfoCapabilities($info);
@@ -1524,7 +1710,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 $reportProgress(0.1);
             }
 
-            $batch = $this->waitForBatch($this->getClient($userId), $batchId, $reportProgress);
+            $batch = $this->waitForBatch($this->getFullClient($userId), $batchId, $reportProgress);
             if ($batch->processingStatus !== 'ended') {
                 throw new \RuntimeException("Batch did not complete: status={$batch->processingStatus}");
             }
@@ -1575,6 +1761,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      *                                   carries a malformed or duplicated custom_id
      */
     public function submitBatch(array $requests, ?string $userId = null): string {
+        if (!$this->supportsBatch()) {
+            throw new \RuntimeException($this->getLabel() . ' has no Message Batches API.');
+        }
         if ($requests === []) {
             throw new \InvalidArgumentException('Cannot submit an empty batch');
         }
@@ -1626,7 +1815,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         // subclasses that override the seam, so it is parked for the call.
         $this->batchExtendedOutput = $extended;
         try {
-            $batch = $this->callBatchCreate($this->getClient($userId), $payload);
+            $batch = $this->callBatchCreate($this->getFullClient($userId), $payload);
         } finally {
             $this->batchExtendedOutput = false;
         }
@@ -1646,7 +1835,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @return array{status: string, ended: bool, counts: array{processing: int, succeeded: int, errored: int, canceled: int, expired: int}}
      */
     public function getBatchStatus(string $batchId, ?string $userId = null): array {
-        $batch = $this->callBatchRetrieve($this->getClient($userId), $batchId);
+        $batch = $this->callBatchRetrieve($this->getFullClient($userId), $batchId);
         $counts = $batch->requestCounts;
 
         return [
@@ -1677,7 +1866,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      */
     public function fetchBatchResults(string $batchId, ?string $userId = null): array {
         $results = [];
-        foreach ($this->callBatchResults($this->getClient($userId), $batchId) as $entry) {
+        foreach ($this->callBatchResults($this->getFullClient($userId), $batchId) as $entry) {
             $results[$entry->customID] = $this->convertBatchResult($entry);
         }
         return $results;
@@ -1689,7 +1878,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      */
     public function cancelBatch(string $batchId, ?string $userId = null): bool {
         try {
-            $this->callBatchCancel($this->getClient($userId), $batchId);
+            $this->callBatchCancel($this->getFullClient($userId), $batchId);
             return true;
         } catch (\Throwable $e) {
             $this->logger->warning('AIquila SDK: batch cancel failed', [
@@ -1874,8 +2063,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * '1', hence the two-value check.
      */
     private function extendedBatchOutputEnabled(): bool {
+        if (!$this->hasFeature(self::FEATURE_EXTENDED_BATCH_OUTPUT)) {
+            return false;
+        }
         return in_array(
-            $this->config->getAppValue($this->appName, 'batch_output_300k', 'false'),
+            $this->appValue('batch_output_300k', 'false'),
             ['true', '1'],
             true
         );
@@ -1895,7 +2087,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * ceiling has to match what is actually being sent.
      */
     private function batchMaxTokens(string $model, ?string $userId, bool $extended): int {
-        $stored = (int)$this->config->getAppValue($this->appName, 'max_tokens', (string)ClaudeModels::DEFAULT_MAX_TOKENS);
+        $stored = (int)$this->appValue('max_tokens', (string)ClaudeModels::DEFAULT_MAX_TOKENS);
         $ceiling = $extended
             ? ClaudeModels::getExtendedMaxTokenCeiling($model)
             : $this->resolveModelCapabilities($model, $userId)['max_tokens'];
@@ -1942,6 +2134,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         bool    $citations = true,
         ?string $fileId    = null
     ): array {
+        // A file_id only exists on the Claude API; elsewhere the inline
+        // payload the caller also passed is what gets sent.
+        if (!$this->supportsFilesApi()) {
+            $fileId = null;
+        }
         try {
             $client = $this->getClient($userId);
 
@@ -2224,9 +2421,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             'streaming' => true,
             'thinking' => true,
             'effort' => true,
-            'native_mcp' => true,
+            'native_mcp' => $this->supportsNativeMcp(),
             'documents' => true,
-            'fast_mode' => true,
+            'fast_mode' => $this->hasFeature(self::FEATURE_FAST_MODE),
         ]);
     }
 
@@ -2283,7 +2480,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         try {
             $client = $this->getClient($userId);
 
-            $imageSource = $fileId !== null
+            $imageSource = $fileId !== null && $this->supportsFilesApi()
                 ? ['type' => 'file', 'file_id' => $fileId]
                 : ['type' => 'base64', 'media_type' => $mimeType, 'data' => $base64Image];
 
@@ -2348,7 +2545,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
             $content = [];
             foreach (array_values($images) as $i => $img) {
-                $fid = $fileIds[$i] ?? null;
+                $fid = $this->supportsFilesApi() ? ($fileIds[$i] ?? null) : null;
                 $source = $fid !== null
                     ? ['type' => 'file', 'file_id' => $fid]
                     : ['type' => 'base64', 'media_type' => $img['mimeType'], 'data' => $img['base64']];
@@ -2805,8 +3002,12 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         ?string  $userId = null,
         array    $options = []
     ): \Generator {
+        if (!$this->supportsNativeMcp()) {
+            yield ['type' => 'error', 'error' => $this->getLabel() . ' does not support the native MCP connector.', 'usage' => null];
+            return;
+        }
         try {
-            $client = $this->getClient($userId);
+            $client = $this->getFullClient($userId);
         } catch (\Throwable $e) {
             yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];
             return;

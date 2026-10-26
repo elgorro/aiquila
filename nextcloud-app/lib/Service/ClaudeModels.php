@@ -72,6 +72,53 @@ class ClaudeModels {
         return self::DEPRECATED_MAP[$model] ?? $model;
     }
 
+    // ── Cloud-platform model IDs ───────────────────────────────────────────
+
+    /** @var array<string, string> */
+    private static array $canonicalCache = [];
+
+    /**
+     * Map a cloud platform's spelling of a model ID back to the first-party ID
+     * the capability tables below are keyed on. Identity for first-party IDs.
+     *
+     *   anthropic.claude-opus-5-5                         (Bedrock)
+     *   global.anthropic.claude-sonnet-5                  (Bedrock inference profile)
+     *   anthropic.claude-haiku-4-5-20251001-v1:0          (Bedrock InvokeModel)
+     *   arn:aws:bedrock:…:inference-profile/eu.anthropic.claude-sonnet-5
+     *   claude-haiku-4-5@20251001                         (Vertex snapshot)
+     *   claude-haiku-4-5                                  (undated alias of a dated table key)
+     *
+     * Every lookup in this class goes through it, so a cloud provider gets the
+     * right token ceiling, thinking policy and effort table without each call
+     * site knowing which platform it is on. Unknown IDs come back normalised
+     * but otherwise unchanged, and then hit the conservative defaults.
+     */
+    public static function canonicalId(string $model): string {
+        if (isset(self::$canonicalCache[$model])) {
+            return self::$canonicalCache[$model];
+        }
+
+        $id = $model;
+        if (str_starts_with($id, 'arn:')) {
+            $slash = strrpos($id, '/');
+            $id = $slash === false ? $id : substr($id, $slash + 1);
+        }
+        $id = (string)preg_replace('/^(?:[a-z]{2,6}(?:-[a-z]+)?\.)?anthropic\./', '', $id);
+        $id = (string)preg_replace('/-v\d+(?::\d+)?$/', '', $id);
+        $id = (string)preg_replace('/@(\d{8})$/', '-$1', $id);
+
+        if (!in_array($id, self::getAllModels(), true) && !isset(self::DEPRECATED_MAP[$id])) {
+            foreach (self::getAllModels() as $known) {
+                if (preg_match('/^' . preg_quote($id, '/') . '-\d{8}$/', $known) === 1) {
+                    $id = $known;
+                    break;
+                }
+            }
+        }
+
+        return self::$canonicalCache[$model] = $id;
+    }
+
     // ── Application defaults ───────────────────────────────────────────────
 
     public const DEFAULT_MODEL      = self::SONNET_5;
@@ -141,7 +188,7 @@ class ClaudeModels {
      * Use to clamp the user-configured max_tokens value.
      */
     public static function getMaxTokenCeiling(string $model): int {
-        return self::MAX_TOKENS_CEILING[$model] ?? self::DEFAULT_MAX_TOKENS;
+        return self::MAX_TOKENS_CEILING[self::canonicalId($model)] ?? self::DEFAULT_MAX_TOKENS;
     }
 
     /**
@@ -149,15 +196,15 @@ class ClaudeModels {
      * API-side; this value is informational (UI, capability reporting).
      */
     public static function getContextWindow(string $model): int {
-        return self::CONTEXT_WINDOW[$model] ?? self::DEFAULT_CONTEXT_WINDOW;
+        return self::CONTEXT_WINDOW[self::canonicalId($model)] ?? self::DEFAULT_CONTEXT_WINDOW;
     }
 
     public static function supportsThinking(string $model): bool {
-        return self::SUPPORTS_THINKING[$model] ?? false;
+        return self::SUPPORTS_THINKING[self::canonicalId($model)] ?? false;
     }
 
     public static function supportsEffort(string $model): bool {
-        return self::SUPPORTS_EFFORT[$model] ?? false;
+        return self::SUPPORTS_EFFORT[self::canonicalId($model)] ?? false;
     }
 
     /**
@@ -202,7 +249,7 @@ class ClaudeModels {
      * Default effort level for a model (app-level policy, not SDK data).
      */
     public static function getEffortLevel(string $model): string {
-        return self::EFFORT_LEVEL[$model] ?? 'medium';
+        return self::EFFORT_LEVEL[self::canonicalId($model)] ?? 'medium';
     }
 
     // ── Allowed effort values per model (API-enforced) ───────────────────
@@ -229,7 +276,7 @@ class ClaudeModels {
      * @return list<string>
      */
     public static function getAllowedEfforts(string $model): array {
-        return self::ALLOWED_EFFORTS[$model] ?? [];
+        return self::ALLOWED_EFFORTS[self::canonicalId($model)] ?? [];
     }
 
     public static function isAllowedEffort(string $model, string $effort): bool {
@@ -277,7 +324,7 @@ class ClaudeModels {
      * entry (no thinking support, or unknown) are treated as off.
      */
     public static function thinkingDefault(string $model): string {
-        return self::THINKING_POLICY[$model]['default'] ?? self::THINKING_DEFAULT_OFF;
+        return self::THINKING_POLICY[self::canonicalId($model)]['default'] ?? self::THINKING_DEFAULT_OFF;
     }
 
     /**
@@ -285,7 +332,7 @@ class ClaudeModels {
      * THINKING_OFF_DISABLED or THINKING_OFF_OMIT. Unknown models omit.
      */
     public static function thinkingOffMode(string $model): string {
-        return self::THINKING_POLICY[$model]['off'] ?? self::THINKING_OFF_OMIT;
+        return self::THINKING_POLICY[self::canonicalId($model)]['off'] ?? self::THINKING_OFF_OMIT;
     }
 
     public static function canDisableThinking(string $model): bool {
@@ -297,7 +344,8 @@ class ClaudeModels {
      * allowed effort is fine.
      */
     public static function maxEffortWithThinkingDisabled(string $model): ?string {
-        return self::THINKING_POLICY[$model]['off_max_effort'] ?? null;
+        $policy = self::THINKING_POLICY[self::canonicalId($model)] ?? [];
+        return $policy['off_max_effort'] ?? null;
     }
 
     /**
@@ -317,7 +365,7 @@ class ClaudeModels {
     ];
 
     public static function thinkingSummaryNeedsOptIn(string $model): bool {
-        return self::THINKING_SUMMARY_OPT_IN[$model] ?? false;
+        return self::THINKING_SUMMARY_OPT_IN[self::canonicalId($model)] ?? false;
     }
 
     // ── Sampling parameter support ────────────────────────────────────────
@@ -340,7 +388,7 @@ class ClaudeModels {
      * we omit them for all of them.
      */
     public static function supportsSamplingParams(string $model): bool {
-        return !isset(self::NO_SAMPLING_PARAMS[$model]);
+        return !isset(self::NO_SAMPLING_PARAMS[self::canonicalId($model)]);
     }
 
     // ── Service tier ──────────────────────────────────────────────────────
@@ -380,7 +428,7 @@ class ClaudeModels {
      * the Batch API.
      */
     public static function supportsFastMode(string $model): bool {
-        return self::SUPPORTS_FAST_MODE[$model] ?? false;
+        return self::SUPPORTS_FAST_MODE[self::canonicalId($model)] ?? false;
     }
 
     // ── Extended output on the Batch API ──────────────────────────────────
@@ -410,7 +458,7 @@ class ClaudeModels {
     ];
 
     public static function supportsExtendedOutput(string $model): bool {
-        return self::SUPPORTS_EXTENDED_OUTPUT[$model] ?? false;
+        return self::SUPPORTS_EXTENDED_OUTPUT[self::canonicalId($model)] ?? false;
     }
 
     /**

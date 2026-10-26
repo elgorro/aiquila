@@ -82,7 +82,7 @@ class TestableClaudeSDKService extends ClaudeSDKService {
     public function setRetrieveModelInfo(ModelInfo $info): void { $this->retrieveModelInfo = $info; }
     public function throwOnRetrieveModel(\Exception $e): void   { $this->retrieveModelException = $e; }
 
-    protected function callCreate(Client $client, array $params): Message {
+    protected function callCreate(\Anthropic\Core\BaseClient $client, array $params): Message {
         $this->lastCreateParams = $params;
         $this->createCalls[] = $params;
         $this->lastRequestOptions = $this->requestOptionsForMessages($params);
@@ -96,7 +96,7 @@ class TestableClaudeSDKService extends ClaudeSDKService {
         return $this->makeStubMessage($this->stubResponseText);
     }
 
-    protected function callCreateStream(Client $client, array $params): BaseStream {
+    protected function callCreateStream(\Anthropic\Core\BaseClient $client, array $params): BaseStream {
         $this->lastStreamParams = $params;
         if ($this->streamException !== null) {
             throw $this->streamException;

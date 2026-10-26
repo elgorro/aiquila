@@ -143,7 +143,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
             ];
         }
 
-        if (!$provider instanceof ClaudeSDKService) {
+        if (!$provider instanceof ClaudeSDKService || !$provider->supportsBatch()) {
             return $this->runSynchronously($coworker, $provider, $files, $options, $progress);
         }
 
@@ -211,7 +211,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
         }
 
         $provider = $this->providerFactory->getProviderForUser($userId, $coworker->getProvider());
-        if (!$provider instanceof ClaudeSDKService) {
+        if (!$provider instanceof ClaudeSDKService || !$provider->supportsBatch()) {
             throw new \RuntimeException('The provider that submitted this batch is no longer available');
         }
 

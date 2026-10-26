@@ -43,6 +43,7 @@ class BatchTextTaskTypeTest extends TestCase {
 
         // The service is only ever reached through the four batch methods.
         $this->provider = $this->createMock(ClaudeSDKService::class);
+        $this->provider->method('supportsBatch')->willReturn(true);
         $this->providerFactory->method('getProviderForUser')->willReturn($this->provider);
 
         $this->userFolder = $this->createMock(Folder::class);

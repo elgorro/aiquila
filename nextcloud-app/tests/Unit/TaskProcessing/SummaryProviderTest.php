@@ -26,6 +26,7 @@ class SummaryProviderTest extends TestCase {
 
     public function testAnthropicKeepsTheBatchPath(): void {
         $anthropic = $this->createMock(ClaudeSDKService::class);
+        $anthropic->method('supportsBatch')->willReturn(true);
         $anthropic->expects($this->once())
             ->method('summarizeViaBatch')
             ->with('Some long text', 'alice')

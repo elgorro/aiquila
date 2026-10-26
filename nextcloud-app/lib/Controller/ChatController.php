@@ -199,7 +199,7 @@ class ChatController extends Controller {
         if (!empty($images) && empty($documents) && empty($textParts)) {
             if (count($images) === 1) {
                 $rawBytes = base64_decode($images[0]['base64']);
-                $fileId = $this->userId !== null
+                $fileId = $this->userId !== null && FilesService::acceptsFileIds($this->provider())
                     ? $this->filesService->getOrUploadFileId($rawBytes, $images[0]['name'], $images[0]['mimeType'], $this->userId)
                     : null;
                 $result = $this->provider()->askWithImage(
@@ -211,7 +211,7 @@ class ChatController extends Controller {
                 );
             } else {
                 $fileIds = null;
-                if ($this->userId !== null) {
+                if ($this->userId !== null && FilesService::acceptsFileIds($this->provider())) {
                     $fileIds = [];
                     foreach ($images as $img) {
                         $fileIds[] = $this->filesService->getOrUploadFileId(
@@ -231,7 +231,7 @@ class ChatController extends Controller {
         if (empty($images) && count($documents) === 1 && empty($textParts)) {
             $f = $documents[0];
             $rawBytes = base64_decode($f['content']);
-            $fileId = $this->userId !== null
+            $fileId = $this->userId !== null && FilesService::acceptsFileIds($this->provider())
                 ? $this->filesService->getOrUploadFileId($rawBytes, $f['name'], 'application/pdf', $this->userId)
                 : null;
             $result = $this->provider()->askWithDocument(
@@ -480,7 +480,7 @@ class ChatController extends Controller {
             );
             $rawBytes = base64_decode($optimized['data']);
             $imageName = $fileData['name'] ?? basename($filePath);
-            $fileId = $this->userId !== null
+            $fileId = $this->userId !== null && FilesService::acceptsFileIds($this->provider())
                 ? $this->filesService->getOrUploadFileId($rawBytes, $imageName, $optimized['mimeType'], $this->userId)
                 : null;
             $result = $this->provider()->askWithImage(
@@ -493,7 +493,7 @@ class ChatController extends Controller {
         } elseif ($mimeType === 'application/pdf') {
             $rawBytes = base64_decode($fileData['content']);
             $docName = $fileData['name'] ?? basename($filePath);
-            $fileId = $this->userId !== null
+            $fileId = $this->userId !== null && FilesService::acceptsFileIds($this->provider())
                 ? $this->filesService->getOrUploadFileId($rawBytes, $docName, 'application/pdf', $this->userId)
                 : null;
             $result = $this->provider()->askWithDocument(

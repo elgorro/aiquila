@@ -48,12 +48,12 @@ class AutoStreamTestableService extends ClaudeSDKService {
         $this->streamEvents = $events;
     }
 
-    protected function callCreate(Client $client, array $params): Message {
+    protected function callCreate(\Anthropic\Core\BaseClient $client, array $params): Message {
         $this->createCalled = true;
         throw new \LogicException('callCreate must not be used above the streaming threshold');
     }
 
-    protected function callCreateStream(Client $client, array $params): BaseStream {
+    protected function callCreateStream(\Anthropic\Core\BaseClient $client, array $params): BaseStream {
         $this->streamCalled = true;
         $this->lastStreamParams = $params;
         return FakeEventStream::withEvents($this->streamEvents);

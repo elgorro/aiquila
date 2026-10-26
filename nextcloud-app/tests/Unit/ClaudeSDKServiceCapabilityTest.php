@@ -39,7 +39,7 @@ class CapabilityTestableService extends ClaudeSDKService {
         return $this->retrieveResult ?? ModelInfo::with($modelId, null, new \DateTime(), 'Test', null, null);
     }
 
-    protected function callCreate(Client $client, array $params): \Anthropic\Messages\Message {
+    protected function callCreate(\Anthropic\Core\BaseClient $client, array $params): \Anthropic\Messages\Message {
         $this->lastCreateParams = $params;
         // The real callCreate() hands these to the SDK; capture them so tests
         // can assert on beta headers and extra body params.
@@ -606,7 +606,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             public function __construct($cfg, $log, $cred, $cf, $meta, private \Throwable $toThrow) {
                 parent::__construct($cfg, $log, $cred, $cf, $meta);
             }
-            protected function callCreate(Client $client, array $params): \Anthropic\Messages\Message {
+            protected function callCreate(\Anthropic\Core\BaseClient $client, array $params): \Anthropic\Messages\Message {
                 throw $this->toThrow;
             }
             protected function getClient(?string $userId = null): Client {
@@ -643,7 +643,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             public function __construct($cfg, $log, $cred, $cf, $meta, private RefusalStopDetails $refusal) {
                 parent::__construct($cfg, $log, $cred, $cf, $meta);
             }
-            protected function callCreate(Client $client, array $params): \Anthropic\Messages\Message {
+            protected function callCreate(\Anthropic\Core\BaseClient $client, array $params): \Anthropic\Messages\Message {
                 $stub = (new \ReflectionClass(\Anthropic\Messages\Message::class))->newInstanceWithoutConstructor();
                 $ref = new \ReflectionClass($stub);
                 $textObj = new \stdClass();
@@ -687,7 +687,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
 
         $service = new class($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata) extends ClaudeSDKService {
             public ?array $lastCreateParams = null;
-            protected function callCreate(Client $client, array $params): \Anthropic\Messages\Message {
+            protected function callCreate(\Anthropic\Core\BaseClient $client, array $params): \Anthropic\Messages\Message {
                 $this->lastCreateParams = $params;
                 $stub = (new \ReflectionClass(\Anthropic\Messages\Message::class))->newInstanceWithoutConstructor();
                 $ref  = new \ReflectionClass($stub);

@@ -78,10 +78,11 @@ class SummaryProvider implements ISynchronousProvider {
 
         $provider = $this->providers->resolve($userId);
 
-        if ($provider instanceof ClaudeSDKService) {
+        if ($provider instanceof ClaudeSDKService && $provider->supportsBatch()) {
             // Anthropic's Batch API halves the cost and this runs in a background
             // job, so the wait is affordable. No other provider has an equivalent,
-            // hence the branch rather than a method on LLMProviderInterface.
+            // hence the branch rather than a method on LLMProviderInterface. Claude
+            // on a cloud platform without the Batches API takes the plain path.
             $result = $provider->summarizeViaBatch($text, $userId, $reportProgress);
         } else {
             $reportProgress(0.1);

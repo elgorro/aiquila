@@ -591,7 +591,7 @@ class ConversationController extends Controller {
 
         // 3-4. Build messages from the full history, re-attaching every file
         //      sent in this conversation so follow-ups keep their context.
-        ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id);
+        ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id, $this->usesFilesApi($conversation));
 
         // 5. Load project system prompt if conversation has a project
         $systemPrompt = null;
@@ -629,7 +629,7 @@ class ConversationController extends Controller {
             && ($staleId = $this->filesService->extractStaleFileIdFromError(new \RuntimeException((string)$result['error']))) !== null
             && $this->filesService->evictByFileId($staleId)
         ) {
-            ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id);
+            ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id, $this->usesFilesApi($conversation));
             $result = $this->callClaude($claudeMessages, $systemPrompt, $options, $conversation);
         }
         $latencyMs = (int)(microtime(true) * 1000.0) - $startMs;
@@ -780,7 +780,7 @@ class ConversationController extends Controller {
         yield ['type' => 'user_message', 'userMessage' => $this->serializeMessage($userMsg, $fileEntities)];
 
         // 2. Build messages + system prompt (mirrors message()).
-        ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id);
+        ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id, $this->usesFilesApi($conversation));
 
         $systemPrompt = null;
         $projectId = $conversation->getProjectId();
@@ -1074,7 +1074,7 @@ class ConversationController extends Controller {
      *
      * @return array{messages: list<array{role: string, content: string|list<array<string, mixed>>}>, documents: list<array{index:int,path:string,title:string,mimeType:string,fileId?:string}>}
      */
-    private function buildHistory(int $conversationId): array {
+    private function buildHistory(int $conversationId, bool $useFilesApi = true): array {
         $messages = [];
         $documents = [];
         foreach ($this->messageMapper->findByConversation($conversationId) as $msg) {
@@ -1085,7 +1085,7 @@ class ConversationController extends Controller {
                     $this->messageFileMapper->findByMessage($msg->getId())
                 );
                 if ($paths !== []) {
-                    $built = $this->buildFileContentBlocks($paths, count($documents));
+                    $built = $this->buildFileContentBlocks($paths, count($documents), $useFilesApi);
                     $documents = array_merge($documents, $built['documents']);
                     if ($built['blocks'] !== []) {
                         $content = array_merge($built['blocks'], [['type' => 'text', 'text' => $content]]);
@@ -1112,7 +1112,7 @@ class ConversationController extends Controller {
      *                         request; `document_index` counts across all of them
      * @return array{blocks: array<int, array<string, mixed>>, documents: array<int, array{index:int,path:string,title:string,mimeType:string,fileId?:string}>}
      */
-    private function buildFileContentBlocks(array $files, int $indexOffset = 0): array {
+    private function buildFileContentBlocks(array $files, int $indexOffset = 0, bool $useFilesApi = true): array {
         $blocks = [];
         $documents = [];
         foreach ($files as $filePath) {
@@ -1134,7 +1134,7 @@ class ConversationController extends Controller {
                         ],
                     ];
                     $rawBytes = base64_decode($optimized['data']);
-                    $fileId = $this->userId !== null
+                    $fileId = $this->userId !== null && $useFilesApi
                         ? $this->filesService->getOrUploadFileId($rawBytes, $fileData['name'], $optimized['mimeType'], $this->userId)
                         : null;
                     if ($fileId !== null) {
@@ -1153,7 +1153,7 @@ class ConversationController extends Controller {
                         'citations' => ['enabled' => true],
                     ];
                     $rawBytes = base64_decode($fileData['content']);
-                    $fileId = $this->userId !== null
+                    $fileId = $this->userId !== null && $useFilesApi
                         ? $this->filesService->getOrUploadFileId($rawBytes, $fileData['name'], 'application/pdf', $this->userId)
                         : null;
                     if ($fileId !== null) {
@@ -1211,6 +1211,19 @@ class ConversationController extends Controller {
             Http::STATUS_FORBIDDEN,
             NoPermittedProviderException::USER_MESSAGE,
         );
+    }
+
+    /**
+     * Whether attachments for this conversation may go to the Files API. A
+     * provider that is denied here fails later with its own error, so this
+     * only has to avoid an upload nothing can use.
+     */
+    private function usesFilesApi(Conversation $conversation): bool {
+        try {
+            return FilesService::acceptsFileIds($this->resolveProvider($conversation));
+        } catch (NoPermittedProviderException $e) {
+            return false;
+        }
     }
 
     /**
