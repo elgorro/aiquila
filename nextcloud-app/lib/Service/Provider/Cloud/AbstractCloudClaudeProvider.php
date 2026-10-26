@@ -8,6 +8,7 @@ namespace OCA\AIquila\Service\Provider\Cloud;
 use Anthropic\Core\BaseClient;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICacheFactory;
@@ -197,6 +198,22 @@ abstract class AbstractCloudClaudeProvider extends ClaudeSDKService {
         return $this->endpointConfigured()
             ? sprintf('No credentials configured for %s', $this->getLabel())
             : sprintf('%s needs its endpoint settings first', $this->getLabel());
+    }
+
+    /**
+     * A missing optional SDK is a setup gap, not a rejected credential, so the
+     * status light says so before any request is attempted.
+     */
+    public function probe(?string $userId = null): array {
+        $sdk = $this->requiredSdk($this->authMode());
+        if ($sdk !== null && $this->isConfigured() && !$this->sdk->isAvailable($sdk)) {
+            try {
+                $this->sdk->require($sdk, $this->getLabel() . ' with "' . $this->authMode() . '" authentication');
+            } catch (\RuntimeException $e) {
+                return ProviderProbe::unconfigured($e->getMessage(), $this->getModel());
+            }
+        }
+        return parent::probe($userId);
     }
 
     protected function validateModel(string $model): string {

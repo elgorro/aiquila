@@ -275,6 +275,20 @@ class CloudProvidersTest extends TestCase {
         $this->client($this->provider(VertexProvider::class));
     }
 
+    public function testAMissingSdkShowsAsUnconfiguredOnTheStatusLight(): void {
+        $this->sdkAvailable = false;
+        $this->app += [
+            'project_vertex' => 'my-project-1',
+            'auth_mode_vertex' => AbstractCloudClaudeProvider::AUTH_ACCESS_TOKEN,
+        ];
+        $this->secrets['vertex_access_token'] = 'ya29.token';
+
+        $probe = $this->provider(VertexProvider::class)->probe();
+
+        $this->assertSame(\OCA\AIquila\Service\Provider\ProviderProbe::REASON_NOT_CONFIGURED, $probe['reason']);
+        $this->assertStringContainsString(CloudSdk::GOOGLE, $probe['message']);
+    }
+
     // ── Features ────────────────────────────────────────────────────────────
 
     public function testMessagesOnlyPlatformsSwitchOffTheExtras(): void {
