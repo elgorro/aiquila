@@ -383,7 +383,7 @@ Both components stay on the same version number.
 ## Architecture Notes
 
 - **Transports**: stdio (Claude Desktop) or Streamable HTTP (Docker/Claude.ai)
-- **Auth**: built-in OAuth 2.0 provider (`MCP_AUTH_ENABLED=true`), PKCE, JWT via `node:crypto`
+- **Auth**: built-in OAuth 2.0 provider (`MCP_AUTH_ENABLED=true`), PKCE, HS256 JWT via `jose`
 - **Logging**: structured JSON to stderr via pino (`LOG_LEVEL` env var, default `info`)
 - **Logging is always to stderr** — stdout is reserved for the MCP protocol (stdio transport)
 

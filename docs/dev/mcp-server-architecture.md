@@ -20,11 +20,13 @@ The MCP server is a TypeScript/Node.js implementation of the [Model Context Prot
   - `@modelcontextprotocol/server-legacy/auth` — `mcpAuthRouter` and the `OAuthServerProvider` interface. This is the SDK's frozen copy of its v1 authorization-server helpers; it gets no new features
 - **Transport**: `StdioServerTransport` or `NodeStreamableHTTPServerTransport`
 - **HTTP framework**: Express 5 (via the SDK's `createMcpExpressApp`)
-- **Auth**: OAuth 2.1 + PKCE, HS256 JWT via `node:crypto` (no external JWT library)
+- **Auth**: OAuth 2.1 + PKCE, HS256 JWT via [`jose`](https://github.com/panva/jose)
 - **Dependencies**:
-  - `pino` ^9.x — structured JSON logging to stderr
+  - `express` ^5.x — HTTP framework
+  - `jose` ^6.x — JWT signing and verification
+  - `pino` ^10.x — structured JSON logging to stderr
   - `webdav` ^5.x — WebDAV client
-  - `zod` ^3.x — schema validation
+  - `zod` ^4.x — schema validation
 - **Dev Tools**: `vitest`, `tsx`, `eslint`, `prettier`
 
 ## Project Structure
@@ -155,7 +157,7 @@ When `MCP_AUTH_ENABLED=true`, the server runs a built-in OAuth 2.1 + PKCE author
 | Token | Format | TTL | Storage |
 |-------|--------|-----|---------|
 | Authorization code | UUID | 5 min | In-memory (`CodeStore`) |
-| Access token | HS256 JWT (node:crypto) | 1 hour | Stateless (verified by signature) |
+| Access token | HS256 JWT (jose) | 1 hour | Stateless (verified by signature) |
 | Refresh token | UUID | 24 hours | Disk-persisted (`RefreshStore`) |
 
 ### Auth Storage
@@ -307,7 +309,7 @@ All errors are logged via pino before being surfaced.
 
 - **Credentials** — environment variables only; never logged
 - **Input validation** — Zod schemas on all tool inputs; prevents injection via type enforcement
-- **OAuth/JWT** — PKCE enforced; access tokens are short-lived (1h); token signatures verified with `timingSafeEqual`
+- **OAuth/JWT** — PKCE enforced; access tokens are short-lived (1h); JWT signature, issuer and audience verified by `jose`; the internal service token (`MCP_INTERNAL_TOKEN`) is compared with `timingSafeEqual`
 - **HTTPS** — enforced by the reverse proxy (Traefik/Caddy); the MCP container itself serves plain HTTP internally
 - **Rate limiting** — Express handles concurrent requests; further rate limiting can be added at the proxy layer
 - **DNS rebinding** — `allowedHosts` derived from `MCP_AUTH_ISSUER` hostname; `localhost`/`127.0.0.1` always allowed for health checks
