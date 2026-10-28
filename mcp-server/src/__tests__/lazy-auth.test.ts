@@ -17,6 +17,14 @@ describe('isPublicRequest', () => {
     }
   });
 
+  it('allows server/discover, the 2026-07-28 replacement for the handshake', () => {
+    expect(isPublicRequest({ jsonrpc: '2.0', id: 1, method: 'server/discover' })).toBe(true);
+  });
+
+  it('gates subscriptions/listen', () => {
+    expect(isPublicRequest({ jsonrpc: '2.0', id: 1, method: 'subscriptions/listen' })).toBe(false);
+  });
+
   it('allows a public tool', () => {
     expect(isPublicRequest(call('get_local_time'))).toBe(true);
   });

@@ -16,14 +16,15 @@ Your Nextcloud credentials are only used during login and are never stored by th
 
 ## Lazy authentication
 
-MCP clients need to inspect a connector before you sign in — they must complete the
-handshake and read the tool list to show you what the connector can do. So AIquila does
+MCP clients need to inspect a connector before you sign in — they must discover the
+server and read the tool list to show you what the connector can do. So AIquila does
 not demand a token for every request. It serves a small set of methods anonymously and
 challenges only when a request would actually touch your Nextcloud instance.
 
 **Readable without a token:**
 
-- `initialize`, `notifications/initialized`, `ping`
+- `server/discover` (protocol `2026-07-28`)
+- `initialize`, `notifications/initialized`, `ping` (the handshake of `2025-11-25` and earlier)
 - `tools/list`, `resources/list`, `resources/templates/list`, `prompts/list`
 - the `get_local_time` tool, which reports the server's clock and timezone
 
@@ -31,7 +32,12 @@ challenges only when a request would actually touch your Nextcloud instance.
 calendar, contacts, Talk, …). Refusals are an HTTP `401` carrying a `WWW-Authenticate`
 header, which is the signal that makes a client pause, run the OAuth flow, and retry the
 same call. A JSON-RPC batch is a single HTTP request, so one protected message in a batch
-gates the whole batch.
+gates the whole batch. `subscriptions/listen`, which holds a change-notification stream
+open, also requires a token.
+
+The method is read from the JSON-RPC body. Under `2026-07-28` the client also mirrors it
+into the `Mcp-Method` header, and the server rejects a request whose header and body
+disagree, so a header cannot get a protected call past the check.
 
 > **Behaviour change (v0.3.30).** Before this release, *every* `/mcp` request required a
 > token. Anyone who can reach your `/mcp` endpoint can now enumerate tool names,
@@ -41,7 +47,7 @@ gates the whole batch.
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `MCP_LAZY_AUTH` | `true` | `false` requires a Bearer token on every JSON-RPC method, including `initialize` and `tools/list`. Clients that cannot pre-authenticate will not be able to inspect the connector. |
+| `MCP_LAZY_AUTH` | `true` | `false` requires a Bearer token on every JSON-RPC method, including `server/discover`, `initialize` and `tools/list`. Clients that cannot pre-authenticate will not be able to inspect the connector. |
 
 The startup log tells you which mode you are in:
 

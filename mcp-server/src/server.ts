@@ -15,8 +15,9 @@ export const SERVER_VERSION: string = _require('../package.json').version;
  * Tools are filtered based on the MCP_TOOLS env var (explicit whitelist)
  * or auto-detected from enabled Nextcloud apps at startup.
  *
- * Returns a new instance each time because the MCP SDK Protocol
- * class throws if connect() is called more than once.
+ * This is the factory behind both serving entries (serveStdio, createMcpHandler),
+ * which call it for every connection or request in either protocol era. It
+ * must return a new instance each time: an instance serves one connection.
  */
 export async function createServer(): Promise<McpServer> {
   const server = new McpServer({

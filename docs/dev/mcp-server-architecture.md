@@ -63,42 +63,54 @@ mcp-server/src/
 
 Transport is selected at startup via the `MCP_TRANSPORT` environment variable (`stdio` by default).
 
-### stdio (`StdioServerTransport`) — local MCP clients
+### Protocol revisions
 
-A single long-lived `McpServer` instance is created at startup and connected to `StdioServerTransport`. JSON-RPC messages flow over stdin/stdout.
+Both transports are dual-era. They serve MCP [`2026-07-28`](https://modelcontextprotocol.io/specification/2026-07-28), which has no handshake, and the handshake-based revisions up to `2025-11-25`, on the same endpoint or process. The SDK decides the era from how the client opens:
+
+| Client sends | Era | Served as |
+|---|---|---|
+| A request with `_meta["io.modelcontextprotocol/protocolVersion"]` (and, on HTTP, the matching `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers) | modern | `2026-07-28`, statelessly, one request at a time. `server/discover` returns the supported versions, capabilities and server identity |
+| `initialize`, or any request without that `_meta` field | legacy | The revision negotiated by `initialize` (`2025-11-25` or earlier) |
+
+A modern request naming a version the server does not serve gets `400` with `UnsupportedProtocolVersionError` (`-32022`), listing the supported versions. A header that disagrees with the body gets `400` with `HeaderMismatch` (`-32020`). See [Versioning](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning) and [Streamable HTTP](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http) in the specification.
+
+Every server instance comes from the same factory, `createServer()` in `src/server.ts`, so both eras see the same tools.
+
+### stdio (`serveStdio`) — local MCP clients
+
+`serveStdio(() => createServer())` reads the client's opening message and pins the connection to one `McpServer` for the life of the process. A `server/discover` probe or any request with the per-request `_meta` envelope selects `2026-07-28`; an `initialize` handshake selects the negotiated legacy revision, and the connection stays on it. A dual-era client may send `server/discover` first and fall back to `initialize`, in which case the factory runs twice and the probe instance is discarded. JSON-RPC messages flow over stdin/stdout. The tool set is resolved once at startup and cached.
 
 ```
 MCP Client (e.g. Claude Desktop)
      │
      │  JSON-RPC over stdin/stdout
      ▼
-StdioServerTransport
+serveStdio (picks the era from the opening message)
      │
      ▼
-McpServer (single instance, lifetime = process)
+McpServer (one pinned instance, lifetime = process)
      │
      ▼
 Tool handlers → Nextcloud APIs
 ```
 
-### HTTP (`NodeStreamableHTTPServerTransport`) — remote/network MCP clients
+### HTTP (`createMcpHandler`) — remote/network MCP clients
 
-**Per-request stateless**: a new `McpServer` + `NodeStreamableHTTPServerTransport` is created for every incoming HTTP request, then torn down when the response closes.
+**Per-request stateless** in both eras: every HTTP request gets a fresh `McpServer` from the factory, which is torn down when the response closes.
 
 ```typescript
-const handleMcpRequest = async (req, res) => {
-  const mcpServer = createServer();
-  const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  await mcpServer.connect(transport);
-  res.on('close', () => { transport.close(); mcpServer.close(); });
-  await transport.handleRequest(req, res, req.body);
-};
+const mcpHandler = toNodeHandler(
+  createMcpHandler(() => createServer(), { legacy: 'stateless' })
+);
+const handleMcpRequest = (req, res) => mcpHandler(req, res, req.body);
 ```
 
 Key points:
-- `sessionIdGenerator: undefined` — disables session tracking; no client affinity required
-- Allows distributed clients (e.g. Claude.ai, Cursor) to connect from multiple IPs without a shared session
-- `SSEServerTransport` (MCP protocol version 2024-11-05) was deprecated in May 2025 — AIquila does not use it
+- `createMcpHandler` (from `@modelcontextprotocol/server`) serves `2026-07-28` requests itself and passes legacy ones to its `legacy: 'stateless'` leg: a session-less streamable transport, so no `Mcp-Session-Id` is minted. `'reject'` would cut off every client that still opens with `initialize`
+- `toNodeHandler` (from `@modelcontextprotocol/node`) adapts it to Express and forwards `req.auth` (set by `requireBearerAuth`) and the already-parsed `req.body`
+- `GET` and `DELETE` on `/mcp` are answered `405` (once auth has passed): there is no standalone SSE stream and no session to end. Long-lived change notifications use `subscriptions/listen` under `2026-07-28`
+- No client affinity is required, so distributed clients (e.g. Claude.ai, Cursor) can connect from multiple IPs
+- The deprecated HTTP+SSE transport (`2024-11-05`) is not served
 
 ```
 MCP Client (e.g. Claude.ai, Cursor, VS Code)
@@ -289,7 +301,7 @@ User message → MCP client → tools/call JSON-RPC
 ```
 MCP client → HTTPS → Express router
   → requireBearerAuth (verify HS256 JWT)
-  → per-request McpServer + NodeStreamableHTTPServerTransport
+  → createMcpHandler → per-request McpServer (modern or legacy leg)
   → tool handler → Nextcloud API
   → response → transport → HTTP response
   → (server + transport torn down on connection close)

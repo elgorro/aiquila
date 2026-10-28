@@ -6,32 +6,31 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // Mock createServer to avoid pulling in all tool dependencies
-const mockConnect = vi.fn();
-const mockServer = { connect: mockConnect };
+const mockServer = {};
 
 vi.mock('../server.js', () => ({
   createServer: vi.fn(() => mockServer),
   SERVER_VERSION: '0.0.0-test',
 }));
 
-// Mock the MCP SDK transports (must be constructable — no arrow functions)
-const mockStdioTransport = {};
-vi.mock('@modelcontextprotocol/server/stdio', () => {
-  return {
-    StdioServerTransport: vi.fn(function () {
-      return mockStdioTransport;
-    }),
-  };
-});
+vi.mock('../tool-registry.js', () => ({
+  getFilteredToolSets: vi.fn().mockResolvedValue([]),
+}));
 
-const mockHttpTransport = { handleRequest: vi.fn() };
-vi.mock('@modelcontextprotocol/node', () => {
-  return {
-    NodeStreamableHTTPServerTransport: vi.fn(function () {
-      return mockHttpTransport;
-    }),
-  };
-});
+// Mock the MCP SDK serving entries
+vi.mock('@modelcontextprotocol/server/stdio', () => ({
+  serveStdio: vi.fn(() => ({ close: vi.fn() })),
+}));
+
+const mockMcpHandler = { fetch: vi.fn(), close: vi.fn() };
+vi.mock('@modelcontextprotocol/server', () => ({
+  createMcpHandler: vi.fn(() => mockMcpHandler),
+}));
+
+const mockNodeHandler = vi.fn();
+vi.mock('@modelcontextprotocol/node', () => ({
+  toNodeHandler: vi.fn(() => mockNodeHandler),
+}));
 
 const mockListen = vi.fn((_port: number, _host: string, cb: () => void) => cb());
 const mockAll = vi.fn();
@@ -91,11 +90,26 @@ describe('stdio transport', () => {
     vi.clearAllMocks();
   });
 
-  it('should create server and connect with StdioServerTransport', async () => {
+  it('serves stdio through serveStdio with a createServer factory', async () => {
+    const { serveStdio } = await import('@modelcontextprotocol/server/stdio');
+    const { createServer } = await import('../server.js');
     const { startStdio } = await import('../transports/stdio.js');
     await startStdio();
 
-    expect(mockConnect).toHaveBeenCalledWith(mockStdioTransport);
+    expect(serveStdio).toHaveBeenCalledTimes(1);
+    const [factory, opts] = vi.mocked(serveStdio).mock.calls[0];
+    // The default legacy: 'serve' keeps 2025-era clients (Claude Desktop) working.
+    expect(opts?.legacy).toBeUndefined();
+    await factory({ era: 'modern' });
+    expect(createServer).toHaveBeenCalled();
+  });
+
+  it('resolves the tool set at startup, before the first message', async () => {
+    const { getFilteredToolSets } = await import('../tool-registry.js');
+    const { startStdio } = await import('../transports/stdio.js');
+    await startStdio();
+
+    expect(getFilteredToolSets).toHaveBeenCalled();
   });
 });
 
@@ -114,17 +128,30 @@ describe('http transport', () => {
     process.env = savedEnv;
   });
 
-  it('should create server and connect with StreamableHTTPServerTransport', async () => {
+  it('forwards /mcp requests to the SDK handler with the parsed body', async () => {
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
 
-    // Transport is created per-request; invoke the registered handler to trigger connect
     const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
     const handler = mcpCall?.[1] as (req: unknown, res: unknown) => Promise<void>;
     expect(handler).toBeDefined();
-    await handler({ body: {} }, { on: vi.fn() });
+    const req = { body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } };
+    const res = { on: vi.fn() };
+    await handler(req, res);
 
-    expect(mockConnect).toHaveBeenCalledWith(mockHttpTransport);
+    expect(mockNodeHandler).toHaveBeenCalledWith(req, res, req.body);
+  });
+
+  it('builds the handler once, from a createServer factory', async () => {
+    const { createMcpHandler } = await import('@modelcontextprotocol/server');
+    const { createServer } = await import('../server.js');
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+
+    expect(createMcpHandler).toHaveBeenCalledTimes(1);
+    const factory = vi.mocked(createMcpHandler).mock.calls[0][0];
+    await factory({ era: 'modern' });
+    expect(createServer).toHaveBeenCalled();
   });
 
   it('should mount handler on /mcp', async () => {
@@ -139,18 +166,15 @@ describe('http transport', () => {
   // (streamableHttp.js: "405 indicates that the server does not offer an SSE stream at GET
   // endpoint"). Pinned so a future change doesn't add a session-backed GET stream in response to
   // a 405 sighting in devtools — see #384, where that 405 was a red herring.
-  it('should construct the transport in stateless mode (no session id generator)', async () => {
-    const { NodeStreamableHTTPServerTransport } = await import('@modelcontextprotocol/node');
+  //
+  // `legacy: 'stateless'` serves 2025-era clients that way; `'reject'` would cut off every
+  // client that still opens with `initialize`.
+  it('serves 2025-era clients statelessly (no sessions)', async () => {
+    const { createMcpHandler } = await import('@modelcontextprotocol/server');
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
 
-    const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
-    const handler = mcpCall?.[1] as (req: unknown, res: unknown) => Promise<void>;
-    await handler({ body: {} }, { on: vi.fn() });
-
-    expect(NodeStreamableHTTPServerTransport).toHaveBeenCalledWith({
-      sessionIdGenerator: undefined,
-    });
+    expect(vi.mocked(createMcpHandler).mock.calls[0][1]).toMatchObject({ legacy: 'stateless' });
   });
 
   it('should listen on default port 3339', async () => {
@@ -336,17 +360,18 @@ describe('http transport with auth enabled', () => {
     expect(next2).toHaveBeenCalled();
   });
 
-  it('still connects the MCP server to the transport', async () => {
+  it('still forwards authenticated requests to the SDK handler', async () => {
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
 
-    // Transport is created per-request; invoke the last handler on /mcp to trigger connect
     const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
     const handler = mcpCall?.[mcpCall.length - 1] as (req: unknown, res: unknown) => Promise<void>;
     expect(handler).toBeDefined();
-    await handler({ body: {} }, { on: vi.fn() });
+    const req = { body: { jsonrpc: '2.0', id: 1, method: 'tools/call' } };
+    const res = { on: vi.fn() };
+    await handler(req, res);
 
-    expect(mockConnect).toHaveBeenCalledWith(mockHttpTransport);
+    expect(mockNodeHandler).toHaveBeenCalledWith(req, res, req.body);
   });
 
   // ---- CORS ----
