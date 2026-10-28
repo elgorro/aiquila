@@ -265,6 +265,7 @@ and what to expect from `rebuild`.
 | `MCP_CLIENT_REDIRECT_URIS` | empty | Redirect URIs for pre-seeded client |
 | `MCP_REGISTRATION_ENABLED` | static `true` | Allow dynamic client registration |
 | `MCP_REGISTRATION_TOKEN` | auto 32-char hex | Token required for dynamic registration |
+| `MCP_CIMD_ENABLED` | not written | Client ID Metadata Documents. Off while `MCP_REGISTRATION_TOKEN` is set; add `MCP_CIMD_ENABLED=true` to accept them — see [OAuth setup](../mcp/oauth.md#3-configure-client-registration) |
 | `MCP_TRUST_PROXY` | static `true` | Trust Traefik reverse-proxy headers |
 | `MCP_DOMAIN` | `--mcp-domain` | Traefik routing domain |
 | `ACME_EMAIL` | `--acme-email` | Let's Encrypt notifications |
