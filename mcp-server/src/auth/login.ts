@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 
 import { NextcloudOAuthProvider, renderLoginForm, applySecurityHeaders } from './provider.js';
+import { isRegisteredRedirectUri } from './redirect-uri.js';
 import { logger } from '../logger.js';
 
 export function loginHandler(provider: NextcloudOAuthProvider) {
   return async (req: any, res: any): Promise<void> => {
     const body = req.body as Record<string, string>;
     const { username, password, client_id, redirect_uri, state, code_challenge, scope } = body;
+    const redirectUriExplicit = body.redirect_uri_explicit !== '';
 
     const ncUrl = process.env.NEXTCLOUD_URL?.replace(/\/+$/, '');
     if (!ncUrl) {
@@ -22,6 +24,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
           renderLoginForm({
             clientId: client_id ?? '',
             redirectUri: redirect_uri ?? '',
+            redirectUriExplicit,
             codeChallenge: code_challenge ?? '',
             state,
             scope,
@@ -40,6 +43,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
           renderLoginForm({
             clientId: client_id,
             redirectUri: redirect_uri,
+            redirectUriExplicit,
             codeChallenge: code_challenge,
             state,
             scope,
@@ -48,7 +52,9 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
         );
       return;
     }
-    if (!client.redirect_uris.map(String).includes(redirect_uri)) {
+    // Same rule as /authorize, so a native client's ephemeral loopback port
+    // passes here too (RFC 8252 §7.3).
+    if (!isRegisteredRedirectUri(redirect_uri, client.redirect_uris)) {
       applySecurityHeaders(res)
         .status(400)
         .type('html')
@@ -85,6 +91,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
             renderLoginForm({
               clientId: client_id,
               redirectUri: redirect_uri,
+              redirectUriExplicit,
               codeChallenge: code_challenge,
               state,
               scope,
@@ -100,6 +107,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
         clientId: client_id,
         scopes,
         redirectUri: redirect_uri,
+        redirectUriExplicit,
         userId: username,
         state: state || undefined,
       });
@@ -111,8 +119,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       if (state) redirectUrl.searchParams.set('state', state);
       // The metadata advertises authorization_response_iss_parameter_supported,
       // so every authorization response must carry iss, and clients reject one
-      // that lacks it (RFC 9207 §2, §2.4). mcpAuthRouter only adds it on its
-      // own /authorize redirects; this redirect is ours.
+      // that lacks it (RFC 9207 §2, §2.4).
       redirectUrl.searchParams.set('iss', provider.issuerIdentifier);
       res.redirect(redirectUrl.toString());
     } catch (err) {
@@ -124,6 +131,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
           renderLoginForm({
             clientId: client_id,
             redirectUri: redirect_uri,
+            redirectUriExplicit,
             codeChallenge: code_challenge,
             state,
             scope,

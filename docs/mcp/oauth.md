@@ -91,9 +91,30 @@ MCP_AUTH_ISSUER=https://mcp.example.com
 
 ### 3. Configure client registration
 
-Choose one of two approaches:
+A client has to be known to the server before it can sign in. There are three ways, and
+they can be combined.
 
-**Option A — Dynamic registration (recommended for most clients)**
+**Option A — Client ID Metadata Documents (on by default)**
+
+Nothing to configure. A client that supports
+[Client ID Metadata Documents](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/)
+(CIMD) uses an HTTPS URL as its `client_id`; that URL serves a JSON document with the
+client's name and redirect URIs. The server fetches and validates the document when the
+client first appears, so there is no registration step and no per-client state on the
+server. The MCP specification (`2026-07-28`) makes CIMD the preferred mechanism, and
+clients choose it whenever the metadata advertises `client_id_metadata_document_supported`.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `MCP_CIMD_ENABLED` | `true`, or `false` when `MCP_REGISTRATION_TOKEN` is set | `false` stops accepting URL `client_id`s and drops `client_id_metadata_document_supported` from the metadata |
+
+CIMD lets any client start the sign-in flow — the user still has to enter valid Nextcloud
+credentials. If you gate registration with `MCP_REGISTRATION_TOKEN` you have chosen who may
+be a client, so CIMD is off by default in that case; set `MCP_CIMD_ENABLED=true` to have
+both. See [Client ID Metadata Documents](#client-id-metadata-documents) under Security Notes
+for what the server checks.
+
+**Option B — Dynamic registration**
 
 Enable dynamic registration so clients can self-register on first connect:
 
@@ -103,16 +124,17 @@ MCP_REGISTRATION_ENABLED=true
 MCP_REGISTRATION_TOKEN=<openssl rand -hex 32>
 ```
 
-This is the standard OAuth 2.0 approach and works with Claude.ai, Cursor, VS Code extensions, and any other client that supports RFC 7591.
+This is the RFC 7591 approach. The MCP specification deprecates it in favour of CIMD but
+keeps it for backward compatibility, and many clients still rely on it.
 
 With `MCP_REGISTRATION_TOKEN` set, `POST /register` answers `401` unless the request
 carries `Authorization: Bearer <token>` (RFC 7591 §3.1 initial access token). Clients must
 therefore be told the token — see
 [Connecting the Nextcloud app to a gated server](#connecting-the-nextcloud-app-to-a-gated-server).
 
-**Option B — Static pre-seeded client**
+**Option C — Static pre-seeded client**
 
-For clients that do not support dynamic registration, pre-seed a client ID and redirect URI:
+For clients that support neither, pre-seed a client ID and redirect URI:
 
 ```env
 MCP_CLIENT_ID=<stable-identifier>
@@ -122,7 +144,7 @@ MCP_CLIENT_REDIRECT_URIS=<your-client-callback-url>
 Check your MCP client's documentation for its callback URL. Example:
 - **Claude.ai / Claude Code**: `https://claude.ai/api/mcp/auth_callback`
 
-You can combine both options — a pre-seeded client and dynamic registration simultaneously.
+All three options work side by side.
 
 #### Connecting the Nextcloud app to a gated server
 
@@ -172,15 +194,22 @@ You should receive a JSON document similar to:
 
 ```json
 {
-  "issuer": "https://mcp.example.com",
-  "authorization_endpoint": "https://mcp.example.com/oauth/authorize",
-  "token_endpoint": "https://mcp.example.com/oauth/token",
-  "registration_endpoint": "https://mcp.example.com/oauth/register",
+  "issuer": "https://mcp.example.com/",
+  "authorization_endpoint": "https://mcp.example.com/authorize",
+  "token_endpoint": "https://mcp.example.com/token",
+  "revocation_endpoint": "https://mcp.example.com/revoke",
+  "registration_endpoint": "https://mcp.example.com/register",
   "response_types_supported": ["code"],
   "grant_types_supported": ["authorization_code", "refresh_token"],
-  "code_challenge_methods_supported": ["S256"]
+  "code_challenge_methods_supported": ["S256"],
+  "token_endpoint_auth_methods_supported": ["client_secret_post", "none"],
+  "authorization_response_iss_parameter_supported": true,
+  "client_id_metadata_document_supported": true
 }
 ```
+
+`registration_endpoint` appears only with `MCP_REGISTRATION_ENABLED=true`, and
+`client_id_metadata_document_supported` only while CIMD is enabled.
 
 ### 7. Confirm protected requests are rejected
 
@@ -218,7 +247,9 @@ call. If you set `MCP_LAZY_AUTH=false`, the first request returns `401` too.
 
 ### Claude.ai / Claude Code
 
-Claude.ai uses dynamic registration. Enable it with `MCP_REGISTRATION_ENABLED=true`.
+Claude uses Client ID Metadata Documents when the server advertises them, which it does by
+default — no registration settings are needed. With CIMD disabled, enable dynamic
+registration instead (`MCP_REGISTRATION_ENABLED=true`).
 
 In Claude.ai, go to **Settings** → **Integrations** → **Add MCP Server** and enter:
 
@@ -236,19 +267,19 @@ claude mcp add --transport http https://mcp.example.com/mcp
 
 ### Cursor
 
-Cursor supports MCP via HTTP and uses dynamic registration. Enable `MCP_REGISTRATION_ENABLED=true`.
+Cursor supports MCP via HTTP. If your Cursor version does not use CIMD, enable dynamic registration with `MCP_REGISTRATION_ENABLED=true`.
 
 In Cursor, add the server URL `https://mcp.example.com/mcp` in **Settings → MCP** (or your `~/.cursor/mcp.json`). Cursor will initiate the OAuth flow on first use.
 
 ### VS Code (MCP extensions)
 
-VS Code MCP extensions (e.g. Continue, GitHub Copilot with MCP support) also use dynamic registration. Enable `MCP_REGISTRATION_ENABLED=true` and add the server URL in the extension's settings.
+VS Code MCP extensions (e.g. Continue, GitHub Copilot with MCP support) use CIMD or dynamic registration, depending on the extension. If it does not use CIMD, enable `MCP_REGISTRATION_ENABLED=true`, then add the server URL in the extension's settings.
 
 ### Other MCP clients
 
 For any MCP client that supports OAuth 2.0 with PKCE:
 
-1. Enable `MCP_REGISTRATION_ENABLED=true` (dynamic registration, recommended), **or** configure `MCP_CLIENT_ID` + `MCP_CLIENT_REDIRECT_URIS` with your client's callback URL.
+1. If the client supports Client ID Metadata Documents, nothing is needed. Otherwise enable `MCP_REGISTRATION_ENABLED=true` (dynamic registration), **or** configure `MCP_CLIENT_ID` + `MCP_CLIENT_REDIRECT_URIS` with your client's callback URL.
 2. Point your client at `https://mcp.example.com/mcp`.
 3. Follow the OAuth flow prompted by your client.
 
@@ -268,6 +299,38 @@ Tokens are stored in memory only — restarting the container invalidates all ac
 - Use a Nextcloud **app password** (not your main password) for the MCP login. This limits the blast radius if the credential is ever exposed. See [Security Best Practice: App Passwords](setup.md#security-best-practice-app-passwords).
 - The login form is served over HTTPS (enforced by your reverse proxy). Never run the auth-enabled server without TLS.
 - **Tool names, descriptions and input schemas are readable without a token** by default, along with the server's timezone. This is [lazy authentication](#lazy-authentication); no Nextcloud data is exposed. Set `MCP_LAZY_AUTH=false` if your threat model treats the tool inventory as sensitive.
+
+### Client ID Metadata Documents
+
+A CIMD `client_id` is chosen by whoever starts the flow, and the server fetches it. The
+fetch is open to any public HTTPS host and checked as follows:
+
+- The `client_id` must be an `https` URL with a path, without userinfo, fragment or dot
+  segments.
+- Every address the host resolves to is checked against the special-purpose ranges of
+  RFC 6890 (private, loopback, link-local — where cloud metadata services live — CGNAT,
+  multicast, IPv4-mapped IPv6 and others). If any one is listed, nothing is fetched. The
+  connection goes to the address that passed the check, so a DNS answer that changes
+  between check and connect cannot redirect it.
+- Redirects are not followed. The response must be `200` with a JSON content type and at
+  most 5 KB, and the fetch times out after 5 seconds.
+- The document must name itself: its `client_id` must equal the URL exactly. It needs a
+  `client_name` and at least one redirect URI, and must not carry a client secret. Only
+  public clients (`token_endpoint_auth_method` absent or `none`) are accepted.
+- Each redirect URI must share the `client_id` URL's origin, or be a loopback URI
+  (`http://127.0.0.1`, `http://localhost`, `http://[::1]` on any port) for native clients.
+- Valid documents are cached according to their `Cache-Control` header — 15 minutes when
+  it has none, never more than 24 hours. Failures are never cached.
+
+The document's `client_name` is chosen by its author, so the consent page shows the **host
+of the `client_id` URL** instead. That host is the part of the client's identity the server
+has verified.
+
+A rejected document is logged at `warn` with the reason:
+
+```
+[auth] Client ID metadata document rejected  reason="… resolves to a special-purpose address (169.254.169.254)"
+```
 
 ## Troubleshooting
 

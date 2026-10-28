@@ -63,7 +63,7 @@ describe('state persistence (real filesystem)', () => {
     expect(second.get(token)).toBeUndefined();
   });
 
-  it('ClientsStore persists a registered client and a new instance reloads it', () => {
+  it('ClientsStore persists a registered client and a new instance reloads it', async () => {
     const file = join(dir, 'clients.json');
 
     const first = new ClientsStore({ enableDynamicRegistration: true, stateFile: file });
@@ -73,7 +73,7 @@ describe('state persistence (real filesystem)', () => {
     });
 
     const second = new ClientsStore({ enableDynamicRegistration: true, stateFile: file });
-    expect(second.getClient(client.client_id)).toMatchObject({
+    expect(await second.getClient(client.client_id)).toMatchObject({
       client_id: client.client_id,
       client_name: 'Round Trip App',
     });

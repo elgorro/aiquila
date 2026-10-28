@@ -16,14 +16,14 @@ The MCP server is a TypeScript/Node.js implementation of the [Model Context Prot
 - **Protocol**: Model Context Protocol via the [TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) v2:
   - `@modelcontextprotocol/server` — `McpServer`, stdio transport, OAuth error and wire types
   - `@modelcontextprotocol/node` — `NodeStreamableHTTPServerTransport`
-  - `@modelcontextprotocol/express` — `createMcpExpressApp`, `requireBearerAuth`
-  - `@modelcontextprotocol/server-legacy/auth` — `mcpAuthRouter` and the `OAuthServerProvider` interface. This is the SDK's frozen copy of its v1 authorization-server helpers; it gets no new features
+  - `@modelcontextprotocol/express` — `createMcpExpressApp`, `requireBearerAuth`, `mcpAuthMetadataRouter` (serves the discovery documents)
 - **Transport**: `StdioServerTransport` or `NodeStreamableHTTPServerTransport`
 - **HTTP framework**: Express 5 (via the SDK's `createMcpExpressApp`)
 - **Auth**: OAuth 2.1 + PKCE, HS256 JWT via [`jose`](https://github.com/panva/jose)
 - **Dependencies**:
   - `express` ^5.x — HTTP framework
   - `jose` ^6.x — JWT signing and verification
+  - `express-rate-limit` ^8.x — per-IP limits on the OAuth endpoints
   - `pino` ^10.x — structured JSON logging to stderr
   - `webdav` ^5.x — WebDAV client
   - `zod` ^4.x — schema validation
@@ -141,10 +141,12 @@ When `MCP_AUTH_ENABLED=true`, the server runs a built-in OAuth 2.1 + PKCE author
                   (discovery: endpoints, capabilities)
 
 2. MCP Client  →  POST /register  (if MCP_REGISTRATION_ENABLED=true)
-                  (dynamic client registration)
+                  (dynamic client registration — skipped by a client that
+                  uses a Client ID Metadata Document URL as its client_id)
 
 3. MCP Client  →  GET /authorize?response_type=code&code_challenge=...
-                  (PKCE auth code request)
+                  (PKCE auth code request; a URL client_id is fetched and
+                  validated here, see src/auth/cimd.ts)
 
 4. Server      →  200 HTML login form (POST /auth/login)
 
@@ -181,11 +183,37 @@ Token state is persisted to `MCP_AUTH_STATE_DIR` (default `/app/state`):
 
 Authorization codes are in-memory only (5-min TTL, lost on restart by design).
 
+### Authorization server
+
+`src/auth/router.ts` implements the endpoints itself rather than through an SDK router:
+
+| Endpoint | Spec | Notes |
+|---|---|---|
+| `/.well-known/oauth-authorization-server` | RFC 8414 | Built by `buildAuthorizationServerMetadata`, served via `mcpAuthMetadataRouter` |
+| `/.well-known/oauth-protected-resource/mcp` | RFC 9728 | Also served at the root path by `http.ts` |
+| `/authorize` | RFC 6749 §4.1.1, RFC 7636 | 100 req / 15 min per IP. Errors before `client_id` and `redirect_uri` are verified are a `400` JSON body, never a redirect (§4.1.2.1); afterwards they redirect with `error`, `state` and `iss` (RFC 9207 §2) |
+| `/auth/login` | — | Nextcloud credential check, issues the code. 10 req / 15 min per IP |
+| `/token` | RFC 6749 §4.1.3, §6 | 50 req / 15 min per IP. `no-store` + `Pragma: no-cache` (§5.1). Refresh may narrow, never widen, the granted scope |
+| `/register` | RFC 7591 | 20 req / hour per IP. Mounted only with `MCP_REGISTRATION_ENABLED=true` |
+| `/revoke` | RFC 7009 | 50 req / 15 min per IP. Revokes refresh tokens issued to the calling client; always `200` |
+
+Every error, on these endpoints and in the bearer check on `/mcp`, is the SDK's v2
+`OAuthError`. Redirect URIs match exactly, except loopback URIs, which match on any port
+(RFC 8252 §7.3) — `src/auth/redirect-uri.ts` applies the same rule at `/authorize` and at
+`/auth/login`.
+
 ### Client Configuration
 
-Two options for OAuth clients:
+Three options for OAuth clients, usable together:
 
-**Dynamic registration** (recommended — any MCP client):
+**Client ID Metadata Documents** (on by default; `MCP_CIMD_ENABLED`): the client's
+`client_id` is an HTTPS URL serving its metadata. `ClientsStore.getClient` checks the
+pre-seeded and registered clients first, then resolves an `https://` id through
+`ClientIdDocumentResolver` (`src/auth/cimd.ts`), which guards the fetch against SSRF and
+caches valid documents. The checks are listed in
+[OAuth setup](../mcp/oauth.md#client-id-metadata-documents).
+
+**Dynamic registration** (any RFC 7591 client):
 ```
 MCP_REGISTRATION_ENABLED=true
 MCP_REGISTRATION_TOKEN=<secret>  # optional: gates POST /register with Bearer token
@@ -238,6 +266,7 @@ MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
 | `MCP_AUTH_STATE_DIR` | No | `/app/state` | Directory for persisted OAuth state |
 | `MCP_REGISTRATION_ENABLED` | No | `false` | Enable dynamic client registration |
 | `MCP_REGISTRATION_TOKEN` | No | — | Bearer token to gate `POST /register` |
+| `MCP_CIMD_ENABLED` | No | `true` (`false` when `MCP_REGISTRATION_TOKEN` is set) | Accept Client ID Metadata Document URLs as `client_id` |
 | `MCP_CLIENT_ID` | No | — | Pre-seeded static client ID |
 | `MCP_CLIENT_REDIRECT_URIS` | No | `""` (empty) | Comma-separated redirect URIs for static client |
 
@@ -282,7 +311,7 @@ export const myTool = {
 
 ### 5. Auth Layer (`auth/`)
 
-Implements `OAuthServerProvider` from `@modelcontextprotocol/server-legacy/auth`. `verifyAccessToken` throws the v2 `OAuthError` with code `invalid_token`, which `requireBearerAuth` turns into a 401 challenge (RFC 6750 §3.1); any other error becomes a 500. The provider is instantiated once and shared for the lifetime of the HTTP process. Individual stores (`ClientsStore`, `CodeStore`, `RefreshStore`) manage state independently.
+`router.ts` holds the authorization server endpoints and `provider.ts` the grant logic behind them (`NextcloudOAuthProvider`). `verifyAccessToken` throws the v2 `OAuthError` with code `invalid_token`, which `requireBearerAuth` turns into a 401 challenge (RFC 6750 §3.1); any other error becomes a 500. The provider is instantiated once and shared for the lifetime of the HTTP process. Individual stores (`ClientsStore`, `CodeStore`, `RefreshStore`) manage state independently.
 
 ## Data Flow Examples
 

@@ -2,15 +2,6 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
-// The authorization-server side (provider interface, clients store, grant
-// errors) lives in the frozen v1 copy in server-legacy; the resource-server
-// side (token verification, OAuthError) is maintained in the v2 packages.
-import type {
-  OAuthServerProvider,
-  AuthorizationParams,
-  OAuthRegisteredClientsStore,
-} from '@modelcontextprotocol/server-legacy/auth';
-import { InvalidGrantError } from '@modelcontextprotocol/server-legacy/auth';
 import {
   OAuthError,
   OAuthErrorCode,
@@ -20,6 +11,7 @@ import {
   type OAuthTokenRevocationRequest,
 } from '@modelcontextprotocol/server';
 import { ClientsStore, CodeStore, RefreshStore } from './store.js';
+import { looksLikeClientIdUrl } from './cimd.js';
 import { LOGIN_STYLESHEET_PATH } from './login-page-css.js';
 import { logger } from '../logger.js';
 
@@ -91,6 +83,7 @@ export function renderLoginForm(opts: {
   clientName?: string;
   clientId: string;
   redirectUri: string;
+  redirectUriExplicit?: boolean;
   state?: string;
   codeChallenge: string;
   scope?: string;
@@ -116,6 +109,7 @@ export function renderLoginForm(opts: {
     <form method="POST" action="/auth/login">
       <input type="hidden" name="client_id" value="${escapeHtml(opts.clientId)}">
       <input type="hidden" name="redirect_uri" value="${escapeHtml(opts.redirectUri)}">
+      <input type="hidden" name="redirect_uri_explicit" value="${opts.redirectUriExplicit === false ? '' : '1'}">
       <input type="hidden" name="state" value="${escapeHtml(opts.state ?? '')}">
       <input type="hidden" name="code_challenge" value="${escapeHtml(opts.codeChallenge)}">
       <input type="hidden" name="scope" value="${escapeHtml(opts.scope ?? '')}">
@@ -133,14 +127,45 @@ export function renderLoginForm(opts: {
 // Access tokens are valid for 1 hour; refresh tokens handle longer sessions.
 const ACCESS_TOKEN_TTL_SECS = 60 * 60;
 
+/**
+ * The name the consent page shows for a client. A Client ID Metadata Document
+ * is self-asserted, so its client_name is whatever the document's author chose
+ * — possibly another product's name. The host of the client_id URL is the one
+ * thing about such a client that is verified (it served the document over TLS).
+ */
+export function clientDisplayName(client: OAuthClientInformationFull): string | undefined {
+  if (looksLikeClientIdUrl(client.client_id)) {
+    try {
+      return new URL(client.client_id).host;
+    } catch {
+      return undefined;
+    }
+  }
+  return client.client_name;
+}
+
+/** A validated authorization request, as the /authorize endpoint hands it over. */
+export interface AuthorizationParams {
+  redirectUri: string;
+  // false when redirect_uri was omitted and the client's only registered one is used
+  redirectUriExplicit: boolean;
+  codeChallenge: string;
+  state?: string;
+  scopes: string[];
+}
+
 // --- OAuth Provider ---
 
-export class NextcloudOAuthProvider implements OAuthServerProvider {
-  private readonly _clientsStore = ClientsStore.fromEnv();
+export class NextcloudOAuthProvider {
+  private readonly _clientsStore: ClientsStore;
   private readonly codeStore = new CodeStore();
   private readonly refreshStore = RefreshStore.fromEnv();
 
-  get clientsStore(): OAuthRegisteredClientsStore {
+  constructor(clientsStore: ClientsStore = ClientsStore.fromEnv()) {
+    this._clientsStore = clientsStore;
+  }
+
+  get clientsStore(): ClientsStore {
     return this._clientsStore;
   }
 
@@ -154,9 +179,10 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
       .type('html')
       .send(
         renderLoginForm({
-          clientName: client.client_name,
+          clientName: clientDisplayName(client),
           clientId: client.client_id,
           redirectUri: params.redirectUri,
+          redirectUriExplicit: params.redirectUriExplicit,
           state: params.state,
           codeChallenge: params.codeChallenge,
           scope: params.scopes?.join(' '),
@@ -170,7 +196,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
   ): Promise<string> {
     const entry = this.codeStore.get(authorizationCode);
     if (!entry || entry.clientId !== client.client_id) {
-      throw new InvalidGrantError('Invalid authorization code');
+      throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid authorization code');
     }
     return entry.pkceChallenge;
   }
@@ -178,9 +204,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
   async exchangeAuthorizationCode(
     client: OAuthClientInformationFull,
     authorizationCode: string,
-    _codeVerifier?: string,
-    redirectUri?: string,
-    _resource?: URL
+    redirectUri?: string
   ): Promise<OAuthTokens> {
     const entry = this.codeStore.get(authorizationCode);
     if (!entry || entry.clientId !== client.client_id) {
@@ -188,14 +212,19 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
         { client: client.client_id },
         '[token] Auth code exchange failed: invalid or expired code'
       );
-      throw new InvalidGrantError('Invalid authorization code');
+      throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid authorization code');
     }
-    if (redirectUri && entry.redirectUri !== redirectUri) {
+    // RFC 6749 §4.1.3: redirect_uri must be present if the authorization
+    // request included it, and identical to it.
+    if (
+      (redirectUri === undefined && entry.redirectUriExplicit) ||
+      (redirectUri !== undefined && entry.redirectUri !== redirectUri)
+    ) {
       logger.warn(
         { client: client.client_id },
         '[token] Auth code exchange failed: redirect_uri mismatch'
       );
-      throw new InvalidGrantError('Redirect URI mismatch');
+      throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Redirect URI mismatch');
     }
     this.codeStore.delete(authorizationCode);
 
@@ -232,8 +261,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
   async exchangeRefreshToken(
     client: OAuthClientInformationFull,
     refreshToken: string,
-    scopes?: string[],
-    _resource?: URL
+    scopes?: string[]
   ): Promise<OAuthTokens> {
     const entry = this.refreshStore.get(refreshToken);
     if (!entry || entry.clientId !== client.client_id) {
@@ -241,7 +269,16 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
         { client: client.client_id },
         '[token] Refresh token exchange failed: invalid or expired token'
       );
-      throw new InvalidGrantError('Invalid refresh token');
+      throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid refresh token');
+    }
+    // RFC 6749 §6: the requested scope MUST NOT include any scope not
+    // originally granted; omitted means the original scope.
+    const exceeding = scopes?.filter((s) => !entry.scopes.includes(s)) ?? [];
+    if (exceeding.length > 0) {
+      throw new OAuthError(
+        OAuthErrorCode.InvalidScope,
+        `Scope exceeds the original grant: ${exceeding.join(' ')}`
+      );
     }
     const effectiveScopes = scopes ?? entry.scopes;
     this.refreshStore.delete(refreshToken);
@@ -296,11 +333,10 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     );
     if (!claims) {
       logger.warn('[auth] Access token verification failed: invalid or expired token');
-      // OAuthError(InvalidToken) — not a bare Error, and not the legacy
-      // InvalidTokenError — so requireBearerAuth answers 401 with a
-      // WWW-Authenticate challenge (RFC 6750 §3.1). Anything else becomes a
-      // 500, and clients treat that as a server fault rather than a cue to
-      // re-authenticate.
+      // OAuthError(InvalidToken) — not a bare Error — so requireBearerAuth
+      // answers 401 with a WWW-Authenticate challenge (RFC 6750 §3.1).
+      // Anything else becomes a 500, and clients treat that as a server fault
+      // rather than a cue to re-authenticate.
       throw new OAuthError(OAuthErrorCode.InvalidToken, 'Invalid or expired access token');
     }
     return {
@@ -311,11 +347,20 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     };
   }
 
+  /**
+   * Revokes a refresh token. Only refresh tokens are revocable — access tokens
+   * are stateless JWTs that expire on their own. RFC 7009 §2.1: the server
+   * verifies the token was issued to the requesting client; §2.2: an invalid
+   * or unknown token is not an error.
+   */
   async revokeToken(
-    _client: OAuthClientInformationFull,
+    client: OAuthClientInformationFull,
     request: OAuthTokenRevocationRequest
   ): Promise<void> {
-    this.refreshStore.delete(request.token);
+    const entry = this.refreshStore.get(request.token);
+    if (entry && entry.clientId === client.client_id) {
+      this.refreshStore.delete(request.token);
+    }
   }
 
   /** Called by the login handler to issue an auth code after successful Nextcloud auth. */
@@ -324,6 +369,7 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     clientId: string;
     scopes: string[];
     redirectUri: string;
+    redirectUriExplicit: boolean;
     userId: string;
     state?: string;
   }): string {
