@@ -330,6 +330,14 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     return this.codeStore.store(params);
   }
 
+  /**
+   * The issuer identifier exactly as the AS metadata publishes it (`issuer`),
+   * for the `iss` authorization-response parameter (RFC 9207 §2).
+   */
+  get issuerIdentifier(): string {
+    return new URL(this.getIssuer()).href;
+  }
+
   private getSecret(): string {
     const secret = process.env.MCP_AUTH_SECRET;
     if (!secret) throw new Error('MCP_AUTH_SECRET is not set');
