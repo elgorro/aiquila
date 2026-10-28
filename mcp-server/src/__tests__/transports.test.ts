@@ -58,10 +58,10 @@ vi.mock('express', () => ({
   default: { urlencoded: mockUrlencoded },
 }));
 
-// Mock auth SDK modules
+// Mock the authorization server router
 const mockMcpAuthMiddleware = vi.fn();
-vi.mock('@modelcontextprotocol/server-legacy/auth', () => ({
-  mcpAuthRouter: vi.fn(() => mockMcpAuthMiddleware),
+vi.mock('../auth/router.js', () => ({
+  authRouter: vi.fn(() => mockMcpAuthMiddleware),
 }));
 
 // Mock ocs fetchStatus to prevent real network calls during startup probe

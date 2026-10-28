@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import type { OAuthClientInformationFull } from '@modelcontextprotocol/server';
-import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/server-legacy/auth';
+import { ClientIdDocumentError, ClientIdDocumentResolver, looksLikeClientIdUrl } from './cimd.js';
 import { logger } from '../logger.js';
 
 export interface CodeEntry {
@@ -12,6 +12,10 @@ export interface CodeEntry {
   clientId: string;
   scopes: string[];
   redirectUri: string;
+  // Whether the authorization request carried redirect_uri itself rather than
+  // falling back to the client's only registered one. If it did, the token
+  // request must repeat it (RFC 6749 §4.1.3).
+  redirectUriExplicit: boolean;
   userId: string;
   state?: string;
   expiresAt: number;
@@ -161,19 +165,24 @@ interface ClientsStoreOptions {
   preseededClients?: OAuthClientInformationFull[];
   enableDynamicRegistration?: boolean;
   stateFile?: string;
+  // Resolves https:// client_ids as Client ID Metadata Documents. Omitted →
+  // such client_ids are unknown unless registered.
+  clientIdDocuments?: ClientIdDocumentResolver;
 }
 
-export class ClientsStore implements OAuthRegisteredClientsStore {
+export class ClientsStore {
   private readonly clients = new Map<string, OAuthClientInformationFull>();
   private readonly stateFile?: string;
+  private readonly clientIdDocuments?: ClientIdDocumentResolver;
 
-  // Optional: SDK only mounts POST /register when this is defined.
+  // Optional: POST /register is only mounted when this is defined.
   readonly registerClient?: (
     client: Omit<OAuthClientInformationFull, 'client_id' | 'client_id_issued_at'>
   ) => OAuthClientInformationFull;
 
   constructor(options?: ClientsStoreOptions) {
     this.stateFile = options?.stateFile;
+    this.clientIdDocuments = options?.clientIdDocuments;
 
     // Load persisted clients first (dynamic registrations from previous runs)
     if (this.stateFile) {
@@ -204,8 +213,27 @@ export class ClientsStore implements OAuthRegisteredClientsStore {
     }
   }
 
-  getClient(clientId: string): OAuthClientInformationFull | undefined {
-    return this.clients.get(clientId);
+  /** True when https:// client_ids are resolved as Client ID Metadata Documents. */
+  get clientIdMetadataDocumentsEnabled(): boolean {
+    return this.clientIdDocuments !== undefined;
+  }
+
+  /**
+   * Looks up a pre-seeded or registered client, then — for an https:// client_id
+   * — fetches its Client ID Metadata Document. Returns undefined for an unknown
+   * client or a document that fails validation.
+   */
+  async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
+    const known = this.clients.get(clientId);
+    if (known) return known;
+    if (!this.clientIdDocuments || !looksLikeClientIdUrl(clientId)) return undefined;
+    try {
+      return await this.clientIdDocuments.resolve(clientId);
+    } catch (err) {
+      if (!(err instanceof ClientIdDocumentError)) throw err;
+      logger.warn({ clientId, reason: err.message }, '[auth] Client ID metadata document rejected');
+      return undefined;
+    }
   }
 
   private persist(): void {
@@ -218,10 +246,14 @@ export class ClientsStore implements OAuthRegisteredClientsStore {
    *   MCP_CLIENT_ID              → pre-seeded static public PKCE client (any MCP client)
    *   MCP_CLIENT_REDIRECT_URIS   → comma-separated redirect URIs for the pre-seeded client
    *   MCP_REGISTRATION_ENABLED=true → enable dynamic POST /register
+   *   MCP_CIMD_ENABLED           → resolve https:// client_ids as metadata documents;
+   *                                defaults to on, off when MCP_REGISTRATION_TOKEN gates
+   *                                registration (see cimdEnabledFromEnv)
    *
-   * Note: no client_secret is stored — the SDK's clientAuth middleware requires the caller
-   * to send client_secret whenever client.client_secret is set, which public OAuth clients
-   * never do. Security is enforced via PKCE instead.
+   * Note: no client_secret is stored for the pre-seeded client — client
+   * authentication requires the caller to send client_secret whenever
+   * client.client_secret is set, which public OAuth clients never do. Security
+   * is enforced via PKCE instead.
    */
   static fromEnv(): ClientsStore {
     const preseeded: OAuthClientInformationFull[] = [];
@@ -268,8 +300,22 @@ export class ClientsStore implements OAuthRegisteredClientsStore {
       preseededClients: preseeded,
       enableDynamicRegistration: process.env.MCP_REGISTRATION_ENABLED === 'true',
       stateFile,
+      clientIdDocuments: cimdEnabledFromEnv() ? new ClientIdDocumentResolver() : undefined,
     });
   }
+}
+
+/**
+ * Whether Client ID Metadata Documents are accepted. MCP_CIMD_ENABLED decides
+ * when set. Otherwise they are on — unless MCP_REGISTRATION_TOKEN is set: an
+ * operator who gates registration has chosen who may be a client, and CIMD
+ * would let any client in without the token.
+ */
+export function cimdEnabledFromEnv(): boolean {
+  const flag = process.env.MCP_CIMD_ENABLED;
+  if (flag === 'true') return true;
+  if (flag === 'false') return false;
+  return !process.env.MCP_REGISTRATION_TOKEN;
 }
 
 export class CodeStore {

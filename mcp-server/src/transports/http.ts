@@ -5,7 +5,6 @@ import express from 'express';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { createMcpExpressApp, requireBearerAuth } from '@modelcontextprotocol/express';
-import { mcpAuthRouter } from '@modelcontextprotocol/server-legacy/auth';
 import { createServer, SERVER_VERSION } from '../server.js';
 import { NextcloudOAuthProvider } from '../auth/provider.js';
 import {
@@ -13,8 +12,10 @@ import {
   StateDirNotWritableError,
   stateUnwritableMessage,
   markStateUnwritableWarned,
+  cimdEnabledFromEnv,
 } from '../auth/store.js';
 import { loginHandler } from '../auth/login.js';
+import { authRouter } from '../auth/router.js';
 import { LOGIN_STYLESHEET, LOGIN_STYLESHEET_PATH } from '../auth/login-page-css.js';
 import { isPublicRequest } from './lazy-auth.js';
 import { logger } from '../logger.js';
@@ -281,6 +282,7 @@ export async function startHttp(): Promise<void> {
   const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
   const hasStaticClient = !!process.env.MCP_CLIENT_ID;
   const registrationToken = process.env.MCP_REGISTRATION_TOKEN;
+  const cimdEnabled = cimdEnabledFromEnv();
 
   if (authEnabled) {
     const issuerUrl = process.env.MCP_AUTH_ISSUER;
@@ -289,10 +291,6 @@ export async function startHttp(): Promise<void> {
     }
     if (!process.env.MCP_AUTH_SECRET) {
       throw new Error('MCP_AUTH_SECRET must be set when MCP_AUTH_ENABLED=true');
-    }
-
-    if (!registrationEnabled && !hasStaticClient) {
-      logger.warn('No clients configured. Set MCP_CLIENT_ID or MCP_REGISTRATION_ENABLED=true');
     }
 
     try {
@@ -315,22 +313,14 @@ export async function startHttp(): Promise<void> {
 
     const provider = new NextcloudOAuthProvider();
 
-    // When gated dynamic registration is desired, require a bearer token on POST /register.
-    if (registrationEnabled && registrationToken) {
-      app.use('/register', (req: any, res: any, next: any) => {
-        if (req.headers['authorization'] !== `Bearer ${registrationToken}`) {
-          res.status(401).json({
-            error: 'unauthorized_client',
-            error_description: 'Valid registration token required',
-          });
-          return;
-        }
-        next();
-      });
+    if (!registrationEnabled && !hasStaticClient && !cimdEnabled) {
+      logger.warn(
+        'No clients configured. Set MCP_CLIENT_ID, MCP_REGISTRATION_ENABLED=true or MCP_CIMD_ENABLED=true'
+      );
     }
 
-    // OAuth discovery + token endpoints (/.well-known/*, /oauth/*)
-    const oauthPaths = ['/.well-known', '/register', '/authorize', '/token'];
+    // OAuth discovery + authorization server endpoints
+    const oauthPaths = ['/.well-known', '/register', '/authorize', '/token', '/revoke'];
     for (const p of oauthPaths) {
       app.use(p, (req: any, _res: any, next: any) => {
         logger.debug({ method: req.method, path: req.path }, '[oauth] Request');
@@ -338,18 +328,19 @@ export async function startHttp(): Promise<void> {
       });
     }
     app.use(
-      mcpAuthRouter({
+      authRouter({
         provider,
         issuerUrl: new URL(issuerUrl),
         resourceServerUrl: new URL(MCP_PATH, issuerUrl),
         serviceDocumentationUrl: new URL('https://github.com/elgorro/aiquila'),
         scopesSupported: SCOPES_SUPPORTED,
+        registrationToken: registrationEnabled ? registrationToken : undefined,
       })
     );
 
     // Fallback: serve protected resource metadata at the root well-known path too,
     // so clients that use the server root URL (without /mcp) can discover the resource.
-    // The SDK only mounts at /.well-known/oauth-protected-resource/mcp per RFC 9728.
+    // authRouter only mounts it at /.well-known/oauth-protected-resource/mcp per RFC 9728.
     app.get('/.well-known/oauth-protected-resource', (_req, res) => {
       res.json({
         resource: new URL(MCP_PATH, issuerUrl).href,
@@ -482,6 +473,12 @@ export async function startHttp(): Promise<void> {
       if (registrationEnabled) {
         logger.info({ gated: !!registrationToken }, 'Dynamic client registration enabled');
       }
+      logger.info(
+        { cimd: cimdEnabled },
+        cimdEnabled
+          ? 'Client ID Metadata Documents enabled — https:// client_ids are fetched and validated'
+          : 'Client ID Metadata Documents disabled'
+      );
     }
     if (process.env.MCP_INTERNAL_TOKEN) {
       logger.info('Internal bearer token configured (MCP_INTERNAL_TOKEN)');

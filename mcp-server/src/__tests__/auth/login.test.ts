@@ -230,8 +230,39 @@ describe('loginHandler', () => {
     const code = new URL(url).searchParams.get('code')!;
     const fakeClient = { client_id: 'c1', redirect_uris: [] as any[] } as any;
     // If the code is valid we can exchange it
-    const tokens = await provider.exchangeAuthorizationCode(fakeClient, code);
+    const tokens = await provider.exchangeAuthorizationCode(
+      fakeClient,
+      code,
+      BASE_BODY.redirect_uri
+    );
     expect(tokens.scope).toBe('read write');
+  });
+
+  it('accepts a loopback redirect on another port, as /authorize does (RFC 8252 §7.3)', async () => {
+    process.env.MCP_CLIENT_REDIRECT_URIS = 'http://127.0.0.1:8080/cb';
+    provider = new NextcloudOAuthProvider();
+    (global.fetch as any).mockResolvedValueOnce({ ok: true });
+    const res = makeRes();
+    await loginHandler(provider)(
+      { body: { ...BASE_BODY, redirect_uri: 'http://127.0.0.1:51234/cb' } } as any,
+      res as any
+    );
+    const url = new URL((res.redirect as any).mock.calls[0][0] as string);
+    expect(`${url.origin}${url.pathname}`).toBe('http://127.0.0.1:51234/cb');
+  });
+
+  it('lets the token request omit redirect_uri when /authorize resolved it', async () => {
+    (global.fetch as any).mockResolvedValueOnce({ ok: true });
+    const res = makeRes();
+    await loginHandler(provider)(
+      { body: { ...BASE_BODY, redirect_uri_explicit: '' } } as any,
+      res as any
+    );
+    const code = new URL((res.redirect as any).mock.calls[0][0] as string).searchParams.get(
+      'code'
+    )!;
+    const client = { client_id: 'c1', redirect_uris: [] as any[] } as any;
+    await expect(provider.exchangeAuthorizationCode(client, code)).resolves.toBeDefined();
   });
 
   it('handles empty scope gracefully', async () => {

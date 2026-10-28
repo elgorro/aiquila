@@ -25,55 +25,55 @@ describe('ClientsStore with dynamic registration', () => {
     store = new ClientsStore({ enableDynamicRegistration: true });
   });
 
-  it('returns undefined for an unknown client', () => {
-    expect(store.getClient('unknown')).toBeUndefined();
+  it('returns undefined for an unknown client', async () => {
+    expect(await store.getClient('unknown')).toBeUndefined();
   });
 
-  it('registers a client and retrieves it by id', () => {
+  it('registers a client and retrieves it by id', async () => {
     const client = store.registerClient!({
       redirect_uris: [new URL('https://example.com/callback')],
     });
     expect(client.client_id).toBeDefined();
     expect(client.client_id_issued_at).toBeCloseTo(Math.floor(Date.now() / 1000), -2);
-    expect(store.getClient(client.client_id)).toEqual(client);
+    expect(await store.getClient(client.client_id)).toEqual(client);
   });
 
-  it('assigns a unique client_id on each registration', () => {
+  it('assigns a unique client_id on each registration', async () => {
     const a = store.registerClient!({ redirect_uris: [new URL('https://a.com/cb')] });
     const b = store.registerClient!({ redirect_uris: [new URL('https://b.com/cb')] });
     expect(a.client_id).not.toBe(b.client_id);
   });
 
-  it('preserves all metadata fields', () => {
+  it('preserves all metadata fields', async () => {
     const client = store.registerClient!({
       redirect_uris: [new URL('https://example.com/cb')],
       client_name: 'My App',
       scope: 'read write',
     });
-    expect(store.getClient(client.client_id)?.client_name).toBe('My App');
-    expect(store.getClient(client.client_id)?.scope).toBe('read write');
+    expect((await store.getClient(client.client_id))?.client_name).toBe('My App');
+    expect((await store.getClient(client.client_id))?.scope).toBe('read write');
   });
 });
 
 // ---- ClientsStore constructor options ----
 
 describe('ClientsStore constructor options', () => {
-  it('registerClient is undefined when enableDynamicRegistration is false', () => {
+  it('registerClient is undefined when enableDynamicRegistration is false', async () => {
     const store = new ClientsStore({ enableDynamicRegistration: false });
     expect(store.registerClient).toBeUndefined();
   });
 
-  it('registerClient is undefined when no options are provided', () => {
+  it('registerClient is undefined when no options are provided', async () => {
     const store = new ClientsStore();
     expect(store.registerClient).toBeUndefined();
   });
 
-  it('registerClient is defined when enableDynamicRegistration is true', () => {
+  it('registerClient is defined when enableDynamicRegistration is true', async () => {
     const store = new ClientsStore({ enableDynamicRegistration: true });
     expect(store.registerClient).toBeTypeOf('function');
   });
 
-  it('pre-seeded clients are returned by getClient() using their exact client_id', () => {
+  it('pre-seeded clients are returned by getClient() using their exact client_id', async () => {
     const preseeded = {
       client_id: 'my-fixed-client-id',
       client_secret: 'super-secret',
@@ -86,13 +86,13 @@ describe('ClientsStore constructor options', () => {
       client_name: 'Pre-seeded client',
     };
     const store = new ClientsStore({ preseededClients: [preseeded] });
-    const retrieved = store.getClient('my-fixed-client-id');
+    const retrieved = await store.getClient('my-fixed-client-id');
     expect(retrieved).toBeDefined();
     expect(retrieved?.client_id).toBe('my-fixed-client-id');
     expect(retrieved?.client_secret).toBe('super-secret');
   });
 
-  it('client_secret_expires_at: 0 is stored correctly', () => {
+  it('client_secret_expires_at: 0 is stored correctly', async () => {
     const preseeded = {
       client_id: 'id-1',
       client_secret: 'secret-1',
@@ -101,7 +101,7 @@ describe('ClientsStore constructor options', () => {
       redirect_uris: [],
     };
     const store = new ClientsStore({ preseededClients: [preseeded] });
-    expect(store.getClient('id-1')?.client_secret_expires_at).toBe(0);
+    expect((await store.getClient('id-1'))?.client_secret_expires_at).toBe(0);
   });
 });
 
@@ -126,38 +126,38 @@ describe('ClientsStore.fromEnv()', () => {
     }
   });
 
-  it('returns empty store with no registerClient when no env vars are set', () => {
+  it('returns empty store with no registerClient when no env vars are set', async () => {
     const store = ClientsStore.fromEnv();
     expect(store.registerClient).toBeUndefined();
-    expect(store.getClient('anything')).toBeUndefined();
+    expect(await store.getClient('anything')).toBeUndefined();
   });
 
-  it('pre-seeds a public PKCE client when MCP_CLIENT_ID is set', () => {
+  it('pre-seeds a public PKCE client when MCP_CLIENT_ID is set', async () => {
     process.env.MCP_CLIENT_ID = 'env-client-id';
     const store = ClientsStore.fromEnv();
-    const client = store.getClient('env-client-id');
+    const client = await store.getClient('env-client-id');
     expect(client).toBeDefined();
     expect(client?.client_id).toBe('env-client-id');
     expect(client?.client_secret).toBeUndefined();
     expect(client?.token_endpoint_auth_method).toBe('none');
   });
 
-  it('enables registerClient when MCP_REGISTRATION_ENABLED=true', () => {
+  it('enables registerClient when MCP_REGISTRATION_ENABLED=true', async () => {
     process.env.MCP_REGISTRATION_ENABLED = 'true';
     const store = ClientsStore.fromEnv();
     expect(store.registerClient).toBeTypeOf('function');
   });
 
-  it('does not enable registerClient when MCP_REGISTRATION_ENABLED=false', () => {
+  it('does not enable registerClient when MCP_REGISTRATION_ENABLED=false', async () => {
     process.env.MCP_REGISTRATION_ENABLED = 'false';
     const store = ClientsStore.fromEnv();
     expect(store.registerClient).toBeUndefined();
   });
 
-  it('pre-seeds client with MCP_CLIENT_ID alone (no secret needed)', () => {
+  it('pre-seeds client with MCP_CLIENT_ID alone (no secret needed)', async () => {
     process.env.MCP_CLIENT_ID = 'only-id';
     const store = ClientsStore.fromEnv();
-    expect(store.getClient('only-id')).toBeDefined();
+    expect(await store.getClient('only-id')).toBeDefined();
   });
 });
 
@@ -170,7 +170,7 @@ describe('CodeStore', () => {
     store = new CodeStore();
   });
 
-  it('stores and retrieves an auth code entry', () => {
+  it('stores and retrieves an auth code entry', async () => {
     const code = store.store({
       pkceChallenge: 'my-challenge',
       clientId: 'client-1',
@@ -188,11 +188,11 @@ describe('CodeStore', () => {
     expect(entry?.state).toBe('state-xyz');
   });
 
-  it('returns undefined for an unknown code', () => {
+  it('returns undefined for an unknown code', async () => {
     expect(store.get('does-not-exist')).toBeUndefined();
   });
 
-  it('deletes a code so it cannot be retrieved again', () => {
+  it('deletes a code so it cannot be retrieved again', async () => {
     const code = store.store({
       pkceChallenge: 'ch',
       clientId: 'c',
@@ -204,7 +204,7 @@ describe('CodeStore', () => {
     expect(store.get(code)).toBeUndefined();
   });
 
-  it('stores each code with a unique ID', () => {
+  it('stores each code with a unique ID', async () => {
     const params = {
       pkceChallenge: 'ch',
       clientId: 'c',
@@ -227,7 +227,7 @@ describe('RefreshStore', () => {
     store = new RefreshStore();
   });
 
-  it('stores and retrieves a refresh token entry', () => {
+  it('stores and retrieves a refresh token entry', async () => {
     const token = store.store({ userId: 'bob', clientId: 'c1', scopes: ['read'] });
     expect(typeof token).toBe('string');
     const entry = store.get(token);
@@ -236,17 +236,17 @@ describe('RefreshStore', () => {
     expect(entry?.scopes).toEqual(['read']);
   });
 
-  it('returns undefined for an unknown token', () => {
+  it('returns undefined for an unknown token', async () => {
     expect(store.get('bad-token')).toBeUndefined();
   });
 
-  it('deletes a token so it cannot be retrieved again', () => {
+  it('deletes a token so it cannot be retrieved again', async () => {
     const token = store.store({ userId: 'u', clientId: 'c', scopes: [] });
     store.delete(token);
     expect(store.get(token)).toBeUndefined();
   });
 
-  it('stores each token with a unique ID', () => {
+  it('stores each token with a unique ID', async () => {
     const params = { userId: 'u', clientId: 'c', scopes: [] };
     const a = store.store(params);
     const b = store.store(params);
@@ -292,7 +292,7 @@ describe('ClientsStore — persistence', () => {
     delete process.env.MCP_CLIENT_ID;
   });
 
-  it('loads clients from file on construction', () => {
+  it('loads clients from file on construction', async () => {
     const persistedClient = {
       client_id: 'persisted-id',
       client_id_issued_at: 1700000000,
@@ -301,28 +301,28 @@ describe('ClientsStore — persistence', () => {
     mockReadFileSync.mockReturnValue(JSON.stringify([persistedClient]));
 
     const store = new ClientsStore({ stateFile: `${TEST_STATE_DIR}/clients.json` });
-    expect(store.getClient('persisted-id')).toMatchObject({ client_id: 'persisted-id' });
+    expect(await store.getClient('persisted-id')).toMatchObject({ client_id: 'persisted-id' });
   });
 
-  it('is silent on ENOENT — no warning logged, no writeFileSync called', () => {
+  it('is silent on ENOENT — no warning logged, no writeFileSync called', async () => {
     // readFileSync already throws ENOENT by default in setupFsMocks
     const store = new ClientsStore({ stateFile: `${TEST_STATE_DIR}/clients.json` });
-    expect(store.getClient('anything')).toBeUndefined();
+    expect(await store.getClient('anything')).toBeUndefined();
     expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
-  it('warns and starts fresh on corrupt JSON', () => {
+  it('warns and starts fresh on corrupt JSON', async () => {
     mockReadFileSync.mockReturnValue('not-valid-json{{');
 
     const store = new ClientsStore({ stateFile: `${TEST_STATE_DIR}/clients.json` });
-    expect(store.getClient('anything')).toBeUndefined();
+    expect(await store.getClient('anything')).toBeUndefined();
     expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
       expect.objectContaining({ file: `${TEST_STATE_DIR}/clients.json` }),
       expect.stringContaining('[state]')
     );
   });
 
-  it('pre-seeded client overrides persisted client with same id', () => {
+  it('pre-seeded client overrides persisted client with same id', async () => {
     const persisted = {
       client_id: 'same-id',
       client_id_issued_at: 1000,
@@ -341,10 +341,10 @@ describe('ClientsStore — persistence', () => {
       preseededClients: [preseeded],
       stateFile: `${TEST_STATE_DIR}/clients.json`,
     });
-    expect(store.getClient('same-id')?.client_name).toBe('New Name');
+    expect((await store.getClient('same-id'))?.client_name).toBe('New Name');
   });
 
-  it('writes file after dynamic registration with correct path and content', () => {
+  it('writes file after dynamic registration with correct path and content', async () => {
     const stateFile = `${TEST_STATE_DIR}/clients.json`;
     const store = new ClientsStore({
       enableDynamicRegistration: true,
@@ -366,13 +366,13 @@ describe('ClientsStore — persistence', () => {
     expect((written[0] as { client_id: string }).client_id).toBe(client.client_id);
   });
 
-  it('does NOT write file when stateFile is not set', () => {
+  it('does NOT write file when stateFile is not set', async () => {
     const store = new ClientsStore({ enableDynamicRegistration: true });
     store.registerClient!({ redirect_uris: [new URL('https://example.com/cb')] });
     expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
-  it('fromEnv() sets stateFile when MCP_REGISTRATION_ENABLED=true', () => {
+  it('fromEnv() sets stateFile when MCP_REGISTRATION_ENABLED=true', async () => {
     process.env.MCP_REGISTRATION_ENABLED = 'true';
 
     const store = ClientsStore.fromEnv();
@@ -406,7 +406,7 @@ describe('RefreshStore — persistence', () => {
     vi.useRealTimers();
   });
 
-  it('loads valid tokens from file on construction', () => {
+  it('loads valid tokens from file on construction', async () => {
     const futureExpiry = Date.now() + REFRESH_TTL_MS;
     const persistedTokens = {
       'token-abc': { userId: 'alice', clientId: 'c1', scopes: ['read'], expiresAt: futureExpiry },
@@ -419,7 +419,7 @@ describe('RefreshStore — persistence', () => {
     expect(entry?.clientId).toBe('c1');
   });
 
-  it('prunes expired tokens on load', () => {
+  it('prunes expired tokens on load', async () => {
     const pastExpiry = Date.now() - 1000;
     const persistedTokens = {
       'expired-token': {
@@ -435,7 +435,7 @@ describe('RefreshStore — persistence', () => {
     expect(store.get('expired-token')).toBeUndefined();
   });
 
-  it('writes file after store()', () => {
+  it('writes file after store()', async () => {
     const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
     const store = new RefreshStore(stateFile);
 
@@ -445,7 +445,7 @@ describe('RefreshStore — persistence', () => {
     expect(mockRenameSync).toHaveBeenCalledWith(stateFile + '.tmp', stateFile);
   });
 
-  it('writes file after delete() — deleted token absent from written content', () => {
+  it('writes file after delete() — deleted token absent from written content', async () => {
     const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
     const store = new RefreshStore(stateFile);
 
@@ -464,7 +464,7 @@ describe('RefreshStore — persistence', () => {
     expect(written[token]).toBeUndefined();
   });
 
-  it('writes file on lazy expiry in get()', () => {
+  it('writes file on lazy expiry in get()', async () => {
     vi.useFakeTimers();
     const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
     const store = new RefreshStore(stateFile);
@@ -482,13 +482,13 @@ describe('RefreshStore — persistence', () => {
     expect(mockRenameSync).toHaveBeenCalledWith(stateFile + '.tmp', stateFile);
   });
 
-  it('does NOT write file when stateFile is not set', () => {
+  it('does NOT write file when stateFile is not set', async () => {
     const store = new RefreshStore(); // no stateFile
     store.store({ userId: 'alice', clientId: 'c1', scopes: ['read'] });
     expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
-  it('writeFileSync error degrades gracefully — does not throw, warns with #342 guidance', () => {
+  it('writeFileSync error degrades gracefully — does not throw, warns with #342 guidance', async () => {
     const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
     const err = new Error('permission denied') as NodeJS.ErrnoException;
     err.code = 'EACCES';
@@ -507,7 +507,7 @@ describe('RefreshStore — persistence', () => {
     );
   });
 
-  it('renameSync error degrades gracefully — does not throw and cleans up the .tmp file', () => {
+  it('renameSync error degrades gracefully — does not throw and cleans up the .tmp file', async () => {
     const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
     mockRenameSync.mockImplementation(() => {
       throw new Error('cross-device link');
@@ -519,7 +519,7 @@ describe('RefreshStore — persistence', () => {
     expect(mockUnlinkSync).toHaveBeenCalledWith(stateFile + '.tmp');
   });
 
-  it('fromEnv() wires up the state file', () => {
+  it('fromEnv() wires up the state file', async () => {
     const store = RefreshStore.fromEnv();
     store.store({ userId: 'alice', clientId: 'c1', scopes: [] });
 
