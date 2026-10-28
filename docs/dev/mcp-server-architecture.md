@@ -161,7 +161,7 @@ When `MCP_AUTH_ENABLED=true`, the server runs a built-in OAuth 2.1 + PKCE author
 8. MCP Client  →  POST /token  {code, code_verifier}
                   (PKCE token exchange)
 
-9. Server      →  {access_token: <HS256 JWT, 1h>, refresh_token: <UUID, 24h>}
+9. Server      →  {access_token: <HS256 JWT, 1h>, refresh_token: <256-bit random, 24h>}
 
 10. MCP Client →  POST /mcp  Authorization: Bearer <access_token>
                   (every MCP request verified via requireBearerAuth middleware)
@@ -173,14 +173,14 @@ When `MCP_AUTH_ENABLED=true`, the server runs a built-in OAuth 2.1 + PKCE author
 |-------|--------|-----|---------|
 | Authorization code | UUID | 5 min | In-memory (`CodeStore`) |
 | Access token | HS256 JWT (jose) | 1 hour | Verified by signature, then checked against `RevocationList` by `gid` (grant) and `jti` |
-| Refresh token | UUID | 24 hours | Disk-persisted (`RefreshStore`) |
+| Refresh token | 256 random bits, base64url | 24 hours | Disk-persisted (`RefreshStore`), keyed by SHA-256 hash — the file holds no usable token |
 
 ### Auth Storage
 
 Token state is persisted to `MCP_AUTH_STATE_DIR` (default `/app/state`):
 
 - `clients.json` — dynamically registered OAuth clients (`ClientsStore`)
-- `refresh-tokens.json` — active refresh tokens (`RefreshStore`)
+- `refresh-tokens.json` — active refresh tokens, keyed by their SHA-256 hash (`RefreshStore`). Entries from older versions, keyed by the token itself, are hashed on load
 - `revoked.json` — revoked grants and access tokens, each kept until the access tokens it
   covers have expired (`RevocationList`)
 

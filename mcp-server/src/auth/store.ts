@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import type { OAuthClientInformationFull } from '@modelcontextprotocol/server';
@@ -345,6 +345,18 @@ export class CodeStore {
   }
 }
 
+/** The key a refresh token is stored under: its SHA-256, hex-encoded. */
+function refreshTokenKey(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+const HASHED_KEY = /^[0-9a-f]{64}$/;
+
+/**
+ * Refresh tokens, keyed by their SHA-256 hash so the state file holds nothing
+ * a reader could present as a token. The tokens are 256 random bits, so a
+ * plain hash needs no salt or stretching.
+ */
 export class RefreshStore {
   private readonly tokens = new Map<string, RefreshEntry>();
   private readonly stateFile?: string;
@@ -357,32 +369,41 @@ export class RefreshStore {
       if (persisted && typeof persisted === 'object') {
         const now = Date.now();
         let loaded = 0;
-        for (const [token, entry] of Object.entries(persisted)) {
+        let migrated = 0;
+        for (const [key, entry] of Object.entries(persisted)) {
           if (entry.expiresAt > now) {
+            // Files from earlier versions keyed entries by the token itself.
+            const hashed = HASHED_KEY.test(key) ? key : refreshTokenKey(key);
+            if (hashed !== key) migrated++;
             // Entries written before grants existed get one of their own.
-            this.tokens.set(token, { ...entry, grantId: entry.grantId ?? randomUUID() });
+            this.tokens.set(hashed, { ...entry, grantId: entry.grantId ?? randomUUID() });
             loaded++;
           }
         }
         if (loaded > 0) {
           logger.info({ count: loaded }, '[state] Loaded refresh tokens from file');
         }
+        if (migrated > 0) {
+          logger.info({ count: migrated }, '[state] Hashed plaintext refresh tokens');
+          this.persist();
+        }
       }
     }
   }
 
   store(entry: Omit<RefreshEntry, 'expiresAt'>): string {
-    const token = randomUUID();
-    this.tokens.set(token, { ...entry, expiresAt: Date.now() + REFRESH_TTL_MS });
+    const token = randomBytes(32).toString('base64url');
+    this.tokens.set(refreshTokenKey(token), { ...entry, expiresAt: Date.now() + REFRESH_TTL_MS });
     this.persist();
     return token;
   }
 
   get(token: string): RefreshEntry | undefined {
-    const entry = this.tokens.get(token);
+    const key = refreshTokenKey(token);
+    const entry = this.tokens.get(key);
     if (!entry) return undefined;
     if (Date.now() > entry.expiresAt) {
-      this.tokens.delete(token);
+      this.tokens.delete(key);
       this.persist();
       return undefined;
     }
@@ -390,7 +411,7 @@ export class RefreshStore {
   }
 
   delete(token: string): void {
-    this.tokens.delete(token);
+    this.tokens.delete(refreshTokenKey(token));
     this.persist();
   }
 
@@ -405,8 +426,8 @@ export class RefreshStore {
   private persist(): void {
     if (!this.stateFile) return;
     const obj: Record<string, RefreshEntry> = {};
-    for (const [token, entry] of this.tokens) {
-      obj[token] = entry;
+    for (const [key, entry] of this.tokens) {
+      obj[key] = entry;
     }
     saveJson(this.stateFile, obj);
   }

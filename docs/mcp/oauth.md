@@ -288,7 +288,7 @@ For any MCP client that supports OAuth 2.0 with PKCE:
 | Token | Lifetime | Notes |
 |---|---|---|
 | Access token | 1 hour | JWT signed with `MCP_AUTH_SECRET` |
-| Refresh token | 24 hours | Opaque value; rotated on each use |
+| Refresh token | 24 hours | 256 random bits; rotated on each use. The server stores only its SHA-256 hash |
 
 Refresh tokens and revocations are kept in `MCP_AUTH_STATE_DIR`, so sessions survive a
 restart as long as that directory is persistent and writable.
