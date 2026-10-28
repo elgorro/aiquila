@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import {
   OAuthError,
@@ -10,7 +10,8 @@ import {
   type OAuthTokens,
   type OAuthTokenRevocationRequest,
 } from '@modelcontextprotocol/server';
-import { ClientsStore, CodeStore, RefreshStore } from './store.js';
+import { ClientsStore, CodeStore, RefreshStore, RevocationList } from './store.js';
+import { checkNextcloudUser, type NextcloudUserCheck } from './nc-user.js';
 import { looksLikeClientIdUrl } from './cimd.js';
 import { LOGIN_STYLESHEET_PATH } from './login-page-css.js';
 import { logger } from '../logger.js';
@@ -156,13 +157,21 @@ export interface AuthorizationParams {
 
 // --- OAuth Provider ---
 
+export interface ProviderOptions {
+  // Asks Nextcloud whether a grant's user may still use it; checked on refresh.
+  checkUser?: NextcloudUserCheck;
+}
+
 export class NextcloudOAuthProvider {
   private readonly _clientsStore: ClientsStore;
   private readonly codeStore = new CodeStore();
   private readonly refreshStore = RefreshStore.fromEnv();
+  private readonly revocations = RevocationList.fromEnv();
+  private readonly checkUser: NextcloudUserCheck;
 
-  constructor(clientsStore: ClientsStore = ClientsStore.fromEnv()) {
+  constructor(clientsStore: ClientsStore = ClientsStore.fromEnv(), options: ProviderOptions = {}) {
     this._clientsStore = clientsStore;
+    this.checkUser = options.checkUser ?? checkNextcloudUser;
   }
 
   get clientsStore(): ClientsStore {
@@ -228,18 +237,15 @@ export class NextcloudOAuthProvider {
     }
     this.codeStore.delete(authorizationCode);
 
-    const accessToken = await signJwt(
-      {
-        sub: entry.userId,
-        client_id: entry.clientId,
-        scopes: entry.scopes,
-        iss: this.getIssuer(),
-        aud: this.getResourceUrl(),
-      },
-      this.getSecret(),
-      ACCESS_TOKEN_TTL_SECS
+    const grantId = randomUUID();
+    const accessToken = await this.signAccessToken(
+      grantId,
+      entry.userId,
+      entry.clientId,
+      entry.scopes
     );
     const refreshToken = this.refreshStore.store({
+      grantId,
       userId: entry.userId,
       clientId: entry.clientId,
       scopes: entry.scopes,
@@ -281,20 +287,28 @@ export class NextcloudOAuthProvider {
       );
     }
     const effectiveScopes = scopes ?? entry.scopes;
+
+    // A user disabled or deleted in Nextcloud loses the grant at the next
+    // refresh. RFC 6749 §5.2: a grant that is no longer valid is invalid_grant.
+    const userState = await this.checkUser(entry.userId);
+    if (userState === 'disabled' || userState === 'missing') {
+      this.revokeGrant(entry.grantId);
+      logger.warn(
+        { user: entry.userId, client: client.client_id, userState },
+        '[token] Refresh refused: Nextcloud user is no longer active — grant revoked'
+      );
+      throw new OAuthError(OAuthErrorCode.InvalidGrant, 'The user is no longer active');
+    }
     this.refreshStore.delete(refreshToken);
 
-    const accessToken = await signJwt(
-      {
-        sub: entry.userId,
-        client_id: entry.clientId,
-        scopes: effectiveScopes,
-        iss: this.getIssuer(),
-        aud: this.getResourceUrl(),
-      },
-      this.getSecret(),
-      ACCESS_TOKEN_TTL_SECS
+    const accessToken = await this.signAccessToken(
+      entry.grantId,
+      entry.userId,
+      entry.clientId,
+      effectiveScopes
     );
     const newRefresh = this.refreshStore.store({
+      grantId: entry.grantId,
       userId: entry.userId,
       clientId: entry.clientId,
       scopes: effectiveScopes,
@@ -325,13 +339,8 @@ export class NextcloudOAuthProvider {
       }
     }
 
-    const issuer = process.env.MCP_AUTH_ISSUER;
-    const claims = await verifyJwt(
-      token,
-      this.getSecret(),
-      issuer ? { issuer, audience: new URL('/mcp', issuer).toString() } : undefined
-    );
-    if (!claims) {
+    const claims = await this.verifyOwnJwt(token);
+    if (!claims || this.isRevoked(claims)) {
       logger.warn('[auth] Access token verification failed: invalid or expired token');
       // OAuthError(InvalidToken) — not a bare Error — so requireBearerAuth
       // answers 401 with a WWW-Authenticate challenge (RFC 6750 §3.1).
@@ -348,19 +357,81 @@ export class NextcloudOAuthProvider {
   }
 
   /**
-   * Revokes a refresh token. Only refresh tokens are revocable — access tokens
-   * are stateless JWTs that expire on their own. RFC 7009 §2.1: the server
-   * verifies the token was issued to the requesting client; §2.2: an invalid
-   * or unknown token is not an error.
+   * Revokes a refresh or access token (RFC 7009 §2.1). A refresh token ends
+   * its whole grant, including the access tokens issued under it, as §2.1
+   * says it SHOULD. An access token is revoked on its own. The server checks
+   * the token was issued to the requesting client; an invalid or unknown
+   * token is not an error (§2.2). token_type_hint is only a hint, so both
+   * kinds are tried whatever it says.
    */
   async revokeToken(
     client: OAuthClientInformationFull,
     request: OAuthTokenRevocationRequest
   ): Promise<void> {
     const entry = this.refreshStore.get(request.token);
-    if (entry && entry.clientId === client.client_id) {
-      this.refreshStore.delete(request.token);
+    if (entry) {
+      if (entry.clientId === client.client_id) {
+        this.revokeGrant(entry.grantId);
+        logger.info({ user: entry.userId, client: client.client_id }, '[token] Grant revoked');
+      }
+      return;
     }
+    const claims = await this.verifyOwnJwt(request.token);
+    if (
+      claims &&
+      claims.client_id === client.client_id &&
+      typeof claims.jti === 'string' &&
+      typeof claims.exp === 'number'
+    ) {
+      this.revocations.revokeAccessToken(claims.jti, claims.exp * 1000);
+      logger.info({ user: claims.sub, client: client.client_id }, '[token] Access token revoked');
+    }
+  }
+
+  /** Ends a grant: its refresh tokens go, and its access tokens stop verifying. */
+  private revokeGrant(grantId: string): void {
+    this.refreshStore.deleteGrant(grantId);
+    this.revocations.revokeGrant(grantId, Date.now() + ACCESS_TOKEN_TTL_SECS * 1000);
+  }
+
+  private isRevoked(claims: JWTPayload): boolean {
+    // Tokens without a grant id predate revocation support; refusing them
+    // makes the client refresh once.
+    if (typeof claims.gid !== 'string' || typeof claims.jti !== 'string') return true;
+    return (
+      this.revocations.isGrantRevoked(claims.gid) ||
+      this.revocations.isAccessTokenRevoked(claims.jti)
+    );
+  }
+
+  private signAccessToken(
+    grantId: string,
+    userId: string,
+    clientId: string,
+    scopes: string[]
+  ): Promise<string> {
+    return signJwt(
+      {
+        sub: userId,
+        client_id: clientId,
+        scopes,
+        gid: grantId,
+        jti: randomUUID(),
+        iss: this.getIssuer(),
+        aud: this.getResourceUrl(),
+      },
+      this.getSecret(),
+      ACCESS_TOKEN_TTL_SECS
+    );
+  }
+
+  private verifyOwnJwt(token: string): Promise<JWTPayload | null> {
+    const issuer = process.env.MCP_AUTH_ISSUER;
+    return verifyJwt(
+      token,
+      this.getSecret(),
+      issuer ? { issuer, audience: new URL('/mcp', issuer).toString() } : undefined
+    );
   }
 
   /** Called by the login handler to issue an auth code after successful Nextcloud auth. */

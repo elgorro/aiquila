@@ -41,7 +41,8 @@ mcp-server/src/
 │   └── http.ts          # Express app + NodeStreamableHTTPServerTransport + auth middleware
 ├── auth/
 │   ├── provider.ts      # NextcloudOAuthProvider — JWT sign/verify, code issuance
-│   ├── store.ts         # ClientsStore, CodeStore, RefreshStore (disk-persisted)
+│   ├── store.ts         # ClientsStore, CodeStore, RefreshStore, RevocationList (disk-persisted)
+│   ├── nc-user.ts       # Provisioning-API check that a grant's Nextcloud user is still active
 │   └── login.ts         # POST /auth/login — Nextcloud credential validation
 ├── client/
 │   ├── webdav.ts        # WebDAV singleton
@@ -171,7 +172,7 @@ When `MCP_AUTH_ENABLED=true`, the server runs a built-in OAuth 2.1 + PKCE author
 | Token | Format | TTL | Storage |
 |-------|--------|-----|---------|
 | Authorization code | UUID | 5 min | In-memory (`CodeStore`) |
-| Access token | HS256 JWT (jose) | 1 hour | Stateless (verified by signature) |
+| Access token | HS256 JWT (jose) | 1 hour | Verified by signature, then checked against `RevocationList` by `gid` (grant) and `jti` |
 | Refresh token | UUID | 24 hours | Disk-persisted (`RefreshStore`) |
 
 ### Auth Storage
@@ -180,6 +181,13 @@ Token state is persisted to `MCP_AUTH_STATE_DIR` (default `/app/state`):
 
 - `clients.json` — dynamically registered OAuth clients (`ClientsStore`)
 - `refresh-tokens.json` — active refresh tokens (`RefreshStore`)
+- `revoked.json` — revoked grants and access tokens, each kept until the access tokens it
+  covers have expired (`RevocationList`)
+
+A grant is one sign-in. Its id (`gid` in the access token, `grantId` in the refresh entry)
+stays the same across refresh rotations. On every refresh, `checkNextcloudUser` asks the
+provisioning API whether the user still exists and is enabled; a disabled or deleted user
+gets `invalid_grant` and the grant is revoked.
 
 Authorization codes are in-memory only (5-min TTL, lost on restart by design).
 
@@ -195,7 +203,7 @@ Authorization codes are in-memory only (5-min TTL, lost on restart by design).
 | `/auth/login` | — | Nextcloud credential check, issues the code. 10 req / 15 min per IP |
 | `/token` | RFC 6749 §4.1.3, §6 | 50 req / 15 min per IP. `no-store` + `Pragma: no-cache` (§5.1). Refresh may narrow, never widen, the granted scope |
 | `/register` | RFC 7591 | 20 req / hour per IP. Mounted only with `MCP_REGISTRATION_ENABLED=true` |
-| `/revoke` | RFC 7009 | 50 req / 15 min per IP. Revokes refresh tokens issued to the calling client; always `200` |
+| `/revoke` | RFC 7009 | 50 req / 15 min per IP. A refresh token revokes its whole grant (§2.1), an access token only itself. Only tokens issued to the calling client; always `200` |
 
 Every error, on these endpoints and in the bearer check on `/mcp`, is the SDK's v2
 `OAuthError`. Redirect URIs match exactly, except loopback URIs, which match on any port

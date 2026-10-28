@@ -21,7 +21,10 @@ export interface CodeEntry {
   expiresAt: number;
 }
 
-interface RefreshEntry {
+export interface RefreshEntry {
+  // Identifies the authorization grant: every refresh token rotated from one
+  // login, and every access token issued along the way, carries the same id.
+  grantId: string;
   userId: string;
   clientId: string;
   scopes: string[];
@@ -356,7 +359,8 @@ export class RefreshStore {
         let loaded = 0;
         for (const [token, entry] of Object.entries(persisted)) {
           if (entry.expiresAt > now) {
-            this.tokens.set(token, entry);
+            // Entries written before grants existed get one of their own.
+            this.tokens.set(token, { ...entry, grantId: entry.grantId ?? randomUUID() });
             loaded++;
           }
         }
@@ -390,6 +394,14 @@ export class RefreshStore {
     this.persist();
   }
 
+  /** Removes every refresh token of a grant. */
+  deleteGrant(grantId: string): void {
+    for (const [token, entry] of this.tokens) {
+      if (entry.grantId === grantId) this.tokens.delete(token);
+    }
+    this.persist();
+  }
+
   private persist(): void {
     if (!this.stateFile) return;
     const obj: Record<string, RefreshEntry> = {};
@@ -403,5 +415,69 @@ export class RefreshStore {
     const dir = stateDir();
     ensureDir(dir);
     return new RefreshStore(join(dir, 'refresh-tokens.json'));
+  }
+}
+
+/**
+ * Revoked grants and access tokens, each kept until the last access token it
+ * could cover has expired. Access tokens are self-contained JWTs, so this list
+ * is what makes them revocable before they expire (RFC 7009 §2).
+ */
+export class RevocationList {
+  private readonly revoked = new Map<string, number>();
+  private readonly stateFile?: string;
+
+  constructor(stateFile?: string) {
+    this.stateFile = stateFile;
+    if (this.stateFile) {
+      const persisted = loadJson<Record<string, number>>(this.stateFile);
+      if (persisted && typeof persisted === 'object') {
+        const now = Date.now();
+        for (const [key, expiresAt] of Object.entries(persisted)) {
+          if (typeof expiresAt === 'number' && expiresAt > now) this.revoked.set(key, expiresAt);
+        }
+      }
+    }
+  }
+
+  revokeGrant(grantId: string, untilMs: number): void {
+    this.add(`grant:${grantId}`, untilMs);
+  }
+
+  revokeAccessToken(jti: string, untilMs: number): void {
+    this.add(`jti:${jti}`, untilMs);
+  }
+
+  isGrantRevoked(grantId: string): boolean {
+    return this.has(`grant:${grantId}`);
+  }
+
+  isAccessTokenRevoked(jti: string): boolean {
+    return this.has(`jti:${jti}`);
+  }
+
+  private add(key: string, untilMs: number): void {
+    const now = Date.now();
+    for (const [k, expiresAt] of this.revoked) {
+      if (expiresAt <= now) this.revoked.delete(k);
+    }
+    this.revoked.set(key, Math.max(untilMs, this.revoked.get(key) ?? 0));
+    this.persist();
+  }
+
+  private has(key: string): boolean {
+    const expiresAt = this.revoked.get(key);
+    return expiresAt !== undefined && expiresAt > Date.now();
+  }
+
+  private persist(): void {
+    if (!this.stateFile) return;
+    saveJson(this.stateFile, Object.fromEntries(this.revoked));
+  }
+
+  static fromEnv(): RevocationList {
+    const dir = stateDir();
+    ensureDir(dir);
+    return new RevocationList(join(dir, 'revoked.json'));
   }
 }

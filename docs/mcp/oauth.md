@@ -288,9 +288,27 @@ For any MCP client that supports OAuth 2.0 with PKCE:
 | Token | Lifetime | Notes |
 |---|---|---|
 | Access token | 1 hour | JWT signed with `MCP_AUTH_SECRET` |
-| Refresh token | 24 hours | Opaque UUID stored in memory; rotated on each use |
+| Refresh token | 24 hours | Opaque value; rotated on each use |
 
-Tokens are stored in memory only — restarting the container invalidates all active sessions. Users will need to re-authenticate after a restart.
+Refresh tokens and revocations are kept in `MCP_AUTH_STATE_DIR`, so sessions survive a
+restart as long as that directory is persistent and writable.
+
+### Ending a session
+
+Every sign-in starts a *grant*. The refresh tokens rotated from it, and the access tokens
+issued along the way, all belong to that grant.
+
+- **Revoking a refresh token** at `/revoke` ends the whole grant. Its access tokens stop
+  working at once, not when they expire (RFC 7009 §2.1).
+- **Revoking an access token** ends only that token. The refresh token keeps working.
+- **Disabling or deleting the user in Nextcloud** ends the grant at the next refresh, so
+  within an hour at most. The server asks the provisioning API about the user, as
+  `NEXTCLOUD_USER`. That needs admin rights. Without them the check cannot see other
+  users, logs a warning once and lets the refresh through.
+- **Changing the Nextcloud password does not end a grant.** The server never keeps the
+  password, so it cannot tell that it changed. Nextcloud handles its own app passwords the
+  same way. To cut off a client after a password change, revoke its refresh token, or
+  disable the user until the next refresh has been refused.
 
 ## Security Notes
 

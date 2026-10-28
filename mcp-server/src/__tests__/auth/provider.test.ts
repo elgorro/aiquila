@@ -459,4 +459,92 @@ describe('NextcloudOAuthProvider', () => {
       await expect(provider.revokeToken(CLIENT, { token: 'unknown-token' })).resolves.not.toThrow();
     });
   });
+
+  // ---- grants: revocation and the Nextcloud user check ----
+
+  describe('grant revocation', () => {
+    async function login(p = provider) {
+      const code = p.issueAuthCode({
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: ['read'],
+        redirectUri: 'https://r.com',
+        redirectUriExplicit: false,
+        userId: 'alice',
+      });
+      return p.exchangeAuthorizationCode(CLIENT, code);
+    }
+
+    it('revoking a refresh token also rejects access tokens of the grant (RFC 7009 §2.1)', async () => {
+      const first = await login();
+      const second = await provider.exchangeRefreshToken(CLIENT, first.refresh_token!);
+      await provider.revokeToken(CLIENT, { token: second.refresh_token! });
+      await expect(provider.verifyAccessToken(first.access_token)).rejects.toThrow();
+      await expect(provider.verifyAccessToken(second.access_token)).rejects.toThrow();
+    });
+
+    it('leaves other grants untouched', async () => {
+      const a = await login();
+      const b = await login();
+      await provider.revokeToken(CLIENT, { token: a.refresh_token! });
+      await expect(provider.verifyAccessToken(b.access_token)).resolves.toBeDefined();
+      await expect(provider.exchangeRefreshToken(CLIENT, b.refresh_token!)).resolves.toBeDefined();
+    });
+
+    it('revokes an access token on its own', async () => {
+      const tokens = await login();
+      await provider.revokeToken(CLIENT, { token: tokens.access_token });
+      await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow();
+      await expect(
+        provider.exchangeRefreshToken(CLIENT, tokens.refresh_token!)
+      ).resolves.toBeDefined();
+    });
+
+    it('ignores revocation of another client’s access token', async () => {
+      const tokens = await login();
+      await provider.revokeToken({ ...CLIENT, client_id: 'other' }, { token: tokens.access_token });
+      await expect(provider.verifyAccessToken(tokens.access_token)).resolves.toBeDefined();
+    });
+
+    it('keeps a revocation across a restart', async () => {
+      const tokens = await login();
+      await provider.revokeToken(CLIENT, { token: tokens.refresh_token! });
+      const restarted = new NextcloudOAuthProvider();
+      await expect(restarted.verifyAccessToken(tokens.access_token)).rejects.toThrow();
+    });
+
+    it('rejects a signed token without a grant id', async () => {
+      const { SignJWT } = await import('jose');
+      const token = await new SignJWT({ sub: 'alice', client_id: CLIENT.client_id, scopes: [] })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuer('https://test.example.com')
+        .setAudience('https://test.example.com/mcp')
+        .setExpirationTime('1h')
+        .sign(new TextEncoder().encode(TEST_SECRET));
+      await expect(provider.verifyAccessToken(token)).rejects.toThrow();
+    });
+
+    for (const state of ['disabled', 'missing'] as const) {
+      it(`refuses refresh and ends the grant when the Nextcloud user is ${state}`, async () => {
+        const checkUser = vi.fn().mockResolvedValue(state);
+        const p = new NextcloudOAuthProvider(undefined, { checkUser });
+        const tokens = await login(p);
+        await expect(p.exchangeRefreshToken(CLIENT, tokens.refresh_token!)).rejects.toMatchObject({
+          code: 'invalid_grant',
+        });
+        expect(checkUser).toHaveBeenCalledWith('alice');
+        await expect(p.verifyAccessToken(tokens.access_token)).rejects.toThrow();
+        checkUser.mockResolvedValue('active');
+        await expect(p.exchangeRefreshToken(CLIENT, tokens.refresh_token!)).rejects.toThrow();
+      });
+    }
+
+    it('refreshes when Nextcloud cannot tell (unknown)', async () => {
+      const p = new NextcloudOAuthProvider(undefined, {
+        checkUser: vi.fn().mockResolvedValue('unknown'),
+      });
+      const tokens = await login(p);
+      await expect(p.exchangeRefreshToken(CLIENT, tokens.refresh_token!)).resolves.toBeDefined();
+    });
+  });
 });

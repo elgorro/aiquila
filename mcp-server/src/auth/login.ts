@@ -4,6 +4,22 @@ import { NextcloudOAuthProvider, renderLoginForm, applySecurityHeaders } from '.
 import { isRegisteredRedirectUri } from './redirect-uri.js';
 import { logger } from '../logger.js';
 
+/**
+ * The user id from a /cloud/user response. A login name (an email address, an
+ * LDAP name) can differ from the uid, and the uid is what grants are bound to
+ * and what the provisioning API looks up later.
+ */
+async function nextcloudUid(resp: Response, loginName: string): Promise<string> {
+  try {
+    const body = (await resp.json()) as { ocs?: { data?: { id?: unknown } } };
+    const id = body?.ocs?.data?.id;
+    if (typeof id === 'string' && id !== '') return id;
+  } catch {
+    // fall through
+  }
+  return loginName;
+}
+
 export function loginHandler(provider: NextcloudOAuthProvider) {
   return async (req: any, res: any): Promise<void> => {
     const body = req.body as Record<string, string>;
@@ -79,6 +95,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
         headers: {
           Authorization: `Basic ${credentials}`,
           'OCS-APIRequest': 'true',
+          Accept: 'application/json',
         },
       });
 
@@ -101,6 +118,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
         return;
       }
 
+      const userId = await nextcloudUid(ncResp, username);
       const scopes = scope ? scope.split(' ').filter(Boolean) : [];
       const code = provider.issueAuthCode({
         pkceChallenge: code_challenge,
@@ -108,11 +126,11 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
         scopes,
         redirectUri: redirect_uri,
         redirectUriExplicit,
-        userId: username,
+        userId,
         state: state || undefined,
       });
 
-      logger.info({ user: username, client: client_id }, '[auth] Login successful');
+      logger.info({ user: userId, client: client_id }, '[auth] Login successful');
 
       const redirectUrl = new URL(redirect_uri);
       redirectUrl.searchParams.set('code', code);

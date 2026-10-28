@@ -207,6 +207,29 @@ describe('loginHandler', () => {
     expect(url).toContain('/ocs/v2.php/cloud/user');
   });
 
+  it('binds the grant to the Nextcloud uid, not the login name', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ocs: { data: { id: 'alice-uid' } } }),
+    });
+    const res = makeRes();
+    await loginHandler(provider)(
+      { body: { ...BASE_BODY, username: 'alice@example.com' } } as any,
+      res as any
+    );
+    const code = new URL((res.redirect as any).mock.calls[0][0]).searchParams.get('code')!;
+    const client = { client_id: 'c1', redirect_uris: [] as any[] } as any;
+    const tokens = await provider.exchangeAuthorizationCode(
+      client,
+      code,
+      'https://example.com/callback'
+    );
+    const payload = JSON.parse(
+      Buffer.from(tokens.access_token.split('.')[1], 'base64url').toString()
+    );
+    expect(payload.sub).toBe('alice-uid');
+  });
+
   it('issued code is verifiable via the provider', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
