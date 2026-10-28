@@ -539,6 +539,15 @@ describe('NextcloudOAuthProvider', () => {
       });
     }
 
+    it('redeems a refresh token once even when two requests race', async () => {
+      const tokens = await login();
+      const results = await Promise.allSettled([
+        provider.exchangeRefreshToken(CLIENT, tokens.refresh_token!),
+        provider.exchangeRefreshToken(CLIENT, tokens.refresh_token!),
+      ]);
+      expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected']);
+    });
+
     it('refreshes when Nextcloud cannot tell (unknown)', async () => {
       const p = new NextcloudOAuthProvider(undefined, {
         checkUser: vi.fn().mockResolvedValue('unknown'),
