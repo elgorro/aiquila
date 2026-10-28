@@ -3,8 +3,13 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import type { OAuthClientInformationFull } from '@modelcontextprotocol/server';
+import {
+  OAuthError,
+  OAuthErrorCode,
+  type OAuthClientInformationFull,
+} from '@modelcontextprotocol/server';
 import { ClientIdDocumentError, ClientIdDocumentResolver, looksLikeClientIdUrl } from './cimd.js';
+import { RedirectUriPolicy } from './redirect-uri.js';
 import { logger } from '../logger.js';
 
 export interface CodeEntry {
@@ -174,6 +179,21 @@ interface ClientsStoreOptions {
   // Resolves https:// client_ids as Client ID Metadata Documents. Omitted →
   // such client_ids are unknown unless registered.
   clientIdDocuments?: ClientIdDocumentResolver;
+  // Redirect URIs a registered client may use. Omitted → any.
+  redirectPolicy?: RedirectUriPolicy;
+}
+
+/** The first redirect URI of `client` the policy rejects, with the reason. */
+function rejectedRedirect(
+  client: Pick<OAuthClientInformationFull, 'redirect_uris'>,
+  policy: RedirectUriPolicy | undefined
+): string | undefined {
+  if (!policy) return undefined;
+  for (const uri of client.redirect_uris ?? []) {
+    const reason = policy.reject(String(uri));
+    if (reason) return reason;
+  }
+  return undefined;
 }
 
 export class ClientsStore {
@@ -189,14 +209,28 @@ export class ClientsStore {
   constructor(options?: ClientsStoreOptions) {
     this.stateFile = options?.stateFile;
     this.clientIdDocuments = options?.clientIdDocuments;
+    const policy = options?.redirectPolicy;
 
-    // Load persisted clients first (dynamic registrations from previous runs)
+    // Load persisted clients first (dynamic registrations from previous runs).
+    // The redirect policy applies to them too, so registrations from before
+    // it existed, or before it was narrowed, are dropped.
     if (this.stateFile) {
       const persisted = loadJson<OAuthClientInformationFull[]>(this.stateFile);
       if (persisted && Array.isArray(persisted)) {
+        let dropped = 0;
         for (const client of persisted) {
+          const reason = rejectedRedirect(client, policy);
+          if (reason) {
+            logger.warn(
+              { clientId: client.client_id, reason },
+              '[auth] Dropping registered client: redirect URI not allowed'
+            );
+            dropped++;
+            continue;
+          }
           this.clients.set(client.client_id, client);
         }
+        if (dropped > 0) this.persist();
       }
     }
 
@@ -207,6 +241,11 @@ export class ClientsStore {
 
     if (options?.enableDynamicRegistration) {
       this.registerClient = (client) => {
+        const reason = rejectedRedirect(client, policy);
+        if (reason) {
+          // RFC 7591 §3.2.2
+          throw new OAuthError(OAuthErrorCode.InvalidRedirectUri, reason);
+        }
         const full: OAuthClientInformationFull = {
           ...client,
           client_id: randomUUID(),
@@ -252,6 +291,7 @@ export class ClientsStore {
    *   MCP_CLIENT_ID              → pre-seeded static public PKCE client (any MCP client)
    *   MCP_CLIENT_REDIRECT_URIS   → comma-separated redirect URIs for the pre-seeded client
    *   MCP_REGISTRATION_ENABLED=true → enable dynamic POST /register
+   *   MCP_REDIRECT_ALLOWLIST     → extra redirect hosts / schemes registered clients may use
    *   MCP_CIMD_ENABLED           → resolve https:// client_ids as metadata documents;
    *                                defaults to on, off when MCP_REGISTRATION_TOKEN gates
    *                                registration (see cimdEnabledFromEnv)
@@ -296,7 +336,8 @@ export class ClientsStore {
     }
 
     let stateFile: string | undefined;
-    if (process.env.MCP_REGISTRATION_ENABLED === 'true') {
+    const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
+    if (registrationEnabled) {
       const dir = stateDir();
       ensureDir(dir);
       stateFile = join(dir, 'clients.json');
@@ -304,7 +345,8 @@ export class ClientsStore {
 
     return new ClientsStore({
       preseededClients: preseeded,
-      enableDynamicRegistration: process.env.MCP_REGISTRATION_ENABLED === 'true',
+      enableDynamicRegistration: registrationEnabled,
+      redirectPolicy: registrationEnabled ? RedirectUriPolicy.fromEnv() : undefined,
       stateFile,
       clientIdDocuments: cimdEnabledFromEnv() ? new ClientIdDocumentResolver() : undefined,
     });

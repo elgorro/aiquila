@@ -14,6 +14,7 @@ import { authRouter, type AuthRouterOptions } from '../../auth/router.js';
 import { NextcloudOAuthProvider } from '../../auth/provider.js';
 import { ClientsStore } from '../../auth/store.js';
 import { ClientIdDocumentResolver } from '../../auth/cimd.js';
+import { RedirectUriPolicy } from '../../auth/redirect-uri.js';
 
 const ISSUER = 'https://mcp.example.com/';
 const REDIRECT = 'https://client.example.com/callback';
@@ -51,7 +52,7 @@ const fetchDocument = vi.fn(async () => ({
   }),
 }));
 
-function makeStore(opts?: { registration?: boolean; cimd?: boolean }) {
+function makeStore(opts?: { registration?: boolean; cimd?: boolean; policy?: RedirectUriPolicy }) {
   return new ClientsStore({
     preseededClients: [
       {
@@ -72,6 +73,7 @@ function makeStore(opts?: { registration?: boolean; cimd?: boolean }) {
       },
     ],
     enableDynamicRegistration: opts?.registration,
+    redirectPolicy: opts?.policy,
     clientIdDocuments:
       opts?.cimd === false
         ? undefined
@@ -83,7 +85,11 @@ function makeStore(opts?: { registration?: boolean; cimd?: boolean }) {
 }
 
 async function serve(
-  opts?: { registration?: boolean; cimd?: boolean } & Partial<AuthRouterOptions>
+  opts?: {
+    registration?: boolean;
+    cimd?: boolean;
+    policy?: RedirectUriPolicy;
+  } & Partial<AuthRouterOptions>
 ) {
   const provider = new NextcloudOAuthProvider(makeStore(opts));
   const app = express();
@@ -513,6 +519,25 @@ describe('/register', () => {
       const client = await (await register(ctx.base, metadata)).json();
       expect(client.client_secret).toMatch(/^[0-9a-f]{64}$/);
       expect(client.client_secret_expires_at).toBeGreaterThan(Date.now() / 1000);
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  it('rejects a redirect URI outside the allowlist with invalid_redirect_uri (RFC 7591 §3.2.2)', async () => {
+    const ctx = await serve({ registration: true, policy: new RedirectUriPolicy() });
+    try {
+      const res = await register(ctx.base, {
+        redirect_uris: ['https://attacker.example/cb'],
+        token_endpoint_auth_method: 'none',
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('invalid_redirect_uri');
+      const ok = await register(ctx.base, {
+        redirect_uris: ['https://claude.ai/api/mcp/auth_callback', 'http://127.0.0.1:5555/cb'],
+        token_endpoint_auth_method: 'none',
+      });
+      expect(ok.status).toBe(201);
     } finally {
       await ctx.close();
     }

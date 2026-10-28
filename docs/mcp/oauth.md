@@ -127,6 +127,25 @@ MCP_REGISTRATION_TOKEN=<openssl rand -hex 32>
 This is the RFC 7591 approach. The MCP specification deprecates it in favour of CIMD but
 keeps it for backward compatibility, and many clients still rely on it.
 
+A registered client may only use redirect URIs the server trusts. Otherwise anyone could
+register a redirect to their own host, send a user a sign-in link, and receive the
+authorization code. The following are always allowed:
+
+- loopback URIs on any port, such as `http://127.0.0.1:<port>/…` or `http://[::1]:<port>/…`, for native clients
+- `https://` on `claude.ai`, `claude.com` and the host of `NEXTCLOUD_URL`. The AIquila
+  Nextcloud app registers itself with a callback on that host
+- private-use schemes that contain a dot, such as `com.example.app:/callback` (RFC 8252 §7.1)
+
+| Variable | Default | Effect |
+|---|---|---|
+| `MCP_REDIRECT_ALLOWLIST` | empty | Comma-separated extra entries: a host (`vscode.dev`), a scheme (`cursor:`), or `*` for any `https` host |
+
+Registration with any other redirect URI fails with `invalid_redirect_uri`. Plain `http`
+is only allowed on loopback. Clients registered earlier whose redirect URIs no longer pass
+are dropped when the server starts, and register again. If Nextcloud is reached over an
+internal address (`NEXTCLOUD_URL=http://nc`), list its public host in
+`MCP_REDIRECT_ALLOWLIST`. The Hetzner full stack does this by default.
+
 With `MCP_REGISTRATION_TOKEN` set, `POST /register` answers `401` unless the request
 carries `Authorization: Bearer <token>` (RFC 7591 §3.1 initial access token). Clients must
 therefore be told the token — see

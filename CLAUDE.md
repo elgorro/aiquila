@@ -402,6 +402,7 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_AUTH_ISSUER` | If auth | public HTTPS URL of this server |
 | `MCP_AUTH_STATE_DIR` | No | Directory for persisted OAuth state (default `/app/state`) |
 | `MCP_CIMD_ENABLED` | No | Accept Client ID Metadata Document URLs as `client_id`. Default on, off when `MCP_REGISTRATION_TOKEN` is set |
+| `MCP_REDIRECT_ALLOWLIST` | No | Extra redirect hosts (or `scheme:` entries, or `*`) dynamically registered clients may use. Loopback, `claude.ai`, `claude.com` and the `NEXTCLOUD_URL` host are always allowed |
 | `MCP_LAZY_AUTH` | No | `false` requires a bearer token on every JSON-RPC method. Default `true`: `server/discover`, `initialize`, `tools/list` and `get_local_time` are served without one |
 | `MCP_LOCALE` | No | BCP 47 locale tag for `localTime` in `get_local_time` (e.g. `sv-SE`); defaults to system locale |
 | `MCP_MAX_FILE_SIZE` | No | Max `write_file` content length in bytes (default `1073741824` = 1 GB) |

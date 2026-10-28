@@ -230,6 +230,10 @@ MCP_REGISTRATION_ENABLED=true
 MCP_REGISTRATION_TOKEN=<secret>  # optional: gates POST /register with Bearer token
 ```
 
+Registered redirect URIs must pass `RedirectUriPolicy` (`src/auth/redirect-uri.ts`), gated or
+not: `invalid_redirect_uri` otherwise (RFC 7591 §3.2.2). Persisted registrations that no longer
+pass are dropped on start.
+
 A gated endpoint rejects registration without `Authorization: Bearer <MCP_REGISTRATION_TOKEN>`,
 so every client has to be given the token — for the Nextcloud app that is the per-server
 **Registration token** field, see
@@ -277,6 +281,7 @@ MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
 | `MCP_AUTH_STATE_DIR` | No | `/app/state` | Directory for persisted OAuth state |
 | `MCP_REGISTRATION_ENABLED` | No | `false` | Enable dynamic client registration |
 | `MCP_REGISTRATION_TOKEN` | No | — | Bearer token to gate `POST /register` |
+| `MCP_REDIRECT_ALLOWLIST` | No | — | Extra redirect hosts / `scheme:` entries / `*` for registered clients (`RedirectUriPolicy`) |
 | `MCP_CIMD_ENABLED` | No | `true` (`false` when `MCP_REGISTRATION_TOKEN` is set) | Accept Client ID Metadata Document URLs as `client_id` |
 | `MCP_CLIENT_ID` | No | — | Pre-seeded static client ID |
 | `MCP_CLIENT_REDIRECT_URIS` | No | `""` (empty) | Comma-separated redirect URIs for static client |
