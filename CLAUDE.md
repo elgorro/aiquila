@@ -51,11 +51,16 @@ findings rather than adding one.
 
 ## Nextcloud app — OpenAPI spec
 
+The specs are **OpenAPI 3.1.0** (JSON Schema 2020-12). `composer openapi` runs
+`generate-spec --openapi-version 3.1.0`, then `tools/openapi-3.1.php`. The extractor only
+relabels the version, so that script rewrites its 3.0 `nullable` into `type: [T, "null"]`.
+Never call `vendor/bin/generate-spec` alone: it writes 3.0.3, and CI then reports a mismatch.
+
 After editing a controller annotated with `#[OpenAPI]`, regenerate and commit the spec
 (CI fails on a mismatch):
 
 ```bash
-cd nextcloud-app && vendor/bin/generate-spec   # updates openapi.json + openapi-full.json
+cd nextcloud-app && composer openapi   # updates openapi.json, openapi-administration.json, openapi-full.json
 ```
 
 ## Nextcloud app — local dev testing
@@ -172,6 +177,7 @@ Specs this repo leans on:
 | HTTP / WebDAV | 9110 (HTTP semantics, incl. conditional requests — obsoletes 7232), 4918 (WebDAV) |
 | Calendar / contacts | 5545 (iCalendar), 4791 (CalDAV), 6350 (vCard 4.0), 2426 (vCard 3.0, obsoleted by 6350 but still sent by clients), 6352 (CardDAV) |
 | Other | 5646 (BCP 47 language tags), 2119 / 8174 (MUST / SHOULD keywords) |
+| API description | OpenAPI 3.1.0 (not an RFC: [spec.openapis.org/oas/v3.1.0](https://spec.openapis.org/oas/v3.1.0)), JSON Schema 2020-12 |
 
 - Read MUST / SHOULD / MAY per RFC 2119 — a SHOULD is not optional without a reason.
 - Cite the RFC and section in the code comment or PR description where behaviour

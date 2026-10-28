@@ -1,6 +1,7 @@
 # OpenAPI Spec
 
-The Nextcloud app ships three committed OpenAPI spec files generated from PHP annotations.
+The Nextcloud app ships three committed **OpenAPI 3.1.0** spec files generated from PHP
+annotations.
 
 ## Output files
 
@@ -17,8 +18,17 @@ From `nextcloud-app/`:
 ```bash
 make openapi
 # or directly:
-vendor/bin/generate-spec
+composer openapi
 ```
+
+`composer openapi` runs the Nextcloud
+[openapi-extractor](https://github.com/nextcloud-releases/openapi-extractor) with
+`--openapi-version 3.1.0`, then `tools/openapi-3.1.php`. The extractor only changes the
+version field: its schemas still use the OpenAPI 3.0 `nullable` keyword, which 3.1 removed
+in favour of JSON Schema 2020-12. The script rewrites `nullable: true` as
+`type: [T, "null"]` (or an `anyOf` with `{"type": "null"}`), and turns an empty
+`components.schemas` into an object. Running `vendor/bin/generate-spec` alone writes a 3.0.3
+spec that CI rejects as out of date.
 
 Commit all three output files together with any annotation changes.
 
