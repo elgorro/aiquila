@@ -156,6 +156,46 @@ That material belongs in the GitHub issue or discussion — link to it rather th
 inlining it. If a fact needs a date or a ticket number to make sense, it is probably
 not documentation. One fact, one home: link between pages instead of restating.
 
+### Verify specs against the RFC
+
+**Always check protocol and format behaviour against the RFC itself** — when writing,
+reviewing or documenting it. Don't rely on memory, blog posts, library docs, or how
+Nextcloud or a client happens to behave; read the normative text on
+[rfc-editor.org](https://www.rfc-editor.org/) and check its errata and any RFC that
+obsoletes or updates it.
+
+Specs this repo leans on:
+
+| Area | RFCs |
+|---|---|
+| OAuth / auth | 6749 (OAuth 2.0), 7636 (PKCE), 6750 (Bearer), 8414 (AS metadata), 7591 (dynamic client registration), 9728 (protected resource metadata), 8707 (resource indicators), 7519 (JWT) |
+| HTTP / WebDAV | 9110 (HTTP semantics, incl. conditional requests — obsoletes 7232), 4918 (WebDAV) |
+| Calendar / contacts | 5545 (iCalendar), 4791 (CalDAV), 6350 (vCard 4.0), 2426 (vCard 3.0, obsoleted by 6350 but still sent by clients), 6352 (CardDAV) |
+| Other | 5646 (BCP 47 language tags), 2119 / 8174 (MUST / SHOULD keywords) |
+
+- Read MUST / SHOULD / MAY per RFC 2119 — a SHOULD is not optional without a reason.
+- Cite the RFC and section in the code comment or PR description where behaviour
+  depends on it (e.g. `RFC 6749 §5.2`), so reviewers can check the same text.
+- Where the MCP specification or Nextcloud deviates from or profiles an RFC, verify
+  against that spec revision too and note the deviation.
+
+**MCP protocol.** The MCP specification is not an RFC, but the same rule applies: verify
+against the published revision, not memory. The latest revision is **`2026-07-28`**
+(<https://modelcontextprotocol.io/specification/2026-07-28>). It drops the `initialize`
+handshake: each request carries its version in `_meta`
+(`io.modelcontextprotocol/protocolVersion`, mirrored in the `MCP-Protocol-Version`
+header), and `server/discover` lists supported versions. Revisions up to `2025-11-25`
+use the handshake.
+
+- Before relying on a revision, check
+  <https://modelcontextprotocol.io/specification/versioning> for a newer **Current** one,
+  and update the revision above when it changes.
+- Check which revisions the installed SDK actually negotiates
+  (`LATEST_PROTOCOL_VERSION` / `SUPPORTED_PROTOCOL_VERSIONS` in
+  `node_modules/@modelcontextprotocol/sdk/dist/esm/types.js`). That can lag the latest
+  spec, and the behaviour you implement must match the revision being negotiated.
+- Auth is the MCP authorization spec on top of the OAuth RFCs above. Check both.
+
 ## Reviewing pull requests
 
 Contributor-facing rules live in `CONTRIBUTING.md`. This section is the maintainer
