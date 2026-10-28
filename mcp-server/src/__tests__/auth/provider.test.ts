@@ -28,7 +28,6 @@ describe('renderLoginForm', () => {
     const html = renderLoginForm({
       clientId: 'c1',
       redirectUri: 'https://r.com',
-      redirectUriExplicit: false,
       codeChallenge: 'cc',
     });
     expect(html).toContain('method="POST"');
@@ -39,7 +38,6 @@ describe('renderLoginForm', () => {
     const html = renderLoginForm({
       clientId: 'c1',
       redirectUri: 'https://r.com',
-      redirectUriExplicit: false,
       codeChallenge: 'cc',
       state: 'st',
       scope: 'read write',
@@ -55,7 +53,6 @@ describe('renderLoginForm', () => {
     const html = renderLoginForm({
       clientId: 'c1',
       redirectUri: 'https://r.com',
-      redirectUriExplicit: false,
       codeChallenge: 'cc',
       clientName: 'My App',
     });
@@ -66,7 +63,6 @@ describe('renderLoginForm', () => {
     const html = renderLoginForm({
       clientId: 'c1',
       redirectUri: 'https://r.com',
-      redirectUriExplicit: false,
       codeChallenge: 'cc',
       error: 'Bad credentials',
     });
@@ -77,7 +73,6 @@ describe('renderLoginForm', () => {
     const html = renderLoginForm({
       clientId: 'c1',
       redirectUri: 'https://r.com',
-      redirectUriExplicit: false,
       codeChallenge: 'cc',
       clientName: '<script>xss</script>',
     });
@@ -89,7 +84,6 @@ describe('renderLoginForm', () => {
     const html = renderLoginForm({
       clientId: 'c1',
       redirectUri: 'https://r.com',
-      redirectUriExplicit: false,
       codeChallenge: 'cc',
       error: '<b>error</b>',
     });
@@ -164,7 +158,6 @@ describe('NextcloudOAuthProvider', () => {
       const html = renderLoginForm({
         clientId: 'c1',
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         codeChallenge: 'ch',
       });
       expect(html).toContain(`<link rel="stylesheet" href="${LOGIN_STYLESHEET_PATH}">`);
@@ -184,7 +177,6 @@ describe('NextcloudOAuthProvider', () => {
         CLIENT,
         {
           redirectUri: 'https://example.com/callback',
-          redirectUriExplicit: false,
           codeChallenge: 'cc',
           state: 's',
           scopes: ['mcp:tools'],
@@ -196,16 +188,14 @@ describe('NextcloudOAuthProvider', () => {
       const request = {
         clientId: field('client_id'),
         redirectUri: field('redirect_uri'),
-        redirectUriExplicit: field('redirect_uri_explicit') !== '',
         codeChallenge: field('code_challenge'),
         state: field('state'),
         scope: field('scope'),
         issuedAt: Number(field('request_iat')),
       };
-      expect(request.redirectUriExplicit).toBe(false);
       expect(verifyLoginRequestMac(request, field('request_mac'))).toBe(true);
       expect(
-        verifyLoginRequestMac({ ...request, redirectUriExplicit: true }, field('request_mac'))
+        verifyLoginRequestMac({ ...request, codeChallenge: 'other' }, field('request_mac'))
       ).toBe(false);
     });
 
@@ -234,7 +224,6 @@ describe('NextcloudOAuthProvider', () => {
         clientId: CLIENT.client_id,
         scopes: ['read'],
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         userId: 'alice',
       });
       const challenge = await provider.challengeForAuthorizationCode(CLIENT, code);
@@ -251,7 +240,6 @@ describe('NextcloudOAuthProvider', () => {
         clientId: 'other-client',
         scopes: [],
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         userId: 'u',
       });
       await expect(provider.challengeForAuthorizationCode(CLIENT, code)).rejects.toThrow();
@@ -267,7 +255,6 @@ describe('NextcloudOAuthProvider', () => {
         clientId: CLIENT.client_id,
         scopes: ['read'],
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         userId: 'alice',
       });
       const tokens = await provider.exchangeAuthorizationCode(CLIENT, code);
@@ -284,7 +271,6 @@ describe('NextcloudOAuthProvider', () => {
         clientId: CLIENT.client_id,
         scopes: ['read', 'write'],
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         userId: 'alice',
       });
       const { access_token } = await provider.exchangeAuthorizationCode(CLIENT, code);
@@ -298,7 +284,6 @@ describe('NextcloudOAuthProvider', () => {
         clientId: CLIENT.client_id,
         scopes: [],
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         userId: 'u',
       });
       await provider.exchangeAuthorizationCode(CLIENT, code);
@@ -315,7 +300,6 @@ describe('NextcloudOAuthProvider', () => {
         clientId: CLIENT.client_id,
         scopes: [],
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         userId: 'u',
       });
       await expect(
@@ -329,7 +313,6 @@ describe('NextcloudOAuthProvider', () => {
         clientId: 'other-client',
         scopes: [],
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         userId: 'u',
       });
       await expect(provider.exchangeAuthorizationCode(CLIENT, code)).rejects.toThrow();
@@ -345,7 +328,6 @@ describe('NextcloudOAuthProvider', () => {
         clientId: CLIENT.client_id,
         scopes,
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         userId,
       });
       const { access_token } = await provider.exchangeAuthorizationCode(CLIENT, code);
@@ -425,7 +407,6 @@ describe('NextcloudOAuthProvider', () => {
         clientId: CLIENT.client_id,
         scopes: ['read'],
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         userId: 'alice',
       });
       const { refresh_token } = await provider.exchangeAuthorizationCode(CLIENT, code);
@@ -460,7 +441,6 @@ describe('NextcloudOAuthProvider', () => {
         clientId: CLIENT.client_id,
         scopes: ['read', 'write'],
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         userId: 'u',
       });
       const { refresh_token } = await provider.exchangeAuthorizationCode(CLIENT, code);
@@ -488,7 +468,6 @@ describe('NextcloudOAuthProvider', () => {
         clientId: CLIENT.client_id,
         scopes: [],
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         userId: 'u',
       });
       const { refresh_token } = await provider.exchangeAuthorizationCode(CLIENT, code);
@@ -510,7 +489,6 @@ describe('NextcloudOAuthProvider', () => {
         clientId: CLIENT.client_id,
         scopes: ['read'],
         redirectUri: 'https://r.com',
-        redirectUriExplicit: false,
         userId: 'alice',
       });
       return p.exchangeAuthorizationCode(CLIENT, code);

@@ -25,7 +25,6 @@ function signed(body: Record<string, string>, issuedAt = Math.floor(Date.now() /
   const request = {
     clientId: body.client_id ?? '',
     redirectUri: body.redirect_uri ?? '',
-    redirectUriExplicit: body.redirect_uri_explicit !== '',
     codeChallenge: body.code_challenge ?? '',
     state: body.state || undefined,
     scope: body.scope || undefined,
@@ -294,13 +293,10 @@ describe('loginHandler', () => {
     expect(`${url.origin}${url.pathname}`).toBe('http://127.0.0.1:51234/cb');
   });
 
-  it('lets the token request omit redirect_uri when /authorize resolved it', async () => {
+  it('lets the token request omit redirect_uri (OAuth 2.1 §10.2)', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
-    await loginHandler(provider)(
-      { body: signed({ ...BASE_BODY, redirect_uri_explicit: '' }) } as any,
-      res as any
-    );
+    await loginHandler(provider)({ body: signed(BASE_BODY) } as any, res as any);
     const code = new URL((res.redirect as any).mock.calls[0][0] as string).searchParams.get(
       'code'
     )!;
@@ -309,7 +305,6 @@ describe('loginHandler', () => {
   });
 
   it.each([
-    ['redirect_uri_explicit', ''],
     ['redirect_uri', 'https://example.com/callback?x'],
     ['code_challenge', 'other-challenge'],
     ['scope', 'admin'],

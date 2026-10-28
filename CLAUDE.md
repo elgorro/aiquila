@@ -168,10 +168,19 @@ Specs this repo leans on:
 
 | Area | RFCs |
 |---|---|
-| OAuth / auth | 6749 (OAuth 2.0), 7636 (PKCE), 6750 (Bearer), 8414 (AS metadata), 7591 (dynamic client registration), 9728 (protected resource metadata), 8707 (resource indicators), 7519 (JWT) |
+| OAuth / auth | 6749 (OAuth 2.0), 7636 (PKCE), 6750 (Bearer), 8414 (AS metadata), 7591 (dynamic client registration), 9728 (protected resource metadata), 8707 (resource indicators), 7519 (JWT), 7009 (revocation), 9207 (`iss` in the authorization response), 8252 (native apps), 9700 (security BCP) |
 | HTTP / WebDAV | 9110 (HTTP semantics, incl. conditional requests — obsoletes 7232), 4918 (WebDAV) |
 | Calendar / contacts | 5545 (iCalendar), 4791 (CalDAV), 6350 (vCard 4.0), 2426 (vCard 3.0, obsoleted by 6350 but still sent by clients), 6352 (CardDAV) |
 | Other | 5646 (BCP 47 language tags), 2119 / 8174 (MUST / SHOULD keywords) |
+
+**OAuth 2.1.** The MCP server's authorization server implements **OAuth 2.1**, currently
+[`draft-ietf-oauth-v2-1-16`](https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/). It
+consolidates 6749, 7636, 6750, 8252 and 9700, and where it changes 6749 the draft wins. In
+particular: PKCE S256 on every code, no implicit or password grant, exact redirect matching
+(loopback any port), one-time-use refresh tokens with reuse detection, and an optional
+`redirect_uri` at the token endpoint (§10.2: still enforced when an OAuth 2.0 client sends it).
+Before relying on it, check the datatracker for a newer draft or the published RFC and update
+the revision here.
 
 - Read MUST / SHOULD / MAY per RFC 2119 — a SHOULD is not optional without a reason.
 - Cite the RFC and section in the code comment or PR description where behaviour

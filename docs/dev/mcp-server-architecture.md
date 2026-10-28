@@ -204,8 +204,8 @@ Authorization codes are in-memory only (5-min TTL, lost on restart by design).
 | `/.well-known/oauth-authorization-server` | RFC 8414 | Built by `buildAuthorizationServerMetadata`, served via `mcpAuthMetadataRouter` |
 | `/.well-known/oauth-protected-resource/mcp` | RFC 9728 | Also served at the root path by `http.ts` |
 | `/authorize` | RFC 6749 §4.1.1, RFC 7636 | 100 req / 15 min per IP. Errors before `client_id` and `redirect_uri` are verified are a `400` JSON body, never a redirect (§4.1.2.1); afterwards they redirect with `error`, `state` and `iss` (RFC 9207 §2) |
-| `/auth/login` | — | Nextcloud credential check, issues the code. 10 req / 15 min per IP. Accepts only a form `/authorize` rendered: `request_mac` is an HMAC (keyed by `MCP_AUTH_SECRET`) over the request fields and `request_iat`, valid 30 minutes, so the user agent cannot alter `redirect_uri`, its explicit flag, the PKCE challenge, state or scope |
-| `/token` | RFC 6749 §4.1.3, §6 | 50 req / 15 min per IP. `no-store` + `Pragma: no-cache` (§5.1). Refresh may narrow, never widen, the granted scope |
+| `/auth/login` | — | Nextcloud credential check, issues the code. 10 req / 15 min per IP. Accepts only a form `/authorize` rendered: `request_mac` is an HMAC (keyed by `MCP_AUTH_SECRET`) over the request fields and `request_iat`, valid 30 minutes, so the user agent cannot alter `redirect_uri`, the PKCE challenge, state or scope |
+| `/token` | OAuth 2.1 §4.1.3, §10.2; RFC 6749 §6 | 50 req / 15 min per IP. `no-store` + `Pragma: no-cache` (§5.1). `redirect_uri` optional; if sent, must equal the authorization request's. Refresh may narrow, never widen, the granted scope |
 | `/register` | RFC 7591 | 20 req / hour per IP. Mounted only with `MCP_REGISTRATION_ENABLED=true` |
 | `/revoke` | RFC 7009 | 50 req / 15 min per IP. A refresh token revokes its whole grant (§2.1), an access token only itself. Only tokens issued to the calling client; always `200` |
 

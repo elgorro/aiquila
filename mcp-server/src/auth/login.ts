@@ -33,7 +33,6 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
     const request: LoginFormRequest = {
       clientId: client_id ?? '',
       redirectUri: redirect_uri ?? '',
-      redirectUriExplicit: body.redirect_uri_explicit !== '',
       codeChallenge: code_challenge ?? '',
       state: state || undefined,
       scope: scope || undefined,
@@ -105,7 +104,6 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
         clientId: client_id,
         scopes: scope ? scope.split(' ').filter(Boolean) : [],
         redirectUri: redirect_uri,
-        redirectUriExplicit: request.redirectUriExplicit,
         userId,
         state: state || undefined,
       });
