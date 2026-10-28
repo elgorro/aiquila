@@ -287,6 +287,9 @@ export class NextcloudOAuthProvider {
       );
     }
     const effectiveScopes = scopes ?? entry.scopes;
+    // Spend the token before the first await, so two concurrent requests
+    // cannot both redeem it.
+    this.refreshStore.delete(refreshToken);
 
     // A user disabled or deleted in Nextcloud loses the grant at the next
     // refresh. RFC 6749 §5.2: a grant that is no longer valid is invalid_grant.
@@ -299,7 +302,6 @@ export class NextcloudOAuthProvider {
       );
       throw new OAuthError(OAuthErrorCode.InvalidGrant, 'The user is no longer active');
     }
-    this.refreshStore.delete(refreshToken);
 
     const accessToken = await this.signAccessToken(
       entry.grantId,
