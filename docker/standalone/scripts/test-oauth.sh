@@ -47,8 +47,10 @@ echo "$DISCOVERY" | python3 -m json.tool
 # Extract endpoints from discovery (strip host, use BASE for direct HTTP access)
 REGISTER_PATH=$(echo "$DISCOVERY" | python3 -c "import sys,json; from urllib.parse import urlparse; print(urlparse(json.load(sys.stdin)['registration_endpoint']).path)")
 TOKEN_PATH=$(echo "$DISCOVERY"    | python3 -c "import sys,json; from urllib.parse import urlparse; print(urlparse(json.load(sys.stdin)['token_endpoint']).path)")
+ISSUER=$(echo "$DISCOVERY"        | python3 -c "import sys,json; print(json.load(sys.stdin)['issuer'])")
 echo "register path : $REGISTER_PATH"
 echo "token path    : $TOKEN_PATH"
+echo "issuer        : $ISSUER"
 
 # ── Step 2: Generate PKCE ─────────────────────────────────────────────────────
 sep "Step 2 — Generate PKCE + state"
@@ -101,6 +103,15 @@ if [ -z "$CODE" ]; then
 fi
 echo "auth code: ${CODE:0:12}..."
 
+# The metadata advertises authorization_response_iss_parameter_supported, so the
+# redirect must carry iss equal to the metadata issuer (RFC 9207 §2, §2.4).
+ISS=$(python3 -c "import sys; from urllib.parse import urlparse, parse_qs; print(parse_qs(urlparse(sys.argv[1]).query).get('iss', [''])[0])" "$LOCATION")
+if [ "$ISS" != "$ISSUER" ]; then
+  echo "ERROR: redirect iss '$ISS' does not match metadata issuer '$ISSUER'" >&2
+  exit 1
+fi
+echo "iss      : $ISS"
+
 # ── Step 5: Exchange code for token ───────────────────────────────────────────
 sep "Step 5 — POST $TOKEN_PATH (code → access_token)"
 TOKEN_RESP=$($CURL -X POST "$BASE$TOKEN_PATH" \
@@ -147,6 +158,24 @@ sep "Step 7 — MCP tools/list"
 $CURL -X POST "$BASE/mcp" "${MCP_HEADERS[@]}" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
   | parse_mcp
+
+# ── Step 8: MCP 2026-07-28 — no handshake, version on every request ───────────
+# The same endpoint serves the per-request era: each request carries its version
+# in _meta and mirrors it (plus the method) into headers. No session.
+MODERN_META='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl-test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}'
+MODERN_HEADERS=(-H "Content-Type: application/json" -H "Accept: application/json, text/event-stream"
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "MCP-Protocol-Version: 2026-07-28")
+
+sep "Step 8 — MCP server/discover (2026-07-28)"
+DISCOVER=$($CURL -X POST "$BASE/mcp" "${MODERN_HEADERS[@]}" -H "Mcp-Method: server/discover" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"server/discover\",\"params\":{$MODERN_META}}" | parse_mcp)
+echo "$DISCOVER"
+echo "$DISCOVER" | python3 -c "import sys,json; r=json.load(sys.stdin)['result']; assert '2026-07-28' in r['supportedVersions'], r"
+
+sep "Step 9 — MCP tools/list (2026-07-28)"
+$CURL -X POST "$BASE/mcp" "${MODERN_HEADERS[@]}" -H "Mcp-Method: tools/list" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/list\",\"params\":{$MODERN_META}}" \
+  | parse_mcp | python3 -c "import sys,json; r=json.load(sys.stdin)['result']; print(f\"{len(r['tools'])} tools, cacheScope={r['cacheScope']}\")"
 
 sep "All steps passed"
 echo "Re-use token for more calls:"

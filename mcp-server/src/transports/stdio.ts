@@ -1,15 +1,25 @@
 // SPDX-License-Identifier: MIT
 
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { createServer } from '../server.js';
+import { getFilteredToolSets } from '../tool-registry.js';
 import { logger } from '../logger.js';
 import { fetchStatus } from '../client/ocs.js';
 import { SUPPORT_NOTICE } from '../support.js';
 
 export async function startStdio(): Promise<void> {
-  const server = await createServer();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  // Resolve the tool set now so app detection runs at startup rather than on
+  // the client's first message; the result is cached for the factory below.
+  await getFilteredToolSets();
+
+  // serveStdio picks the era from the client's opening message: a
+  // `server/discover` probe or any request carrying the per-request `_meta`
+  // envelope is served as 2026-07-28, an `initialize` handshake pins the
+  // connection to the negotiated 2025-era revision. The factory may run twice —
+  // once for a discover probe that the client then abandons for `initialize`.
+  serveStdio(() => createServer(), {
+    onerror: (err) => logger.error({ err: err.message }, '[mcp] stdio error'),
+  });
   logger.info('AIquila MCP server running (stdio transport)');
   logger.info(SUPPORT_NOTICE);
   void (async () => {

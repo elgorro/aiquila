@@ -191,9 +191,9 @@ use the handshake.
   <https://modelcontextprotocol.io/specification/versioning> for a newer **Current** one,
   and update the revision above when it changes.
 - Check which revisions the installed SDK actually negotiates
-  (`LATEST_PROTOCOL_VERSION` / `SUPPORTED_PROTOCOL_VERSIONS` in
-  `node_modules/@modelcontextprotocol/sdk/dist/esm/types.js`). That can lag the latest
-  spec, and the behaviour you implement must match the revision being negotiated.
+  (`grep -h "PROTOCOL_VERSION.* = " mcp-server/node_modules/@modelcontextprotocol/core/dist/*.mjs`).
+  That can lag the latest spec, and the behaviour you implement must match the revision
+  being negotiated.
 - Auth is the MCP authorization spec on top of the OAuth RFCs above. Check both.
 
 ## Reviewing pull requests
@@ -383,7 +383,7 @@ Both components stay on the same version number.
 ## Architecture Notes
 
 - **Transports**: stdio (Claude Desktop) or Streamable HTTP (Docker/Claude.ai)
-- **Auth**: built-in OAuth 2.0 provider (`MCP_AUTH_ENABLED=true`), PKCE, JWT via `node:crypto`
+- **Auth**: built-in OAuth 2.0 provider (`MCP_AUTH_ENABLED=true`), PKCE, HS256 JWT via `jose`
 - **Logging**: structured JSON to stderr via pino (`LOG_LEVEL` env var, default `info`)
 - **Logging is always to stderr** — stdout is reserved for the MCP protocol (stdio transport)
 
@@ -401,7 +401,7 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_AUTH_SECRET` | If auth | `openssl rand -hex 32` |
 | `MCP_AUTH_ISSUER` | If auth | public HTTPS URL of this server |
 | `MCP_AUTH_STATE_DIR` | No | Directory for persisted OAuth state (default `/app/state`) |
-| `MCP_LAZY_AUTH` | No | `false` requires a bearer token on every JSON-RPC method. Default `true`: `initialize`, `tools/list` and `get_local_time` are served without one |
+| `MCP_LAZY_AUTH` | No | `false` requires a bearer token on every JSON-RPC method. Default `true`: `server/discover`, `initialize`, `tools/list` and `get_local_time` are served without one |
 | `MCP_LOCALE` | No | BCP 47 locale tag for `localTime` in `get_local_time` (e.g. `sv-SE`); defaults to system locale |
 | `MCP_MAX_FILE_SIZE` | No | Max `write_file` content length in bytes (default `1073741824` = 1 GB) |
 | `MCP_ALLOWED_HOSTS` | No | Comma-separated extra hostnames for DNS rebinding protection (e.g. `mcp` for Docker service name) |
@@ -421,7 +421,8 @@ Do not use `--no-verify` to skip hooks.
 ### OAuth end-to-end test
 
 `docker/standalone/scripts/test-oauth.sh` runs the full PKCE flow against a live server:
-discovery → client registration → login → token exchange → MCP initialize → tools/list.
+discovery → client registration → login (checks the RFC 9207 `iss`) → token exchange →
+MCP initialize → tools/list → `2026-07-28` `server/discover` → `2026-07-28` tools/list.
 
 ```bash
 # Requires: docker/standalone/.env with NEXTCLOUD_USER + NEXTCLOUD_PASSWORD + auth vars

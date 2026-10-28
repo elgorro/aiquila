@@ -23,7 +23,7 @@ vi.mock('../client/bookmarks.js', () => ({
   fetchBookmarksAPI: vi.fn(),
 }));
 
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { createServer } from '../server.js';
 import { _resetCache, getFilteredToolSets } from '../tool-registry.js';
 

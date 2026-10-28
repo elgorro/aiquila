@@ -343,13 +343,14 @@ describe('NextcloudOAuthProvider', () => {
     });
 
     // A bare Error would surface as a 500, which clients read as a server fault
-    // rather than a cue to re-authenticate. It must be an InvalidTokenError so
-    // the SDK answers 401 with a WWW-Authenticate challenge.
-    it('rejects an invalid token with InvalidTokenError (→ 401, not 500)', async () => {
-      const { InvalidTokenError } = await import('@modelcontextprotocol/sdk/server/auth/errors.js');
-      await expect(provider.verifyAccessToken('not-a-jwt')).rejects.toBeInstanceOf(
-        InvalidTokenError
-      );
+    // rather than a cue to re-authenticate. It must be an OAuthError with the
+    // invalid_token code so requireBearerAuth answers 401 with a
+    // WWW-Authenticate challenge.
+    it('rejects an invalid token with OAuthError(invalid_token) (→ 401, not 500)', async () => {
+      const { OAuthError, OAuthErrorCode } = await import('@modelcontextprotocol/server');
+      const err = await provider.verifyAccessToken('not-a-jwt').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(OAuthError);
+      expect((err as InstanceType<typeof OAuthError>).code).toBe(OAuthErrorCode.InvalidToken);
     });
 
     it('embeds correct aud claim (resource server URL)', async () => {

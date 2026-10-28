@@ -71,6 +71,18 @@ describe('loginHandler', () => {
     expect(new URL(url).searchParams.get('state')).toBe('xyz');
   });
 
+  // The AS metadata advertises authorization_response_iss_parameter_supported,
+  // so clients reject an authorization response without iss (RFC 9207 §2.4).
+  // The value must equal the metadata's `issuer` — the URL's href, trailing slash
+  // included.
+  it('includes iss matching the metadata issuer in the redirect URL', async () => {
+    (global.fetch as any).mockResolvedValueOnce({ ok: true });
+    const res = makeRes();
+    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    const url = (res.redirect as any).mock.calls[0][0] as string;
+    expect(new URL(url).searchParams.get('iss')).toBe('https://test.example.com/');
+  });
+
   it('omits state when state is empty', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();

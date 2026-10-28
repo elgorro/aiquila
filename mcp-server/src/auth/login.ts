@@ -109,6 +109,11 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       const redirectUrl = new URL(redirect_uri);
       redirectUrl.searchParams.set('code', code);
       if (state) redirectUrl.searchParams.set('state', state);
+      // The metadata advertises authorization_response_iss_parameter_supported,
+      // so every authorization response must carry iss, and clients reject one
+      // that lacks it (RFC 9207 §2, §2.4). mcpAuthRouter only adds it on its
+      // own /authorize redirects; this redirect is ours.
+      redirectUrl.searchParams.set('iss', provider.issuerIdentifier);
       res.redirect(redirectUrl.toString());
     } catch (err) {
       logger.error({ user: username, err }, '[auth] Login error');

@@ -79,6 +79,8 @@ For better security, use Nextcloud **App Passwords** instead of your main passwo
 
 ## MCP Client Configuration
 
+Both transports serve MCP `2026-07-28` and the handshake-based revisions up to `2025-11-25`, so a client needs no protocol setting: the server follows whichever one the client opens with. See [Protocol revisions](../dev/mcp-server-architecture.md#protocol-revisions).
+
 ### Stdio Client Setup (Claude Desktop, Cursor, etc.)
 
 Most local MCP clients use stdio transport. Below is the configuration format — check your client's documentation for the config file location.

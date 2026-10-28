@@ -2,10 +2,10 @@
 
 import https from 'node:https';
 import express from 'express';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
-import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
-import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
+import { createMcpHandler } from '@modelcontextprotocol/server';
+import { toNodeHandler } from '@modelcontextprotocol/node';
+import { createMcpExpressApp, requireBearerAuth } from '@modelcontextprotocol/express';
+import { mcpAuthRouter } from '@modelcontextprotocol/server-legacy/auth';
 import { createServer, SERVER_VERSION } from '../server.js';
 import { NextcloudOAuthProvider } from '../auth/provider.js';
 import {
@@ -208,7 +208,7 @@ export async function startHttp(): Promise<void> {
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader(
         'Access-Control-Allow-Headers',
-        'Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID'
+        'Authorization, Content-Type, Mcp-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id, Last-Event-ID'
       );
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id, WWW-Authenticate');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
@@ -261,20 +261,22 @@ export async function startHttp(): Promise<void> {
     }
   }
 
-  // Stateless mode: create a new transport + server per request so each MCP
-  // call is handled independently. This is required by the SDK for stateless
-  // operation and allows distributed clients (like Claude.ai, Cursor, etc.) to
-  // connect from multiple IPs without needing a shared session.
-  const handleMcpRequest = async (req: any, res: any) => {
-    const mcpServer = await createServer();
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await mcpServer.connect(transport);
-    res.on('close', () => {
-      void transport.close();
-      void mcpServer.close();
-    });
-    await transport.handleRequest(req, res, req.body);
-  };
+  // Dual-era and stateless. A request carrying the per-request `_meta`
+  // envelope is served as 2026-07-28; anything else (the `initialize`
+  // handshake and every 2025-era request after it) goes to the legacy leg,
+  // which answers each request from a fresh server over a session-less
+  // streamable transport — the same model this server has always used, so
+  // distributed clients (Claude.ai, Cursor, …) can reach it from several IPs
+  // without a shared session. Both legs answer GET and DELETE with 405.
+  // `toNodeHandler` forwards `req.auth` (set by requireBearerAuth) and the
+  // already-parsed `req.body`.
+  const mcpHandler = toNodeHandler(
+    createMcpHandler(() => createServer(), {
+      legacy: 'stateless',
+      onerror: (err) => logger.warn({ err: err.message }, '[mcp] Request error'),
+    })
+  );
+  const handleMcpRequest = (req: any, res: any) => mcpHandler(req, res, req.body);
 
   const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
   const hasStaticClient = !!process.env.MCP_CLIENT_ID;
