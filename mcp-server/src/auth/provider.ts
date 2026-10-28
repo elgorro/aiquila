@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import {
   OAuthError,
@@ -80,6 +80,55 @@ export function applySecurityHeaders<T extends { set(name: string, value: string
     .set('Content-Security-Policy', LOGIN_PAGE_CSP);
 }
 
+/**
+ * The authorization request as the login form carries it from /authorize to
+ * /auth/login. It passes through the user agent, so it is MACed: otherwise
+ * the form could claim, say, that redirect_uri was not in the authorization
+ * request, and the token request would no longer have to repeat it
+ * (RFC 6749 §4.1.3).
+ */
+export interface LoginFormRequest {
+  clientId: string;
+  redirectUri: string;
+  redirectUriExplicit: boolean;
+  codeChallenge: string;
+  state?: string;
+  scope?: string;
+  // Seconds since the epoch, when /authorize rendered the form
+  issuedAt: number;
+}
+
+// How long a rendered login form stays valid.
+const LOGIN_FORM_TTL_SECS = 30 * 60;
+
+export function loginRequestMac(req: LoginFormRequest): string {
+  const secret = process.env.MCP_AUTH_SECRET;
+  if (!secret) throw new Error('MCP_AUTH_SECRET is not set');
+  return createHmac('sha256', secret)
+    .update(
+      JSON.stringify([
+        'aiquila-login-form-v1',
+        req.clientId,
+        req.redirectUri,
+        req.redirectUriExplicit,
+        req.codeChallenge,
+        req.state ?? '',
+        req.scope ?? '',
+        req.issuedAt,
+      ])
+    )
+    .digest('base64url');
+}
+
+/** True when `mac` belongs to `req` and the form has not expired. */
+export function verifyLoginRequestMac(req: LoginFormRequest, mac: string | undefined): boolean {
+  if (!mac || !Number.isSafeInteger(req.issuedAt)) return false;
+  const age = Math.floor(Date.now() / 1000) - req.issuedAt;
+  if (age < 0 || age > LOGIN_FORM_TTL_SECS) return false;
+  const hash = (v: string) => createHash('sha256').update(v).digest();
+  return timingSafeEqual(hash(mac), hash(loginRequestMac(req)));
+}
+
 export function renderLoginForm(opts: {
   clientName?: string;
   clientId: string;
@@ -88,6 +137,8 @@ export function renderLoginForm(opts: {
   state?: string;
   codeChallenge: string;
   scope?: string;
+  issuedAt?: number;
+  requestMac?: string;
   error?: string;
 }): string {
   return `<!DOCTYPE html>
@@ -114,6 +165,8 @@ export function renderLoginForm(opts: {
       <input type="hidden" name="state" value="${escapeHtml(opts.state ?? '')}">
       <input type="hidden" name="code_challenge" value="${escapeHtml(opts.codeChallenge)}">
       <input type="hidden" name="scope" value="${escapeHtml(opts.scope ?? '')}">
+      <input type="hidden" name="request_iat" value="${opts.issuedAt ?? ''}">
+      <input type="hidden" name="request_mac" value="${escapeHtml(opts.requestMac ?? '')}">
       <label for="username">Nextcloud Username</label>
       <input type="text" id="username" name="username" autocomplete="username" required>
       <label for="password">Password / App Password</label>
@@ -183,18 +236,23 @@ export class NextcloudOAuthProvider {
     params: AuthorizationParams,
     res: any
   ): Promise<void> {
+    const request: LoginFormRequest = {
+      clientId: client.client_id,
+      redirectUri: params.redirectUri,
+      redirectUriExplicit: params.redirectUriExplicit,
+      state: params.state,
+      codeChallenge: params.codeChallenge,
+      scope: params.scopes?.join(' '),
+      issuedAt: Math.floor(Date.now() / 1000),
+    };
     applySecurityHeaders(res)
       .status(200)
       .type('html')
       .send(
         renderLoginForm({
+          ...request,
           clientName: clientDisplayName(client),
-          clientId: client.client_id,
-          redirectUri: params.redirectUri,
-          redirectUriExplicit: params.redirectUriExplicit,
-          state: params.state,
-          codeChallenge: params.codeChallenge,
-          scope: params.scopes?.join(' '),
+          requestMac: loginRequestMac(request),
         })
       );
   }

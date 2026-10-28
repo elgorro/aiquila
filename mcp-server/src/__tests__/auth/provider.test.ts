@@ -4,7 +4,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { NextcloudOAuthProvider, renderLoginForm, LOGIN_PAGE_CSP } from '../../auth/provider.js';
+import {
+  NextcloudOAuthProvider,
+  renderLoginForm,
+  LOGIN_PAGE_CSP,
+  verifyLoginRequestMac,
+} from '../../auth/provider.js';
 import { LOGIN_STYLESHEET_PATH } from '../../auth/login-page-css.js';
 
 const TEST_SECRET = 'super-secret-32-char-key-for-testing!!';
@@ -166,6 +171,42 @@ describe('NextcloudOAuthProvider', () => {
       expect(html).not.toContain('<style');
       expect(html).not.toContain('<script');
       expect(html).not.toContain('style="');
+    });
+
+    it('renders a form whose MAC verifies against the request it carries', async () => {
+      const res = {
+        set: vi.fn().mockReturnThis(),
+        status: vi.fn().mockReturnThis(),
+        type: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+      };
+      await provider.authorize(
+        CLIENT,
+        {
+          redirectUri: 'https://example.com/callback',
+          redirectUriExplicit: false,
+          codeChallenge: 'cc',
+          state: 's',
+          scopes: ['mcp:tools'],
+        },
+        res
+      );
+      const html = res.send.mock.calls[0][0] as string;
+      const field = (name: string) => html.match(new RegExp(`name="${name}" value="([^"]*)"`))![1];
+      const request = {
+        clientId: field('client_id'),
+        redirectUri: field('redirect_uri'),
+        redirectUriExplicit: field('redirect_uri_explicit') !== '',
+        codeChallenge: field('code_challenge'),
+        state: field('state'),
+        scope: field('scope'),
+        issuedAt: Number(field('request_iat')),
+      };
+      expect(request.redirectUriExplicit).toBe(false);
+      expect(verifyLoginRequestMac(request, field('request_mac'))).toBe(true);
+      expect(
+        verifyLoginRequestMac({ ...request, redirectUriExplicit: true }, field('request_mac'))
+      ).toBe(false);
     });
 
     it('includes client name in the rendered form', async () => {

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { NextcloudOAuthProvider } from '../../auth/provider.js';
 import { loginHandler } from '../../auth/login.js';
-import { LOGIN_PAGE_CSP } from '../../auth/provider.js';
+import { LOGIN_PAGE_CSP, loginRequestMac } from '../../auth/provider.js';
 
 global.fetch = vi.fn();
 
@@ -19,6 +19,20 @@ const BASE_BODY = {
   code_challenge: 'challenge-abc',
   scope: 'read write',
 };
+
+/** The body as the form /authorize rendered would post it: with request_iat and request_mac. */
+function signed(body: Record<string, string>, issuedAt = Math.floor(Date.now() / 1000)) {
+  const request = {
+    clientId: body.client_id ?? '',
+    redirectUri: body.redirect_uri ?? '',
+    redirectUriExplicit: body.redirect_uri_explicit !== '',
+    codeChallenge: body.code_challenge ?? '',
+    state: body.state || undefined,
+    scope: body.scope || undefined,
+    issuedAt,
+  };
+  return { ...body, request_iat: String(issuedAt), request_mac: loginRequestMac(request) };
+}
 
 function makeRes() {
   const res = {
@@ -59,14 +73,14 @@ describe('loginHandler', () => {
   it('redirects with ?code= on successful Nextcloud auth', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
-    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    await loginHandler(provider)({ body: signed(BASE_BODY) } as any, res as any);
     expect(res.redirect).toHaveBeenCalledWith(expect.stringContaining('code='));
   });
 
   it('includes state in the redirect URL', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
-    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    await loginHandler(provider)({ body: signed(BASE_BODY) } as any, res as any);
     const url = (res.redirect as any).mock.calls[0][0] as string;
     expect(new URL(url).searchParams.get('state')).toBe('xyz');
   });
@@ -78,7 +92,7 @@ describe('loginHandler', () => {
   it('includes iss matching the metadata issuer in the redirect URL', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
-    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    await loginHandler(provider)({ body: signed(BASE_BODY) } as any, res as any);
     const url = (res.redirect as any).mock.calls[0][0] as string;
     expect(new URL(url).searchParams.get('iss')).toBe('https://test.example.com/');
   });
@@ -86,7 +100,7 @@ describe('loginHandler', () => {
   it('omits state when state is empty', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
-    await loginHandler(provider)({ body: { ...BASE_BODY, state: '' } } as any, res as any);
+    await loginHandler(provider)({ body: signed({ ...BASE_BODY, state: '' }) } as any, res as any);
     const url = (res.redirect as any).mock.calls[0][0] as string;
     expect(new URL(url).searchParams.has('state')).toBe(false);
   });
@@ -94,7 +108,7 @@ describe('loginHandler', () => {
   it('redirect target matches the requested redirect_uri', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
-    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    await loginHandler(provider)({ body: signed(BASE_BODY) } as any, res as any);
     const url = (res.redirect as any).mock.calls[0][0] as string;
     expect(url).toContain('https://example.com/callback');
   });
@@ -102,7 +116,7 @@ describe('loginHandler', () => {
   it('re-renders login form with error on 401 from Nextcloud', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: false, status: 401 });
     const res = makeRes();
-    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    await loginHandler(provider)({ body: signed(BASE_BODY) } as any, res as any);
     expect(res.redirect).not.toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith(expect.stringContaining('Invalid Nextcloud credentials'));
   });
@@ -110,7 +124,7 @@ describe('loginHandler', () => {
   it('re-renders login form on network failure', async () => {
     (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
     const res = makeRes();
-    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    await loginHandler(provider)({ body: signed(BASE_BODY) } as any, res as any);
     expect(res.redirect).not.toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith(expect.stringContaining('Authentication failed'));
   });
@@ -122,26 +136,29 @@ describe('loginHandler', () => {
       // invalid credentials
       async () => {
         (global.fetch as any).mockResolvedValueOnce({ ok: false, status: 401 });
-        return loginHandler(provider)({ body: BASE_BODY } as any, makeResAndTrack() as any);
+        return loginHandler(provider)({ body: signed(BASE_BODY) } as any, makeResAndTrack() as any);
       },
       // network failure
       async () => {
         (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
-        return loginHandler(provider)({ body: BASE_BODY } as any, makeResAndTrack() as any);
+        return loginHandler(provider)({ body: signed(BASE_BODY) } as any, makeResAndTrack() as any);
       },
       // missing fields
       async () =>
-        loginHandler(provider)({ body: { username: 'u' } } as any, makeResAndTrack() as any),
+        loginHandler(provider)(
+          { body: signed({ username: 'u' }) } as any,
+          makeResAndTrack() as any
+        ),
       // unknown client
       async () =>
         loginHandler(provider)(
-          { body: { ...BASE_BODY, client_id: 'nope' } } as any,
+          { body: signed({ ...BASE_BODY, client_id: 'nope' }) } as any,
           makeResAndTrack() as any
         ),
       // invalid redirect URI
       async () =>
         loginHandler(provider)(
-          { body: { ...BASE_BODY, redirect_uri: 'https://evil.example/cb' } } as any,
+          { body: signed({ ...BASE_BODY, redirect_uri: 'https://evil.example/cb' }) } as any,
           makeResAndTrack() as any
         ),
     ];
@@ -167,14 +184,17 @@ describe('loginHandler', () => {
   it('returns 500 when NEXTCLOUD_URL is not configured', async () => {
     delete process.env.NEXTCLOUD_URL;
     const res = makeRes();
-    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    await loginHandler(provider)({ body: signed(BASE_BODY) } as any, res as any);
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.redirect).not.toHaveBeenCalled();
   });
 
   it('returns 400 when required form fields are missing', async () => {
     const res = makeRes();
-    await loginHandler(provider)({ body: { username: 'u', password: 'p' } } as any, res as any);
+    await loginHandler(provider)(
+      { body: signed({ username: 'u', password: 'p' }) } as any,
+      res as any
+    );
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.redirect).not.toHaveBeenCalled();
   });
@@ -182,7 +202,7 @@ describe('loginHandler', () => {
   it('calls Nextcloud with Basic auth header', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
-    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    await loginHandler(provider)({ body: signed(BASE_BODY) } as any, res as any);
     const [url, opts] = (global.fetch as any).mock.calls[0];
     expect(url).toContain('/ocs/v2.php/cloud/user');
     const expectedAuth = 'Basic ' + Buffer.from('alice:secret').toString('base64');
@@ -192,7 +212,7 @@ describe('loginHandler', () => {
   it('calls Nextcloud with OCS-APIRequest header', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
-    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    await loginHandler(provider)({ body: signed(BASE_BODY) } as any, res as any);
     const [, opts] = (global.fetch as any).mock.calls[0];
     expect(opts.headers['OCS-APIRequest']).toBe('true');
   });
@@ -201,7 +221,7 @@ describe('loginHandler', () => {
     process.env.NEXTCLOUD_URL = 'https://cloud.example.com/';
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
-    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    await loginHandler(provider)({ body: signed(BASE_BODY) } as any, res as any);
     const [url] = (global.fetch as any).mock.calls[0];
     expect(url).not.toContain('//ocs');
     expect(url).toContain('/ocs/v2.php/cloud/user');
@@ -214,7 +234,7 @@ describe('loginHandler', () => {
     });
     const res = makeRes();
     await loginHandler(provider)(
-      { body: { ...BASE_BODY, username: 'alice@example.com' } } as any,
+      { body: signed({ ...BASE_BODY, username: 'alice@example.com' }) } as any,
       res as any
     );
     const code = new URL((res.redirect as any).mock.calls[0][0]).searchParams.get('code')!;
@@ -233,7 +253,7 @@ describe('loginHandler', () => {
   it('issued code is verifiable via the provider', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
-    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    await loginHandler(provider)({ body: signed(BASE_BODY) } as any, res as any);
     const url = (res.redirect as any).mock.calls[0][0] as string;
     const code = new URL(url).searchParams.get('code')!;
     // challengeForAuthorizationCode should return the stored PKCE challenge
@@ -246,7 +266,7 @@ describe('loginHandler', () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
     await loginHandler(provider)(
-      { body: { ...BASE_BODY, scope: 'read write' } } as any,
+      { body: signed({ ...BASE_BODY, scope: 'read write' }) } as any,
       res as any
     );
     const url = (res.redirect as any).mock.calls[0][0] as string;
@@ -267,7 +287,7 @@ describe('loginHandler', () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
     await loginHandler(provider)(
-      { body: { ...BASE_BODY, redirect_uri: 'http://127.0.0.1:51234/cb' } } as any,
+      { body: signed({ ...BASE_BODY, redirect_uri: 'http://127.0.0.1:51234/cb' }) } as any,
       res as any
     );
     const url = new URL((res.redirect as any).mock.calls[0][0] as string);
@@ -278,7 +298,7 @@ describe('loginHandler', () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
     await loginHandler(provider)(
-      { body: { ...BASE_BODY, redirect_uri_explicit: '' } } as any,
+      { body: signed({ ...BASE_BODY, redirect_uri_explicit: '' }) } as any,
       res as any
     );
     const code = new URL((res.redirect as any).mock.calls[0][0] as string).searchParams.get(
@@ -288,10 +308,50 @@ describe('loginHandler', () => {
     await expect(provider.exchangeAuthorizationCode(client, code)).resolves.toBeDefined();
   });
 
+  it.each([
+    ['redirect_uri_explicit', ''],
+    ['redirect_uri', 'https://example.com/callback?x'],
+    ['code_challenge', 'other-challenge'],
+    ['scope', 'admin'],
+    ['state', 'forged'],
+  ])('rejects a form whose %s was changed after /authorize', async (field, value) => {
+    const res = makeRes();
+    await loginHandler(provider)(
+      { body: { ...signed(BASE_BODY), [field]: value } } as any,
+      res as any
+    );
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.redirect).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a form without a MAC', async () => {
+    const res = makeRes();
+    await loginHandler(provider)({ body: BASE_BODY } as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a form older than 30 minutes', async () => {
+    const res = makeRes();
+    const old = Math.floor(Date.now() / 1000) - 31 * 60;
+    await loginHandler(provider)({ body: signed(BASE_BODY, old) } as any, res as any);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps the MAC on a re-rendered form so the user can retry', async () => {
+    (global.fetch as any).mockResolvedValueOnce({ ok: false, status: 401 });
+    const res = makeRes();
+    const body = signed(BASE_BODY);
+    await loginHandler(provider)({ body } as any, res as any);
+    expect((res.send as any).mock.calls[0][0]).toContain(`value="${body.request_mac}"`);
+  });
+
   it('handles empty scope gracefully', async () => {
     (global.fetch as any).mockResolvedValueOnce({ ok: true });
     const res = makeRes();
-    await loginHandler(provider)({ body: { ...BASE_BODY, scope: '' } } as any, res as any);
+    await loginHandler(provider)({ body: signed({ ...BASE_BODY, scope: '' }) } as any, res as any);
     expect(res.redirect).toHaveBeenCalled();
   });
 });
