@@ -2,21 +2,23 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
+// The authorization-server side (provider interface, clients store, grant
+// errors) lives in the frozen v1 copy in server-legacy; the resource-server
+// side (token verification, OAuthError) is maintained in the v2 packages.
 import type {
   OAuthServerProvider,
   AuthorizationParams,
-} from '@modelcontextprotocol/sdk/server/auth/provider.js';
-import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/server/auth/clients.js';
-import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import type {
-  OAuthClientInformationFull,
-  OAuthTokens,
-  OAuthTokenRevocationRequest,
-} from '@modelcontextprotocol/sdk/shared/auth.js';
+  OAuthRegisteredClientsStore,
+} from '@modelcontextprotocol/server-legacy/auth';
+import { InvalidGrantError } from '@modelcontextprotocol/server-legacy/auth';
 import {
-  InvalidGrantError,
-  InvalidTokenError,
-} from '@modelcontextprotocol/sdk/server/auth/errors.js';
+  OAuthError,
+  OAuthErrorCode,
+  type AuthInfo,
+  type OAuthClientInformationFull,
+  type OAuthTokens,
+  type OAuthTokenRevocationRequest,
+} from '@modelcontextprotocol/server';
 import { ClientsStore, CodeStore, RefreshStore } from './store.js';
 import { LOGIN_STYLESHEET_PATH } from './login-page-css.js';
 import { logger } from '../logger.js';
@@ -294,10 +296,12 @@ export class NextcloudOAuthProvider implements OAuthServerProvider {
     );
     if (!claims) {
       logger.warn('[auth] Access token verification failed: invalid or expired token');
-      // InvalidTokenError (not a bare Error) so the SDK answers 401 with a
-      // WWW-Authenticate challenge. A bare Error becomes a 500, and clients
-      // treat that as a server fault rather than a cue to re-authenticate.
-      throw new InvalidTokenError('Invalid or expired access token');
+      // OAuthError(InvalidToken) — not a bare Error, and not the legacy
+      // InvalidTokenError — so requireBearerAuth answers 401 with a
+      // WWW-Authenticate challenge (RFC 6750 §3.1). Anything else becomes a
+      // 500, and clients treat that as a server fault rather than a cue to
+      // re-authenticate.
+      throw new OAuthError(OAuthErrorCode.InvalidToken, 'Invalid or expired access token');
     }
     return {
       token,

@@ -16,7 +16,7 @@ vi.mock('../server.js', () => ({
 
 // Mock the MCP SDK transports (must be constructable — no arrow functions)
 const mockStdioTransport = {};
-vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => {
+vi.mock('@modelcontextprotocol/server/stdio', () => {
   return {
     StdioServerTransport: vi.fn(function () {
       return mockStdioTransport;
@@ -25,9 +25,9 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => {
 });
 
 const mockHttpTransport = { handleRequest: vi.fn() };
-vi.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => {
+vi.mock('@modelcontextprotocol/node', () => {
   return {
-    StreamableHTTPServerTransport: vi.fn(function () {
+    NodeStreamableHTTPServerTransport: vi.fn(function () {
       return mockHttpTransport;
     }),
   };
@@ -47,8 +47,10 @@ const mockExpressApp = {
   use: mockUse,
   post: mockPost,
 };
-vi.mock('@modelcontextprotocol/sdk/server/express.js', () => ({
+const mockBearerMiddleware = vi.fn();
+vi.mock('@modelcontextprotocol/express', () => ({
   createMcpExpressApp: vi.fn(() => mockExpressApp),
+  requireBearerAuth: vi.fn(() => mockBearerMiddleware),
 }));
 
 // Mock express (needed when auth is enabled)
@@ -59,13 +61,8 @@ vi.mock('express', () => ({
 
 // Mock auth SDK modules
 const mockMcpAuthMiddleware = vi.fn();
-vi.mock('@modelcontextprotocol/sdk/server/auth/router.js', () => ({
+vi.mock('@modelcontextprotocol/server-legacy/auth', () => ({
   mcpAuthRouter: vi.fn(() => mockMcpAuthMiddleware),
-}));
-
-const mockBearerMiddleware = vi.fn();
-vi.mock('@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js', () => ({
-  requireBearerAuth: vi.fn(() => mockBearerMiddleware),
 }));
 
 // Mock ocs fetchStatus to prevent real network calls during startup probe
@@ -143,8 +140,7 @@ describe('http transport', () => {
   // endpoint"). Pinned so a future change doesn't add a session-backed GET stream in response to
   // a 405 sighting in devtools — see #384, where that 405 was a red herring.
   it('should construct the transport in stateless mode (no session id generator)', async () => {
-    const { StreamableHTTPServerTransport } =
-      await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
+    const { NodeStreamableHTTPServerTransport } = await import('@modelcontextprotocol/node');
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
 
@@ -152,7 +148,9 @@ describe('http transport', () => {
     const handler = mcpCall?.[1] as (req: unknown, res: unknown) => Promise<void>;
     await handler({ body: {} }, { on: vi.fn() });
 
-    expect(StreamableHTTPServerTransport).toHaveBeenCalledWith({ sessionIdGenerator: undefined });
+    expect(NodeStreamableHTTPServerTransport).toHaveBeenCalledWith({
+      sessionIdGenerator: undefined,
+    });
   });
 
   it('should listen on default port 3339', async () => {
@@ -290,8 +288,7 @@ describe('http transport with auth enabled', () => {
   });
 
   it('points the 401 challenge at the protected resource metadata', async () => {
-    const { requireBearerAuth } =
-      await import('@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js');
+    const { requireBearerAuth } = await import('@modelcontextprotocol/express');
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
 

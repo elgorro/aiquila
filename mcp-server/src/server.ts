@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { createRequire } from 'node:module';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { logger } from './logger.js';
 import { getFilteredToolSets } from './tool-registry.js';
 

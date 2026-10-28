@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { createServer } from '../server.js';
 import { logger } from '../logger.js';
 import { fetchStatus } from '../client/ocs.js';

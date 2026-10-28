@@ -2,10 +2,9 @@
 
 import https from 'node:https';
 import express from 'express';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
-import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
-import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import { createMcpExpressApp, requireBearerAuth } from '@modelcontextprotocol/express';
+import { mcpAuthRouter } from '@modelcontextprotocol/server-legacy/auth';
 import { createServer, SERVER_VERSION } from '../server.js';
 import { NextcloudOAuthProvider } from '../auth/provider.js';
 import {
@@ -267,7 +266,7 @@ export async function startHttp(): Promise<void> {
   // connect from multiple IPs without needing a shared session.
   const handleMcpRequest = async (req: any, res: any) => {
     const mcpServer = await createServer();
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await mcpServer.connect(transport);
     res.on('close', () => {
       void transport.close();

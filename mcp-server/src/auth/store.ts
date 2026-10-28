@@ -3,8 +3,8 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
-import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/server/auth/clients.js';
+import type { OAuthClientInformationFull } from '@modelcontextprotocol/server';
+import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/server-legacy/auth';
 import { logger } from '../logger.js';
 
 export interface CodeEntry {

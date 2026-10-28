@@ -13,9 +13,13 @@ The MCP server is a TypeScript/Node.js implementation of the [Model Context Prot
 
 - **Runtime**: Node.js 26+
 - **Language**: TypeScript 5.8+ (strict mode)
-- **Protocol**: Model Context Protocol via [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) ^1.x
-- **Transport**: `StdioServerTransport` or `StreamableHTTPServerTransport`
-- **HTTP framework**: Express 5 (via MCP SDK's `createMcpExpressApp`)
+- **Protocol**: Model Context Protocol via the [TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) v2:
+  - `@modelcontextprotocol/server` — `McpServer`, stdio transport, OAuth error and wire types
+  - `@modelcontextprotocol/node` — `NodeStreamableHTTPServerTransport`
+  - `@modelcontextprotocol/express` — `createMcpExpressApp`, `requireBearerAuth`
+  - `@modelcontextprotocol/server-legacy/auth` — `mcpAuthRouter` and the `OAuthServerProvider` interface. This is the SDK's frozen copy of its v1 authorization-server helpers; it gets no new features
+- **Transport**: `StdioServerTransport` or `NodeStreamableHTTPServerTransport`
+- **HTTP framework**: Express 5 (via the SDK's `createMcpExpressApp`)
 - **Auth**: OAuth 2.1 + PKCE, HS256 JWT via `node:crypto` (no external JWT library)
 - **Dependencies**:
   - `pino` ^9.x — structured JSON logging to stderr
@@ -32,7 +36,7 @@ mcp-server/src/
 ├── logger.ts            # pino → stderr
 ├── transports/
 │   ├── stdio.ts         # StdioServerTransport (local MCP clients)
-│   └── http.ts          # Express app + StreamableHTTPServerTransport + auth middleware
+│   └── http.ts          # Express app + NodeStreamableHTTPServerTransport + auth middleware
 ├── auth/
 │   ├── provider.ts      # NextcloudOAuthProvider — JWT sign/verify, code issuance
 │   ├── store.ts         # ClientsStore, CodeStore, RefreshStore (disk-persisted)
@@ -75,14 +79,14 @@ McpServer (single instance, lifetime = process)
 Tool handlers → Nextcloud APIs
 ```
 
-### HTTP (`StreamableHTTPServerTransport`) — remote/network MCP clients
+### HTTP (`NodeStreamableHTTPServerTransport`) — remote/network MCP clients
 
-**Per-request stateless**: a new `McpServer` + `StreamableHTTPServerTransport` is created for every incoming HTTP request, then torn down when the response closes.
+**Per-request stateless**: a new `McpServer` + `NodeStreamableHTTPServerTransport` is created for every incoming HTTP request, then torn down when the response closes.
 
 ```typescript
 const handleMcpRequest = async (req, res) => {
   const mcpServer = createServer();
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   await mcpServer.connect(transport);
   res.on('close', () => { transport.close(); mcpServer.close(); });
   await transport.handleRequest(req, res, req.body);
@@ -264,7 +268,7 @@ export const myTool = {
 
 ### 5. Auth Layer (`auth/`)
 
-Implements `OAuthServerProvider` from the MCP SDK. The provider is instantiated once and shared for the lifetime of the HTTP process. Individual stores (`ClientsStore`, `CodeStore`, `RefreshStore`) manage state independently.
+Implements `OAuthServerProvider` from `@modelcontextprotocol/server-legacy/auth`. `verifyAccessToken` throws the v2 `OAuthError` with code `invalid_token`, which `requireBearerAuth` turns into a 401 challenge (RFC 6750 §3.1); any other error becomes a 500. The provider is instantiated once and shared for the lifetime of the HTTP process. Individual stores (`ClientsStore`, `CodeStore`, `RefreshStore`) manage state independently.
 
 ## Data Flow Examples
 
@@ -283,7 +287,7 @@ User message → MCP client → tools/call JSON-RPC
 ```
 MCP client → HTTPS → Express router
   → requireBearerAuth (verify HS256 JWT)
-  → per-request McpServer + StreamableHTTPServerTransport
+  → per-request McpServer + NodeStreamableHTTPServerTransport
   → tool handler → Nextcloud API
   → response → transport → HTTP response
   → (server + transport torn down on connection close)

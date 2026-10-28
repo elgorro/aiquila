@@ -191,9 +191,9 @@ use the handshake.
   <https://modelcontextprotocol.io/specification/versioning> for a newer **Current** one,
   and update the revision above when it changes.
 - Check which revisions the installed SDK actually negotiates
-  (`LATEST_PROTOCOL_VERSION` / `SUPPORTED_PROTOCOL_VERSIONS` in
-  `node_modules/@modelcontextprotocol/sdk/dist/esm/types.js`). That can lag the latest
-  spec, and the behaviour you implement must match the revision being negotiated.
+  (`grep -h "PROTOCOL_VERSION.* = " mcp-server/node_modules/@modelcontextprotocol/core/dist/*.mjs`).
+  That can lag the latest spec, and the behaviour you implement must match the revision
+  being negotiated.
 - Auth is the MCP authorization spec on top of the OAuth RFCs above. Check both.
 
 ## Reviewing pull requests
