@@ -145,7 +145,9 @@ print()
 sep "Step 6 — MCP initialize"
 INIT_RESP=$($CURL -D - -X POST "$BASE/mcp" "${MCP_HEADERS[@]}" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl-test","version":"1.0"}}}')
-SESSION_ID=$(echo "$INIT_RESP" | grep -i '^mcp-session-id:' | tr -d '\r' | sed 's/[Mm]cp-[Ss]ession-[Ii]d: //')
+# The server is stateless and normally sends no session ID; grep's no-match
+# exit status must not trip `set -o pipefail`.
+SESSION_ID=$(echo "$INIT_RESP" | { grep -i '^mcp-session-id:' || true; } | tr -d '\r' | sed 's/[Mm]cp-[Ss]ession-[Ii]d: //')
 INIT_BODY=$(echo "$INIT_RESP" | sed '1,/^\r$/d')
 echo "$INIT_BODY" | parse_mcp
 if [ -n "$SESSION_ID" ]; then
