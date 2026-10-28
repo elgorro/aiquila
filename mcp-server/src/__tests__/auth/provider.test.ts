@@ -548,6 +548,50 @@ describe('NextcloudOAuthProvider', () => {
       expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected']);
     });
 
+    it('reuse of a rotated refresh token ends the grant (RFC 9700 §4.14.2)', async () => {
+      const first = await login();
+      const second = await provider.exchangeRefreshToken(CLIENT, first.refresh_token!);
+      await expect(
+        provider.exchangeRefreshToken(CLIENT, first.refresh_token!)
+      ).rejects.toMatchObject({ code: 'invalid_grant' });
+      // The token the legitimate client (or the attacker) holds now is dead too…
+      await expect(provider.exchangeRefreshToken(CLIENT, second.refresh_token!)).rejects.toThrow();
+      // …and so are the access tokens of the grant.
+      await expect(provider.verifyAccessToken(second.access_token)).rejects.toThrow();
+    });
+
+    it('logs reuse at warn with client and user', async () => {
+      const { logger } = await import('../../logger.js');
+      const warn = vi.spyOn(logger, 'warn');
+      const first = await login();
+      await provider.exchangeRefreshToken(CLIENT, first.refresh_token!);
+      await provider.exchangeRefreshToken(CLIENT, first.refresh_token!).catch(() => {});
+      expect(warn).toHaveBeenCalledWith(
+        { user: 'alice', client: CLIENT.client_id },
+        expect.stringContaining('reuse detected')
+      );
+      warn.mockRestore();
+    });
+
+    it('detects reuse across a restart', async () => {
+      const first = await login();
+      const second = await provider.exchangeRefreshToken(CLIENT, first.refresh_token!);
+      const restarted = new NextcloudOAuthProvider();
+      await expect(restarted.exchangeRefreshToken(CLIENT, first.refresh_token!)).rejects.toThrow();
+      await expect(restarted.exchangeRefreshToken(CLIENT, second.refresh_token!)).rejects.toThrow();
+    });
+
+    it('a reused token from another client does not end the grant', async () => {
+      const first = await login();
+      const second = await provider.exchangeRefreshToken(CLIENT, first.refresh_token!);
+      await expect(
+        provider.exchangeRefreshToken({ ...CLIENT, client_id: 'other' }, first.refresh_token!)
+      ).rejects.toThrow();
+      await expect(
+        provider.exchangeRefreshToken(CLIENT, second.refresh_token!)
+      ).resolves.toBeDefined();
+    });
+
     it('refreshes when Nextcloud cannot tell (unknown)', async () => {
       const p = new NextcloudOAuthProvider(undefined, {
         checkUser: vi.fn().mockResolvedValue('unknown'),

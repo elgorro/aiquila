@@ -301,6 +301,11 @@ issued along the way, all belong to that grant.
 - **Revoking a refresh token** at `/revoke` ends the whole grant. Its access tokens stop
   working at once, not when they expire (RFC 7009 §2.1).
 - **Revoking an access token** ends only that token. The refresh token keeps working.
+- **Presenting a refresh token a second time** ends the grant. A rotated token that comes
+  back means two parties hold it, and the server cannot tell which one is the client, so
+  it revokes everything and logs `Refresh token reuse detected` at `warn` (RFC 9700
+  §4.14.2). A client that retries a refresh after a lost response triggers this too, and
+  has to sign in again.
 - **Disabling or deleting the user in Nextcloud** ends the grant at the next refresh, so
   within an hour at most. The server asks the provisioning API about the user, as
   `NEXTCLOUD_USER`. That needs admin rights. Without them the check cannot see other

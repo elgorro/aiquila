@@ -28,6 +28,9 @@ export interface RefreshEntry {
   userId: string;
   clientId: string;
   scopes: string[];
+  // Set once the token has been exchanged. A spent token is kept until it
+  // would have expired, so presenting it again is recognised as reuse.
+  spent?: boolean;
   expiresAt: number;
 }
 
@@ -412,6 +415,14 @@ export class RefreshStore {
 
   delete(token: string): void {
     this.tokens.delete(refreshTokenKey(token));
+    this.persist();
+  }
+
+  /** Marks a token as exchanged. It no longer redeems, but is still recognised. */
+  markSpent(token: string): void {
+    const entry = this.tokens.get(refreshTokenKey(token));
+    if (!entry) return;
+    entry.spent = true;
     this.persist();
   }
 

@@ -189,6 +189,9 @@ stays the same across refresh rotations. On every refresh, `checkNextcloudUser` 
 provisioning API whether the user still exists and is enabled; a disabled or deleted user
 gets `invalid_grant` and the grant is revoked.
 
+A refresh token is marked `spent` when exchanged rather than deleted, and kept until it
+would have expired. Presenting a spent token revokes its grant (RFC 9700 §4.14.2).
+
 Authorization codes are in-memory only (5-min TTL, lost on restart by design).
 
 ### Authorization server

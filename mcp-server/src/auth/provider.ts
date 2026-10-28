@@ -277,6 +277,17 @@ export class NextcloudOAuthProvider {
       );
       throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid refresh token');
     }
+    // RFC 9700 §4.14.2: a rotated token presented again means two parties
+    // hold the grant. Which one is the attacker cannot be told, so the whole
+    // grant ends and the legitimate client signs in again.
+    if (entry.spent) {
+      this.revokeGrant(entry.grantId);
+      logger.warn(
+        { user: entry.userId, client: client.client_id },
+        '[token] Refresh token reuse detected — grant revoked'
+      );
+      throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid refresh token');
+    }
     // RFC 6749 §6: the requested scope MUST NOT include any scope not
     // originally granted; omitted means the original scope.
     const exceeding = scopes?.filter((s) => !entry.scopes.includes(s)) ?? [];
@@ -289,7 +300,7 @@ export class NextcloudOAuthProvider {
     const effectiveScopes = scopes ?? entry.scopes;
     // Spend the token before the first await, so two concurrent requests
     // cannot both redeem it.
-    this.refreshStore.delete(refreshToken);
+    this.refreshStore.markSpent(refreshToken);
 
     // A user disabled or deleted in Nextcloud loses the grant at the next
     // refresh. RFC 6749 §5.2: a grant that is no longer valid is invalid_grant.
