@@ -84,6 +84,49 @@ describe('state persistence (real filesystem)', () => {
     expect(new RefreshStore(file).get(legacy)?.grantId).toEqual(expect.any(String));
   });
 
+  it('RefreshStore drops tokens issued under a previous MCP_AUTH_SECRET', () => {
+    const file = join(dir, 'refresh-tokens.json');
+    const saved = process.env.MCP_AUTH_SECRET;
+    try {
+      process.env.MCP_AUTH_SECRET = 'a'.repeat(64);
+      const token = new RefreshStore(file).store({
+        grantId: 'g',
+        userId: 'alice',
+        clientId: 'c1',
+        scopes: [],
+      });
+      expect(new RefreshStore(file).get(token)?.userId).toBe('alice');
+
+      process.env.MCP_AUTH_SECRET = 'b'.repeat(64);
+      expect(new RefreshStore(file).get(token)).toBeUndefined();
+      expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({});
+    } finally {
+      process.env.MCP_AUTH_SECRET = saved;
+    }
+  });
+
+  it('RefreshStore adopts entries from before secret binding under the current secret', () => {
+    const file = join(dir, 'refresh-tokens.json');
+    const token = 'x'.repeat(43);
+    writeFileSync(
+      file,
+      JSON.stringify({
+        [createHash('sha256').update(token).digest('hex')]: {
+          grantId: 'g',
+          userId: 'alice',
+          clientId: 'c1',
+          scopes: [],
+          expiresAt: Date.now() + 60_000,
+        },
+      })
+    );
+    expect(new RefreshStore(file).get(token)?.userId).toBe('alice');
+    const [entry] = Object.values(JSON.parse(readFileSync(file, 'utf8'))) as {
+      secretId?: string;
+    }[];
+    expect(entry.secretId).toMatch(/^[0-9a-f]{16}$/);
+  });
+
   it('RefreshStore reflects a deletion on disk across instances', () => {
     const file = join(dir, 'refresh-tokens.json');
 

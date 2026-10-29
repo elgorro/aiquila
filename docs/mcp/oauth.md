@@ -347,7 +347,7 @@ issued along the way, all belong to that grant.
 
 ## Security Notes
 
-- **`MCP_AUTH_SECRET` is critical.** Rotate it by updating the env var and restarting. All existing tokens are immediately invalidated.
+- **`MCP_AUTH_SECRET` is critical.** Rotate it by updating the env var and restarting. Every session ends: access tokens no longer verify, and refresh tokens issued under the old secret are dropped from the state directory on start, so clients sign in again.
 - The MCP server validates Nextcloud credentials on every login by calling your Nextcloud instance's OCS API. If Nextcloud is unreachable, logins will fail.
 - Use a Nextcloud **app password** (not your main password) for the MCP login. This limits the blast radius if the credential is ever exposed. See [Security Best Practice: App Passwords](setup.md#security-best-practice-app-passwords).
 - The login form is served over HTTPS (enforced by your reverse proxy). Never run the auth-enabled server without TLS.
