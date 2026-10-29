@@ -406,7 +406,7 @@ Tests live in `src/__tests__/`. Coverage includes:
 - Tool handlers (mocked clients)
 
 End-to-end tests are in `docker/standalone/scripts/`:
-- `test-oauth.sh` — full PKCE flow against a live server
+- `test-oauth.sh` — full OAuth 2.1 flow against a live server, including refresh rotation, revocation and reuse detection
 - `test-tools.sh` — exercises core MCP tools against real Nextcloud
 
 ## Build & Deployment

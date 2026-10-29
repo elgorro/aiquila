@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Full OAuth 2.0 PKCE flow test for AIquila MCP server.
+# Full OAuth 2.1 flow test for AIquila MCP server, acting as an OAuth 2.1
+# client (draft-ietf-oauth-v2-1): PKCE S256, a resource indicator (RFC 8707),
+# no redirect_uri at the token endpoint (§10.2), then refresh rotation,
+# reuse detection (RFC 9700 §4.14.2) and revocation (RFC 7009).
 # Reads credentials from .env in the same directory.
 # Usage: ./test-oauth.sh [base-url]
 #   base-url defaults to https://localhost:3340 (via Caddy, self-signed cert)
@@ -48,6 +51,10 @@ echo "$DISCOVERY" | python3 -m json.tool
 REGISTER_PATH=$(echo "$DISCOVERY" | python3 -c "import sys,json; from urllib.parse import urlparse; print(urlparse(json.load(sys.stdin)['registration_endpoint']).path)")
 TOKEN_PATH=$(echo "$DISCOVERY"    | python3 -c "import sys,json; from urllib.parse import urlparse; print(urlparse(json.load(sys.stdin)['token_endpoint']).path)")
 ISSUER=$(echo "$DISCOVERY"        | python3 -c "import sys,json; print(json.load(sys.stdin)['issuer'])")
+REVOKE_PATH=$(echo "$DISCOVERY"   | python3 -c "import sys,json; from urllib.parse import urlparse; print(urlparse(json.load(sys.stdin)['revocation_endpoint']).path)")
+# The resource indicator is the protected resource's own identifier (RFC 9728 §3.2).
+RESOURCE=$($CURL "$BASE/.well-known/oauth-protected-resource/mcp" | python3 -c "import sys,json; print(json.load(sys.stdin)['resource'])")
+echo "resource      : $RESOURCE"
 echo "register path : $REGISTER_PATH"
 echo "token path    : $TOKEN_PATH"
 echo "issuer        : $ISSUER"
@@ -86,7 +93,8 @@ AUTHZ_HTML=$($CURL -G "$BASE/authorize" \
   --data-urlencode "redirect_uri=$REDIRECT_URI" \
   --data-urlencode "state=$STATE" \
   --data-urlencode "code_challenge=$CODE_CHALLENGE" \
-  --data-urlencode "code_challenge_method=S256")
+  --data-urlencode "code_challenge_method=S256" \
+  --data-urlencode "resource=$RESOURCE")
 FORM_FIELDS=()
 while IFS= read -r field; do FORM_FIELDS+=(--data-urlencode "$field"); done < <(
   echo "$AUTHZ_HTML" | python3 -c "
@@ -127,15 +135,17 @@ echo "iss      : $ISS"
 
 # ── Step 5: Exchange code for token ───────────────────────────────────────────
 sep "Step 5 — POST $TOKEN_PATH (code → access_token)"
+# OAuth 2.1 §10.2: no redirect_uri here — PKCE binds the code to this client.
 TOKEN_RESP=$($CURL -X POST "$BASE$TOKEN_PATH" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   --data-urlencode "grant_type=authorization_code" \
   --data-urlencode "code=$CODE" \
-  --data-urlencode "redirect_uri=$REDIRECT_URI" \
   --data-urlencode "code_verifier=$CODE_VERIFIER" \
-  --data-urlencode "client_id=$CLIENT_ID")
+  --data-urlencode "client_id=$CLIENT_ID" \
+  --data-urlencode "resource=$RESOURCE")
 echo "$TOKEN_RESP" | python3 -m json.tool
 ACCESS_TOKEN=$(echo "$TOKEN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+REFRESH_TOKEN=$(echo "$TOKEN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['refresh_token'])")
 echo "access_token: ${ACCESS_TOKEN:0:20}..."
 
 MCP_HEADERS=(-H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -H "Authorization: Bearer $ACCESS_TOKEN")
@@ -192,7 +202,49 @@ $CURL -X POST "$BASE/mcp" "${MODERN_HEADERS[@]}" -H "Mcp-Method: tools/list" \
   -d "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/list\",\"params\":{$MODERN_META}}" \
   | parse_mcp | python3 -c "import sys,json; r=json.load(sys.stdin)['result']; print(f\"{len(r['tools'])} tools, cacheScope={r['cacheScope']}\")"
 
+# ── Steps 10–13: refresh rotation, revocation, reuse detection ────────────────
+refresh() {
+  $CURL -X POST "$BASE$TOKEN_PATH" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "grant_type=refresh_token" \
+    --data-urlencode "refresh_token=$1" \
+    --data-urlencode "client_id=$CLIENT_ID"
+}
+# HTTP status of an MCP tools/list call made with the given access token
+mcp_status() {
+  $CURL -o /dev/null -w '%{http_code}' -X POST "$BASE/mcp" \
+    -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+    -H "Authorization: Bearer $1" \
+    -d '{"jsonrpc":"2.0","id":9,"method":"tools/list","params":{}}'
+}
+fail() { echo "ERROR: $*" >&2; exit 1; }
+
+sep "Step 10 — refresh (rotation)"
+REFRESH_RESP=$(refresh "$REFRESH_TOKEN")
+ACCESS_TOKEN_2=$(echo "$REFRESH_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])") \
+  || fail "refresh failed: $REFRESH_RESP"
+REFRESH_TOKEN_2=$(echo "$REFRESH_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['refresh_token'])")
+[ "$REFRESH_TOKEN_2" != "$REFRESH_TOKEN" ] || fail "refresh token was not rotated"
+[ "$(mcp_status "$ACCESS_TOKEN_2")" = 200 ] || fail "refreshed access token rejected"
+echo "rotated; new access token works"
+
+sep "Step 11 — revoke an access token (RFC 7009)"
+$CURL -o /dev/null -X POST "$BASE$REVOKE_PATH" -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "token=$ACCESS_TOKEN" --data-urlencode "client_id=$CLIENT_ID"
+[ "$(mcp_status "$ACCESS_TOKEN")" = 401 ] || fail "revoked access token still accepted"
+[ "$(mcp_status "$ACCESS_TOKEN_2")" = 200 ] || fail "revoking one access token affected another"
+echo "revoked token → 401; the other access token still works"
+
+sep "Step 12 — reuse the rotated refresh token (RFC 9700 §4.14.2)"
+REUSE_ERR=$(refresh "$REFRESH_TOKEN" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))")
+[ "$REUSE_ERR" = invalid_grant ] || fail "reused refresh token: expected invalid_grant, got '$REUSE_ERR'"
+echo "reuse → invalid_grant"
+
+sep "Step 13 — the whole grant is gone"
+LATEST_ERR=$(refresh "$REFRESH_TOKEN_2" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))")
+[ "$LATEST_ERR" = invalid_grant ] || fail "current refresh token survived reuse detection"
+[ "$(mcp_status "$ACCESS_TOKEN_2")" = 401 ] || fail "access token of the revoked grant still accepted"
+echo "current refresh token → invalid_grant; grant's access token → 401"
+
 sep "All steps passed"
-echo "Re-use token for more calls:"
-echo "  export MCP_TOKEN=$ACCESS_TOKEN"
-echo "  curl -s -X POST $BASE/mcp -H 'Content-Type: application/json' -H \"Authorization: Bearer \$MCP_TOKEN\" -d '{...}' | python3 -m json.tool"
+echo "The tokens from this run were revoked by steps 11–13; run it again for a fresh grant."

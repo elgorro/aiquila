@@ -143,7 +143,7 @@ Run from `docker/standalone/`:
 | `make build` | Rebuild container |
 | `make clean` | Stop and remove everything |
 | `make test` | Test connectivity |
-| `make test-oauth` | Full PKCE OAuth flow test (defaults to `https://localhost:3340`) |
+| `make test-oauth` | Full OAuth 2.1 flow test, including refresh, revocation and reuse detection (defaults to `https://localhost:3340`) |
 
 Or from `docker/`:
 
