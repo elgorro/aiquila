@@ -290,3 +290,28 @@ describe('MCP Streamable HTTP (2025-11-25 handshake)', () => {
     expect(await res.text()).toBe('');
   });
 });
+
+describe('MCP_INTERNAL_TOKEN at the HTTP layer', () => {
+  const INTERNAL = 'i'.repeat(64);
+  let t: Stack;
+  beforeAll(async () => {
+    t = await startStack({ MCP_INTERNAL_TOKEN: INTERNAL });
+  });
+  afterAll(() => t.close());
+
+  it('is accepted on a direct loopback connection', async () => {
+    const res = await mcp(t, modernBody(1, 'tools/list'), { token: INTERNAL });
+    await res.body?.cancel();
+    expect(res.status).toBe(200);
+  });
+
+  it('is an invalid token when the request came through a proxy', async () => {
+    const res = await mcp(t, modernBody(1, 'tools/list'), {
+      token: INTERNAL,
+      headers: { 'x-forwarded-for': '203.0.113.7' },
+    });
+    await res.body?.cancel();
+    expect(res.status).toBe(401);
+    expect(res.headers.get('www-authenticate')).toContain('error="invalid_token"');
+  });
+});

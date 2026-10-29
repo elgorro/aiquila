@@ -18,6 +18,7 @@ import { loginHandler } from '../auth/login.js';
 import { authRouter } from '../auth/router.js';
 import { LOGIN_STYLESHEET, LOGIN_STYLESHEET_PATH } from '../auth/login-page-css.js';
 import { isPublicRequest } from './lazy-auth.js';
+import { internalNetworks, internalTokenAllowed, isInternalToken } from '../auth/internal-token.js';
 import { logger } from '../logger.js';
 import { SUPPORT_NOTICE } from '../support.js';
 import { fetchStatus } from '../client/ocs.js';
@@ -337,6 +338,7 @@ export async function createHttpApp(): Promise<express.Express> {
     }
 
     const provider = new NextcloudOAuthProvider();
+    const internalTokens = internalNetworks();
 
     if (!registrationEnabled && !hasStaticClient && !cimdEnabled) {
       logger.warn(
@@ -454,6 +456,29 @@ export async function createHttpApp(): Promise<express.Express> {
             },
           ]
         : []),
+
+      // MCP_INTERNAL_TOKEN works only on a direct connection from an internal
+      // address; through the reverse proxy it is an invalid token.
+      (req: any, res: any, next: any) => {
+        const header = req.headers.authorization;
+        const token =
+          typeof header === 'string' && /^Bearer /i.test(header) ? header.slice(7).trim() : '';
+        if (token && isInternalToken(token) && !internalTokenAllowed(req, internalTokens)) {
+          logger.warn(
+            { address: req.socket?.remoteAddress },
+            '[auth] MCP_INTERNAL_TOKEN used from outside the internal network — rejected'
+          );
+          res
+            .status(401)
+            .set(
+              'WWW-Authenticate',
+              `Bearer error="invalid_token", error_description="Invalid token", resource_metadata="${new URL('/.well-known/oauth-protected-resource/mcp', issuerUrl).href}"`
+            )
+            .json({ error: 'invalid_token', error_description: 'Invalid token' });
+          return;
+        }
+        next();
+      },
 
       requireBearerAuth({
         verifier: provider,

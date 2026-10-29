@@ -13,6 +13,7 @@ import {
 import { ClientsStore, CodeStore, RefreshStore, RevocationList } from './store.js';
 import { checkNextcloudUser, type NextcloudUserCheck } from './nc-user.js';
 import { looksLikeClientIdUrl } from './cimd.js';
+import { isInternalToken } from './internal-token.js';
 import { LOGIN_STYLESHEET_PATH } from './login-page-css.js';
 import { logger } from '../logger.js';
 
@@ -405,18 +406,15 @@ export class NextcloudOAuthProvider {
   }
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
-    // Internal token bypass for service-to-service auth (e.g. NC → MCP on Docker network)
-    const internalToken = process.env.MCP_INTERNAL_TOKEN;
-    if (internalToken) {
-      const hash = (s: string) => createHash('sha256').update(s).digest();
-      if (timingSafeEqual(hash(token), hash(internalToken))) {
-        return {
-          token,
-          clientId: 'internal',
-          scopes: [],
-          expiresAt: Math.floor(Date.now() / 1000) + 86400 * 365,
-        };
-      }
+    // Internal token for service-to-service calls on the internal network.
+    // Where it may be used from is enforced in the HTTP transport.
+    if (isInternalToken(token)) {
+      return {
+        token,
+        clientId: 'internal',
+        scopes: [],
+        expiresAt: Math.floor(Date.now() / 1000) + 86400 * 365,
+      };
     }
 
     const claims = await this.verifyOwnJwt(token);

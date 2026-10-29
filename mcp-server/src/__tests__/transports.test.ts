@@ -288,6 +288,7 @@ describe('http transport with auth enabled', () => {
       '/mcp',
       expect.any(Function), // logging + challenge-scope decoration
       expect.any(Function), // lazy-auth gate
+      expect.any(Function), // internal-token network check
       mockBearerMiddleware,
       expect.any(Function) // authenticated handler
     );
@@ -298,17 +299,19 @@ describe('http transport with auth enabled', () => {
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
 
-    // Chain collapses to logging + bearer + handler: every method needs a token.
+    // Chain collapses to logging + internal-token check + bearer + handler:
+    // every method needs a token.
     expect(mockAll).toHaveBeenCalledWith(
       '/mcp',
+      expect.any(Function),
       expect.any(Function),
       mockBearerMiddleware,
       expect.any(Function)
     );
 
     const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
-    expect(mcpCall).toHaveLength(4);
-    expect(mcpCall?.[2]).toBe(mockBearerMiddleware);
+    expect(mcpCall).toHaveLength(5);
+    expect(mcpCall?.[3]).toBe(mockBearerMiddleware);
   });
 
   it('points the 401 challenge at the protected resource metadata', async () => {
