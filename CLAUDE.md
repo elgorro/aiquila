@@ -437,9 +437,12 @@ Do not use `--no-verify` to skip hooks.
 
 ### OAuth end-to-end test
 
-`docker/standalone/scripts/test-oauth.sh` runs the full PKCE flow against a live server:
-discovery → client registration → login (checks the RFC 9207 `iss`) → token exchange →
-MCP initialize → tools/list → `2026-07-28` `server/discover` → `2026-07-28` tools/list.
+`docker/standalone/scripts/test-oauth.sh` acts as an OAuth 2.1 client against a live server:
+discovery (incl. the RFC 9728 `resource`) → client registration → `/authorize` form → login
+(checks the RFC 9207 `iss`) → token exchange with `resource` and without `redirect_uri` →
+MCP initialize → tools/list → `2026-07-28` `server/discover` → `2026-07-28` tools/list →
+refresh rotation → access-token revocation (RFC 7009) → refresh-token reuse ends the grant
+(RFC 9700 §4.14.2).
 
 ```bash
 # Requires: docker/standalone/.env with NEXTCLOUD_USER + NEXTCLOUD_PASSWORD + auth vars
