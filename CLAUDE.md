@@ -168,10 +168,19 @@ Specs this repo leans on:
 
 | Area | RFCs |
 |---|---|
-| OAuth / auth | 6749 (OAuth 2.0), 7636 (PKCE), 6750 (Bearer), 8414 (AS metadata), 7591 (dynamic client registration), 9728 (protected resource metadata), 8707 (resource indicators), 7519 (JWT) |
+| OAuth / auth | 6749 (OAuth 2.0), 7636 (PKCE), 6750 (Bearer), 8414 (AS metadata), 7591 (dynamic client registration), 9728 (protected resource metadata), 8707 (resource indicators), 7519 (JWT), 7009 (revocation), 9207 (`iss` in the authorization response), 8252 (native apps), 9700 (security BCP) |
 | HTTP / WebDAV | 9110 (HTTP semantics, incl. conditional requests — obsoletes 7232), 4918 (WebDAV) |
 | Calendar / contacts | 5545 (iCalendar), 4791 (CalDAV), 6350 (vCard 4.0), 2426 (vCard 3.0, obsoleted by 6350 but still sent by clients), 6352 (CardDAV) |
 | Other | 5646 (BCP 47 language tags), 2119 / 8174 (MUST / SHOULD keywords) |
+
+**OAuth 2.1.** The MCP server's authorization server implements **OAuth 2.1**, currently
+[`draft-ietf-oauth-v2-1-16`](https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/). It
+consolidates 6749, 7636, 6750, 8252 and 9700, and where it changes 6749 the draft wins. In
+particular: PKCE S256 on every code, no implicit or password grant, exact redirect matching
+(loopback any port), one-time-use refresh tokens with reuse detection, and an optional
+`redirect_uri` at the token endpoint (§10.2: still enforced when an OAuth 2.0 client sends it).
+Before relying on it, check the datatracker for a newer draft or the published RFC and update
+the revision here.
 
 - Read MUST / SHOULD / MAY per RFC 2119 — a SHOULD is not optional without a reason.
 - Cite the RFC and section in the code comment or PR description where behaviour
@@ -402,6 +411,7 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_AUTH_ISSUER` | If auth | public HTTPS URL of this server |
 | `MCP_AUTH_STATE_DIR` | No | Directory for persisted OAuth state (default `/app/state`) |
 | `MCP_CIMD_ENABLED` | No | Accept Client ID Metadata Document URLs as `client_id`. Default on, off when `MCP_REGISTRATION_TOKEN` is set |
+| `MCP_REDIRECT_ALLOWLIST` | No | Extra redirect hosts (or `scheme:` entries, or `*`) dynamically registered clients may use. Loopback, `claude.ai`, `claude.com` and the `NEXTCLOUD_URL` host are always allowed |
 | `MCP_LAZY_AUTH` | No | `false` requires a bearer token on every JSON-RPC method. Default `true`: `server/discover`, `initialize`, `tools/list` and `get_local_time` are served without one |
 | `MCP_LOCALE` | No | BCP 47 locale tag for `localTime` in `get_local_time` (e.g. `sv-SE`); defaults to system locale |
 | `MCP_MAX_FILE_SIZE` | No | Max `write_file` content length in bytes (default `1073741824` = 1 GB) |

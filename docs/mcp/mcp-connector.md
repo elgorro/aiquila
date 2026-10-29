@@ -54,6 +54,7 @@ Key endpoints discovered from `GET /.well-known/oauth-authorization-server`:
 | Step | Endpoint | Notes |
 |------|----------|-------|
 | Register | `registration_endpoint` | Dynamic client registration (PKCE, no secret) |
+| Authorize | `authorization_endpoint` | `GET` renders the login form; its hidden fields (including `request_iat` and `request_mac`) must be posted back unchanged |
 | Login | `POST /auth/login` | Returns 302 with `code` in Location |
 | Token | `token_endpoint` | `grant_type=authorization_code` + `code_verifier` |
 
