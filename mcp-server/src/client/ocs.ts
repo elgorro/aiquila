@@ -115,7 +115,11 @@ export async function fetchOCS<T = unknown>(
 
   const json = (await response.json()) as OcsResponse<T>;
 
-  if (json.ocs.meta.statuscode !== 200 && json.ocs.meta.statuscode !== 100) {
+  // OCS v2 mirrors the HTTP status into meta.statuscode, so any 2xx is a
+  // success — Talk answers 201 for a new conversation and 202 when some
+  // invitations failed. 100 is the OCS v1 success code.
+  const code = json.ocs.meta.statuscode;
+  if (code !== 100 && (code < 200 || code > 299)) {
     throw new Error(`OCS API error: ${json.ocs.meta.statuscode} - ${json.ocs.meta.message}`);
   }
 
