@@ -18,7 +18,12 @@ import {
   type OAuthClientMetadata,
   type OAuthMetadata,
 } from '@modelcontextprotocol/server';
-import type { NextcloudOAuthProvider } from './provider.js';
+import {
+  browserBindingCookie,
+  newBrowserBinding,
+  readBrowserBinding,
+  type NextcloudOAuthProvider,
+} from './provider.js';
 import { isRegisteredRedirectUri } from './redirect-uri.js';
 import { logger } from '../logger.js';
 
@@ -295,6 +300,9 @@ function authorizationHandler(options: AuthRouterOptions) {
         throw new OAuthError(OAuthErrorCode.InvalidRequest, 'code_challenge is malformed');
       }
       checkResource(p.resource);
+      // Bind the login form to this browser (see LoginFormRequest.browserBinding).
+      const browserBinding = readBrowserBinding(req) ?? newBrowserBinding();
+      res.append('Set-Cookie', browserBindingCookie(browserBinding));
       await provider.authorize(
         client,
         {
@@ -302,6 +310,7 @@ function authorizationHandler(options: AuthRouterOptions) {
           codeChallenge,
           state,
           scopes: p.scope ? p.scope.split(' ').filter(Boolean) : [],
+          browserBinding,
         },
         res
       );

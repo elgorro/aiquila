@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import {
   OAuthError,
@@ -101,10 +101,55 @@ export interface LoginFormRequest {
   scope?: string;
   // Seconds since the epoch, when /authorize rendered the form
   issuedAt: number;
+  // The login-binding cookie of the browser /authorize answered. Not in the
+  // form: the browser sends it back as a cookie, which a cross-site page
+  // cannot set (login CSRF, RFC 6749 §10.12).
+  browserBinding?: string;
 }
 
 // How long a rendered login form stays valid.
 const LOGIN_FORM_TTL_SECS = 30 * 60;
+
+const BROWSER_BINDING = /^[A-Za-z0-9_-]{43}$/;
+
+/**
+ * The login-binding cookie's name. With an https issuer it carries the
+ * __Host- prefix, so no other host (a sibling subdomain, say) can plant one
+ * (RFC 6265bis §4.1.3.2). Browsers refuse that prefix over plain http, where
+ * the bare name is used.
+ */
+export function loginCookieName(): string {
+  const issuer = process.env.MCP_AUTH_ISSUER ?? '';
+  return issuer.startsWith('https:') ? '__Host-aiquila-login' : 'aiquila-login';
+}
+
+/** The login-binding value from a request's Cookie header, if well-formed. */
+export function readBrowserBinding(req: { headers?: Record<string, unknown> }): string | undefined {
+  const header = req.headers?.cookie;
+  if (typeof header !== 'string') return undefined;
+  const name = loginCookieName();
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1 || part.slice(0, eq).trim() !== name) continue;
+    const value = part.slice(eq + 1).trim();
+    return BROWSER_BINDING.test(value) ? value : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * The Set-Cookie value binding this browser to the login forms it is shown.
+ * One value per browser, reused while it lasts, so several sign-ins in
+ * parallel tabs all stay valid. SameSite=Lax keeps it off cross-site POSTs.
+ */
+export function browserBindingCookie(value: string): string {
+  const secure = loginCookieName().startsWith('__Host-') ? '; Secure' : '';
+  return `${loginCookieName()}=${value}; Path=/; Max-Age=${LOGIN_FORM_TTL_SECS}; HttpOnly; SameSite=Lax${secure}`;
+}
+
+export function newBrowserBinding(): string {
+  return randomBytes(32).toString('base64url');
+}
 
 export function loginRequestMac(req: LoginFormRequest): string {
   const secret = process.env.MCP_AUTH_SECRET;
@@ -112,13 +157,14 @@ export function loginRequestMac(req: LoginFormRequest): string {
   return createHmac('sha256', secret)
     .update(
       JSON.stringify([
-        'aiquila-login-form-v1',
+        'aiquila-login-form-v2',
         req.clientId,
         req.redirectUri,
         req.codeChallenge,
         req.state ?? '',
         req.scope ?? '',
         req.issuedAt,
+        req.browserBinding ?? '',
       ])
     )
     .digest('base64url');
@@ -127,6 +173,7 @@ export function loginRequestMac(req: LoginFormRequest): string {
 /** True when `mac` belongs to `req` and the form has not expired. */
 export function verifyLoginRequestMac(req: LoginFormRequest, mac: string | undefined): boolean {
   if (!mac || !Number.isSafeInteger(req.issuedAt)) return false;
+  if (!req.browserBinding || !BROWSER_BINDING.test(req.browserBinding)) return false;
   const age = Math.floor(Date.now() / 1000) - req.issuedAt;
   if (age < 0 || age > LOGIN_FORM_TTL_SECS) return false;
   const hash = (v: string) => createHash('sha256').update(v).digest();
@@ -206,6 +253,8 @@ export interface AuthorizationParams {
   codeChallenge: string;
   state?: string;
   scopes: string[];
+  // See LoginFormRequest.browserBinding
+  browserBinding?: string;
 }
 
 // --- OAuth Provider ---
@@ -243,6 +292,7 @@ export class NextcloudOAuthProvider {
       codeChallenge: params.codeChallenge,
       scope: params.scopes?.join(' '),
       issuedAt: Math.floor(Date.now() / 1000),
+      browserBinding: params.browserBinding,
     };
     applySecurityHeaders(res)
       .status(200)

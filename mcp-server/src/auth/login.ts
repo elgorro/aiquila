@@ -5,6 +5,7 @@ import {
   renderLoginForm,
   applySecurityHeaders,
   verifyLoginRequestMac,
+  readBrowserBinding,
   type LoginFormRequest,
 } from './provider.js';
 import { isRegisteredRedirectUri } from './redirect-uri.js';
@@ -41,6 +42,7 @@ export function loginHandler(
       state: state || undefined,
       scope: scope || undefined,
       issuedAt: Number(body.request_iat),
+      browserBinding: readBrowserBinding(req),
     };
 
     // Re-renders the form with the request as received, so the user can retry.
@@ -48,7 +50,14 @@ export function loginHandler(
       applySecurityHeaders(res)
         .status(status)
         .type('html')
-        .send(renderLoginForm({ ...request, ...form, requestMac: body.request_mac, error }));
+        .send(
+          renderLoginForm({
+            ...request,
+            ...form,
+            requestMac: body.request_mac,
+            error,
+          })
+        );
     };
 
     const ncUrl = process.env.NEXTCLOUD_URL?.replace(/\/+$/, '');

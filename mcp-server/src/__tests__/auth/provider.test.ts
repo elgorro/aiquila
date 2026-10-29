@@ -180,10 +180,13 @@ describe('NextcloudOAuthProvider', () => {
           codeChallenge: 'cc',
           state: 's',
           scopes: ['mcp:tools'],
+          browserBinding: 'b'.repeat(43),
         },
         res
       );
       const html = res.send.mock.calls[0][0] as string;
+      // The binding travels as a cookie, never in the form.
+      expect(html).not.toContain('b'.repeat(43));
       const field = (name: string) => html.match(new RegExp(`name="${name}" value="([^"]*)"`))![1];
       const request = {
         clientId: field('client_id'),
@@ -192,8 +195,16 @@ describe('NextcloudOAuthProvider', () => {
         state: field('state'),
         scope: field('scope'),
         issuedAt: Number(field('request_iat')),
+        browserBinding: 'b'.repeat(43),
       };
       expect(verifyLoginRequestMac(request, field('request_mac'))).toBe(true);
+      // Posted from another browser: the MAC no longer verifies.
+      expect(
+        verifyLoginRequestMac({ ...request, browserBinding: 'c'.repeat(43) }, field('request_mac'))
+      ).toBe(false);
+      expect(
+        verifyLoginRequestMac({ ...request, browserBinding: undefined }, field('request_mac'))
+      ).toBe(false);
       expect(
         verifyLoginRequestMac({ ...request, codeChallenge: 'other' }, field('request_mac'))
       ).toBe(false);

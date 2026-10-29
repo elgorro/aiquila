@@ -309,3 +309,96 @@ describe('the login form', () => {
     expect(login.headers.get('location')).toBeNull();
   });
 });
+
+describe('RFC 6749 §10.12 — login CSRF', () => {
+  // Its own stack: the file's logins are near the per-IP limit already.
+  let outer: Stack;
+  let outerClient: string;
+  beforeAll(async () => {
+    outer = s;
+    outerClient = clientId;
+    s = await startStack();
+    clientId = (await register(s)).client_id;
+  });
+  afterAll(async () => {
+    await s.close();
+    s = outer;
+    clientId = outerClient;
+  });
+
+  async function formAndCookie() {
+    const q = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: REDIRECT_URI,
+      code_challenge: pkce().challenge,
+      code_challenge_method: 'S256',
+    });
+    const res = await fetch(`${s.base}/authorize?${q}`);
+    return { res, fields: hiddenFields(await res.text()) };
+  }
+
+  it('/authorize binds the browser with an HttpOnly, SameSite cookie', async () => {
+    const { res } = await formAndCookie();
+    const cookie = res.headers.getSetCookie().find((c) => c.startsWith('aiquila-login='));
+    expect(cookie).toBeDefined();
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('SameSite=Lax');
+    expect(cookie).toContain('Path=/');
+  });
+
+  it("an attacker's valid form posted from the victim's browser issues no code", async () => {
+    // The attacker fetches a form for themselves; the victim's browser has
+    // no binding cookie, or its own.
+    const { fields } = await formAndCookie();
+    const { res: victim } = await formAndCookie();
+    for (const cookie of [undefined, cookieHeader(victim)]) {
+      const login = await fetch(
+        `${s.base}/auth/login`,
+        form({ ...fields, username: 'alice', password: NC_PASSWORD }, cookie ? { cookie } : {})
+      );
+      expect(login.status).toBe(400);
+      expect(login.headers.get('location')).toBeNull();
+    }
+  });
+
+  it('the binding is reused, so parallel sign-ins in one browser all work', async () => {
+    const first = await formAndCookie();
+    const cookie = cookieHeader(first.res);
+    const q = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: REDIRECT_URI,
+      code_challenge: pkce().challenge,
+      code_challenge_method: 'S256',
+    });
+    const second = await fetch(`${s.base}/authorize?${q}`, { headers: { cookie } });
+    expect(cookieHeader(second)).toBe(cookie);
+    const login = await fetch(
+      `${s.base}/auth/login`,
+      form(
+        { ...first.fields, username: 'alice', password: NC_PASSWORD },
+        { cookie: cookieHeader(second) }
+      )
+    );
+    expect(login.status).toBe(302);
+  });
+});
+
+describe('the login-binding cookie with an https issuer', () => {
+  it('uses the __Host- prefix and Secure (RFC 6265bis §4.1.3.2)', async () => {
+    const { loginCookieName, browserBindingCookie } = await import('../../auth/provider.js');
+    const saved = process.env.MCP_AUTH_ISSUER;
+    process.env.MCP_AUTH_ISSUER = 'https://mcp.example.com';
+    try {
+      expect(loginCookieName()).toBe('__Host-aiquila-login');
+      const c = browserBindingCookie('x'.repeat(43));
+      expect(c).toMatch(/^__Host-aiquila-login=/);
+      expect(c).toContain('Secure');
+      expect(c).toContain('Path=/');
+      expect(c).not.toContain('Domain=');
+    } finally {
+      process.env.MCP_AUTH_ISSUER = saved;
+    }
+  });
+});
