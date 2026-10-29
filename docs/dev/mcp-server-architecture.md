@@ -38,12 +38,14 @@ mcp-server/src/
 ├── logger.ts            # pino → stderr
 ├── transports/
 │   ├── stdio.ts         # StdioServerTransport (local MCP clients)
-│   └── http.ts          # Express app + NodeStreamableHTTPServerTransport + auth middleware
+│   └── http.ts          # createHttpApp(): Express app + MCP handler + auth middleware; startHttp() listens
 ├── auth/
 │   ├── provider.ts      # NextcloudOAuthProvider — JWT sign/verify, code issuance
 │   ├── store.ts         # ClientsStore, CodeStore, RefreshStore, RevocationList (disk-persisted)
 │   ├── nc-user.ts       # Provisioning-API check that a grant's Nextcloud user is still active
-│   └── login.ts         # POST /auth/login — Nextcloud credential validation
+│   ├── login.ts         # POST /auth/login — Nextcloud credential validation
+│   ├── login-throttle.ts # Per-IP and per-username login limits
+│   └── internal-token.ts # Where MCP_INTERNAL_TOKEN is accepted from
 ├── client/
 │   ├── webdav.ts        # WebDAV singleton
 │   ├── caldav.ts        # CalDAV helper (authenticated fetch)
@@ -275,7 +277,7 @@ MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
 | `MCP_TRUST_PROXY` | No | `false` | Set to `1` when behind a single reverse proxy |
 | `MCP_TLS_STRICT` | No | `false` | Set `true` to fail fast on TLS cert errors |
 | `MCP_ALLOWED_HOSTS` | No | — | Comma-separated extra hostnames accepted by DNS rebinding protection (e.g. `mcp` for a Docker service name). The `MCP_AUTH_ISSUER` hostname plus `localhost` / `127.0.0.1` are always allowed |
-| `MCP_CORS_ORIGINS` | No | — | Comma-separated extra origins allowed to make cross-origin browser requests. The `MCP_AUTH_ISSUER` origin is allowed by default when auth is enabled. Origins are matched exactly and echoed back — `*` is never sent, because these endpoints are credentialed |
+| `MCP_CORS_ORIGINS` | No | — | Comma-separated extra origins allowed to make cross-origin browser requests. The `MCP_AUTH_ISSUER` origin is allowed by default when auth is enabled. Origins are matched exactly and echoed back — `*` is never sent, because these endpoints are credentialed. A request to `/mcp` with any other `Origin` is answered `403` |
 
 ### Auth (`MCP_AUTH_ENABLED=true`)
 
@@ -288,6 +290,9 @@ MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
 | `MCP_REGISTRATION_ENABLED` | No | `false` | Enable dynamic client registration |
 | `MCP_REGISTRATION_TOKEN` | No | — | Bearer token to gate `POST /register` |
 | `MCP_REDIRECT_ALLOWLIST` | No | — | Extra redirect hosts / `scheme:` entries / `*` for registered clients (`RedirectUriPolicy`) |
+| `MCP_REFRESH_TOKEN_TTL` | No | `2592000` | Refresh token lifetime in seconds (30 days), sliding on each rotation |
+| `MCP_INTERNAL_TOKEN` | No | — | Static service-to-service bearer token; accepted only on direct connections from internal addresses |
+| `MCP_INTERNAL_TOKEN_NETWORKS` | No | loopback + private ranges | Comma-separated CIDRs / addresses `MCP_INTERNAL_TOKEN` is accepted from |
 | `MCP_CIMD_ENABLED` | No | `true` (`false` when `MCP_REGISTRATION_TOKEN` is set) | Accept Client ID Metadata Document URLs as `client_id` |
 | `MCP_CLIENT_ID` | No | — | Pre-seeded static client ID |
 | `MCP_CLIENT_REDIRECT_URIS` | No | `""` (empty) | Comma-separated redirect URIs for static client |
@@ -372,10 +377,10 @@ All errors are logged via pino before being surfaced.
 
 - **Credentials** — environment variables only; never logged
 - **Input validation** — Zod schemas on all tool inputs; prevents injection via type enforcement
-- **OAuth/JWT** — PKCE enforced; access tokens are short-lived (1h); JWT signature, issuer and audience verified by `jose`; the internal service token (`MCP_INTERNAL_TOKEN`) is compared with `timingSafeEqual`
+- **OAuth/JWT** — PKCE enforced; access tokens are short-lived (1h) `at+jwt` JWTs whose type, signature, issuer and audience are verified by `jose`; the internal service token (`MCP_INTERNAL_TOKEN`) is compared with `timingSafeEqual` and accepted only on direct connections from internal addresses (`src/auth/internal-token.ts`)
 - **HTTPS** — enforced by the reverse proxy (Traefik/Caddy); the MCP container itself serves plain HTTP internally
-- **Rate limiting** — Express handles concurrent requests; further rate limiting can be added at the proxy layer
-- **DNS rebinding** — `allowedHosts` derived from `MCP_AUTH_ISSUER` hostname; `localhost`/`127.0.0.1` always allowed for health checks
+- **Rate limiting** — the OAuth endpoints are limited per client IP; `/auth/login` also counts failed logins per username (`src/auth/login-throttle.ts`)
+- **DNS rebinding** — `allowedHosts` derived from `MCP_AUTH_ISSUER` hostname; `localhost`/`127.0.0.1` always allowed for health checks. A request to `/mcp` whose `Origin` is not an allowed CORS origin gets `403`
 
 ## Logging
 
@@ -409,6 +414,11 @@ Tests live in `src/__tests__/`. Coverage includes:
 - Auth stores (persistence, TTL expiry)
 - Transport setup (stdio + HTTP)
 - Tool handlers (mocked clients)
+- RFC conformance (`src/__tests__/rfc/`) — the real HTTP app from `createHttpApp()` against a
+  fake Nextcloud: authorization server metadata (RFC 8414, 9728), the authorization and token
+  endpoints (RFC 6749, 7636, 8707, 9207, 8252, 9700, OAuth 2.1), registration (RFC 7591),
+  revocation (RFC 7009), bearer tokens (RFC 6750, 9068, 8725), MCP Streamable HTTP, and the
+  iCalendar / vCard the tools write (RFC 5545, 6350). Each `describe` cites the section it checks
 
 End-to-end tests are in `docker/standalone/scripts/`:
 - `test-oauth.sh` — full OAuth 2.1 flow against a live server, including refresh rotation, revocation and reuse detection

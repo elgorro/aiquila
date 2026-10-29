@@ -419,10 +419,13 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_CIMD_ENABLED` | No | Accept Client ID Metadata Document URLs as `client_id`. Default on, off when `MCP_REGISTRATION_TOKEN` is set |
 | `MCP_REDIRECT_ALLOWLIST` | No | Extra redirect hosts (or `scheme:` entries, or `*`) dynamically registered clients may use. Loopback, `claude.ai`, `claude.com` and the `NEXTCLOUD_URL` host are always allowed |
 | `MCP_LAZY_AUTH` | No | `false` requires a bearer token on every JSON-RPC method. Default `true`: `server/discover`, `initialize`, `tools/list` and `get_local_time` are served without one |
+| `MCP_REFRESH_TOKEN_TTL` | No | Refresh token lifetime in seconds, sliding on each rotation (default `2592000` = 30 days) |
+| `MCP_INTERNAL_TOKEN` | No | Static service-to-service bearer token that bypasses OAuth. Accepted only on direct connections (no forwarding headers) from internal addresses |
+| `MCP_INTERNAL_TOKEN_NETWORKS` | No | Comma-separated CIDRs / addresses `MCP_INTERNAL_TOKEN` is accepted from; replaces the loopback + private-range default |
 | `MCP_LOCALE` | No | BCP 47 locale tag for `localTime` in `get_local_time` (e.g. `sv-SE`); defaults to system locale |
 | `MCP_MAX_FILE_SIZE` | No | Max `write_file` content length in bytes (default `1073741824` = 1 GB) |
 | `MCP_ALLOWED_HOSTS` | No | Comma-separated extra hostnames for DNS rebinding protection (e.g. `mcp` for Docker service name) |
-| `MCP_CORS_ORIGINS` | No | Comma-separated extra origins allowed to make browser requests. The `MCP_AUTH_ISSUER` origin is always allowed when auth is on |
+| `MCP_CORS_ORIGINS` | No | Comma-separated extra origins allowed to make browser requests. The `MCP_AUTH_ISSUER` origin is always allowed when auth is on. Any other `Origin` on `/mcp` gets `403` |
 | `MCP_OCC_ALLOWLIST` | No | Comma-separated allowlist entries for `run_occ` (`cmd` = no arguments, `cmd *` = any); replaces the read-only default |
 | `LOG_LEVEL` | No | `trace`/`debug`/`info`/`warn`/`error`/`fatal` |
 
@@ -433,6 +436,9 @@ cd mcp-server && npm test
 ```
 
 Tests live in `mcp-server/src/__tests__/`. Auth tests cover provider, store, and token flows.
+`src/__tests__/rfc/` is the RFC conformance suite: it runs the real app from
+`createHttpApp()` against a fake Nextcloud and cites the RFC section each test checks. When
+protocol or format behaviour changes, add or adjust the test there with its section.
 Do not use `--no-verify` to skip hooks.
 
 ### OAuth end-to-end test
