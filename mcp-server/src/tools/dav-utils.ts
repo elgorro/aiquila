@@ -89,3 +89,55 @@ export function quoteICalParam(value: string): string {
   // eslint-disable-next-line no-control-regex
   return `"${value.replace(/[\x00-\x08\x0a-\x1f\x7f"]/g, '')}"`;
 }
+
+// --- Content lines (RFC 5545 §3.1, RFC 6350 §3.2) ---
+
+// Lines SHOULD NOT be longer than 75 octets, excluding the line break.
+const MAX_LINE_OCTETS = 75;
+
+/**
+ * Fold a content line to 75 octets, splitting only on whole code points so
+ * multi-byte UTF-8 sequences are never cut in half (RFC 5545 §3.1: "a
+ * multi-octet sequence MUST NOT be split"). Continuation lines carry a single
+ * leading space, which counts toward the limit.
+ */
+export function foldContentLine(line: string): string {
+  if (Buffer.byteLength(line, 'utf8') <= MAX_LINE_OCTETS) return line;
+
+  const chunks: string[] = [];
+  let current = '';
+  let currentOctets = 0;
+  // First line has the full budget; continuation lines lose one octet to the
+  // leading space.
+  let limit = MAX_LINE_OCTETS;
+
+  for (const char of line) {
+    const octets = Buffer.byteLength(char, 'utf8');
+    if (currentOctets + octets > limit) {
+      chunks.push(current);
+      current = '';
+      currentOctets = 0;
+      limit = MAX_LINE_OCTETS - 1;
+    }
+    current += char;
+    currentOctets += octets;
+  }
+  chunks.push(current);
+
+  return chunks.join('\r\n ');
+}
+
+/**
+ * An iCalendar object in wire format (RFC 5545 §3.1): every content line
+ * ends in CRLF — the last one too — and is folded to 75 octets. Input may
+ * use any line ending and may already be folded; it is unfolded first so
+ * nothing is folded twice. Empty lines, which are not content lines, go.
+ */
+export function formatICalendar(text: string): string {
+  const lines = text
+    .replace(/\r\n|\r|\n/g, '\n')
+    .replace(/\n[ \t]/g, '')
+    .split('\n')
+    .filter((line) => line !== '');
+  return lines.map(foldContentLine).join('\r\n') + '\r\n';
+}

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+import { foldContentLine } from './dav-utils.js';
+
 /**
  * Minimal vCard (RFC 6350 / RFC 2426) parser and serializer.
  *
@@ -13,9 +15,6 @@
  * card we did not author byte-stable apart from re-folding, which matters
  * because we PUT back whatever the server gave us.
  */
-
-/** Maximum octets per line before folding (RFC 6350 §3.2). */
-const MAX_LINE_OCTETS = 75;
 
 export interface VCardProperty {
   /** Property group, e.g. `item1` in `item1.TEL` — used by the Nextcloud Contacts app for labels. */
@@ -153,45 +152,13 @@ export function parseVCard(text: string): VCardDocument {
 // Serialization
 // ---------------------------------------------------------------------------
 
-/**
- * Fold a content line to {@link MAX_LINE_OCTETS} octets, splitting only on
- * whole code points so multi-byte UTF-8 sequences are never cut in half.
- * Continuation lines carry a single leading space, which counts toward the
- * limit.
- */
-function foldLine(line: string): string {
-  if (Buffer.byteLength(line, 'utf8') <= MAX_LINE_OCTETS) return line;
-
-  const chunks: string[] = [];
-  let current = '';
-  let currentOctets = 0;
-  // First line has the full budget; continuation lines lose one octet to the
-  // leading space.
-  let limit = MAX_LINE_OCTETS;
-
-  for (const char of line) {
-    const octets = Buffer.byteLength(char, 'utf8');
-    if (currentOctets + octets > limit) {
-      chunks.push(current);
-      current = '';
-      currentOctets = 0;
-      limit = MAX_LINE_OCTETS - 1;
-    }
-    current += char;
-    currentOctets += octets;
-  }
-  chunks.push(current);
-
-  return chunks.join('\r\n ');
-}
-
 function serializeProperty(property: VCardProperty): string {
   const bare = property.rawName ?? property.name;
   const name = property.group ? `${property.group}.${bare}` : bare;
   const params = property.params
     .map(([key, value]) => (value === '' ? `;${key}` : `;${key}=${value}`))
     .join('');
-  return foldLine(`${name}${params}:${property.value}`);
+  return foldContentLine(`${name}${params}:${property.value}`);
 }
 
 /**

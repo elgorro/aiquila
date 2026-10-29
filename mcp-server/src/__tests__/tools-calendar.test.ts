@@ -410,6 +410,8 @@ END:VCALENDAR</c:calendar-data>
       });
 
       const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
+      // Long content lines are folded (RFC 5545 §3.1); compare unfolded.
+      putCall[1].body = putCall[1].body.replace(/\r\n[ \t]/g, '');
       expect(putCall[1].body).toContain('ATTENDEE');
       expect(putCall[1].body).toContain('CN="Bob"');
       expect(putCall[1].body).toContain('mailto:bob@example.com');
@@ -829,7 +831,11 @@ END:VCALENDAR</c:calendar-data>
       });
 
       expect(result.content[0].text).toContain('updated successfully');
-      const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body;
+      // Long content lines are folded (RFC 5545 §3.1); compare unfolded.
+      const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body.replace(
+        /\r\n[ \t]/g,
+        ''
+      );
       expect(putBody).toContain('ORGANIZER;CN="admin":mailto:admin');
       expect(putBody).toContain(
         'ATTENDEE;CN="Alice";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:alice@example.com'
