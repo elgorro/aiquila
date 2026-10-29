@@ -284,6 +284,26 @@ export async function createHttpApp(): Promise<express.Express> {
   );
   const handleMcpRequest = (req: any, res: any) => mcpHandler(req, res, req.body);
 
+  // MCP 2026-07-28, Streamable HTTP, Security §1: the Origin header MUST be
+  // validated on every request to the MCP endpoint, and one that is present
+  // and not allowed is answered 403 (DNS rebinding). Requests without Origin
+  // (server-side clients, the Nextcloud app) are unaffected. The allowed set
+  // is the CORS one: the issuer origin plus MCP_CORS_ORIGINS.
+  const checkOrigin = (req: any, res: any, next: any) => {
+    const origin = req.headers?.origin;
+    if (typeof origin === 'string' && !allowedOrigins.has(origin)) {
+      logger.warn({ origin }, '[mcp] Request from a disallowed Origin rejected');
+      res.status(403).json({
+        jsonrpc: '2.0',
+        error: { code: -32600, message: 'Origin not allowed' },
+      });
+      return;
+    }
+    next();
+  };
+  app.use(MCP_PATH, checkOrigin);
+  app.all('/', checkOrigin);
+
   const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
   const hasStaticClient = !!process.env.MCP_CLIENT_ID;
   const registrationToken = process.env.MCP_REGISTRATION_TOKEN;
