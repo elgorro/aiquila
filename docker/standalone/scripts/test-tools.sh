@@ -129,17 +129,30 @@ REG_RESP=$($CURL -X POST "$BASE$REGISTER_PATH" \
 CLIENT_ID=$(echo "$REG_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['client_id'])")
 echo "client_id : $CLIENT_ID"
 
+# The login form carries the authorization request back with a MAC, so it has
+# to come from /authorize; its hidden fields are posted back unchanged.
+AUTHZ_HTML=$($CURL -G "$BASE/authorize" \
+  --data-urlencode "response_type=code" \
+  --data-urlencode "client_id=$CLIENT_ID" \
+  --data-urlencode "redirect_uri=$REDIRECT_URI" \
+  --data-urlencode "state=$STATE" \
+  --data-urlencode "code_challenge=$CODE_CHALLENGE" \
+  --data-urlencode "code_challenge_method=S256")
+FORM_FIELDS=()
+while IFS= read -r field; do FORM_FIELDS+=(--data-urlencode "$field"); done < <(
+  echo "$AUTHZ_HTML" | python3 -c "
+import sys, re, html
+for name, value in re.findall(r'<input type=\"hidden\" name=\"([^\"]+)\" value=\"([^\"]*)\"', sys.stdin.read()):
+    print(f'{name}={html.unescape(value)}')
+")
+[ ${#FORM_FIELDS[@]} -eq 0 ] && { echo "ERROR: /authorize did not render the login form" >&2; echo "$AUTHZ_HTML" >&2; exit 1; }
+
 LOGIN_HEADERS=$($CURL -D - -o /dev/null --max-redirs 0 \
   -X POST "$BASE/auth/login" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   --data-urlencode "username=$NC_USER" \
   --data-urlencode "password=$NC_PASS" \
-  --data-urlencode "client_id=$CLIENT_ID" \
-  --data-urlencode "redirect_uri=$REDIRECT_URI" \
-  --data-urlencode "state=$STATE" \
-  --data-urlencode "code_challenge=$CODE_CHALLENGE" \
-  --data-urlencode "code_challenge_method=S256" \
-  --data-urlencode "scope=")
+  "${FORM_FIELDS[@]}")
 CODE=$(echo "$LOGIN_HEADERS" | grep -i '^location:' | tr -d '\r' | sed 's/[Ll]ocation: //' | grep -o 'code=[^&]*' | cut -d= -f2)
 [ -z "$CODE" ] && { echo "ERROR: Login failed — no auth code in redirect" >&2; exit 1; }
 

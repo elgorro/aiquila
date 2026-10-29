@@ -5,7 +5,8 @@
 // directory degrades gracefully instead of crashing (discussion #342).
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, chmodSync } from 'node:fs';
+import { mkdtempSync, rmSync, chmodSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -50,6 +51,37 @@ describe('state persistence (real filesystem)', () => {
     expect(entry?.userId).toBe('alice');
     expect(entry?.clientId).toBe('c1');
     expect(entry?.scopes).toEqual(['read']);
+  });
+
+  it('RefreshStore writes no usable token to disk, only its SHA-256', () => {
+    const file = join(dir, 'refresh-tokens.json');
+    const token = new RefreshStore(file).store({
+      grantId: 'g',
+      userId: 'alice',
+      clientId: 'c1',
+      scopes: [],
+    });
+    const raw = readFileSync(file, 'utf8');
+    expect(raw).not.toContain(token);
+    expect(Object.keys(JSON.parse(raw))).toEqual([
+      createHash('sha256').update(token).digest('hex'),
+    ]);
+  });
+
+  it('RefreshStore hashes plaintext entries from earlier versions on load', () => {
+    const file = join(dir, 'refresh-tokens.json');
+    const legacy = '3f2b8c1e-7d4a-4e5f-9a6b-0c1d2e3f4a5b';
+    writeFileSync(
+      file,
+      JSON.stringify({
+        [legacy]: { userId: 'alice', clientId: 'c1', scopes: [], expiresAt: Date.now() + 60_000 },
+      })
+    );
+    const store = new RefreshStore(file);
+    expect(store.get(legacy)?.userId).toBe('alice');
+    const raw = readFileSync(file, 'utf8');
+    expect(raw).not.toContain(legacy);
+    expect(new RefreshStore(file).get(legacy)?.grantId).toEqual(expect.any(String));
   });
 
   it('RefreshStore reflects a deletion on disk across instances', () => {

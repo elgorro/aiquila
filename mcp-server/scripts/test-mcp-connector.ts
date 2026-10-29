@@ -109,16 +109,37 @@ async function getAccessToken(): Promise<string> {
 
   // 4. Login — POST credentials, follow redirect manually to extract auth code
   sep('OAuth — Login');
-  const loginParams = new URLSearchParams({
-    username: NC_USER,
-    password: NC_PASS,
+  // The login form carries the authorization request back with a MAC, so it
+  // has to come from /authorize; its hidden fields are posted back unchanged.
+  const authorizeUrl = new URL(`${BASE_URL}/authorize`);
+  authorizeUrl.search = new URLSearchParams({
+    response_type: 'code',
     client_id: clientId,
     redirect_uri: REDIRECT_URI,
     state,
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
-    scope: '',
-  });
+  }).toString();
+  const authorizeHtml = await (await fetch(authorizeUrl)).text();
+  const formFields = [
+    ...authorizeHtml.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g),
+  ].map(([, name, value]) => [
+    name,
+    value
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&'),
+  ]);
+  if (formFields.length === 0) {
+    throw new Error(`/authorize did not render the login form:\n${authorizeHtml.slice(0, 200)}`);
+  }
+  const loginParams = new URLSearchParams([
+    ['username', NC_USER],
+    ['password', NC_PASS],
+    ...formFields,
+  ]);
 
   const loginRes = await fetch(loginUrl, {
     method: 'POST',
