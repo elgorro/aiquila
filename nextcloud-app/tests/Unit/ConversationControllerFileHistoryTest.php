@@ -49,11 +49,11 @@ class ConversationControllerFileHistoryTest extends TestCase {
         $conversation->setUserId('testuser');
         $conversation->setTitle('existing');
 
-        $conversationMapper = $this->createMock(ConversationMapper::class);
+        $conversationMapper = $this->createStub(ConversationMapper::class);
         $conversationMapper->method('findByIdAndUser')->willReturn($conversation);
         $conversationMapper->method('update')->willReturnArgument(0);
 
-        $messageMapper = $this->createMock(MessageMapper::class);
+        $messageMapper = $this->createStub(MessageMapper::class);
         $messageMapper->method('insert')->willReturnCallback(function (MessageEntity $m): MessageEntity {
             $m->setId($this->nextId++);
             $this->messages[] = $m;
@@ -61,7 +61,7 @@ class ConversationControllerFileHistoryTest extends TestCase {
         });
         $messageMapper->method('findByConversation')->willReturnCallback(fn(): array => $this->messages);
 
-        $messageFileMapper = $this->createMock(MessageFileMapper::class);
+        $messageFileMapper = $this->createStub(MessageFileMapper::class);
         $messageFileMapper->method('insert')->willReturnCallback(function (MessageFile $f): MessageFile {
             $f->setId($this->nextId++);
             $this->filesByMessage[$f->getMessageId()][] = $f;
@@ -71,7 +71,7 @@ class ConversationControllerFileHistoryTest extends TestCase {
             fn(int $id): array => $this->filesByMessage[$id] ?? []
         );
 
-        $fileService = $this->createMock(FileService::class);
+        $fileService = $this->createStub(FileService::class);
         $fileService->method('getContent')->willReturnCallback(
             static function (string $path) use ($nextcloudFiles): array {
                 if (!isset($nextcloudFiles[$path])) {
@@ -85,7 +85,7 @@ class ConversationControllerFileHistoryTest extends TestCase {
         );
 
         $citations = $citeFirstDocument ? [['type' => 'page_location', 'document_index' => 0, 'cited_text' => 'x']] : [];
-        $provider = $this->createMock(LLMProviderInterface::class);
+        $provider = $this->createStub(LLMProviderInterface::class);
         $provider->method('supportsNativeMcp')->willReturn(false);
         $provider->method('getId')->willReturn('claude');
         $provider->method('chat')->willReturnCallback(
@@ -102,17 +102,17 @@ class ConversationControllerFileHistoryTest extends TestCase {
             }
         );
 
-        $factory = $this->createMock(LLMProviderFactory::class);
+        $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('hasPermittedProvider')->willReturn(true);
         $factory->method('getProviderForUser')->willReturn($provider);
 
-        $mcpClient = $this->createMock(McpClientService::class);
+        $mcpClient = $this->createStub(McpClientService::class);
         $mcpClient->method('getAllTools')->willReturn(['tools' => [], 'mapping' => []]);
 
-        $nativeMcp = $this->createMock(NativeMcpService::class);
+        $nativeMcp = $this->createStub(NativeMcpService::class);
         $nativeMcp->method('isEnabledForUser')->willReturn(false);
 
-        $request = $this->createMock(IRequest::class);
+        $request = $this->createStub(IRequest::class);
         $request->method('getParams')->willReturn([]);
 
         return new ConversationController(
@@ -121,18 +121,18 @@ class ConversationControllerFileHistoryTest extends TestCase {
             $conversationMapper,
             $messageMapper,
             $messageFileMapper,
-            $this->createMock(ProjectMapper::class),
-            $this->createMock(ProjectPathMapper::class),
+            $this->createStub(ProjectMapper::class),
+            $this->createStub(ProjectPathMapper::class),
             $factory,
             $fileService,
-            $this->createMock(FilesService::class),
-            $this->createMock(ImageOptimizer::class),
+            $this->createStub(FilesService::class),
+            $this->createStub(ImageOptimizer::class),
             $mcpClient,
             $nativeMcp,
-            $this->createMock(IJobList::class),
-            $this->createMock(ContextChatService::class),
+            $this->createStub(IJobList::class),
+            $this->createStub(ContextChatService::class),
             'testuser',
-            $this->createMock(LoggerInterface::class),
+            $this->createStub(LoggerInterface::class),
         );
     }
 

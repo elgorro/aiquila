@@ -19,13 +19,13 @@ class LocalProviderTest extends TestCase {
     private $logger;
 
     protected function setUp(): void {
-        $this->clientService = $this->createMock(IClientService::class);
-        $this->client        = $this->createMock(IClient::class);
-        $this->config        = $this->createMock(IConfig::class);
-        $this->credentials   = $this->createMock(CredentialService::class);
-        $this->logger        = $this->createMock(LoggerInterface::class);
+        $this->clientService = $this->createStub(IClientService::class);
+        $this->client        = $this->createStub(IClient::class);
+        $this->config        = $this->createStub(IConfig::class);
+        $this->credentials   = $this->createStub(CredentialService::class);
+        $this->logger        = $this->createStub(LoggerInterface::class);
 
-        $this->clientService->method('newClient')->willReturn($this->client);
+        $this->clientService->method('newClient')->willReturnCallback(fn () => $this->client);
         $this->config->method('getUserValue')->willReturn('');
     }
 
@@ -60,7 +60,7 @@ class LocalProviderTest extends TestCase {
     }
 
     private function jsonResponse(array $payload): IResponse {
-        $response = $this->createMock(IResponse::class);
+        $response = $this->createStub(IResponse::class);
         $response->method('getBody')->willReturn(json_encode($payload));
         return $response;
     }
@@ -262,7 +262,7 @@ class LocalProviderTest extends TestCase {
         $sse = "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n"
             . "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":1}}\n"
             . "data: [DONE]\n";
-        $response = $this->createMock(IResponse::class);
+        $response = $this->createStub(IResponse::class);
         $response->method('getBody')->willReturn($sse);
         $this->client->method('post')->willReturn($response);
 
@@ -282,7 +282,7 @@ class LocalProviderTest extends TestCase {
     public function testTruncatedStreamIsReportedAsAnErrorNotDone(): void {
         $provider = $this->provider();
         $sse = "data: {\"choices\":[{\"delta\":{\"content\":\"Half an ans\"}}]}\n";
-        $response = $this->createMock(IResponse::class);
+        $response = $this->createStub(IResponse::class);
         $response->method('getBody')->willReturn($sse);
         $this->client->method('post')->willReturn($response);
 
@@ -306,6 +306,8 @@ class LocalProviderTest extends TestCase {
     }
 
     public function testChatWithoutEndpointReturnsActionableError(): void {
+        $this->client = $this->createMock(IClient::class);
+
         $provider = $this->provider(['local_base_url' => '']);
         $this->client->expects($this->never())->method('post');
 
@@ -524,6 +526,8 @@ class LocalProviderTest extends TestCase {
     }
 
     public function testTranscriptionRefusedUnlessEnabled(): void {
+        $this->client = $this->createMock(IClient::class);
+
         $this->client->expects($this->never())->method('post');
 
         $this->assertSame(
@@ -584,6 +588,8 @@ class LocalProviderTest extends TestCase {
     }
 
     public function testSpeechRefusedUnlessEnabled(): void {
+        $this->client = $this->createMock(IClient::class);
+
         $this->client->expects($this->never())->method('post');
 
         $this->assertSame(
@@ -604,7 +610,7 @@ class LocalProviderTest extends TestCase {
             function (string $u, array $o) use (&$url, &$body): IResponse {
                 $url = $u;
                 $body = json_decode($o['body'], true);
-                $response = $this->createMock(IResponse::class);
+                $response = $this->createStub(IResponse::class);
                 $response->method('getBody')->willReturn('mp3-bytes');
                 return $response;
             }

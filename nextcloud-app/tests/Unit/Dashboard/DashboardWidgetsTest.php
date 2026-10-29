@@ -28,7 +28,7 @@ class DashboardWidgetsTest extends TestCase {
     private IDateTimeFormatter $dateTimeFormatter;
 
     protected function setUp(): void {
-        $this->l10n = $this->createMock(IL10N::class);
+        $this->l10n = $this->createStub(IL10N::class);
         $this->l10n->method('t')->willReturnCallback(
             fn (string $text, array $p = []) => $p === [] ? $text : vsprintf(str_replace('%s', '%s', $text), $p)
         );
@@ -36,22 +36,22 @@ class DashboardWidgetsTest extends TestCase {
             fn (string $s, string $pl, int $count) => str_replace('%n', (string)$count, $count === 1 ? $s : $pl)
         );
 
-        $this->urlGenerator = $this->createMock(IURLGenerator::class);
+        $this->urlGenerator = $this->createStub(IURLGenerator::class);
         $this->urlGenerator->method('linkToRouteAbsolute')->willReturn('https://nc.test/apps/aiquila/');
         $this->urlGenerator->method('imagePath')->willReturn('/apps/aiquila/img/app-dark.svg');
         $this->urlGenerator->method('getAbsoluteURL')->willReturnArgument(0);
 
-        $user = $this->createMock(IUser::class);
+        $user = $this->createStub(IUser::class);
         $user->method('getUID')->willReturn('alice');
-        $this->userSession = $this->createMock(IUserSession::class);
+        $this->userSession = $this->createStub(IUserSession::class);
         $this->userSession->method('getUser')->willReturn($user);
 
-        $this->dateTimeFormatter = $this->createMock(IDateTimeFormatter::class);
+        $this->dateTimeFormatter = $this->createStub(IDateTimeFormatter::class);
         $this->dateTimeFormatter->method('formatTimeSpan')->willReturn('5 minutes ago');
     }
 
     public function testConversationsWidgetItems(): void {
-        $mapper = $this->createMock(ConversationMapper::class);
+        $mapper = $this->createStub(ConversationMapper::class);
         $mapper->method('findAllByUser')->willReturn([
             $this->conversation(1, 'First chat', 1000),
             $this->conversation(2, 'Second chat', 900),
@@ -71,7 +71,7 @@ class DashboardWidgetsTest extends TestCase {
     }
 
     public function testConversationsWidgetCapsAtFive(): void {
-        $mapper = $this->createMock(ConversationMapper::class);
+        $mapper = $this->createStub(ConversationMapper::class);
         $mapper->method('findAllByUser')->willReturn(
             array_map(fn (int $i) => $this->conversation($i, "Chat $i", 1000 - $i), range(1, 10))
         );
@@ -84,7 +84,7 @@ class DashboardWidgetsTest extends TestCase {
     }
 
     public function testConversationsWidgetEmpty(): void {
-        $mapper = $this->createMock(ConversationMapper::class);
+        $mapper = $this->createStub(ConversationMapper::class);
         $mapper->method('findAllByUser')->willReturn([]);
 
         $widget = new ConversationsWidget(
@@ -97,7 +97,7 @@ class DashboardWidgetsTest extends TestCase {
     }
 
     public function testCoworkersWidgetStatusSubtitles(): void {
-        $service = $this->createMock(CoworkerService::class);
+        $service = $this->createStub(CoworkerService::class);
         $service->method('listForUser')->willReturn([
             $this->coworker('Paused one', paused: 1),
             $this->coworker('Failed one', lastStatus: 'error', lastError: 'boom'),
@@ -120,13 +120,13 @@ class DashboardWidgetsTest extends TestCase {
     }
 
     public function testUsageWidgetItems(): void {
-        $mapper = $this->createMock(UsageStatMapper::class);
+        $mapper = $this->createStub(UsageStatMapper::class);
         $mapper->method('sumTokensByUserSince')->willReturn(['input_tokens' => 10, 'output_tokens' => 5]);
         $mapper->method('sumTokensByUser')->willReturn([
             'input_tokens' => 100, 'output_tokens' => 50,
             'cache_creation_tokens' => 0, 'cache_read_tokens' => 0,
         ]);
-        $timeFactory = $this->createMock(ITimeFactory::class);
+        $timeFactory = $this->createStub(ITimeFactory::class);
         $timeFactory->method('getTime')->willReturn(1_000_000);
 
         $widget = new UsageWidget(

@@ -43,11 +43,11 @@ class ConversationControllerThinkingBudgetTest extends TestCase {
         $this->conversation->setUserId('testuser');
         $this->conversation->setModel(ClaudeModels::DEFAULT_MODEL);
 
-        $this->mapper = $this->createMock(ConversationMapper::class);
+        $this->mapper = $this->createStub(ConversationMapper::class);
         $this->mapper->method('findByIdAndUser')->willReturn($this->conversation);
         $this->mapper->method('update')->willReturnArgument(0);
 
-        $provider = $this->createMock(LLMProviderInterface::class);
+        $provider = $this->createStub(LLMProviderInterface::class);
         $provider->method('getCapabilities')->willReturn(array_merge([
             'vision' => true,
             'tools' => true,
@@ -61,33 +61,33 @@ class ConversationControllerThinkingBudgetTest extends TestCase {
         $provider->method('getLabel')->willReturn('Ollama');
         $provider->method('getModel')->willReturn(ClaudeModels::DEFAULT_MODEL);
 
-        $factory = $this->createMock(LLMProviderFactory::class);
+        $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('hasPermittedProvider')->willReturn(true);
         $factory->method('getProvider')->willReturn($provider);
         $factory->method('getProviderById')->willReturn($provider);
         $factory->method('getProviderForUser')->willReturn($provider);
 
-        $request = $this->createMock(IRequest::class);
+        $request = $this->createStub(IRequest::class);
         $request->method('getParams')->willReturn([]);
 
         return new ConversationController(
             'aiquila',
             $request,
             $this->mapper,
-            $this->createMock(MessageMapper::class),
-            $this->createMock(MessageFileMapper::class),
-            $this->createMock(ProjectMapper::class),
-            $this->createMock(ProjectPathMapper::class),
+            $this->createStub(MessageMapper::class),
+            $this->createStub(MessageFileMapper::class),
+            $this->createStub(ProjectMapper::class),
+            $this->createStub(ProjectPathMapper::class),
             $factory,
-            $this->createMock(FileService::class),
-            $this->createMock(FilesService::class),
-            $this->createMock(ImageOptimizer::class),
-            $this->createMock(McpClientService::class),
-            $this->createMock(NativeMcpService::class),
-            $this->createMock(IJobList::class),
-            $this->createMock(ContextChatService::class),
+            $this->createStub(FileService::class),
+            $this->createStub(FilesService::class),
+            $this->createStub(ImageOptimizer::class),
+            $this->createStub(McpClientService::class),
+            $this->createStub(NativeMcpService::class),
+            $this->createStub(IJobList::class),
+            $this->createStub(ContextChatService::class),
             'testuser',
-            $this->createMock(LoggerInterface::class),
+            $this->createStub(LoggerInterface::class),
         );
     }
 

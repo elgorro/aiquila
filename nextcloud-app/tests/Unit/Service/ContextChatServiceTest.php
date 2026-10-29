@@ -24,19 +24,23 @@ class ContextChatServiceTest extends TestCase {
     private ContextChatService $service;
 
     protected function setUp(): void {
-        $this->conversationMapper = $this->createMock(ConversationMapper::class);
-        $this->messageMapper = $this->createMock(MessageMapper::class);
-        $this->container = $this->createMock(IServerContainer::class);
-        $this->manager = $this->createMock(IContentManager::class);
-        $logger = $this->createMock(LoggerInterface::class);
+        $this->conversationMapper = $this->createStub(ConversationMapper::class);
+        $this->messageMapper = $this->createStub(MessageMapper::class);
+        $this->container = $this->createStub(IServerContainer::class);
+        $this->manager = $this->createStub(IContentManager::class);
+        $this->container->method('get')->willReturnCallback(
+            fn (string $id) => match ($id) { IContentManager::class => $this->manager },
+        );
 
-        $this->container->method('get')->with(IContentManager::class)->willReturn($this->manager);
+        $this->buildService();
+    }
 
+    private function buildService(): void {
         $this->service = new ContextChatService(
             $this->conversationMapper,
             $this->messageMapper,
             $this->container,
-            $logger,
+            $this->createStub(LoggerInterface::class),
         );
     }
 
@@ -58,11 +62,16 @@ class ContextChatServiceTest extends TestCase {
     }
 
     public function testIndexConversationSubmitsContentItem(): void {
+        $this->conversationMapper = $this->createMock(ConversationMapper::class);
+        $this->messageMapper = $this->createMock(MessageMapper::class);
+        $this->manager = $this->createMock(IContentManager::class);
+        $this->buildService();
+
         $this->manager->expects($this->once())->method('isContextChatAvailable')->willReturn(true);
 
-        $this->conversationMapper->method('findById')->with(42)
+        $this->conversationMapper->expects($this->once())->method('findById')->with(42)
             ->willReturn($this->makeConversation(42, 'alice', 'Trip planning'));
-        $this->messageMapper->method('findByConversation')->with(42)->willReturn([
+        $this->messageMapper->expects($this->once())->method('findByConversation')->with(42)->willReturn([
             $this->makeMessage('user', 'Where should I go?'),
             $this->makeMessage('assistant', 'Consider Lisbon.'),
         ]);
@@ -85,6 +94,10 @@ class ContextChatServiceTest extends TestCase {
     }
 
     public function testIndexConversationNoOpWhenUnavailable(): void {
+        $this->conversationMapper = $this->createMock(ConversationMapper::class);
+        $this->manager = $this->createMock(IContentManager::class);
+        $this->buildService();
+
         $this->manager->method('isContextChatAvailable')->willReturn(false);
 
         $this->conversationMapper->expects($this->never())->method('findById');
@@ -94,6 +107,9 @@ class ContextChatServiceTest extends TestCase {
     }
 
     public function testIndexConversationSkipsEmptyConversation(): void {
+        $this->manager = $this->createMock(IContentManager::class);
+        $this->buildService();
+
         $this->manager->method('isContextChatAvailable')->willReturn(true);
         $this->conversationMapper->method('findById')
             ->willReturn($this->makeConversation(7, 'bob', 'Empty'));
@@ -105,6 +121,9 @@ class ContextChatServiceTest extends TestCase {
     }
 
     public function testIndexConversationRemovesWhenDeleted(): void {
+        $this->manager = $this->createMock(IContentManager::class);
+        $this->buildService();
+
         $this->manager->method('isContextChatAvailable')->willReturn(true);
         $this->conversationMapper->method('findById')
             ->willThrowException(new DoesNotExistException('gone'));
@@ -117,6 +136,9 @@ class ContextChatServiceTest extends TestCase {
     }
 
     public function testRemoveConversationDeletesContent(): void {
+        $this->manager = $this->createMock(IContentManager::class);
+        $this->buildService();
+
         $this->manager->method('isContextChatAvailable')->willReturn(true);
 
         $this->manager->expects($this->once())->method('deleteContent')

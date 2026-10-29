@@ -19,26 +19,39 @@ class LoadTextAssistantListenerTest extends TestCase {
     private LoadTextAssistantListener $listener;
 
     protected function setUp(): void {
-        $this->appManager = $this->createMock(IAppManager::class);
-        $this->userSession = $this->createMock(IUserSession::class);
+        $this->appManager = $this->createStub(IAppManager::class);
+        $this->userSession = $this->createStub(IUserSession::class);
+        $this->buildListener();
+    }
+
+    private function buildListener(): void {
         $this->listener = new LoadTextAssistantListener($this->appManager, $this->userSession);
     }
 
     public function testSkipsWithoutUser(): void {
+        $this->appManager = $this->createMock(IAppManager::class);
+        $this->buildListener();
+
         $this->userSession->method('getUser')->willReturn(null);
         $this->appManager->expects($this->never())->method('isEnabledForUser');
         $this->listener->handle(new Event());
     }
 
     public function testSkipsWhenTextDisabled(): void {
-        $this->userSession->method('getUser')->willReturn($this->createMock(IUser::class));
+        $this->appManager = $this->createMock(IAppManager::class);
+        $this->buildListener();
+
+        $this->userSession->method('getUser')->willReturn($this->createStub(IUser::class));
         $this->appManager->expects($this->once())->method('isEnabledForUser')
             ->with('text')->willReturn(false);
         $this->listener->handle(new Event());
     }
 
     public function testSkipsWhenAssistantEnabled(): void {
-        $this->userSession->method('getUser')->willReturn($this->createMock(IUser::class));
+        $this->appManager = $this->createMock(IAppManager::class);
+        $this->buildListener();
+
+        $this->userSession->method('getUser')->willReturn($this->createStub(IUser::class));
         $this->appManager->expects($this->exactly(2))->method('isEnabledForUser')
             ->willReturnCallback(fn(string $app) => in_array($app, ['text', 'assistant'], true));
         $this->listener->handle(new Event());

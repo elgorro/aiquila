@@ -21,10 +21,10 @@ class RequestMetadataServiceTest extends TestCase {
     private array $secrets = [];
 
     protected function setUp(): void {
-        $this->config = $this->createMock(IConfig::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->config = $this->createStub(IConfig::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
 
-        $this->credentials = $this->createMock(CredentialService::class);
+        $this->credentials = $this->createStub(CredentialService::class);
         $this->credentials->method('getSecret')
             ->willReturnCallback(fn (string $name) => $this->secrets[$name] ?? '');
         $this->credentials->method('setSecret')
@@ -32,7 +32,7 @@ class RequestMetadataServiceTest extends TestCase {
                 $this->secrets[$name] = $value;
             });
 
-        $this->random = $this->createMock(ISecureRandom::class);
+        $this->random = $this->createStub(ISecureRandom::class);
         $this->random->method('generate')->willReturn(self::SALT);
     }
 

@@ -30,24 +30,28 @@ class ProviderSettingsServiceTest extends TestCase {
     private ProviderSettingsService $service;
 
     protected function setUp(): void {
-        $this->config = $this->createMock(IConfig::class);
-        $this->credentials = $this->createMock(CredentialService::class);
-        $this->cacheFactory = $this->createMock(ICacheFactory::class);
-        $this->cache = $this->createMock(ICache::class);
-        $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
+        $this->config = $this->createStub(IConfig::class);
+        $this->credentials = $this->createStub(CredentialService::class);
+        $this->cacheFactory = $this->createStub(ICacheFactory::class);
+        $this->cache = $this->createStub(ICache::class);
+        $this->cacheFactory->method('createDistributed')->willReturnCallback(fn () => $this->cache);
 
-        $this->access = $this->createMock(ProviderAccessService::class);
+        $this->access = $this->createStub(ProviderAccessService::class);
         $this->access->method('getLists')->willReturn([
             'allowed_users' => [],
             'allowed_groups' => [],
             'blocked_users' => [],
             'blocked_groups' => [],
         ]);
-        $this->userManager = $this->createMock(IUserManager::class);
-        $this->groupManager = $this->createMock(IGroupManager::class);
-        $this->providerFactory = $this->createMock(LLMProviderFactory::class);
+        $this->userManager = $this->createStub(IUserManager::class);
+        $this->groupManager = $this->createStub(IGroupManager::class);
+        $this->providerFactory = $this->createStub(LLMProviderFactory::class);
         $this->providerFactory->method('getProviderIds')->willReturn(['testprovider']);
 
+        $this->buildService();
+    }
+
+    private function buildService(): void {
         $this->service = new ProviderSettingsService(
             $this->config,
             $this->credentials,
@@ -56,7 +60,7 @@ class ProviderSettingsServiceTest extends TestCase {
             $this->groupManager,
             $this->cacheFactory,
             $this->providerFactory,
-            $this->createMock(LoggerInterface::class),
+            $this->createStub(LoggerInterface::class),
         );
     }
 
@@ -66,8 +70,8 @@ class ProviderSettingsServiceTest extends TestCase {
      *
      * @param list<array<string, mixed>> $schema
      */
-    private function provider(array $schema): LLMProviderInterface {
-        $provider = $this->createMock(LLMProviderInterface::class);
+    private function provider(array $schema, bool $mock = false): LLMProviderInterface {
+        $provider = $mock ? $this->createMock(LLMProviderInterface::class) : $this->createStub(LLMProviderInterface::class);
         $provider->method('getId')->willReturn('testprovider');
         $provider->method('getLabel')->willReturn('Test provider');
         $provider->method('getSettingsSchema')->willReturn($schema);
@@ -86,6 +90,9 @@ class ProviderSettingsServiceTest extends TestCase {
     // ── Scope enforcement (the SSRF guard) ──────────────────────────────
 
     public function testUserWriteRejectsAdminOnlyEndpointField(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $provider = $this->provider($this->mixedScopeSchema());
 
         // The endpoint decides where the server sends outbound requests; a
@@ -101,6 +108,9 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testUserWriteAcceptsBothScopedField(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $provider = $this->provider($this->mixedScopeSchema());
 
         $this->config->expects($this->once())
@@ -113,6 +123,9 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testUserWriteRejectsUnknownField(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $provider = $this->provider($this->mixedScopeSchema());
 
         $this->config->expects($this->never())->method('setUserValue');
@@ -131,6 +144,9 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testEmptyUserValueClearsTheOverride(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $provider = $this->provider($this->mixedScopeSchema());
 
         $this->config->expects($this->once())
@@ -162,7 +178,7 @@ class ProviderSettingsServiceTest extends TestCase {
      * @param array<string, string> $appValues
      */
     private function describeWithProfile(array $profile, array $appValues): array {
-        $provider = $this->createMockForIntersectionOfInterfaces([LLMProviderInterface::class, ThinkingProfileInterface::class]);
+        $provider = $this->createStubForIntersectionOfInterfaces([LLMProviderInterface::class, ThinkingProfileInterface::class]);
         $provider->method('getId')->willReturn('testprovider');
         $provider->method('getLabel')->willReturn('Test provider');
         $provider->method('getCapabilities')->willReturn(ProviderSettingsSchema::capabilities());
@@ -231,6 +247,9 @@ class ProviderSettingsServiceTest extends TestCase {
     // ── Value validation ────────────────────────────────────────────────
 
     public function testAdminWriteRejectsNonHttpEndpoint(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $provider = $this->provider($this->mixedScopeSchema());
 
         $this->config->expects($this->never())->method('setAppValue');
@@ -247,6 +266,9 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testAdminWriteIsAllOrNothing(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $provider = $this->provider($this->mixedScopeSchema());
 
         // The valid field must not be written when a later one fails
@@ -261,6 +283,9 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testAdminWriteAcceptsValidEndpoint(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $provider = $this->provider($this->mixedScopeSchema());
 
         $this->config->expects($this->once())
@@ -300,7 +325,7 @@ class ProviderSettingsServiceTest extends TestCase {
     // ── Model list caching ──────────────────────────────────────────────
 
     public function testStatusPassesTheProbeThroughWithTheProviderId(): void {
-        $provider = $this->provider([]);
+        $provider = $this->provider([], mock: true);
         $provider->expects($this->once())->method('probe')->with('alice')->willReturn([
             'state' => ProviderProbe::STATE_DEGRADED,
             'reason' => ProviderProbe::REASON_MODEL_MISSING,
@@ -317,7 +342,7 @@ class ProviderSettingsServiceTest extends TestCase {
 
     /** The admin card describes the instance, so its probe must ignore the caller. */
     public function testAdminStatusProbesWithoutAUser(): void {
-        $provider = $this->provider([]);
+        $provider = $this->provider([], mock: true);
         $provider->expects($this->once())->method('probe')->with(null)->willReturn([
             'state' => ProviderProbe::STATE_OK,
             'reason' => ProviderProbe::REASON_OK,
@@ -329,7 +354,7 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testCachedModelListSkipsTheProvider(): void {
-        $provider = $this->provider([]);
+        $provider = $this->provider([], mock: true);
         $provider->expects($this->never())->method('listModels');
         $this->cache->method('get')->willReturn(['cached-a', 'cached-b']);
 
@@ -337,7 +362,10 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testRefreshBypassesTheCacheAndStoresTheResult(): void {
-        $provider = $this->provider([]);
+        $this->cache = $this->createMock(ICache::class);
+        $this->buildService();
+
+        $provider = $this->provider([], mock: true);
         $provider->expects($this->once())->method('listModels')->willReturn(['live-a']);
         $this->cache->expects($this->never())->method('get');
         $this->cache->expects($this->once())->method('set')->with('instance', ['live-a'], 3600);
@@ -346,6 +374,9 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testUnreachableProviderFallsBackAndRemembersTheFailure(): void {
+        $this->cache = $this->createMock(ICache::class);
+        $this->buildService();
+
         $provider = $this->provider([]);
         $provider->method('listModels')->willReturn(null);
         $provider->method('getModel')->willReturn('configured-tag');
@@ -360,7 +391,7 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testCachedFailureServesTheFallbackWithoutCallingTheProvider(): void {
-        $provider = $this->provider([]);
+        $provider = $this->provider([], mock: true);
         $provider->expects($this->never())->method('listModels');
         $provider->method('getModel')->willReturn('configured-tag');
         $this->cache->method('get')->willReturn(['__aiquila_failed' => true]);
@@ -369,7 +400,10 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testRefreshBypassesACachedFailure(): void {
-        $provider = $this->provider([]);
+        $this->cache = $this->createMock(ICache::class);
+        $this->buildService();
+
+        $provider = $this->provider([], mock: true);
         $provider->expects($this->once())->method('listModels')->willReturn(['live-a']);
         $this->cache->expects($this->never())->method('get');
 
@@ -403,6 +437,9 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testForgetModelsClearsEveryScopeOfTheProvider(): void {
+        $this->cache = $this->createMock(ICache::class);
+        $this->buildService();
+
         // remove() cannot drop the per-user entries, so each provider owns a
         // cache namespace and the sweep clears the whole thing.
         $this->cache->expects($this->once())->method('clear');
@@ -412,7 +449,10 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testStatusIsReusedWithinTheThrottleWindow(): void {
-        $provider = $this->provider([]);
+        $this->cache = $this->createMock(ICache::class);
+        $this->buildService();
+
+        $provider = $this->provider([], mock: true);
         $provider->method('getId')->willReturn('testprovider');
         $provider->expects($this->once())->method('probe')->willReturn(
             ProviderProbe::unconfigured('no key', 'some-model')
@@ -454,6 +494,10 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testNamedSecretGoesToTheCredentialStoreNotConfig(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildService();
+
         $provider = $this->provider($this->secretSchema());
 
         $this->config->expects($this->never())->method('setAppValue');
@@ -465,6 +509,9 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testEmptyNamedSecretClearsIt(): void {
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildService();
+
         $provider = $this->provider($this->secretSchema());
 
         $this->credentials->expects($this->once())->method('deleteSecret')->with('test_extra_headers');
@@ -498,6 +545,9 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testMalformedHeaderBlockIsRejectedBeforeStorage(): void {
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildService();
+
         $provider = $this->provider($this->secretSchema());
 
         $this->credentials->expects($this->never())->method('setSecret');
@@ -532,6 +582,9 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testReadableCertificatePathIsAccepted(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $provider = $this->provider($this->secretSchema());
         $path = tempnam(sys_get_temp_dir(), 'aiquila-ca');
 
@@ -559,6 +612,9 @@ class ProviderSettingsServiceTest extends TestCase {
     // ── Cloud endpoint formats ──────────────────────────────────────────
 
     public function testCloudEndpointPartsAreValidatedBeforeStorage(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $provider = $this->provider([
             ProviderSettingsSchema::text('region', 'region_test', 'AWS region', '', format: ProviderSettingsSchema::FORMAT_AWS_REGION),
             ProviderSettingsSchema::text('resource', 'resource_test', 'Foundry resource', '', format: ProviderSettingsSchema::FORMAT_AZURE_RESOURCE),
@@ -581,6 +637,9 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testServiceAccountKeyMustBeJson(): void {
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildService();
+
         $provider = $this->provider([
             ProviderSettingsSchema::secretTextarea('service_account', 'test_sa', 'Key', '', format: ProviderSettingsSchema::FORMAT_JSON_OBJECT),
         ]);

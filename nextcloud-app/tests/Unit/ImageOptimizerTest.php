@@ -11,7 +11,7 @@ class ImageOptimizerTest extends TestCase {
     private LoggerInterface $logger;
 
     protected function setUp(): void {
-        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
         $this->optimizer = new ImageOptimizer($this->logger);
     }
 

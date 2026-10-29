@@ -9,18 +9,15 @@ use OCA\AIquila\Db\MessageFileMapper;
 
 class MessageFileMapperTest extends MapperTestCase {
 
-    private function makeMapper(): MessageFileMapper {
-        return $this->getMockBuilder(MessageFileMapper::class)
-            ->setConstructorArgs([$this->db])
-            ->onlyMethods(['findEntities'])
-            ->getMock();
+    private function makeMapper(bool $mock = false): MessageFileMapper {
+        return $this->partialMapper(MessageFileMapper::class, ['findEntities'], $mock);
     }
 
     public function testFindByMessageCallsFindEntities(): void {
         $file = new MessageFile();
         $file->setMessageId(3);
 
-        $mapper = $this->makeMapper();
+        $mapper = $this->makeMapper(mock: true);
         $mapper->expects($this->once())
             ->method('findEntities')
             ->willReturn([$file]);
@@ -32,6 +29,8 @@ class MessageFileMapperTest extends MapperTestCase {
     }
 
     public function testFindByMessageOrdersByCreatedAtAsc(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())
             ->method('orderBy')
             ->with('created_at', 'ASC')
@@ -43,6 +42,8 @@ class MessageFileMapperTest extends MapperTestCase {
     }
 
     public function testDeleteByMessageCallsExecuteStatement(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())->method('executeStatement');
 
         $mapper = new MessageFileMapper($this->db);
@@ -50,6 +51,8 @@ class MessageFileMapperTest extends MapperTestCase {
     }
 
     public function testTableName(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())
             ->method('from')
             ->with('aiquila_message_files')

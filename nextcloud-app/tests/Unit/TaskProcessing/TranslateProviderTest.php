@@ -22,7 +22,11 @@ class TranslateProviderTest extends TestCase {
     private TranslateProvider $provider;
 
     protected function setUp(): void {
-        $this->factory = $this->createMock(LLMProviderFactory::class);
+        $this->factory = $this->createStub(LLMProviderFactory::class);
+        $this->buildProvider();
+    }
+
+    private function buildProvider(): void {
         $l10n = $this->createStub(IL10N::class);
         $l10n->method('t')->willReturnArgument(0);
         $l10nFactory = $this->createStub(IFactory::class);
@@ -98,6 +102,9 @@ class TranslateProviderTest extends TestCase {
     }
 
     public function testRunsOnTheUsersProviderRatherThanAnthropic(): void {
+        $this->factory = $this->createMock(LLMProviderFactory::class);
+        $this->buildProvider();
+
         $local = $this->createMock(LLMProviderInterface::class);
         $local->expects($this->once())
             ->method('ask')
@@ -127,7 +134,7 @@ class TranslateProviderTest extends TestCase {
 
     public function testOriginLanguageIsOptional(): void {
         $local = $this->createMock(LLMProviderInterface::class);
-        $local->method('ask')
+        $local->expects($this->once())->method('ask')
             ->with($this->logicalNot($this->stringContains(' from ')))
             ->willReturn(['response' => 'Bonjour']);
         $this->factory->method('getProviderForUser')->willReturn($local);

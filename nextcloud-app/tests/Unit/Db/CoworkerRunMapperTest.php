@@ -9,6 +9,8 @@ use OCA\AIquila\Db\CoworkerRunMapper;
 class CoworkerRunMapperTest extends MapperTestCase {
 
     public function testTableName(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())
             ->method('from')
             ->with('aiquila_coworker_runs')

@@ -25,9 +25,9 @@ class TextProvidersTest extends TestCase {
     private ProviderResolver $resolver;
 
     protected function setUp(): void {
-        $this->factory = $this->createMock(LLMProviderFactory::class);
-        $this->llm = $this->createMock(LLMProviderInterface::class);
-        $this->factory->method('getProviderForUser')->willReturn($this->llm);
+        $this->factory = $this->createStub(LLMProviderFactory::class);
+        $this->llm = $this->createStub(LLMProviderInterface::class);
+        $this->factory->method('getProviderForUser')->willReturnCallback(fn () => $this->llm);
         $this->resolver = new ProviderResolver($this->factory);
     }
 
@@ -53,6 +53,7 @@ class TextProvidersTest extends TestCase {
     }
 
     public function testChatMapsHistoryToAlternatingRoles(): void {
+        $this->llm = $this->createMock(LLMProviderInterface::class);
         $this->llm->expects($this->once())
             ->method('chat')
             ->with(
@@ -76,6 +77,7 @@ class TextProvidersTest extends TestCase {
     }
 
     public function testChatWithoutHistoryOrSystemPromptSendsOnlyTheMessage(): void {
+        $this->llm = $this->createMock(LLMProviderInterface::class);
         $this->llm->expects($this->once())
             ->method('chat')
             ->with([['role' => 'user', 'content' => 'Hi']], null, 'alice')
@@ -105,6 +107,7 @@ class TextProvidersTest extends TestCase {
     }
 
     public function testContextWriteSendsBothStyleAndSubject(): void {
+        $this->llm = $this->createMock(LLMProviderInterface::class);
         $this->llm->expects($this->once())
             ->method('ask')
             ->with(
@@ -141,6 +144,7 @@ class TextProvidersTest extends TestCase {
     }
 
     public function testImproveSendsInstructionsAndText(): void {
+        $this->llm = $this->createMock(LLMProviderInterface::class);
         $this->llm->expects($this->once())
             ->method('ask')
             ->with(
@@ -159,6 +163,7 @@ class TextProvidersTest extends TestCase {
     }
 
     public function testImproveFallsBackToGeneralInstructions(): void {
+        $this->llm = $this->createMock(LLMProviderInterface::class);
         $this->llm->expects($this->once())
             ->method('ask')
             ->with($this->stringContains(ImproveProvider::DEFAULT_INSTRUCTIONS), '', 'alice')

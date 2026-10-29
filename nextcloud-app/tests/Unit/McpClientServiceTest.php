@@ -101,9 +101,9 @@ class McpClientServiceTest extends TestCase {
     private TestableMcpClientService $service;
 
     protected function setUp(): void {
-        $this->mapper = $this->createMock(McpServerMapper::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->credentials = $this->createMock(CredentialService::class);
+        $this->mapper = $this->createStub(McpServerMapper::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
+        $this->credentials = $this->createStub(CredentialService::class);
 
         // Default: encrypt/decrypt pass through for test simplicity
         $this->credentials->method('encryptToken')
@@ -111,6 +111,10 @@ class McpClientServiceTest extends TestCase {
         $this->credentials->method('decryptToken')
             ->willReturnCallback(fn(?string $v) => $v);
 
+        $this->buildService();
+    }
+
+    private function buildService(): void {
         $this->service = new TestableMcpClientService($this->mapper, $this->logger, $this->credentials);
     }
 
@@ -377,9 +381,12 @@ class McpClientServiceTest extends TestCase {
     }
 
     public function testExecuteToolResolvesMapping(): void {
+        $this->mapper = $this->createMock(McpServerMapper::class);
+        $this->buildService();
+
         $server = $this->makeServer(1, 'Test');
 
-        $this->mapper->method('findById')->with(1)->willReturn($server);
+        $this->mapper->expects($this->once())->method('findById')->with(1)->willReturn($server);
 
         // Queue: initialize + tools/call
         $this->service->queueResponse([]);

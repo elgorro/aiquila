@@ -17,10 +17,14 @@ class CredentialServiceTest extends TestCase {
     private CredentialService $service;
 
     protected function setUp(): void {
-        $this->credManager = $this->createMock(ICredentialsManager::class);
-        $this->crypto = $this->createMock(ICrypto::class);
-        $this->config = $this->createMock(IConfig::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->credManager = $this->createStub(ICredentialsManager::class);
+        $this->crypto = $this->createStub(ICrypto::class);
+        $this->config = $this->createStub(IConfig::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
+        $this->buildService();
+    }
+
+    private function buildService(): void {
         $this->service = new CredentialService(
             $this->credManager,
             $this->crypto,
@@ -30,7 +34,10 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testGetApiKeyFromCredentialsManager(): void {
-        $this->credManager->method('retrieve')
+        $this->credManager = $this->createMock(ICredentialsManager::class);
+        $this->buildService();
+
+        $this->credManager->expects($this->once())->method('retrieve')
             ->with('testuser', 'aiquila/api_key')
             ->willReturn('sk-ant-secure-key');
 
@@ -39,11 +46,15 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testGetApiKeyMigratesFromIConfig(): void {
-        $this->credManager->method('retrieve')
+        $this->credManager = $this->createMock(ICredentialsManager::class);
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
+        $this->credManager->expects($this->once())->method('retrieve')
             ->with('testuser', 'aiquila/api_key')
             ->willReturn(null);
 
-        $this->config->method('getUserValue')
+        $this->config->expects($this->once())->method('getUserValue')
             ->with('testuser', 'aiquila', 'api_key', '')
             ->willReturn('sk-ant-plaintext-key');
 
@@ -62,6 +73,9 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testGetApiKeyFallsBackToAppKey(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         // User key not found in either store
         $this->credManager->method('retrieve')
             ->willReturnMap([
@@ -69,7 +83,7 @@ class CredentialServiceTest extends TestCase {
                 ['', 'aiquila/api_key', 'sk-ant-app-key'],
             ]);
 
-        $this->config->method('getUserValue')
+        $this->config->expects($this->once())->method('getUserValue')
             ->with('testuser', 'aiquila', 'api_key', '')
             ->willReturn('');
 
@@ -78,7 +92,10 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testGetApiKeyAppScope(): void {
-        $this->credManager->method('retrieve')
+        $this->credManager = $this->createMock(ICredentialsManager::class);
+        $this->buildService();
+
+        $this->credManager->expects($this->once())->method('retrieve')
             ->with('', 'aiquila/api_key')
             ->willReturn('sk-ant-app-key');
 
@@ -87,11 +104,15 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testGetApiKeyAppScopeMigratesFromIConfig(): void {
-        $this->credManager->method('retrieve')
+        $this->credManager = $this->createMock(ICredentialsManager::class);
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
+        $this->credManager->expects($this->once())->method('retrieve')
             ->with('', 'aiquila/api_key')
             ->willReturn(null);
 
-        $this->config->method('getAppValue')
+        $this->config->expects($this->once())->method('getAppValue')
             ->with('aiquila', 'api_key', '')
             ->willReturn('sk-ant-old-app-key');
 
@@ -108,7 +129,10 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testHasApiKeyTrue(): void {
-        $this->credManager->method('retrieve')
+        $this->credManager = $this->createMock(ICredentialsManager::class);
+        $this->buildService();
+
+        $this->credManager->expects($this->once())->method('retrieve')
             ->with('testuser', 'aiquila/api_key')
             ->willReturn('sk-ant-key');
 
@@ -116,11 +140,15 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testHasApiKeyFalse(): void {
-        $this->credManager->method('retrieve')
+        $this->credManager = $this->createMock(ICredentialsManager::class);
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
+        $this->credManager->expects($this->once())->method('retrieve')
             ->with('testuser', 'aiquila/api_key')
             ->willReturn(null);
 
-        $this->config->method('getUserValue')
+        $this->config->expects($this->once())->method('getUserValue')
             ->with('testuser', 'aiquila', 'api_key', '')
             ->willReturn('');
 
@@ -128,11 +156,15 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testHasApiKeyChecksPlaintextFallback(): void {
-        $this->credManager->method('retrieve')
+        $this->credManager = $this->createMock(ICredentialsManager::class);
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
+        $this->credManager->expects($this->once())->method('retrieve')
             ->with('testuser', 'aiquila/api_key')
             ->willReturn(null);
 
-        $this->config->method('getUserValue')
+        $this->config->expects($this->once())->method('getUserValue')
             ->with('testuser', 'aiquila', 'api_key', '')
             ->willReturn('sk-ant-plaintext');
 
@@ -140,6 +172,10 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testSetApiKeyStoresAndCleansPlaintext(): void {
+        $this->credManager = $this->createMock(ICredentialsManager::class);
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $this->credManager->expects($this->once())
             ->method('store')
             ->with('testuser', 'aiquila/api_key', 'sk-ant-new-key');
@@ -152,6 +188,10 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testSetApiKeyAppScope(): void {
+        $this->credManager = $this->createMock(ICredentialsManager::class);
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $this->credManager->expects($this->once())
             ->method('store')
             ->with('', 'aiquila/api_key', 'sk-ant-app-key');
@@ -164,6 +204,10 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testDeleteApiKey(): void {
+        $this->credManager = $this->createMock(ICredentialsManager::class);
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $this->credManager->expects($this->once())
             ->method('delete')
             ->with('testuser', 'aiquila/api_key');
@@ -184,7 +228,10 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testEncryptToken(): void {
-        $this->crypto->method('encrypt')
+        $this->crypto = $this->createMock(ICrypto::class);
+        $this->buildService();
+
+        $this->crypto->expects($this->once())->method('encrypt')
             ->with('my-secret-token')
             ->willReturn('encrypted-data');
 
@@ -197,7 +244,10 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testDecryptTokenDecryptsEncrypted(): void {
-        $this->crypto->method('decrypt')
+        $this->crypto = $this->createMock(ICrypto::class);
+        $this->buildService();
+
+        $this->crypto->expects($this->once())->method('decrypt')
             ->with('encrypted-data')
             ->willReturn('my-secret-token');
 
@@ -206,6 +256,9 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testDecryptTokenPlaintextFallback(): void {
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildService();
+
         $this->crypto->method('decrypt')
             ->willThrowException(new \Exception('Invalid ciphertext'));
 
@@ -219,6 +272,9 @@ class CredentialServiceTest extends TestCase {
     // ── Named secrets ───────────────────────────────────────────────────
 
     public function testSetSecretStoresUnderItsOwnNamespace(): void {
+        $this->credManager = $this->createMock(ICredentialsManager::class);
+        $this->buildService();
+
         // Namespaced away from the per-provider API keys so a secret name can
         // never collide with a provider id.
         $this->credManager->expects($this->once())
@@ -250,6 +306,9 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testDeleteSecret(): void {
+        $this->credManager = $this->createMock(ICredentialsManager::class);
+        $this->buildService();
+
         $this->credManager->expects($this->once())
             ->method('delete')
             ->with('', 'aiquila/secret/local_extra_headers');

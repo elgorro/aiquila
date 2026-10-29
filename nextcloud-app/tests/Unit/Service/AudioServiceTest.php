@@ -21,7 +21,7 @@ class AudioServiceTest extends TestCase {
     }
 
     private function provider() {
-        $provider = $this->createMock(LLMProviderInterface::class);
+        $provider = $this->createStub(LLMProviderInterface::class);
         $provider->method('getId')->willReturn('mistral');
         $provider->method('getLabel')->willReturn('Mistral');
         return $provider;

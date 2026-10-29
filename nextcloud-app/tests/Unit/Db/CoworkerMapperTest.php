@@ -9,18 +9,15 @@ use OCA\AIquila\Db\CoworkerMapper;
 
 class CoworkerMapperTest extends MapperTestCase {
 
-    private function makeMapper(): CoworkerMapper {
-        return $this->getMockBuilder(CoworkerMapper::class)
-            ->setConstructorArgs([$this->db])
-            ->onlyMethods(['findEntities', 'findEntity'])
-            ->getMock();
+    private function makeMapper(bool $mock = false): CoworkerMapper {
+        return $this->partialMapper(CoworkerMapper::class, ['findEntities', 'findEntity'], $mock);
     }
 
     public function testFindAllByUserCallsFindEntities(): void {
         $cw = new Coworker();
         $cw->setUserId('frank');
 
-        $mapper = $this->makeMapper();
+        $mapper = $this->makeMapper(mock: true);
         $mapper->expects($this->once())
             ->method('findEntities')
             ->willReturn([$cw]);
@@ -32,6 +29,8 @@ class CoworkerMapperTest extends MapperTestCase {
     }
 
     public function testFindAllByUserOrdersByTitleAsc(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())
             ->method('orderBy')
             ->with('title', 'ASC')
@@ -43,6 +42,8 @@ class CoworkerMapperTest extends MapperTestCase {
     }
 
     public function testFindAllByUserExcludesAppOwned(): void {
+        $this->mockExpressionBuilder();
+
         // user filter via where(); owner_app IS NULL via andWhere()
         $this->expr->expects($this->once())->method('isNull')->with('owner_app')->willReturn('owner_app IS NULL');
 
@@ -55,7 +56,7 @@ class CoworkerMapperTest extends MapperTestCase {
         $cw = new Coworker();
         $cw->setOwnerApp('myapp');
 
-        $mapper = $this->makeMapper();
+        $mapper = $this->makeMapper(mock: true);
         $mapper->expects($this->once())
             ->method('findEntity')
             ->willReturn($cw);
@@ -68,7 +69,7 @@ class CoworkerMapperTest extends MapperTestCase {
         $cw = new Coworker();
         $cw->setOwnerApp('myapp');
 
-        $mapper = $this->makeMapper();
+        $mapper = $this->makeMapper(mock: true);
         $mapper->expects($this->once())
             ->method('findEntities')
             ->willReturn([$cw]);
@@ -80,6 +81,8 @@ class CoworkerMapperTest extends MapperTestCase {
     }
 
     public function testFindAllByAppWithUserAddsUserFilter(): void {
+        $this->mockQueryBuilder();
+
         // owner_app via where(); user_id + orderBy not via andWhere count is 1
         $this->qb->expects($this->once())->method('andWhere')->willReturnSelf();
 
@@ -91,7 +94,7 @@ class CoworkerMapperTest extends MapperTestCase {
     public function testFindByIdAndUserCallsFindEntity(): void {
         $cw = new Coworker();
 
-        $mapper = $this->makeMapper();
+        $mapper = $this->makeMapper(mock: true);
         $mapper->expects($this->once())
             ->method('findEntity')
             ->willReturn($cw);
@@ -105,7 +108,7 @@ class CoworkerMapperTest extends MapperTestCase {
         $cw->setIsActive(1);
         $cw->setNextRunAt(1000);
 
-        $mapper = $this->makeMapper();
+        $mapper = $this->makeMapper(mock: true);
         $mapper->expects($this->once())
             ->method('findEntities')
             ->willReturn([$cw]);
@@ -117,6 +120,8 @@ class CoworkerMapperTest extends MapperTestCase {
     }
 
     public function testFindDueForRunAppliesIsActiveFilter(): void {
+        $this->mockQueryBuilder();
+
         // is_active filter via where(); paused + next_run_at filters via andWhere()
         $this->qb->expects($this->once())->method('where')->willReturnSelf();
         $this->qb->expects($this->exactly(2))->method('andWhere')->willReturnSelf();
@@ -127,6 +132,8 @@ class CoworkerMapperTest extends MapperTestCase {
     }
 
     public function testTableName(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())
             ->method('from')
             ->with('aiquila_coworkers')

@@ -24,10 +24,14 @@ class AIquilaCapabilityTest extends TestCase {
     private AIquilaCapability $capability;
 
     protected function setUp(): void {
-        $this->config = $this->createMock(IConfig::class);
-        $this->credentialService = $this->createMock(CredentialService::class);
-        $this->appManager = $this->createMock(IAppManager::class);
+        $this->config = $this->createStub(IConfig::class);
+        $this->credentialService = $this->createStub(CredentialService::class);
+        $this->appManager = $this->createStub(IAppManager::class);
 
+        $this->buildCapability();
+    }
+
+    private function buildCapability(): void {
         // Providers only need their DI deps to run tasks; getTaskTypeId() touches none.
         $container = $this->createStub(ContainerInterface::class);
         $container->method('get')->willReturnCallback(
@@ -60,7 +64,10 @@ class AIquilaCapabilityTest extends TestCase {
     }
 
     public function testVersionFromAppManager(): void {
-        $this->appManager->method('getAppVersion')
+        $this->appManager = $this->createMock(IAppManager::class);
+        $this->buildCapability();
+
+        $this->appManager->expects($this->once())->method('getAppVersion')
             ->with('aiquila')
             ->willReturn('2.5.0');
         $this->config->method('getAppValue')->willReturn('');
@@ -86,9 +93,12 @@ class AIquilaCapabilityTest extends TestCase {
     }
 
     public function testApiConfiguredTrueWhenKeyExists(): void {
+        $this->credentialService = $this->createMock(CredentialService::class);
+        $this->buildCapability();
+
         $this->appManager->method('getAppVersion')->willReturn('1.0.0');
         $this->config->method('getAppValue')->willReturn('');
-        $this->credentialService->method('getApiKey')
+        $this->credentialService->expects($this->once())->method('getApiKey')
             ->with(null)
             ->willReturn('sk-ant-test-key');
 
@@ -98,9 +108,12 @@ class AIquilaCapabilityTest extends TestCase {
     }
 
     public function testApiConfiguredFalseWhenKeyEmpty(): void {
+        $this->credentialService = $this->createMock(CredentialService::class);
+        $this->buildCapability();
+
         $this->appManager->method('getAppVersion')->willReturn('1.0.0');
         $this->config->method('getAppValue')->willReturn('');
-        $this->credentialService->method('getApiKey')
+        $this->credentialService->expects($this->once())->method('getApiKey')
             ->with(null)
             ->willReturn('');
 

@@ -15,8 +15,8 @@ class AIquilaNotifierTest extends TestCase {
     private AIquilaNotifier $notifier;
 
     protected function setUp(): void {
-        $this->urlGenerator = $this->createMock(IURLGenerator::class);
-        $this->l10n = $this->createMock(IL10N::class);
+        $this->urlGenerator = $this->createStub(IURLGenerator::class);
+        $this->l10n = $this->createStub(IL10N::class);
         $this->l10n->method('t')->willReturnCallback(
             fn(string $text, array $params = []) => $params ? vsprintf($text, $params) : $text
         );
@@ -36,7 +36,7 @@ class AIquilaNotifierTest extends TestCase {
     }
 
     public function testPrepareThrowsForOtherApp(): void {
-        $notification = $this->createMock(INotification::class);
+        $notification = $this->createStub(INotification::class);
         $notification->method('getApp')->willReturn('other_app');
 
         $this->expectException(UnknownNotificationException::class);
@@ -135,7 +135,7 @@ class AIquilaNotifierTest extends TestCase {
     }
 
     public function testPrepareUnknownSubjectThrows(): void {
-        $notification = $this->createMock(INotification::class);
+        $notification = $this->createStub(INotification::class);
         $notification->method('getApp')->willReturn('aiquila');
         $notification->method('getSubject')->willReturn('unknown_subject');
 

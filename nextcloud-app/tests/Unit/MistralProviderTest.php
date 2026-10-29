@@ -21,13 +21,13 @@ class MistralProviderTest extends TestCase {
     private MistralProvider $provider;
 
     protected function setUp(): void {
-        $this->clientService = $this->createMock(IClientService::class);
-        $this->client        = $this->createMock(IClient::class);
-        $this->config        = $this->createMock(IConfig::class);
-        $this->credentials   = $this->createMock(CredentialService::class);
-        $this->logger        = $this->createMock(LoggerInterface::class);
+        $this->clientService = $this->createStub(IClientService::class);
+        $this->client        = $this->createStub(IClient::class);
+        $this->config        = $this->createStub(IConfig::class);
+        $this->credentials   = $this->createStub(CredentialService::class);
+        $this->logger        = $this->createStub(LoggerInterface::class);
 
-        $this->clientService->method('newClient')->willReturn($this->client);
+        $this->clientService->method('newClient')->willReturnCallback(fn () => $this->client);
         $this->credentials->method('getApiKey')->willReturn('test-key');
         // Config defaults: getAppValue($app, $key, $default) -> $default; getUserValue -> ''.
         $this->config->method('getAppValue')->willReturnArgument(2);
@@ -42,13 +42,13 @@ class MistralProviderTest extends TestCase {
     }
 
     private function jsonResponse(array $payload): IResponse {
-        $response = $this->createMock(IResponse::class);
+        $response = $this->createStub(IResponse::class);
         $response->method('getBody')->willReturn(json_encode($payload));
         return $response;
     }
 
     private function sseResponse(string $sse): IResponse {
-        $response = $this->createMock(IResponse::class);
+        $response = $this->createStub(IResponse::class);
         $response->method('getBody')->willReturn($sse);
         return $response;
     }
@@ -455,6 +455,7 @@ class MistralProviderTest extends TestCase {
     }
 
     public function testTranscribeAudioRejectsAnEmptyRecordingWithoutCallingTheApi(): void {
+        $this->client = $this->createMock(IClient::class);
         $this->client->expects($this->never())->method('post');
 
         $this->assertSame(['error' => 'No audio to transcribe.'], $this->provider->transcribeAudio('', 'audio/mpeg', 'a.mp3', 'u'));
@@ -482,7 +483,7 @@ class MistralProviderTest extends TestCase {
 
     /** The OpenAI-shaped route this mirrors answers with the bytes directly. */
     public function testSynthesizeSpeechAcceptsARawAudioBody(): void {
-        $response = $this->createMock(IResponse::class);
+        $response = $this->createStub(IResponse::class);
         $response->method('getBody')->willReturn("ID3\x03 raw mp3");
         $this->client->method('post')->willReturn($response);
 
@@ -490,6 +491,7 @@ class MistralProviderTest extends TestCase {
     }
 
     public function testSynthesizeSpeechRejectsBlankTextWithoutCallingTheApi(): void {
+        $this->client = $this->createMock(IClient::class);
         $this->client->expects($this->never())->method('post');
 
         $this->assertSame(['error' => 'No text to speak.'], $this->provider->synthesizeSpeech('   ', 'u'));
@@ -518,7 +520,7 @@ class MistralProviderTest extends TestCase {
         $this->client->method('get')->willReturnCallback(
             function (string $u) use (&$downloaded): IResponse {
                 $downloaded[] = $u;
-                $response = $this->createMock(IResponse::class);
+                $response = $this->createStub(IResponse::class);
                 $response->method('getBody')->willReturn('png-' . count($downloaded));
                 return $response;
             }
@@ -542,6 +544,7 @@ class MistralProviderTest extends TestCase {
     }
 
     public function testGenerateImagesStopsAtTheRequestedCount(): void {
+        $this->client = $this->createMock(IClient::class);
         $this->client->method('post')->willReturn($this->jsonResponse([
             'outputs' => [['type' => 'message.output', 'content' => [
                 ['type' => 'tool_file', 'file_id' => 'file-1', 'file_type' => 'jpg'],
@@ -550,7 +553,7 @@ class MistralProviderTest extends TestCase {
         ]));
         $this->client->expects($this->once())->method('get')->willReturnCallback(
             function (): IResponse {
-                $response = $this->createMock(IResponse::class);
+                $response = $this->createStub(IResponse::class);
                 $response->method('getBody')->willReturn('jpeg-bytes');
                 return $response;
             }

@@ -18,11 +18,11 @@ class DocsTranslateFolderTaskTypeTest extends TestCase {
 
     protected function setUp(): void {
         $this->task = new DocsTranslateFolderTaskType(
-            $this->createMock(IRootFolder::class),
-            $this->createMock(LLMProviderFactory::class),
-            $this->createMock(ISystemTagManager::class),
-            $this->createMock(ISystemTagObjectMapper::class),
-            $this->createMock(LoggerInterface::class),
+            $this->createStub(IRootFolder::class),
+            $this->createStub(LLMProviderFactory::class),
+            $this->createStub(ISystemTagManager::class),
+            $this->createStub(ISystemTagObjectMapper::class),
+            $this->createStub(LoggerInterface::class),
         );
     }
 
@@ -55,7 +55,7 @@ class DocsTranslateFolderTaskTypeTest extends TestCase {
     }
 
     public function testOutputNameCarriesTheLanguage(): void {
-        $file = $this->createMock(File::class);
+        $file = $this->createStub(File::class);
         $file->method('getName')->willReturn('report.md');
 
         $name = $this->callOutputName($file, ['targetLanguage' => 'German']);
@@ -68,7 +68,7 @@ class DocsTranslateFolderTaskTypeTest extends TestCase {
      * same output rather than quietly duplicating the work.
      */
     public function testOutputNameNormalisesSpacingAndCase(): void {
-        $file = $this->createMock(File::class);
+        $file = $this->createStub(File::class);
         $file->method('getName')->willReturn('report.md');
 
         $this->assertSame(

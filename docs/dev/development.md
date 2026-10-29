@@ -174,6 +174,17 @@ composer test
 ./vendor/bin/phpunit
 ```
 
+`phpunit.xml` sets `failOnPhpunitDeprecation` and `failOnPhpunitNotice`, so the
+suite fails on how a test double is used, not only on assertions:
+
+- Use `createStub()` for a collaborator the test only needs answers from, and
+  `createMock()` only when the test verifies calls with `expects()`. A mock with
+  no expectations is a notice.
+- `with()` needs an explicit `expects()` in front of it. For an answer that
+  depends on the arguments, use `willReturnMap()` or `willReturnCallback()` on a stub.
+- Fixtures shared through `setUp()` are stubs. A test that verifies one swaps in
+  a mock and rebuilds the object under test, as the `build…()` helpers do.
+
 ## Code Style
 
 ### TypeScript (MCP Server)

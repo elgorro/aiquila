@@ -9,18 +9,15 @@ use OCA\AIquila\Db\MessageMapper;
 
 class MessageMapperTest extends MapperTestCase {
 
-    private function makeMapper(): MessageMapper {
-        return $this->getMockBuilder(MessageMapper::class)
-            ->setConstructorArgs([$this->db])
-            ->onlyMethods(['findEntities'])
-            ->getMock();
+    private function makeMapper(bool $mock = false): MessageMapper {
+        return $this->partialMapper(MessageMapper::class, ['findEntities'], $mock);
     }
 
     public function testFindByConversationCallsFindEntities(): void {
         $msg = new Message();
         $msg->setConversationId(5);
 
-        $mapper = $this->makeMapper();
+        $mapper = $this->makeMapper(mock: true);
         $mapper->expects($this->once())
             ->method('findEntities')
             ->willReturn([$msg]);
@@ -32,6 +29,8 @@ class MessageMapperTest extends MapperTestCase {
     }
 
     public function testFindByConversationOrdersByCreatedAtAsc(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())
             ->method('orderBy')
             ->with('created_at', 'ASC')
@@ -43,6 +42,8 @@ class MessageMapperTest extends MapperTestCase {
     }
 
     public function testDeleteByConversationCallsExecuteStatement(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())->method('executeStatement');
 
         $mapper = new MessageMapper($this->db);
@@ -50,6 +51,8 @@ class MessageMapperTest extends MapperTestCase {
     }
 
     public function testTableName(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())
             ->method('from')
             ->with('aiquila_messages')

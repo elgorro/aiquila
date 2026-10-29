@@ -30,30 +30,34 @@ class ChatControllerTest extends TestCase {
     private ChatController $ctrl;
 
     protected function setUp(): void {
-        $this->cache        = $this->createMock(ICache::class);
-        $this->cacheFactory = $this->createMock(ICacheFactory::class);
+        $this->cache        = $this->createStub(ICache::class);
+        $this->cacheFactory = $this->createStub(ICacheFactory::class);
         $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
-        $this->claude      = $this->createMock(ClaudeSDKService::class);
-        $this->factory     = $this->createMock(LLMProviderFactory::class);
+        $this->claude      = $this->createStub(ClaudeSDKService::class);
+        $this->factory     = $this->createStub(LLMProviderFactory::class);
         // Access control is exercised in LLMProviderFactoryTest; here every
         // provider is permitted so the endpoints reach their own logic.
         $this->factory->method('hasPermittedProvider')->willReturn(true);
-        $this->factory->method('getProvider')->willReturn($this->claude);
-        $this->fileService = $this->createMock(FileService::class);
-        $this->filesService = $this->createMock(FilesService::class);
+        $this->factory->method('getProvider')->willReturnCallback(fn () => $this->claude);
+        $this->fileService = $this->createStub(FileService::class);
+        $this->filesService = $this->createStub(FilesService::class);
         // By default no Files API dedup — tests get null and the existing base64 path
         $this->filesService->method('getOrUploadFileId')->willReturn(null);
-        $this->imageOptimizer = $this->createMock(ImageOptimizer::class);
+        $this->imageOptimizer = $this->createStub(ImageOptimizer::class);
         // By default, optimizer passes through images unchanged
         $this->imageOptimizer->method('isSupported')->willReturn(true);
         $this->imageOptimizer->method('optimize')->willReturnCallback(
             fn(string $raw, string $mime) => ['data' => base64_encode($raw), 'mimeType' => $mime, 'resized' => false]
         );
-        $this->mcpClient   = $this->createMock(McpClientService::class);
-        $this->nativeMcp   = $this->createMock(\OCA\AIquila\Service\NativeMcpService::class);
+        $this->mcpClient   = $this->createStub(McpClientService::class);
+        $this->nativeMcp   = $this->createStub(\OCA\AIquila\Service\NativeMcpService::class);
         $this->nativeMcp->method('isEnabledForUser')->willReturn(false);
-        $this->request     = $this->createMock(IRequest::class);
-        $this->logger      = $this->createMock(LoggerInterface::class);
+        $this->request     = $this->createStub(IRequest::class);
+        $this->logger      = $this->createStub(LoggerInterface::class);
+        $this->buildCtrl();
+    }
+
+    private function buildCtrl(): void {
         $this->ctrl        = new ChatController(
             'aiquila',
             $this->request,
@@ -130,6 +134,9 @@ class ChatControllerTest extends TestCase {
     }
 
     public function testAskDelegatesToClaudeService(): void {
+        $this->claude = $this->createMock(ClaudeSDKService::class);
+        $this->buildCtrl();
+
         $this->cache->method('get')->willReturn(null);
 
         $this->claude->expects($this->once())
@@ -145,6 +152,10 @@ class ChatControllerTest extends TestCase {
     // ── ask() with files tests ──────────────────────────────────────────
 
     public function testAskWithFilesSendsContext(): void {
+        $this->claude = $this->createMock(ClaudeSDKService::class);
+        $this->fileService = $this->createMock(FileService::class);
+        $this->buildCtrl();
+
         $this->cache->method('get')->willReturn(null);
 
         $this->fileService->expects($this->once())
@@ -172,6 +183,9 @@ class ChatControllerTest extends TestCase {
     }
 
     public function testAskWithNonexistentFileReturns404(): void {
+        $this->fileService = $this->createMock(FileService::class);
+        $this->buildCtrl();
+
         $this->cache->method('get')->willReturn(null);
 
         $this->fileService->expects($this->once())
@@ -185,6 +199,10 @@ class ChatControllerTest extends TestCase {
     }
 
     public function testAskWithImageFileDelegatesToVision(): void {
+        $this->claude = $this->createMock(ClaudeSDKService::class);
+        $this->fileService = $this->createMock(FileService::class);
+        $this->buildCtrl();
+
         $this->cache->method('get')->willReturn(null);
 
         $this->fileService->expects($this->once())
@@ -207,6 +225,10 @@ class ChatControllerTest extends TestCase {
     }
 
     public function testAskWithMultipleImagesDelegatesToAskWithImages(): void {
+        $this->claude = $this->createMock(ClaudeSDKService::class);
+        $this->fileService = $this->createMock(FileService::class);
+        $this->buildCtrl();
+
         $this->cache->method('get')->willReturn(null);
 
         $this->fileService->expects($this->exactly(2))
@@ -236,6 +258,10 @@ class ChatControllerTest extends TestCase {
     }
 
     public function testAskWithMixedFilesUsesStructuredContent(): void {
+        $this->claude = $this->createMock(ClaudeSDKService::class);
+        $this->fileService = $this->createMock(FileService::class);
+        $this->buildCtrl();
+
         $this->cache->method('get')->willReturn(null);
 
         $this->fileService->expects($this->exactly(2))
@@ -285,6 +311,9 @@ class ChatControllerTest extends TestCase {
     }
 
     public function testSummarizeDelegatesToClaudeService(): void {
+        $this->claude = $this->createMock(ClaudeSDKService::class);
+        $this->buildCtrl();
+
         $this->cache->method('get')->willReturn(null);
 
         $this->claude->expects($this->once())

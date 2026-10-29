@@ -47,12 +47,12 @@ class ConversationControllerStreamTest extends TestCase {
         $this->conversation->setUserId('testuser');
         $this->conversation->setTitle(null);
 
-        $conversationMapper = $this->createMock(ConversationMapper::class);
+        $conversationMapper = $this->createStub(ConversationMapper::class);
         $conversationMapper->method('findByIdAndUser')->willReturn($this->conversation);
         $conversationMapper->method('update')->willReturnArgument(0);
 
         $nextId = 1;
-        $this->messageMapper = $this->createMock(MessageMapper::class);
+        $this->messageMapper = $this->createStub(MessageMapper::class);
         $this->messageMapper->method('insert')->willReturnCallback(
             function (MessageEntity $m) use (&$nextId): MessageEntity {
                 $m->setId($nextId++);
@@ -62,7 +62,7 @@ class ConversationControllerStreamTest extends TestCase {
         );
         $this->messageMapper->method('findByConversation')->willReturn([]);
 
-        $provider = $this->createMock(LLMProviderInterface::class);
+        $provider = $this->createStub(LLMProviderInterface::class);
         $provider->method('supportsNativeMcp')->willReturn(false);
         $provider->method('getId')->willReturn('local');
         $provider->method('getLabel')->willReturn('Local model');
@@ -76,17 +76,17 @@ class ConversationControllerStreamTest extends TestCase {
             }
         );
 
-        $factory = $this->createMock(LLMProviderFactory::class);
+        $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('hasPermittedProvider')->willReturn(true);
         $factory->method('getProviderForUser')->willReturn($provider);
 
-        $mcpClient = $this->createMock(McpClientService::class);
+        $mcpClient = $this->createStub(McpClientService::class);
         $mcpClient->method('getAllTools')->willReturn(['tools' => [], 'mapping' => []]);
 
-        $nativeMcp = $this->createMock(NativeMcpService::class);
+        $nativeMcp = $this->createStub(NativeMcpService::class);
         $nativeMcp->method('isEnabledForUser')->willReturn(false);
 
-        $request = $this->createMock(IRequest::class);
+        $request = $this->createStub(IRequest::class);
         $request->method('getParams')->willReturn([]);
 
         return new ConversationController(
@@ -94,19 +94,19 @@ class ConversationControllerStreamTest extends TestCase {
             $request,
             $conversationMapper,
             $this->messageMapper,
-            $this->createMock(MessageFileMapper::class),
-            $this->createMock(ProjectMapper::class),
-            $this->createMock(ProjectPathMapper::class),
+            $this->createStub(MessageFileMapper::class),
+            $this->createStub(ProjectMapper::class),
+            $this->createStub(ProjectPathMapper::class),
             $factory,
-            $this->createMock(FileService::class),
-            $this->createMock(FilesService::class),
-            $this->createMock(ImageOptimizer::class),
+            $this->createStub(FileService::class),
+            $this->createStub(FilesService::class),
+            $this->createStub(ImageOptimizer::class),
             $mcpClient,
             $nativeMcp,
-            $this->createMock(IJobList::class),
-            $this->createMock(ContextChatService::class),
+            $this->createStub(IJobList::class),
+            $this->createStub(ContextChatService::class),
             'testuser',
-            $this->createMock(LoggerInterface::class),
+            $this->createStub(LoggerInterface::class),
         );
     }
 

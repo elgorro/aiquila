@@ -24,12 +24,12 @@ class SettingsControllerTest extends TestCase {
     private SettingsController $ctrl;
 
     protected function setUp(): void {
-        $this->config      = $this->createMock(IConfig::class);
-        $this->request     = $this->createMock(IRequest::class);
-        $this->factory     = $this->createMock(LLMProviderFactory::class);
-        $this->provider    = $this->createMock(LLMProviderInterface::class);
-        $this->credentials = $this->createMock(CredentialService::class);
-        $this->nativeMcp   = $this->createMock(\OCA\AIquila\Service\NativeMcpService::class);
+        $this->config      = $this->createStub(IConfig::class);
+        $this->request     = $this->createStub(IRequest::class);
+        $this->factory     = $this->createStub(LLMProviderFactory::class);
+        $this->provider    = $this->createStub(LLMProviderInterface::class);
+        $this->credentials = $this->createStub(CredentialService::class);
+        $this->nativeMcp   = $this->createStub(\OCA\AIquila\Service\NativeMcpService::class);
         $this->nativeMcp->method('isEnabledForUser')->willReturn(false);
         $this->nativeMcp->method('probeAll')->willReturn([]);
 
@@ -37,7 +37,7 @@ class SettingsControllerTest extends TestCase {
         // the caching service. Stand in for it with the same live-or-fallback
         // rule the real one applies, so the provider stubs below still drive
         // what these tests assert on.
-        $this->providerSettings = $this->createMock(ProviderSettingsService::class);
+        $this->providerSettings = $this->createStub(ProviderSettingsService::class);
         $this->providerSettings->method('listModels')->willReturnCallback(
             static function (LLMProviderInterface $provider): array {
                 $live = $provider->listModels(null);
@@ -57,6 +57,10 @@ class SettingsControllerTest extends TestCase {
         $this->factory->method('getProviderById')->willReturn($this->provider);
         $this->factory->method('getProvider')->willReturn($this->provider);
 
+        $this->buildCtrl();
+    }
+
+    private function buildCtrl(): void {
         $this->ctrl = new SettingsController(
             'aiquila',
             $this->request,
@@ -66,7 +70,7 @@ class SettingsControllerTest extends TestCase {
             $this->credentials,
             $this->nativeMcp,
             $this->providerSettings,
-            $this->createMock(\Psr\Log\LoggerInterface::class),
+            $this->createStub(\Psr\Log\LoggerInterface::class),
             new SearchSettings($this->config)
         );
     }
@@ -148,6 +152,10 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testSaveStoresApiKeyAndModel(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildCtrl();
+
         $this->credentials->expects($this->once())
             ->method('setApiKey')
             ->with('testuser', 'my-api-key', 'anthropic');
@@ -163,6 +171,10 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testSaveWithEmptyModelDeletesUserValue(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildCtrl();
+
         $this->credentials->expects($this->once())
             ->method('setApiKey')
             ->with('testuser', 'some-key', 'anthropic');
@@ -176,6 +188,9 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testSaveWithEmptyApiKeyDeletesKey(): void {
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildCtrl();
+
         $this->credentials->expects($this->once())
             ->method('deleteApiKey')
             ->with('testuser', 'anthropic');
@@ -184,6 +199,10 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testSaveStoresProviderOverrideAndScopesKey(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildCtrl();
+
         $this->config->expects($this->once())
             ->method('setUserValue')
             ->with('testuser', 'aiquila', 'user_provider', 'mistral');

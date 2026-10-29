@@ -9,18 +9,15 @@ use OCA\AIquila\Db\UsageStatMapper;
 
 class UsageStatMapperTest extends MapperTestCase {
 
-    private function makeMapper(): UsageStatMapper {
-        return $this->getMockBuilder(UsageStatMapper::class)
-            ->setConstructorArgs([$this->db])
-            ->onlyMethods(['findEntities'])
-            ->getMock();
+    private function makeMapper(bool $mock = false): UsageStatMapper {
+        return $this->partialMapper(UsageStatMapper::class, ['findEntities'], $mock);
     }
 
     public function testFindByUserCallsFindEntities(): void {
         $stat = new UsageStat();
         $stat->setUserId('eve');
 
-        $mapper = $this->makeMapper();
+        $mapper = $this->makeMapper(mock: true);
         $mapper->expects($this->once())
             ->method('findEntities')
             ->willReturn([$stat]);
@@ -32,6 +29,8 @@ class UsageStatMapperTest extends MapperTestCase {
     }
 
     public function testFindByUserAppliesDefaultLimit(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())
             ->method('setMaxResults')
             ->with(100)
@@ -48,6 +47,8 @@ class UsageStatMapperTest extends MapperTestCase {
     }
 
     public function testFindByUserRespectsCustomLimitAndOffset(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())
             ->method('setMaxResults')
             ->with(25)
@@ -64,6 +65,8 @@ class UsageStatMapperTest extends MapperTestCase {
     }
 
     public function testFindByUserOrdersByCreatedAtDesc(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())
             ->method('orderBy')
             ->with('created_at', 'DESC')
@@ -125,6 +128,8 @@ class UsageStatMapperTest extends MapperTestCase {
     }
 
     public function testTableName(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())
             ->method('from')
             ->with('aiquila_usage_stats')

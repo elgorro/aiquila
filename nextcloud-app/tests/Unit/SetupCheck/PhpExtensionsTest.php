@@ -11,7 +11,7 @@ class PhpExtensionsTest extends TestCase {
     private PhpExtensions $check;
 
     protected function setUp(): void {
-        $this->l10n = $this->createMock(IL10N::class);
+        $this->l10n = $this->createStub(IL10N::class);
         $this->l10n->method('t')->willReturnCallback(
             fn(string $text, array $params = []) => $params ? vsprintf($text, $params) : $text
         );

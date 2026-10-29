@@ -9,14 +9,13 @@ use OCA\AIquila\Db\ConversationMapper;
 
 class ConversationMapperTest extends MapperTestCase {
 
-    private function makeMapper(): ConversationMapper {
-        return $this->getMockBuilder(ConversationMapper::class)
-            ->setConstructorArgs([$this->db])
-            ->onlyMethods(['findEntities', 'findEntity'])
-            ->getMock();
+    private function makeMapper(bool $mock = false): ConversationMapper {
+        return $this->partialMapper(ConversationMapper::class, ['findEntities', 'findEntity'], $mock);
     }
 
     public function testTableName(): void {
+        $this->mockQueryBuilder();
+
         $mapper = new ConversationMapper($this->db);
         // getTableName() is protected; verify it via the QB call
         $this->qb->expects($this->once())
@@ -33,7 +32,7 @@ class ConversationMapperTest extends MapperTestCase {
         $conv = new Conversation();
         $conv->setUserId('alice');
 
-        $mapper = $this->makeMapper();
+        $mapper = $this->makeMapper(mock: true);
         $mapper->expects($this->once())
             ->method('findEntities')
             ->willReturn([$conv]);
@@ -48,7 +47,7 @@ class ConversationMapperTest extends MapperTestCase {
         $conv = new Conversation();
         $conv->setUserId('alice');
 
-        $mapper = $this->makeMapper();
+        $mapper = $this->makeMapper(mock: true);
         $mapper->expects($this->once())
             ->method('findEntity')
             ->willReturn($conv);
@@ -58,6 +57,8 @@ class ConversationMapperTest extends MapperTestCase {
     }
 
     public function testDeleteAllByUserCallsExecuteStatement(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())->method('executeStatement');
 
         $mapper = new ConversationMapper($this->db);
@@ -65,6 +66,8 @@ class ConversationMapperTest extends MapperTestCase {
     }
 
     public function testFindAllByUserOrdersByUpdatedAtDesc(): void {
+        $this->mockQueryBuilder();
+
         $this->qb->expects($this->once())
             ->method('orderBy')
             ->with('updated_at', 'DESC')

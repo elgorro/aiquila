@@ -14,9 +14,13 @@ class TextAssistantAvailableTest extends TestCase {
     private TextAssistantAvailable $check;
 
     protected function setUp(): void {
-        $this->appManager = $this->createMock(IAppManager::class);
-        $this->taskManager = $this->createMock(IManager::class);
-        $l10n = $this->createMock(IL10N::class);
+        $this->appManager = $this->createStub(IAppManager::class);
+        $this->taskManager = $this->createStub(IManager::class);
+        $this->buildCheck();
+    }
+
+    private function buildCheck(): void {
+        $l10n = $this->createStub(IL10N::class);
         $l10n->method('t')->willReturnCallback(
             fn(string $text, array $params = []) => $params ? vsprintf($text, $params) : $text
         );
@@ -34,6 +38,9 @@ class TextAssistantAvailableTest extends TestCase {
     }
 
     public function testSuccessWhenTextDisabled(): void {
+        $this->taskManager = $this->createMock(IManager::class);
+        $this->buildCheck();
+
         $this->enabledApps(['text' => false, 'assistant' => false]);
         $this->taskManager->expects($this->never())->method('getAvailableTaskTypes');
         $this->assertSame('success', $this->check->run()->getSeverity());

@@ -64,12 +64,12 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
     private RequestMetadataService $requestMetadata;
 
     protected function setUp(): void {
-        $this->config = $this->createMock(IConfig::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->credentials = $this->createMock(CredentialService::class);
+        $this->config = $this->createStub(IConfig::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
+        $this->credentials = $this->createStub(CredentialService::class);
         $this->credentials->method('getApiKey')->willReturn('test-key');
 
-        $this->cache = $this->createMock(ICache::class);
+        $this->cache = $this->createStub(ICache::class);
         // Cached caps to avoid hitting models->retrieve from buildRequestParams.
         $this->cache->method('get')->willReturn([
             'max_tokens' => 8192,
@@ -77,8 +77,8 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
             'supports_thinking_enabled' => false,
             'supports_effort' => false,
         ]);
-        $this->cacheFactory = $this->createMock(ICacheFactory::class);
-        $this->requestMetadata = $this->createMock(RequestMetadataService::class);
+        $this->cacheFactory = $this->createStub(ICacheFactory::class);
+        $this->requestMetadata = $this->createStub(RequestMetadataService::class);
         $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
 
         $this->config->method('getUserValue')->willReturn('');
@@ -92,7 +92,7 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
     }
 
     private function streamFromEvents(array $events): BaseStream {
-        $stream = $this->createMock(BaseStream::class);
+        $stream = $this->createStub(BaseStream::class);
         $stream->method('getIterator')->willReturn(new \ArrayIterator($events));
         return $stream;
     }

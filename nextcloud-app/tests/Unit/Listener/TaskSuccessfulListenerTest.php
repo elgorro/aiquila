@@ -23,12 +23,16 @@ class TaskSuccessfulListenerTest extends TestCase {
     private TaskSuccessfulListener $listener;
 
     protected function setUp(): void {
-        $this->notificationManager = $this->createMock(INotificationManager::class);
-        $this->taskProcessingManager = $this->createMock(ITaskProcessingManager::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->config = $this->createMock(IConfig::class);
+        $this->notificationManager = $this->createStub(INotificationManager::class);
+        $this->taskProcessingManager = $this->createStub(ITaskProcessingManager::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
+        $this->config = $this->createStub(IConfig::class);
         $this->config->method('getUserValue')
             ->willReturnCallback(fn (string $u, string $a, string $k, $d = '') => $this->prefValue ?? $d);
+        $this->buildListener();
+    }
+
+    private function buildListener(): void {
         $this->listener = new TaskSuccessfulListener(
             $this->notificationManager,
             $this->taskProcessingManager,
@@ -38,7 +42,7 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     private function mockPreferredProvider(string $providerId): void {
-        $provider = $this->createMock(IProvider::class);
+        $provider = $this->createStub(IProvider::class);
         $provider->method('getId')->willReturn($providerId);
         $this->taskProcessingManager->method('getPreferredProvider')->willReturn($provider);
     }
@@ -58,13 +62,16 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testIgnoresNonAiquilaProvider(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->buildListener();
+
         // These assertions are about the provider/notification path, so opt in.
         $this->prefValue = '1';
 
         $this->mockPreferredProvider('other_app:text2text');
 
         $task = $this->makeTask();
-        $event = $this->createMock(TaskSuccessfulEvent::class);
+        $event = $this->createStub(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($task);
 
         $this->notificationManager->expects($this->never())->method('notify');
@@ -72,11 +79,14 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testIgnoresNullUser(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->buildListener();
+
         $this->mockPreferredProvider('aiquila:text2text');
 
         $task = $this->makeTask(userId: null);
 
-        $event = $this->createMock(TaskSuccessfulEvent::class);
+        $event = $this->createStub(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($task);
 
         $this->notificationManager->expects($this->never())->method('notify');
@@ -84,6 +94,9 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testCreatesNotificationOnSuccess(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->buildListener();
+
         // These assertions are about the provider/notification path, so opt in.
         $this->prefValue = '1';
 
@@ -91,7 +104,7 @@ class TaskSuccessfulListenerTest extends TestCase {
 
         $task = $this->makeTask('core:text2text:summary', id: 42);
 
-        $event = $this->createMock(TaskSuccessfulEvent::class);
+        $event = $this->createStub(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($task);
 
         $notification = $this->createMock(INotification::class);
@@ -112,6 +125,10 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testUnknownTaskTypeIsSkippedSilently(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildListener();
+
         // These assertions are about the provider/notification path, so opt in.
         $this->prefValue = '1';
 
@@ -121,7 +138,7 @@ class TaskSuccessfulListenerTest extends TestCase {
             ->willThrowException(new \OCP\TaskProcessing\Exception\Exception('no provider'));
 
         $task = $this->makeTask();
-        $event = $this->createMock(TaskSuccessfulEvent::class);
+        $event = $this->createStub(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($task);
 
         $this->notificationManager->expects($this->never())->method('createNotification');
@@ -131,6 +148,10 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testUnexpectedErrorIsLoggedNotPropagated(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildListener();
+
         // These assertions are about the provider/notification path, so opt in.
         $this->prefValue = '1';
 
@@ -140,7 +161,7 @@ class TaskSuccessfulListenerTest extends TestCase {
             ->willThrowException(new \RuntimeException('boom'));
 
         $task = $this->makeTask();
-        $event = $this->createMock(TaskSuccessfulEvent::class);
+        $event = $this->createStub(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($task);
 
         $this->notificationManager->expects($this->never())->method('notify');
@@ -149,6 +170,9 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testNotificationFailureDoesNotBreakTheEventChain(): void {
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildListener();
+
         // These assertions are about the provider/notification path, so opt in.
         $this->prefValue = '1';
 
@@ -158,10 +182,10 @@ class TaskSuccessfulListenerTest extends TestCase {
 
         $task = $this->makeTask(id: 42);
 
-        $event = $this->createMock(TaskSuccessfulEvent::class);
+        $event = $this->createStub(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($task);
 
-        $notification = $this->createMock(INotification::class);
+        $notification = $this->createStub(INotification::class);
         $notification->method('setApp')->willReturn($notification);
         $notification->method('setUser')->willReturn($notification);
         $notification->method('setDateTime')->willReturn($notification);
@@ -177,10 +201,13 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testSuccessNotificationsAreOffByDefault(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->buildListener();
+
         // AIquila never schedules the tasks it serves, so silence is the default.
         $this->mockPreferredProvider('aiquila:text2text');
 
-        $event = $this->createMock(TaskSuccessfulEvent::class);
+        $event = $this->createStub(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($this->makeTask());
 
         $this->notificationManager->expects($this->never())->method('notify');
@@ -188,12 +215,16 @@ class TaskSuccessfulListenerTest extends TestCase {
     }
 
     public function testPreferenceIsCheckedBeforeTheProviderLookup(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->taskProcessingManager = $this->createMock(ITaskProcessingManager::class);
+        $this->buildListener();
+
         // Resolving the provider costs a manager call; the opt-out must not pay it.
         $this->prefValue = '0';
 
         $this->taskProcessingManager->expects($this->never())->method('getPreferredProvider');
 
-        $event = $this->createMock(TaskSuccessfulEvent::class);
+        $event = $this->createStub(TaskSuccessfulEvent::class);
         $event->method('getTask')->willReturn($this->makeTask());
 
         $this->notificationManager->expects($this->never())->method('notify');

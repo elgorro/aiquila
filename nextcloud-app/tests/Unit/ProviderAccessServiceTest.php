@@ -23,9 +23,9 @@ class ProviderAccessServiceTest extends TestCase {
     private $userManager;
 
     protected function setUp(): void {
-        $this->mapper = $this->createMock(ProviderAccessRuleMapper::class);
-        $this->groupManager = $this->createMock(IGroupManager::class);
-        $this->userManager = $this->createMock(IUserManager::class);
+        $this->mapper = $this->createStub(ProviderAccessRuleMapper::class);
+        $this->groupManager = $this->createStub(IGroupManager::class);
+        $this->userManager = $this->createStub(IUserManager::class);
     }
 
     /**
@@ -45,14 +45,14 @@ class ProviderAccessServiceTest extends TestCase {
         }
         $this->mapper->method('findAll')->willReturn($entities);
 
-        $user = $this->createMock(IUser::class);
+        $user = $this->createStub(IUser::class);
         $this->userManager->method('get')->willReturn($user);
         $this->groupManager->method('getUserGroupIds')->willReturn($groupIds);
 
         // A cache that never hits, so every test reads the rules it declared.
-        $cache = $this->createMock(ICache::class);
+        $cache = $this->createStub(ICache::class);
         $cache->method('get')->willReturn(null);
-        $cacheFactory = $this->createMock(ICacheFactory::class);
+        $cacheFactory = $this->createStub(ICacheFactory::class);
         $cacheFactory->method('createDistributed')->willReturn($cache);
 
         return new ProviderAccessService(
@@ -60,7 +60,7 @@ class ProviderAccessServiceTest extends TestCase {
             $this->groupManager,
             $this->userManager,
             $cacheFactory,
-            $this->createMock(LoggerInterface::class),
+            $this->createStub(LoggerInterface::class),
         );
     }
 

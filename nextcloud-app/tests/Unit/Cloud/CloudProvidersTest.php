@@ -65,7 +65,7 @@ class CloudProvidersTest extends TestCase {
     private CloudSdk $sdk;
 
     protected function setUp(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createStub(IConfig::class);
         $this->config->method('getAppValue')->willReturnCallback(
             fn (string $app, string $key, string $default = '') => $this->app[$key] ?? $default,
         );
@@ -73,7 +73,7 @@ class CloudProvidersTest extends TestCase {
             fn (string $uid, string $app, string $key, $default = '') => $this->user[$uid . '/' . $key] ?? $default,
         );
 
-        $this->credentials = $this->createMock(CredentialService::class);
+        $this->credentials = $this->createStub(CredentialService::class);
         $this->credentials->method('getApiKey')->willReturnCallback(
             fn (?string $uid, string $provider = 'anthropic') => $uid === null ? ($this->keys[$provider] ?? '') : 'sk-ant-personal',
         );
@@ -81,7 +81,7 @@ class CloudProvidersTest extends TestCase {
             fn (string $name) => $this->secrets[$name] ?? '',
         );
 
-        $this->sdk = $this->createMock(CloudSdk::class);
+        $this->sdk = $this->createStub(CloudSdk::class);
         $this->sdk->method('isAvailable')->willReturnCallback(fn () => $this->sdkAvailable);
         $this->sdk->method('require')->willReturnCallback(function (string $package, string $what): void {
             if (!$this->sdkAvailable) {
@@ -96,12 +96,12 @@ class CloudProvidersTest extends TestCase {
      * @return T
      */
     private function provider(string $class): AbstractCloudClaudeProvider {
-        $cache = $this->createMock(ICache::class);
-        $cacheFactory = $this->createMock(ICacheFactory::class);
+        $cache = $this->createStub(ICache::class);
+        $cacheFactory = $this->createStub(ICacheFactory::class);
         $cacheFactory->method('createDistributed')->willReturn($cache);
-        $metadata = $this->createMock(RequestMetadataService::class);
+        $metadata = $this->createStub(RequestMetadataService::class);
         $metadata->method('hashUserId')->willReturn('hashed');
-        return new $class($this->config, $this->createMock(LoggerInterface::class), $this->credentials, $cacheFactory, $metadata, $this->sdk);
+        return new $class($this->config, $this->createStub(LoggerInterface::class), $this->credentials, $cacheFactory, $metadata, $this->sdk);
     }
 
     public static function message(): Message {
