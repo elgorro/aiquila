@@ -1,11 +1,12 @@
 {
-    "openapi": "3.0.3",
+    "openapi": "3.1.0",
     "info": {
         "title": "aiquila",
         "version": "0.0.1",
         "description": "Private AI in your Nextcloud — chat, agents and MCP tools, with the AI provider you choose",
         "license": {
-            "name": "AGPL-3.0-or-later"
+            "name": "AGPL-3.0-or-later",
+            "identifier": "AGPL-3.0-or-later"
         }
     },
     "components": {
@@ -81,15 +82,19 @@
                                                 "type": "string"
                                             },
                                             "title": {
-                                                "type": "string",
-                                                "nullable": true
+                                                "type": [
+                                                    "string",
+                                                    "null"
+                                                ]
                                             },
                                             "model": {
                                                 "type": "string"
                                             },
                                             "provider": {
-                                                "type": "string",
-                                                "nullable": true
+                                                "type": [
+                                                    "string",
+                                                    "null"
+                                                ]
                                             },
                                             "createdAt": {
                                                 "type": "integer",
@@ -100,26 +105,36 @@
                                                 "format": "int64"
                                             },
                                             "projectId": {
-                                                "type": "integer",
-                                                "format": "int64",
-                                                "nullable": true
+                                                "type": [
+                                                    "integer",
+                                                    "null"
+                                                ],
+                                                "format": "int64"
                                             },
                                             "effort": {
-                                                "type": "string",
-                                                "nullable": true
+                                                "type": [
+                                                    "string",
+                                                    "null"
+                                                ]
                                             },
                                             "thinking": {
-                                                "type": "boolean",
-                                                "nullable": true
+                                                "type": [
+                                                    "boolean",
+                                                    "null"
+                                                ]
                                             },
                                             "thinkingBudget": {
-                                                "type": "integer",
-                                                "format": "int64",
-                                                "nullable": true
+                                                "type": [
+                                                    "integer",
+                                                    "null"
+                                                ],
+                                                "format": "int64"
                                             },
                                             "speedFast": {
-                                                "type": "boolean",
-                                                "nullable": true
+                                                "type": [
+                                                    "boolean",
+                                                    "null"
+                                                ]
                                             }
                                         }
                                     }
@@ -170,14 +185,18 @@
                                 "type": "object",
                                 "properties": {
                                     "provider": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Provider to pin (null/'' follows the user's setting)"
                                     },
                                     "model": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Model to pin (null/'' uses the provider's default)"
                                     }
@@ -228,15 +247,19 @@
                                             "type": "string"
                                         },
                                         "title": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "model": {
                                             "type": "string"
                                         },
                                         "provider": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "createdAt": {
                                             "type": "integer",
@@ -247,26 +270,36 @@
                                             "format": "int64"
                                         },
                                         "projectId": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         },
                                         "effort": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "thinking": {
-                                            "type": "boolean",
-                                            "nullable": true
+                                            "type": [
+                                                "boolean",
+                                                "null"
+                                            ]
                                         },
                                         "thinkingBudget": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         },
                                         "speedFast": {
-                                            "type": "boolean",
-                                            "nullable": true
+                                            "type": [
+                                                "boolean",
+                                                "null"
+                                            ]
                                         }
                                     }
                                 }
@@ -406,15 +439,19 @@
                                             "type": "string"
                                         },
                                         "title": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "model": {
                                             "type": "string"
                                         },
                                         "provider": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "createdAt": {
                                             "type": "integer",
@@ -425,26 +462,36 @@
                                             "format": "int64"
                                         },
                                         "projectId": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         },
                                         "effort": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "thinking": {
-                                            "type": "boolean",
-                                            "nullable": true
+                                            "type": [
+                                                "boolean",
+                                                "null"
+                                            ]
                                         },
                                         "thinkingBudget": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         },
                                         "speedFast": {
-                                            "type": "boolean",
-                                            "nullable": true
+                                            "type": [
+                                                "boolean",
+                                                "null"
+                                            ]
                                         },
                                         "messages": {
                                             "type": "array",
@@ -482,47 +529,63 @@
                                                         "type": "string"
                                                     },
                                                     "inputTokens": {
-                                                        "type": "integer",
-                                                        "format": "int64",
-                                                        "nullable": true
+                                                        "type": [
+                                                            "integer",
+                                                            "null"
+                                                        ],
+                                                        "format": "int64"
                                                     },
                                                     "outputTokens": {
-                                                        "type": "integer",
-                                                        "format": "int64",
-                                                        "nullable": true
+                                                        "type": [
+                                                            "integer",
+                                                            "null"
+                                                        ],
+                                                        "format": "int64"
                                                     },
                                                     "cacheCreationTokens": {
-                                                        "type": "integer",
-                                                        "format": "int64",
-                                                        "nullable": true
+                                                        "type": [
+                                                            "integer",
+                                                            "null"
+                                                        ],
+                                                        "format": "int64"
                                                     },
                                                     "cacheReadTokens": {
-                                                        "type": "integer",
-                                                        "format": "int64",
-                                                        "nullable": true
+                                                        "type": [
+                                                            "integer",
+                                                            "null"
+                                                        ],
+                                                        "format": "int64"
                                                     },
                                                     "latencyMs": {
-                                                        "type": "integer",
-                                                        "format": "int64",
-                                                        "nullable": true
+                                                        "type": [
+                                                            "integer",
+                                                            "null"
+                                                        ],
+                                                        "format": "int64"
                                                     },
                                                     "citations": {
-                                                        "type": "object",
-                                                        "nullable": true,
+                                                        "type": [
+                                                            "object",
+                                                            "null"
+                                                        ],
                                                         "additionalProperties": {
                                                             "type": "object"
                                                         }
                                                     },
                                                     "documents": {
-                                                        "type": "object",
-                                                        "nullable": true,
+                                                        "type": [
+                                                            "object",
+                                                            "null"
+                                                        ],
                                                         "additionalProperties": {
                                                             "type": "object"
                                                         }
                                                     },
                                                     "thinkingSummary": {
-                                                        "type": "string",
-                                                        "nullable": true
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
                                                     },
                                                     "createdAt": {
                                                         "type": "integer",
@@ -556,8 +619,10 @@
                                                                     "type": "string"
                                                                 },
                                                                 "mimeType": {
-                                                                    "type": "string",
-                                                                    "nullable": true
+                                                                    "type": [
+                                                                        "string",
+                                                                        "null"
+                                                                    ]
                                                                 },
                                                                 "createdAt": {
                                                                     "type": "integer",
@@ -643,33 +708,43 @@
                                         "description": "New title"
                                     },
                                     "projectId": {
-                                        "type": "integer",
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ],
                                         "format": "int64",
-                                        "nullable": true,
                                         "default": null,
                                         "description": "Project ID to link (null to clear)"
                                     },
                                     "effort": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Effort override (low…max; empty string clears)"
                                     },
                                     "thinking": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Adaptive-thinking override ('on'/'off'; empty string clears)"
                                     },
                                     "thinkingBudget": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Explicit thinking budget in tokens (empty string clears)"
                                     },
                                     "speedFast": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Fast-mode override ('on'/'off'; empty string clears)"
                                     }
@@ -730,15 +805,19 @@
                                             "type": "string"
                                         },
                                         "title": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "model": {
                                             "type": "string"
                                         },
                                         "provider": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "createdAt": {
                                             "type": "integer",
@@ -749,26 +828,36 @@
                                             "format": "int64"
                                         },
                                         "projectId": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         },
                                         "effort": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "thinking": {
-                                            "type": "boolean",
-                                            "nullable": true
+                                            "type": [
+                                                "boolean",
+                                                "null"
+                                            ]
                                         },
                                         "thinkingBudget": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         },
                                         "speedFast": {
-                                            "type": "boolean",
-                                            "nullable": true
+                                            "type": [
+                                                "boolean",
+                                                "null"
+                                            ]
                                         }
                                     }
                                 }
@@ -1175,14 +1264,18 @@
                                 "type": "object",
                                 "properties": {
                                     "provider": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Provider to pin ('' unpins, null keeps unchanged)"
                                     },
                                     "model": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Model to pin (null keeps unchanged)"
                                     }
@@ -1243,15 +1336,19 @@
                                             "type": "string"
                                         },
                                         "title": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "model": {
                                             "type": "string"
                                         },
                                         "provider": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "createdAt": {
                                             "type": "integer",
@@ -1262,26 +1359,36 @@
                                             "format": "int64"
                                         },
                                         "projectId": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         },
                                         "effort": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "thinking": {
-                                            "type": "boolean",
-                                            "nullable": true
+                                            "type": [
+                                                "boolean",
+                                                "null"
+                                            ]
                                         },
                                         "thinkingBudget": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         },
                                         "speedFast": {
-                                            "type": "boolean",
-                                            "nullable": true
+                                            "type": [
+                                                "boolean",
+                                                "null"
+                                            ]
                                         }
                                     }
                                 }
@@ -1443,13 +1550,17 @@
                                             "type": "boolean"
                                         },
                                         "effort": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "budget": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         },
                                         "adjustments": {
                                             "type": "array",
@@ -1594,15 +1705,19 @@
                                             "type": "string"
                                         },
                                         "title": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "model": {
                                             "type": "string"
                                         },
                                         "provider": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "createdAt": {
                                             "type": "integer",
@@ -1613,26 +1728,36 @@
                                             "format": "int64"
                                         },
                                         "projectId": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         },
                                         "effort": {
-                                            "type": "string",
-                                            "nullable": true
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
                                         },
                                         "thinking": {
-                                            "type": "boolean",
-                                            "nullable": true
+                                            "type": [
+                                                "boolean",
+                                                "null"
+                                            ]
                                         },
                                         "thinkingBudget": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         },
                                         "speedFast": {
-                                            "type": "boolean",
-                                            "nullable": true
+                                            "type": [
+                                                "boolean",
+                                                "null"
+                                            ]
                                         }
                                     }
                                 }
@@ -2811,8 +2936,10 @@
                                         }
                                     },
                                     "system": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Optional system prompt"
                                     },
@@ -3456,44 +3583,58 @@
                                         "description": "Personal API key for the scoped provider (leave empty to clear)"
                                     },
                                     "model": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Preferred model ID for the scoped provider ('' clears the override, null keeps it unchanged)"
                                     },
                                     "provider": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Active provider override ('' clears, e.g. 'anthropic'/'mistral', null keeps unchanged). Also scopes api_key/model in this call."
                                     },
                                     "default_system_prompt": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Default system prompt (null to keep unchanged)"
                                     },
                                     "default_verbose": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Enable verbose mode by default ('1' or null to keep unchanged)"
                                     },
                                     "task_success_notifications": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Notify when an AI task completes ('1'/'0', null to keep unchanged)"
                                     },
                                     "task_failure_notifications": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Notify when an AI task fails ('1'/'0', null to keep unchanged)"
                                     },
                                     "native_mcp_enabled": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "User override for native-MCP ('1' opt in, '0' opt out, '' clears override, null keeps unchanged)"
                                     }
@@ -3792,8 +3933,10 @@
                         "in": "query",
                         "description": "'1' to bypass the cached model lists and re-query every provider",
                         "schema": {
-                            "type": "string",
-                            "nullable": true,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
                             "default": null
                         }
                     },
@@ -3898,8 +4041,10 @@
                                         }
                                     },
                                     "makeDefault": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "'1' to also make this the user's default provider"
                                     }
@@ -5292,9 +5437,11 @@
                                     ],
                                     "properties": {
                                         "coworkerId": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         }
                                     }
                                 }
@@ -5343,9 +5490,11 @@
                                 "type": "object",
                                 "properties": {
                                     "coworkerId": {
-                                        "type": "integer",
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ],
                                         "format": "int64",
-                                        "nullable": true,
                                         "default": null,
                                         "description": "Coworker to display, or null to clear"
                                     }
@@ -5366,9 +5515,11 @@
                                     ],
                                     "properties": {
                                         "coworkerId": {
-                                            "type": "integer",
-                                            "format": "int64",
-                                            "nullable": true
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
                                         }
                                     }
                                 }
@@ -5943,8 +6094,10 @@
                         "in": "query",
                         "description": "Optional MIME type filter",
                         "schema": {
-                            "type": "string",
-                            "nullable": true,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
                             "default": null
                         }
                     },

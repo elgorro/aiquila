@@ -29,7 +29,11 @@
     },
     "scripts": {
         "test": "phpunit",
-        "psalm": "psalm --no-cache"
+        "psalm": "psalm --no-cache",
+        "openapi": [
+            "generate-spec --openapi-version 3.1.0",
+            "@php tools/openapi-3.1.php openapi.json openapi-administration.json openapi-full.json"
+        ]
     },
     "config": {
         "allow-plugins": {

@@ -1,11 +1,12 @@
 {
-    "openapi": "3.0.3",
+    "openapi": "3.1.0",
     "info": {
         "title": "aiquila-administration",
         "version": "0.0.1",
         "description": "Private AI in your Nextcloud — chat, agents and MCP tools, with the AI provider you choose",
         "license": {
-            "name": "AGPL-3.0-or-later"
+            "name": "AGPL-3.0-or-later",
+            "identifier": "AGPL-3.0-or-later"
         }
     },
     "components": {
@@ -51,44 +52,58 @@
                                         "description": "API key for the instance, scoped to $provider (default 'anthropic')"
                                     },
                                     "provider": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Instance default provider ('anthropic'/'mistral', null keeps unchanged). Also scopes api_key in this call."
                                     },
                                     "native_mcp_enabled": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Instance default for native-MCP ('1' enabled, '0' disabled, null keeps unchanged)"
                                     },
                                     "native_mcp_extra_url": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Optional extra MCP server URL (trimmed; null keeps unchanged)"
                                     },
                                     "native_mcp_extra_token": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Bearer token for the extra MCP server ('' clears, null keeps unchanged)"
                                     },
                                     "mistral_connector_ids": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Comma/space-separated Mistral connector IDs for the native-MCP path (trimmed; null keeps unchanged)"
                                     },
                                     "search_enabled": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Expose AIquila conversations to unified search ('1' enabled, '0' disabled, null keeps unchanged)"
                                     },
                                     "auto_cache": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Top-level automatic prompt caching ('1' enabled, '0' disabled, null keeps unchanged)"
                                     }
@@ -237,9 +252,11 @@
                                                 ],
                                                 "properties": {
                                                     "id": {
-                                                        "type": "integer",
-                                                        "format": "int64",
-                                                        "nullable": true
+                                                        "type": [
+                                                            "integer",
+                                                            "null"
+                                                        ],
+                                                        "format": "int64"
                                                     },
                                                     "name": {
                                                         "type": "string"
@@ -251,9 +268,11 @@
                                                         "type": "boolean"
                                                     },
                                                     "http_status": {
-                                                        "type": "integer",
-                                                        "format": "int64",
-                                                        "nullable": true
+                                                        "type": [
+                                                            "integer",
+                                                            "null"
+                                                        ],
+                                                        "format": "int64"
                                                     },
                                                     "reachable": {
                                                         "type": "boolean"
@@ -330,8 +349,10 @@
                         "in": "query",
                         "description": "'1' to bypass the cached model lists",
                         "schema": {
-                            "type": "string",
-                            "nullable": true,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
                             "default": null
                         }
                     },
@@ -446,8 +467,10 @@
                                         }
                                     },
                                     "makeDefault": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "'1' to also make this the instance default provider"
                                     }
@@ -1427,22 +1450,30 @@
                                                 "type": "boolean"
                                             },
                                             "last_status": {
-                                                "type": "string",
-                                                "nullable": true
+                                                "type": [
+                                                    "string",
+                                                    "null"
+                                                ]
                                             },
                                             "last_error": {
-                                                "type": "string",
-                                                "nullable": true
+                                                "type": [
+                                                    "string",
+                                                    "null"
+                                                ]
                                             },
                                             "tool_count": {
-                                                "type": "integer",
-                                                "format": "int64",
-                                                "nullable": true
+                                                "type": [
+                                                    "integer",
+                                                    "null"
+                                                ],
+                                                "format": "int64"
                                             },
                                             "last_connected_at": {
-                                                "type": "integer",
-                                                "format": "int64",
-                                                "nullable": true
+                                                "type": [
+                                                    "integer",
+                                                    "null"
+                                                ],
+                                                "format": "int64"
                                             }
                                         }
                                     }
@@ -1693,8 +1724,10 @@
                                         "description": "Updated bearer token"
                                     },
                                     "registrationToken": {
-                                        "type": "string",
-                                        "nullable": true,
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
                                         "default": null,
                                         "description": "Updated registration token; null leaves it unchanged, an empty string clears it"
                                     },

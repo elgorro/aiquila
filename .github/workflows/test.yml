@@ -135,7 +135,7 @@ jobs:
 
       - name: Generate OpenAPI spec
         if: needs.changes.outputs.nextcloud == 'true'
-        run: vendor/bin/generate-spec
+        run: composer openapi
 
       - name: Check OpenAPI spec is up to date
         if: needs.changes.outputs.nextcloud == 'true'
