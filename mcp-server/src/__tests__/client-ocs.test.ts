@@ -36,6 +36,34 @@ describe('fetchOCS', () => {
     process.env.NEXTCLOUD_PASSWORD = 'testpass';
   });
 
+  it.each([100, 200, 201, 202])('treats OCS status %i as success', async (code) => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      status: code === 100 ? 200 : code,
+      statusText: 'OK',
+      json: async () => ({
+        ocs: { meta: { status: 'ok', statuscode: code, message: 'OK' }, data: { id: 7 } },
+      }),
+    } as unknown as Response);
+    const { fetchOCS } = await import('../client/ocs.js');
+    await expect(fetchOCS('/ocs/v2.php/apps/spreed/api/v4/room')).resolves.toMatchObject({
+      ocs: { data: { id: 7 } },
+    });
+  });
+
+  it.each([400, 997, 998])('still throws on OCS status %i', async (code) => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        ocs: { meta: { status: 'failure', statuscode: code, message: 'no' }, data: [] },
+      }),
+    } as unknown as Response);
+    const { fetchOCS } = await import('../client/ocs.js');
+    await expect(fetchOCS('/x')).rejects.toThrow(`OCS API error: ${code}`);
+  });
+
   it('resolves with null on 304 when the caller opts in', async () => {
     vi.mocked(global.fetch).mockResolvedValue(notModified());
 
