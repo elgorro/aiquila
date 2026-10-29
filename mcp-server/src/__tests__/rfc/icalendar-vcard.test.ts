@@ -220,3 +220,40 @@ describe('RFC 6350 / 2426 — create_contact', () => {
     expect(put.headers['Content-Type']).toMatch(/^text\/vcard/);
   });
 });
+
+describe('RFC 9110 §13.1 — conditional writes (lost-update prevention)', () => {
+  it('§13.1.1: update_event PUTs with If-Match carrying the quoted ETag it read', async () => {
+    const { updateEventTool } = await import('../../tools/apps/calendar.js');
+    const result = await updateEventTool.handler({
+      uid: 'u',
+      calendarName: 'personal',
+      summary: 'Renamed',
+    } as any);
+    expect(result.isError).toBeFalsy();
+    expect(puts).toHaveLength(1);
+    // An entity-tag is a quoted string (§8.8.3) and is sent back unchanged.
+    expect(puts[0].headers['If-Match']).toBe('"e"');
+    expect(puts[0].headers['If-None-Match']).toBeUndefined();
+  });
+
+  it('§13.1.1: the rewritten object is still RFC 5545 content lines', async () => {
+    const { updateEventTool } = await import('../../tools/apps/calendar.js');
+    await updateEventTool.handler({
+      uid: 'u',
+      calendarName: 'personal',
+      description: LONG,
+    } as any);
+    expectWellFormedContentLines(puts[0].body);
+  });
+
+  it('§13.1.2: create uses If-None-Match: *, so it never overwrites', async () => {
+    const { createEventTool } = await import('../../tools/apps/calendar.js');
+    await createEventTool.handler({
+      summary: 'x',
+      calendarName: 'personal',
+      dtstart: '20240315T100000Z',
+    } as any);
+    expect(puts[0].headers['If-None-Match']).toBe('*');
+    expect(puts[0].headers['If-Match']).toBeUndefined();
+  });
+});
