@@ -63,3 +63,29 @@ export const sanitizeVCardUriValue = sanitizeDavUriValue;
 /** Unescape vCard property values (case-insensitive \\n per RFC 6350). */
 export const unescapeVCardValue = (value: string) =>
   unescapeDavValue(value, { caseInsensitiveNewline: true });
+
+// --- Values written unescaped into iCalendar ---
+//
+// Text values go through escapeICalValue. Dates, recurrence rules, time zone
+// ids and calendar addresses are written as they are, so they must be checked:
+// a CR or LF in any of them ends the content line, and whatever follows
+// becomes a property of its own (an extra ATTENDEE, say, that Nextcloud then
+// sends an invitation to).
+
+/** RFC 5545 §3.3.4 DATE (`YYYYMMDD`) or §3.3.5 DATE-TIME (`YYYYMMDDTHHMMSS`, optionally `Z`). */
+export const ICAL_DATE_OR_DATE_TIME = /^\d{8}(T\d{6}Z?)?$/;
+
+/** RFC 5545 §3.3.10 RECUR: rule parts made of letters, digits and `= ; , + -`. */
+export const ICAL_RECUR = /^[A-Za-z0-9=;,+-]+$/;
+
+/** An IANA time zone name, written unquoted after `TZID=` (RFC 5545 §3.2.19). */
+export const IANA_TZID = /^[A-Za-z0-9_+-]+(\/[A-Za-z0-9_+-]+)*$/;
+
+/**
+ * A parameter value as an RFC 5545 §3.2 quoted-string. QSAFE-CHAR excludes
+ * control characters (other than tab) and DQUOTE, so those are dropped.
+ */
+export function quoteICalParam(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  return `"${value.replace(/[\x00-\x08\x0a-\x1f\x7f"]/g, '')}"`;
+}

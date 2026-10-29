@@ -7,7 +7,14 @@ import {
   fetchCalDAV,
   nsTagContent,
 } from '../../client/caldav.js';
-import { escapeICalValue, unescapeICalValue } from '../dav-utils.js';
+import {
+  escapeICalValue,
+  unescapeICalValue,
+  ICAL_DATE_OR_DATE_TIME,
+  ICAL_RECUR,
+  IANA_TZID,
+  quoteICalParam,
+} from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -132,9 +139,9 @@ function setICalProperty(icalData: string, propName: string, value: string | nul
       return vevent.replace(regex, '').replace(/(\r?\n){2,}/g, '\r\n');
     }
     if (regex.test(vevent)) {
-      return vevent.replace(regex, `${propName}:${value}`);
+      return vevent.replace(regex, () => `${propName}:${value}`);
     }
-    return vevent.replace(/END:VEVENT/, `${propName}:${value}\r\nEND:VEVENT`);
+    return vevent.replace(/END:VEVENT/, () => `${propName}:${value}\r\nEND:VEVENT`);
   });
 }
 
@@ -158,9 +165,9 @@ function setICalDateProperty(
       formatted = `${propName}:${value}`;
     }
     if (regex.test(vevent)) {
-      return vevent.replace(regex, formatted);
+      return vevent.replace(regex, () => formatted);
     }
-    return vevent.replace(/END:VEVENT/, `${formatted}\r\nEND:VEVENT`);
+    return vevent.replace(/END:VEVENT/, () => `${formatted}\r\nEND:VEVENT`);
   });
 }
 
@@ -1084,9 +1091,11 @@ export const createEventTool = {
       .describe('The calendar name. Use list_calendars to find available calendar names.'),
     dtstart: z
       .string()
+      .regex(ICAL_DATE_OR_DATE_TIME, 'Use YYYYMMDD or YYYYMMDDTHHmmss[Z]')
       .describe('Start date/time in YYYYMMDD (all-day) or YYYYMMDDTHHmmssZ (timed) format'),
     dtend: z
       .string()
+      .regex(ICAL_DATE_OR_DATE_TIME, 'Use YYYYMMDD or YYYYMMDDTHHmmss[Z]')
       .optional()
       .describe(
         'End date/time. For all-day events, this is the exclusive end date (day after last day). If omitted, defaults to 1 hour after start (timed) or next day (all-day).'
@@ -1105,7 +1114,7 @@ export const createEventTool = {
     attendees: z
       .array(
         z.object({
-          email: z.string().describe('Attendee email'),
+          email: z.email().describe('Attendee email'),
           cn: z.string().optional().describe('Display name'),
           role: z
             .enum(['REQ-PARTICIPANT', 'OPT-PARTICIPANT', 'NON-PARTICIPANT', 'CHAIR'])
@@ -1118,6 +1127,7 @@ export const createEventTool = {
       .describe('List of attendees'),
     rrule: z
       .string()
+      .regex(ICAL_RECUR, 'Use RFC 5545 RECUR syntax, e.g. FREQ=WEEKLY;BYDAY=MO')
       .optional()
       .describe("Recurrence rule (e.g. 'FREQ=WEEKLY;BYDAY=MO,WE,FR' or 'FREQ=MONTHLY;COUNT=12')"),
     accessClass: z
@@ -1138,6 +1148,7 @@ export const createEventTool = {
       ),
     tzid: z
       .string()
+      .regex(IANA_TZID, 'Use an IANA time zone name, e.g. Europe/Berlin')
       .optional()
       .describe(
         'IANA time zone (e.g. "Europe/Berlin"). When set, a VTIMEZONE block is emitted and dtstart/dtend use TZID instead of UTC. Required for reliable iOS Calendar and Thunderbird CalDAV sync of timed events. UTC inputs (trailing Z) are converted to wall-clock time in this zone.'
@@ -1267,11 +1278,11 @@ export const createEventTool = {
       // Add attendees
       if (args.attendees && args.attendees.length > 0) {
         // Add organizer (current user)
-        vevent += `\r\nORGANIZER;CN=${config.user}:mailto:${config.user}`;
+        vevent += `\r\nORGANIZER;CN=${quoteICalParam(config.user)}:mailto:${config.user}`;
 
         for (const attendee of args.attendees) {
           let atLine = 'ATTENDEE';
-          if (attendee.cn) atLine += `;CN=${attendee.cn}`;
+          if (attendee.cn) atLine += `;CN=${quoteICalParam(attendee.cn)}`;
           atLine += `;ROLE=${attendee.role || 'REQ-PARTICIPANT'}`;
           atLine += `;PARTSTAT=NEEDS-ACTION`;
           if (attendee.rsvp !== false) atLine += `;RSVP=TRUE`;
@@ -1361,8 +1372,17 @@ export const updateEventTool = {
       .string()
       .describe('The calendar name. Use list_calendars to find available calendar names.'),
     summary: z.string().optional().describe('New event title'),
-    dtstart: z.string().optional().describe('New start date/time (YYYYMMDD or YYYYMMDDTHHmmssZ)'),
-    dtend: z.string().nullable().optional().describe('New end date/time, or null to remove'),
+    dtstart: z
+      .string()
+      .regex(ICAL_DATE_OR_DATE_TIME, 'Use YYYYMMDD or YYYYMMDDTHHmmss[Z]')
+      .optional()
+      .describe('New start date/time (YYYYMMDD or YYYYMMDDTHHmmssZ)'),
+    dtend: z
+      .string()
+      .regex(ICAL_DATE_OR_DATE_TIME, 'Use YYYYMMDD or YYYYMMDDTHHmmss[Z]')
+      .nullable()
+      .optional()
+      .describe('New end date/time, or null to remove'),
     location: z.string().nullable().optional().describe('New location, or null to remove'),
     description: z.string().nullable().optional().describe('New description, or null to remove'),
     status: z.enum(['TENTATIVE', 'CONFIRMED', 'CANCELLED']).optional().describe('New status'),
@@ -1372,7 +1392,12 @@ export const updateEventTool = {
       .enum(['PUBLIC', 'PRIVATE', 'CONFIDENTIAL'])
       .optional()
       .describe('New classification'),
-    rrule: z.string().nullable().optional().describe('New recurrence rule, or null to remove'),
+    rrule: z
+      .string()
+      .regex(ICAL_RECUR, 'Use RFC 5545 RECUR syntax, e.g. FREQ=WEEKLY;BYDAY=MO')
+      .nullable()
+      .optional()
+      .describe('New recurrence rule, or null to remove'),
     alarm: z
       .number()
       .nullable()
@@ -1389,7 +1414,7 @@ export const updateEventTool = {
     attendees: z
       .array(
         z.object({
-          email: z.string().describe('Attendee email'),
+          email: z.email().describe('Attendee email'),
           cn: z.string().optional().describe('Display name'),
           role: z
             .enum(['REQ-PARTICIPANT', 'OPT-PARTICIPANT', 'NON-PARTICIPANT', 'CHAIR'])
@@ -1403,6 +1428,7 @@ export const updateEventTool = {
       .describe('Replace attendees list, or null to remove all attendees'),
     tzid: z
       .string()
+      .regex(IANA_TZID, 'Use an IANA time zone name, e.g. Europe/Berlin')
       .optional()
       .describe(
         'IANA time zone (e.g. "Europe/Berlin") for the updated dtstart/dtend. When set, a VTIMEZONE block is added (if missing) and DTSTART/DTEND use TZID instead of UTC. Required for iOS/Thunderbird CalDAV sync.'
@@ -1497,7 +1523,7 @@ export const updateEventTool = {
           for (const mins of collectAlarmMinutes(args.alarm, args.alarms)) {
             const valarm = buildVAlarm(mins);
             if (valarm) {
-              modified = modified.replace(/END:VEVENT/, `${valarm}\r\nEND:VEVENT`);
+              modified = modified.replace(/END:VEVENT/, () => `${valarm}\r\nEND:VEVENT`);
             }
           }
         }
@@ -1510,17 +1536,17 @@ export const updateEventTool = {
           vevent.replace(/^(ATTENDEE|ORGANIZER)[;:].*\r?\n?/gm, '')
         );
         if (args.attendees !== null && args.attendees.length > 0) {
-          let attendeeLines = `ORGANIZER;CN=${config.user}:mailto:${config.user}`;
+          let attendeeLines = `ORGANIZER;CN=${quoteICalParam(config.user)}:mailto:${config.user}`;
           for (const attendee of args.attendees) {
             let atLine = 'ATTENDEE';
-            if (attendee.cn) atLine += `;CN=${attendee.cn}`;
+            if (attendee.cn) atLine += `;CN=${quoteICalParam(attendee.cn)}`;
             atLine += `;ROLE=${attendee.role || 'REQ-PARTICIPANT'}`;
             atLine += `;PARTSTAT=NEEDS-ACTION`;
             if (attendee.rsvp !== false) atLine += `;RSVP=TRUE`;
             atLine += `:mailto:${attendee.email}`;
             attendeeLines += `\r\n${atLine}`;
           }
-          modified = modified.replace(/END:VEVENT/, `${attendeeLines}\r\nEND:VEVENT`);
+          modified = modified.replace(/END:VEVENT/, () => `${attendeeLines}\r\nEND:VEVENT`);
         }
       }
 

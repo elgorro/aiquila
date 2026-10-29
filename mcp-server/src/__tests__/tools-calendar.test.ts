@@ -411,7 +411,7 @@ END:VCALENDAR</c:calendar-data>
 
       const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
       expect(putCall[1].body).toContain('ATTENDEE');
-      expect(putCall[1].body).toContain('CN=Bob');
+      expect(putCall[1].body).toContain('CN="Bob"');
       expect(putCall[1].body).toContain('mailto:bob@example.com');
       expect(putCall[1].body).toContain('ORGANIZER');
       expect(putCall[1].body).toContain('BEGIN:VALARM');
@@ -830,9 +830,9 @@ END:VCALENDAR</c:calendar-data>
 
       expect(result.content[0].text).toContain('updated successfully');
       const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body;
-      expect(putBody).toContain('ORGANIZER;CN=admin:mailto:admin');
+      expect(putBody).toContain('ORGANIZER;CN="admin":mailto:admin');
       expect(putBody).toContain(
-        'ATTENDEE;CN=Alice;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:alice@example.com'
+        'ATTENDEE;CN="Alice";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:alice@example.com'
       );
       expect(putBody).toContain(
         'ATTENDEE;ROLE=OPT-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bob@example.com'

@@ -191,6 +191,22 @@ Common `rrule` patterns:
 | `FREQ=WEEKLY;COUNT=10` | Weekly, 10 occurrences |
 | `FREQ=DAILY;UNTIL=20261231T235959Z` | Daily until Dec 31, 2026 |
 
+## Input validation
+
+Dates, recurrence rules, time zones and attendee addresses are written into the event
+unescaped, so they are checked first. A value that fails the check rejects the call:
+
+- `dtstart`, `dtend`: `YYYYMMDD`, `YYYYMMDDTHHmmss` or `YYYYMMDDTHHmmssZ` (RFC 5545 §3.3.4,
+  §3.3.5). ISO forms such as `2026-03-15T10:00:00Z` are rejected.
+- `rrule`: letters, digits and `= ; , + -` only, i.e. RFC 5545 §3.3.10 rule parts without
+  the `RRULE:` prefix.
+- `tzid`: an IANA name such as `Europe/Berlin`.
+- `attendees[].email`: a valid email address.
+
+An attendee's display name is free text. It is written as a quoted parameter value (RFC 5545
+§3.2), with line breaks and double quotes removed. Task dates (`due`, `dtstart`) follow the
+same date rule.
+
 ## Workflow Examples
 
 ### Schedule a Recurring Meeting
