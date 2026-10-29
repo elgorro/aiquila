@@ -18,7 +18,12 @@ import {
   type OAuthClientMetadata,
   type OAuthMetadata,
 } from '@modelcontextprotocol/server';
-import type { NextcloudOAuthProvider } from './provider.js';
+import {
+  browserBindingCookie,
+  newBrowserBinding,
+  readBrowserBinding,
+  type NextcloudOAuthProvider,
+} from './provider.js';
 import { isRegisteredRedirectUri } from './redirect-uri.js';
 import { logger } from '../logger.js';
 
@@ -295,6 +300,9 @@ function authorizationHandler(options: AuthRouterOptions) {
         throw new OAuthError(OAuthErrorCode.InvalidRequest, 'code_challenge is malformed');
       }
       checkResource(p.resource);
+      // Bind the login form to this browser (see LoginFormRequest.browserBinding).
+      const browserBinding = readBrowserBinding(req) ?? newBrowserBinding();
+      res.append('Set-Cookie', browserBindingCookie(browserBinding));
       await provider.authorize(
         client,
         {
@@ -302,6 +310,7 @@ function authorizationHandler(options: AuthRouterOptions) {
           codeChallenge,
           state,
           scopes: p.scope ? p.scope.split(' ').filter(Boolean) : [],
+          browserBinding,
         },
         res
       );
@@ -377,8 +386,17 @@ function registrationHandler(provider: NextcloudOAuthProvider) {
             : result.issues
                 .map((i) => `${(i.path ?? []).map(String).join('.')}: ${i.message}`)
                 .join('; ');
-        // RFC 7591 §3.2.2
-        throw new OAuthError(OAuthErrorCode.InvalidClientMetadata, detail || 'Invalid metadata');
+        // RFC 7591 §3.2.2: invalid_redirect_uri when it is the redirect URIs
+        // that are wrong, invalid_client_metadata for anything else.
+        const onlyRedirects =
+          !(result instanceof Promise) &&
+          result.issues.length > 0 &&
+          result.issues.every((i) => String(i.path?.[0] ?? '') === 'redirect_uris') &&
+          Array.isArray((req.body ?? {}).redirect_uris);
+        throw new OAuthError(
+          onlyRedirects ? OAuthErrorCode.InvalidRedirectUri : OAuthErrorCode.InvalidClientMetadata,
+          detail || 'Invalid metadata'
+        );
       }
       const metadata = result.value as OAuthClientMetadata;
       const isPublic = metadata.token_endpoint_auth_method === 'none';

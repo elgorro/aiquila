@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import {
   OAuthError,
@@ -13,10 +13,15 @@ import {
 import { ClientsStore, CodeStore, RefreshStore, RevocationList } from './store.js';
 import { checkNextcloudUser, type NextcloudUserCheck } from './nc-user.js';
 import { looksLikeClientIdUrl } from './cimd.js';
+import { isInternalToken } from './internal-token.js';
 import { LOGIN_STYLESHEET_PATH } from './login-page-css.js';
 import { logger } from '../logger.js';
 
 // --- JWT helpers (HMAC-SHA256 via jose) ---
+
+// RFC 9068 §2.1: JWT access tokens are explicitly typed, so no other JWT
+// signed with MCP_AUTH_SECRET can pass for one (RFC 8725 §3.11).
+const ACCESS_TOKEN_TYP = 'at+jwt';
 
 async function signJwt(
   payload: Record<string, unknown>,
@@ -26,7 +31,7 @@ async function signJwt(
   const key = new TextEncoder().encode(secret);
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT(payload)
-    .setProtectedHeader({ alg: 'HS256' })
+    .setProtectedHeader({ alg: 'HS256', typ: ACCESS_TOKEN_TYP })
     .setIssuedAt(now)
     .setExpirationTime(now + expiresInSecs)
     .sign(key);
@@ -41,6 +46,8 @@ async function verifyJwt(
     const key = new TextEncoder().encode(secret);
     const { payload } = await jwtVerify(token, key, {
       algorithms: ['HS256'],
+      // RFC 9068 §4: the resource server MUST check the typ header.
+      typ: ACCESS_TOKEN_TYP,
       ...(opts?.issuer && { issuer: opts.issuer }),
       ...(opts?.audience && { audience: opts.audience }),
     });
@@ -94,10 +101,55 @@ export interface LoginFormRequest {
   scope?: string;
   // Seconds since the epoch, when /authorize rendered the form
   issuedAt: number;
+  // The login-binding cookie of the browser /authorize answered. Not in the
+  // form: the browser sends it back as a cookie, which a cross-site page
+  // cannot set (login CSRF, RFC 6749 §10.12).
+  browserBinding?: string;
 }
 
 // How long a rendered login form stays valid.
 const LOGIN_FORM_TTL_SECS = 30 * 60;
+
+const BROWSER_BINDING = /^[A-Za-z0-9_-]{43}$/;
+
+/**
+ * The login-binding cookie's name. With an https issuer it carries the
+ * __Host- prefix, so no other host (a sibling subdomain, say) can plant one
+ * (RFC 6265bis §4.1.3.2). Browsers refuse that prefix over plain http, where
+ * the bare name is used.
+ */
+export function loginCookieName(): string {
+  const issuer = process.env.MCP_AUTH_ISSUER ?? '';
+  return issuer.startsWith('https:') ? '__Host-aiquila-login' : 'aiquila-login';
+}
+
+/** The login-binding value from a request's Cookie header, if well-formed. */
+export function readBrowserBinding(req: { headers?: Record<string, unknown> }): string | undefined {
+  const header = req.headers?.cookie;
+  if (typeof header !== 'string') return undefined;
+  const name = loginCookieName();
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1 || part.slice(0, eq).trim() !== name) continue;
+    const value = part.slice(eq + 1).trim();
+    return BROWSER_BINDING.test(value) ? value : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * The Set-Cookie value binding this browser to the login forms it is shown.
+ * One value per browser, reused while it lasts, so several sign-ins in
+ * parallel tabs all stay valid. SameSite=Lax keeps it off cross-site POSTs.
+ */
+export function browserBindingCookie(value: string): string {
+  const secure = loginCookieName().startsWith('__Host-') ? '; Secure' : '';
+  return `${loginCookieName()}=${value}; Path=/; Max-Age=${LOGIN_FORM_TTL_SECS}; HttpOnly; SameSite=Lax${secure}`;
+}
+
+export function newBrowserBinding(): string {
+  return randomBytes(32).toString('base64url');
+}
 
 export function loginRequestMac(req: LoginFormRequest): string {
   const secret = process.env.MCP_AUTH_SECRET;
@@ -105,13 +157,14 @@ export function loginRequestMac(req: LoginFormRequest): string {
   return createHmac('sha256', secret)
     .update(
       JSON.stringify([
-        'aiquila-login-form-v1',
+        'aiquila-login-form-v2',
         req.clientId,
         req.redirectUri,
         req.codeChallenge,
         req.state ?? '',
         req.scope ?? '',
         req.issuedAt,
+        req.browserBinding ?? '',
       ])
     )
     .digest('base64url');
@@ -120,6 +173,7 @@ export function loginRequestMac(req: LoginFormRequest): string {
 /** True when `mac` belongs to `req` and the form has not expired. */
 export function verifyLoginRequestMac(req: LoginFormRequest, mac: string | undefined): boolean {
   if (!mac || !Number.isSafeInteger(req.issuedAt)) return false;
+  if (!req.browserBinding || !BROWSER_BINDING.test(req.browserBinding)) return false;
   const age = Math.floor(Date.now() / 1000) - req.issuedAt;
   if (age < 0 || age > LOGIN_FORM_TTL_SECS) return false;
   const hash = (v: string) => createHash('sha256').update(v).digest();
@@ -199,6 +253,8 @@ export interface AuthorizationParams {
   codeChallenge: string;
   state?: string;
   scopes: string[];
+  // See LoginFormRequest.browserBinding
+  browserBinding?: string;
 }
 
 // --- OAuth Provider ---
@@ -236,6 +292,7 @@ export class NextcloudOAuthProvider {
       codeChallenge: params.codeChallenge,
       scope: params.scopes?.join(' '),
       issuedAt: Math.floor(Date.now() / 1000),
+      browserBinding: params.browserBinding,
     };
     applySecurityHeaders(res)
       .status(200)
@@ -284,9 +341,21 @@ export class NextcloudOAuthProvider {
       );
       throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Redirect URI mismatch');
     }
-    this.codeStore.delete(authorizationCode);
+    // OAuth 2.1 (draft-ietf-oauth-v2-1-16 §4.1.3, §7.5.3; RFC 6749 §4.1.2): a
+    // code used twice MUST be denied and the tokens issued from it SHOULD be
+    // revoked. The router has already checked client and code_verifier, so
+    // this replay carries valid parameters and the grant ends.
+    if (entry.redeemedGrantId) {
+      this.revokeGrant(entry.redeemedGrantId);
+      logger.warn(
+        { user: entry.userId, client: client.client_id },
+        '[token] Authorization code replayed — grant revoked'
+      );
+      throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid authorization code');
+    }
 
     const grantId = randomUUID();
+    this.codeStore.markRedeemed(authorizationCode, grantId);
     const accessToken = await this.signAccessToken(
       grantId,
       entry.userId,
@@ -387,18 +456,15 @@ export class NextcloudOAuthProvider {
   }
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
-    // Internal token bypass for service-to-service auth (e.g. NC → MCP on Docker network)
-    const internalToken = process.env.MCP_INTERNAL_TOKEN;
-    if (internalToken) {
-      const hash = (s: string) => createHash('sha256').update(s).digest();
-      if (timingSafeEqual(hash(token), hash(internalToken))) {
-        return {
-          token,
-          clientId: 'internal',
-          scopes: [],
-          expiresAt: Math.floor(Date.now() / 1000) + 86400 * 365,
-        };
-      }
+    // Internal token for service-to-service calls on the internal network.
+    // Where it may be used from is enforced in the HTTP transport.
+    if (isInternalToken(token)) {
+      return {
+        token,
+        clientId: 'internal',
+        scopes: [],
+        expiresAt: Math.floor(Date.now() / 1000) + 86400 * 365,
+      };
     }
 
     const claims = await this.verifyOwnJwt(token);
@@ -413,7 +479,7 @@ export class NextcloudOAuthProvider {
     return {
       token,
       clientId: claims.client_id as string,
-      scopes: claims.scopes as string[],
+      scopes: typeof claims.scope === 'string' ? claims.scope.split(' ').filter(Boolean) : [],
       expiresAt: claims.exp as number,
     };
   }
@@ -476,7 +542,8 @@ export class NextcloudOAuthProvider {
       {
         sub: userId,
         client_id: clientId,
-        scopes,
+        // RFC 9068 §2.2.3: a space-separated string, as in RFC 6749 §3.3
+        scope: scopes.join(' '),
         gid: grantId,
         jti: randomUUID(),
         iss: this.getIssuer(),

@@ -10,6 +10,8 @@ the MCP authorization specification builds on:
 - exact redirect URI matching, except that loopback redirects may use any port
 - bearer tokens in the `Authorization` header only, never in the query string
 - refresh tokens rotate on every use, and reusing one ends the grant
+- an authorization code is single-use; replaying a redeemed one ends the grant it started
+- access tokens are JWTs typed `at+jwt` (RFC 9068) and checked for type, issuer and audience
 - `redirect_uri` is optional in the token request, because PKCE already binds the code. An
   OAuth 2.0 client that sends it must send the value from the authorization request
 
@@ -318,7 +320,11 @@ For any MCP client that supports OAuth 2.0 with PKCE:
 | Token | Lifetime | Notes |
 |---|---|---|
 | Access token | 1 hour | JWT signed with `MCP_AUTH_SECRET` |
-| Refresh token | 24 hours | 256 random bits; rotated on each use. The server stores only its SHA-256 hash |
+| Refresh token | 30 days (`MCP_REFRESH_TOKEN_TTL`) | 256 random bits; rotated on each use. The server stores only its SHA-256 hash |
+
+The refresh lifetime is sliding: every rotation issues a token with the full lifetime, so a
+client used at least once per period stays signed in. Set `MCP_REFRESH_TOKEN_TTL` in
+seconds to change it, for example `86400` to require a daily sign-in.
 
 Refresh tokens and revocations are kept in `MCP_AUTH_STATE_DIR`, so sessions survive a
 restart as long as that directory is persistent and writable.
@@ -331,6 +337,8 @@ issued along the way, all belong to that grant.
 - **Revoking a refresh token** at `/revoke` ends the whole grant. Its access tokens stop
   working at once, not when they expire (RFC 7009 §2.1).
 - **Revoking an access token** ends only that token. The refresh token keeps working.
+- **Presenting an authorization code a second time** ends the grant it started, provided
+  the replay passes the client and PKCE checks (OAuth 2.1 §4.1.3, §7.5.3).
 - **Presenting a refresh token a second time** ends the grant. A rotated token that comes
   back means two parties hold it, and the server cannot tell which one is the client, so
   it revokes everything and logs `Refresh token reuse detected` at `warn` (RFC 9700
@@ -351,6 +359,35 @@ issued along the way, all belong to that grant.
 - The MCP server validates Nextcloud credentials on every login by calling your Nextcloud instance's OCS API. If Nextcloud is unreachable, logins will fail.
 - Use a Nextcloud **app password** (not your main password) for the MCP login. This limits the blast radius if the credential is ever exposed. See [Security Best Practice: App Passwords](setup.md#security-best-practice-app-passwords).
 - The login form is served over HTTPS (enforced by your reverse proxy). Never run the auth-enabled server without TLS.
+- **The login form is bound to the browser that opened it.** `/authorize` sets a cookie
+  (`__Host-aiquila-login` over HTTPS; `HttpOnly`, `SameSite=Lax`) and the form's integrity
+  check covers its value, so a form fetched by someone else, or posted cross-site, issues
+  no code (login CSRF, RFC 6749 §10.12). A script that drives the flow with `curl` must keep
+  cookies between `/authorize` and `/auth/login` (`-c` / `-b`).
+- **Brute-force protection on `/auth/login`.** Each client IP gets 10 attempts per 15
+  minutes. Failed logins are also counted per username: after 10 within 15 minutes, further
+  attempts for that account are refused with `429` without asking Nextcloud, until the
+  window ends. That also means a third party can lock an account out of *this* login form
+  for 15 minutes; Nextcloud itself is unaffected. Behind a reverse proxy, set
+  `MCP_TRUST_PROXY` so the per-IP limit sees client addresses.
+- **Nextcloud's own brute-force protection** sees the MCP server's address, not the end
+  user's, unless Nextcloud trusts the MCP server as a proxy. The login check sends the
+  client address in `X-Forwarded-For`; add the MCP server's address to Nextcloud's
+  `trusted_proxies` (and `forwarded_for_headers` if you changed it) for Nextcloud to use it.
+  Without that, Nextcloud throttles every user of the connector together.
+- **`MCP_INTERNAL_TOKEN`** is a static bearer token for service-to-service calls (the
+  Nextcloud container calling the MCP container on the Docker network). It bypasses OAuth
+  entirely: anyone holding it can call every tool as `NEXTCLOUD_USER`, and it never
+  expires. It is accepted only on a direct connection from a loopback or private address
+  (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `::1`,
+  `fc00::/7`) that carries no `Forwarded`, `X-Forwarded-For` or `X-Real-IP` header, so it
+  never works through the public reverse proxy. `MCP_INTERNAL_TOKEN_NETWORKS` (comma-separated
+  CIDRs or addresses) replaces those ranges. Generate it with `openssl rand -hex 32`, keep it
+  out of client configuration, and leave it unset if nothing on the internal network needs it.
+- **Browser requests to `/mcp` with an `Origin` header** are refused with `403` unless the
+  origin is the `MCP_AUTH_ISSUER` origin or listed in `MCP_CORS_ORIGINS` (MCP Streamable HTTP,
+  DNS rebinding protection). Requests without `Origin`, which is every server-side client,
+  are unaffected.
 - **Tool names, descriptions and input schemas are readable without a token** by default, along with the server's timezone. This is [lazy authentication](#lazy-authentication); no Nextcloud data is exposed. Set `MCP_LAZY_AUTH=false` if your threat model treats the tool inventory as sensitive.
 
 ### Client ID Metadata Documents

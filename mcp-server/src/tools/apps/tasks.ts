@@ -7,7 +7,7 @@ import {
   fetchCalDAV,
   nsTagContent,
 } from '../../client/caldav.js';
-import { escapeICalValue, ICAL_DATE_OR_DATE_TIME } from '../dav-utils.js';
+import { escapeICalValue, formatICalendar, ICAL_DATE_OR_DATE_TIME } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 import { parseCalendars, type ParsedCalendar } from './calendar.js';
 
@@ -668,7 +668,7 @@ export const createTaskTool = {
 
     const response = await fetchCalDAV(calDavUrl, {
       method: 'PUT',
-      body: vtodo,
+      body: formatICalendar(vtodo),
       headers: {
         'Content-Type': 'text/calendar; charset=utf-8',
         'If-None-Match': '*',
@@ -847,7 +847,7 @@ export const updateTaskTool = {
       const putUrl = `${config.url}${href}`;
       const putResponse = await fetchCalDAV(putUrl, {
         method: 'PUT',
-        body: modified,
+        body: formatICalendar(modified),
         headers: {
           'Content-Type': 'text/calendar; charset=utf-8',
           'If-Match': etag,
@@ -988,7 +988,7 @@ export const completeTaskTool = {
       const putUrl = `${config.url}${href}`;
       const putResponse = await fetchCalDAV(putUrl, {
         method: 'PUT',
-        body: modified,
+        body: formatICalendar(modified),
         headers: {
           'Content-Type': 'text/calendar; charset=utf-8',
           'If-Match': etag,

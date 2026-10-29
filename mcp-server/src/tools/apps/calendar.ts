@@ -14,6 +14,7 @@ import {
   ICAL_RECUR,
   IANA_TZID,
   quoteICalParam,
+  formatICalendar,
 } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
@@ -1301,7 +1302,7 @@ export const createEventTool = {
 
       const response = await fetchCalDAV(calDavUrl, {
         method: 'PUT',
-        body: vevent,
+        body: formatICalendar(vevent),
         headers: {
           'Content-Type': 'text/calendar; charset=utf-8',
           'If-None-Match': '*',
@@ -1558,7 +1559,7 @@ export const updateEventTool = {
       const putUrl = `${config.url}${href}`;
       const putResponse = await fetchCalDAV(putUrl, {
         method: 'PUT',
-        body: modified,
+        body: formatICalendar(modified),
         headers: {
           'Content-Type': 'text/calendar; charset=utf-8',
           'If-Match': etag,

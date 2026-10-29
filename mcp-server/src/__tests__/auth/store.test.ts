@@ -394,7 +394,7 @@ describe('ClientsStore — persistence', () => {
 
 describe('RefreshStore — persistence', () => {
   const TEST_STATE_DIR = '/tmp/test-state';
-  const REFRESH_TTL_MS = 24 * 60 * 60 * 1000;
+  const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
   beforeEach(() => {
     setupFsMocks();
@@ -473,8 +473,8 @@ describe('RefreshStore — persistence', () => {
     mockWriteFileSync.mockClear();
     mockRenameSync.mockClear();
 
-    // Advance time past 24h TTL
-    vi.advanceTimersByTime(25 * 60 * 60 * 1000);
+    // Advance time past the 30-day TTL
+    vi.advanceTimersByTime(31 * 24 * 60 * 60 * 1000);
 
     const result = store.get(token);
     expect(result).toBeUndefined();
@@ -532,5 +532,52 @@ describe('RefreshStore — persistence', () => {
       `${TEST_STATE_DIR}/refresh-tokens.json.tmp`,
       `${TEST_STATE_DIR}/refresh-tokens.json`
     );
+  });
+});
+
+// ---- RefreshStore — lifetime ----
+
+describe('RefreshStore — lifetime', () => {
+  afterEach(() => {
+    delete process.env.MCP_REFRESH_TOKEN_TTL;
+  });
+
+  it('defaults to 30 days', async () => {
+    const { RefreshStore } = await import('../../auth/store.js');
+    const store = new RefreshStore();
+    const before = Date.now();
+    const entry = store.get(store.store({ grantId: 'g', userId: 'u', clientId: 'c', scopes: [] }))!;
+    expect(entry.expiresAt - before).toBeGreaterThanOrEqual(30 * 24 * 3600 * 1000);
+    expect(entry.expiresAt - before).toBeLessThan(30 * 24 * 3600 * 1000 + 5000);
+  });
+
+  it('MCP_REFRESH_TOKEN_TTL sets it in seconds', async () => {
+    process.env.MCP_REFRESH_TOKEN_TTL = '3600';
+    const { refreshTtlMs } = await import('../../auth/store.js');
+    expect(refreshTtlMs()).toBe(3600 * 1000);
+  });
+
+  it('an invalid MCP_REFRESH_TOKEN_TTL falls back to the default', async () => {
+    const { refreshTtlMs } = await import('../../auth/store.js');
+    for (const v of ['0', '-5', 'abc', '1.5']) {
+      process.env.MCP_REFRESH_TOKEN_TTL = v;
+      expect(refreshTtlMs(), v).toBe(30 * 24 * 3600 * 1000);
+    }
+  });
+
+  it('keeps at most 10 spent tokens per grant, dropping the oldest', async () => {
+    const { RefreshStore } = await import('../../auth/store.js');
+    const store = new RefreshStore();
+    const tokens: string[] = [];
+    let current = store.store({ grantId: 'g', userId: 'u', clientId: 'c', scopes: [] });
+    for (let i = 0; i < 15; i++) {
+      tokens.push(current);
+      store.markSpent(current);
+      current = store.store({ grantId: 'g', userId: 'u', clientId: 'c', scopes: [] });
+    }
+    const kept = tokens.filter((t) => store.get(t)?.spent);
+    expect(kept).toHaveLength(10);
+    expect(kept).toEqual(tokens.slice(5));
+    expect(store.get(current)?.spent).toBeUndefined();
   });
 });

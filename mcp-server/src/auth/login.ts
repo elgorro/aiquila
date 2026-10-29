@@ -5,9 +5,11 @@ import {
   renderLoginForm,
   applySecurityHeaders,
   verifyLoginRequestMac,
+  readBrowserBinding,
   type LoginFormRequest,
 } from './provider.js';
 import { isRegisteredRedirectUri } from './redirect-uri.js';
+import { LoginThrottle } from './login-throttle.js';
 import { logger } from '../logger.js';
 
 /**
@@ -26,7 +28,10 @@ async function nextcloudUid(resp: Response, loginName: string): Promise<string> 
   return loginName;
 }
 
-export function loginHandler(provider: NextcloudOAuthProvider) {
+export function loginHandler(
+  provider: NextcloudOAuthProvider,
+  throttle: LoginThrottle = new LoginThrottle()
+) {
   return async (req: any, res: any): Promise<void> => {
     const body = req.body as Record<string, string>;
     const { username, password, client_id, redirect_uri, state, code_challenge, scope } = body;
@@ -37,6 +42,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       state: state || undefined,
       scope: scope || undefined,
       issuedAt: Number(body.request_iat),
+      browserBinding: readBrowserBinding(req),
     };
 
     // Re-renders the form with the request as received, so the user can retry.
@@ -44,7 +50,14 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       applySecurityHeaders(res)
         .status(status)
         .type('html')
-        .send(renderLoginForm({ ...request, ...form, requestMac: body.request_mac, error }));
+        .send(
+          renderLoginForm({
+            ...request,
+            ...form,
+            requestMac: body.request_mac,
+            error,
+          })
+        );
     };
 
     const ncUrl = process.env.NEXTCLOUD_URL?.replace(/\/+$/, '');
@@ -80,6 +93,12 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       return;
     }
 
+    if (throttle.isUserLocked(username)) {
+      logger.warn({ user: username, ip: req.ip }, '[auth] Login refused: account throttled');
+      fail(429, 'Too many failed sign-in attempts for this account. Try again in 15 minutes.');
+      return;
+    }
+
     logger.info({ user: username, client: client_id, nc: ncUrl }, '[auth] Login attempt');
 
     try {
@@ -89,15 +108,22 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
           Authorization: `Basic ${credentials}`,
           'OCS-APIRequest': 'true',
           Accept: 'application/json',
+          // Lets Nextcloud's brute-force protection see the end user's
+          // address. Nextcloud uses it only when this server is listed in
+          // its trusted_proxies; otherwise the header is ignored.
+          ...(typeof req.ip === 'string' && req.ip ? { 'X-Forwarded-For': req.ip } : {}),
         },
       });
 
       if (!ncResp.ok) {
+        // Only a credentials refusal counts against the account; an outage does not.
+        if (ncResp.status === 401) throttle.recordFailure(username);
         logger.warn({ user: username, status: ncResp.status }, '[auth] Login failed');
         fail(200, 'Invalid Nextcloud credentials');
         return;
       }
 
+      throttle.recordSuccess(username);
       const userId = await nextcloudUid(ncResp, username);
       const code = provider.issueAuthCode({
         pkceChallenge: code_challenge,

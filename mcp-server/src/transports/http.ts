@@ -15,9 +15,11 @@ import {
   cimdEnabledFromEnv,
 } from '../auth/store.js';
 import { loginHandler } from '../auth/login.js';
+import { LoginThrottle } from '../auth/login-throttle.js';
 import { authRouter } from '../auth/router.js';
 import { LOGIN_STYLESHEET, LOGIN_STYLESHEET_PATH } from '../auth/login-page-css.js';
 import { isPublicRequest } from './lazy-auth.js';
+import { internalNetworks, internalTokenAllowed, isInternalToken } from '../auth/internal-token.js';
 import { logger } from '../logger.js';
 import { SUPPORT_NOTICE } from '../support.js';
 import { fetchStatus } from '../client/ocs.js';
@@ -114,8 +116,13 @@ async function checkIssuerTls(issuerUrl: string): Promise<void> {
   });
 }
 
-export async function startHttp(): Promise<void> {
-  const port = parseInt(process.env.MCP_PORT || String(DEFAULT_PORT), 10);
+/**
+ * Builds the HTTP application: CORS, health check, the OAuth authorization
+ * server when MCP_AUTH_ENABLED=true, and the MCP endpoint. Reads its
+ * configuration from the environment. startHttp() listens on it; tests drive
+ * it directly.
+ */
+export async function createHttpApp(): Promise<express.Express> {
   const host = process.env.MCP_HOST || '0.0.0.0';
   const authEnabled = process.env.MCP_AUTH_ENABLED === 'true';
 
@@ -279,6 +286,26 @@ export async function startHttp(): Promise<void> {
   );
   const handleMcpRequest = (req: any, res: any) => mcpHandler(req, res, req.body);
 
+  // MCP 2026-07-28, Streamable HTTP, Security §1: the Origin header MUST be
+  // validated on every request to the MCP endpoint, and one that is present
+  // and not allowed is answered 403 (DNS rebinding). Requests without Origin
+  // (server-side clients, the Nextcloud app) are unaffected. The allowed set
+  // is the CORS one: the issuer origin plus MCP_CORS_ORIGINS.
+  const checkOrigin = (req: any, res: any, next: any) => {
+    const origin = req.headers?.origin;
+    if (typeof origin === 'string' && !allowedOrigins.has(origin)) {
+      logger.warn({ origin }, '[mcp] Request from a disallowed Origin rejected');
+      res.status(403).json({
+        jsonrpc: '2.0',
+        error: { code: -32600, message: 'Origin not allowed' },
+      });
+      return;
+    }
+    next();
+  };
+  app.use(MCP_PATH, checkOrigin);
+  app.all('/', checkOrigin);
+
   const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
   const hasStaticClient = !!process.env.MCP_CLIENT_ID;
   const registrationToken = process.env.MCP_REGISTRATION_TOKEN;
@@ -312,6 +339,7 @@ export async function startHttp(): Promise<void> {
     }
 
     const provider = new NextcloudOAuthProvider();
+    const internalTokens = internalNetworks();
 
     if (!registrationEnabled && !hasStaticClient && !cimdEnabled) {
       logger.warn(
@@ -353,29 +381,19 @@ export async function startHttp(): Promise<void> {
     // Parse URL-encoded form submissions from the login page
     app.use(express.urlencoded({ extended: false }));
 
-    // Nextcloud credential validation → auth code issuance
-    const loginRateLimit = (() => {
-      const attempts = new Map<string, { count: number; resetAt: number }>();
-      const MAX = 10,
-        WINDOW_MS = 15 * 60 * 1000;
-      return (req: any, res: any, next: any) => {
-        const ip = req.ip ?? 'unknown';
-        const now = Date.now();
-        const entry = attempts.get(ip);
-        if (!entry || now > entry.resetAt) {
-          attempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
-          return next();
-        }
-        entry.count++;
-        if (entry.count > MAX) {
-          logger.warn({ ip }, '[auth] Login rate limit exceeded');
-          res.status(429).json({ error: 'too_many_requests' });
-          return;
-        }
-        next();
-      };
-    })();
-    app.post('/auth/login', loginRateLimit, loginHandler(provider));
+    // Nextcloud credential validation → auth code issuance. Throttled per IP
+    // here, and per username inside the handler.
+    const loginThrottle = new LoginThrottle();
+    const loginRateLimit = (req: any, res: any, next: any) => {
+      const ip = req.ip ?? 'unknown';
+      if (!loginThrottle.allowIp(ip)) {
+        logger.warn({ ip }, '[auth] Login rate limit exceeded');
+        res.status(429).json({ error: 'too_many_requests' });
+        return;
+      }
+      next();
+    };
+    app.post('/auth/login', loginRateLimit, loginHandler(provider, loginThrottle));
 
     // Protect /mcp (and / as alias) with Bearer token auth
     const authMiddleware = [
@@ -430,6 +448,29 @@ export async function startHttp(): Promise<void> {
           ]
         : []),
 
+      // MCP_INTERNAL_TOKEN works only on a direct connection from an internal
+      // address; through the reverse proxy it is an invalid token.
+      (req: any, res: any, next: any) => {
+        const header = req.headers.authorization;
+        const token =
+          typeof header === 'string' && /^Bearer /i.test(header) ? header.slice(7).trim() : '';
+        if (token && isInternalToken(token) && !internalTokenAllowed(req, internalTokens)) {
+          logger.warn(
+            { address: req.socket?.remoteAddress },
+            '[auth] MCP_INTERNAL_TOKEN used from outside the internal network — rejected'
+          );
+          res
+            .status(401)
+            .set(
+              'WWW-Authenticate',
+              `Bearer error="invalid_token", error_description="Invalid token", resource_metadata="${new URL('/.well-known/oauth-protected-resource/mcp', issuerUrl).href}"`
+            )
+            .json({ error: 'invalid_token', error_description: 'Invalid token' });
+          return;
+        }
+        next();
+      },
+
       requireBearerAuth({
         verifier: provider,
         resourceMetadataUrl: new URL('/.well-known/oauth-protected-resource/mcp', issuerUrl).href,
@@ -449,6 +490,20 @@ export async function startHttp(): Promise<void> {
     app.all('/', mcpHandler);
   }
 
+  return app;
+}
+
+export async function startHttp(): Promise<void> {
+  const port = parseInt(process.env.MCP_PORT || String(DEFAULT_PORT), 10);
+  const host = process.env.MCP_HOST || '0.0.0.0';
+  const authEnabled = process.env.MCP_AUTH_ENABLED === 'true';
+  const lazyAuthEnabled = process.env.MCP_LAZY_AUTH !== 'false';
+  const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
+  const hasStaticClient = !!process.env.MCP_CLIENT_ID;
+  const registrationToken = process.env.MCP_REGISTRATION_TOKEN;
+  const cimdEnabled = cimdEnabledFromEnv();
+
+  const app = await createHttpApp();
   app.listen(port, host, () => {
     logger.info(
       { version: SERVER_VERSION, host, port, path: MCP_PATH },

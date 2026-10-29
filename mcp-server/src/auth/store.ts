@@ -19,6 +19,9 @@ export interface CodeEntry {
   redirectUri: string;
   userId: string;
   state?: string;
+  // Set once the code has been exchanged: the grant it started. The entry is
+  // kept until it expires so a replay can be recognised and the grant ended.
+  redeemedGrantId?: string;
   expiresAt: number;
 }
 
@@ -48,7 +51,28 @@ function authSecretId(): string {
 }
 
 const CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const REFRESH_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const DEFAULT_REFRESH_TTL_SECS = 30 * 24 * 60 * 60; // 30 days
+
+// Spent refresh tokens kept per grant for reuse detection. Each rotation adds
+// one; the oldest beyond this are dropped, so a long-lived grant does not
+// grow the state file without bound. A dropped token still fails to redeem,
+// it just no longer ends the grant when replayed.
+const SPENT_TOKENS_PER_GRANT = 10;
+
+/**
+ * Refresh token lifetime in ms: MCP_REFRESH_TOKEN_TTL seconds, default 30
+ * days. Sliding: every rotation issues a token with the full lifetime, so a
+ * client that is used at least once per period stays signed in.
+ */
+export function refreshTtlMs(): number {
+  const raw = process.env.MCP_REFRESH_TOKEN_TTL;
+  if (raw !== undefined && raw !== '') {
+    const secs = Number(raw);
+    if (Number.isSafeInteger(secs) && secs > 0) return secs * 1000;
+    logger.warn({ value: raw }, '[config] Ignoring invalid MCP_REFRESH_TOKEN_TTL');
+  }
+  return DEFAULT_REFRESH_TTL_SECS * 1000;
+}
 
 const DEFAULT_STATE_DIR = '/app/state';
 
@@ -396,6 +420,12 @@ export class CodeStore {
   delete(code: string): void {
     this.codes.delete(code);
   }
+
+  /** Marks a code as exchanged for `grantId`. It no longer redeems, but is still recognised. */
+  markRedeemed(code: string, grantId: string): void {
+    const entry = this.codes.get(code);
+    if (entry) entry.redeemedGrantId = grantId;
+  }
 }
 
 /** The key a refresh token is stored under: its SHA-256, hex-encoded. */
@@ -466,8 +496,9 @@ export class RefreshStore {
     this.tokens.set(refreshTokenKey(token), {
       ...entry,
       secretId: authSecretId(),
-      expiresAt: Date.now() + REFRESH_TTL_MS,
+      expiresAt: Date.now() + refreshTtlMs(),
     });
+    this.pruneSpent(entry.grantId);
     this.persist();
     return token;
   }
@@ -495,6 +526,16 @@ export class RefreshStore {
     if (!entry) return;
     entry.spent = true;
     this.persist();
+  }
+
+  /** Keeps only the newest SPENT_TOKENS_PER_GRANT spent tokens of a grant. */
+  private pruneSpent(grantId: string): void {
+    const spent = [...this.tokens].filter(([, e]) => e.grantId === grantId && e.spent);
+    if (spent.length <= SPENT_TOKENS_PER_GRANT) return;
+    spent.sort(([, a], [, b]) => a.expiresAt - b.expiresAt);
+    for (const [key] of spent.slice(0, spent.length - SPENT_TOKENS_PER_GRANT)) {
+      this.tokens.delete(key);
+    }
   }
 
   /** Removes every refresh token of a grant. */

@@ -87,7 +87,11 @@ echo "client_id: $CLIENT_ID"
 sep "Step 4 — POST /auth/login (Nextcloud credentials → auth code)"
 # The login form carries the authorization request back with a MAC, so it has
 # to come from /authorize; its hidden fields are posted back unchanged.
-AUTHZ_HTML=$($CURL -G "$BASE/authorize" \
+# /authorize sets a cookie binding the login form to this client; the login
+# POST must send it back, as a browser would.
+COOKIE_JAR=$(mktemp)
+trap 'rm -f "$COOKIE_JAR"' EXIT
+AUTHZ_HTML=$($CURL -c "$COOKIE_JAR" -G "$BASE/authorize" \
   --data-urlencode "response_type=code" \
   --data-urlencode "client_id=$CLIENT_ID" \
   --data-urlencode "redirect_uri=$REDIRECT_URI" \
@@ -105,7 +109,7 @@ for name, value in re.findall(r'<input type=\"hidden\" name=\"([^\"]+)\" value=\
 [ ${#FORM_FIELDS[@]} -eq 0 ] && { echo "ERROR: /authorize did not render the login form" >&2; echo "$AUTHZ_HTML" >&2; exit 1; }
 
 LOGIN_HEADERS=$($CURL -D - -o /dev/null --max-redirs 0 \
-  -X POST "$BASE/auth/login" \
+  -b "$COOKIE_JAR" -X POST "$BASE/auth/login" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   --data-urlencode "username=$NC_USER" \
   --data-urlencode "password=$NC_PASS" \
