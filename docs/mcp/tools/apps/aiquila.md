@@ -263,8 +263,9 @@ Current Claude models:
 - `claude-haiku-4-5-20251001` - Fastest, most economical
 - `claude-opus-4-5-20251101` - Older Opus generation
 
-The Fable models, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7+ reject the `temperature` / `top_p` / `top_k`
-sampling parameters; AIquila omits them automatically for those models.
+The Claude API rejects the `temperature` / `top_p` / `top_k` sampling parameters on every
+model, so AIquila never sends them to Claude, on any provider. The OpenAI-compatible providers
+(Mistral, DeepSeek, Local) still receive them where the backend accepts them.
 
 How "thinking off" behaves per model is described under
 [Thinking and effort](../../../installation/aiquila-setup.md#thinking-and-effort).

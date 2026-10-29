@@ -36,7 +36,7 @@ class CapabilityTestableService extends ClaudeSDKService {
 
     protected function callRetrieveModel(Client $client, string $modelId): ModelInfo {
         if ($this->retrieveException !== null) throw $this->retrieveException;
-        return $this->retrieveResult ?? ModelInfo::with($modelId, null, new \DateTime(), 'Test', null, null);
+        return $this->retrieveResult ?? ModelInfo::with(id: $modelId, capabilities: null, createdAt: new \DateTime(), deprecatedAt: null, displayName: 'Test', line: null, maxInputTokens: null, maxTokens: null, retiresAt: null);
     }
 
     protected function callCreate(\Anthropic\Core\BaseClient $client, array $params): \Anthropic\Messages\Message {
@@ -55,7 +55,7 @@ class CapabilityTestableService extends ClaudeSDKService {
             $p = $ref->getProperty($prop);
             $p->setValue($stub, $val);
         }
-        $usage = \Anthropic\Messages\Usage::with(null, null, null, null, 10, 20, null, null, null);
+        $usage = \Anthropic\Messages\Usage::with(null, null, null, null, 10, 20, null, null, null, null);
         $p = $ref->getProperty('usage');
         $p->setValue($stub, $usage);
         return $stub;
@@ -102,8 +102,8 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $this->cache->expects($this->atLeastOnce())->method('set');
 
         $info = ModelInfo::with(
-            ClaudeModels::OPUS_4_6,
-            [
+            id: ClaudeModels::OPUS_4_6,
+            capabilities: [
                 'batch' => ['supported' => true],
                 'citations' => ['supported' => false],
                 'code_execution' => ['supported' => false],
@@ -120,10 +120,13 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                 'structured_outputs' => ['supported' => false],
                 'thinking' => ['supported' => true, 'types' => ['adaptive' => ['supported' => true], 'enabled' => ['supported' => true]]],
             ],
-            new \DateTime(),
-            'Claude Opus 4.6',
-            200000,
-            128000
+            createdAt: new \DateTime(),
+            deprecatedAt: null,
+            displayName: 'Claude Opus 4.6',
+            line: null,
+            maxInputTokens: 200000,
+            maxTokens: 128000,
+            retiresAt: null,
         );
 
         $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
@@ -148,8 +151,8 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         });
 
         $info = ModelInfo::with(
-            ClaudeModels::OPUS_4_6,
-            [
+            id: ClaudeModels::OPUS_4_6,
+            capabilities: [
                 'batch' => ['supported' => true],
                 'citations' => ['supported' => false],
                 'code_execution' => ['supported' => false],
@@ -166,10 +169,13 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                 'structured_outputs' => ['supported' => false],
                 'thinking' => ['supported' => true, 'types' => ['adaptive' => ['supported' => true], 'enabled' => ['supported' => true]]],
             ],
-            new \DateTime(),
-            'Claude Opus 4.6',
-            1000000,
-            128000
+            createdAt: new \DateTime(),
+            deprecatedAt: null,
+            displayName: 'Claude Opus 4.6',
+            line: null,
+            maxInputTokens: 1000000,
+            maxTokens: 128000,
+            retiresAt: null,
         );
 
         $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
@@ -226,8 +232,8 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             });
 
         $info = ModelInfo::with(
-            ClaudeModels::OPUS_4_7,
-            [
+            id: ClaudeModels::OPUS_4_7,
+            capabilities: [
                 'batch' => ['supported' => true],
                 'citations' => ['supported' => false],
                 'code_execution' => ['supported' => false],
@@ -244,10 +250,13 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                 'structured_outputs' => ['supported' => false],
                 'thinking' => ['supported' => true, 'types' => ['adaptive' => ['supported' => true], 'enabled' => ['supported' => true]]],
             ],
-            new \DateTime(),
-            'Claude Opus 4.7',
-            1000000,
-            128000
+            createdAt: new \DateTime(),
+            deprecatedAt: null,
+            displayName: 'Claude Opus 4.7',
+            line: null,
+            maxInputTokens: 1000000,
+            maxTokens: 128000,
+            retiresAt: null,
         );
 
         $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
@@ -274,8 +283,8 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             });
 
         $info = ModelInfo::with(
-            ClaudeModels::HAIKU_4_5,
-            [
+            id: ClaudeModels::HAIKU_4_5,
+            capabilities: [
                 'batch' => ['supported' => true],
                 'citations' => ['supported' => false],
                 'code_execution' => ['supported' => false],
@@ -292,10 +301,13 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                 'structured_outputs' => ['supported' => false],
                 'thinking' => ['supported' => false, 'types' => ['adaptive' => ['supported' => false], 'enabled' => ['supported' => false]]],
             ],
-            new \DateTime(),
-            'Claude Haiku 4.5',
-            200000,
-            8192
+            createdAt: new \DateTime(),
+            deprecatedAt: null,
+            displayName: 'Claude Haiku 4.5',
+            line: null,
+            maxInputTokens: 200000,
+            maxTokens: 8192,
+            retiresAt: null,
         );
 
         $service = new CapabilityTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
@@ -653,7 +665,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                     $p = $ref->getProperty($prop);
                     $p->setValue($stub, $val);
                 }
-                $usage = \Anthropic\Messages\Usage::with(null, null, null, null, 10, 5, null, null, null);
+                $usage = \Anthropic\Messages\Usage::with(null, null, null, null, 10, 5, null, null, null, null);
                 $p = $ref->getProperty('usage');
                 $p->setValue($stub, $usage);
                 return $stub;
@@ -698,7 +710,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                     $p = $ref->getProperty($prop);
                     $p->setValue($stub, $val);
                 }
-                $usage = \Anthropic\Messages\Usage::with(null, 50, 200, 'us', 100, 30, null, null, 'standard');
+                $usage = \Anthropic\Messages\Usage::with(null, 50, 200, 'us', 100, 30, null, null, 'standard', null);
                 $p = $ref->getProperty('usage');
                 $p->setValue($stub, $usage);
                 return $stub;

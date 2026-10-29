@@ -108,7 +108,7 @@ class CloudProvidersTest extends TestCase {
         $text = new \stdClass();
         $text->type = 'text';
         $text->text = 'ok';
-        return Message::with('msg', null, [$text], 'm', null, 'end_turn', null, Usage::with(null, null, null, null, 1, 1, null, null, null));
+        return Message::with('msg', null, [$text], null, 'm', null, 'end_turn', null, Usage::with(null, null, null, null, 1, 1, null, null, null, null));
     }
 
     private static function baseUrl(BaseClient $client): string {
@@ -216,6 +216,43 @@ class CloudProvidersTest extends TestCase {
         $client = $this->client($this->provider(BedrockInvokeProvider::class));
         $this->assertInstanceOf(BedrockClient::class, $client);
         $this->assertSame('https://bedrock-runtime.us-west-2.amazonaws.com', self::baseUrl($client));
+    }
+
+    /**
+     * Bedrock serves the SDK's 2026-10-21 only for Claude 4.7 and later, so the
+     * InvokeModel route for older models has to send the Bedrock version.
+     */
+    public function testBedrockInvokeSendsTheBedrockApiVersion(): void {
+        $this->app['region_bedrock_invoke'] = 'us-west-2';
+        $this->keys['bedrock_invoke'] = 'bedrock-key';
+        $client = $this->client($this->provider(BedrockInvokeProvider::class));
+
+        $transport = new class implements \Psr\Http\Client\ClientInterface {
+            public ?\Psr\Http\Message\RequestInterface $request = null;
+            public function sendRequest(\Psr\Http\Message\RequestInterface $request): \Psr\Http\Message\ResponseInterface {
+                $this->request = $request;
+                return new \Nyholm\Psr7\Response(200, ['Content-Type' => 'application/json'], (string)json_encode([
+                    'id' => 'msg', 'type' => 'message', 'role' => 'assistant', 'model' => 'm',
+                    'content' => [['type' => 'text', 'text' => 'ok']],
+                    'stop_reason' => 'end_turn', 'stop_sequence' => null,
+                    'usage' => ['input_tokens' => 1, 'output_tokens' => 1],
+                ]));
+            }
+        };
+
+        $client->messages->create(
+            maxTokens: 16,
+            messages: [['role' => 'user', 'content' => 'hi']],
+            model: 'global.anthropic.claude-opus-4-6-v1',
+            tools: [['name' => 't', 'input_schema' => ['type' => 'object', 'properties' => new \stdClass()]]],
+            requestOptions: ['transporter' => $transport, 'maxRetries' => 0],
+        );
+
+        $this->assertNotNull($transport->request);
+        $this->assertSame('/model/global.anthropic.claude-opus-4-6-v1/invoke', $transport->request->getUri()->getPath());
+        $body = (string)$transport->request->getBody();
+        $this->assertSame(BedrockInvokeProvider::ANTHROPIC_VERSION, json_decode($body, true)['anthropic_version'] ?? null);
+        $this->assertStringContainsString('"properties":{}', $body);
     }
 
     public function testClaudePlatformAwsNeedsTheWorkspace(): void {

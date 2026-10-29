@@ -7,6 +7,9 @@ namespace OCA\AIquila\Service\Provider\Cloud;
 
 use Anthropic\Bedrock\Client as BedrockClient;
 use Anthropic\Core\BaseClient;
+use Nyholm\Psr7\Stream;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
 
 /**
  * Claude on Amazon Bedrock through the original InvokeModel API
@@ -19,6 +22,13 @@ use Anthropic\Core\BaseClient;
  * cache breakpoints are sent.
  */
 class BedrockInvokeProvider extends AbstractAwsClaudeProvider {
+    /**
+     * The SDK sends `anthropic_version: 2026-10-21`, which Bedrock accepts only
+     * for Claude 4.7 and later — exactly the models this route does not serve.
+     * Opus 4.6 and earlier keep the Bedrock version they were released under.
+     */
+    public const ANTHROPIC_VERSION = 'bedrock-2023-05-31';
+
     public function getId(): string {
         return 'bedrock_invoke';
     }
@@ -47,16 +57,36 @@ class BedrockInvokeProvider extends AbstractAwsClaudeProvider {
         $region = $this->region();
         $baseUrl = CloudEndpoints::bedrockRuntimeUrl($region);
 
+        $requestOptions = ['middleware' => [self::pinAnthropicVersion(...)]];
+
         return match ($authMode) {
-            self::AUTH_API_KEY => BedrockClient::withApiKey($this->requiredApiKey(), $region, $baseUrl),
+            self::AUTH_API_KEY => BedrockClient::withApiKey($this->requiredApiKey(), $region, $baseUrl, $requestOptions),
             self::AUTH_ACCESS_KEYS => BedrockClient::withCredentials(
                 accessKeyId: $this->awsAccessKeyId(),
                 secretAccessKey: $this->requiredSecret('aws_secret_access_key'),
                 region: $region,
                 securityToken: $this->optionalSecret('aws_session_token'),
                 baseUrl: $baseUrl,
+                requestOptions: $requestOptions,
             ),
-            default => BedrockClient::fromEnvironment($region, $baseUrl),
+            default => BedrockClient::fromEnvironment($region, $baseUrl, $requestOptions),
         };
+    }
+
+    /**
+     * Client middleware runs before the SDK's Bedrock middleware, which only
+     * fills in `anthropic_version` when the body has none. Decoded as objects
+     * so empty JSON objects such as a tool's `{}` input survive the round trip.
+     *
+     * @param \Closure(RequestInterface): ResponseInterface $next
+     */
+    private static function pinAnthropicVersion(RequestInterface $request, \Closure $next): ResponseInterface {
+        $body = json_decode((string)$request->getBody(), false);
+        if (!$body instanceof \stdClass) {
+            return $next($request);
+        }
+        $body->anthropic_version = self::ANTHROPIC_VERSION;
+        $json = json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return $next($request->withBody(Stream::create($json))->withHeader('Content-Length', (string)strlen($json)));
     }
 }

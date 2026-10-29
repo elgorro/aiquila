@@ -46,7 +46,9 @@ Where a feature is off:
   only used through the Claude API card's key, which no cloud workspace can read,
   so even the Anthropic-operated platforms inline.
 - **InvokeModel** — explicit cache breakpoints still go out; only the top-level
-  automatic one is left off, because that route rejects it.
+  automatic one is left off, because that route rejects it. Requests carry
+  `anthropic_version: bedrock-2023-05-31`: Bedrock serves the SDK's current API
+  version only for Claude 4.7 and later, which this route does not carry.
 
 ## Setting one up
 

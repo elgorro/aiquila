@@ -54,9 +54,8 @@ If you are on the default, two things change after upgrading:
   accordingly. This is a measurement change, not a fault.
 - **The output ceiling rises** from 64,000 to 128,000 tokens.
 
-Sonnet 5 also rejects the `temperature`, `top_p`, and `top_k` sampling
-parameters; AIquila omits them automatically for models that don't accept them,
-so no configuration change is needed.
+AIquila never sends the `temperature`, `top_p`, and `top_k` sampling
+parameters to Claude, so no configuration change is needed.
 
 To stay on the previous model:
 

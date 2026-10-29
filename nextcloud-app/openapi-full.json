@@ -2946,7 +2946,7 @@
                                     "options": {
                                         "type": "object",
                                         "default": {},
-                                        "description": "Optional model parameters (temperature, top_p, top_k, stop_sequences)",
+                                        "description": "Optional model parameters (stop_sequences; temperature, top_p and top_k reach only the OpenAI-compatible providers)",
                                         "additionalProperties": {
                                             "type": "object"
                                         }

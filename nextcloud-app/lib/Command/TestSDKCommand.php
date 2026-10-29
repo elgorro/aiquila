@@ -67,7 +67,7 @@ class TestSDKCommand extends Base {
         $output->writeln('<info>✓ API Key: ' . $maskedKey . '</info>');
         $output->writeln('<info>✓ Model: ' . $this->claudeService->getModel() . '</info>');
         $output->writeln('<info>✓ Max Tokens: ' . $this->claudeService->getMaxTokens() . '</info>');
-        $output->writeln('<info>✓ SDK Version: Anthropic PHP SDK 0.4.0</info>');
+        $output->writeln('<info>✓ SDK Version: Anthropic PHP SDK ' . \Anthropic\VERSION . '</info>');
         $output->writeln('');
 
         // Test 2: API Connection Test
