@@ -512,7 +512,7 @@ check_ok && step_ok || step_fail "talk_list_conversations returned an error"
 
 ROOM_NAME="Test Room $TIMESTAMP"
 sep "Step 55 — talk_create_conversation"
-mcp_tool $((RPC_ID++)) "talk_create_conversation" "{\"roomType\":3,\"roomName\":\"$ROOM_NAME\"}"
+mcp_tool $((RPC_ID++)) "talk_create_conversation" "{\"roomType\":\"public\",\"roomName\":\"$ROOM_NAME\"}"
 check_text "Conversation created" && step_ok || step_fail "talk_create_conversation failed"
 ROOM_TOKEN=$(extract_text '\[([a-zA-Z0-9]+)\]')
 echo "  room_token: $ROOM_TOKEN"
@@ -556,32 +556,43 @@ check_text "deleted" && step_ok || step_fail "delete_note failed"
 
 # ── Group J: Tasks CRUD ──────────────────────────────────────────────────────
 
-sep "Step 64 — list_tasks"
-mcp_tool $((RPC_ID++)) "list_tasks" '{"calendarName":"tasks"}'
-check_ok && step_ok || step_fail "list_tasks returned an error"
+# Task lists are named per user; use the first one rather than assuming "tasks".
+sep "Step 63a — list_task_lists"
+mcp_tool $((RPC_ID++)) "list_task_lists" '{}'
+TASK_LIST=$(extract_text 'calendarName: (\S+)' 2>/dev/null || true)
+if [ -z "$TASK_LIST" ]; then
+  check_ok && step_skip "tasks: $NC_USER has no task list" || step_fail "list_task_lists failed"
+else
+  step_ok
+  echo "  task_list: $TASK_LIST"
 
-TASK_SUMMARY="Test Task $TIMESTAMP"
-sep "Step 65 — create_task"
-mcp_tool $((RPC_ID++)) "create_task" "{\"calendarName\":\"tasks\",\"summary\":\"$TASK_SUMMARY\"}"
-check_text "Task created successfully" && step_ok || step_fail "create_task failed"
-TASK_UID=$(extract_text 'UID: (.+)')
-echo "  task_uid: $TASK_UID"
+  sep "Step 64 — list_tasks"
+  mcp_tool $((RPC_ID++)) "list_tasks" "{\"calendarName\":\"$TASK_LIST\"}"
+  check_ok && step_ok || step_fail "list_tasks returned an error"
 
-sep "Step 66 — list_tasks"
-mcp_tool $((RPC_ID++)) "list_tasks" '{"calendarName":"tasks"}'
-check_text "$TASK_SUMMARY" && step_ok || step_fail "list_tasks: task not found"
+  TASK_SUMMARY="Test Task $TIMESTAMP"
+  sep "Step 65 — create_task"
+  mcp_tool $((RPC_ID++)) "create_task" "{\"calendarName\":\"$TASK_LIST\",\"summary\":\"$TASK_SUMMARY\"}"
+  check_text "Task created successfully" && step_ok || step_fail "create_task failed"
+  TASK_UID=$(extract_text 'UID: (.+)')
+  echo "  task_uid: $TASK_UID"
 
-sep "Step 67 — update_task"
-mcp_tool $((RPC_ID++)) "update_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\",\"summary\":\"$TASK_SUMMARY Updated\"}"
-check_text "Task updated successfully" && step_ok || step_fail "update_task failed"
+  sep "Step 66 — list_tasks"
+  mcp_tool $((RPC_ID++)) "list_tasks" "{\"calendarName\":\"$TASK_LIST\"}"
+  check_text "$TASK_SUMMARY" && step_ok || step_fail "list_tasks: task not found"
 
-sep "Step 68 — complete_task"
-mcp_tool $((RPC_ID++)) "complete_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\"}"
-check_text "completed successfully" && step_ok || step_fail "complete_task failed"
+  sep "Step 67 — update_task"
+  mcp_tool $((RPC_ID++)) "update_task" "{\"calendarName\":\"$TASK_LIST\",\"uid\":\"$TASK_UID\",\"summary\":\"$TASK_SUMMARY Updated\"}"
+  check_text "Task updated successfully" && step_ok || step_fail "update_task failed"
 
-sep "Step 69 — delete_task"
-mcp_tool $((RPC_ID++)) "delete_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\"}"
-check_text "Task deleted successfully" && step_ok || step_fail "delete_task failed"
+  sep "Step 68 — complete_task"
+  mcp_tool $((RPC_ID++)) "complete_task" "{\"calendarName\":\"$TASK_LIST\",\"uid\":\"$TASK_UID\"}"
+  check_text "completed successfully" && step_ok || step_fail "complete_task failed"
+
+  sep "Step 69 — delete_task"
+  mcp_tool $((RPC_ID++)) "delete_task" "{\"calendarName\":\"$TASK_LIST\",\"uid\":\"$TASK_UID\"}"
+  check_text "Task deleted successfully" && step_ok || step_fail "delete_task failed"
+fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
