@@ -114,8 +114,13 @@ async function checkIssuerTls(issuerUrl: string): Promise<void> {
   });
 }
 
-export async function startHttp(): Promise<void> {
-  const port = parseInt(process.env.MCP_PORT || String(DEFAULT_PORT), 10);
+/**
+ * Builds the HTTP application: CORS, health check, the OAuth authorization
+ * server when MCP_AUTH_ENABLED=true, and the MCP endpoint. Reads its
+ * configuration from the environment. startHttp() listens on it; tests drive
+ * it directly.
+ */
+export async function createHttpApp(): Promise<express.Express> {
   const host = process.env.MCP_HOST || '0.0.0.0';
   const authEnabled = process.env.MCP_AUTH_ENABLED === 'true';
 
@@ -449,6 +454,20 @@ export async function startHttp(): Promise<void> {
     app.all('/', mcpHandler);
   }
 
+  return app;
+}
+
+export async function startHttp(): Promise<void> {
+  const port = parseInt(process.env.MCP_PORT || String(DEFAULT_PORT), 10);
+  const host = process.env.MCP_HOST || '0.0.0.0';
+  const authEnabled = process.env.MCP_AUTH_ENABLED === 'true';
+  const lazyAuthEnabled = process.env.MCP_LAZY_AUTH !== 'false';
+  const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
+  const hasStaticClient = !!process.env.MCP_CLIENT_ID;
+  const registrationToken = process.env.MCP_REGISTRATION_TOKEN;
+  const cimdEnabled = cimdEnabledFromEnv();
+
+  const app = await createHttpApp();
   app.listen(port, host, () => {
     logger.info(
       { version: SERVER_VERSION, host, port, path: MCP_PATH },
