@@ -125,7 +125,6 @@ function issueCode(ctx: Ctx, overrides?: Record<string, unknown>) {
     clientId: PUBLIC_CLIENT,
     scopes: ['mcp:tools'],
     redirectUri: REDIRECT,
-    redirectUriExplicit: true,
     userId: 'alice',
     ...overrides,
   });
@@ -275,7 +274,7 @@ describe('/authorize', () => {
     const { redirect_uri: _omitted, ...rest } = valid;
     const res = await authorize({ ...rest, client_id: 'single-uri-client' });
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain('name="redirect_uri_explicit" value=""');
+    expect(await res.text()).toContain(`name="redirect_uri" value="${REDIRECT}"`);
   });
 
   it('requires redirect_uri when several are registered', async () => {
@@ -367,26 +366,13 @@ describe('/token', () => {
     expect((await res.json()).error).toBe('invalid_grant');
   });
 
-  it('requires redirect_uri when the authorization request had one (RFC 6749 §4.1.3)', async () => {
+  it('accepts a token request without redirect_uri (OAuth 2.1 §10.2)', async () => {
     const res = await fetch(
       `${ctx.base}/token`,
       form({
         grant_type: 'authorization_code',
         client_id: PUBLIC_CLIENT,
         code: issueCode(ctx),
-        code_verifier: VERIFIER,
-      })
-    );
-    expect((await res.json()).error).toBe('invalid_grant');
-  });
-
-  it('does not require redirect_uri when the authorization request omitted it', async () => {
-    const res = await fetch(
-      `${ctx.base}/token`,
-      form({
-        grant_type: 'authorization_code',
-        client_id: PUBLIC_CLIENT,
-        code: issueCode(ctx, { redirectUriExplicit: false }),
         code_verifier: VERIFIER,
       })
     );

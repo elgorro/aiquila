@@ -1,6 +1,17 @@
-# OAuth 2.0 Authentication
+# OAuth 2.1 Authentication
 
 AIquila's HTTP transport includes a built-in OAuth 2.1 provider so any MCP client that supports OAuth can connect to a remote server without an external identity service. Authentication is **opt-in** — existing stdio setups (local MCP clients) are completely unaffected.
+
+The authorization server follows **OAuth 2.1**
+([`draft-ietf-oauth-v2-1-16`](https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/)), which
+the MCP authorization specification builds on:
+
+- authorization code grant with PKCE `S256` only; no implicit or password grant
+- exact redirect URI matching, except that loopback redirects may use any port
+- bearer tokens in the `Authorization` header only, never in the query string
+- refresh tokens rotate on every use, and reusing one ends the grant
+- `redirect_uri` is optional in the token request, because PKCE already binds the code. An
+  OAuth 2.0 client that sends it must send the value from the authorization request
 
 ## How It Works
 

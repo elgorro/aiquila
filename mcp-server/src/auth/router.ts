@@ -226,7 +226,6 @@ function authorizationHandler(options: AuthRouterOptions) {
     let p: Record<string, string>;
     let client: OAuthClientInformationFull;
     let redirectUri: string;
-    let redirectUriExplicit: boolean;
     try {
       p = params(req.method === 'POST' ? req.body : req.query);
       client = await provider.clientsStore.getClient(required(p, 'client_id')).then((c) => {
@@ -238,11 +237,9 @@ function authorizationHandler(options: AuthRouterOptions) {
           throw new OAuthError(OAuthErrorCode.InvalidRequest, 'Unregistered redirect_uri');
         }
         redirectUri = p.redirect_uri;
-        redirectUriExplicit = true;
       } else if (client.redirect_uris.length === 1) {
         // RFC 6749 §3.1.2.3: optional when exactly one is registered.
         redirectUri = String(client.redirect_uris[0]);
-        redirectUriExplicit = false;
       } else {
         throw new OAuthError(
           OAuthErrorCode.InvalidRequest,
@@ -277,7 +274,6 @@ function authorizationHandler(options: AuthRouterOptions) {
         client,
         {
           redirectUri,
-          redirectUriExplicit,
           codeChallenge,
           state,
           scopes: p.scope ? p.scope.split(' ').filter(Boolean) : [],

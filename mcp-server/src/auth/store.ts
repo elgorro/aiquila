@@ -17,10 +17,6 @@ export interface CodeEntry {
   clientId: string;
   scopes: string[];
   redirectUri: string;
-  // Whether the authorization request carried redirect_uri itself rather than
-  // falling back to the client's only registered one. If it did, the token
-  // request must repeat it (RFC 6749 §4.1.3).
-  redirectUriExplicit: boolean;
   userId: string;
   state?: string;
   expiresAt: number;
