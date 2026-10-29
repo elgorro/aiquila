@@ -368,29 +368,6 @@ class ClaudeModels {
         return self::THINKING_SUMMARY_OPT_IN[self::canonicalId($model)] ?? false;
     }
 
-    // ── Sampling parameter support ────────────────────────────────────────
-
-    /** Models that reject temperature/top_p/top_k with a 400. */
-    private const NO_SAMPLING_PARAMS = [
-        self::FABLE_5_1 => true,
-        self::FABLE_5   => true,
-        self::OPUS_5_5  => true,
-        self::OPUS_5    => true,
-        self::SONNET_5  => true,
-        self::OPUS_4_8  => true,
-        self::OPUS_4_7  => true,
-    ];
-
-    /**
-     * Whether a model accepts the temperature/top_p/top_k sampling
-     * parameters. The Fable family, Opus 4.7+ and the 5-series removed them:
-     * Opus 5 rejects them outright, Sonnet 5 rejects any non-default value, so
-     * we omit them for all of them.
-     */
-    public static function supportsSamplingParams(string $model): bool {
-        return !isset(self::NO_SAMPLING_PARAMS[self::canonicalId($model)]);
-    }
-
     // ── Service tier ──────────────────────────────────────────────────────
 
     /**

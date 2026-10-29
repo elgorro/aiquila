@@ -369,9 +369,6 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      *   auto_cache    (bool)    – request top-level automatic cache_control, which
      *                             lets the API place a breakpoint on the growing
      *                             conversation tail (multi-turn callers only)
-     *   temperature   (float)
-     *   top_p         (float)
-     *   top_k         (int)
      *   stop_sequences (array)
      *   tools          (array)  – Anthropic-format tool definitions
      *   effort         (string) – per-conversation effort override (low…max)
@@ -469,15 +466,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $params['system'] = [$systemBlock];
         }
 
-        // Sampling parameters — Fable 5, the 5-series, and Opus 4.7+ reject
-        // temperature/top_p/top_k with a 400
-        $samplingKeys = ClaudeModels::supportsSamplingParams($this->capabilityModel($model))
-            ? ['temperature', 'top_p', 'top_k', 'stop_sequences']
-            : ['stop_sequences'];
-        foreach ($samplingKeys as $key) {
-            if (array_key_exists($key, $options)) {
-                $params[$key] = $options[$key];
-            }
+        // API version 2026-10-21 rejects temperature/top_p/top_k with a 400 on
+        // every model, so they are never forwarded.
+        if (array_key_exists('stop_sequences', $options)) {
+            $params['stop_sequences'] = $options['stop_sequences'];
         }
 
         // Tools — mark the last tool with cache_control so the entire tool block
@@ -931,9 +923,6 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             system: $params['system'] ?? null,
             thinking: $params['thinking'] ?? null,
             outputConfig: $params['outputConfig'] ?? null,
-            temperature: $params['temperature'] ?? null,
-            topP: $params['top_p'] ?? null,
-            topK: $params['top_k'] ?? null,
             stopSequences: $params['stop_sequences'] ?? null,
             tools: $params['tools'] ?? null,
             serviceTier: $params['service_tier'] ?? null,
@@ -1042,15 +1031,16 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         ksort($blocks);
 
         $usage = Usage::with(
-            null,
-            $base?->usage->cacheCreationInputTokens ?? null,
-            $base?->usage->cacheReadInputTokens ?? null,
-            $base?->usage->inferenceGeo ?? null,
-            $base?->usage->inputTokens ?? 0,
-            $outputTokens,
-            null,
-            null,
-            $base?->usage->serviceTier ?? null,
+            cacheCreation: null,
+            cacheCreationInputTokens: $base?->usage->cacheCreationInputTokens ?? null,
+            cacheReadInputTokens: $base?->usage->cacheReadInputTokens ?? null,
+            inferenceGeo: $base?->usage->inferenceGeo ?? null,
+            inputTokens: $base?->usage->inputTokens ?? 0,
+            outputTokens: $outputTokens,
+            outputTokensDetails: null,
+            serverToolUse: null,
+            serviceTier: $base?->usage->serviceTier ?? null,
+            speed: $base?->usage->speed ?? null,
         );
 
         // The accumulated blocks are the loosely-typed stdClass shapes the stream
@@ -1058,14 +1048,15 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         // class goes through the same property access.
         /** @psalm-suppress InvalidArgument */
         return Message::with(
-            $base?->id ?? '',
-            null,
-            array_values($blocks),
-            $params['model'],
-            $stopDetails,
-            $stopReason,
-            $stopSequence,
-            $usage,
+            id: $base?->id ?? '',
+            container: null,
+            content: array_values($blocks),
+            diagnostics: null,
+            model: $params['model'],
+            stopDetails: $stopDetails,
+            stopReason: $stopReason,
+            stopSequence: $stopSequence,
+            usage: $usage,
         );
     }
 
@@ -1081,9 +1072,6 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             system: $params['system'] ?? null,
             thinking: $params['thinking'] ?? null,
             outputConfig: $params['outputConfig'] ?? null,
-            temperature: $params['temperature'] ?? null,
-            topP: $params['top_p'] ?? null,
-            topK: $params['top_k'] ?? null,
             stopSequences: $params['stop_sequences'] ?? null,
             tools: $params['tools'] ?? null,
             serviceTier: $params['service_tier'] ?? null,
@@ -1350,7 +1338,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string $prompt The question/prompt
      * @param string $context Optional context
      * @param string|null $userId User ID for user-specific API key
-     * @param array $options Optional: system, temperature, top_p, top_k, stop_sequences, cache_system
+     * @param array $options Optional: system, stop_sequences, cache_system
      * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
     public function ask(
@@ -1408,7 +1396,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      *                        [['role'=>'user','content'=>'...'], ...]
      * @param string|null $system Optional system prompt
      * @param string|null $userId User ID for API key resolution
-     * @param array $options Optional: temperature, top_p, top_k, stop_sequences, cache_system
+     * @param array $options Optional: stop_sequences, cache_system
      * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
     public function chat(
@@ -1470,7 +1458,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param callable $toolExecutor fn(string $name, array $input): array — returns MCP tool result
      * @param string|null $system Optional system prompt
      * @param string|null $userId User ID for API key resolution
-     * @param array $options Optional: temperature, top_p, etc.
+     * @param array $options Optional: stop_sequences, cache_system, etc.
      * @param int $maxIterations Safety cap on tool-use loop iterations
      * @return array{response: string, usage?: array, citations?: array}|array{error: string}
      */
@@ -1917,16 +1905,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             'messages'  => $params['messages'],
             'model'     => $params['model'],
         ];
-        foreach (['system', 'thinking', 'outputConfig', 'temperature', 'tools'] as $k) {
+        foreach (['system', 'thinking', 'outputConfig', 'tools'] as $k) {
             if (isset($params[$k])) {
                 $out[$k] = $params[$k];
             }
-        }
-        if (isset($params['top_p'])) {
-            $out['topP'] = $params['top_p'];
-        }
-        if (isset($params['top_k'])) {
-            $out['topK'] = $params['top_k'];
         }
         if (isset($params['stop_sequences'])) {
             $out['stopSequences'] = $params['stop_sequences'];
@@ -2608,7 +2590,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string $prompt The question/prompt
      * @param string $context Optional context
      * @param string|null $userId User ID for user-specific API key
-     * @param array $options Optional: system, temperature, top_p, top_k, stop_sequences, cache_system
+     * @param array $options Optional: system, stop_sequences, cache_system
      * @return \Generator Yields text chunks as they arrive
      * @throws \Exception If error occurs
      */
@@ -2984,11 +2966,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             speed: $fast ? 'fast' : null,
             stopSequences: $params['stop_sequences'] ?? null,
             system: $params['system'] ?? null,
-            temperature: $params['temperature'] ?? null,
             thinking: $params['thinking'] ?? null,
             tools: $params['tools'] ?? null,
-            topK: $params['top_k'] ?? null,
-            topP: $params['top_p'] ?? null,
             metadata: $this->betaMetadataParam($params),
             betas: $betas,
         );

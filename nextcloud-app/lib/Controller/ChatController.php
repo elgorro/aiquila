@@ -305,7 +305,7 @@ class ChatController extends Controller {
      *
      * @param list<array{role: string, content: string}> $messages Conversation messages
      * @param string|null $system Optional system prompt
-     * @param array<string, mixed> $options Optional model parameters (temperature, top_p, top_k, stop_sequences)
+     * @param array<string, mixed> $options Optional model parameters (stop_sequences; temperature, top_p and top_k reach only the OpenAI-compatible providers)
      *
      * 200: Claude response with model info and token usage
      * 400: Messages array is missing or empty

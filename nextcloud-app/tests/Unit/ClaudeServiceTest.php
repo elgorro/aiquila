@@ -111,7 +111,7 @@ class TestableClaudeSDKService extends ClaudeSDKService {
                 mixed $parsedBody = null,
             ) {}
             public function close(): void {}
-            public function getIterator(): \Traversable { return new \ArrayIterator($this->events); }
+            public function getIterator(): \Iterator { return new \ArrayIterator($this->events); }
         };
         $stream->events = $events;
         return $stream;
@@ -137,7 +137,7 @@ class TestableClaudeSDKService extends ClaudeSDKService {
 
     protected function callRetrieveModel(Client $client, string $modelId): ModelInfo {
         if ($this->retrieveModelException !== null) throw $this->retrieveModelException;
-        return $this->retrieveModelInfo ?? ModelInfo::with($modelId, null, new \DateTime(), 'Test Model', null, null);
+        return $this->retrieveModelInfo ?? ModelInfo::with(id: $modelId, capabilities: null, createdAt: new \DateTime(), deprecatedAt: null, displayName: 'Test Model', line: null, maxInputTokens: null, maxTokens: null, retiresAt: null);
     }
 
     // Bypass real Client construction; callCreate/callCreateStream intercept before use.
@@ -172,7 +172,7 @@ class TestableClaudeSDKService extends ClaudeSDKService {
             $p = $ref->getProperty($prop);
             $p->setValue($stub, $val);
         }
-        $usage = Usage::with(null, null, null, null, 10, 20, null, null, null);
+        $usage = Usage::with(null, null, null, null, 10, 20, null, null, null, null);
         $p = $ref->getProperty('usage');
         $p->setValue($stub, $usage);
         return $stub;
@@ -420,44 +420,25 @@ class ClaudeServiceTest extends TestCase {
 
     // ── ask(): options passthrough ─────────────────────────────────────────
 
-    public function testAskWithOptionsPassesTemperatureToParams(): void {
-        // Sonnet 4.6 still accepts sampling params; the 5-series does not.
-        $this->configWithApiKey(ClaudeModels::SONNET_4_6);
-
-        $result = $this->testable->ask('Hi', '', 'testuser', ['temperature' => 0.7]);
-
-        $this->assertArrayNotHasKey('error', $result);
-        $this->assertArrayHasKey('temperature', $this->testable->lastCreateParams);
-        $this->assertSame(0.7, $this->testable->lastCreateParams['temperature']);
-    }
-
-    public function testAskWithOptionsPassesTopPAndTopKToParams(): void {
-        $this->configWithApiKey(ClaudeModels::SONNET_4_6);
-
-        $this->testable->ask('Hi', '', 'testuser', ['top_p' => 0.9, 'top_k' => 40]);
-
-        $this->assertSame(0.9, $this->testable->lastCreateParams['top_p']);
-        $this->assertSame(40,  $this->testable->lastCreateParams['top_k']);
-    }
-
     /**
-     * Opus 5 rejects temperature/top_p/top_k with a 400 and Sonnet 5 rejects
-     * any non-default value, so buildParams() must drop them rather than
-     * forward a caller-supplied value.
+     * API version 2026-10-21 rejects temperature/top_p/top_k with a 400 on
+     * every model, so buildParams() drops them whatever the caller sends.
      */
-    public function testAskDropsSamplingParamsOn5Series(): void {
-        $this->configWithApiKey(ClaudeModels::SONNET_5);
+    public function testAskDropsSamplingParams(): void {
+        foreach ([ClaudeModels::SONNET_4_6, ClaudeModels::SONNET_5] as $model) {
+            $this->configWithApiKey($model);
 
-        $result = $this->testable->ask('Hi', '', 'testuser', [
-            'temperature' => 0.7,
-            'top_p'       => 0.9,
-            'top_k'       => 40,
-        ]);
+            $result = $this->testable->ask('Hi', '', 'testuser', [
+                'temperature' => 0.7,
+                'top_p'       => 0.9,
+                'top_k'       => 40,
+            ]);
 
-        $this->assertArrayNotHasKey('error', $result);
-        $this->assertArrayNotHasKey('temperature', $this->testable->lastCreateParams);
-        $this->assertArrayNotHasKey('top_p', $this->testable->lastCreateParams);
-        $this->assertArrayNotHasKey('top_k', $this->testable->lastCreateParams);
+            $this->assertArrayNotHasKey('error', $result);
+            $this->assertArrayNotHasKey('temperature', $this->testable->lastCreateParams, $model);
+            $this->assertArrayNotHasKey('top_p', $this->testable->lastCreateParams, $model);
+            $this->assertArrayNotHasKey('top_k', $this->testable->lastCreateParams, $model);
+        }
     }
 
     public function testAskWithOptionsPassesStopSequencesToParams(): void {
@@ -1304,8 +1285,8 @@ class ClaudeServiceTest extends TestCase {
 
     public function testListModelsReturnsIds(): void {
         $this->configWithApiKey();
-        $m1 = ModelInfo::with(ClaudeModels::SONNET_4_6, null, new \DateTime(), 'Claude Sonnet 4.6', null, null);
-        $m2 = ModelInfo::with(ClaudeModels::HAIKU_4_5, null, new \DateTime(), 'Claude Haiku 4.5', null, null);
+        $m1 = ModelInfo::with(id: ClaudeModels::SONNET_4_6, capabilities: null, createdAt: new \DateTime(), deprecatedAt: null, displayName: 'Claude Sonnet 4.6', line: null, maxInputTokens: null, maxTokens: null, retiresAt: null);
+        $m2 = ModelInfo::with(id: ClaudeModels::HAIKU_4_5, capabilities: null, createdAt: new \DateTime(), deprecatedAt: null, displayName: 'Claude Haiku 4.5', line: null, maxInputTokens: null, maxTokens: null, retiresAt: null);
         $this->testable->setListModelsItems([$m1, $m2]);
 
         $result = $this->testable->listModels('testuser');
@@ -1336,7 +1317,7 @@ class ClaudeServiceTest extends TestCase {
 
     public function testRetrieveModelReturnsInfo(): void {
         $this->configWithApiKey();
-        $info = ModelInfo::with(ClaudeModels::SONNET_4_6, null, new \DateTime(), 'Claude Sonnet 4.6', null, null);
+        $info = ModelInfo::with(id: ClaudeModels::SONNET_4_6, capabilities: null, createdAt: new \DateTime(), deprecatedAt: null, displayName: 'Claude Sonnet 4.6', line: null, maxInputTokens: null, maxTokens: null, retiresAt: null);
         $this->testable->setRetrieveModelInfo($info);
 
         $result = $this->testable->retrieveModel('claude-sonnet-4-6', 'testuser');

@@ -150,7 +150,7 @@ class BatchTestableService extends ClaudeSDKService {
         foreach (['content' => [$textObj], 'stopReason' => $stopReason] as $prop => $val) {
             $ref->getProperty($prop)->setValue($msg, $val);
         }
-        $ref->getProperty('usage')->setValue($msg, Usage::with(null, null, null, null, 5, 7, null, null, null));
+        $ref->getProperty('usage')->setValue($msg, Usage::with(null, null, null, null, 5, 7, null, null, null, null));
 
         if ($stopReason === 'refusal') {
             $ref->getProperty('stopDetails')->setValue(
@@ -174,7 +174,7 @@ class BatchTestableService extends ClaudeSDKService {
             $p = $ref->getProperty($prop);
             $p->setValue($msg, $val);
         }
-        $usage = Usage::with(null, null, null, null, 5, 7, null, null, null);
+        $usage = Usage::with(null, null, null, null, 5, 7, null, null, null, null);
         $up = $ref->getProperty('usage');
         $up->setValue($msg, $usage);
 

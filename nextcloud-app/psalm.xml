@@ -80,6 +80,16 @@
         </TypeDoesNotContainType>
 
         <!--
+            The SDK's createStream() returns its @internal BaseStream interface, and
+            iterating that return value is the documented way to read a stream.
+        -->
+        <InternalMethod>
+            <errorLevel type="suppress">
+                <referencedMethod name="Anthropic\Core\Contracts\BaseStream::getIterator"/>
+            </errorLevel>
+        </InternalMethod>
+
+        <!--
             IMG_* constants only exist when ext-gd is loaded. Nextcloud requires gd,
             but the analysis environment need not have it, so keep the result the same
             either way.

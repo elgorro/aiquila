@@ -108,7 +108,7 @@ class CloudProvidersTest extends TestCase {
         $text = new \stdClass();
         $text->type = 'text';
         $text->text = 'ok';
-        return Message::with('msg', null, [$text], 'm', null, 'end_turn', null, Usage::with(null, null, null, null, 1, 1, null, null, null));
+        return Message::with('msg', null, [$text], null, 'm', null, 'end_turn', null, Usage::with(null, null, null, null, 1, 1, null, null, null, null));
     }
 
     private static function baseUrl(BaseClient $client): string {

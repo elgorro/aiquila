@@ -41,7 +41,6 @@ class ClaudeModelsTest extends TestCase {
             $this->assertSame(1000000, ClaudeModels::getContextWindow($model));
             $this->assertTrue(ClaudeModels::supportsThinking($model));
             $this->assertTrue(ClaudeModels::supportsEffort($model));
-            $this->assertFalse(ClaudeModels::supportsSamplingParams($model));
             $this->assertSame(ClaudeModels::ALL_EFFORTS, ClaudeModels::getAllowedEfforts($model));
             // Set explicitly: Opus 5.5's API default is `medium`.
             $this->assertSame('xhigh', ClaudeModels::getEffortLevel($model));
@@ -180,16 +179,6 @@ class ClaudeModelsTest extends TestCase {
         $this->assertEquals('medium', ClaudeModels::getEffortLevel(ClaudeModels::SONNET_5));
     }
 
-    public function testSupportsSamplingParams(): void {
-        $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::FABLE_5));
-        $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::OPUS_5));
-        $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::SONNET_5));
-        $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::OPUS_4_8));
-        $this->assertFalse(ClaudeModels::supportsSamplingParams(ClaudeModels::OPUS_4_7));
-        $this->assertTrue(ClaudeModels::supportsSamplingParams(ClaudeModels::SONNET_4_6));
-        $this->assertTrue(ClaudeModels::supportsSamplingParams(ClaudeModels::HAIKU_4_5));
-    }
-
     public function testGetEffortLevelForOpus46(): void {
         $this->assertEquals('high', ClaudeModels::getEffortLevel(ClaudeModels::OPUS_4_6));
     }
@@ -298,7 +287,6 @@ class ClaudeModelsTest extends TestCase {
     public function testLookupsUnderstandCloudIds(): void {
         $this->assertSame(ClaudeModels::getMaxTokenCeiling(ClaudeModels::SONNET_4_6), ClaudeModels::getMaxTokenCeiling('eu.anthropic.claude-sonnet-4-6'));
         $this->assertFalse(ClaudeModels::canDisableThinking('anthropic.claude-opus-5-5'));
-        $this->assertFalse(ClaudeModels::supportsSamplingParams('global.anthropic.claude-sonnet-5'));
         $this->assertSame(ClaudeModels::getAllowedEfforts(ClaudeModels::OPUS_4_6), ClaudeModels::getAllowedEfforts('global.anthropic.claude-opus-4-6-v1'));
     }
 }
