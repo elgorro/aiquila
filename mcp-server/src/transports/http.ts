@@ -15,6 +15,7 @@ import {
   cimdEnabledFromEnv,
 } from '../auth/store.js';
 import { loginHandler } from '../auth/login.js';
+import { LoginThrottle } from '../auth/login-throttle.js';
 import { authRouter } from '../auth/router.js';
 import { LOGIN_STYLESHEET, LOGIN_STYLESHEET_PATH } from '../auth/login-page-css.js';
 import { isPublicRequest } from './lazy-auth.js';
@@ -380,29 +381,19 @@ export async function createHttpApp(): Promise<express.Express> {
     // Parse URL-encoded form submissions from the login page
     app.use(express.urlencoded({ extended: false }));
 
-    // Nextcloud credential validation → auth code issuance
-    const loginRateLimit = (() => {
-      const attempts = new Map<string, { count: number; resetAt: number }>();
-      const MAX = 10,
-        WINDOW_MS = 15 * 60 * 1000;
-      return (req: any, res: any, next: any) => {
-        const ip = req.ip ?? 'unknown';
-        const now = Date.now();
-        const entry = attempts.get(ip);
-        if (!entry || now > entry.resetAt) {
-          attempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
-          return next();
-        }
-        entry.count++;
-        if (entry.count > MAX) {
-          logger.warn({ ip }, '[auth] Login rate limit exceeded');
-          res.status(429).json({ error: 'too_many_requests' });
-          return;
-        }
-        next();
-      };
-    })();
-    app.post('/auth/login', loginRateLimit, loginHandler(provider));
+    // Nextcloud credential validation → auth code issuance. Throttled per IP
+    // here, and per username inside the handler.
+    const loginThrottle = new LoginThrottle();
+    const loginRateLimit = (req: any, res: any, next: any) => {
+      const ip = req.ip ?? 'unknown';
+      if (!loginThrottle.allowIp(ip)) {
+        logger.warn({ ip }, '[auth] Login rate limit exceeded');
+        res.status(429).json({ error: 'too_many_requests' });
+        return;
+      }
+      next();
+    };
+    app.post('/auth/login', loginRateLimit, loginHandler(provider, loginThrottle));
 
     // Protect /mcp (and / as alias) with Bearer token auth
     const authMiddleware = [
