@@ -553,7 +553,7 @@ class ProviderSettingsServiceTest extends TestCase {
         $this->credentials->expects($this->never())->method('setSecret');
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('cannot be overridden');
+        $this->expectExceptionMessageIsOrContains('cannot be overridden');
         $this->service->writeAdmin($provider, ['extra_headers' => 'Authorization: Bearer x']);
     }
 
@@ -561,7 +561,7 @@ class ProviderSettingsServiceTest extends TestCase {
         $provider = $this->provider($this->secretSchema());
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('not a valid header name');
+        $this->expectExceptionMessageIsOrContains('not a valid header name');
         $this->service->writeAdmin($provider, ['auth_header' => 'X API Key']);
     }
 
@@ -569,7 +569,7 @@ class ProviderSettingsServiceTest extends TestCase {
         $provider = $this->provider($this->secretSchema());
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('absolute path');
+        $this->expectExceptionMessageIsOrContains('absolute path');
         $this->service->writeAdmin($provider, ['ca_bundle' => 'certs/ca.pem']);
     }
 
@@ -577,7 +577,7 @@ class ProviderSettingsServiceTest extends TestCase {
         $provider = $this->provider($this->secretSchema());
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('not readable by the web server');
+        $this->expectExceptionMessageIsOrContains('not readable by the web server');
         $this->service->writeAdmin($provider, ['ca_bundle' => '/nope/ca.pem']);
     }
 

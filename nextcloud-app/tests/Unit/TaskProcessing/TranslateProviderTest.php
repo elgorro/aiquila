@@ -152,7 +152,7 @@ class TranslateProviderTest extends TestCase {
             ->willThrowException(new NoPermittedProviderException('alice'));
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage(NoPermittedProviderException::USER_MESSAGE);
+        $this->expectExceptionMessageIsOrContains(NoPermittedProviderException::USER_MESSAGE);
         $this->provider->process('alice', [
             'input' => 'Guten Tag',
             'target_language' => 'French',
@@ -161,7 +161,7 @@ class TranslateProviderTest extends TestCase {
 
     public function testMissingTargetLanguageIsRejected(): void {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No target language provided');
+        $this->expectExceptionMessageIsOrContains('No target language provided');
         $this->provider->process('alice', ['input' => 'Guten Tag'], static fn (float $p) => null);
     }
 }

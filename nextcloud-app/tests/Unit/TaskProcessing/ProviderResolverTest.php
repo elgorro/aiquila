@@ -64,7 +64,7 @@ class ProviderResolverTest extends TestCase {
             ->willThrowException(new NoPermittedProviderException('alice'));
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage(NoPermittedProviderException::USER_MESSAGE);
+        $this->expectExceptionMessageIsOrContains(NoPermittedProviderException::USER_MESSAGE);
         $this->resolver->resolve('alice');
     }
 
@@ -93,7 +93,7 @@ class ProviderResolverTest extends TestCase {
         ]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Local model cannot process images. Pick a vision-capable provider in your AIquila settings — available: Claude (Anthropic).');
+        $this->expectExceptionMessageIsOrContains('Local model cannot process images. Pick a vision-capable provider in your AIquila settings — available: Claude (Anthropic).');
         $this->resolver->resolveVisionCapable('alice');
     }
 
@@ -107,7 +107,7 @@ class ProviderResolverTest extends TestCase {
         ]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('no vision-capable AI provider is available for your account');
+        $this->expectExceptionMessageIsOrContains('no vision-capable AI provider is available for your account');
         $this->resolver->resolveVisionCapable('alice');
     }
 
@@ -130,7 +130,7 @@ class ProviderResolverTest extends TestCase {
         ]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Claude (Anthropic) cannot transcribe audio. Pick a transcription-capable provider in your AIquila settings — available: Mistral.');
+        $this->expectExceptionMessageIsOrContains('Claude (Anthropic) cannot transcribe audio. Pick a transcription-capable provider in your AIquila settings — available: Mistral.');
         $this->resolver->resolveAudioCapable('alice');
     }
 
@@ -144,7 +144,7 @@ class ProviderResolverTest extends TestCase {
         ]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Claude (Anthropic) cannot generate speech. Pick a speech-capable provider in your AIquila settings — available: Mistral.');
+        $this->expectExceptionMessageIsOrContains('Claude (Anthropic) cannot generate speech. Pick a speech-capable provider in your AIquila settings — available: Mistral.');
         $this->resolver->resolveSpeechCapable('alice');
     }
 
@@ -155,7 +155,7 @@ class ProviderResolverTest extends TestCase {
         $this->factory->method('getProviderById')->willReturnMap([['local', $local]]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Local model cannot generate images, and no image-generating AI provider is available for your account. Ask your administrator.');
+        $this->expectExceptionMessageIsOrContains('Local model cannot generate images, and no image-generating AI provider is available for your account. Ask your administrator.');
         $this->resolver->resolveImageGenCapable('alice');
     }
 
@@ -168,7 +168,7 @@ class ProviderResolverTest extends TestCase {
         $this->factory->method('getProviderById')->willReturnMap([['local', $half]]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Local model cannot generate speech, and no speech-capable AI provider is available for your account. Ask your administrator.');
+        $this->expectExceptionMessageIsOrContains('Local model cannot generate speech, and no speech-capable AI provider is available for your account. Ask your administrator.');
         $this->resolver->resolveVoiceChatCapable('alice');
     }
 

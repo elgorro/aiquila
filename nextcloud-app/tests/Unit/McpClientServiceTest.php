@@ -453,7 +453,7 @@ class McpClientServiceTest extends TestCase {
 
         // Verify state mismatch throws
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('state mismatch');
+        $this->expectExceptionMessageIsOrContains('state mismatch');
         $this->service->completeOAuth($server, 'auth-code', 'wrong-state', 'http://nc.local/callback');
     }
 
@@ -463,7 +463,7 @@ class McpClientServiceTest extends TestCase {
         $server->setOauthState('correct-state');
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('state mismatch');
+        $this->expectExceptionMessageIsOrContains('state mismatch');
         $this->service->completeOAuth($server, 'code', 'wrong-state', 'http://nc.local/callback');
     }
 

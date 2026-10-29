@@ -200,7 +200,7 @@ class AudioProvidersTest extends TestCase {
         $this->serve($provider);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Unsupported audio format: audio/aiff');
+        $this->expectExceptionMessageIsOrContains('Unsupported audio format: audio/aiff');
         $this->audioToText()->process('alice', ['input' => $this->audioFile('memo.aiff', 'audio/aiff')], self::noop());
     }
 
@@ -208,7 +208,7 @@ class AudioProvidersTest extends TestCase {
         $this->serve($this->provider(['audio_in' => true]));
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('The audio file is too large. Maximum is 100 MB.');
+        $this->expectExceptionMessageIsOrContains('The audio file is too large. Maximum is 100 MB.');
         $this->audioToText()->process(
             'alice',
             ['input' => $this->audioFile('memo.mp3', 'audio/mpeg', AudioLimits::MAX_BYTES + 1)],
@@ -218,7 +218,7 @@ class AudioProvidersTest extends TestCase {
 
     public function testTranscriptionWithoutAnAudioFileFails(): void {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No audio file provided');
+        $this->expectExceptionMessageIsOrContains('No audio file provided');
         $this->audioToText()->process('alice', ['input' => 'not a file'], self::noop());
     }
 
@@ -228,7 +228,7 @@ class AudioProvidersTest extends TestCase {
         $this->serve($provider);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Rate limit exceeded.');
+        $this->expectExceptionMessageIsOrContains('Rate limit exceeded.');
         $this->audioToText()->process('alice', ['input' => $this->audioFile()], self::noop());
     }
 
@@ -240,7 +240,7 @@ class AudioProvidersTest extends TestCase {
         $this->factory->method('getProviderById')->willReturnMap([['anthropic', $provider]]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Claude (Anthropic) cannot transcribe audio');
+        $this->expectExceptionMessageIsOrContains('Claude (Anthropic) cannot transcribe audio');
         $this->audioToText()->process('alice', ['input' => $this->audioFile()], self::noop());
     }
 
@@ -266,7 +266,7 @@ class AudioProvidersTest extends TestCase {
 
     public function testSpeechRejectsBlankInput(): void {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No input text provided');
+        $this->expectExceptionMessageIsOrContains('No input text provided');
         $this->textToSpeech()->process('alice', ['input' => '   '], self::noop());
     }
 
@@ -306,7 +306,7 @@ class AudioProvidersTest extends TestCase {
         $this->serve($provider);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No images were generated.');
+        $this->expectExceptionMessageIsOrContains('No images were generated.');
         $this->textToImage()->process('alice', ['input' => 'a blue door'], self::noop());
     }
 
@@ -359,7 +359,7 @@ class AudioProvidersTest extends TestCase {
         $this->serve($provider);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Nothing could be transcribed from this recording.');
+        $this->expectExceptionMessageIsOrContains('Nothing could be transcribed from this recording.');
         $this->voiceChat()->process('alice', ['input' => $this->audioFile()], self::noop());
     }
 
@@ -371,7 +371,7 @@ class AudioProvidersTest extends TestCase {
         $this->factory->method('getProviderById')->willReturnMap([['local', $provider]]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Local model cannot generate speech');
+        $this->expectExceptionMessageIsOrContains('Local model cannot generate speech');
         $this->voiceChat()->process('alice', ['input' => $this->audioFile()], self::noop());
     }
 
@@ -421,7 +421,7 @@ class AudioProvidersTest extends TestCase {
         $this->factory->method('getProviderForUser')->willReturn($provider);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Local model returned no timestamps');
+        $this->expectExceptionMessageIsOrContains('Local model returned no timestamps');
         $this->subtitles()->process('alice', ['input' => $this->audioFile()], self::noop());
     }
 
@@ -433,7 +433,7 @@ class AudioProvidersTest extends TestCase {
         $this->factory->method('getProviderById')->willReturnMap([['anthropic', $provider]]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Anthropic cannot transcribe audio');
+        $this->expectExceptionMessageIsOrContains('Anthropic cannot transcribe audio');
         $this->subtitles()->process('alice', ['input' => $this->audioFile()], self::noop());
     }
 
@@ -495,7 +495,7 @@ class AudioProvidersTest extends TestCase {
         $this->serve($provider);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Nothing could be transcribed from this recording.');
+        $this->expectExceptionMessageIsOrContains('Nothing could be transcribed from this recording.');
         $this->audioTranslate()->process('alice', ['input' => $this->audioFile(), 'target_language' => 'de'], self::noop());
     }
 
@@ -507,13 +507,13 @@ class AudioProvidersTest extends TestCase {
         $this->factory->method('getProviderById')->willReturnMap([['local', $provider]]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Local model cannot generate speech');
+        $this->expectExceptionMessageIsOrContains('Local model cannot generate speech');
         $this->audioTranslate()->process('alice', ['input' => $this->audioFile(), 'target_language' => 'de'], self::noop());
     }
 
     public function testAudioTranslationNeedsATargetLanguage(): void {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No target language provided');
+        $this->expectExceptionMessageIsOrContains('No target language provided');
         $this->audioTranslate()->process('alice', ['input' => $this->audioFile()], self::noop());
     }
 }

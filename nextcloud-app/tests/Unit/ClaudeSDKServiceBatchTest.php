@@ -304,7 +304,7 @@ class ClaudeSDKServiceBatchTest extends TestCase {
         $svc = $this->makeService();
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Duplicate custom_id');
+        $this->expectExceptionMessageIsOrContains('Duplicate custom_id');
         $svc->submitBatch([
             ['custom_id' => 'same', 'messages' => [['role' => 'user', 'content' => 'a']]],
             ['custom_id' => 'same', 'messages' => [['role' => 'user', 'content' => 'b']]],

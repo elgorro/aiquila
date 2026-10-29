@@ -53,7 +53,7 @@ class HeaderSpecTest extends TestCase {
     #[DataProvider('rejectedProvider')]
     public function testRejects(string $raw, string $expected): void {
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage($expected);
+        $this->expectExceptionMessageIsOrContains($expected);
 
         HeaderSpec::parse($raw);
     }

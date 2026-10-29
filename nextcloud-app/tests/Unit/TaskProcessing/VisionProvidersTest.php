@@ -153,7 +153,7 @@ class VisionProvidersTest extends TestCase {
         ]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('DeepSeek cannot process images.');
+        $this->expectExceptionMessageIsOrContains('DeepSeek cannot process images.');
         $this->analyzeImages()->process('alice', [
             'input' => 'What is this?',
             'images' => [$this->imageFile()],
@@ -164,7 +164,7 @@ class VisionProvidersTest extends TestCase {
         $this->factory->method('getProviderForUser')->willReturn($this->visionProvider());
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Image 1 is not a file');
+        $this->expectExceptionMessageIsOrContains('Image 1 is not a file');
         $this->analyzeImages()->process('alice', [
             'input' => 'What is this?',
             'images' => [self::JPEG],
@@ -207,19 +207,19 @@ class VisionProvidersTest extends TestCase {
         $this->factory->method('getProviderIdsForUser')->willReturn([]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('no vision-capable AI provider is available');
+        $this->expectExceptionMessageIsOrContains('no vision-capable AI provider is available');
         $this->imageToText()->process('alice', ['input' => [$this->imageFile()]], static fn (float $p) => null);
     }
 
     public function testOcrRejectsAnEmptyFileList(): void {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No images provided');
+        $this->expectExceptionMessageIsOrContains('No images provided');
         $this->imageToText()->process('alice', ['input' => []], static fn (float $p) => null);
     }
 
     public function testTooManyImagesIsRejected(): void {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Too many images');
+        $this->expectExceptionMessageIsOrContains('Too many images');
         $this->analyzeImages()->process('alice', [
             'input' => 'What are these?',
             'images' => array_fill(0, ImageOptimizer::MAX_IMAGES + 1, $this->imageFile()),
