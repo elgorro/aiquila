@@ -209,6 +209,11 @@ Authorization codes are in-memory only (5-min TTL, lost on restart by design).
 | `/register` | RFC 7591 | 20 req / hour per IP. Mounted only with `MCP_REGISTRATION_ENABLED=true` |
 | `/revoke` | RFC 7009 | 50 req / 15 min per IP. A refresh token revokes its whole grant (§2.1), an access token only itself. Only tokens issued to the calling client; always `200` |
 
+`resource` (RFC 8707) is optional on `/authorize` and `/token`. When present it must name this
+server: the MCP endpoint URL or the server's origin, compared without scheme/host case or a
+trailing slash (MCP `2026-07-28`, *Canonical Server URI*). Anything else is `invalid_target`.
+Access tokens are always audience-restricted to the MCP endpoint.
+
 Every error, on these endpoints and in the bearer check on `/mcp`, is the SDK's v2
 `OAuthError`. Redirect URIs match exactly, except loopback URIs, which match on any port
 (RFC 8252 §7.3) — `src/auth/redirect-uri.ts` applies the same rule at `/authorize` and at

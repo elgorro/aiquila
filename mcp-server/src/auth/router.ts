@@ -126,12 +126,36 @@ function required(p: Record<string, string>, name: string): string {
   return value;
 }
 
-/** RFC 8707 §2: a resource indicator is an absolute URI without a fragment. */
-function checkResource(resource: string | undefined): void {
-  if (resource === undefined) return;
-  if (!URL.canParse(resource) || new URL(resource).hash) {
-    throw new OAuthError(OAuthErrorCode.InvalidTarget, 'resource must be an absolute URI');
-  }
+/** A URI compared the way the MCP canonical-URI rules allow: case-folded scheme and host, no trailing slash. */
+function canonicalResource(url: URL): string {
+  return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, '')}${url.search}`;
+}
+
+/**
+ * RFC 8707 §2: the resource indicator must be an absolute URI without a
+ * fragment, and one this server issues tokens for; anything else is
+ * invalid_target. Tokens are always audience-restricted to the MCP endpoint,
+ * so the accepted values are that URL and the server's origin, both of which
+ * the MCP specification (2026-07-28, Canonical Server URI) lists as canonical
+ * forms. Omitting resource is allowed (§2: the AS MAY use a default).
+ */
+function resourceChecker(options: AuthRouterOptions): (resource: string | undefined) => void {
+  const accepted = new Set([
+    canonicalResource(options.resourceServerUrl),
+    canonicalResource(new URL(options.resourceServerUrl.origin)),
+  ]);
+  return (resource) => {
+    if (resource === undefined) return;
+    if (!URL.canParse(resource) || new URL(resource).hash) {
+      throw new OAuthError(OAuthErrorCode.InvalidTarget, 'resource must be an absolute URI');
+    }
+    if (!accepted.has(canonicalResource(new URL(resource)))) {
+      throw new OAuthError(
+        OAuthErrorCode.InvalidTarget,
+        `This server issues tokens only for ${options.resourceServerUrl.href}`
+      );
+    }
+  };
 }
 
 function secretsEqual(a: string, b: string): boolean {
@@ -216,6 +240,7 @@ function limiter(windowMs: number, limit: number, what: string) {
 
 function authorizationHandler(options: AuthRouterOptions) {
   const { provider } = options;
+  const checkResource = resourceChecker(options);
   const issuer = options.issuerUrl.href;
 
   return async (req: any, res: any) => {
@@ -293,7 +318,9 @@ function authorizationHandler(options: AuthRouterOptions) {
   };
 }
 
-function tokenHandler(provider: NextcloudOAuthProvider) {
+function tokenHandler(options: AuthRouterOptions) {
+  const { provider } = options;
+  const checkResource = resourceChecker(options);
   return async (req: any, res: any) => {
     // RFC 6749 §5.1: responses carrying tokens must not be cached.
     res.setHeader('Cache-Control', 'no-store');
@@ -423,7 +450,7 @@ export function authRouter(options: AuthRouterOptions): express.Router {
     allowMethods(['POST']),
     form,
     limiter(minutes(15), 50, 'token'),
-    tokenHandler(provider)
+    tokenHandler(options)
   );
 
   if (provider.clientsStore.registerClient) {

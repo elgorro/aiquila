@@ -260,6 +260,8 @@ describe('/authorize', () => {
     [{ code_challenge_method: 'plain' }, 'invalid_request'],
     [{ code_challenge: 'too-short' }, 'invalid_request'],
     [{ resource: 'not a uri' }, 'invalid_target'],
+    [{ resource: 'https://other.example.com/mcp' }, 'invalid_target'],
+    [{ resource: 'https://mcp.example.com/other' }, 'invalid_target'],
   ])('redirects %o back with error %s, state and iss (RFC 9207 §2)', async (patch, error) => {
     const res = await authorize({ ...valid, ...patch });
     expect(res.status).toBe(302);
@@ -268,6 +270,17 @@ describe('/authorize', () => {
     expect(location.searchParams.get('error')).toBe(error);
     expect(location.searchParams.get('state')).toBe('xyz');
     expect(location.searchParams.get('iss')).toBe(ISSUER);
+  });
+
+  it.each([
+    'https://mcp.example.com/mcp',
+    'https://mcp.example.com/mcp/',
+    'HTTPS://MCP.EXAMPLE.COM/mcp',
+    'https://mcp.example.com',
+    'https://mcp.example.com/',
+  ])('accepts the canonical resource %s (RFC 8707 §2, MCP canonical URI)', async (resource) => {
+    const res = await authorize({ ...valid, resource });
+    expect(res.status).toBe(200);
   });
 
   it('uses the only registered redirect_uri when none is given', async () => {
@@ -330,6 +343,37 @@ describe('/token', () => {
     ctx = await serve();
   });
   afterAll(() => ctx.close());
+
+  it('rejects a token request for another resource with invalid_target (RFC 8707 §2)', async () => {
+    const res = await fetch(
+      `${ctx.base}/token`,
+      form({
+        grant_type: 'authorization_code',
+        client_id: PUBLIC_CLIENT,
+        code: issueCode(ctx),
+        code_verifier: VERIFIER,
+        redirect_uri: REDIRECT,
+        resource: 'https://other.example.com/mcp',
+      })
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('invalid_target');
+  });
+
+  it('accepts a token request for this resource', async () => {
+    const res = await fetch(
+      `${ctx.base}/token`,
+      form({
+        grant_type: 'authorization_code',
+        client_id: PUBLIC_CLIENT,
+        code: issueCode(ctx),
+        code_verifier: VERIFIER,
+        redirect_uri: REDIRECT,
+        resource: 'https://mcp.example.com/mcp',
+      })
+    );
+    expect(res.status).toBe(200);
+  });
 
   it('exchanges a code with a matching verifier, uncacheable (RFC 6749 §5.1)', async () => {
     const res = await fetch(
