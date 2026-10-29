@@ -18,18 +18,25 @@ class CoworkerDashboardTest extends TestCase {
     private CoworkerController $ctrl;
 
     protected function setUp(): void {
-        $this->service = $this->createMock(CoworkerService::class);
-        $this->config = $this->createMock(IConfig::class);
-        $registry = $this->createMock(CoworkerTaskRegistry::class);
-        $request = $this->createMock(IRequest::class);
+        $this->service = $this->createStub(CoworkerService::class);
+        $this->config = $this->createStub(IConfig::class);
+        $this->buildCtrl();
+    }
+
+    private function buildCtrl(): void {
+        $registry = $this->createStub(CoworkerTaskRegistry::class);
+        $request = $this->createStub(IRequest::class);
         $this->ctrl = new CoworkerController(
             'aiquila', $request, $this->service, $registry, $this->config, 'alice',
-            $this->createMock(\Psr\Log\LoggerInterface::class)
+            $this->createStub(\Psr\Log\LoggerInterface::class)
         );
     }
 
     public function testGetReturnsStoredSelection(): void {
-        $this->config->method('getUserValue')
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildCtrl();
+
+        $this->config->expects($this->once())->method('getUserValue')
             ->with('alice', 'aiquila', 'dashboard_coworker', '')
             ->willReturn('7');
 
@@ -45,6 +52,10 @@ class CoworkerDashboardTest extends TestCase {
     }
 
     public function testSetPersistsOwnedCoworker(): void {
+        $this->service = $this->createMock(CoworkerService::class);
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildCtrl();
+
         $this->service->expects($this->once())
             ->method('findForUser')->with(7, 'alice')
             ->willReturn(new Coworker());
@@ -56,6 +67,9 @@ class CoworkerDashboardTest extends TestCase {
     }
 
     public function testSetRejectsForeignCoworker(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildCtrl();
+
         $this->service->method('findForUser')
             ->willThrowException(new DoesNotExistException('nope'));
         $this->config->expects($this->never())->method('setUserValue');
@@ -65,6 +79,9 @@ class CoworkerDashboardTest extends TestCase {
     }
 
     public function testSetNullClearsSelection(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildCtrl();
+
         $this->config->expects($this->once())
             ->method('deleteUserValue')->with('alice', 'aiquila', 'dashboard_coworker');
 

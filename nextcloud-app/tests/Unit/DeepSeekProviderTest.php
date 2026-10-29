@@ -22,13 +22,13 @@ class DeepSeekProviderTest extends TestCase {
     private DeepSeekProvider $provider;
 
     protected function setUp(): void {
-        $this->clientService = $this->createMock(IClientService::class);
-        $this->client        = $this->createMock(IClient::class);
-        $this->config        = $this->createMock(IConfig::class);
-        $this->credentials   = $this->createMock(CredentialService::class);
-        $this->logger        = $this->createMock(LoggerInterface::class);
+        $this->clientService = $this->createStub(IClientService::class);
+        $this->client        = $this->createStub(IClient::class);
+        $this->config        = $this->createStub(IConfig::class);
+        $this->credentials   = $this->createStub(CredentialService::class);
+        $this->logger        = $this->createStub(LoggerInterface::class);
 
-        $this->clientService->method('newClient')->willReturn($this->client);
+        $this->clientService->method('newClient')->willReturnCallback(fn () => $this->client);
         $this->credentials->method('getApiKey')->willReturn('test-key');
         $this->config->method('getAppValue')->willReturnArgument(2);
         $this->config->method('getUserValue')->willReturn('');
@@ -42,13 +42,13 @@ class DeepSeekProviderTest extends TestCase {
     }
 
     private function jsonResponse(array $payload): IResponse {
-        $response = $this->createMock(IResponse::class);
+        $response = $this->createStub(IResponse::class);
         $response->method('getBody')->willReturn(json_encode($payload));
         return $response;
     }
 
     private function sseResponse(string $sse): IResponse {
-        $response = $this->createMock(IResponse::class);
+        $response = $this->createStub(IResponse::class);
         $response->method('getBody')->willReturn($sse);
         return $response;
     }
@@ -64,6 +64,7 @@ class DeepSeekProviderTest extends TestCase {
      * pretending — the same {error: string} shape every other call uses.
      */
     public function testNonTextModalitiesAreDeclaredUnsupportedAndNeverCallTheApi(): void {
+        $this->client = $this->createMock(IClient::class);
         $capabilities = $this->provider->getCapabilities();
         $this->assertFalse($capabilities['audio_in']);
         $this->assertFalse($capabilities['audio_out']);
@@ -117,7 +118,7 @@ class DeepSeekProviderTest extends TestCase {
 
     public function testReasonerModelOmitsSamplingParams(): void {
         $captured = null;
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createStub(IConfig::class);
         $this->config->method('getUserValue')->willReturn('');
         $this->config->method('getAppValue')->willReturnCallback(
             fn($app, $key, $default) => $key === 'model_deepseek' ? 'deepseek-reasoner' : $default
@@ -305,7 +306,7 @@ class DeepSeekProviderTest extends TestCase {
     }
 
     public function testProbeIsGreyWithoutAKey(): void {
-        $credentials = $this->createMock(CredentialService::class);
+        $credentials = $this->createStub(CredentialService::class);
         $credentials->method('getApiKey')->willReturn('');
         $provider = new DeepSeekProvider($this->clientService, $this->config, $credentials, $this->logger);
 

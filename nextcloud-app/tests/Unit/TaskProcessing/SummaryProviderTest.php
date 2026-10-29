@@ -14,7 +14,11 @@ class SummaryProviderTest extends TestCase {
     private SummaryProvider $provider;
 
     protected function setUp(): void {
-        $this->factory = $this->createMock(LLMProviderFactory::class);
+        $this->factory = $this->createStub(LLMProviderFactory::class);
+        $this->buildProvider();
+    }
+
+    private function buildProvider(): void {
         $this->provider = new SummaryProvider(new ProviderResolver($this->factory));
     }
 
@@ -57,7 +61,7 @@ class SummaryProviderTest extends TestCase {
     }
 
     public function testProviderErrorBecomesAnException(): void {
-        $local = $this->createMock(LLMProviderInterface::class);
+        $local = $this->createStub(LLMProviderInterface::class);
         $local->method('ask')->willReturn(['error' => 'upstream is down']);
         $this->factory->method('getProviderForUser')->willReturn($local);
 
@@ -67,6 +71,9 @@ class SummaryProviderTest extends TestCase {
     }
 
     public function testEmptyInputIsRejectedBeforeAnyProviderIsResolved(): void {
+        $this->factory = $this->createMock(LLMProviderFactory::class);
+        $this->buildProvider();
+
         $this->factory->expects($this->never())->method('getProviderForUser');
 
         $this->expectException(\RuntimeException::class);

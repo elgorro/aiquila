@@ -15,7 +15,7 @@ class ChangeToneProviderTest extends TestCase {
     private ChangeToneProvider $provider;
 
     protected function setUp(): void {
-        $this->factory = $this->createMock(LLMProviderFactory::class);
+        $this->factory = $this->createStub(LLMProviderFactory::class);
         $l10n = $this->createStub(IL10N::class);
         $l10n->method('t')->willReturnArgument(0);
         $this->provider = new ChangeToneProvider(new ProviderResolver($this->factory), $l10n);

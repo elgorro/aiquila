@@ -189,17 +189,21 @@ class ClaudeServiceTest extends TestCase {
     private TestableClaudeSDKService $testable;
 
     protected function setUp(): void {
-        $this->config      = $this->createMock(IConfig::class);
-        $this->logger      = $this->createMock(LoggerInterface::class);
-        $this->credentials = $this->createMock(CredentialService::class);
+        $this->config      = $this->createStub(IConfig::class);
+        $this->logger      = $this->createStub(LoggerInterface::class);
+        $this->credentials = $this->createStub(CredentialService::class);
 
-        $cache = $this->createMock(ICache::class);
+        $cache = $this->createStub(ICache::class);
         $cache->method('get')->willReturn(null);
         $cache->method('set')->willReturn(true);
-        $this->cacheFactory = $this->createMock(ICacheFactory::class);
-        $this->requestMetadata = $this->createMock(RequestMetadataService::class);
+        $this->cacheFactory = $this->createStub(ICacheFactory::class);
+        $this->requestMetadata = $this->createStub(RequestMetadataService::class);
         $this->cacheFactory->method('createDistributed')->willReturn($cache);
 
+        $this->buildService();
+    }
+
+    private function buildService(): void {
         $this->service     = new ClaudeSDKService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
         $this->testable    = new TestableClaudeSDKService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
     }
@@ -207,28 +211,28 @@ class ClaudeServiceTest extends TestCase {
     // ── PSR-7 helpers for building SDK exceptions ─────────────────────────
 
     private function makeStatusException(string $class, int $status): APIStatusException {
-        $body = $this->createMock(StreamInterface::class);
+        $body = $this->createStub(StreamInterface::class);
         $body->method('__toString')->willReturn('{}');
 
-        $response = $this->createMock(ResponseInterface::class);
+        $response = $this->createStub(ResponseInterface::class);
         $response->method('getStatusCode')->willReturn($status);
         $response->method('getBody')->willReturn($body);
 
-        $request = $this->createMock(RequestInterface::class);
+        $request = $this->createStub(RequestInterface::class);
 
         return new $class(request: $request, response: $response);
     }
 
     private function makeConnectionException(): APIConnectionException {
         return new APIConnectionException(
-            request: $this->createMock(RequestInterface::class),
+            request: $this->createStub(RequestInterface::class),
             message: 'network down'
         );
     }
 
     private function makeTimeoutException(): APITimeoutException {
         return new APITimeoutException(
-            request: $this->createMock(RequestInterface::class),
+            request: $this->createStub(RequestInterface::class),
             message: 'timed out'
         );
     }
@@ -248,7 +252,10 @@ class ClaudeServiceTest extends TestCase {
     // ── getApiKey ─────────────────────────────────────────────────────────
 
     public function testGetApiKeyReturnsUserKeyFirst(): void {
-        $this->credentials->method('getApiKey')
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildService();
+
+        $this->credentials->expects($this->once())->method('getApiKey')
             ->with('testuser')
             ->willReturn('user-api-key');
 
@@ -256,7 +263,10 @@ class ClaudeServiceTest extends TestCase {
     }
 
     public function testGetApiKeyFallsBackToAdminKey(): void {
-        $this->credentials->method('getApiKey')
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildService();
+
+        $this->credentials->expects($this->once())->method('getApiKey')
             ->with('testuser')
             ->willReturn('admin-api-key');
 
@@ -266,7 +276,10 @@ class ClaudeServiceTest extends TestCase {
     // ── getModel ──────────────────────────────────────────────────────────
 
     public function testGetModelReturnsDefault(): void {
-        $this->config->method('getAppValue')
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
+        $this->config->expects($this->once())->method('getAppValue')
             ->with('aiquila', 'model', ClaudeModels::DEFAULT_MODEL)
             ->willReturn(ClaudeModels::DEFAULT_MODEL);
 
@@ -281,8 +294,11 @@ class ClaudeServiceTest extends TestCase {
     }
 
     public function testGetModelFallsBackToAdminWhenUserHasNoPref(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $this->config->method('getUserValue')->willReturn('');
-        $this->config->method('getAppValue')
+        $this->config->expects($this->once())->method('getAppValue')
             ->with('aiquila', 'model', ClaudeModels::DEFAULT_MODEL)
             ->willReturn('claude-opus-4-6');
 
@@ -290,8 +306,11 @@ class ClaudeServiceTest extends TestCase {
     }
 
     public function testGetModelWithNullUserIdSkipsUserLookup(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->buildService();
+
         $this->config->expects($this->never())->method('getUserValue');
-        $this->config->method('getAppValue')
+        $this->config->expects($this->once())->method('getAppValue')
             ->with('aiquila', 'model', ClaudeModels::DEFAULT_MODEL)
             ->willReturn(ClaudeModels::DEFAULT_MODEL);
 
@@ -1304,6 +1323,9 @@ class ClaudeServiceTest extends TestCase {
     }
 
     public function testListModelsOnErrorReturnsNull(): void {
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildService();
+
         $this->configWithApiKey();
         $this->testable->throwOnListModels(new \RuntimeException('API error'));
         $this->logger->expects($this->once())->method('warning');
@@ -1326,6 +1348,9 @@ class ClaudeServiceTest extends TestCase {
     }
 
     public function testRetrieveModelOnErrorReturnsNull(): void {
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildService();
+
         $this->configWithApiKey();
         $this->testable->throwOnRetrieveModel(new \RuntimeException('not found'));
         $this->logger->expects($this->once())->method('warning');

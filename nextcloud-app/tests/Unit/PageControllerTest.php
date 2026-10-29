@@ -21,15 +21,15 @@ class PageControllerTest extends TestCase {
     private PageController $ctrl;
 
     protected function setUp(): void {
-        $this->initialState       = $this->createMock(IInitialState::class);
-        $this->factory            = $this->createMock(LLMProviderFactory::class);
-        $this->provider           = $this->createMock(LLMProviderInterface::class);
-        $this->conversationMapper = $this->createMock(ConversationMapper::class);
-        $this->request            = $this->createMock(IRequest::class);
+        $this->initialState       = $this->createStub(IInitialState::class);
+        $this->factory            = $this->createStub(LLMProviderFactory::class);
+        $this->provider           = $this->createStub(LLMProviderInterface::class);
+        $this->conversationMapper = $this->createStub(ConversationMapper::class);
+        $this->request            = $this->createStub(IRequest::class);
 
         $this->conversationMapper->method('findAllByUser')->willReturn([]);
         $this->provider->method('getId')->willReturn('anthropic');
-        $this->factory->method('getProvider')->willReturn($this->provider);
+        $this->factory->method('getProvider')->willReturnCallback(fn () => $this->provider);
 
         $this->ctrl = new PageController(
             'aiquila',
@@ -52,6 +52,7 @@ class PageControllerTest extends TestCase {
     }
 
     public function testIndexProvidesInitialStateWithUserEffectiveModel(): void {
+        $this->provider = $this->createMock(LLMProviderInterface::class);
         $this->provider->expects($this->atLeastOnce())
             ->method('getModel')
             ->with('testuser')

@@ -77,15 +77,15 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
     private RequestMetadataService $requestMetadata;
 
     protected function setUp(): void {
-        $this->config = $this->createMock(IConfig::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->credentials = $this->createMock(CredentialService::class);
+        $this->config = $this->createStub(IConfig::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
+        $this->credentials = $this->createStub(CredentialService::class);
         $this->credentials->method('getApiKey')->willReturn('test-key');
 
-        $this->cache = $this->createMock(ICache::class);
-        $this->cacheFactory = $this->createMock(ICacheFactory::class);
-        $this->requestMetadata = $this->createMock(RequestMetadataService::class);
-        $this->cacheFactory->method('createDistributed')->willReturn($this->cache);
+        $this->cache = $this->createStub(ICache::class);
+        $this->cacheFactory = $this->createStub(ICacheFactory::class);
+        $this->requestMetadata = $this->createStub(RequestMetadataService::class);
+        $this->cacheFactory->method('createDistributed')->willReturnCallback(fn () => $this->cache);
 
         $this->config->method('getUserValue')->willReturn('');
         $this->config->method('getAppValue')
@@ -97,6 +97,8 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
     }
 
     public function testDynamicCapabilitiesFromModelInfo(): void {
+        $this->cache = $this->createMock(ICache::class);
+
         // Cache miss → dynamic resolution
         $this->cache->method('get')->willReturn(null);
         $this->cache->expects($this->atLeastOnce())->method('set');
@@ -187,6 +189,8 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
     }
 
     public function testCacheHitSkipsApiCall(): void {
+        $this->cache = $this->createMock(ICache::class);
+
         $cached = [
             'max_tokens' => 64000,
             'supports_thinking' => true,
@@ -219,10 +223,12 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
     }
 
     public function testOpus47UsesXhighEffort(): void {
+        $this->cache = $this->createMock(ICache::class);
+
         $this->cache->method('get')->willReturn(null);
         $this->cache->expects($this->atLeastOnce())->method('set');
 
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createStub(IConfig::class);
         $this->config->method('getUserValue')->willReturn('');
         $this->config->method('getAppValue')
             ->willReturnCallback(fn($app, $key, $default) => match ($key) {
@@ -273,7 +279,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $this->cache->method('get')->willReturn(null);
 
         // Use Haiku which doesn't support thinking/effort
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createStub(IConfig::class);
         $this->config->method('getUserValue')->willReturn('');
         $this->config->method('getAppValue')
             ->willReturnCallback(fn($app, $key, $default) => match ($key) {
@@ -322,7 +328,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
 
     /** Build a service for a given model with cached caps and optional admin config. */
     private function makeServiceForModel(string $model, array $appConfig = [], bool $supportsEnabledThinking = true, array $userConfig = []): CapabilityTestableService {
-        $config = $this->createMock(IConfig::class);
+        $config = $this->createStub(IConfig::class);
         $config->method('getUserValue')
             ->willReturnCallback(fn($uid, $app, $key, $default = '') => $userConfig[$key] ?? $default);
         $config->method('getAppValue')
@@ -642,7 +648,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         ]);
 
         $capturedDebug = [];
-        $logger = $this->createMock(LoggerInterface::class);
+        $logger = $this->createStub(LoggerInterface::class);
         $logger->method('debug')->willReturnCallback(function ($msg, $ctx = []) use (&$capturedDebug) {
             if (str_contains($msg, 'Response metadata')) {
                 $capturedDebug[] = $ctx;

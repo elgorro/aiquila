@@ -23,12 +23,16 @@ class TaskFailedListenerTest extends TestCase {
     private TaskFailedListener $listener;
 
     protected function setUp(): void {
-        $this->notificationManager = $this->createMock(INotificationManager::class);
-        $this->taskProcessingManager = $this->createMock(ITaskProcessingManager::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->config = $this->createMock(IConfig::class);
+        $this->notificationManager = $this->createStub(INotificationManager::class);
+        $this->taskProcessingManager = $this->createStub(ITaskProcessingManager::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
+        $this->config = $this->createStub(IConfig::class);
         $this->config->method('getUserValue')
             ->willReturnCallback(fn (string $u, string $a, string $k, $d = '') => $this->prefValue ?? $d);
+        $this->buildListener();
+    }
+
+    private function buildListener(): void {
         $this->listener = new TaskFailedListener(
             $this->notificationManager,
             $this->taskProcessingManager,
@@ -38,7 +42,7 @@ class TaskFailedListenerTest extends TestCase {
     }
 
     private function mockPreferredProvider(string $providerId): void {
-        $provider = $this->createMock(IProvider::class);
+        $provider = $this->createStub(IProvider::class);
         $provider->method('getId')->willReturn($providerId);
         $this->taskProcessingManager->method('getPreferredProvider')->willReturn($provider);
     }
@@ -60,10 +64,13 @@ class TaskFailedListenerTest extends TestCase {
     }
 
     public function testIgnoresNonAiquilaProvider(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->buildListener();
+
         $this->mockPreferredProvider('other_app:text2text');
 
         $task = $this->makeTask();
-        $event = $this->createMock(TaskFailedEvent::class);
+        $event = $this->createStub(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
 
         $this->notificationManager->expects($this->never())->method('notify');
@@ -71,11 +78,14 @@ class TaskFailedListenerTest extends TestCase {
     }
 
     public function testCreatesNotificationOnFailure(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->buildListener();
+
         $this->mockPreferredProvider('aiquila:text2text');
 
         $task = $this->makeTask(99, 'API rate limit exceeded');
 
-        $event = $this->createMock(TaskFailedEvent::class);
+        $event = $this->createStub(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
 
         $notification = $this->createMock(INotification::class);
@@ -95,13 +105,16 @@ class TaskFailedListenerTest extends TestCase {
     }
 
     public function testTruncatesLongErrorMessage(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->buildListener();
+
         $this->mockPreferredProvider('aiquila:text2text');
 
         $longError = str_repeat('x', 300);
 
         $task = $this->makeTask(100, $longError);
 
-        $event = $this->createMock(TaskFailedEvent::class);
+        $event = $this->createStub(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
 
         $notification = $this->createMock(INotification::class);
@@ -123,11 +136,14 @@ class TaskFailedListenerTest extends TestCase {
     }
 
     public function testHandlesNullErrorMessage(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->buildListener();
+
         $this->mockPreferredProvider('aiquila:text2text');
 
         $task = $this->makeTask(101, null);
 
-        $event = $this->createMock(TaskFailedEvent::class);
+        $event = $this->createStub(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
 
         $notification = $this->createMock(INotification::class);
@@ -147,11 +163,15 @@ class TaskFailedListenerTest extends TestCase {
     }
 
     public function testUnknownTaskTypeIsSkippedSilently(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildListener();
+
         $this->taskProcessingManager->method('getPreferredProvider')
             ->willThrowException(new \OCP\TaskProcessing\Exception\Exception('no provider'));
 
         $task = $this->makeTask();
-        $event = $this->createMock(TaskFailedEvent::class);
+        $event = $this->createStub(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
 
         $this->notificationManager->expects($this->never())->method('createNotification');
@@ -161,11 +181,15 @@ class TaskFailedListenerTest extends TestCase {
     }
 
     public function testUnexpectedErrorIsLoggedNotPropagated(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildListener();
+
         $this->taskProcessingManager->method('getPreferredProvider')
             ->willThrowException(new \RuntimeException('boom'));
 
         $task = $this->makeTask();
-        $event = $this->createMock(TaskFailedEvent::class);
+        $event = $this->createStub(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
 
         $this->notificationManager->expects($this->never())->method('notify');
@@ -174,14 +198,17 @@ class TaskFailedListenerTest extends TestCase {
     }
 
     public function testNotificationFailureDoesNotBreakTheEventChain(): void {
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildListener();
+
         $this->mockPreferredProvider('aiquila:text2text');
 
         $task = $this->makeTask(99, 'boom');
 
-        $event = $this->createMock(TaskFailedEvent::class);
+        $event = $this->createStub(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($task);
 
-        $notification = $this->createMock(INotification::class);
+        $notification = $this->createStub(INotification::class);
         $notification->method('setApp')->willReturn($notification);
         $notification->method('setUser')->willReturn($notification);
         $notification->method('setDateTime')->willReturn($notification);
@@ -197,14 +224,17 @@ class TaskFailedListenerTest extends TestCase {
     }
 
     public function testFailureNotificationsAreOnByDefault(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->buildListener();
+
         // A failure points at AIquila's own configuration, so it is reported
         // without the user having to opt in.
         $this->mockPreferredProvider('aiquila:text2text');
 
-        $event = $this->createMock(TaskFailedEvent::class);
+        $event = $this->createStub(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($this->makeTask(7, 'quota exceeded'));
 
-        $notification = $this->createMock(INotification::class);
+        $notification = $this->createStub(INotification::class);
         $notification->method('setApp')->willReturn($notification);
         $notification->method('setUser')->willReturn($notification);
         $notification->method('setDateTime')->willReturn($notification);
@@ -218,12 +248,16 @@ class TaskFailedListenerTest extends TestCase {
     }
 
     public function testFailureNotificationsCanBeTurnedOff(): void {
+        $this->notificationManager = $this->createMock(INotificationManager::class);
+        $this->taskProcessingManager = $this->createMock(ITaskProcessingManager::class);
+        $this->buildListener();
+
         // Opting out must also skip the provider lookup, which costs a manager call.
         $this->prefValue = '0';
 
         $this->taskProcessingManager->expects($this->never())->method('getPreferredProvider');
 
-        $event = $this->createMock(TaskFailedEvent::class);
+        $event = $this->createStub(TaskFailedEvent::class);
         $event->method('getTask')->willReturn($this->makeTask(7, 'quota exceeded'));
 
         $this->notificationManager->expects($this->never())->method('notify');

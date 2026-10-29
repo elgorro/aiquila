@@ -28,37 +28,41 @@ class ProviderSettingsControllerTest extends TestCase {
     private ProviderSettingsController $ctrl;
 
     protected function setUp(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createStub(IConfig::class);
         $this->config->method('getUserValue')->willReturn('');
         $this->config->method('getAppValue')->willReturnArgument(2);
 
-        $this->factory = $this->createMock(LLMProviderFactory::class);
+        $this->factory = $this->createStub(LLMProviderFactory::class);
         $this->factory->method('getProviderIds')->willReturn(['anthropic', 'mistral']);
         $this->factory->method('isKnownProviderId')->willReturn(true);
         $this->factory->method('getProviderById')->willReturnCallback(
             function (string $id): LLMProviderInterface {
-                $provider = $this->createMock(LLMProviderInterface::class);
+                $provider = $this->createStub(LLMProviderInterface::class);
                 $provider->method('getId')->willReturn($id);
                 return $provider;
             },
         );
 
-        $this->settings = $this->createMock(ProviderSettingsService::class);
+        $this->settings = $this->createStub(ProviderSettingsService::class);
         $this->settings->method('describe')->willReturnCallback(
             static fn (LLMProviderInterface $p): array => ['id' => $p->getId()],
         );
 
+        $this->buildCtrl();
+    }
+
+    private function buildCtrl(): void {
         $this->ctrl = new ProviderSettingsController(
             'aiquila',
-            $this->createMock(IRequest::class),
+            $this->createStub(IRequest::class),
             'testuser',
             $this->config,
             $this->factory,
             $this->settings,
-            $this->createMock(CredentialService::class),
-            $this->createMock(IUserManager::class),
-            $this->createMock(IGroupManager::class),
-            $this->createMock(LoggerInterface::class),
+            $this->createStub(CredentialService::class),
+            $this->createStub(IUserManager::class),
+            $this->createStub(IGroupManager::class),
+            $this->createStub(LoggerInterface::class),
         );
     }
 
@@ -84,6 +88,10 @@ class ProviderSettingsControllerTest extends TestCase {
     }
 
     public function testUpdateRefusesADeniedProvider(): void {
+        $this->config = $this->createMock(IConfig::class);
+        $this->settings = $this->createMock(ProviderSettingsService::class);
+        $this->buildCtrl();
+
         $this->factory->method('isAllowedForUser')->willReturn(false);
         // The write must not happen at all, not merely be reported as rejected.
         $this->settings->expects($this->never())->method('writeUser');
@@ -111,6 +119,9 @@ class ProviderSettingsControllerTest extends TestCase {
     }
 
     public function testStatusRefusesADeniedProvider(): void {
+        $this->settings = $this->createMock(ProviderSettingsService::class);
+        $this->buildCtrl();
+
         $this->factory->method('isAllowedForUser')->willReturn(false);
         // A blocked provider must not be probed at all — the light would
         // otherwise confirm a key the user may not use.
@@ -135,21 +146,21 @@ class ProviderSettingsControllerTest extends TestCase {
      * @param LLMProviderInterface $provider what getProviderById() answers with
      */
     private function ctrlWithProvider(LLMProviderInterface $provider): ProviderSettingsController {
-        $factory = $this->createMock(LLMProviderFactory::class);
+        $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('isKnownProviderId')->willReturn(true);
         $factory->method('getProviderById')->willReturn($provider);
 
         return new ProviderSettingsController(
             'aiquila',
-            $this->createMock(IRequest::class),
+            $this->createStub(IRequest::class),
             'testuser',
             $this->config,
             $factory,
             $this->settings,
-            $this->createMock(CredentialService::class),
-            $this->createMock(IUserManager::class),
-            $this->createMock(IGroupManager::class),
-            $this->createMock(LoggerInterface::class),
+            $this->createStub(CredentialService::class),
+            $this->createStub(IUserManager::class),
+            $this->createStub(IGroupManager::class),
+            $this->createStub(LoggerInterface::class),
         );
     }
 
@@ -173,7 +184,7 @@ class ProviderSettingsControllerTest extends TestCase {
     }
 
     public function testAdminActionRejectsAProviderWithoutActions(): void {
-        $provider = $this->createMock(LLMProviderInterface::class);
+        $provider = $this->createStub(LLMProviderInterface::class);
         $provider->method('getId')->willReturn('mistral');
 
         $response = $this->ctrlWithProvider($provider)->adminAction('mistral', 'rotate_metadata_salt');
@@ -184,7 +195,7 @@ class ProviderSettingsControllerTest extends TestCase {
     }
 
     public function testAdminActionRejectsAnUnknownActionId(): void {
-        $provider = $this->createMockForIntersectionOfInterfaces(
+        $provider = $this->createStubForIntersectionOfInterfaces(
             [LLMProviderInterface::class, ProviderActionsInterface::class],
         );
         $provider->method('getId')->willReturn('anthropic');
@@ -199,20 +210,20 @@ class ProviderSettingsControllerTest extends TestCase {
     // ── Test connection on cloud providers ──────────────────────────────
 
     private function controllerFor(LLMProviderInterface $service, CredentialService $credentials): ProviderSettingsController {
-        $factory = $this->createMock(LLMProviderFactory::class);
+        $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('isKnownProviderId')->willReturn(true);
         $factory->method('getProviderById')->willReturn($service);
         return new ProviderSettingsController(
             'aiquila',
-            $this->createMock(IRequest::class),
+            $this->createStub(IRequest::class),
             'admin',
             $this->config,
             $factory,
             $this->settings,
             $credentials,
-            $this->createMock(IUserManager::class),
-            $this->createMock(IGroupManager::class),
-            $this->createMock(LoggerInterface::class),
+            $this->createStub(IUserManager::class),
+            $this->createStub(IGroupManager::class),
+            $this->createStub(LoggerInterface::class),
         );
     }
 
@@ -238,7 +249,7 @@ class ProviderSettingsControllerTest extends TestCase {
         $bedrock->method('isConfigured')->willReturn(false);
         $bedrock->expects($this->never())->method('ask');
 
-        $response = $this->controllerFor($bedrock, $this->createMock(CredentialService::class))->test('bedrock');
+        $response = $this->controllerFor($bedrock, $this->createStub(CredentialService::class))->test('bedrock');
 
         $this->assertSame(400, $response->getStatus());
     }
@@ -247,7 +258,7 @@ class ProviderSettingsControllerTest extends TestCase {
         $bedrock = $this->createMock(\OCA\AIquila\Service\Provider\Cloud\BedrockProvider::class);
         $bedrock->method('authMode')->willReturn('api_key');
         $bedrock->expects($this->never())->method('ask');
-        $credentials = $this->createMock(CredentialService::class);
+        $credentials = $this->createStub(CredentialService::class);
         $credentials->method('getApiKey')->willReturn('');
 
         $response = $this->controllerFor($bedrock, $credentials)->test('bedrock');

@@ -23,15 +23,19 @@ class VisionProvidersTest extends TestCase {
     private ProviderResolver $resolver;
 
     protected function setUp(): void {
-        $this->factory = $this->createMock(LLMProviderFactory::class);
-        $this->resolver = new ProviderResolver($this->factory);
+        $this->factory = $this->createStub(LLMProviderFactory::class);
+        $this->buildResolver();
 
         // Not a supported mime as far as the optimizer is concerned, so prepare()
         // takes the plain base64_encode() path and no GD is needed.
-        $this->imageOptimizer = $this->createMock(ImageOptimizer::class);
+        $this->imageOptimizer = $this->createStub(ImageOptimizer::class);
         $this->imageOptimizer->method('prepare')->willReturnCallback(
             static fn (string $raw, string $mime): array => ['base64' => base64_encode($raw), 'mimeType' => $mime]
         );
+    }
+
+    private function buildResolver(): void {
+        $this->resolver = new ProviderResolver($this->factory);
     }
 
     /**
@@ -39,15 +43,15 @@ class VisionProvidersTest extends TestCase {
      * File/Image-typed input slot is resolved by Manager::fillInputFileData().
      */
     private function imageFile(int $id = 42, string $content = self::JPEG, string $mime = 'image/jpeg') {
-        $file = $this->createMock(File::class);
+        $file = $this->createStub(File::class);
         $file->method('getId')->willReturn($id);
         $file->method('getContent')->willReturn($content);
         $file->method('getMimetype')->willReturn($mime);
         return $file;
     }
 
-    private function visionProvider() {
-        $provider = $this->createMock(LLMProviderInterface::class);
+    private function visionProvider(bool $mock = false) {
+        $provider = $mock ? $this->createMock(LLMProviderInterface::class) : $this->createStub(LLMProviderInterface::class);
         $provider->method('getId')->willReturn('mistral');
         $provider->method('getLabel')->willReturn('Mistral');
         $provider->method('getCapabilities')->willReturn(ProviderSettingsSchema::capabilities(['vision' => true]));
@@ -55,7 +59,7 @@ class VisionProvidersTest extends TestCase {
     }
 
     private function blindProvider() {
-        $provider = $this->createMock(LLMProviderInterface::class);
+        $provider = $this->createStub(LLMProviderInterface::class);
         $provider->method('getId')->willReturn('deepseek');
         $provider->method('getLabel')->willReturn('DeepSeek');
         $provider->method('getCapabilities')->willReturn(ProviderSettingsSchema::capabilities(['vision' => false]));
@@ -87,7 +91,7 @@ class VisionProvidersTest extends TestCase {
     }
 
     public function testSingleImageUsesAskWithImageAndPassesTheFileId(): void {
-        $provider = $this->visionProvider();
+        $provider = $this->visionProvider(mock: true);
         $provider->expects($this->once())
             ->method('askWithImage')
             ->with('What is this?', base64_encode(self::JPEG), 'image/jpeg', 'alice', '42')
@@ -104,7 +108,7 @@ class VisionProvidersTest extends TestCase {
     }
 
     public function testMultipleImagesUseAskWithImages(): void {
-        $provider = $this->visionProvider();
+        $provider = $this->visionProvider(mock: true);
         $provider->expects($this->once())
             ->method('askWithImages')
             ->with('What are these?', $this->countOf(2), 'alice', ['1', '2'])
@@ -121,6 +125,9 @@ class VisionProvidersTest extends TestCase {
     }
 
     public function testProviderOverrideIsPassedToTheFactory(): void {
+        $this->factory = $this->createMock(LLMProviderFactory::class);
+        $this->buildResolver();
+
         $provider = $this->visionProvider();
         $provider->method('askWithImage')->willReturn(['response' => 'A cat']);
         $this->factory->expects($this->once())
@@ -181,7 +188,7 @@ class VisionProvidersTest extends TestCase {
 
     public function testOcrDefaultsThePromptAndPassesTheFileId(): void {
         $default = $this->imageToText()->getOptionalInputShapeDefaults()['prompt'];
-        $provider = $this->visionProvider();
+        $provider = $this->visionProvider(mock: true);
         $provider->expects($this->once())
             ->method('askWithImage')
             ->with($default, base64_encode(self::JPEG), 'image/jpeg', 'alice', '7')

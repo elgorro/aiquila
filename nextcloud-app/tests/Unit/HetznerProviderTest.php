@@ -21,11 +21,11 @@ class HetznerProviderTest extends TestCase {
     private HetznerProvider $provider;
 
     protected function setUp(): void {
-        $this->clientService = $this->createMock(IClientService::class);
-        $this->client        = $this->createMock(IClient::class);
-        $this->config        = $this->createMock(IConfig::class);
-        $this->credentials   = $this->createMock(CredentialService::class);
-        $this->logger        = $this->createMock(LoggerInterface::class);
+        $this->clientService = $this->createStub(IClientService::class);
+        $this->client        = $this->createStub(IClient::class);
+        $this->config        = $this->createStub(IConfig::class);
+        $this->credentials   = $this->createStub(CredentialService::class);
+        $this->logger        = $this->createStub(LoggerInterface::class);
 
         $this->clientService->method('newClient')->willReturn($this->client);
         $this->credentials->method('getApiKey')->willReturn('test-token');
@@ -42,7 +42,7 @@ class HetznerProviderTest extends TestCase {
 
     /** Provider with specific app config values (everything else = default). */
     private function provider(array $appValues): HetznerProvider {
-        $config = $this->createMock(IConfig::class);
+        $config = $this->createStub(IConfig::class);
         $config->method('getUserValue')->willReturn('');
         $config->method('getAppValue')->willReturnCallback(
             fn($app, $key, $default = '') => $appValues[$key] ?? $default
@@ -51,13 +51,13 @@ class HetznerProviderTest extends TestCase {
     }
 
     private function jsonResponse(array $payload): IResponse {
-        $response = $this->createMock(IResponse::class);
+        $response = $this->createStub(IResponse::class);
         $response->method('getBody')->willReturn(json_encode($payload));
         return $response;
     }
 
     private function sseResponse(string $sse): IResponse {
-        $response = $this->createMock(IResponse::class);
+        $response = $this->createStub(IResponse::class);
         $response->method('getBody')->willReturn($sse);
         return $response;
     }
@@ -123,7 +123,7 @@ class HetznerProviderTest extends TestCase {
     }
 
     public function testIsConfiguredRequiresToken(): void {
-        $credentials = $this->createMock(CredentialService::class);
+        $credentials = $this->createStub(CredentialService::class);
         $credentials->method('getApiKey')->willReturn('');
         $provider = new HetznerProvider($this->clientService, $this->config, $credentials, $this->logger);
 

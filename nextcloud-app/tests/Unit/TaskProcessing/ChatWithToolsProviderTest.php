@@ -20,9 +20,9 @@ class ChatWithToolsProviderTest extends TestCase {
     private ChatWithToolsProvider $provider;
 
     protected function setUp(): void {
-        $this->factory = $this->createMock(LLMProviderFactory::class);
-        $this->llm = $this->createMock(LLMProviderInterface::class);
-        $this->factory->method('getProviderForUser')->willReturn($this->llm);
+        $this->factory = $this->createStub(LLMProviderFactory::class);
+        $this->llm = $this->createStub(LLMProviderInterface::class);
+        $this->factory->method('getProviderForUser')->willReturnCallback(fn () => $this->llm);
         $this->resolver = new ProviderResolver($this->factory);
         $this->provider = new ChatWithToolsProvider($this->resolver);
     }
@@ -33,6 +33,7 @@ class ChatWithToolsProviderTest extends TestCase {
     }
 
     public function testOpenAiToolsAreTranslatedToTheCanonicalShape(): void {
+        $this->llm = $this->createMock(LLMProviderInterface::class);
         $this->llm->expects($this->once())
             ->method('chatToolsTurn')
             ->with(
@@ -88,6 +89,7 @@ class ChatWithToolsProviderTest extends TestCase {
     }
 
     public function testToolResultsAreReplayedAfterTheUserTurn(): void {
+        $this->llm = $this->createMock(LLMProviderInterface::class);
         $this->llm->expects($this->once())
             ->method('chatToolsTurn')
             ->with(
@@ -111,6 +113,7 @@ class ChatWithToolsProviderTest extends TestCase {
     }
 
     public function testAToolMessageAloneIsEnoughToContinue(): void {
+        $this->llm = $this->createMock(LLMProviderInterface::class);
         $this->llm->expects($this->once())
             ->method('chatToolsTurn')
             ->with([['role' => 'user', 'content' => "Tool results:\nBerlin: 18C"]], [], null, 'alice')

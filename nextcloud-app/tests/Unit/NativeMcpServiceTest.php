@@ -12,10 +12,10 @@ use Psr\Log\LoggerInterface;
 
 class NativeMcpServiceTest extends TestCase {
     private function service(string $connectorIds): NativeMcpService {
-        $mapper = $this->createMock(McpServerMapper::class);
-        $credentials = $this->createMock(CredentialService::class);
-        $config = $this->createMock(IConfig::class);
-        $logger = $this->createMock(LoggerInterface::class);
+        $mapper = $this->createStub(McpServerMapper::class);
+        $credentials = $this->createStub(CredentialService::class);
+        $config = $this->createStub(IConfig::class);
+        $logger = $this->createStub(LoggerInterface::class);
         $config->method('getAppValue')->willReturnCallback(
             fn($app, $key, $default = '') => $key === 'mistral_connector_ids' ? $connectorIds : $default
         );

@@ -32,12 +32,12 @@ class LLMProviderFactoryTest extends TestCase {
     private LLMProviderFactory $factory;
 
     protected function setUp(): void {
-        $this->config    = $this->createMock(IConfig::class);
-        $this->anthropic = $this->createMock(ClaudeSDKService::class);
-        $this->mistral   = $this->createMock(MistralProvider::class);
-        $this->deepseek  = $this->createMock(DeepSeekProvider::class);
-        $this->hetzner   = $this->createMock(HetznerProvider::class);
-        $this->local     = $this->createMock(LocalProvider::class);
+        $this->config    = $this->createStub(IConfig::class);
+        $this->anthropic = $this->createStub(ClaudeSDKService::class);
+        $this->mistral   = $this->createStub(MistralProvider::class);
+        $this->deepseek  = $this->createStub(DeepSeekProvider::class);
+        $this->hetzner   = $this->createStub(HetznerProvider::class);
+        $this->local     = $this->createStub(LocalProvider::class);
         $this->anthropic->method('getId')->willReturn('anthropic');
         $this->mistral->method('getId')->willReturn('mistral');
         $this->deepseek->method('getId')->willReturn('deepseek');
@@ -51,14 +51,14 @@ class LLMProviderFactoryTest extends TestCase {
             'vertex' => VertexProvider::class,
             'foundry' => FoundryProvider::class,
         ] as $id => $class) {
-            $mock = $this->createMock($class);
+            $mock = $this->createStub($class);
             $mock->method('getId')->willReturn($id);
             $this->cloud[$id] = $mock;
         }
 
         // Access control off by default: filterAllowed() returns everything, so
         // these tests keep asserting the plain precedence rules.
-        $this->access = $this->createMock(ProviderAccessService::class);
+        $this->access = $this->createStub(ProviderAccessService::class);
         $this->access->method('filterAllowed')->willReturnCallback(
             static fn (array $ids, ?string $userId): array => $ids,
         );
@@ -69,7 +69,7 @@ class LLMProviderFactoryTest extends TestCase {
 
     /** Rebuild the factory with only $permitted allowed for every user. */
     private function permitOnly(array $permitted): void {
-        $access = $this->createMock(ProviderAccessService::class);
+        $access = $this->createStub(ProviderAccessService::class);
         $access->method('filterAllowed')->willReturnCallback(
             static fn (array $ids, ?string $userId): array => array_values(array_intersect($ids, $permitted)),
         );

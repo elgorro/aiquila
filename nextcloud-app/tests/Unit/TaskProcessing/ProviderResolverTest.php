@@ -14,7 +14,11 @@ class ProviderResolverTest extends TestCase {
     private ProviderResolver $resolver;
 
     protected function setUp(): void {
-        $this->factory = $this->createMock(LLMProviderFactory::class);
+        $this->factory = $this->createStub(LLMProviderFactory::class);
+        $this->buildResolver();
+    }
+
+    private function buildResolver(): void {
         $this->resolver = new ProviderResolver($this->factory);
     }
 
@@ -24,7 +28,7 @@ class ProviderResolverTest extends TestCase {
 
     /** @param array<string, bool> $capabilities */
     private function capable(string $id, string $label, array $capabilities, bool $configured = true) {
-        $provider = $this->createMock(LLMProviderInterface::class);
+        $provider = $this->createStub(LLMProviderInterface::class);
         $provider->method('getId')->willReturn($id);
         $provider->method('getLabel')->willReturn($label);
         $provider->method('getCapabilities')->willReturn(ProviderSettingsSchema::capabilities($capabilities));
@@ -33,6 +37,9 @@ class ProviderResolverTest extends TestCase {
     }
 
     public function testResolveDelegatesToTheFactory(): void {
+        $this->factory = $this->createMock(LLMProviderFactory::class);
+        $this->buildResolver();
+
         $local = $this->provider('local', 'Local model', false);
         $this->factory->expects($this->once())
             ->method('getProviderForUser')
@@ -43,8 +50,11 @@ class ProviderResolverTest extends TestCase {
     }
 
     public function testResolvePassesTheRequestedIdThrough(): void {
+        $this->factory = $this->createMock(LLMProviderFactory::class);
+        $this->buildResolver();
+
         $mistral = $this->provider('mistral', 'Mistral', true);
-        $this->factory->method('getProviderForUser')->with('alice', 'mistral')->willReturn($mistral);
+        $this->factory->expects($this->once())->method('getProviderForUser')->with('alice', 'mistral')->willReturn($mistral);
 
         $this->assertSame($mistral, $this->resolver->resolve('alice', 'mistral'));
     }

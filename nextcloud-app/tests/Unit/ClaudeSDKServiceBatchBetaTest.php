@@ -52,21 +52,21 @@ class BatchBetaTestableService extends ClaudeSDKService {
 
 class ClaudeSDKServiceBatchBetaTest extends TestCase {
     private function makeService(array $appConfig = []): BatchBetaTestableService {
-        $config = $this->createMock(IConfig::class);
+        $config = $this->createStub(IConfig::class);
         $config->method('getAppValue')->willReturnCallback(
             fn ($app, $key, $default) => $appConfig[$key] ?? $default
         );
         $config->method('getUserValue')->willReturnCallback(fn ($u, $a, $k, $d) => $d);
-        $logger = $this->createMock(LoggerInterface::class);
-        $credentials = $this->createMock(CredentialService::class);
+        $logger = $this->createStub(LoggerInterface::class);
+        $credentials = $this->createStub(CredentialService::class);
         $credentials->method('getApiKey')->willReturn('test-key');
-        $cache = $this->createMock(ICache::class);
+        $cache = $this->createStub(ICache::class);
         // No cached capabilities and no reachable API, so getMaxTokens() falls
         // back to the static ClaudeModels ceilings — which is what we assert on.
         $cache->method('get')->willReturn(null);
-        $cacheFactory = $this->createMock(ICacheFactory::class);
+        $cacheFactory = $this->createStub(ICacheFactory::class);
         $cacheFactory->method('createDistributed')->willReturn($cache);
-        $requestMetadata = $this->createMock(RequestMetadataService::class);
+        $requestMetadata = $this->createStub(RequestMetadataService::class);
         $requestMetadata->method('hashUserId')->willReturn('deadbeef');
 
         return new BatchBetaTestableService($config, $logger, $credentials, $cacheFactory, $requestMetadata);

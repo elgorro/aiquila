@@ -15,8 +15,12 @@ class ConversationContentProviderTest extends TestCase {
     private ConversationContentProvider $provider;
 
     protected function setUp(): void {
-        $this->service = $this->createMock(ContextChatService::class);
-        $this->urlGenerator = $this->createMock(IURLGenerator::class);
+        $this->service = $this->createStub(ContextChatService::class);
+        $this->urlGenerator = $this->createStub(IURLGenerator::class);
+        $this->buildProvider();
+    }
+
+    private function buildProvider(): void {
         $this->provider = new ConversationContentProvider($this->service, $this->urlGenerator);
     }
 
@@ -26,7 +30,10 @@ class ConversationContentProviderTest extends TestCase {
     }
 
     public function testItemUrlDeepLinksToConversation(): void {
-        $this->urlGenerator->method('linkToRoute')->with('aiquila.page.index')->willReturn('/apps/aiquila/');
+        $this->urlGenerator = $this->createMock(IURLGenerator::class);
+        $this->buildProvider();
+
+        $this->urlGenerator->expects($this->once())->method('linkToRoute')->with('aiquila.page.index')->willReturn('/apps/aiquila/');
         $this->urlGenerator->method('getAbsoluteURL')
             ->willReturnCallback(static fn (string $url): string => 'https://cloud.example' . $url);
 
@@ -37,6 +44,9 @@ class ConversationContentProviderTest extends TestCase {
     }
 
     public function testInitialImportReindexesAll(): void {
+        $this->service = $this->createMock(ContextChatService::class);
+        $this->buildProvider();
+
         $this->service->expects($this->once())->method('reindexAll');
         $this->provider->triggerInitialImport();
     }

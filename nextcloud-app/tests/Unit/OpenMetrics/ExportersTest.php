@@ -29,7 +29,7 @@ class ExportersTest extends TestCase {
     }
 
     public function testTokensUsedExporter(): void {
-        $mapper = $this->createMock(UsageStatMapper::class);
+        $mapper = $this->createStub(UsageStatMapper::class);
         $mapper->method('sumTokensByModelAndType')->willReturn([
             ['model' => 'claude-opus-4-8', 'request_type' => 'chat', 'input_tokens' => 1000, 'output_tokens' => 500],
         ]);
@@ -48,7 +48,7 @@ class ExportersTest extends TestCase {
     }
 
     public function testTasksExporter(): void {
-        $mapper = $this->createMock(CoworkerRunMapper::class);
+        $mapper = $this->createStub(CoworkerRunMapper::class);
         $mapper->method('countByStatus')->willReturn(['success' => 7, 'error' => 2]);
 
         $exporter = new TasksExporter($mapper);
@@ -62,7 +62,7 @@ class ExportersTest extends TestCase {
     }
 
     public function testConversationsExporter(): void {
-        $mapper = $this->createMock(ConversationMapper::class);
+        $mapper = $this->createStub(ConversationMapper::class);
         $mapper->method('countAll')->willReturn(42);
 
         $exporter = new ConversationsExporter($mapper);
@@ -78,7 +78,7 @@ class ExportersTest extends TestCase {
         $down = $this->makeServer(2, 'Mail', true, 'error');
         $disabled = $this->makeServer(3, 'Notes', false, 'ok');
 
-        $mapper = $this->createMock(McpServerMapper::class);
+        $mapper = $this->createStub(McpServerMapper::class);
         $mapper->method('findAll')->willReturn([$up, $down, $disabled]);
 
         $exporter = new McpServerStatusExporter($mapper);

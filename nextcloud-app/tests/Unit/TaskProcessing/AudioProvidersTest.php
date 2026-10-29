@@ -33,7 +33,7 @@ class AudioProvidersTest extends TestCase {
     private ProviderResolver $resolver;
 
     protected function setUp(): void {
-        $this->factory = $this->createMock(LLMProviderFactory::class);
+        $this->factory = $this->createStub(LLMProviderFactory::class);
         $this->resolver = new ProviderResolver($this->factory);
     }
 
@@ -42,7 +42,7 @@ class AudioProvidersTest extends TestCase {
      * Audio-typed input slot is resolved by Manager::fillInputFileData().
      */
     private function audioFile(string $name = 'memo.mp3', string $mime = 'audio/mpeg', int $size = 2048) {
-        $file = $this->createMock(File::class);
+        $file = $this->createStub(File::class);
         $file->method('getId')->willReturn(7);
         $file->method('getName')->willReturn($name);
         $file->method('getContent')->willReturn(self::MP3);
@@ -52,8 +52,8 @@ class AudioProvidersTest extends TestCase {
     }
 
     /** @param array<string, bool> $capabilities */
-    private function provider(array $capabilities, string $id = 'mistral', string $label = 'Mistral') {
-        $provider = $this->createMock(LLMProviderInterface::class);
+    private function provider(array $capabilities, string $id = 'mistral', string $label = 'Mistral', bool $mock = false) {
+        $provider = $mock ? $this->createMock(LLMProviderInterface::class) : $this->createStub(LLMProviderInterface::class);
         $provider->method('getId')->willReturn($id);
         $provider->method('getLabel')->willReturn($label);
         $provider->method('getCapabilities')->willReturn(ProviderSettingsSchema::capabilities($capabilities));
@@ -148,7 +148,7 @@ class AudioProvidersTest extends TestCase {
     // ── Transcription ───────────────────────────────────────────────────────
 
     public function testTranscriptionPassesTheFileThroughAndReturnsTheText(): void {
-        $provider = $this->provider(['audio_in' => true]);
+        $provider = $this->provider(['audio_in' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
             ->with(self::MP3, 'audio/mpeg', 'memo.mp3', 'alice', ['language' => 'de'])
@@ -165,7 +165,7 @@ class AudioProvidersTest extends TestCase {
     }
 
     public function testTranscriptionOmitsTheLanguageOptionWhenNoneWasGiven(): void {
-        $provider = $this->provider(['audio_in' => true]);
+        $provider = $this->provider(['audio_in' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
             ->with(self::MP3, 'audio/mpeg', 'memo.mp3', 'alice', [])
@@ -180,7 +180,7 @@ class AudioProvidersTest extends TestCase {
      * recording stored without a usable extension gets one from its MIME type.
      */
     public function testTranscriptionNamesTheUploadFromTheMimeTypeWhenTheFileHasNoExtension(): void {
-        $provider = $this->provider(['audio_in' => true]);
+        $provider = $this->provider(['audio_in' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
             ->with(self::MP3, 'audio/ogg', 'voice-message.ogg', null, [])
@@ -195,7 +195,7 @@ class AudioProvidersTest extends TestCase {
     }
 
     public function testTranscriptionRejectsAnUnsupportedContainerBeforeCallingTheProvider(): void {
-        $provider = $this->provider(['audio_in' => true]);
+        $provider = $this->provider(['audio_in' => true], mock: true);
         $provider->expects($this->never())->method('transcribeAudio');
         $this->serve($provider);
 
@@ -233,7 +233,7 @@ class AudioProvidersTest extends TestCase {
     }
 
     public function testTranscriptionRefusesAProviderWithoutTheCapability(): void {
-        $provider = $this->provider(['vision' => true], 'anthropic', 'Claude (Anthropic)');
+        $provider = $this->provider(['vision' => true], 'anthropic', 'Claude (Anthropic)', mock: true);
         $provider->expects($this->never())->method('transcribeAudio');
         $this->factory->method('getProviderForUser')->willReturn($provider);
         $this->factory->method('getProviderIdsForUser')->willReturn(['anthropic']);
@@ -248,7 +248,7 @@ class AudioProvidersTest extends TestCase {
 
     /** The task type names the slot `speech`, not `output`, and it carries bytes. */
     public function testSpeechIsReturnedAsRawBytesUnderTheSpeechKey(): void {
-        $provider = $this->provider(['audio_out' => true]);
+        $provider = $this->provider(['audio_out' => true], mock: true);
         $provider->expects($this->once())
             ->method('synthesizeSpeech')
             ->with('Read this out.', 'alice', ['voice' => 'alloy'])
@@ -273,7 +273,7 @@ class AudioProvidersTest extends TestCase {
     // ── Image generation ────────────────────────────────────────────────────
 
     public function testImageGenerationClampsTheRequestedCount(): void {
-        $provider = $this->provider(['image_out' => true]);
+        $provider = $this->provider(['image_out' => true], mock: true);
         $provider->expects($this->once())
             ->method('generateImages')
             ->with('an orange cat', TextToImageProvider::MAX_IMAGES, 'alice')
@@ -290,7 +290,7 @@ class AudioProvidersTest extends TestCase {
     }
 
     public function testImageGenerationFallsBackToOneForANonNumericCount(): void {
-        $provider = $this->provider(['image_out' => true]);
+        $provider = $this->provider(['image_out' => true], mock: true);
         $provider->expects($this->once())
             ->method('generateImages')
             ->with('a blue door', 1, 'alice')
@@ -313,7 +313,7 @@ class AudioProvidersTest extends TestCase {
     // ── Voice chat ──────────────────────────────────────────────────────────
 
     public function testVoiceChatChainsTranscriptionChatAndSpeech(): void {
-        $provider = $this->provider(['audio_in' => true, 'audio_out' => true]);
+        $provider = $this->provider(['audio_in' => true, 'audio_out' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
             ->willReturn(['response' => 'What is the weather?']);
@@ -353,7 +353,7 @@ class AudioProvidersTest extends TestCase {
     }
 
     public function testVoiceChatStopsWhenNothingWasTranscribed(): void {
-        $provider = $this->provider(['audio_in' => true, 'audio_out' => true]);
+        $provider = $this->provider(['audio_in' => true, 'audio_out' => true], mock: true);
         $provider->method('transcribeAudio')->willReturn(['response' => '  ']);
         $provider->expects($this->never())->method('chat');
         $this->serve($provider);
@@ -364,7 +364,7 @@ class AudioProvidersTest extends TestCase {
     }
 
     public function testVoiceChatRefusesAProviderThatCanOnlyTranscribe(): void {
-        $provider = $this->provider(['audio_in' => true], 'local', 'Local model');
+        $provider = $this->provider(['audio_in' => true], 'local', 'Local model', mock: true);
         $provider->expects($this->never())->method('transcribeAudio');
         $this->factory->method('getProviderForUser')->willReturn($provider);
         $this->factory->method('getProviderIdsForUser')->willReturn(['local']);
@@ -378,7 +378,7 @@ class AudioProvidersTest extends TestCase {
     // ── Subtitles ───────────────────────────────────────────────────────────
 
     public function testSubtitlesAskForTimestampsAndDefaultToSubRip(): void {
-        $provider = $this->provider(['audio_in' => true]);
+        $provider = $this->provider(['audio_in' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
             ->with(self::MP3, 'video/mp4', 'talk.mp4', 'alice', ['timestamps' => true])
@@ -426,7 +426,7 @@ class AudioProvidersTest extends TestCase {
     }
 
     public function testSubtitlesRefuseAProviderThatCannotTranscribe(): void {
-        $provider = $this->provider([], 'anthropic', 'Anthropic');
+        $provider = $this->provider([], 'anthropic', 'Anthropic', mock: true);
         $provider->expects($this->never())->method('transcribeAudio');
         $this->factory->method('getProviderForUser')->willReturn($provider);
         $this->factory->method('getProviderIdsForUser')->willReturn(['anthropic']);
@@ -440,7 +440,7 @@ class AudioProvidersTest extends TestCase {
     // ── Audio translation ───────────────────────────────────────────────────
 
     public function testAudioTranslationChainsTranscriptionTranslationAndSpeech(): void {
-        $provider = $this->provider(['audio_in' => true, 'audio_out' => true]);
+        $provider = $this->provider(['audio_in' => true, 'audio_out' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
             ->with(self::MP3, 'audio/mpeg', 'memo.mp3', 'alice', ['language' => 'en'])
@@ -468,7 +468,7 @@ class AudioProvidersTest extends TestCase {
         $translate = $this->audioTranslate();
         $this->assertSame('detect_language', $translate->getInputShapeDefaults()['origin_language']);
 
-        $provider = $this->provider(['audio_in' => true, 'audio_out' => true]);
+        $provider = $this->provider(['audio_in' => true, 'audio_out' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
             ->with($this->anything(), $this->anything(), $this->anything(), 'alice', [])
@@ -488,7 +488,7 @@ class AudioProvidersTest extends TestCase {
     }
 
     public function testAudioTranslationStopsWhenNothingWasTranscribed(): void {
-        $provider = $this->provider(['audio_in' => true, 'audio_out' => true]);
+        $provider = $this->provider(['audio_in' => true, 'audio_out' => true], mock: true);
         $provider->method('transcribeAudio')->willReturn(['response' => '']);
         $provider->expects($this->never())->method('ask');
         $provider->expects($this->never())->method('synthesizeSpeech');
@@ -500,7 +500,7 @@ class AudioProvidersTest extends TestCase {
     }
 
     public function testAudioTranslationRefusesAProviderThatCanOnlyTranscribe(): void {
-        $provider = $this->provider(['audio_in' => true], 'local', 'Local model');
+        $provider = $this->provider(['audio_in' => true], 'local', 'Local model', mock: true);
         $provider->expects($this->never())->method('transcribeAudio');
         $this->factory->method('getProviderForUser')->willReturn($provider);
         $this->factory->method('getProviderIdsForUser')->willReturn(['local']);

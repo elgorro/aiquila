@@ -32,18 +32,22 @@ class CoworkerServiceBatchTest extends TestCase {
     private CoworkerService $service;
 
     protected function setUp(): void {
-        $this->mapper = $this->createMock(CoworkerMapper::class);
-        $this->runMapper = $this->createMock(CoworkerRunMapper::class);
-        $this->registry = $this->createMock(CoworkerTaskRegistry::class);
-        $this->providerFactory = $this->createMock(LLMProviderFactory::class);
-        $this->timeFactory = $this->createMock(ITimeFactory::class);
+        $this->mapper = $this->createStub(CoworkerMapper::class);
+        $this->runMapper = $this->createStub(CoworkerRunMapper::class);
+        $this->registry = $this->createStub(CoworkerTaskRegistry::class);
+        $this->providerFactory = $this->createStub(LLMProviderFactory::class);
+        $this->timeFactory = $this->createStub(ITimeFactory::class);
         $this->timeFactory->method('getTime')->willReturn(1_700_000_000);
-        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
 
         $this->runMapper->method('insert')->willReturnArgument(0);
         $this->runMapper->method('update')->willReturnArgument(0);
         $this->mapper->method('update')->willReturnArgument(0);
 
+        $this->buildService();
+    }
+
+    private function buildService(): void {
         $this->service = new CoworkerService(
             $this->mapper,
             $this->runMapper,
@@ -78,7 +82,7 @@ class CoworkerServiceBatchTest extends TestCase {
     }
 
     public function testPendingResultLeavesTheRunOpen(): void {
-        $task = $this->createMock(ResumableCoworkerTaskType::class);
+        $task = $this->createStub(ResumableCoworkerTaskType::class);
         $task->method('run')->willReturn([
             'itemsTotal' => 5,
             'itemsProcessed' => 0,
@@ -102,6 +106,10 @@ class CoworkerServiceBatchTest extends TestCase {
      * twice and race two runs onto the same output files.
      */
     public function testExecuteSkipsWhileAPreviousRunIsPending(): void {
+        $this->runMapper = $this->createMock(CoworkerRunMapper::class);
+        $this->registry = $this->createMock(CoworkerTaskRegistry::class);
+        $this->buildService();
+
         $open = $this->pendingRun(42, ['batch_id' => 'batch_01ABC']);
         $this->runMapper->method('findPendingForCoworker')->willReturn($open);
         $this->runMapper->expects($this->never())->method('insert');
@@ -139,7 +147,7 @@ class CoworkerServiceBatchTest extends TestCase {
     }
 
     public function testResumeKeepsTheRunOpenWhileTheBatchIsStillRunning(): void {
-        $task = $this->createMock(ResumableCoworkerTaskType::class);
+        $task = $this->createStub(ResumableCoworkerTaskType::class);
         $task->method('resume')->willReturn([
             'itemsTotal' => 5,
             'itemsProcessed' => 0,
@@ -159,7 +167,7 @@ class CoworkerServiceBatchTest extends TestCase {
 
     /** The caller is a background job, so a failing resume must not throw. */
     public function testResumeCapturesAFailureOnTheRun(): void {
-        $task = $this->createMock(ResumableCoworkerTaskType::class);
+        $task = $this->createStub(ResumableCoworkerTaskType::class);
         $task->method('resume')->willThrowException(new \RuntimeException('batch expired'));
         $this->registry->method('get')->willReturn($task);
         $this->mapper->method('findByIdAndUser')->willReturn($this->coworker());
@@ -176,7 +184,7 @@ class CoworkerServiceBatchTest extends TestCase {
      * rather than left for the poll job to retry forever.
      */
     public function testResumeFailsForANonResumableTaskType(): void {
-        $this->registry->method('get')->willReturn($this->createMock(CoworkerTaskType::class));
+        $this->registry->method('get')->willReturn($this->createStub(CoworkerTaskType::class));
         $this->mapper->method('findByIdAndUser')->willReturn($this->coworker());
 
         $run = $this->service->resumePending($this->pendingRun(1, ['batch_id' => 'batch_01ABC']));

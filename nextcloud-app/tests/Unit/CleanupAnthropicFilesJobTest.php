@@ -24,7 +24,7 @@ class CleanupAnthropicFilesJobTest extends TestCase {
 
     public function testRunsDeleteOlderThanWith30DayCutoff(): void {
         $now = 1_750_000_000;
-        $time = $this->createMock(ITimeFactory::class);
+        $time = $this->createStub(ITimeFactory::class);
         $time->method('getTime')->willReturn($now);
 
         $mapper = $this->createMock(FileUploadMapper::class);
@@ -40,7 +40,7 @@ class CleanupAnthropicFilesJobTest extends TestCase {
     }
 
     public function testRunsSilentlyWhenNothingDeleted(): void {
-        $time = $this->createMock(ITimeFactory::class);
+        $time = $this->createStub(ITimeFactory::class);
         $time->method('getTime')->willReturn(1_750_000_000);
 
         $mapper = $this->createMock(FileUploadMapper::class);
@@ -54,10 +54,10 @@ class CleanupAnthropicFilesJobTest extends TestCase {
     }
 
     public function testRunsLogsWhenMapperThrows(): void {
-        $time = $this->createMock(ITimeFactory::class);
+        $time = $this->createStub(ITimeFactory::class);
         $time->method('getTime')->willReturn(1_750_000_000);
 
-        $mapper = $this->createMock(FileUploadMapper::class);
+        $mapper = $this->createStub(FileUploadMapper::class);
         $mapper->method('deleteOlderThan')->willThrowException(new \RuntimeException('db down'));
 
         $logger = $this->createMock(LoggerInterface::class);
@@ -67,10 +67,10 @@ class CleanupAnthropicFilesJobTest extends TestCase {
     }
 
     public function testIntervalIsDaily(): void {
-        $time = $this->createMock(ITimeFactory::class);
+        $time = $this->createStub(ITimeFactory::class);
         $time->method('getTime')->willReturn(0);
-        $mapper = $this->createMock(FileUploadMapper::class);
-        $logger = $this->createMock(LoggerInterface::class);
+        $mapper = $this->createStub(FileUploadMapper::class);
+        $logger = $this->createStub(LoggerInterface::class);
 
         $job = new CleanupAnthropicFilesJob($time, $mapper, $logger);
         $this->assertSame(86400, $job->getInterval());

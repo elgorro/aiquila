@@ -15,12 +15,16 @@ class AnthropicApiReachableTest extends TestCase {
     private AnthropicApiReachable $check;
 
     protected function setUp(): void {
-        $this->sdk = $this->createMock(ClaudeSDKService::class);
-        $this->credentials = $this->createMock(CredentialService::class);
-        $this->l10n = $this->createMock(IL10N::class);
+        $this->sdk = $this->createStub(ClaudeSDKService::class);
+        $this->credentials = $this->createStub(CredentialService::class);
+        $this->l10n = $this->createStub(IL10N::class);
         $this->l10n->method('t')->willReturnCallback(
             fn(string $text, array $params = []) => $params ? vsprintf($text, $params) : $text
         );
+        $this->buildCheck();
+    }
+
+    private function buildCheck(): void {
         $this->check = new AnthropicApiReachable($this->sdk, $this->credentials, $this->l10n);
     }
 
@@ -33,27 +37,41 @@ class AnthropicApiReachableTest extends TestCase {
     }
 
     public function testInfoWhenNoApiKey(): void {
-        $this->credentials->method('hasApiKey')->with(null)->willReturn(false);
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildCheck();
+
+        $this->credentials->expects($this->once())->method('hasApiKey')->with(null)->willReturn(false);
         $result = $this->check->run();
         $this->assertSame('info', $result->getSeverity());
     }
 
     public function testSuccessWhenApiReachable(): void {
-        $this->credentials->method('hasApiKey')->with(null)->willReturn(true);
-        $this->sdk->method('listModels')->with(null)->willReturn(['claude-sonnet-4-6']);
+        $this->sdk = $this->createMock(ClaudeSDKService::class);
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildCheck();
+
+        $this->credentials->expects($this->once())->method('hasApiKey')->with(null)->willReturn(true);
+        $this->sdk->expects($this->once())->method('listModels')->with(null)->willReturn(['claude-sonnet-4-6']);
         $result = $this->check->run();
         $this->assertSame('success', $result->getSeverity());
     }
 
     public function testErrorWhenApiReturnsNull(): void {
-        $this->credentials->method('hasApiKey')->with(null)->willReturn(true);
-        $this->sdk->method('listModels')->with(null)->willReturn(null);
+        $this->sdk = $this->createMock(ClaudeSDKService::class);
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildCheck();
+
+        $this->credentials->expects($this->once())->method('hasApiKey')->with(null)->willReturn(true);
+        $this->sdk->expects($this->once())->method('listModels')->with(null)->willReturn(null);
         $result = $this->check->run();
         $this->assertSame('error', $result->getSeverity());
     }
 
     public function testErrorWhenApiThrows(): void {
-        $this->credentials->method('hasApiKey')->with(null)->willReturn(true);
+        $this->credentials = $this->createMock(CredentialService::class);
+        $this->buildCheck();
+
+        $this->credentials->expects($this->once())->method('hasApiKey')->with(null)->willReturn(true);
         $this->sdk->method('listModels')->willThrowException(new \RuntimeException('Connection refused'));
         $result = $this->check->run();
         $this->assertSame('error', $result->getSeverity());

@@ -21,11 +21,11 @@ class McpServerControllerTest extends TestCase {
     private IRequest $request;
 
     protected function setUp(): void {
-        $this->request = $this->createMock(IRequest::class);
-        $this->mapper = $this->createMock(McpServerMapper::class);
-        $this->mcpClient = $this->createMock(McpClientService::class);
-        $this->credentials = $this->createMock(CredentialService::class);
-        $this->urlGenerator = $this->createMock(IURLGenerator::class);
+        $this->request = $this->createStub(IRequest::class);
+        $this->mapper = $this->createStub(McpServerMapper::class);
+        $this->mcpClient = $this->createStub(McpClientService::class);
+        $this->credentials = $this->createStub(CredentialService::class);
+        $this->urlGenerator = $this->createStub(IURLGenerator::class);
 
         // Default: encryptToken returns a fixed encrypted value
         $this->credentials->method('encryptToken')
@@ -44,7 +44,7 @@ class McpServerControllerTest extends TestCase {
             $this->mcpClient,
             $this->credentials,
             $this->urlGenerator,
-            $this->createMock(\Psr\Log\LoggerInterface::class)
+            $this->createStub(\Psr\Log\LoggerInterface::class)
         );
     }
 

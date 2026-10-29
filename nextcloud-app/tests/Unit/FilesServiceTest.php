@@ -18,13 +18,21 @@ class FilesServiceTest extends TestCase {
     private FilesService $service;
 
     protected function setUp(): void {
-        $this->claudeService = $this->createMock(ClaudeSDKService::class);
-        $this->mapper = $this->createMock(FileUploadMapper::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->claudeService = $this->createStub(ClaudeSDKService::class);
+        $this->mapper = $this->createStub(FileUploadMapper::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
+        $this->buildService();
+    }
+
+    private function buildService(): void {
         $this->service = new FilesService($this->claudeService, $this->mapper, $this->logger);
     }
 
     public function testReturnsCachedFileIdWithoutUploading(): void {
+        $this->claudeService = $this->createMock(ClaudeSDKService::class);
+        $this->mapper = $this->createMock(FileUploadMapper::class);
+        $this->buildService();
+
         $cached = new FileUpload();
         $cached->setUserId('alice');
         $cached->setSha256(hash('sha256', 'hello'));
@@ -44,9 +52,13 @@ class FilesServiceTest extends TestCase {
     }
 
     public function testUploadsAndCachesOnFirstUse(): void {
+        $this->claudeService = $this->createMock(ClaudeSDKService::class);
+        $this->mapper = $this->createMock(FileUploadMapper::class);
+        $this->buildService();
+
         $sha = hash('sha256', 'pdfbytes');
 
-        $this->mapper->method('findByHash')->with('bob', $sha)->willReturn(null);
+        $this->mapper->expects($this->once())->method('findByHash')->with('bob', $sha)->willReturn(null);
         $this->claudeService->expects($this->once())
             ->method('uploadFile')
             ->with('pdfbytes', 'doc.pdf', 'application/pdf', 'bob')
@@ -70,6 +82,10 @@ class FilesServiceTest extends TestCase {
     }
 
     public function testReturnsNullAndLogsOnUploadFailure(): void {
+        $this->mapper = $this->createMock(FileUploadMapper::class);
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildService();
+
         $this->mapper->method('findByHash')->willReturn(null);
         $this->claudeService->method('uploadFile')->willThrowException(new \RuntimeException('boom'));
         $this->mapper->expects($this->never())->method('insert');
@@ -80,6 +96,9 @@ class FilesServiceTest extends TestCase {
     }
 
     public function testEvictByFileIdRemovesRow(): void {
+        $this->mapper = $this->createMock(FileUploadMapper::class);
+        $this->buildService();
+
         $this->mapper->expects($this->once())
             ->method('deleteByFileId')
             ->with('file_stale_42')
@@ -94,6 +113,9 @@ class FilesServiceTest extends TestCase {
     }
 
     public function testEvictByFileIdSwallowsAndLogsErrors(): void {
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildService();
+
         $this->mapper->method('deleteByFileId')->willThrowException(new \RuntimeException('db down'));
         $this->logger->expects($this->once())->method('debug');
         $this->assertFalse($this->service->evictByFileId('file_x'));
@@ -110,6 +132,9 @@ class FilesServiceTest extends TestCase {
     }
 
     public function testStillReturnsFileIdWhenInsertRaces(): void {
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildService();
+
         $this->mapper->method('findByHash')->willReturn(null);
         $this->claudeService->method('uploadFile')->willReturn('file_raced_999');
         $this->mapper->method('insert')->willThrowException(new \RuntimeException('UNIQUE constraint'));

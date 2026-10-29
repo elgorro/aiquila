@@ -72,12 +72,12 @@ class ClaudeSDKServiceAutoStreamTest extends TestCase {
     private RequestMetadataService $requestMetadata;
 
     protected function setUp(): void {
-        $this->config = $this->createMock(IConfig::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
-        $this->credentials = $this->createMock(CredentialService::class);
+        $this->config = $this->createStub(IConfig::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
+        $this->credentials = $this->createStub(CredentialService::class);
         $this->credentials->method('getApiKey')->willReturn('test-key');
 
-        $cache = $this->createMock(ICache::class);
+        $cache = $this->createStub(ICache::class);
         $cache->method('get')->willReturn([
             'max_tokens' => 128000,
             'context_window' => 1000000,
@@ -85,8 +85,8 @@ class ClaudeSDKServiceAutoStreamTest extends TestCase {
             'supports_thinking_enabled' => false,
             'supports_effort' => false,
         ]);
-        $this->cacheFactory = $this->createMock(ICacheFactory::class);
-        $this->requestMetadata = $this->createMock(RequestMetadataService::class);
+        $this->cacheFactory = $this->createStub(ICacheFactory::class);
+        $this->requestMetadata = $this->createStub(RequestMetadataService::class);
         $this->cacheFactory->method('createDistributed')->willReturn($cache);
 
         $this->config->method('getUserValue')->willReturn('');
@@ -162,7 +162,7 @@ class ClaudeSDKServiceAutoStreamTest extends TestCase {
     }
 
     public function testSmallMaxTokensKeepsNonStreamingTransport(): void {
-        $config = $this->createMock(IConfig::class);
+        $config = $this->createStub(IConfig::class);
         $config->method('getUserValue')->willReturn('');
         $config->method('getAppValue')
             ->willReturnCallback(fn($app, $key, $default) => match ($key) {

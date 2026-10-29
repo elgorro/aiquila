@@ -35,18 +35,18 @@ class BatchTextTaskTypeTest extends TestCase {
     private array $written = [];
 
     protected function setUp(): void {
-        $this->rootFolder = $this->createMock(IRootFolder::class);
-        $this->providerFactory = $this->createMock(LLMProviderFactory::class);
-        $this->tagManager = $this->createMock(ISystemTagManager::class);
-        $this->tagObjectMapper = $this->createMock(ISystemTagObjectMapper::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->rootFolder = $this->createStub(IRootFolder::class);
+        $this->providerFactory = $this->createStub(LLMProviderFactory::class);
+        $this->tagManager = $this->createStub(ISystemTagManager::class);
+        $this->tagObjectMapper = $this->createStub(ISystemTagObjectMapper::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
 
         // The service is only ever reached through the four batch methods.
-        $this->provider = $this->createMock(ClaudeSDKService::class);
+        $this->provider = $this->createStub(ClaudeSDKService::class);
         $this->provider->method('supportsBatch')->willReturn(true);
-        $this->providerFactory->method('getProviderForUser')->willReturn($this->provider);
+        $this->providerFactory->method('getProviderForUser')->willReturnCallback(fn () => $this->provider);
 
-        $this->userFolder = $this->createMock(Folder::class);
+        $this->userFolder = $this->createStub(Folder::class);
         $this->rootFolder->method('getUserFolder')->willReturn($this->userFolder);
 
         $this->task = new DocsSummarizeFolderTaskType(
@@ -56,6 +56,12 @@ class BatchTextTaskTypeTest extends TestCase {
             $this->tagObjectMapper,
             $this->logger,
         );
+    }
+
+    /** Swap the provider stub for a mock the test verifies. */
+    private function mockProvider(): void {
+        $this->provider = $this->createMock(ClaudeSDKService::class);
+        $this->provider->method('supportsBatch')->willReturn(true);
     }
 
     private function coworker(array $options = []): Coworker {
@@ -80,7 +86,7 @@ class BatchTextTaskTypeTest extends TestCase {
      * A source file in a parent folder that records what gets written to it.
      */
     private function file(int $id, string $name, string $mime, string $content, int $mtime = 100): File {
-        $file = $this->createMock(File::class);
+        $file = $this->createStub(File::class);
         $file->method('getId')->willReturn($id);
         $file->method('getName')->willReturn($name);
         $file->method('getPath')->willReturn('/Documents/' . $name);
@@ -98,12 +104,12 @@ class BatchTextTaskTypeTest extends TestCase {
         if ($this->parent !== null) {
             return $this->parent;
         }
-        $parent = $this->createMock(Folder::class);
+        $parent = $this->createStub(Folder::class);
         $parent->method('nodeExists')->willReturnCallback(
             fn (string $name): bool => isset($this->written[$name])
         );
         $parent->method('get')->willReturnCallback(function (string $name) {
-            $existing = $this->createMock(File::class);
+            $existing = $this->createStub(File::class);
             $existing->method('getMTime')->willReturn(0);
             $existing->method('putContent')->willReturnCallback(function ($c) use ($name) {
                 $this->written[$name] = $c;
@@ -112,7 +118,7 @@ class BatchTextTaskTypeTest extends TestCase {
         });
         $parent->method('newFile')->willReturnCallback(function (string $name, $content = null) {
             $this->written[$name] = (string)$content;
-            return $this->createMock(File::class);
+            return $this->createStub(File::class);
         });
         $this->parent = $parent;
         return $parent;
@@ -120,7 +126,7 @@ class BatchTextTaskTypeTest extends TestCase {
 
     /** @param list<File> $files */
     private function inputFolder(array $files): void {
-        $folder = $this->createMock(Folder::class);
+        $folder = $this->createStub(Folder::class);
         $folder->method('getDirectoryListing')->willReturn($files);
         $this->userFolder->method('get')->willReturn($folder);
     }
@@ -133,6 +139,8 @@ class BatchTextTaskTypeTest extends TestCase {
     // ── Submission ────────────────────────────────────────────────────────
 
     public function testRunSubmitsOneBatchForTheWholeFolder(): void {
+        $this->mockProvider();
+
         $this->inputFolder([
             $this->file(11, 'a.txt', 'text/plain', 'first body'),
             $this->file(12, 'b.md', 'text/markdown', 'second body'),
@@ -259,6 +267,8 @@ class BatchTextTaskTypeTest extends TestCase {
     }
 
     public function testAnEmptyFolderFinishesWithoutSubmittingAnything(): void {
+        $this->mockProvider();
+
         $this->inputFolder([]);
         $this->provider->expects($this->never())->method('submitBatch');
 
@@ -281,6 +291,8 @@ class BatchTextTaskTypeTest extends TestCase {
     }
 
     public function testResumeStaysPendingWhileTheBatchIsStillRunning(): void {
+        $this->mockProvider();
+
         $this->provider->method('getBatchStatus')->willReturn([
             'status' => 'in_progress',
             'ended' => false,
@@ -414,13 +426,13 @@ class BatchTextTaskTypeTest extends TestCase {
      * input unless the walk skips it.
      */
     public function testTheConfiguredOutputFolderIsExcludedFromTheWalk(): void {
-        $outputFolder = $this->createMock(Folder::class);
+        $outputFolder = $this->createStub(Folder::class);
         $outputFolder->method('getId')->willReturn(99);
         $outputFolder->method('getDirectoryListing')->willReturn([
             $this->file(12, 'stale.md', 'text/markdown', 'output from an earlier run'),
         ]);
 
-        $input = $this->createMock(Folder::class);
+        $input = $this->createStub(Folder::class);
         $input->method('getDirectoryListing')->willReturn([
             $this->file(11, 'a.txt', 'text/plain', 'body'),
             $outputFolder,

@@ -10,7 +10,7 @@ use Psr\Log\LoggerInterface;
 class CloudSdkTest extends TestCase {
     private function sdk(string $path, LoggerInterface $logger): CloudSdk {
         $config = $this->createMock(IConfig::class);
-        $config->method('getSystemValueString')
+        $config->expects($this->once())->method('getSystemValueString')
             ->with(CloudSdk::SYSTEM_CONFIG_KEY, '')
             ->willReturn($path);
         return new class($config, $logger) extends CloudSdk {

@@ -25,12 +25,16 @@ class CoworkManagerTest extends TestCase {
     private CoworkManager $manager;
 
     protected function setUp(): void {
-        $this->service = $this->createMock(CoworkerService::class);
-        $this->mapper = $this->createMock(CoworkerMapper::class);
-        $this->registry = $this->createMock(CoworkerTaskRegistry::class);
-        $this->rootFolder = $this->createMock(IRootFolder::class);
-        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->service = $this->createStub(CoworkerService::class);
+        $this->mapper = $this->createStub(CoworkerMapper::class);
+        $this->registry = $this->createStub(CoworkerTaskRegistry::class);
+        $this->rootFolder = $this->createStub(IRootFolder::class);
+        $this->logger = $this->createStub(LoggerInterface::class);
 
+        $this->buildManager();
+    }
+
+    private function buildManager(): void {
         $this->manager = new CoworkManager(
             $this->service,
             $this->mapper,
@@ -56,6 +60,9 @@ class CoworkManagerTest extends TestCase {
     }
 
     public function testRegisterCreatesOwnedCoworker(): void {
+        $this->service = $this->createMock(CoworkerService::class);
+        $this->buildManager();
+
         $created = $this->coworker();
         $this->service->expects($this->once())
             ->method('create')
@@ -68,6 +75,10 @@ class CoworkManagerTest extends TestCase {
     }
 
     public function testUpdateResolvesByApp(): void {
+        $this->service = $this->createMock(CoworkerService::class);
+        $this->mapper = $this->createMock(CoworkerMapper::class);
+        $this->buildManager();
+
         $cw = $this->coworker();
         $this->mapper->expects($this->once())
             ->method('findByIdAndApp')->with(5, 'myapp')->willReturn($cw);
@@ -78,7 +89,10 @@ class CoworkManagerTest extends TestCase {
     }
 
     public function testForeignAppCannotResolve(): void {
-        $this->mapper->method('findByIdAndApp')
+        $this->mapper = $this->createMock(CoworkerMapper::class);
+        $this->buildManager();
+
+        $this->mapper->expects($this->once())->method('findByIdAndApp')
             ->with(5, 'otherapp')
             ->willThrowException(new DoesNotExistException('nope'));
 
@@ -87,6 +101,9 @@ class CoworkManagerTest extends TestCase {
     }
 
     public function testDeregisterDeletesEntity(): void {
+        $this->service = $this->createMock(CoworkerService::class);
+        $this->buildManager();
+
         $cw = $this->coworker();
         $this->mapper->method('findByIdAndApp')->willReturn($cw);
         $this->service->expects($this->once())->method('deleteEntity')->with($cw);
@@ -95,7 +112,10 @@ class CoworkManagerTest extends TestCase {
     }
 
     public function testRegisterTaskTypeDelegates(): void {
-        $type = $this->createMock(CoworkerTaskType::class);
+        $this->registry = $this->createMock(CoworkerTaskRegistry::class);
+        $this->buildManager();
+
+        $type = $this->createStub(CoworkerTaskType::class);
         $this->registry->expects($this->once())->method('register')->with($type);
         $this->manager->registerTaskType($type);
     }
@@ -110,17 +130,20 @@ class CoworkManagerTest extends TestCase {
     }
 
     public function testVerifyHappyPath(): void {
+        $this->rootFolder = $this->createMock(IRootFolder::class);
+        $this->buildManager();
+
         $cw = $this->coworker();
         $this->mapper->method('findByIdAndApp')->willReturn($cw);
         $this->registry->method('has')->willReturn(true);
 
-        $task = $this->createMock(CoworkerTaskType::class);
+        $task = $this->createStub(CoworkerTaskType::class);
         $task->method('validateOptions'); // no throw
         $this->registry->method('get')->willReturn($task);
 
         $folder = $this->createMock(Folder::class);
-        $folder->method('nodeExists')->with('/Photos')->willReturn(true);
-        $this->rootFolder->method('getUserFolder')->with('alice')->willReturn($folder);
+        $folder->expects($this->once())->method('nodeExists')->with('/Photos')->willReturn(true);
+        $this->rootFolder->expects($this->once())->method('getUserFolder')->with('alice')->willReturn($folder);
 
         $result = $this->manager->verify('myapp', 5);
         $this->assertTrue($result['owned']);
@@ -135,7 +158,7 @@ class CoworkManagerTest extends TestCase {
         $this->mapper->method('findByIdAndApp')->willReturn($cw);
         $this->registry->method('has')->willReturn(false);
 
-        $folder = $this->createMock(Folder::class);
+        $folder = $this->createStub(Folder::class);
         $folder->method('nodeExists')->willReturn(true);
         $this->rootFolder->method('getUserFolder')->willReturn($folder);
 
@@ -149,9 +172,9 @@ class CoworkManagerTest extends TestCase {
         $cw->setCronSchedule('not a cron');
         $this->mapper->method('findByIdAndApp')->willReturn($cw);
         $this->registry->method('has')->willReturn(true);
-        $this->registry->method('get')->willReturn($this->createMock(CoworkerTaskType::class));
+        $this->registry->method('get')->willReturn($this->createStub(CoworkerTaskType::class));
 
-        $folder = $this->createMock(Folder::class);
+        $folder = $this->createStub(Folder::class);
         $folder->method('nodeExists')->willReturn(true);
         $this->rootFolder->method('getUserFolder')->willReturn($folder);
 
@@ -165,12 +188,12 @@ class CoworkManagerTest extends TestCase {
         $this->mapper->method('findByIdAndApp')->willReturn($cw);
         $this->registry->method('has')->willReturn(true);
 
-        $task = $this->createMock(CoworkerTaskType::class);
+        $task = $this->createStub(CoworkerTaskType::class);
         $task->method('validateOptions')
             ->willThrowException(new \InvalidArgumentException('maxTags out of range'));
         $this->registry->method('get')->willReturn($task);
 
-        $folder = $this->createMock(Folder::class);
+        $folder = $this->createStub(Folder::class);
         $folder->method('nodeExists')->willReturn(true);
         $this->rootFolder->method('getUserFolder')->willReturn($folder);
 
@@ -183,10 +206,10 @@ class CoworkManagerTest extends TestCase {
         $cw = $this->coworker();
         $this->mapper->method('findByIdAndApp')->willReturn($cw);
         $this->registry->method('has')->willReturn(true);
-        $this->registry->method('get')->willReturn($this->createMock(CoworkerTaskType::class));
+        $this->registry->method('get')->willReturn($this->createStub(CoworkerTaskType::class));
 
         $folder = $this->createMock(Folder::class);
-        $folder->method('nodeExists')->with('/Photos')->willReturn(false);
+        $folder->expects($this->once())->method('nodeExists')->with('/Photos')->willReturn(false);
         $this->rootFolder->method('getUserFolder')->willReturn($folder);
 
         $result = $this->manager->verify('myapp', 5);
