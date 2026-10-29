@@ -32,7 +32,19 @@ export interface RefreshEntry {
   // Set once the token has been exchanged. A spent token is kept until it
   // would have expired, so presenting it again is recognised as reuse.
   spent?: boolean;
+  // Fingerprint of the MCP_AUTH_SECRET the token was issued under. Rotating
+  // the secret must end every session, and refresh tokens are not signed
+  // with it, so this is what ties them to it.
+  secretId?: string;
   expiresAt: number;
+}
+
+/** A short, one-way fingerprint of MCP_AUTH_SECRET. */
+function authSecretId(): string {
+  return createHash('sha256')
+    .update(`aiquila-refresh-secret:${process.env.MCP_AUTH_SECRET ?? ''}`)
+    .digest('hex')
+    .slice(0, 16);
 }
 
 const CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -409,23 +421,40 @@ export class RefreshStore {
       const persisted = loadJson<Record<string, RefreshEntry>>(this.stateFile);
       if (persisted && typeof persisted === 'object') {
         const now = Date.now();
+        const secretId = authSecretId();
         let loaded = 0;
         let migrated = 0;
+        let dropped = 0;
         for (const [key, entry] of Object.entries(persisted)) {
-          if (entry.expiresAt > now) {
-            // Files from earlier versions keyed entries by the token itself.
-            const hashed = HASHED_KEY.test(key) ? key : refreshTokenKey(key);
-            if (hashed !== key) migrated++;
-            // Entries written before grants existed get one of their own.
-            this.tokens.set(hashed, { ...entry, grantId: entry.grantId ?? randomUUID() });
-            loaded++;
+          if (entry.expiresAt <= now) continue;
+          // Issued under a previous MCP_AUTH_SECRET: rotating the secret ends the session.
+          if (entry.secretId !== undefined && entry.secretId !== secretId) {
+            dropped++;
+            continue;
           }
+          // Files from earlier versions keyed entries by the token itself.
+          const hashed = HASHED_KEY.test(key) ? key : refreshTokenKey(key);
+          if (hashed !== key || entry.secretId === undefined) migrated++;
+          this.tokens.set(hashed, {
+            ...entry,
+            // Entries written before grants existed get one of their own.
+            grantId: entry.grantId ?? randomUUID(),
+            secretId,
+          });
+          loaded++;
         }
         if (loaded > 0) {
           logger.info({ count: loaded }, '[state] Loaded refresh tokens from file');
         }
-        if (migrated > 0) {
-          logger.info({ count: migrated }, '[state] Hashed plaintext refresh tokens');
+        if (dropped > 0) {
+          logger.info(
+            { count: dropped },
+            '[state] Dropped refresh tokens issued under a previous MCP_AUTH_SECRET'
+          );
+        }
+        if (migrated > 0 || dropped > 0) {
+          if (migrated > 0)
+            logger.info({ count: migrated }, '[state] Upgraded refresh token entries');
           this.persist();
         }
       }
@@ -434,7 +463,11 @@ export class RefreshStore {
 
   store(entry: Omit<RefreshEntry, 'expiresAt'>): string {
     const token = randomBytes(32).toString('base64url');
-    this.tokens.set(refreshTokenKey(token), { ...entry, expiresAt: Date.now() + REFRESH_TTL_MS });
+    this.tokens.set(refreshTokenKey(token), {
+      ...entry,
+      secretId: authSecretId(),
+      expiresAt: Date.now() + REFRESH_TTL_MS,
+    });
     this.persist();
     return token;
   }
