@@ -19,6 +19,9 @@ export interface CodeEntry {
   redirectUri: string;
   userId: string;
   state?: string;
+  // Set once the code has been exchanged: the grant it started. The entry is
+  // kept until it expires so a replay can be recognised and the grant ended.
+  redeemedGrantId?: string;
   expiresAt: number;
 }
 
@@ -395,6 +398,12 @@ export class CodeStore {
 
   delete(code: string): void {
     this.codes.delete(code);
+  }
+
+  /** Marks a code as exchanged for `grantId`. It no longer redeems, but is still recognised. */
+  markRedeemed(code: string, grantId: string): void {
+    const entry = this.codes.get(code);
+    if (entry) entry.redeemedGrantId = grantId;
   }
 }
 

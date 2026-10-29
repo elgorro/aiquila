@@ -284,9 +284,21 @@ export class NextcloudOAuthProvider {
       );
       throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Redirect URI mismatch');
     }
-    this.codeStore.delete(authorizationCode);
+    // OAuth 2.1 (draft-ietf-oauth-v2-1-16 §4.1.3, §7.5.3; RFC 6749 §4.1.2): a
+    // code used twice MUST be denied and the tokens issued from it SHOULD be
+    // revoked. The router has already checked client and code_verifier, so
+    // this replay carries valid parameters and the grant ends.
+    if (entry.redeemedGrantId) {
+      this.revokeGrant(entry.redeemedGrantId);
+      logger.warn(
+        { user: entry.userId, client: client.client_id },
+        '[token] Authorization code replayed — grant revoked'
+      );
+      throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid authorization code');
+    }
 
     const grantId = randomUUID();
+    this.codeStore.markRedeemed(authorizationCode, grantId);
     const accessToken = await this.signAccessToken(
       grantId,
       entry.userId,
