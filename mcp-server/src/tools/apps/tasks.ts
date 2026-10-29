@@ -7,7 +7,7 @@ import {
   fetchCalDAV,
   nsTagContent,
 } from '../../client/caldav.js';
-import { escapeICalValue } from '../dav-utils.js';
+import { escapeICalValue, ICAL_DATE_OR_DATE_TIME } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 import { parseCalendars, type ParsedCalendar } from './calendar.js';
 
@@ -97,9 +97,9 @@ function setICalProperty(icalData: string, propName: string, value: string | nul
     return icalData.replace(regex, '').replace(/(\r?\n){2,}/g, '\r\n');
   }
   if (regex.test(icalData)) {
-    return icalData.replace(regex, `${propName}:${value}`);
+    return icalData.replace(regex, () => `${propName}:${value}`);
   }
-  return icalData.replace(/END:VTODO/, `${propName}:${value}\r\nEND:VTODO`);
+  return icalData.replace(/END:VTODO/, () => `${propName}:${value}\r\nEND:VTODO`);
 }
 
 /**
@@ -112,9 +112,9 @@ function setICalDateProperty(icalData: string, propName: string, value: string |
   }
   const formatted = value.length === 8 ? `${propName};VALUE=DATE:${value}` : `${propName}:${value}`;
   if (regex.test(icalData)) {
-    return icalData.replace(regex, formatted);
+    return icalData.replace(regex, () => formatted);
   }
-  return icalData.replace(/END:VTODO/, `${formatted}\r\nEND:VTODO`);
+  return icalData.replace(/END:VTODO/, () => `${formatted}\r\nEND:VTODO`);
 }
 
 // ---------------------------------------------------------------------------
@@ -581,11 +581,16 @@ export const createTaskTool = {
       .describe('Task priority (0=undefined, 1=highest, 5=medium, 9=lowest)'),
     due: z
       .string()
+      .regex(ICAL_DATE_OR_DATE_TIME, 'Use YYYYMMDD or YYYYMMDDTHHmmss[Z]')
       .optional()
       .describe(
         "Due date in YYYYMMDD or YYYYMMDDTHHmmssZ format (e.g. '20240315' or '20240315T140000Z')"
       ),
-    dtstart: z.string().optional().describe('Start date in YYYYMMDD or YYYYMMDDTHHmmssZ format'),
+    dtstart: z
+      .string()
+      .regex(ICAL_DATE_OR_DATE_TIME, 'Use YYYYMMDD or YYYYMMDDTHHmmss[Z]')
+      .optional()
+      .describe('Start date in YYYYMMDD or YYYYMMDDTHHmmssZ format'),
     location: z.string().optional().describe('Location string'),
     categories: z
       .array(z.string())
@@ -647,7 +652,7 @@ export const createTaskTool = {
       vtodo += `\r\nCATEGORIES:${args.categories.map(escapeICalValue).join(',')}`;
     }
     if (args.relatedTo) {
-      vtodo += `\r\nRELATED-TO;RELTYPE=PARENT:${args.relatedTo}`;
+      vtodo += `\r\nRELATED-TO;RELTYPE=PARENT:${escapeICalValue(args.relatedTo)}`;
     }
     if (args.percentComplete !== undefined && args.percentComplete > 0) {
       vtodo += `\r\nPERCENT-COMPLETE:${args.percentComplete}`;
@@ -716,10 +721,16 @@ export const updateTaskTool = {
       .describe('New priority (0-9, 0 removes priority)'),
     due: z
       .string()
+      .regex(ICAL_DATE_OR_DATE_TIME, 'Use YYYYMMDD or YYYYMMDDTHHmmss[Z]')
       .nullable()
       .optional()
       .describe('New due date (YYYYMMDD or YYYYMMDDTHHmmssZ), or null to remove'),
-    dtstart: z.string().nullable().optional().describe('New start date, or null to remove'),
+    dtstart: z
+      .string()
+      .regex(ICAL_DATE_OR_DATE_TIME, 'Use YYYYMMDD or YYYYMMDDTHHmmss[Z]')
+      .nullable()
+      .optional()
+      .describe('New start date, or null to remove'),
     status: z
       .enum(['NEEDS-ACTION', 'IN-PROCESS', 'COMPLETED', 'CANCELLED'])
       .optional()
@@ -809,13 +820,12 @@ export const updateTaskTool = {
         const relRegex = /^RELATED-TO(;[^:]*)?:.*$/m;
         if (args.relatedTo === null) {
           modified = modified.replace(relRegex, '').replace(/(\r?\n){2,}/g, '\r\n');
-        } else if (relRegex.test(modified)) {
-          modified = modified.replace(relRegex, `RELATED-TO;RELTYPE=PARENT:${args.relatedTo}`);
         } else {
-          modified = modified.replace(
-            /END:VTODO/,
-            `RELATED-TO;RELTYPE=PARENT:${args.relatedTo}\r\nEND:VTODO`
-          );
+          // RELATED-TO is TEXT (RFC 5545 §3.8.4.5)
+          const relLine = `RELATED-TO;RELTYPE=PARENT:${escapeICalValue(args.relatedTo)}`;
+          modified = relRegex.test(modified)
+            ? modified.replace(relRegex, () => relLine)
+            : modified.replace(/END:VTODO/, () => `${relLine}\r\nEND:VTODO`);
         }
       }
       if (args.categories !== undefined) {
@@ -824,7 +834,7 @@ export const updateTaskTool = {
         if (args.categories.length > 0) {
           modified = modified.replace(
             /END:VTODO/,
-            `CATEGORIES:${args.categories.map(escapeICalValue).join(',')}\r\nEND:VTODO`
+            () => `CATEGORIES:${args.categories!.map(escapeICalValue).join(',')}\r\nEND:VTODO`
           );
         }
       }
