@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import {
   OAuthError,
@@ -80,14 +80,61 @@ export function applySecurityHeaders<T extends { set(name: string, value: string
     .set('Content-Security-Policy', LOGIN_PAGE_CSP);
 }
 
+/**
+ * The authorization request as the login form carries it from /authorize to
+ * /auth/login. It passes through the user agent, so it is MACed: otherwise a
+ * login could be posted with a code_challenge, scope or redirect_uri that
+ * /authorize never checked.
+ */
+export interface LoginFormRequest {
+  clientId: string;
+  redirectUri: string;
+  codeChallenge: string;
+  state?: string;
+  scope?: string;
+  // Seconds since the epoch, when /authorize rendered the form
+  issuedAt: number;
+}
+
+// How long a rendered login form stays valid.
+const LOGIN_FORM_TTL_SECS = 30 * 60;
+
+export function loginRequestMac(req: LoginFormRequest): string {
+  const secret = process.env.MCP_AUTH_SECRET;
+  if (!secret) throw new Error('MCP_AUTH_SECRET is not set');
+  return createHmac('sha256', secret)
+    .update(
+      JSON.stringify([
+        'aiquila-login-form-v1',
+        req.clientId,
+        req.redirectUri,
+        req.codeChallenge,
+        req.state ?? '',
+        req.scope ?? '',
+        req.issuedAt,
+      ])
+    )
+    .digest('base64url');
+}
+
+/** True when `mac` belongs to `req` and the form has not expired. */
+export function verifyLoginRequestMac(req: LoginFormRequest, mac: string | undefined): boolean {
+  if (!mac || !Number.isSafeInteger(req.issuedAt)) return false;
+  const age = Math.floor(Date.now() / 1000) - req.issuedAt;
+  if (age < 0 || age > LOGIN_FORM_TTL_SECS) return false;
+  const hash = (v: string) => createHash('sha256').update(v).digest();
+  return timingSafeEqual(hash(mac), hash(loginRequestMac(req)));
+}
+
 export function renderLoginForm(opts: {
   clientName?: string;
   clientId: string;
   redirectUri: string;
-  redirectUriExplicit?: boolean;
   state?: string;
   codeChallenge: string;
   scope?: string;
+  issuedAt?: number;
+  requestMac?: string;
   error?: string;
 }): string {
   return `<!DOCTYPE html>
@@ -110,10 +157,11 @@ export function renderLoginForm(opts: {
     <form method="POST" action="/auth/login">
       <input type="hidden" name="client_id" value="${escapeHtml(opts.clientId)}">
       <input type="hidden" name="redirect_uri" value="${escapeHtml(opts.redirectUri)}">
-      <input type="hidden" name="redirect_uri_explicit" value="${opts.redirectUriExplicit === false ? '' : '1'}">
       <input type="hidden" name="state" value="${escapeHtml(opts.state ?? '')}">
       <input type="hidden" name="code_challenge" value="${escapeHtml(opts.codeChallenge)}">
       <input type="hidden" name="scope" value="${escapeHtml(opts.scope ?? '')}">
+      <input type="hidden" name="request_iat" value="${opts.issuedAt ?? ''}">
+      <input type="hidden" name="request_mac" value="${escapeHtml(opts.requestMac ?? '')}">
       <label for="username">Nextcloud Username</label>
       <input type="text" id="username" name="username" autocomplete="username" required>
       <label for="password">Password / App Password</label>
@@ -148,8 +196,6 @@ export function clientDisplayName(client: OAuthClientInformationFull): string | 
 /** A validated authorization request, as the /authorize endpoint hands it over. */
 export interface AuthorizationParams {
   redirectUri: string;
-  // false when redirect_uri was omitted and the client's only registered one is used
-  redirectUriExplicit: boolean;
   codeChallenge: string;
   state?: string;
   scopes: string[];
@@ -183,18 +229,22 @@ export class NextcloudOAuthProvider {
     params: AuthorizationParams,
     res: any
   ): Promise<void> {
+    const request: LoginFormRequest = {
+      clientId: client.client_id,
+      redirectUri: params.redirectUri,
+      state: params.state,
+      codeChallenge: params.codeChallenge,
+      scope: params.scopes?.join(' '),
+      issuedAt: Math.floor(Date.now() / 1000),
+    };
     applySecurityHeaders(res)
       .status(200)
       .type('html')
       .send(
         renderLoginForm({
+          ...request,
           clientName: clientDisplayName(client),
-          clientId: client.client_id,
-          redirectUri: params.redirectUri,
-          redirectUriExplicit: params.redirectUriExplicit,
-          state: params.state,
-          codeChallenge: params.codeChallenge,
-          scope: params.scopes?.join(' '),
+          requestMac: loginRequestMac(request),
         })
       );
   }
@@ -223,12 +273,11 @@ export class NextcloudOAuthProvider {
       );
       throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid authorization code');
     }
-    // RFC 6749 §4.1.3: redirect_uri must be present if the authorization
-    // request included it, and identical to it.
-    if (
-      (redirectUri === undefined && entry.redirectUriExplicit) ||
-      (redirectUri !== undefined && entry.redirectUri !== redirectUri)
-    ) {
+    // OAuth 2.1 (draft-ietf-oauth-v2-1-16 §10.2): PKCE, required on every
+    // code here, prevents code injection, so the token request no longer
+    // needs redirect_uri. An OAuth 2.0 client may still send it, and then it
+    // must match the authorization request (RFC 6749 §4.1.3).
+    if (redirectUri !== undefined && entry.redirectUri !== redirectUri) {
       logger.warn(
         { client: client.client_id },
         '[token] Auth code exchange failed: redirect_uri mismatch'
@@ -453,7 +502,6 @@ export class NextcloudOAuthProvider {
     clientId: string;
     scopes: string[];
     redirectUri: string;
-    redirectUriExplicit: boolean;
     userId: string;
     state?: string;
   }): string {

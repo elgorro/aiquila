@@ -14,6 +14,7 @@ import { authRouter, type AuthRouterOptions } from '../../auth/router.js';
 import { NextcloudOAuthProvider } from '../../auth/provider.js';
 import { ClientsStore } from '../../auth/store.js';
 import { ClientIdDocumentResolver } from '../../auth/cimd.js';
+import { RedirectUriPolicy } from '../../auth/redirect-uri.js';
 
 const ISSUER = 'https://mcp.example.com/';
 const REDIRECT = 'https://client.example.com/callback';
@@ -51,7 +52,7 @@ const fetchDocument = vi.fn(async () => ({
   }),
 }));
 
-function makeStore(opts?: { registration?: boolean; cimd?: boolean }) {
+function makeStore(opts?: { registration?: boolean; cimd?: boolean; policy?: RedirectUriPolicy }) {
   return new ClientsStore({
     preseededClients: [
       {
@@ -72,6 +73,7 @@ function makeStore(opts?: { registration?: boolean; cimd?: boolean }) {
       },
     ],
     enableDynamicRegistration: opts?.registration,
+    redirectPolicy: opts?.policy,
     clientIdDocuments:
       opts?.cimd === false
         ? undefined
@@ -83,7 +85,11 @@ function makeStore(opts?: { registration?: boolean; cimd?: boolean }) {
 }
 
 async function serve(
-  opts?: { registration?: boolean; cimd?: boolean } & Partial<AuthRouterOptions>
+  opts?: {
+    registration?: boolean;
+    cimd?: boolean;
+    policy?: RedirectUriPolicy;
+  } & Partial<AuthRouterOptions>
 ) {
   const provider = new NextcloudOAuthProvider(makeStore(opts));
   const app = express();
@@ -119,7 +125,6 @@ function issueCode(ctx: Ctx, overrides?: Record<string, unknown>) {
     clientId: PUBLIC_CLIENT,
     scopes: ['mcp:tools'],
     redirectUri: REDIRECT,
-    redirectUriExplicit: true,
     userId: 'alice',
     ...overrides,
   });
@@ -269,7 +274,7 @@ describe('/authorize', () => {
     const { redirect_uri: _omitted, ...rest } = valid;
     const res = await authorize({ ...rest, client_id: 'single-uri-client' });
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain('name="redirect_uri_explicit" value=""');
+    expect(await res.text()).toContain(`name="redirect_uri" value="${REDIRECT}"`);
   });
 
   it('requires redirect_uri when several are registered', async () => {
@@ -361,26 +366,13 @@ describe('/token', () => {
     expect((await res.json()).error).toBe('invalid_grant');
   });
 
-  it('requires redirect_uri when the authorization request had one (RFC 6749 §4.1.3)', async () => {
+  it('accepts a token request without redirect_uri (OAuth 2.1 §10.2)', async () => {
     const res = await fetch(
       `${ctx.base}/token`,
       form({
         grant_type: 'authorization_code',
         client_id: PUBLIC_CLIENT,
         code: issueCode(ctx),
-        code_verifier: VERIFIER,
-      })
-    );
-    expect((await res.json()).error).toBe('invalid_grant');
-  });
-
-  it('does not require redirect_uri when the authorization request omitted it', async () => {
-    const res = await fetch(
-      `${ctx.base}/token`,
-      form({
-        grant_type: 'authorization_code',
-        client_id: PUBLIC_CLIENT,
-        code: issueCode(ctx, { redirectUriExplicit: false }),
         code_verifier: VERIFIER,
       })
     );
@@ -513,6 +505,25 @@ describe('/register', () => {
       const client = await (await register(ctx.base, metadata)).json();
       expect(client.client_secret).toMatch(/^[0-9a-f]{64}$/);
       expect(client.client_secret_expires_at).toBeGreaterThan(Date.now() / 1000);
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  it('rejects a redirect URI outside the allowlist with invalid_redirect_uri (RFC 7591 §3.2.2)', async () => {
+    const ctx = await serve({ registration: true, policy: new RedirectUriPolicy() });
+    try {
+      const res = await register(ctx.base, {
+        redirect_uris: ['https://attacker.example/cb'],
+        token_endpoint_auth_method: 'none',
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('invalid_redirect_uri');
+      const ok = await register(ctx.base, {
+        redirect_uris: ['https://claude.ai/api/mcp/auth_callback', 'http://127.0.0.1:5555/cb'],
+        token_endpoint_auth_method: 'none',
+      });
+      expect(ok.status).toBe(201);
     } finally {
       await ctx.close();
     }

@@ -376,7 +376,7 @@ describe('ClientsStore — persistence', () => {
     process.env.MCP_REGISTRATION_ENABLED = 'true';
 
     const store = ClientsStore.fromEnv();
-    store.registerClient!({ redirect_uris: [new URL('https://example.com/cb')] });
+    store.registerClient!({ redirect_uris: [new URL('https://claude.ai/api/mcp/auth_callback')] });
 
     expect(mockWriteFileSync).toHaveBeenCalledWith(
       `${TEST_STATE_DIR}/clients.json.tmp`,

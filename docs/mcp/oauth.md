@@ -1,6 +1,17 @@
-# OAuth 2.0 Authentication
+# OAuth 2.1 Authentication
 
 AIquila's HTTP transport includes a built-in OAuth 2.1 provider so any MCP client that supports OAuth can connect to a remote server without an external identity service. Authentication is **opt-in** — existing stdio setups (local MCP clients) are completely unaffected.
+
+The authorization server follows **OAuth 2.1**
+([`draft-ietf-oauth-v2-1-16`](https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/)), which
+the MCP authorization specification builds on:
+
+- authorization code grant with PKCE `S256` only; no implicit or password grant
+- exact redirect URI matching, except that loopback redirects may use any port
+- bearer tokens in the `Authorization` header only, never in the query string
+- refresh tokens rotate on every use, and reusing one ends the grant
+- `redirect_uri` is optional in the token request, because PKCE already binds the code. An
+  OAuth 2.0 client that sends it must send the value from the authorization request
 
 ## How It Works
 
@@ -126,6 +137,25 @@ MCP_REGISTRATION_TOKEN=<openssl rand -hex 32>
 
 This is the RFC 7591 approach. The MCP specification deprecates it in favour of CIMD but
 keeps it for backward compatibility, and many clients still rely on it.
+
+A registered client may only use redirect URIs the server trusts. Otherwise anyone could
+register a redirect to their own host, send a user a sign-in link, and receive the
+authorization code. The following are always allowed:
+
+- loopback URIs on any port, such as `http://127.0.0.1:<port>/…` or `http://[::1]:<port>/…`, for native clients
+- `https://` on `claude.ai`, `claude.com` and the host of `NEXTCLOUD_URL`. The AIquila
+  Nextcloud app registers itself with a callback on that host
+- private-use schemes that contain a dot, such as `com.example.app:/callback` (RFC 8252 §7.1)
+
+| Variable | Default | Effect |
+|---|---|---|
+| `MCP_REDIRECT_ALLOWLIST` | empty | Comma-separated extra entries: a host (`vscode.dev`), a scheme (`cursor:`), or `*` for any `https` host |
+
+Registration with any other redirect URI fails with `invalid_redirect_uri`. Plain `http`
+is only allowed on loopback. Clients registered earlier whose redirect URIs no longer pass
+are dropped when the server starts, and register again. If Nextcloud is reached over an
+internal address (`NEXTCLOUD_URL=http://nc`), list its public host in
+`MCP_REDIRECT_ALLOWLIST`. The Hetzner full stack does this by default.
 
 With `MCP_REGISTRATION_TOKEN` set, `POST /register` answers `401` unless the request
 carries `Authorization: Bearer <token>` (RFC 7591 §3.1 initial access token). Clients must

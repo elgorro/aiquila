@@ -266,6 +266,7 @@ and what to expect from `rebuild`.
 | `MCP_REGISTRATION_ENABLED` | static `true` | Allow dynamic client registration |
 | `MCP_REGISTRATION_TOKEN` | auto 32-char hex | Token required for dynamic registration |
 | `MCP_CIMD_ENABLED` | not written | Client ID Metadata Documents. Off while `MCP_REGISTRATION_TOKEN` is set; add `MCP_CIMD_ENABLED=true` to accept them — see [OAuth setup](../mcp/oauth.md#3-configure-client-registration) |
+| `MCP_REDIRECT_ALLOWLIST` | not written | Extra redirect hosts for registered clients. The full stack's compose file defaults it to `NC_DOMAIN`, so the Nextcloud app can register — see [OAuth setup](../mcp/oauth.md#3-configure-client-registration) |
 | `MCP_TRUST_PROXY` | static `true` | Trust Traefik reverse-proxy headers |
 | `MCP_DOMAIN` | `--mcp-domain` | Traefik routing domain |
 | `ACME_EMAIL` | `--acme-email` | Let's Encrypt notifications |
