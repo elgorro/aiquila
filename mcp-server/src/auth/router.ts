@@ -386,8 +386,17 @@ function registrationHandler(provider: NextcloudOAuthProvider) {
             : result.issues
                 .map((i) => `${(i.path ?? []).map(String).join('.')}: ${i.message}`)
                 .join('; ');
-        // RFC 7591 §3.2.2
-        throw new OAuthError(OAuthErrorCode.InvalidClientMetadata, detail || 'Invalid metadata');
+        // RFC 7591 §3.2.2: invalid_redirect_uri when it is the redirect URIs
+        // that are wrong, invalid_client_metadata for anything else.
+        const onlyRedirects =
+          !(result instanceof Promise) &&
+          result.issues.length > 0 &&
+          result.issues.every((i) => String(i.path?.[0] ?? '') === 'redirect_uris') &&
+          Array.isArray((req.body ?? {}).redirect_uris);
+        throw new OAuthError(
+          onlyRedirects ? OAuthErrorCode.InvalidRedirectUri : OAuthErrorCode.InvalidClientMetadata,
+          detail || 'Invalid metadata'
+        );
       }
       const metadata = result.value as OAuthClientMetadata;
       const isPublic = metadata.token_endpoint_auth_method === 'none';
