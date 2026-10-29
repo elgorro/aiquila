@@ -69,6 +69,8 @@ export function formatOccError(error: unknown): string {
       case 401:
         return 'Authentication failed. Check that NEXTCLOUD_USER and NEXTCLOUD_PASSWORD are correct.';
       case 403:
+        // The app's own refusal (OCC allowlist) carries a reason; the admin check does not.
+        if (error.detail) return `Refused by Nextcloud: ${error.detail}`;
         return 'Permission denied. OCC commands require admin rights. Ensure the Nextcloud user is an admin.';
       case 404:
         return 'OCC endpoint not found. Ensure the AIquila app is installed and enabled.';

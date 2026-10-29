@@ -145,6 +145,92 @@ describe('OCS-based Tools', () => {
       expect(result2.isError).toBe(true);
     });
 
+    it('should refuse arguments to a command allowed without them', async () => {
+      const { runOccTool } = await import('../tools/system/occ.js');
+
+      for (const [command, args] of [
+        ['maintenance:mode', ['--on']],
+        ['theming:config', ['name', 'Evil Corp']],
+        ['update:check', ['--help']],
+      ] as const) {
+        const result = await runOccTool.handler({ command, args: [...args] });
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain(`"${command} ${args.join(' ')}"`);
+      }
+      expect(mockExecuteOCC).not.toHaveBeenCalled();
+    });
+
+    it('should allow a no-argument entry without arguments', async () => {
+      mockExecuteOCC.mockResolvedValue({ success: true, exitCode: 0, stdout: 'off', stderr: '' });
+
+      const { runOccTool } = await import('../tools/system/occ.js');
+      const result = await runOccTool.handler({ command: 'maintenance:mode' });
+
+      expect(result.isError).toBe(false);
+      expect(mockExecuteOCC).toHaveBeenCalledWith('maintenance:mode', [], undefined);
+    });
+
+    it('should allow any arguments to a wildcard entry', async () => {
+      mockExecuteOCC.mockResolvedValue({ success: true, exitCode: 0, stdout: '[]', stderr: '' });
+
+      const { runOccTool } = await import('../tools/system/occ.js');
+      const result = await runOccTool.handler({
+        command: 'app:list',
+        args: ['--shipped=false', '--output=json'],
+      });
+
+      expect(result.isError).toBe(false);
+      expect(mockExecuteOCC).toHaveBeenCalledWith(
+        'app:list',
+        ['--shipped=false', '--output=json'],
+        undefined
+      );
+    });
+
+    it('should keep write commands out of the default allowlist', async () => {
+      const { runOccTool, getOccAllowlist } = await import('../tools/system/occ.js');
+      const names = getOccAllowlist().map((e) => e.split(/\s+/)[0]);
+
+      for (const command of [
+        'config:app:get',
+        'files:scan',
+        'files:cleanup',
+        'trashbin:cleanup',
+        'notification:generate',
+        'maintenance:mimetype:update-db',
+        'db:add-missing-indices',
+      ]) {
+        expect(names).not.toContain(command);
+        const result = await runOccTool.handler({ command, args: ['--all'] });
+        expect(result.isError).toBe(true);
+      }
+      expect(mockExecuteOCC).not.toHaveBeenCalled();
+    });
+
+    it('should refuse abbreviated command names', async () => {
+      const { runOccTool } = await import('../tools/system/occ.js');
+      const result = await runOccTool.handler({ command: 'maint:mode' });
+
+      expect(result.isError).toBe(true);
+      expect(mockExecuteOCC).not.toHaveBeenCalled();
+    });
+
+    it('should match fixed arguments and a trailing wildcard exactly', async () => {
+      const { isOccAllowed } = await import('../tools/system/occ.js');
+      const list = ['maintenance:mode --on', 'config:app:get core *', 'files:scan *'];
+
+      expect(isOccAllowed(list, 'maintenance:mode', ['--on'])).toBe(true);
+      expect(isOccAllowed(list, 'maintenance:mode', ['--off'])).toBe(false);
+      expect(isOccAllowed(list, 'maintenance:mode', [])).toBe(false);
+      expect(isOccAllowed(list, 'maintenance:mode', ['--on', '--off'])).toBe(false);
+      expect(isOccAllowed(list, 'config:app:get', ['core', 'vendor'])).toBe(true);
+      expect(isOccAllowed(list, 'config:app:get', ['core'])).toBe(true);
+      expect(isOccAllowed(list, 'config:app:get', ['mail', 'secret'])).toBe(false);
+      expect(isOccAllowed(list, 'config:app:get', [])).toBe(false);
+      expect(isOccAllowed(list, 'files:scan', [])).toBe(true);
+      expect(isOccAllowed(list, 'files:scan', ['--all'])).toBe(true);
+    });
+
     it('should return clear permission denied message on 403', async () => {
       const { ApiError } = await import('../client/aiquila.js');
       mockExecuteOCC.mockRejectedValue(new ApiError(403, 'Forbidden', '<html>forbidden</html>'));
@@ -156,6 +242,20 @@ describe('OCS-based Tools', () => {
       expect(result.content[0].text).toContain('Permission denied');
       expect(result.content[0].text).toContain('admin rights');
       expect(result.content[0].text).not.toContain('<html>');
+    });
+
+    it('should pass on the reason when Nextcloud refuses an allowlisted command', async () => {
+      const { ApiError } = await import('../client/aiquila.js');
+      mockExecuteOCC.mockRejectedValue(
+        new ApiError(403, 'Forbidden', '', 'Command and arguments are not in the OCC allowlist')
+      );
+
+      const { runOccTool } = await import('../tools/system/occ.js');
+      const result = await runOccTool.handler({ command: 'app:list' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not in the OCC allowlist');
+      expect(result.content[0].text).not.toContain('admin rights');
     });
 
     it('should return clear auth failed message on 401', async () => {
@@ -290,7 +390,7 @@ describe('OCS-based Tools', () => {
       });
 
       const { runOccTool } = await import('../tools/system/occ.js');
-      const result = await runOccTool.handler({ command: 'config:app:get', args: ['core'] });
+      const result = await runOccTool.handler({ command: 'status', args: ['--output=json'] });
 
       expect(result.content[0].text).toContain(`"dbpassword": "[REDACTED]"`);
       expect(result.content[0].text).not.toContain('hunter2');

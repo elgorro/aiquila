@@ -3,6 +3,7 @@
 
 namespace OCA\AIquila\Controller;
 
+use OCA\AIquila\Service\OccAllowlist;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\BruteForceProtection;
@@ -22,7 +23,8 @@ class OccController extends Controller {
     public function __construct(
         string $appName,
         IRequest $request,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        private readonly OccAllowlist $allowlist,
     ) {
         parent::__construct($appName, $request);
         $this->logger = $logger;
@@ -37,10 +39,11 @@ class OccController extends Controller {
      *
      * 200: Command completed; see exitCode for success/failure
      * 400: No command was provided
+     * 403: Not an admin, or the command and arguments are not in the OCC allowlist
      * 408: The command exceeded the requested timeout
      * 500: The PHP CLI binary could not be located or the process failed to start
      *
-     * @return JSONResponse<Http::STATUS_OK, array{success: bool, stdout: string, stderr: string, exitCode: int}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_TIMEOUT, array{success: bool, error: string, errorId: string, stdout: string, stderr: string, exitCode: int}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{success: bool, stdout: string, stderr: string, exitCode: int}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{success: bool, error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{success: bool, error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{success: bool, error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_REQUEST_TIMEOUT, array{success: bool, error: string, errorId: string, stdout: string, stderr: string, exitCode: int}, array{}>
      */
     #[NoCSRFRequired]
     // Admin-only, but it shells out to the PHP CLI and is CSRF-exempt, so
@@ -50,6 +53,21 @@ class OccController extends Controller {
     public function execute(string $command = '', array $args = [], int $timeout = 120): JSONResponse {
         if (empty($command)) {
             return new JSONResponse(['success' => false, 'error' => 'No command provided', 'errorId' => ''], 400);
+        }
+
+        // The body is client JSON: re-index and stringify whatever arrived.
+        $argv = [];
+        foreach ($args as $arg) {
+            $argv[] = (string) $arg;
+        }
+        $args = $argv;
+        if (!$this->allowlist->isAllowed($command, $args)) {
+            $this->logger->warning('OCC execution refused: not in the allowlist', ['command' => $command, 'args' => $args]);
+            return new JSONResponse([
+                'success' => false,
+                'error' => 'Command and arguments are not in the OCC allowlist (app config occ_allowlist)',
+                'errorId' => '',
+            ], 403);
         }
 
         $timeout = max(1, min($timeout, self::MAX_TIMEOUT));
@@ -91,7 +109,7 @@ class OccController extends Controller {
             . ' --no-ansi --no-interaction';
 
         foreach ($args as $arg) {
-            $shellCmd .= ' ' . escapeshellarg((string) $arg);
+            $shellCmd .= ' ' . escapeshellarg($arg);
         }
 
         $this->logger->info('OCC execution requested', ['command' => $command, 'args' => $args]);

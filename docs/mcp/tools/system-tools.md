@@ -286,6 +286,83 @@ docker exec -u www-data aiquila-nextcloud php occ setupchecks
 
 ---
 
+### run_occ
+
+Run an allowlisted OCC command and return its output. Secrets and server paths in
+the output are redacted.
+
+**Parameters:**
+- `command` (string, required): The OCC command, e.g. `app:list`. Must match an allowlist entry exactly; abbreviations such as `maint:mode` are refused
+- `args` (string[], optional): Arguments, e.g. `["--output=json"]`
+- `timeout` (number, optional): Seconds, default 120, max 600
+
+**Example Usage:**
+```
+Ask Claude: "Which apps are installed but not shipped with Nextcloud?"
+Ask Claude: "Is maintenance mode on?"
+```
+
+#### The allowlist
+
+Tool arguments come from the model, so text in an email, file or web page the model
+reads can steer them. The allowlist therefore limits arguments as well as commands.
+An entry is a command followed by the exact arguments it permits:
+
+| Entry | Allows |
+|---|---|
+| `cmd` | `cmd` with no arguments |
+| `cmd a b` | exactly `cmd a b` |
+| `cmd a *` | `cmd a` followed by any arguments |
+| `cmd *` | `cmd` with any arguments |
+
+The default allows only commands that read state:
+
+| Entry | What it does |
+|---|---|
+| `status *`, `setupchecks *`, `update:check` | Version, setup and update checks |
+| `app:list *` | List apps |
+| `integrity:check-core *`, `integrity:check-app *` | Verify code signatures |
+| `user:list *`, `user:info *`, `group:list *` | List accounts and groups |
+| `maintenance:mode` | Show whether maintenance mode is on (`--on` / `--off` are refused) |
+| `theming:config` | Show the theming settings (setting a key is refused) |
+
+Commands that change state are opt-in. Some of them, and what they can do:
+
+| Entry | Effect |
+|---|---|
+| `maintenance:mode --on`, `maintenance:mode --off` | Takes the instance offline for every user, or back online |
+| `theming:config *` | Changes the name, URL and slogan on the login page and in emails |
+| `notification:generate *` | Sends any user a notification with any link |
+| `trashbin:cleanup *` | `--all-users` permanently empties every user's trash bin |
+| `files:scan *`, `files:cleanup *` | Whole-instance file cache jobs |
+| `maintenance:mimetype:update-db`, `db:add-missing-indices`, `db:add-missing-columns`, `db:add-missing-primary-keys` | Database maintenance |
+| `config:app:get *` | Reads any app's config, including values apps store as secrets |
+
+The list is enforced twice, and an invocation must pass both:
+
+1. **MCP server** — `MCP_OCC_ALLOWLIST`, comma-separated entries. It replaces the
+   default, so repeat the default entries you want to keep:
+
+   ```bash
+   MCP_OCC_ALLOWLIST='status *,app:list *,maintenance:mode,maintenance:mode --on,maintenance:mode --off'
+   ```
+
+2. **Nextcloud** — the AIquila app's `occ_allowlist` app config value guards
+   `POST /api/occ` with the same syntax. Its default is the list above plus the commands
+   the dedicated tools run (`app:install *`, `app:remove *`, `aiquila:configure *`,
+   `aiquila:test *`). Setting it replaces that default, so keep those entries if you use
+   `install_app`, `uninstall_app` or the `aiquila_*` tools:
+
+   ```bash
+   occ config:app:set aiquila occ_allowlist --value='status *,app:list *,setupchecks *,integrity:check-core *,integrity:check-app *,user:list *,user:info *,group:list *,update:check,maintenance:mode,theming:config,app:install *,app:remove *,aiquila:configure *,aiquila:test *,maintenance:mode --on,maintenance:mode --off'
+   ```
+
+   An invocation it refuses returns `403` with the reason.
+
+`run_occ` needs the service account to be a Nextcloud admin.
+
+---
+
 ## App Management Tools
 
 Tools for managing Nextcloud apps via OCC commands.

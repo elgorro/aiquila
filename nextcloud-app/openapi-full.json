@@ -8222,6 +8222,47 @@
                             }
                         }
                     },
+                    "403": {
+                        "description": "Not an admin, or the command and arguments are not in the OCC allowlist",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "success",
+                                                "error",
+                                                "errorId"
+                                            ],
+                                            "properties": {
+                                                "success": {
+                                                    "type": "boolean"
+                                                },
+                                                "error": {
+                                                    "type": "string"
+                                                },
+                                                "errorId": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "message"
+                                            ],
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
                     "500": {
                         "description": "The PHP CLI binary could not be located or the process failed to start",
                         "content": {
@@ -8289,24 +8330,6 @@
                     },
                     "401": {
                         "description": "Current user is not logged in",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "required": [
-                                        "message"
-                                    ],
-                                    "properties": {
-                                        "message": {
-                                            "type": "string"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Logged in account must be an admin",
                         "content": {
                             "application/json": {
                                 "schema": {

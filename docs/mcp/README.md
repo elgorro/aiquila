@@ -119,7 +119,7 @@ Nextcloud apps and administration:
 #### OCC (1 tool)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `run_occ` | Execute any OCC command | [System Tools](tools/system-tools.md) |
+| `run_occ` | Execute an allowlisted OCC command (read-only by default) | [System Tools](tools/system-tools.md) |
 
 ### App Tools
 
