@@ -18,6 +18,10 @@ import { logger } from '../logger.js';
 
 // --- JWT helpers (HMAC-SHA256 via jose) ---
 
+// RFC 9068 §2.1: JWT access tokens are explicitly typed, so no other JWT
+// signed with MCP_AUTH_SECRET can pass for one (RFC 8725 §3.11).
+const ACCESS_TOKEN_TYP = 'at+jwt';
+
 async function signJwt(
   payload: Record<string, unknown>,
   secret: string,
@@ -26,7 +30,7 @@ async function signJwt(
   const key = new TextEncoder().encode(secret);
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT(payload)
-    .setProtectedHeader({ alg: 'HS256' })
+    .setProtectedHeader({ alg: 'HS256', typ: ACCESS_TOKEN_TYP })
     .setIssuedAt(now)
     .setExpirationTime(now + expiresInSecs)
     .sign(key);
@@ -41,6 +45,8 @@ async function verifyJwt(
     const key = new TextEncoder().encode(secret);
     const { payload } = await jwtVerify(token, key, {
       algorithms: ['HS256'],
+      // RFC 9068 §4: the resource server MUST check the typ header.
+      typ: ACCESS_TOKEN_TYP,
       ...(opts?.issuer && { issuer: opts.issuer }),
       ...(opts?.audience && { audience: opts.audience }),
     });
@@ -425,7 +431,7 @@ export class NextcloudOAuthProvider {
     return {
       token,
       clientId: claims.client_id as string,
-      scopes: claims.scopes as string[],
+      scopes: typeof claims.scope === 'string' ? claims.scope.split(' ').filter(Boolean) : [],
       expiresAt: claims.exp as number,
     };
   }
@@ -488,7 +494,8 @@ export class NextcloudOAuthProvider {
       {
         sub: userId,
         client_id: clientId,
-        scopes,
+        // RFC 9068 §2.2.3: a space-separated string, as in RFC 6749 §3.3
+        scope: scopes.join(' '),
         gid: grantId,
         jti: randomUUID(),
         iss: this.getIssuer(),
