@@ -120,7 +120,7 @@ the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/in
 | `MCP_MAX_FILE_SIZE`    | No       | max `write_file` content length in bytes (default `1073741824` = 1 GB)                |
 | `MCP_ALLOWED_HOSTS`    | No       | extra hostnames for DNS rebinding protection                                          |
 | `MCP_CORS_ORIGINS`     | No       | extra browser origins allowed via CORS                                                |
-| `MCP_OCC_ALLOWLIST`    | No       | allowed OCC commands for `run_occ`; overrides the default allowlist                   |
+| `MCP_OCC_ALLOWLIST`    | No       | allowlist entries for `run_occ` (`cmd`, `cmd *`); replaces the read-only default      |
 | `LOG_LEVEL`            | No       | `trace`/`debug`/`info`/`warn`/`error`/`fatal`                                          |
 
 ## Requirements

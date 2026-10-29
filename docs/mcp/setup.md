@@ -41,7 +41,7 @@ Optional:
 
 - `MCP_MAX_FILE_SIZE` - Maximum `write_file` content length in bytes (default `1073741824` = 1 GB)
 - `LOG_LEVEL` - Log verbosity sent to stderr: `trace`, `debug`, `info` (default), `warn`, `error`, `fatal`
-- `MCP_OCC_ALLOWLIST` - Comma-separated list of allowed OCC commands for `run_occ` (overrides default allowlist)
+- `MCP_OCC_ALLOWLIST` - Comma-separated OCC allowlist entries for `run_occ`, replacing the read-only default. `cmd` allows no arguments, `cmd *` any. Commands that change state are opt-in here and in the Nextcloud app's `occ_allowlist` — see [run_occ](tools/system-tools.md#the-allowlist)
 
 ### Setting Up Environment Variables
 

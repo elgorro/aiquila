@@ -423,7 +423,7 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_MAX_FILE_SIZE` | No | Max `write_file` content length in bytes (default `1073741824` = 1 GB) |
 | `MCP_ALLOWED_HOSTS` | No | Comma-separated extra hostnames for DNS rebinding protection (e.g. `mcp` for Docker service name) |
 | `MCP_CORS_ORIGINS` | No | Comma-separated extra origins allowed to make browser requests. The `MCP_AUTH_ISSUER` origin is always allowed when auth is on |
-| `MCP_OCC_ALLOWLIST` | No | Comma-separated list of allowed OCC commands for `run_occ`; overrides default allowlist |
+| `MCP_OCC_ALLOWLIST` | No | Comma-separated allowlist entries for `run_occ` (`cmd` = no arguments, `cmd *` = any); replaces the read-only default |
 | `LOG_LEVEL` | No | `trace`/`debug`/`info`/`warn`/`error`/`fatal` |
 
 ## Tests
