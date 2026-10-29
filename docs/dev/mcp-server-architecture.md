@@ -41,7 +41,8 @@ mcp-server/src/
 │   └── http.ts          # Express app + NodeStreamableHTTPServerTransport + auth middleware
 ├── auth/
 │   ├── provider.ts      # NextcloudOAuthProvider — JWT sign/verify, code issuance
-│   ├── store.ts         # ClientsStore, CodeStore, RefreshStore (disk-persisted)
+│   ├── store.ts         # ClientsStore, CodeStore, RefreshStore, RevocationList (disk-persisted)
+│   ├── nc-user.ts       # Provisioning-API check that a grant's Nextcloud user is still active
 │   └── login.ts         # POST /auth/login — Nextcloud credential validation
 ├── client/
 │   ├── webdav.ts        # WebDAV singleton
@@ -150,7 +151,8 @@ When `MCP_AUTH_ENABLED=true`, the server runs a built-in OAuth 2.1 + PKCE author
 
 4. Server      →  200 HTML login form (POST /auth/login)
 
-5. User        →  POST /auth/login  {username, password, code_challenge, ...}
+5. User        →  POST /auth/login  {username, password, code_challenge, ...,
+                                     request_iat, request_mac}
 
 6. Server      →  validates credentials against OCS API
                   /ocs/v2.php/cloud/user
@@ -160,7 +162,7 @@ When `MCP_AUTH_ENABLED=true`, the server runs a built-in OAuth 2.1 + PKCE author
 8. MCP Client  →  POST /token  {code, code_verifier}
                   (PKCE token exchange)
 
-9. Server      →  {access_token: <HS256 JWT, 1h>, refresh_token: <UUID, 24h>}
+9. Server      →  {access_token: <HS256 JWT, 1h>, refresh_token: <256-bit random, 24h>}
 
 10. MCP Client →  POST /mcp  Authorization: Bearer <access_token>
                   (every MCP request verified via requireBearerAuth middleware)
@@ -171,15 +173,25 @@ When `MCP_AUTH_ENABLED=true`, the server runs a built-in OAuth 2.1 + PKCE author
 | Token | Format | TTL | Storage |
 |-------|--------|-----|---------|
 | Authorization code | UUID | 5 min | In-memory (`CodeStore`) |
-| Access token | HS256 JWT (jose) | 1 hour | Stateless (verified by signature) |
-| Refresh token | UUID | 24 hours | Disk-persisted (`RefreshStore`) |
+| Access token | HS256 JWT (jose) | 1 hour | Verified by signature, then checked against `RevocationList` by `gid` (grant) and `jti` |
+| Refresh token | 256 random bits, base64url | 24 hours | Disk-persisted (`RefreshStore`), keyed by SHA-256 hash — the file holds no usable token |
 
 ### Auth Storage
 
 Token state is persisted to `MCP_AUTH_STATE_DIR` (default `/app/state`):
 
 - `clients.json` — dynamically registered OAuth clients (`ClientsStore`)
-- `refresh-tokens.json` — active refresh tokens (`RefreshStore`)
+- `refresh-tokens.json` — active refresh tokens, keyed by their SHA-256 hash (`RefreshStore`). Entries from older versions, keyed by the token itself, are hashed on load
+- `revoked.json` — revoked grants and access tokens, each kept until the access tokens it
+  covers have expired (`RevocationList`)
+
+A grant is one sign-in. Its id (`gid` in the access token, `grantId` in the refresh entry)
+stays the same across refresh rotations. On every refresh, `checkNextcloudUser` asks the
+provisioning API whether the user still exists and is enabled; a disabled or deleted user
+gets `invalid_grant` and the grant is revoked.
+
+A refresh token is marked `spent` when exchanged rather than deleted, and kept until it
+would have expired. Presenting a spent token revokes its grant (RFC 9700 §4.14.2).
 
 Authorization codes are in-memory only (5-min TTL, lost on restart by design).
 
@@ -192,10 +204,10 @@ Authorization codes are in-memory only (5-min TTL, lost on restart by design).
 | `/.well-known/oauth-authorization-server` | RFC 8414 | Built by `buildAuthorizationServerMetadata`, served via `mcpAuthMetadataRouter` |
 | `/.well-known/oauth-protected-resource/mcp` | RFC 9728 | Also served at the root path by `http.ts` |
 | `/authorize` | RFC 6749 §4.1.1, RFC 7636 | 100 req / 15 min per IP. Errors before `client_id` and `redirect_uri` are verified are a `400` JSON body, never a redirect (§4.1.2.1); afterwards they redirect with `error`, `state` and `iss` (RFC 9207 §2) |
-| `/auth/login` | — | Nextcloud credential check, issues the code. 10 req / 15 min per IP |
-| `/token` | RFC 6749 §4.1.3, §6 | 50 req / 15 min per IP. `no-store` + `Pragma: no-cache` (§5.1). Refresh may narrow, never widen, the granted scope |
+| `/auth/login` | — | Nextcloud credential check, issues the code. 10 req / 15 min per IP. Accepts only a form `/authorize` rendered: `request_mac` is an HMAC (keyed by `MCP_AUTH_SECRET`) over the request fields and `request_iat`, valid 30 minutes, so the user agent cannot alter `redirect_uri`, the PKCE challenge, state or scope |
+| `/token` | OAuth 2.1 §4.1.3, §10.2; RFC 6749 §6 | 50 req / 15 min per IP. `no-store` + `Pragma: no-cache` (§5.1). `redirect_uri` optional; if sent, must equal the authorization request's. Refresh may narrow, never widen, the granted scope |
 | `/register` | RFC 7591 | 20 req / hour per IP. Mounted only with `MCP_REGISTRATION_ENABLED=true` |
-| `/revoke` | RFC 7009 | 50 req / 15 min per IP. Revokes refresh tokens issued to the calling client; always `200` |
+| `/revoke` | RFC 7009 | 50 req / 15 min per IP. A refresh token revokes its whole grant (§2.1), an access token only itself. Only tokens issued to the calling client; always `200` |
 
 Every error, on these endpoints and in the bearer check on `/mcp`, is the SDK's v2
 `OAuthError`. Redirect URIs match exactly, except loopback URIs, which match on any port
@@ -218,6 +230,10 @@ caches valid documents. The checks are listed in
 MCP_REGISTRATION_ENABLED=true
 MCP_REGISTRATION_TOKEN=<secret>  # optional: gates POST /register with Bearer token
 ```
+
+Registered redirect URIs must pass `RedirectUriPolicy` (`src/auth/redirect-uri.ts`), gated or
+not: `invalid_redirect_uri` otherwise (RFC 7591 §3.2.2). Persisted registrations that no longer
+pass are dropped on start.
 
 A gated endpoint rejects registration without `Authorization: Bearer <MCP_REGISTRATION_TOKEN>`,
 so every client has to be given the token — for the Nextcloud app that is the per-server
@@ -266,6 +282,7 @@ MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
 | `MCP_AUTH_STATE_DIR` | No | `/app/state` | Directory for persisted OAuth state |
 | `MCP_REGISTRATION_ENABLED` | No | `false` | Enable dynamic client registration |
 | `MCP_REGISTRATION_TOKEN` | No | — | Bearer token to gate `POST /register` |
+| `MCP_REDIRECT_ALLOWLIST` | No | — | Extra redirect hosts / `scheme:` entries / `*` for registered clients (`RedirectUriPolicy`) |
 | `MCP_CIMD_ENABLED` | No | `true` (`false` when `MCP_REGISTRATION_TOKEN` is set) | Accept Client ID Metadata Document URLs as `client_id` |
 | `MCP_CLIENT_ID` | No | — | Pre-seeded static client ID |
 | `MCP_CLIENT_REDIRECT_URIS` | No | `""` (empty) | Comma-separated redirect URIs for static client |

@@ -1,14 +1,51 @@
 // SPDX-License-Identifier: MIT
 
-import { NextcloudOAuthProvider, renderLoginForm, applySecurityHeaders } from './provider.js';
+import {
+  NextcloudOAuthProvider,
+  renderLoginForm,
+  applySecurityHeaders,
+  verifyLoginRequestMac,
+  type LoginFormRequest,
+} from './provider.js';
 import { isRegisteredRedirectUri } from './redirect-uri.js';
 import { logger } from '../logger.js';
+
+/**
+ * The user id from a /cloud/user response. A login name (an email address, an
+ * LDAP name) can differ from the uid, and the uid is what grants are bound to
+ * and what the provisioning API looks up later.
+ */
+async function nextcloudUid(resp: Response, loginName: string): Promise<string> {
+  try {
+    const body = (await resp.json()) as { ocs?: { data?: { id?: unknown } } };
+    const id = body?.ocs?.data?.id;
+    if (typeof id === 'string' && id !== '') return id;
+  } catch {
+    // fall through
+  }
+  return loginName;
+}
 
 export function loginHandler(provider: NextcloudOAuthProvider) {
   return async (req: any, res: any): Promise<void> => {
     const body = req.body as Record<string, string>;
     const { username, password, client_id, redirect_uri, state, code_challenge, scope } = body;
-    const redirectUriExplicit = body.redirect_uri_explicit !== '';
+    const request: LoginFormRequest = {
+      clientId: client_id ?? '',
+      redirectUri: redirect_uri ?? '',
+      codeChallenge: code_challenge ?? '',
+      state: state || undefined,
+      scope: scope || undefined,
+      issuedAt: Number(body.request_iat),
+    };
+
+    // Re-renders the form with the request as received, so the user can retry.
+    const fail = (status: number, error: string, form: Partial<LoginFormRequest> = {}) => {
+      applySecurityHeaders(res)
+        .status(status)
+        .type('html')
+        .send(renderLoginForm({ ...request, ...form, requestMac: body.request_mac, error }));
+    };
 
     const ncUrl = process.env.NEXTCLOUD_URL?.replace(/\/+$/, '');
     if (!ncUrl) {
@@ -17,57 +54,29 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
     }
 
     if (!username || !password || !client_id || !redirect_uri || !code_challenge) {
-      applySecurityHeaders(res)
-        .status(400)
-        .type('html')
-        .send(
-          renderLoginForm({
-            clientId: client_id ?? '',
-            redirectUri: redirect_uri ?? '',
-            redirectUriExplicit,
-            codeChallenge: code_challenge ?? '',
-            state,
-            scope,
-            error: 'Missing required parameters',
-          })
-        );
+      fail(400, 'Missing required parameters');
+      return;
+    }
+
+    // The form must be the one /authorize rendered, unchanged.
+    if (!verifyLoginRequestMac(request, body.request_mac)) {
+      logger.warn({ client: client_id }, '[auth] Login form failed its integrity check');
+      fail(
+        400,
+        'This sign-in request is invalid or has expired. Start again from your application.'
+      );
       return;
     }
 
     const client = await provider.clientsStore.getClient(client_id);
     if (!client) {
-      applySecurityHeaders(res)
-        .status(400)
-        .type('html')
-        .send(
-          renderLoginForm({
-            clientId: client_id,
-            redirectUri: redirect_uri,
-            redirectUriExplicit,
-            codeChallenge: code_challenge,
-            state,
-            scope,
-            error: 'Unknown client',
-          })
-        );
+      fail(400, 'Unknown client');
       return;
     }
     // Same rule as /authorize, so a native client's ephemeral loopback port
     // passes here too (RFC 8252 §7.3).
     if (!isRegisteredRedirectUri(redirect_uri, client.redirect_uris)) {
-      applySecurityHeaders(res)
-        .status(400)
-        .type('html')
-        .send(
-          renderLoginForm({
-            clientId: client_id,
-            redirectUri: '',
-            codeChallenge: code_challenge,
-            state,
-            scope,
-            error: 'Invalid redirect URI',
-          })
-        );
+      fail(400, 'Invalid redirect URI', { redirectUri: '' });
       return;
     }
 
@@ -79,40 +88,27 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
         headers: {
           Authorization: `Basic ${credentials}`,
           'OCS-APIRequest': 'true',
+          Accept: 'application/json',
         },
       });
 
       if (!ncResp.ok) {
         logger.warn({ user: username, status: ncResp.status }, '[auth] Login failed');
-        applySecurityHeaders(res)
-          .status(200)
-          .type('html')
-          .send(
-            renderLoginForm({
-              clientId: client_id,
-              redirectUri: redirect_uri,
-              redirectUriExplicit,
-              codeChallenge: code_challenge,
-              state,
-              scope,
-              error: 'Invalid Nextcloud credentials',
-            })
-          );
+        fail(200, 'Invalid Nextcloud credentials');
         return;
       }
 
-      const scopes = scope ? scope.split(' ').filter(Boolean) : [];
+      const userId = await nextcloudUid(ncResp, username);
       const code = provider.issueAuthCode({
         pkceChallenge: code_challenge,
         clientId: client_id,
-        scopes,
+        scopes: scope ? scope.split(' ').filter(Boolean) : [],
         redirectUri: redirect_uri,
-        redirectUriExplicit,
-        userId: username,
+        userId,
         state: state || undefined,
       });
 
-      logger.info({ user: username, client: client_id }, '[auth] Login successful');
+      logger.info({ user: userId, client: client_id }, '[auth] Login successful');
 
       const redirectUrl = new URL(redirect_uri);
       redirectUrl.searchParams.set('code', code);
@@ -124,20 +120,7 @@ export function loginHandler(provider: NextcloudOAuthProvider) {
       res.redirect(redirectUrl.toString());
     } catch (err) {
       logger.error({ user: username, err }, '[auth] Login error');
-      applySecurityHeaders(res)
-        .status(200)
-        .type('html')
-        .send(
-          renderLoginForm({
-            clientId: client_id,
-            redirectUri: redirect_uri,
-            redirectUriExplicit,
-            codeChallenge: code_challenge,
-            state,
-            scope,
-            error: 'Authentication failed. Please try again.',
-          })
-        );
+      fail(200, 'Authentication failed. Please try again.');
     }
   };
 }

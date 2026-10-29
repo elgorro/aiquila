@@ -1,6 +1,17 @@
-# OAuth 2.0 Authentication
+# OAuth 2.1 Authentication
 
 AIquila's HTTP transport includes a built-in OAuth 2.1 provider so any MCP client that supports OAuth can connect to a remote server without an external identity service. Authentication is **opt-in** — existing stdio setups (local MCP clients) are completely unaffected.
+
+The authorization server follows **OAuth 2.1**
+([`draft-ietf-oauth-v2-1-16`](https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/)), which
+the MCP authorization specification builds on:
+
+- authorization code grant with PKCE `S256` only; no implicit or password grant
+- exact redirect URI matching, except that loopback redirects may use any port
+- bearer tokens in the `Authorization` header only, never in the query string
+- refresh tokens rotate on every use, and reusing one ends the grant
+- `redirect_uri` is optional in the token request, because PKCE already binds the code. An
+  OAuth 2.0 client that sends it must send the value from the authorization request
 
 ## How It Works
 
@@ -126,6 +137,25 @@ MCP_REGISTRATION_TOKEN=<openssl rand -hex 32>
 
 This is the RFC 7591 approach. The MCP specification deprecates it in favour of CIMD but
 keeps it for backward compatibility, and many clients still rely on it.
+
+A registered client may only use redirect URIs the server trusts. Otherwise anyone could
+register a redirect to their own host, send a user a sign-in link, and receive the
+authorization code. The following are always allowed:
+
+- loopback URIs on any port, such as `http://127.0.0.1:<port>/…` or `http://[::1]:<port>/…`, for native clients
+- `https://` on `claude.ai`, `claude.com` and the host of `NEXTCLOUD_URL`. The AIquila
+  Nextcloud app registers itself with a callback on that host
+- private-use schemes that contain a dot, such as `com.example.app:/callback` (RFC 8252 §7.1)
+
+| Variable | Default | Effect |
+|---|---|---|
+| `MCP_REDIRECT_ALLOWLIST` | empty | Comma-separated extra entries: a host (`vscode.dev`), a scheme (`cursor:`), or `*` for any `https` host |
+
+Registration with any other redirect URI fails with `invalid_redirect_uri`. Plain `http`
+is only allowed on loopback. Clients registered earlier whose redirect URIs no longer pass
+are dropped when the server starts, and register again. If Nextcloud is reached over an
+internal address (`NEXTCLOUD_URL=http://nc`), list its public host in
+`MCP_REDIRECT_ALLOWLIST`. The Hetzner full stack does this by default.
 
 With `MCP_REGISTRATION_TOKEN` set, `POST /register` answers `401` unless the request
 carries `Authorization: Bearer <token>` (RFC 7591 §3.1 initial access token). Clients must
@@ -288,9 +318,32 @@ For any MCP client that supports OAuth 2.0 with PKCE:
 | Token | Lifetime | Notes |
 |---|---|---|
 | Access token | 1 hour | JWT signed with `MCP_AUTH_SECRET` |
-| Refresh token | 24 hours | Opaque UUID stored in memory; rotated on each use |
+| Refresh token | 24 hours | 256 random bits; rotated on each use. The server stores only its SHA-256 hash |
 
-Tokens are stored in memory only — restarting the container invalidates all active sessions. Users will need to re-authenticate after a restart.
+Refresh tokens and revocations are kept in `MCP_AUTH_STATE_DIR`, so sessions survive a
+restart as long as that directory is persistent and writable.
+
+### Ending a session
+
+Every sign-in starts a *grant*. The refresh tokens rotated from it, and the access tokens
+issued along the way, all belong to that grant.
+
+- **Revoking a refresh token** at `/revoke` ends the whole grant. Its access tokens stop
+  working at once, not when they expire (RFC 7009 §2.1).
+- **Revoking an access token** ends only that token. The refresh token keeps working.
+- **Presenting a refresh token a second time** ends the grant. A rotated token that comes
+  back means two parties hold it, and the server cannot tell which one is the client, so
+  it revokes everything and logs `Refresh token reuse detected` at `warn` (RFC 9700
+  §4.14.2). A client that retries a refresh after a lost response triggers this too, and
+  has to sign in again.
+- **Disabling or deleting the user in Nextcloud** ends the grant at the next refresh, so
+  within an hour at most. The server asks the provisioning API about the user, as
+  `NEXTCLOUD_USER`. That needs admin rights. Without them the check cannot see other
+  users, logs a warning once and lets the refresh through.
+- **Changing the Nextcloud password does not end a grant.** The server never keeps the
+  password, so it cannot tell that it changed. Nextcloud handles its own app passwords the
+  same way. To cut off a client after a password change, revoke its refresh token, or
+  disable the user until the next refresh has been refused.
 
 ## Security Notes
 
