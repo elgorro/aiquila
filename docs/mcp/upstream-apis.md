@@ -91,7 +91,7 @@ this repository ([OpenAPI](../dev/openapi.md)) rather than an external reference
 | `talk` | `apps/talk.ts` | `spreed` | OCS | [Talk API](https://nextcloud-talk.readthedocs.io/en/latest/) | 0.2.7 · `f6ca299` · 2026-03-21 | spreed 24.0.6 · NC 34.0.5 · 2026-10-30 |
 | `circles` | `apps/circles.ts` | `circles` | OCS | [routes](https://github.com/nextcloud/circles/blob/master/appinfo/routes.php) | 0.2.10 · `3741789` · 2026-03-28 | circles 34.0.0 · NC 34.0.5 · 2026-10-30 |
 | `bookmarks` | `apps/bookmarks.ts` | `bookmarks` | App REST v2 | [Bookmarks API](https://nextcloud-bookmarks.readthedocs.io/en/latest/) | 0.1.13 · `1915054` · 2026-02-12 | — |
-| `polls` | `apps/polls.ts` | `polls` | App REST v1.0 | [Polls API v1.0](https://github.com/nextcloud/polls/blob/main/docs/API_v1.0.md) | 0.3.4 · `fbf3f55` · 2026-04-22 | — |
+| `polls` | `apps/polls.ts` | `polls` | OCS v1.0 | [Polls API v1.0](https://github.com/nextcloud/polls/blob/main/docs/API_v1.0.md) (OpenAPI) | 0.3.4 · `fbf3f55` · 2026-04-22 | polls 9.3.0 · NC 34.0.5 · 2026-10-30 |
 | `forms` | `apps/forms.ts` | `forms` | OCS v3 | [Forms API v3](https://github.com/nextcloud/forms/blob/main/docs/API_v3.md) | 0.3.5 · `54d1470` · 2026-04-22 | — |
 | `text` | `apps/text.ts` | `text` | OCS, WebDAV | [nextcloud/text](https://github.com/nextcloud/text) | 0.3.6 · `45b96df` · 2026-05-06 | — |
 | `assistant` | `apps/assistant.ts` | `assistant` | OCS | [Task processing API](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-taskprocessing-api.html) | 0.1.55 · `b66ad3c` · 2026-03-10 | assistant 3.5.1, core · NC 34.0.5 · 2026-10-30 |

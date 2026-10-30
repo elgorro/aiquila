@@ -22,8 +22,8 @@ const samplePoll = {
     useNo: true,
   },
   owner: { userId: 'alice', displayName: 'Alice' },
-  status: { deleted: false, expired: false },
-  currentUserStatus: { userRole: 'owner', countVotes: 0, isSubscribed: true },
+  status: { isArchived: false, isExpired: false },
+  currentUserStatus: { userRole: 'owner', countVotes: 0 },
 };
 
 describe('Polls Tools', () => {
@@ -36,15 +36,18 @@ describe('Polls Tools', () => {
 
   describe('list_polls', () => {
     it('returns a formatted poll list', async () => {
-      mockFetchPollsAPI.mockResolvedValue([
-        samplePoll,
-        {
-          ...samplePoll,
-          id: 8,
-          configuration: { ...samplePoll.configuration, title: 'Sprint dates' },
-          type: 'datePoll',
-        },
-      ]);
+      // GET /polls answers { polls: [...] }
+      mockFetchPollsAPI.mockResolvedValue({
+        polls: [
+          samplePoll,
+          {
+            ...samplePoll,
+            id: 8,
+            configuration: { ...samplePoll.configuration, title: 'Sprint dates' },
+            type: 'datePoll',
+          },
+        ],
+      });
 
       const { listPollsTool } = await import('../tools/apps/polls.js');
       const result = await listPollsTool.handler();
@@ -55,7 +58,7 @@ describe('Polls Tools', () => {
     });
 
     it('handles empty list', async () => {
-      mockFetchPollsAPI.mockResolvedValue([]);
+      mockFetchPollsAPI.mockResolvedValue({ polls: [] });
       const { listPollsTool } = await import('../tools/apps/polls.js');
       const result = await listPollsTool.handler();
       expect(result.content[0].text).toContain('No polls found');
@@ -73,7 +76,8 @@ describe('Polls Tools', () => {
 
   describe('get_poll', () => {
     it('renders details', async () => {
-      mockFetchPollsAPI.mockResolvedValue({ poll: samplePoll });
+      // GET /poll/{id} carries `subscribed` beside the poll
+      mockFetchPollsAPI.mockResolvedValue({ poll: samplePoll, subscribed: true });
       const { getPollTool } = await import('../tools/apps/polls.js');
       const result = await getPollTool.handler({ pollId: 7 });
       expect(result.content[0].text).toContain('Lunch');
@@ -105,13 +109,23 @@ describe('Polls Tools', () => {
   });
 
   describe('update_poll', () => {
-    it('wraps fields in { poll: ... }', async () => {
+    it('wraps fields in { pollConfiguration: ... }', async () => {
       mockFetchPollsAPI.mockResolvedValue({ poll: samplePoll });
       const { updatePollTool } = await import('../tools/apps/polls.js');
       await updatePollTool.handler({ pollId: 7, title: 'New', anonymous: true });
       expect(mockFetchPollsAPI).toHaveBeenCalledWith('/poll/7', {
         method: 'PUT',
-        body: { poll: { title: 'New', anonymous: true } },
+        body: { pollConfiguration: { title: 'New', anonymous: true } },
+      });
+    });
+
+    it('maps a boolean allowProposals to the stored string', async () => {
+      mockFetchPollsAPI.mockResolvedValue({ poll: samplePoll });
+      const { updatePollTool } = await import('../tools/apps/polls.js');
+      await updatePollTool.handler({ pollId: 7, allowProposals: true });
+      expect(mockFetchPollsAPI).toHaveBeenCalledWith('/poll/7', {
+        method: 'PUT',
+        body: { pollConfiguration: { allowProposals: 'allow' } },
       });
     });
 
@@ -164,8 +178,8 @@ describe('Polls Tools', () => {
     it('formats options with tallies', async () => {
       mockFetchPollsAPI.mockResolvedValue({
         options: [
-          { id: 1, pollId: 7, pollOptionText: 'Pizza', yes: 3, no: 0, maybe: 1 },
-          { id: 2, pollId: 7, pollOptionText: 'Sushi', yes: 2, no: 1, maybe: 0 },
+          { id: 1, pollId: 7, text: 'Pizza', votes: { yes: 3, no: 0, maybe: 1, count: 4 } },
+          { id: 2, pollId: 7, text: 'Sushi', votes: { yes: 2, no: 1, maybe: 0, count: 3 } },
         ],
       });
       const { listPollOptionsTool } = await import('../tools/apps/polls.js');
@@ -177,15 +191,15 @@ describe('Polls Tools', () => {
   });
 
   describe('add_text_poll_option', () => {
-    it('sends pollOptionText', async () => {
+    it('wraps the text in an option object', async () => {
       mockFetchPollsAPI.mockResolvedValue({
-        option: { id: 10, pollId: 7, pollOptionText: 'Ramen' },
+        option: { id: 10, pollId: 7, text: 'Ramen' },
       });
       const { addTextPollOptionTool } = await import('../tools/apps/polls.js');
       await addTextPollOptionTool.handler({ pollId: 7, text: 'Ramen' });
       expect(mockFetchPollsAPI).toHaveBeenCalledWith('/poll/7/option', {
         method: 'POST',
-        body: { pollOptionText: 'Ramen' },
+        body: { option: { text: 'Ramen' } },
       });
     });
   });
@@ -205,7 +219,6 @@ describe('Polls Tools', () => {
         method: 'POST',
         body: {
           option: {
-            text: '',
             timestamp: Math.floor(Date.parse('2027-05-12T14:00:00Z') / 1000),
             duration: 3600,
           },
@@ -239,8 +252,20 @@ describe('Polls Tools', () => {
     it('formats votes', async () => {
       mockFetchPollsAPI.mockResolvedValue({
         votes: [
-          { id: 1, pollId: 7, userId: 'alice', voteAnswer: 'yes', optionText: 'Pizza' },
-          { id: 2, pollId: 7, userId: 'bob', voteAnswer: 'no', optionText: 'Sushi' },
+          {
+            id: 1,
+            pollId: 7,
+            user: { userId: 'alice', displayName: 'alice' },
+            answer: 'yes',
+            optionText: 'Pizza',
+          },
+          {
+            id: 2,
+            pollId: 7,
+            user: { userId: 'bob', displayName: 'bob' },
+            answer: 'no',
+            optionText: 'Sushi',
+          },
         ],
       });
       const { listPollVotesTool } = await import('../tools/apps/polls.js');
@@ -251,16 +276,20 @@ describe('Polls Tools', () => {
   });
 
   describe('vote_on_poll', () => {
-    it('posts to /vote', async () => {
+    it('PUTs the answer to /option/{id}/vote/{answer}', async () => {
       mockFetchPollsAPI.mockResolvedValue({
-        vote: { id: 5, pollId: 7, userId: 'alice', voteAnswer: 'yes', optionText: 'Pizza' },
+        vote: {
+          id: 5,
+          pollId: 7,
+          user: { userId: 'alice', displayName: 'Alice' },
+          answer: 'yes',
+          optionText: 'Pizza',
+        },
       });
       const { voteOnPollTool } = await import('../tools/apps/polls.js');
-      await voteOnPollTool.handler({ optionId: 1, setTo: 'yes' });
-      expect(mockFetchPollsAPI).toHaveBeenCalledWith('/vote', {
-        method: 'POST',
-        body: { optionId: 1, setTo: 'yes' },
-      });
+      const result = await voteOnPollTool.handler({ optionId: 1, setTo: 'yes' });
+      expect(mockFetchPollsAPI).toHaveBeenCalledWith('/option/1/vote/yes', { method: 'PUT' });
+      expect(result.content[0].text).toContain('Alice → yes on Pizza');
     });
   });
 
@@ -268,7 +297,13 @@ describe('Polls Tools', () => {
     it('list_poll_comments formats output', async () => {
       mockFetchPollsAPI.mockResolvedValue({
         comments: [
-          { id: 1, pollId: 7, userId: 'alice', comment: 'Looks good', timestamp: 1714078369 },
+          {
+            id: 1,
+            pollId: 7,
+            user: { userId: 'alice', displayName: 'Alice' },
+            comment: 'Looks good',
+            timestamp: 1714078369,
+          },
         ],
       });
       const { listPollCommentsTool } = await import('../tools/apps/polls.js');
@@ -277,15 +312,20 @@ describe('Polls Tools', () => {
       expect(result.content[0].text).toContain('Looks good');
     });
 
-    it('add_poll_comment posts to /comment', async () => {
+    it('add_poll_comment posts to /poll/{id}/comment', async () => {
       mockFetchPollsAPI.mockResolvedValue({
-        comment: { id: 2, pollId: 7, userId: 'alice', comment: 'Hi' },
+        comment: {
+          id: 2,
+          pollId: 7,
+          user: { userId: 'alice', displayName: 'Alice' },
+          comment: 'Hi',
+        },
       });
       const { addPollCommentTool } = await import('../tools/apps/polls.js');
       await addPollCommentTool.handler({ pollId: 7, message: 'Hi' });
-      expect(mockFetchPollsAPI).toHaveBeenCalledWith('/comment', {
+      expect(mockFetchPollsAPI).toHaveBeenCalledWith('/poll/7/comment', {
         method: 'POST',
-        body: { pollId: 7, message: 'Hi' },
+        body: { comment: 'Hi' },
       });
     });
 
@@ -302,7 +342,13 @@ describe('Polls Tools', () => {
       mockFetchPollsAPI.mockResolvedValue({
         shares: [
           { id: 1, pollId: 7, type: 'public', token: 'abc', URL: 'https://example.com/s/abc' },
-          { id: 2, pollId: 7, type: 'user', token: 'def', userId: 'bob', label: 'Bob' },
+          {
+            id: 2,
+            pollId: 7,
+            type: 'user',
+            token: 'def',
+            user: { userId: 'bob', displayName: 'Bob' },
+          },
         ],
       });
       const { listPollSharesTool } = await import('../tools/apps/polls.js');
@@ -320,7 +366,7 @@ describe('Polls Tools', () => {
       await addPollShareTool.handler({ pollId: 7, type: 'public' });
       expect(mockFetchPollsAPI).toHaveBeenCalledWith('/poll/7/share/public', {
         method: 'POST',
-        body: { type: 'public' },
+        body: {},
       });
     });
 
@@ -345,7 +391,7 @@ describe('Polls Tools', () => {
 
     it('add_poll_share email success', async () => {
       mockFetchPollsAPI.mockResolvedValue({
-        share: { id: 3, pollId: 7, type: 'email', token: 'e1', userId: 'bob@example.com' },
+        share: { id: 3, pollId: 7, type: 'external', token: 'e1' },
       });
       const { addPollShareTool } = await import('../tools/apps/polls.js');
       await addPollShareTool.handler({
@@ -356,7 +402,7 @@ describe('Polls Tools', () => {
       });
       expect(mockFetchPollsAPI).toHaveBeenCalledWith('/poll/7/share/email', {
         method: 'POST',
-        body: { type: 'email', userId: 'bob@example.com', displayName: 'Bob' },
+        body: { emailAddress: 'bob@example.com', displayName: 'Bob' },
       });
     });
 
@@ -370,7 +416,7 @@ describe('Polls Tools', () => {
 
   describe('set_poll_subscription', () => {
     it('subscribe uses PUT', async () => {
-      mockFetchPollsAPI.mockResolvedValue(undefined);
+      mockFetchPollsAPI.mockResolvedValue({ pollId: 7, subscribed: true });
       const { setPollSubscriptionTool } = await import('../tools/apps/polls.js');
       const result = await setPollSubscriptionTool.handler({ pollId: 7, subscribe: true });
       expect(mockFetchPollsAPI).toHaveBeenCalledWith('/poll/7/subscription', { method: 'PUT' });
@@ -378,13 +424,22 @@ describe('Polls Tools', () => {
     });
 
     it('unsubscribe uses DELETE', async () => {
-      mockFetchPollsAPI.mockResolvedValue(undefined);
+      mockFetchPollsAPI.mockResolvedValue({ pollId: 7, subscribed: false });
       const { setPollSubscriptionTool } = await import('../tools/apps/polls.js');
       const result = await setPollSubscriptionTool.handler({ pollId: 7, subscribe: false });
       expect(mockFetchPollsAPI).toHaveBeenCalledWith('/poll/7/subscription', {
         method: 'DELETE',
       });
       expect(result.content[0].text).toContain('Unsubscribed');
+    });
+
+    it('reports a subscription polls refused', async () => {
+      // Polls answers subscribed=false when the account has no email address
+      mockFetchPollsAPI.mockResolvedValue({ pollId: 7, subscribed: false });
+      const { setPollSubscriptionTool } = await import('../tools/apps/polls.js');
+      const result = await setPollSubscriptionTool.handler({ pollId: 7, subscribe: true });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('email address');
     });
   });
 

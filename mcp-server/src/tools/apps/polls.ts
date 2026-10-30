@@ -13,7 +13,7 @@ import { handleAppError } from '../error-utils.js';
 
 /**
  * Nextcloud Polls App Tools
- * Uses the Polls REST API v1.0 (/index.php/apps/polls/api/v1.0)
+ * Uses the Polls API v1.0, served over OCS (/ocs/v2.php/apps/polls/api/v1.0)
  */
 
 const pollsStatusMap: Record<number, string> = {
@@ -24,18 +24,12 @@ const pollsStatusMap: Record<number, string> = {
 
 function formatPoll(p: Poll): string {
   const cfg = p.configuration ?? { title: '(untitled)' };
-  const status = p.status?.deleted
-    ? 'deleted'
-    : p.status?.expired
-      ? 'expired'
-      : (cfg.expire ?? 0) < 0
-        ? 'closed'
-        : 'open';
+  const status = p.status?.isArchived ? 'archived' : p.status?.isExpired ? 'closed' : 'open';
   const owner = p.owner?.displayName || p.owner?.userId || 'unknown';
   return `[${p.id}] ${cfg.title} (${p.type}) — owner: ${owner}, status: ${status}`;
 }
 
-function formatPollDetailed(p: Poll): string {
+function formatPollDetailed(p: Poll, subscribed?: boolean): string {
   const cfg = p.configuration ?? { title: '(untitled)' };
   const lines: string[] = [formatPoll(p)];
   if (cfg.description) lines.push(`Description: ${cfg.description}`);
@@ -48,25 +42,27 @@ function formatPollDetailed(p: Poll): string {
     cfg.anonymous ? 'anonymous' : null,
     cfg.allowComment ? 'comments allowed' : null,
     cfg.allowMaybe ? 'maybe allowed' : null,
-    cfg.allowProposals ? 'proposals allowed' : null,
+    cfg.allowProposals && cfg.allowProposals !== 'disallow'
+      ? `proposals: ${cfg.allowProposals}`
+      : null,
     cfg.useNo ? 'no-votes allowed' : null,
   ].filter(Boolean);
   if (flags.length) lines.push(`Flags: ${flags.join(', ')}`);
   if (p.currentUserStatus) {
     const s = p.currentUserStatus;
     lines.push(
-      `You: role=${s.userRole ?? '?'}, votes=${s.countVotes ?? 0}, subscribed=${s.isSubscribed ?? false}`
+      `You: role=${s.userRole ?? '?'}, votes=${s.countVotes ?? 0}, subscribed=${subscribed ?? false}`
     );
   }
   return lines.join('\n');
 }
 
 function formatOption(o: PollOption): string {
-  const label = o.text || o.pollOptionText || `option ${o.id}`;
+  const label = o.text || `option ${o.id}`;
   const tallies: string[] = [];
-  if (o.yes !== undefined) tallies.push(`yes=${o.yes}`);
-  if (o.no !== undefined) tallies.push(`no=${o.no}`);
-  if (o.maybe !== undefined) tallies.push(`maybe=${o.maybe}`);
+  if (o.votes) {
+    tallies.push(`yes=${o.votes.yes}`, `no=${o.votes.no}`, `maybe=${o.votes.maybe}`);
+  }
   const confirmed = o.confirmed ? ' (confirmed)' : '';
   let timing = '';
   if (o.timestamp) {
@@ -77,20 +73,20 @@ function formatOption(o: PollOption): string {
 }
 
 function formatVote(v: PollVote): string {
-  const who = v.userId ?? 'unknown';
-  const answer = v.voteAnswer ?? '?';
+  const who = v.user?.displayName || v.user?.userId || 'unknown';
+  const answer = v.answer || '?';
   const what = v.optionText ?? (v.optionId !== undefined ? `option ${v.optionId}` : '');
   return `${who} → ${answer}${what ? ` on ${what}` : ''}`;
 }
 
 function formatComment(c: PollComment): string {
-  const who = c.user?.displayName || c.userId || 'unknown';
-  const when = c.timestamp ? new Date(c.timestamp * 1000).toISOString() : (c.dt ?? '');
+  const who = c.user?.displayName || c.user?.userId || 'unknown';
+  const when = c.timestamp ? new Date(c.timestamp * 1000).toISOString() : '';
   return `[${c.id}] ${who}${when ? ` at ${when}` : ''}: ${c.comment ?? ''}`;
 }
 
 function formatShare(s: PollShare): string {
-  const label = s.label || s.userId || '';
+  const label = s.label || s.user?.displayName || s.user?.emailAddress || '';
   const who = label ? ` ${label}` : '';
   return `[${s.type}] token=${s.token}${who}${s.URL ? ` — ${s.URL}` : ''}`;
 }
@@ -113,7 +109,7 @@ export const listPollsTool = {
   inputSchema: z.object({}),
   handler: async () => {
     try {
-      const polls = await fetchPollsAPI<Poll[]>('/polls');
+      const { polls } = await fetchPollsAPI<{ polls: Poll[] }>('/polls');
       if (!polls || polls.length === 0) {
         return { content: [{ type: 'text' as const, text: 'No polls found.' }] };
       }
@@ -147,9 +143,11 @@ export const getPollTool = {
   }),
   handler: async (args: { pollId: number }) => {
     try {
-      const { poll } = await fetchPollsAPI<{ poll: Poll }>(`/poll/${args.pollId}`);
+      const { poll, subscribed } = await fetchPollsAPI<{ poll: Poll; subscribed?: boolean }>(
+        `/poll/${args.pollId}`
+      );
       return {
-        content: [{ type: 'text' as const, text: formatPollDetailed(poll) }],
+        content: [{ type: 'text' as const, text: formatPollDetailed(poll, subscribed) }],
       };
     } catch (error) {
       return handleAppError(error, 'Error getting poll', pollsStatusMap);
@@ -211,7 +209,10 @@ export const updatePollTool = {
     anonymous: z.boolean().optional(),
     allowComment: z.boolean().optional(),
     allowMaybe: z.boolean().optional(),
-    allowProposals: z.boolean().optional(),
+    allowProposals: z
+      .union([z.boolean(), z.enum(['disallow', 'allow', 'review'])])
+      .optional()
+      .describe("'allow', 'disallow', or 'review' (proposals need the owner's approval)"),
     showResults: z.enum(['never', 'always', 'closed']).optional(),
     autoReminder: z.boolean().optional(),
     hideBookedUp: z.boolean().optional(),
@@ -228,7 +229,7 @@ export const updatePollTool = {
     anonymous?: boolean;
     allowComment?: boolean;
     allowMaybe?: boolean;
-    allowProposals?: boolean;
+    allowProposals?: boolean | 'disallow' | 'allow' | 'review';
     showResults?: 'never' | 'always' | 'closed';
     autoReminder?: boolean;
     hideBookedUp?: boolean;
@@ -242,6 +243,10 @@ export const updatePollTool = {
       for (const [k, v] of Object.entries(rest)) {
         if (v !== undefined) pollBody[k] = v;
       }
+      // Polls stores allowProposals as 'disallow' | 'allow' | 'review'
+      if (typeof pollBody.allowProposals === 'boolean') {
+        pollBody.allowProposals = pollBody.allowProposals ? 'allow' : 'disallow';
+      }
       if (Object.keys(pollBody).length === 0) {
         return {
           content: [{ type: 'text' as const, text: 'No fields provided to update.' }],
@@ -250,7 +255,7 @@ export const updatePollTool = {
       }
       const { poll } = await fetchPollsAPI<{ poll: Poll }>(`/poll/${pollId}`, {
         method: 'PUT',
-        body: { poll: pollBody },
+        body: { pollConfiguration: pollBody },
       });
       return {
         content: [{ type: 'text' as const, text: `Poll updated: ${formatPoll(poll)}` }],
@@ -427,7 +432,7 @@ export const addTextPollOptionTool = {
         `/poll/${args.pollId}/option`,
         {
           method: 'POST',
-          body: { pollOptionText: args.text },
+          body: { option: { text: args.text } },
         }
       );
       return {
@@ -480,7 +485,6 @@ export const addDatePollOptionTool = {
           method: 'POST',
           body: {
             option: {
-              text: '',
               timestamp,
               duration: args.durationSeconds,
             },
@@ -575,15 +579,17 @@ export const voteOnPollTool = {
   }),
   handler: async (args: { optionId: number; setTo: 'yes' | 'no' | 'maybe' }) => {
     try {
-      const result = await fetchPollsAPI<{ vote: PollVote }>('/vote', {
-        method: 'POST',
-        body: { optionId: args.optionId, setTo: args.setTo },
-      });
+      const { vote } = await fetchPollsAPI<{ vote: PollVote | null }>(
+        `/option/${args.optionId}/vote/${args.setTo}`,
+        { method: 'PUT' }
+      );
       return {
         content: [
           {
             type: 'text' as const,
-            text: `Vote recorded: ${formatVote(result.vote)}`,
+            text: vote
+              ? `Vote recorded: ${formatVote(vote)}`
+              : `Vote on option ${args.optionId} set to ${args.setTo}.`,
           },
         ],
       };
@@ -648,10 +654,10 @@ export const addPollCommentTool = {
   }),
   handler: async (args: { pollId: number; message: string }) => {
     try {
-      const { comment } = await fetchPollsAPI<{ comment: PollComment }>('/comment', {
-        method: 'POST',
-        body: { pollId: args.pollId, message: args.message },
-      });
+      const { comment } = await fetchPollsAPI<{ comment: PollComment }>(
+        `/poll/${args.pollId}/comment`,
+        { method: 'POST', body: { comment: args.message } }
+      );
       return {
         content: [{ type: 'text' as const, text: `Comment added: ${formatComment(comment)}` }],
       };
@@ -752,7 +758,8 @@ export const addPollShareTool = {
     displayName?: string;
   }) => {
     try {
-      let body: Record<string, unknown> = { type: args.type };
+      // The share type travels in the path; the body carries the recipient.
+      let body: Record<string, unknown> = {};
       if (args.type === 'user') {
         if (!args.userId) {
           return {
@@ -760,7 +767,7 @@ export const addPollShareTool = {
             isError: true,
           };
         }
-        body = { type: 'user', userId: args.userId };
+        body = { userId: args.userId };
       } else if (args.type === 'email') {
         if (!args.userId || !args.displayName) {
           return {
@@ -773,11 +780,7 @@ export const addPollShareTool = {
             isError: true,
           };
         }
-        body = {
-          type: 'email',
-          userId: args.userId,
-          displayName: args.displayName,
-        };
+        body = { emailAddress: args.userId, displayName: args.displayName };
       }
       const { share } = await fetchPollsAPI<{ share: PollShare }>(
         `/poll/${args.pollId}/share/${args.type}`,
@@ -842,9 +845,25 @@ export const setPollSubscriptionTool = {
   }),
   handler: async (args: { pollId: number; subscribe: boolean }) => {
     try {
-      await fetchPollsAPI(`/poll/${args.pollId}/subscription`, {
-        method: args.subscribe ? 'PUT' : 'DELETE',
-      });
+      const { subscribed } = await fetchPollsAPI<{ subscribed: boolean }>(
+        `/poll/${args.pollId}/subscription`,
+        { method: args.subscribe ? 'PUT' : 'DELETE' }
+      );
+      if (subscribed !== args.subscribe) {
+        // Polls refuses without an error: subscribing needs an email address on
+        // the account (Poll::getAllowSubscribeToPoll).
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: args.subscribe
+                ? `Polls did not subscribe you to poll ${args.pollId}. Subscriptions need an email address on your account.`
+                : `Polls still reports you as subscribed to poll ${args.pollId}.`,
+            },
+          ],
+          isError: true,
+        };
+      }
       return {
         content: [
           {
