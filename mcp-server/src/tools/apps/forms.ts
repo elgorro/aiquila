@@ -57,7 +57,9 @@ function formatForm(f: Form): string {
   const state = STATE_LABELS[f.state] ?? `state=${f.state}`;
   const expires = f.expires ? ` expires=${new Date(f.expires * 1000).toISOString()}` : '';
   const counts = f.submissionCount !== undefined ? ` submissions=${f.submissionCount}` : '';
-  return `[${f.id}] ${f.title || '(untitled)'} — owner=${f.ownerId}, ${state}${expires}${counts}`;
+  // The form list (GET /forms) returns partial forms without ownerId
+  const owner = f.ownerId ? `owner=${f.ownerId}, ` : '';
+  return `[${f.id}] ${f.title || '(untitled)'} — ${owner}${state}${expires}${counts}`;
 }
 
 function formatFormDetailed(f: Form): string {
@@ -275,10 +277,23 @@ export const updateFormTool = {
           isError: true,
         };
       }
-      const form = await fetchFormsAPI<Form>(`/forms/${formId}`, {
-        method: 'PATCH',
-        body,
-      });
+      // Forms API v3: PATCH bodies wrap the fields in keyValuePairs, and the
+      // answer is the form id. `state` is refused alongside other keys ("State
+      // may only be changed on its own"), so it goes in a request of its own.
+      const { state, ...fields } = body;
+      if (Object.keys(fields).length > 0) {
+        await fetchFormsAPI<number>(`/forms/${formId}`, {
+          method: 'PATCH',
+          body: { keyValuePairs: fields },
+        });
+      }
+      if (state !== undefined) {
+        await fetchFormsAPI<number>(`/forms/${formId}`, {
+          method: 'PATCH',
+          body: { keyValuePairs: { state } },
+        });
+      }
+      const form = await fetchFormsAPI<Form>(`/forms/${formId}`);
       return {
         content: [{ type: 'text' as const, text: `Form updated: ${formatForm(form)}` }],
       };
@@ -305,12 +320,18 @@ export const transferFormOwnerTool = {
   }),
   handler: async (args: { formId: number; ownerId: string }) => {
     try {
-      const form = await fetchFormsAPI<Form>(`/forms/${args.formId}`, {
+      // A transfer is an update whose only key is ownerId; it answers the new owner id
+      const ownerId = await fetchFormsAPI<string>(`/forms/${args.formId}`, {
         method: 'PATCH',
-        body: { ownerId: args.ownerId },
+        body: { keyValuePairs: { ownerId: args.ownerId } },
       });
       return {
-        content: [{ type: 'text' as const, text: `Ownership transferred: ${formatForm(form)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Ownership of form ${args.formId} transferred to ${ownerId}.`,
+          },
+        ],
       };
     } catch (error) {
       return handleAppError(error, 'Error transferring form ownership', formsStatusMap);
@@ -457,12 +478,18 @@ export const updateFormQuestionTool = {
           isError: true,
         };
       }
-      const question = await fetchFormsAPI<FormQuestion>(
-        `/forms/${formId}/questions/${questionId}`,
-        { method: 'PATCH', body }
-      );
+      // Answers the question id
+      await fetchFormsAPI<number>(`/forms/${formId}/questions/${questionId}`, {
+        method: 'PATCH',
+        body: { keyValuePairs: body },
+      });
       return {
-        content: [{ type: 'text' as const, text: `Question updated: ${formatQuestion(question)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Question ${questionId} updated: ${Object.keys(body).join(', ')}.`,
+          },
+        ],
       };
     } catch (error) {
       return handleAppError(error, 'Error updating question', formsStatusMap);
@@ -608,12 +635,18 @@ export const updateFormOptionTool = {
           isError: true,
         };
       }
-      const option = await fetchFormsAPI<FormOption>(
-        `/forms/${formId}/questions/${questionId}/options/${optionId}`,
-        { method: 'PATCH', body }
-      );
+      // Answers the option id
+      await fetchFormsAPI<number>(`/forms/${formId}/questions/${questionId}/options/${optionId}`, {
+        method: 'PATCH',
+        body: { keyValuePairs: body },
+      });
       return {
-        content: [{ type: 'text' as const, text: `Option updated: ${formatOption(option)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Option ${optionId} updated: ${Object.keys(body).join(', ')}.`,
+          },
+        ],
       };
     } catch (error) {
       return handleAppError(error, 'Error updating option', formsStatusMap);
@@ -639,7 +672,8 @@ export const reorderFormOptionsTool = {
   }),
   handler: async (args: { formId: number; questionId: number; newOrder: number[] }) => {
     try {
-      await fetchFormsAPI(`/forms/${args.formId}/questions/${args.questionId}/options/reorder`, {
+      // PATCH on the options collection reorders it; /options/reorder would hit /options/{optionId}
+      await fetchFormsAPI(`/forms/${args.formId}/questions/${args.questionId}/options`, {
         method: 'PATCH',
         body: { newOrder: args.newOrder },
       });
@@ -768,12 +802,18 @@ export const updateFormShareTool = {
   }),
   handler: async (args: { formId: number; shareId: number; permissions: FormPermission[] }) => {
     try {
-      const share = await fetchFormsAPI<FormShare>(`/forms/${args.formId}/shares/${args.shareId}`, {
+      // Answers the share id
+      await fetchFormsAPI<number>(`/forms/${args.formId}/shares/${args.shareId}`, {
         method: 'PATCH',
-        body: { permissions: args.permissions },
+        body: { keyValuePairs: { permissions: args.permissions } },
       });
       return {
-        content: [{ type: 'text' as const, text: `Share updated: ${formatShare(share)}` }],
+        content: [
+          {
+            type: 'text' as const,
+            text: `Share ${args.shareId} updated: permissions ${args.permissions.join(', ')}.`,
+          },
+        ],
       };
     } catch (error) {
       return handleAppError(error, 'Error updating share', formsStatusMap);

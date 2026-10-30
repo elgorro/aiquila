@@ -102,7 +102,8 @@ export interface Form {
   hash: string;
   title: string;
   description: string;
-  ownerId: string;
+  /** Absent from the partial forms GET /forms returns */
+  ownerId?: string;
   submissionMessage?: string;
   created: number;
   access: FormAccess;
@@ -192,7 +193,8 @@ export async function fetchFormsAPI<T = unknown>(
 
   const json = (await response.json()) as OcsEnvelope<T>;
   const code = json?.ocs?.meta?.statuscode;
-  if (code !== undefined && code !== 200 && code !== 100) {
+  // OCS v2 mirrors the HTTP status, so a create answers 201; 100 is OCS v1 success
+  if (code !== undefined && code !== 100 && (code < 200 || code > 299)) {
     throw new ApiError(code, json.ocs.meta.status ?? 'error', json.ocs.meta.message ?? '');
   }
   return json.ocs.data;
