@@ -137,6 +137,29 @@ describe('Share Tools', () => {
       expect(result.content[0].text).toContain('https://cloud.example.com/s/xYz789');
     });
 
+    it('should apply hideDownload with a follow-up update (POST /shares ignores it)', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: { id: 55, share_type: 3, path: '/Photos/cat.jpg', token: 'xYz789' },
+        },
+      });
+
+      const { createShareTool } = await import('../tools/apps/shares.js');
+      await createShareTool.handler({ path: '/Photos/cat.jpg', shareType: 3, hideDownload: true });
+
+      expect(mockFetchOCS).toHaveBeenNthCalledWith(
+        1,
+        '/ocs/v2.php/apps/files_sharing/api/v1/shares',
+        { method: 'POST', body: { path: '/Photos/cat.jpg', shareType: '3' } }
+      );
+      expect(mockFetchOCS).toHaveBeenNthCalledWith(
+        2,
+        '/ocs/v2.php/apps/files_sharing/api/v1/shares/55',
+        { method: 'PUT', body: { hideDownload: 'true' } }
+      );
+    });
+
     it('should handle API errors', async () => {
       mockFetchOCS.mockRejectedValue(new Error('OCS 404: Share not found'));
 
