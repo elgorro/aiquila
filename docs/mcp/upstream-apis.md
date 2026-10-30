@@ -79,7 +79,7 @@ this repository ([OpenAPI](../dev/openapi.md)) rather than an external reference
 |---|---|---|---|---|---|---|
 | `calendar` | `apps/calendar.ts` | `calendar` | CalDAV | [RFC 4791](https://www.rfc-editor.org/rfc/rfc4791), [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545) | 0.1.7 · `b98bd51` · 2026-02-08 | calendar 6.6.4, dav 1.40.0 · NC 34.0.5 · 2026-10-30 |
 | `tasks` | `apps/tasks.ts` | `tasks` | CalDAV | [RFC 4791](https://www.rfc-editor.org/rfc/rfc4791), [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545) | 0.1.2 · `33a6ce8` · 2025-11-21 | tasks 0.18.1, dav 1.40.0 · NC 34.0.5 · 2026-10-30 |
-| `contacts` | `apps/contacts.ts` | `contacts` | CardDAV | [RFC 6352](https://www.rfc-editor.org/rfc/rfc6352), [RFC 6350](https://www.rfc-editor.org/rfc/rfc6350) | 0.1.7 · `b98bd51` · 2026-02-08 | — |
+| `contacts` | `apps/contacts.ts` | `contacts` | CardDAV | [RFC 6352](https://www.rfc-editor.org/rfc/rfc6352), [RFC 6350](https://www.rfc-editor.org/rfc/rfc6350) | 0.1.7 · `b98bd51` · 2026-02-08 | contacts 8.9.3, dav 1.40.0 · NC 34.0.5 · 2026-10-30 |
 | `notes` | `apps/notes.ts` | `notes` | App REST v1 | [Notes API v1](https://github.com/nextcloud/notes/blob/main/docs/api/v1.md) | 0.1.2 · `33a6ce8` · 2025-11-21 | notes 6.1.0 · NC 34.0.5 · 2026-10-30 |
 | `news` | `apps/news.ts` | `news` | App REST v1-3 | [News API v1-3](https://github.com/nextcloud/news/blob/master/docs/development/api/api-v1-3.md) | 0.3.18 · `0a6ce5e` · 2026-06-12 | news 29.0.0 · NC 34.0.5 · 2026-10-30 |
 | `mail` | `apps/mail.ts` | `mail` | App REST, OCS (send) | [nextcloud/mail](https://github.com/nextcloud/mail) | 0.1.7 · `b98bd51` · 2026-02-08 | mail 5.12.6 · NC 34.0.5 · 2026-10-30 |
