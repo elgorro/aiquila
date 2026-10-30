@@ -1129,6 +1129,21 @@ describe('Maps Tools', () => {
   // ── Routing ────────────────────────────────────────────────────────────
 
   describe('export_map_route', () => {
+    it('should handle the null track Maps returns before indexing the file', async () => {
+      mockFetchMapsAPI.mockResolvedValue(null);
+
+      const { mapsTools } = await import('../tools/apps/maps.js');
+      const tool = mapsTools.find((t) => t.name === 'export_map_route')!;
+      const result = await tool.handler({
+        name: 'Walk',
+        type: 'route',
+        coords: [{ lat: 1, lng: 2 }],
+      });
+
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain('"Walk.gpx"');
+    });
+
     it('should export a route as GPX', async () => {
       mockFetchMapsAPI.mockResolvedValue({ id: 5, file_id: 200 });
 
