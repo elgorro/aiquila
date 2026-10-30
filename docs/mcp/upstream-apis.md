@@ -83,7 +83,7 @@ this repository ([OpenAPI](../dev/openapi.md)) rather than an external reference
 | `notes` | `apps/notes.ts` | `notes` | App REST v1 | [Notes API v1](https://github.com/nextcloud/notes/blob/main/docs/api/v1.md) | 0.1.2 · `33a6ce8` · 2025-11-21 | notes 6.1.0 · NC 34.0.5 · 2026-10-30 |
 | `news` | `apps/news.ts` | `news` | App REST v1-3 | [nextcloud/news](https://github.com/nextcloud/news) | 0.3.18 · `0a6ce5e` · 2026-06-12 | — |
 | `mail` | `apps/mail.ts` | `mail` | App REST | [nextcloud/mail](https://github.com/nextcloud/mail) | 0.1.7 · `b98bd51` · 2026-02-08 | — |
-| `deck` | `apps/deck.ts` | `deck` | App REST v1.0 | [Deck API](https://deck.readthedocs.io/en/latest/API/) | 0.2.10 · `5ac75d0` · 2026-03-28 | — |
+| `deck` | `apps/deck.ts` | `deck` | App REST v1.0 | [Deck API](https://deck.readthedocs.io/en/latest/API/) | 0.2.10 · `5ac75d0` · 2026-03-28 | deck 1.18.6 · NC 34.0.5 · 2026-10-30 |
 | `passman` | `apps/passman.ts` | `passman` | App REST v2 | [nextcloud/passman](https://github.com/nextcloud/passman) | 0.3.24 · `a1c8f7e` · 2026-06-27 | — |
 | `cookbook` | `apps/cookbook.ts` | `cookbook` | WebDAV (recipe files) | [nextcloud/cookbook](https://github.com/nextcloud/cookbook) | 0.1.2 · `33a6ce8` · 2025-11-21 | — |
 | `maps` | `apps/maps.ts` | `maps` | App REST | [nextcloud/maps](https://github.com/nextcloud/maps) | 0.1.13 · `1915054` · 2026-02-12 | — |
