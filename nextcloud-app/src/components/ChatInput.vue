@@ -80,7 +80,6 @@ import { getFilePickerBuilder, FilePickerClosed, showError } from '@nextcloud/di
 import { getCurrentUser } from '@nextcloud/auth'
 import axios from '@nextcloud/axios'
 import { generateRemoteUrl } from '@nextcloud/router'
-import '@nextcloud/dialogs/style.css'
 
 import { getFileInfo, getFilePreview, isImageMime } from '../api.js'
 
