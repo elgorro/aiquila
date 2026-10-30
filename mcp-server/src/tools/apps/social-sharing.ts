@@ -76,12 +76,21 @@ const NETWORKS: NetworkDef[] = [
   },
 ];
 
-/** Fetch the set of enabled Nextcloud app ids. */
-async function getEnabledApps(): Promise<Set<string>> {
-  const result = await fetchOCS<{ apps: string[] }>('/ocs/v2.php/cloud/apps', {
-    queryParams: { filter: 'enabled' },
-  });
-  return new Set(result.ocs.data.apps);
+/**
+ * Fetch the set of enabled Nextcloud app ids, or null when the account may not
+ * read it: /cloud/apps needs admin rights, and the socialsharing apps publish
+ * nothing a regular user can see.
+ */
+async function getEnabledApps(): Promise<Set<string> | null> {
+  try {
+    const result = await fetchOCS<{ apps: string[] }>('/ocs/v2.php/cloud/apps', {
+      queryParams: { filter: 'enabled' },
+    });
+    return new Set(result.ocs.data.apps);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Permission denied')) return null;
+    throw error;
+  }
 }
 
 /** Resolve a public-link share by id or path. */
@@ -160,7 +169,7 @@ export const generateSocialShareLinksTool = {
       const filter = args.networks ? new Set(args.networks.map((n) => n.toLowerCase())) : null;
       const enabledApps = await getEnabledApps();
 
-      const lines = NETWORKS.filter((n) => enabledApps.has(n.appId))
+      const lines = NETWORKS.filter((n) => !enabledApps || enabledApps.has(n.appId))
         .filter((n) => !filter || filter.has(n.key))
         .map((n) => `${n.key}: ${n.build(link, message)}`);
 
@@ -181,7 +190,11 @@ export const generateSocialShareLinksTool = {
         content: [
           {
             type: 'text' as const,
-            text: `Social share links for ${link}:\n${lines.join('\n')}`,
+            text:
+              `Social share links for ${link}:\n${lines.join('\n')}` +
+              (enabledApps
+                ? ''
+                : '\n\n(Every network is listed: only an admin can see which socialsharing apps are enabled.)'),
           },
         ],
       };
