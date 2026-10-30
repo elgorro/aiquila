@@ -189,6 +189,10 @@ Add your app to the tools reference table:
 | `your_tool` | Description | [Your App](tools/apps/your-app.md#your_tool) |
 ```
 
+Add a row for the new category to the [tool upstream matrix](../upstream-apis.md): the
+Nextcloud app id, the API it calls, the upstream reference, and the version you
+verified against.
+
 ### 6. Build and Test
 
 ```bash
