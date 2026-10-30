@@ -15,6 +15,7 @@ import {
   cimdEnabledFromEnv,
 } from '../auth/store.js';
 import { authRouter } from '../auth/router.js';
+import { nextcloudPublicUrl, publicUrlProblem } from '../auth/login-flow.js';
 import {
   cipherFromEnv,
   CredentialBackendUnavailableError,
@@ -360,6 +361,11 @@ export async function createHttpApp(): Promise<express.Express> {
           logger.error({ err: (err as Error).message }, '[startup] OpenBao Transit unreachable')
         );
     }
+    // A malformed NEXTCLOUD_PUBLIC_URL fails here rather than at the first sign-in.
+    if (process.env.NEXTCLOUD_PUBLIC_URL) nextcloudPublicUrl();
+    const publicUrlWarning = publicUrlProblem();
+    if (publicUrlWarning) logger.warn(`[startup] ${publicUrlWarning}`);
+
     const provider = new NextcloudOAuthProvider(undefined, {
       credentials: CredentialStore.fromEnv(cipher),
     });

@@ -5,6 +5,7 @@ import {
   checkCredential,
   deleteAppPassword,
   pollLoginFlow,
+  publicUrlProblem,
   startLoginFlow,
 } from '../../auth/login-flow.js';
 
@@ -141,5 +142,26 @@ describe('deleteAppPassword', () => {
     await expect(deleteAppPassword('alice', 'pw')).resolves.toBe(true);
     fetchMock.mockRejectedValueOnce(new Error('down'));
     await expect(deleteAppPassword('alice', 'pw')).resolves.toBe(false);
+  });
+});
+
+describe('publicUrlProblem', () => {
+  it('flags a container name without NEXTCLOUD_PUBLIC_URL', () => {
+    expect(publicUrlProblem()).toMatch(/"nc" looks internal.*NEXTCLOUD_PUBLIC_URL/);
+  });
+
+  it('accepts a container name once NEXTCLOUD_PUBLIC_URL is set', () => {
+    process.env.NEXTCLOUD_PUBLIC_URL = 'https://cloud.example.com';
+    expect(publicUrlProblem()).toBeNull();
+  });
+
+  it.each([
+    'https://cloud.example.com',
+    'http://localhost:8080',
+    'http://10.0.0.5',
+    'http://[::1]:8080',
+  ])('accepts %s on its own', (url) => {
+    process.env.NEXTCLOUD_URL = url;
+    expect(publicUrlProblem()).toBeNull();
   });
 });

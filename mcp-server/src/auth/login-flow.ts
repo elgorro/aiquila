@@ -25,6 +25,25 @@ export function nextcloudPublicUrl(): string {
   return url;
 }
 
+/**
+ * Why the sign-in link would point where no browser can follow it, or null.
+ * Without NEXTCLOUD_PUBLIC_URL the link is built on NEXTCLOUD_URL, and a
+ * single-label host there (`http://nc`, `http://nextcloud`) is a container
+ * name only other containers resolve. Checked at startup, so the operator
+ * reads it in the log rather than from a user stuck on an unreachable page.
+ */
+export function publicUrlProblem(): string | null {
+  if (process.env.NEXTCLOUD_PUBLIC_URL || !process.env.NEXTCLOUD_URL) return null;
+  const { hostname } = new URL(nextcloudBaseUrl());
+  const ip = /^[\d.]+$/.test(hostname) || hostname.startsWith('[');
+  if (ip || hostname.includes('.') || hostname === 'localhost') return null;
+  return (
+    `NEXTCLOUD_URL host "${hostname}" looks internal and NEXTCLOUD_PUBLIC_URL is not set: ` +
+    'the Nextcloud sign-in link will point to it, which browsers cannot open. ' +
+    'Set NEXTCLOUD_PUBLIC_URL to the address users open Nextcloud on.'
+  );
+}
+
 /** A started flow: where to send the user, and how to collect the result. */
 export interface StartedFlow {
   /** The Nextcloud sign-in page, on the public origin. */

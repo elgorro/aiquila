@@ -137,7 +137,9 @@ MCP_AUTH_ISSUER=https://mcp.example.com
 Set `NEXTCLOUD_PUBLIC_URL` when the MCP server reaches Nextcloud over an internal address,
 such as `http://nc` on a Docker network. The server calls Nextcloud on `NEXTCLOUD_URL` and
 sends the browser to the same path on `NEXTCLOUD_PUBLIC_URL`. It refuses a sign-in link
-Nextcloud returns on any other origin.
+Nextcloud returns on any other origin. When `NEXTCLOUD_PUBLIC_URL` is unset and the host in
+`NEXTCLOUD_URL` is a single-label name (a container name such as `nc`), the server logs a
+`[startup]` warning; a malformed `NEXTCLOUD_PUBLIC_URL` stops it at startup.
 
 `NEXTCLOUD_USER` and `NEXTCLOUD_PASSWORD` are not needed with OAuth on. They are used only by
 `MCP_INTERNAL_TOKEN`, which is deprecated (see [Security Notes](#security-notes)).
@@ -552,6 +554,7 @@ answered with an error. Check the log for `Could not start Login Flow v2`.
 ### The "Open Nextcloud" link points at an internal host
 
 Set `NEXTCLOUD_PUBLIC_URL` to the address browsers use; see [step 2](#2-configure-your-env).
+The startup log warns about this case with `NEXTCLOUD_URL host "…" looks internal`.
 
 ### `MCP_AUTH_SECRET`, `MCP_CREDENTIAL_KEY` or `MCP_AUTH_ISSUER` missing on startup
 
