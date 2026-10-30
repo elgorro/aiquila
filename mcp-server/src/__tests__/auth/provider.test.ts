@@ -4,15 +4,28 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
+
+const flow = vi.hoisted(() => ({
+  startLoginFlow: vi.fn(),
+  pollLoginFlow: vi.fn(),
+  checkCredential: vi.fn(),
+  deleteAppPassword: vi.fn(),
+}));
+vi.mock('../../auth/login-flow.js', () => flow);
+
+import { NextcloudOAuthProvider, renderFlowPage, LOGIN_PAGE_CSP } from '../../auth/provider.js';
 import {
-  NextcloudOAuthProvider,
-  renderLoginForm,
-  LOGIN_PAGE_CSP,
-  verifyLoginRequestMac,
-} from '../../auth/provider.js';
+  CredentialBackendUnavailableError,
+  CredentialStore,
+  LocalCipher,
+  type CredentialCipher,
+} from '../../auth/credential-store.js';
 import { LOGIN_STYLESHEET_PATH } from '../../auth/login-page-css.js';
 
 const TEST_SECRET = 'super-secret-32-char-key-for-testing!!';
+const LOGIN_URL = 'https://cloud.example.com/login/v2/flow/abc';
+const CRED = { loginName: 'alice', appPassword: 'app-password-1' };
 
 // Minimal client fixture
 const CLIENT = {
@@ -21,74 +34,55 @@ const CLIENT = {
   client_name: 'Test App',
 } as any;
 
-// ---- renderLoginForm ----
+function mockRes() {
+  return {
+    set: vi.fn().mockReturnThis(),
+    status: vi.fn().mockReturnThis(),
+    type: vi.fn().mockReturnThis(),
+    send: vi.fn(),
+    redirect: vi.fn(),
+  };
+}
 
-describe('renderLoginForm', () => {
-  it('renders a POST form targeting /auth/login', () => {
-    const html = renderLoginForm({
-      clientId: 'c1',
-      redirectUri: 'https://r.com',
-      codeChallenge: 'cc',
-    });
-    expect(html).toContain('method="POST"');
-    expect(html).toContain('action="/auth/login"');
+// ---- renderFlowPage ----
+
+describe('renderFlowPage', () => {
+  const waiting = {
+    kind: 'waiting' as const,
+    redirectUri: 'https://r.com',
+    loginUrl: LOGIN_URL,
+    flowId: 'f'.repeat(43),
+  };
+
+  it('links to the Nextcloud sign-in and reloads itself while waiting', () => {
+    const html = renderFlowPage(waiting);
+    expect(html).toContain(`href="${LOGIN_URL}"`);
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain(`url=/auth/flow/${'f'.repeat(43)}`);
   });
 
-  it('includes all required hidden fields', () => {
-    const html = renderLoginForm({
-      clientId: 'c1',
-      redirectUri: 'https://r.com',
-      codeChallenge: 'cc',
-      state: 'st',
-      scope: 'read write',
-    });
-    expect(html).toContain('name="client_id"');
-    expect(html).toContain('name="redirect_uri"');
-    expect(html).toContain('name="code_challenge"');
-    expect(html).toContain('name="state"');
-    expect(html).toContain('name="scope"');
+  it('asks for no credentials', () => {
+    const html = renderFlowPage(waiting);
+    expect(html).not.toContain('<form');
+    expect(html).not.toContain('type="password"');
   });
 
-  it('includes client name in the page when provided', () => {
-    const html = renderLoginForm({
-      clientId: 'c1',
-      redirectUri: 'https://r.com',
-      codeChallenge: 'cc',
-      clientName: 'My App',
-    });
-    expect(html).toContain('My App');
+  it('links the external stylesheet and inlines no styles or scripts', () => {
+    const html = renderFlowPage(waiting);
+    expect(html).toContain(`<link rel="stylesheet" href="${LOGIN_STYLESHEET_PATH}">`);
+    expect(html).not.toContain('<style');
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('style="');
   });
 
-  it('includes error message when provided', () => {
-    const html = renderLoginForm({
-      clientId: 'c1',
-      redirectUri: 'https://r.com',
-      codeChallenge: 'cc',
-      error: 'Bad credentials',
-    });
-    expect(html).toContain('Bad credentials');
-  });
-
-  it('HTML-escapes special characters in clientName', () => {
-    const html = renderLoginForm({
-      clientId: 'c1',
-      redirectUri: 'https://r.com',
-      codeChallenge: 'cc',
-      clientName: '<script>xss</script>',
-    });
-    expect(html).not.toContain('<script>xss</script>');
-    expect(html).toContain('&lt;script&gt;');
-  });
-
-  it('HTML-escapes special characters in error', () => {
-    const html = renderLoginForm({
-      clientId: 'c1',
-      redirectUri: 'https://r.com',
-      codeChallenge: 'cc',
-      error: '<b>error</b>',
-    });
-    expect(html).not.toContain('<b>error</b>');
-    expect(html).toContain('&lt;b&gt;');
+  it('HTML-escapes the client name, the redirect URI and an error', () => {
+    expect(renderFlowPage({ ...waiting, clientName: '<b>x</b>' })).toContain(
+      '&lt;b&gt;x&lt;/b&gt;'
+    );
+    expect(renderFlowPage({ ...waiting, redirectUri: 'https://r.com/"x' })).toContain('&quot;x');
+    const err = renderFlowPage({ kind: 'error', message: '<script>' });
+    expect(err).toContain('&lt;script&gt;');
+    expect(err).not.toContain('http-equiv="refresh"');
   });
 });
 
@@ -106,7 +100,17 @@ describe('NextcloudOAuthProvider', () => {
       MCP_AUTH_SECRET: TEST_SECRET,
       MCP_AUTH_ISSUER: 'https://test.example.com',
       MCP_AUTH_STATE_DIR: stateDir,
+      MCP_CREDENTIAL_KEY: randomBytes(64).toString('hex'),
+      NEXTCLOUD_URL: 'https://cloud.example.com',
     };
+    flow.startLoginFlow.mockReset().mockResolvedValue({
+      loginUrl: LOGIN_URL,
+      pollToken: 'poll-token',
+      pollPath: '/login/v2/poll',
+    });
+    flow.pollLoginFlow.mockReset().mockResolvedValue(null);
+    flow.checkCredential.mockReset().mockResolvedValue({ state: 'valid', userId: 'alice' });
+    flow.deleteAppPassword.mockReset().mockResolvedValue(true);
     provider = new NextcloudOAuthProvider();
   });
 
@@ -129,100 +133,163 @@ describe('NextcloudOAuthProvider', () => {
     });
   });
 
-  // ---- authorize ----
+  // ---- authorize + continueFlow ----
 
   describe('authorize', () => {
-    it('sends a 200 HTML login form response', async () => {
-      const res = {
-        set: vi.fn().mockReturnThis(),
-        status: vi.fn().mockReturnThis(),
-        type: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-      };
-      await provider.authorize(
-        CLIENT,
-        { codeChallenge: 'ch', redirectUri: 'https://r.com', state: 'st', scopes: ['read'] },
-        res as any
-      );
+    const binding = 'b'.repeat(43);
+    const params = {
+      codeChallenge: 'ch',
+      redirectUri: 'https://example.com/callback',
+      state: 'st',
+      scopes: ['mcp:tools'],
+      browserBinding: binding,
+    };
+
+    async function start() {
+      const res = mockRes();
+      await provider.authorize(CLIENT, params, res as any);
+      const html = res.send.mock.calls[0][0] as string;
+      return { res, flowId: html.match(/url=\/auth\/flow\/([A-Za-z0-9_-]+)"/)![1] };
+    }
+
+    it('starts a Login Flow v2 named after the client and shows the sign-in page', async () => {
+      const { res } = await start();
+      expect(flow.startLoginFlow).toHaveBeenCalledWith('AIquila MCP (Test App)');
       expect(res.set).toHaveBeenCalledWith('X-Frame-Options', 'DENY');
       expect(res.set).toHaveBeenCalledWith('X-Content-Type-Options', 'nosniff');
       expect(res.set).toHaveBeenCalledWith('Referrer-Policy', 'no-referrer');
       expect(res.set).toHaveBeenCalledWith('Content-Security-Policy', LOGIN_PAGE_CSP);
       expect(LOGIN_PAGE_CSP).not.toContain("'unsafe-inline'");
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.type).toHaveBeenCalledWith('html');
-      expect(res.send).toHaveBeenCalledWith(expect.stringContaining('action="/auth/login"'));
+      expect(res.send).toHaveBeenCalledWith(expect.stringContaining(LOGIN_URL));
     });
 
-    it('links the external stylesheet and inlines no styles or scripts', () => {
-      const html = renderLoginForm({
-        clientId: 'c1',
-        redirectUri: 'https://r.com',
-        codeChallenge: 'ch',
+    it('never puts the browser binding in the page', async () => {
+      const { res } = await start();
+      expect(res.send.mock.calls[0][0]).not.toContain(binding);
+    });
+
+    it('reports a Nextcloud that cannot start the flow as server_error', async () => {
+      flow.startLoginFlow.mockRejectedValue(new Error('down'));
+      await expect(provider.authorize(CLIENT, params, mockRes() as any)).rejects.toMatchObject({
+        code: 'server_error',
       });
-      expect(html).toContain(`<link rel="stylesheet" href="${LOGIN_STYLESHEET_PATH}">`);
-      expect(html).not.toContain('<style');
-      expect(html).not.toContain('<script');
-      expect(html).not.toContain('style="');
     });
 
-    it('renders a form whose MAC verifies against the request it carries', async () => {
-      const res = {
-        set: vi.fn().mockReturnThis(),
-        status: vi.fn().mockReturnThis(),
-        type: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-      };
-      await provider.authorize(
-        CLIENT,
-        {
-          redirectUri: 'https://example.com/callback',
-          codeChallenge: 'cc',
-          state: 's',
-          scopes: ['mcp:tools'],
-          browserBinding: 'b'.repeat(43),
-        },
-        res
-      );
-      const html = res.send.mock.calls[0][0] as string;
-      // The binding travels as a cookie, never in the form.
-      expect(html).not.toContain('b'.repeat(43));
-      const field = (name: string) => html.match(new RegExp(`name="${name}" value="([^"]*)"`))![1];
-      const request = {
-        clientId: field('client_id'),
-        redirectUri: field('redirect_uri'),
-        codeChallenge: field('code_challenge'),
-        state: field('state'),
-        scope: field('scope'),
-        issuedAt: Number(field('request_iat')),
-        browserBinding: 'b'.repeat(43),
-      };
-      expect(verifyLoginRequestMac(request, field('request_mac'))).toBe(true);
-      // Posted from another browser: the MAC no longer verifies.
-      expect(
-        verifyLoginRequestMac({ ...request, browserBinding: 'c'.repeat(43) }, field('request_mac'))
-      ).toBe(false);
-      expect(
-        verifyLoginRequestMac({ ...request, browserBinding: undefined }, field('request_mac'))
-      ).toBe(false);
-      expect(
-        verifyLoginRequestMac({ ...request, codeChallenge: 'other' }, field('request_mac'))
-      ).toBe(false);
+    it('keeps waiting while the user has not granted access', async () => {
+      const { flowId } = await start();
+      const res = mockRes();
+      await provider.continueFlow(flowId, binding, res);
+      expect(res.redirect).not.toHaveBeenCalled();
+      expect(res.send).toHaveBeenCalledWith(expect.stringContaining('http-equiv="refresh"'));
     });
 
-    it('includes client name in the rendered form', async () => {
-      const res = {
-        set: vi.fn().mockReturnThis(),
-        status: vi.fn().mockReturnThis(),
-        type: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-      };
-      await provider.authorize(
-        CLIENT,
-        { codeChallenge: 'ch', redirectUri: 'https://r.com' },
-        res as any
-      );
-      expect(res.send).toHaveBeenCalledWith(expect.stringContaining('Test App'));
+    it('redirects with a code once Nextcloud returns the app password', async () => {
+      const { flowId } = await start();
+      flow.pollLoginFlow.mockResolvedValue(CRED);
+      const res = mockRes();
+      await provider.continueFlow(flowId, binding, res);
+      expect(flow.checkCredential).toHaveBeenCalledWith('alice', 'app-password-1');
+      const location = new URL(res.redirect.mock.calls[0][1]);
+      expect(location.searchParams.get('code')).toBeTruthy();
+      expect(location.searchParams.get('state')).toBe('st');
+      expect(location.searchParams.get('iss')).toBe('https://test.example.com/');
+    });
+
+    it('completes only in the browser that started it', async () => {
+      const { flowId } = await start();
+      flow.pollLoginFlow.mockResolvedValue(CRED);
+      for (const other of [undefined, 'c'.repeat(43)]) {
+        const res = mockRes();
+        await provider.continueFlow(flowId, other, res);
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.redirect).not.toHaveBeenCalled();
+      }
+      expect(flow.pollLoginFlow).not.toHaveBeenCalled();
+    });
+
+    it('issues no code for an app password Nextcloud rejects', async () => {
+      const { flowId } = await start();
+      flow.pollLoginFlow.mockResolvedValue(CRED);
+      flow.checkCredential.mockResolvedValue({ state: 'rejected' });
+      const res = mockRes();
+      await provider.continueFlow(flowId, binding, res);
+      expect(res.redirect).not.toHaveBeenCalled();
+      expect(res.send).toHaveBeenCalledWith(expect.stringContaining('did not confirm'));
+    });
+
+    it('polls Nextcloud at most once per second', async () => {
+      const { flowId } = await start();
+      await provider.continueFlow(flowId, binding, mockRes());
+      await provider.continueFlow(flowId, binding, mockRes());
+      expect(flow.pollLoginFlow).toHaveBeenCalledTimes(1);
+    });
+
+    it('two reloads racing on one poll issue a single code', async () => {
+      const { flowId } = await start();
+      flow.pollLoginFlow.mockResolvedValue(CRED);
+      const a = mockRes();
+      const b = mockRes();
+      await Promise.all([
+        provider.continueFlow(flowId, binding, a),
+        provider.continueFlow(flowId, binding, b),
+      ]);
+      const redirects = [a, b].filter((r) => r.redirect.mock.calls.length > 0);
+      expect(redirects).toHaveLength(1);
+    });
+
+    it('retries an app password Nextcloud could not confirm, instead of deleting it', async () => {
+      const { flowId } = await start();
+      flow.pollLoginFlow.mockResolvedValueOnce(CRED).mockResolvedValue(null);
+      flow.checkCredential.mockResolvedValueOnce({ state: 'unknown' });
+      const first = mockRes();
+      await provider.continueFlow(flowId, binding, first);
+      expect(first.redirect).not.toHaveBeenCalled();
+      expect(flow.deleteAppPassword).not.toHaveBeenCalled();
+      await new Promise((r) => setTimeout(r, 1100));
+      const second = mockRes();
+      await provider.continueFlow(flowId, binding, second);
+      // Nextcloud returns the credentials once; the kept ones are confirmed now.
+      expect(flow.pollLoginFlow).toHaveBeenCalledTimes(1);
+      expect(second.redirect).toHaveBeenCalled();
+    });
+
+    it('refuses more sign-ins from one address than its share', async () => {
+      const from = (clientAddress: string) => ({ ...params, clientAddress });
+      for (let i = 0; i < 20; i++)
+        await provider.authorize(CLIENT, from('192.0.2.1'), mockRes() as any);
+      await expect(
+        provider.authorize(CLIENT, from('192.0.2.1'), mockRes() as any)
+      ).rejects.toMatchObject({ code: 'temporarily_unavailable' });
+      await expect(
+        provider.authorize(CLIENT, from('192.0.2.2'), mockRes() as any)
+      ).resolves.toBeUndefined();
+    });
+
+    it('seals the credential as soon as Nextcloud hands it over', async () => {
+      const { flowId } = await start();
+      flow.pollLoginFlow.mockResolvedValue(CRED);
+      await provider.sweep();
+      // The page was not reloaded yet, but the credential is already on disk.
+      const { readFileSync } = await import('node:fs');
+      const file = readFileSync(join(stateDir, 'credentials.json'), 'utf8');
+      expect(Object.keys(JSON.parse(file))).toHaveLength(1);
+      expect(file).not.toContain('app-password-1');
+      const res = mockRes();
+      await provider.continueFlow(flowId, binding, res);
+      expect(res.redirect).toHaveBeenCalled();
+    });
+
+    it('refuses new sign-ins once too many are in progress', async () => {
+      for (let i = 0; i < 500; i++) await provider.authorize(CLIENT, params, mockRes() as any);
+      await expect(provider.authorize(CLIENT, params, mockRes() as any)).rejects.toMatchObject({
+        code: 'temporarily_unavailable',
+      });
+    });
+
+    it('shows the requested scopes', async () => {
+      const { res } = await start();
+      expect(res.send.mock.calls[0][0]).toContain('<code>mcp:tools</code>');
     });
   });
 
@@ -230,7 +297,8 @@ describe('NextcloudOAuthProvider', () => {
 
   describe('challengeForAuthorizationCode', () => {
     it('returns the PKCE challenge for a valid code', async () => {
-      const code = provider.issueAuthCode({
+      const code = await provider.issueAuthCode({
+        credential: CRED,
         pkceChallenge: 'the-challenge',
         clientId: CLIENT.client_id,
         scopes: ['read'],
@@ -246,12 +314,13 @@ describe('NextcloudOAuthProvider', () => {
     });
 
     it('throws when client_id does not match', async () => {
-      const code = provider.issueAuthCode({
+      const code = await provider.issueAuthCode({
+        credential: CRED,
         pkceChallenge: 'ch',
         clientId: 'other-client',
         scopes: [],
         redirectUri: 'https://r.com',
-        userId: 'u',
+        userId: 'alice',
       });
       await expect(provider.challengeForAuthorizationCode(CLIENT, code)).rejects.toThrow();
     });
@@ -261,7 +330,8 @@ describe('NextcloudOAuthProvider', () => {
 
   describe('exchangeAuthorizationCode', () => {
     it('returns a valid access token and refresh token', async () => {
-      const code = provider.issueAuthCode({
+      const code = await provider.issueAuthCode({
+        credential: CRED,
         pkceChallenge: 'ch',
         clientId: CLIENT.client_id,
         scopes: ['read'],
@@ -277,7 +347,8 @@ describe('NextcloudOAuthProvider', () => {
     });
 
     it('includes correct scopes in the token', async () => {
-      const code = provider.issueAuthCode({
+      const code = await provider.issueAuthCode({
+        credential: CRED,
         pkceChallenge: 'ch',
         clientId: CLIENT.client_id,
         scopes: ['read', 'write'],
@@ -290,15 +361,35 @@ describe('NextcloudOAuthProvider', () => {
     });
 
     it('invalidates the code after use (prevents double-spend)', async () => {
-      const code = provider.issueAuthCode({
+      const code = await provider.issueAuthCode({
+        credential: CRED,
         pkceChallenge: 'ch',
         clientId: CLIENT.client_id,
         scopes: [],
         redirectUri: 'https://r.com',
-        userId: 'u',
+        userId: 'alice',
       });
       await provider.exchangeAuthorizationCode(CLIENT, code);
       await expect(provider.exchangeAuthorizationCode(CLIENT, code)).rejects.toThrow();
+    });
+
+    it('a replay racing the first exchange leaves neither with a refresh token', async () => {
+      const code = await provider.issueAuthCode({
+        credential: CRED,
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: [],
+        redirectUri: 'https://r.com',
+        userId: 'alice',
+      });
+      const results = await Promise.allSettled([
+        provider.exchangeAuthorizationCode(CLIENT, code),
+        provider.exchangeAuthorizationCode(CLIENT, code),
+      ]);
+      expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected']);
+      await vi.waitFor(() =>
+        expect(flow.deleteAppPassword).toHaveBeenCalledWith('alice', 'app-password-1')
+      );
     });
 
     it('throws for an unknown code', async () => {
@@ -306,12 +397,13 @@ describe('NextcloudOAuthProvider', () => {
     });
 
     it('throws when redirect_uri does not match', async () => {
-      const code = provider.issueAuthCode({
+      const code = await provider.issueAuthCode({
+        credential: CRED,
         pkceChallenge: 'ch',
         clientId: CLIENT.client_id,
         scopes: [],
         redirectUri: 'https://r.com',
-        userId: 'u',
+        userId: 'alice',
       });
       await expect(
         provider.exchangeAuthorizationCode(CLIENT, code, 'https://attacker.com')
@@ -319,12 +411,13 @@ describe('NextcloudOAuthProvider', () => {
     });
 
     it('throws when client_id does not match', async () => {
-      const code = provider.issueAuthCode({
+      const code = await provider.issueAuthCode({
+        credential: CRED,
         pkceChallenge: 'ch',
         clientId: 'other-client',
         scopes: [],
         redirectUri: 'https://r.com',
-        userId: 'u',
+        userId: 'alice',
       });
       await expect(provider.exchangeAuthorizationCode(CLIENT, code)).rejects.toThrow();
     });
@@ -334,7 +427,8 @@ describe('NextcloudOAuthProvider', () => {
 
   describe('verifyAccessToken', () => {
     async function issueToken(userId = 'alice', scopes = ['read']): Promise<string> {
-      const code = provider.issueAuthCode({
+      const code = await provider.issueAuthCode({
+        credential: CRED,
         pkceChallenge: 'ch',
         clientId: CLIENT.client_id,
         scopes,
@@ -413,7 +507,8 @@ describe('NextcloudOAuthProvider', () => {
 
   describe('exchangeRefreshToken', () => {
     async function issueRefreshToken(): Promise<string> {
-      const code = provider.issueAuthCode({
+      const code = await provider.issueAuthCode({
+        credential: CRED,
         pkceChallenge: 'ch',
         clientId: CLIENT.client_id,
         scopes: ['read'],
@@ -447,12 +542,13 @@ describe('NextcloudOAuthProvider', () => {
     });
 
     it('restricts scopes when requested scopes are a subset', async () => {
-      const code = provider.issueAuthCode({
+      const code = await provider.issueAuthCode({
+        credential: CRED,
         pkceChallenge: 'ch',
         clientId: CLIENT.client_id,
         scopes: ['read', 'write'],
         redirectUri: 'https://r.com',
-        userId: 'u',
+        userId: 'alice',
       });
       const { refresh_token } = await provider.exchangeAuthorizationCode(CLIENT, code);
       const tokens = await provider.exchangeRefreshToken(CLIENT, refresh_token!, ['read']);
@@ -474,12 +570,13 @@ describe('NextcloudOAuthProvider', () => {
 
   describe('revokeToken', () => {
     it('revokes a refresh token so it cannot be used again', async () => {
-      const code = provider.issueAuthCode({
+      const code = await provider.issueAuthCode({
+        credential: CRED,
         pkceChallenge: 'ch',
         clientId: CLIENT.client_id,
         scopes: [],
         redirectUri: 'https://r.com',
-        userId: 'u',
+        userId: 'alice',
       });
       const { refresh_token } = await provider.exchangeAuthorizationCode(CLIENT, code);
       await provider.revokeToken(CLIENT, { token: refresh_token! });
@@ -495,7 +592,8 @@ describe('NextcloudOAuthProvider', () => {
 
   describe('grant revocation', () => {
     async function login(p = provider) {
-      const code = p.issueAuthCode({
+      const code = await p.issueAuthCode({
+        credential: CRED,
         pkceChallenge: 'ch',
         clientId: CLIENT.client_id,
         scopes: ['read'],
@@ -554,18 +652,25 @@ describe('NextcloudOAuthProvider', () => {
       await expect(provider.verifyAccessToken(token)).rejects.toThrow();
     });
 
-    for (const state of ['disabled', 'missing'] as const) {
-      it(`refuses refresh and ends the grant when the Nextcloud user is ${state}`, async () => {
-        const checkUser = vi.fn().mockResolvedValue(state);
-        const p = new NextcloudOAuthProvider(undefined, { checkUser });
-        const tokens = await login(p);
-        await expect(p.exchangeRefreshToken(CLIENT, tokens.refresh_token!)).rejects.toMatchObject({
-          code: 'invalid_grant',
-        });
-        expect(checkUser).toHaveBeenCalledWith('alice');
-        await expect(p.verifyAccessToken(tokens.access_token)).rejects.toThrow();
-        checkUser.mockResolvedValue('active');
-        await expect(p.exchangeRefreshToken(CLIENT, tokens.refresh_token!)).rejects.toThrow();
+    for (const [why, check] of [
+      ['the device was removed or the user disabled', { state: 'rejected' }],
+      ['the app password belongs to someone else', { state: 'valid', userId: 'mallory' }],
+    ] as const) {
+      it(`refuses refresh and ends the grant when ${why}`, async () => {
+        const tokens = await login();
+        flow.checkCredential.mockResolvedValue(check);
+        await expect(
+          provider.exchangeRefreshToken(CLIENT, tokens.refresh_token!)
+        ).rejects.toMatchObject({ code: 'invalid_grant' });
+        expect(flow.checkCredential).toHaveBeenCalledWith('alice', 'app-password-1');
+        await expect(provider.verifyAccessToken(tokens.access_token)).rejects.toThrow();
+        await vi.waitFor(() =>
+          expect(flow.deleteAppPassword).toHaveBeenCalledWith('alice', 'app-password-1')
+        );
+        flow.checkCredential.mockResolvedValue({ state: 'valid', userId: 'alice' });
+        await expect(
+          provider.exchangeRefreshToken(CLIENT, tokens.refresh_token!)
+        ).rejects.toThrow();
       });
     }
 
@@ -623,11 +728,194 @@ describe('NextcloudOAuthProvider', () => {
     });
 
     it('refreshes when Nextcloud cannot tell (unknown)', async () => {
-      const p = new NextcloudOAuthProvider(undefined, {
-        checkUser: vi.fn().mockResolvedValue('unknown'),
+      const tokens = await login();
+      flow.checkCredential.mockResolvedValue({ state: 'unknown' });
+      await expect(
+        provider.exchangeRefreshToken(CLIENT, tokens.refresh_token!)
+      ).resolves.toBeDefined();
+    });
+
+    it('revoking the grant deletes its app password in Nextcloud (RFC 7009 §2.1)', async () => {
+      const tokens = await login();
+      await provider.revokeToken(CLIENT, { token: tokens.refresh_token! });
+      await vi.waitFor(() =>
+        expect(flow.deleteAppPassword).toHaveBeenCalledWith('alice', 'app-password-1')
+      );
+    });
+  });
+
+  // ---- credentialFor ----
+
+  describe('credentialFor', () => {
+    async function login() {
+      const code = await provider.issueAuthCode({
+        credential: CRED,
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: [],
+        redirectUri: 'https://r.com',
+        userId: 'alice',
       });
-      const tokens = await login(p);
-      await expect(p.exchangeRefreshToken(CLIENT, tokens.refresh_token!)).resolves.toBeDefined();
+      return provider.exchangeAuthorizationCode(CLIENT, code);
+    }
+
+    it("returns the grant's app password for its access token", async () => {
+      const { access_token } = await login();
+      const auth = await provider.verifyAccessToken(access_token);
+      await expect(provider.credentialFor(auth)).resolves.toMatchObject({
+        userId: 'alice',
+        ...CRED,
+      });
+    });
+
+    it('survives a restart: the credential is read back from the encrypted store', async () => {
+      const { access_token } = await login();
+      const restarted = new NextcloudOAuthProvider();
+      const auth = await restarted.verifyAccessToken(access_token);
+      await expect(restarted.credentialFor(auth)).resolves.toMatchObject(CRED);
+    });
+
+    it('while Nextcloud cannot be asked, requests share one check and back off', async () => {
+      const { access_token } = await login();
+      const auth = await provider.verifyAccessToken(access_token);
+      vi.useFakeTimers({ now: Date.now() + 6 * 60 * 1000, toFake: ['Date'] });
+      try {
+        flow.checkCredential.mockReset().mockResolvedValue({ state: 'unknown' });
+        await Promise.all([provider.credentialFor(auth), provider.credentialFor(auth)]);
+        await provider.credentialFor(auth);
+        expect(flow.checkCredential).toHaveBeenCalledTimes(1);
+        vi.setSystemTime(Date.now() + 31 * 1000);
+        await expect(provider.credentialFor(auth)).resolves.toMatchObject(CRED);
+        expect(flow.checkCredential).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('a token without user or grant has no credential', async () => {
+      await expect(
+        provider.credentialFor({ token: 't', clientId: 'c', scopes: [], extra: {} })
+      ).resolves.toBeUndefined();
+    });
+
+    it('internal tokens carry the service marker, not a user', async () => {
+      process.env.MCP_INTERNAL_TOKEN = 'i'.repeat(40);
+      const auth = await provider.verifyAccessToken('i'.repeat(40));
+      expect(auth.extra).toEqual({ service: true });
+    });
+  });
+
+  // ---- the key service being unavailable ----
+
+  describe('when the key service is unavailable', () => {
+    /** A cipher whose backend can be switched off, as OpenBao going down. */
+    class FlakyCipher implements CredentialCipher {
+      readonly name = 'flaky';
+      down = false;
+      private readonly inner = new LocalCipher(randomBytes(64));
+      encrypt(p: Buffer, aad: Buffer) {
+        if (this.down) return Promise.reject(new CredentialBackendUnavailableError('down'));
+        return this.inner.encrypt(p, aad);
+      }
+      decrypt(s: string, aad: Buffer) {
+        if (this.down) return Promise.reject(new CredentialBackendUnavailableError('down'));
+        return this.inner.decrypt(s, aad);
+      }
+    }
+    let cipher: FlakyCipher;
+    let p: NextcloudOAuthProvider;
+    beforeEach(() => {
+      cipher = new FlakyCipher();
+      p = new NextcloudOAuthProvider(undefined, {
+        credentials: new CredentialStore(cipher, join(stateDir, 'credentials.json')),
+      });
+    });
+    async function login() {
+      const code = await p.issueAuthCode({
+        credential: CRED,
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: [],
+        redirectUri: 'https://r.com',
+        userId: 'alice',
+      });
+      return p.exchangeAuthorizationCode(CLIENT, code);
+    }
+
+    it('a request fails, but the grant survives the outage', async () => {
+      const { access_token } = await login();
+      const auth = await p.verifyAccessToken(access_token);
+      cipher.down = true;
+      await expect(p.credentialFor(auth)).rejects.toBeInstanceOf(CredentialBackendUnavailableError);
+      cipher.down = false;
+      await expect(p.credentialFor(auth)).resolves.toMatchObject(CRED);
+      expect(flow.deleteAppPassword).not.toHaveBeenCalled();
+    });
+
+    it('refresh still works during the outage', async () => {
+      const { refresh_token } = await login();
+      cipher.down = true;
+      await expect(p.exchangeRefreshToken(CLIENT, refresh_token!)).resolves.toBeDefined();
+    });
+
+    it('a grant revoked during the outage keeps its sealed value until it can be deleted', async () => {
+      const { refresh_token } = await login();
+      cipher.down = true;
+      await p.revokeToken(CLIENT, { token: refresh_token! });
+      await new Promise((r) => setTimeout(r, 10));
+      expect(flow.deleteAppPassword).not.toHaveBeenCalled();
+      cipher.down = false;
+      await p.sweep();
+      await vi.waitFor(() =>
+        expect(flow.deleteAppPassword).toHaveBeenCalledWith('alice', 'app-password-1')
+      );
+    });
+
+    it('a grant arriving during the outage is kept until it can be sealed', async () => {
+      const binding = 'b'.repeat(43);
+      const res = mockRes();
+      await p.authorize(
+        CLIENT,
+        { codeChallenge: 'ch', redirectUri: 'https://r.com', scopes: [], browserBinding: binding },
+        res as any
+      );
+      const flowId = (res.send.mock.calls[0][0] as string).match(/url=\/auth\/flow\/([\w-]+)"/)![1];
+      flow.pollLoginFlow.mockResolvedValueOnce(CRED).mockResolvedValue(null);
+      cipher.down = true;
+      const first = mockRes();
+      await p.continueFlow(flowId, binding, first);
+      expect(first.redirect).not.toHaveBeenCalled();
+      expect(flow.deleteAppPassword).not.toHaveBeenCalled();
+      cipher.down = false;
+      await new Promise((r) => setTimeout(r, 1100));
+      const second = mockRes();
+      await p.continueFlow(flowId, binding, second);
+      expect(flow.pollLoginFlow).toHaveBeenCalledTimes(1);
+      expect(second.redirect).toHaveBeenCalled();
+    });
+  });
+
+  // ---- a restart before the code is exchanged ----
+
+  describe('a restart before the code is exchanged', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it("still deletes the unredeemed code's app password in Nextcloud", async () => {
+      await provider.issueAuthCode({
+        credential: CRED,
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: [],
+        redirectUri: 'https://r.com',
+        userId: 'alice',
+      });
+      // The code itself lived in memory and is gone.
+      const restarted = new NextcloudOAuthProvider();
+      vi.useFakeTimers({ now: Date.now() + 6 * 60 * 1000, toFake: ['Date'] });
+      await restarted.sweep();
+      await vi.waitFor(() =>
+        expect(flow.deleteAppPassword).toHaveBeenCalledWith('alice', 'app-password-1')
+      );
     });
   });
 });

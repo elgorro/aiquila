@@ -178,6 +178,7 @@ describe('CodeStore', () => {
       redirectUri: 'https://example.com/callback',
       userId: 'alice',
       state: 'state-xyz',
+      grantId: 'g1',
     });
     expect(typeof code).toBe('string');
     const entry = store.get(code);
@@ -199,6 +200,7 @@ describe('CodeStore', () => {
       scopes: [],
       redirectUri: 'https://r.com',
       userId: 'u',
+      grantId: 'g1',
     });
     store.delete(code);
     expect(store.get(code)).toBeUndefined();
@@ -211,6 +213,7 @@ describe('CodeStore', () => {
       scopes: [],
       redirectUri: 'https://r.com',
       userId: 'u',
+      grantId: 'g1',
     };
     const a = store.store(params);
     const b = store.store(params);

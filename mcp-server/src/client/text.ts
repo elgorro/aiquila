@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { getNextcloudConfig } from '../tools/types.js';
+import { basicAuth, getNextcloudConfig } from '../tools/types.js';
 import { logger } from '../logger.js';
 import { ApiError } from './aiquila.js';
 
@@ -52,7 +52,7 @@ export async function fetchTextAPI<T = unknown>(
   } = {}
 ): Promise<T> {
   const config = getNextcloudConfig();
-  const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
+  const auth = basicAuth(config);
 
   let url = `${config.url}/ocs/v2.php/apps/text${endpoint}`;
   if (options.queryParams) {

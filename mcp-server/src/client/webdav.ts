@@ -1,38 +1,32 @@
 // SPDX-License-Identifier: MIT
 
 import { createClient, WebDAVClient } from 'webdav';
+import { currentIdentity } from '../nc-context.js';
+import { getNextcloudConfig } from '../tools/types.js';
 
-const NEXTCLOUD_URL = process.env.NEXTCLOUD_URL;
-const NEXTCLOUD_USER = process.env.NEXTCLOUD_USER;
-const NEXTCLOUD_PASSWORD = process.env.NEXTCLOUD_PASSWORD;
-
-let webdavClient: WebDAVClient | null = null;
+// The environment account's client, reused across requests (stdio, the
+// internal token). A signed-in user's client is made per call instead, so their
+// app password is not kept in memory beyond the request that needs it.
+let envClient: WebDAVClient | null = null;
 
 /**
- * Get or create a WebDAV client instance.
- * This singleton pattern ensures we reuse the same client connection.
+ * Get the WebDAV client for the account of the request being served.
  */
 export function getWebDAVClient(): WebDAVClient {
-  if (!NEXTCLOUD_URL || !NEXTCLOUD_USER || !NEXTCLOUD_PASSWORD) {
-    throw new Error(
-      'NEXTCLOUD_URL, NEXTCLOUD_USER, and NEXTCLOUD_PASSWORD environment variables must be set'
-    );
-  }
-
-  if (!webdavClient) {
-    const webdavUrl = `${NEXTCLOUD_URL}/remote.php/dav/files/${NEXTCLOUD_USER}`;
-    webdavClient = createClient(webdavUrl, {
-      username: NEXTCLOUD_USER,
-      password: NEXTCLOUD_PASSWORD,
+  const config = getNextcloudConfig();
+  const create = () =>
+    createClient(`${config.url}/remote.php/dav/files/${config.user}`, {
+      username: config.loginName,
+      password: config.password,
     });
-  }
-
-  return webdavClient;
+  if (currentIdentity()?.kind === 'user') return create();
+  envClient ??= create();
+  return envClient;
 }
 
 /**
  * Reset the WebDAV client (useful for testing or reconnection scenarios)
  */
 export function resetWebDAVClient(): void {
-  webdavClient = null;
+  envClient = null;
 }

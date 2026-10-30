@@ -2,6 +2,7 @@
 
 import { fetchOCS } from './client/ocs.js';
 import { logger } from './logger.js';
+import { currentIdentity } from './nc-context.js';
 import type { Tool } from './tools/types.js';
 
 // System tools (always available)
@@ -166,7 +167,30 @@ function parseMcpTools(): { categories: Set<string>; toolNames: Set<string> } | 
 }
 
 /**
- * Query Nextcloud for enabled apps.
+ * Apps that show a regular user neither a capability nor a navigation entry,
+ * so their presence cannot be detected without admin rights. For non-admins
+ * their tools stay listed, and a call reports the app missing if it is.
+ */
+const UNDETECTABLE_FOR_USERS: ReadonlySet<string> = new Set([
+  'text',
+  'translate',
+  'text_translate',
+  'registration',
+  'terms_of_service',
+  'assistant',
+  'socialsharing_email',
+  'socialsharing_twitter',
+  'socialsharing_facebook',
+  'socialsharing_telegram',
+  'socialsharing_whatsapp',
+  'socialsharing_bluesky',
+  'socialsharing_diaspora',
+]);
+
+/**
+ * The apps enabled for the account of the request being served. The app list
+ * (/cloud/apps) needs admin rights; for anyone else, the apps that publish a
+ * capability or a navigation entry to them, plus UNDETECTABLE_FOR_USERS.
  * Returns null on failure (triggers fallback to all tools).
  */
 async function detectEnabledApps(): Promise<Set<string> | null> {
@@ -175,15 +199,28 @@ async function detectEnabledApps(): Promise<Set<string> | null> {
       queryParams: { filter: 'enabled' },
     });
     const apps = new Set(result.ocs.data.apps);
-    logger.info({ count: apps.size }, '[startup] Detected enabled Nextcloud apps');
+    logger.info({ count: apps.size }, '[tools] Detected enabled Nextcloud apps');
+    return apps;
+  } catch {
+    // Not an admin: fall through to what the account itself can see.
+  }
+  try {
+    const [caps, nav] = await Promise.all([
+      fetchOCS<{ capabilities: Record<string, unknown> }>('/ocs/v2.php/cloud/capabilities'),
+      fetchOCS<{ id: string }[]>('/ocs/v2.php/core/navigation/apps'),
+    ]);
+    const apps = new Set([
+      ...Object.keys(caps.ocs.data.capabilities ?? {}),
+      ...nav.ocs.data.map((a) => a.id),
+      ...UNDETECTABLE_FOR_USERS,
+    ]);
+    logger.info({ count: apps.size }, '[tools] Detected apps visible to the account');
     return apps;
   } catch (err) {
     logger.warn(
       { err: err instanceof Error ? err.message : String(err) },
-      '[startup] Could not detect enabled apps — registering ALL tools as a fallback. ' +
-        '/ocs/v2.php/cloud/apps requires admin credentials; a non-admin NEXTCLOUD_USER always ' +
-        'lands here. Set MCP_TOOLS to an explicit category/tool whitelist, or use an admin app ' +
-        'password, to register only the tools you need.'
+      '[tools] Could not detect enabled apps — registering ALL tools as a fallback. ' +
+        'Set MCP_TOOLS to an explicit category/tool whitelist to register only the tools you need.'
     );
     return null;
   }
@@ -224,8 +261,12 @@ function filterByEnabledApps(enabledApps: Set<string> | null): ToolArray[] {
   ).map((e) => e.tools);
 }
 
-// Cached result — cleared only on process restart
-let cachedToolSets: ToolArray[] | null = null;
+// Cached results, keyed by the account they were detected for. The
+// environment account's never expires; a signed-in user's is refreshed after
+// USER_CACHE_TTL_MS, so an app enabled later shows up without a restart.
+const USER_CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_CACHED_USERS = 500;
+const cachedToolSets = new Map<string, { toolSets: ToolArray[]; expiresAt: number }>();
 
 /**
  * Tool count above which we warn. Not a protocol limit — no MCP client documents one —
@@ -240,38 +281,74 @@ function countTools(toolSets: ToolArray[]): number {
 
 /**
  * Returns filtered tool arrays based on MCP_TOOLS env var or auto-detection.
- * Result is cached after first call.
+ *
+ * Detection runs as the account of the request being served: under OAuth,
+ * per signed-in user (cached per user); a request without a token gets every
+ * tool, since nothing can be asked of Nextcloud on its behalf.
  */
 export async function getFilteredToolSets(): Promise<ToolArray[]> {
-  if (cachedToolSets) return cachedToolSets;
-
   const mcpToolsFilter = parseMcpTools();
-  let source: string;
+  const identity = currentIdentity();
+  const cacheKey = mcpToolsFilter
+    ? 'mcp_tools'
+    : identity?.kind === 'user'
+      ? `user:${identity.user.userId}`
+      : identity?.kind === 'anonymous'
+        ? 'anonymous'
+        : 'env';
+  const cached = cachedToolSets.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    // Re-inserted, so the map's insertion order is least recently used first.
+    cachedToolSets.delete(cacheKey);
+    cachedToolSets.set(cacheKey, cached);
+    return cached.toolSets;
+  }
 
+  let toolSets: ToolArray[];
+  let source: string;
   if (mcpToolsFilter) {
-    cachedToolSets = filterByExplicitList(mcpToolsFilter);
+    toolSets = filterByExplicitList(mcpToolsFilter);
     source = 'MCP_TOOLS';
+  } else if (identity?.kind === 'anonymous') {
+    toolSets = filterByEnabledApps(null);
+    source = 'all (not signed in)';
   } else {
     const enabledApps = await detectEnabledApps();
-    cachedToolSets = filterByEnabledApps(enabledApps);
+    toolSets = filterByEnabledApps(enabledApps);
     source = enabledApps ? 'app-detection' : 'all (fallback)';
   }
 
-  const toolCount = countTools(cachedToolSets);
-  logger.info({ tools: toolCount, source }, '[startup] Tool filtering applied');
+  const isUser = cacheKey.startsWith('user:');
+  cachedToolSets.delete(cacheKey);
+  if (isUser && cachedToolSets.size >= MAX_CACHED_USERS) {
+    const now = Date.now();
+    for (const [k, v] of cachedToolSets) if (v.expiresAt <= now) cachedToolSets.delete(k);
+    // Still full: drop the least recently used user's entry.
+    if (cachedToolSets.size >= MAX_CACHED_USERS) {
+      const oldest = [...cachedToolSets.keys()].find((k) => k.startsWith('user:'));
+      if (oldest) cachedToolSets.delete(oldest);
+    }
+  }
+  cachedToolSets.set(cacheKey, {
+    toolSets,
+    expiresAt: isUser ? Date.now() + USER_CACHE_TTL_MS : Number.POSITIVE_INFINITY,
+  });
 
-  if (toolCount > HIGH_TOOL_COUNT) {
+  const toolCount = countTools(toolSets);
+  logger.info({ tools: toolCount, source }, '[tools] Tool filtering applied');
+
+  if (toolCount > HIGH_TOOL_COUNT && source !== 'all (not signed in)') {
     logger.warn(
       { tools: toolCount, threshold: HIGH_TOOL_COUNT, source },
-      `[startup] Registering ${toolCount} tools. Set MCP_TOOLS to a category/tool whitelist to ` +
+      `[tools] Registering ${toolCount} tools. Set MCP_TOOLS to a category/tool whitelist to ` +
         'narrow this down — some clients degrade on very large tool lists.'
     );
   }
 
-  return cachedToolSets;
+  return toolSets;
 }
 
 /** Reset cached state — for testing only. */
 export function _resetCache(): void {
-  cachedToolSets = null;
+  cachedToolSets.clear();
 }

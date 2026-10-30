@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Stylesheet for the OAuth login page.
+ * Stylesheet for the OAuth sign-in page.
  *
  * Served as a standalone document at LOGIN_STYLESHEET_PATH rather than inlined
- * in a <style> block, so the login page's CSP can drop 'unsafe-inline' entirely.
+ * in a <style> block, so the sign-in page's CSP can drop 'unsafe-inline' entirely.
  * Keep this free of any interpolated/user-supplied value — it is served verbatim.
  */
 export const LOGIN_STYLESHEET = `body { font-family: sans-serif; background: #f4f6f8; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
@@ -14,12 +14,11 @@ h1 { font-size: 1.3rem; margin: 0 0 .25rem; }
 .consent-banner strong { color: #0082c9; }
 .consent-banner .detail { display: block; margin-top: .25rem; }
 .consent-banner code { background: #d6ecf9; border-radius: 3px; padding: 0 .3em; font-size: .85em; word-break: break-all; }
-label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .25rem; }
-input[type=text], input[type=password] { width: 100%; box-sizing: border-box; padding: .55rem .75rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; margin-bottom: 1rem; }
-button { width: 100%; padding: .65rem; background: #0082c9; color: #fff; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
-button:hover { background: #006fa3; }
+p { font-size: .9rem; line-height: 1.5; color: #333; }
+.button { display: block; box-sizing: border-box; width: 100%; padding: .65rem; background: #0082c9; color: #fff; border-radius: 4px; font-size: 1rem; text-align: center; text-decoration: none; }
+.button:hover { background: #006fa3; }
 .error { background: #fdecea; color: #c0392b; border-radius: 4px; padding: .6rem .9rem; margin-bottom: 1rem; font-size: .9rem; }
 `;
 
-/** Public path the login page links its stylesheet from. */
+/** Public path the sign-in page links its stylesheet from. */
 export const LOGIN_STYLESHEET_PATH = '/auth/login.css';

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 
-// The authorization endpoint and the login form behind it: RFC 6749 §3.1 and
-// §4.1, PKCE (RFC 7636), the iss response parameter (RFC 9207), native-app
-// redirects (RFC 8252), and the OAuth 2.1 profile (draft-ietf-oauth-v2-1-16).
+// The authorization endpoint and the Nextcloud sign-in behind it: RFC 6749
+// §3.1 and §4.1, PKCE (RFC 7636), the iss response parameter (RFC 9207),
+// native-app redirects (RFC 8252), and the OAuth 2.1 profile
+// (draft-ietf-oauth-v2-1-16). The user signs in through Nextcloud Login Flow v2.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
@@ -10,11 +11,10 @@ import {
   register,
   pkce,
   form,
-  hiddenFields,
   cookieHeader,
+  flowPage,
   authorizeAndLogin,
   REDIRECT_URI,
-  NC_PASSWORD,
   type Stack,
 } from './harness.js';
 
@@ -218,14 +218,16 @@ describe('RFC 6749 §4.1.2 — authorization response', () => {
     expect(location.searchParams.get('code')).toBeTruthy();
   });
 
-  it('wrong credentials issue no code', async () => {
-    const res = await authorizeAndLogin(s, {
-      clientId,
-      challenge: pkce().challenge,
-      password: 'wrong',
+  it('issues no code until the user has granted access on Nextcloud', async () => {
+    const page = await fetch(authorizeUrl(validParams()));
+    const { flowId } = flowPage(await page.text());
+    const res = await fetch(`${s.base}/auth/flow/${flowId}`, {
+      redirect: 'manual',
+      headers: { cookie: cookieHeader(page) },
     });
     expect(res.status).toBe(200);
     expect(res.headers.get('location')).toBeNull();
+    expect(await res.text()).toContain('http-equiv="refresh"');
   });
 });
 
@@ -249,20 +251,20 @@ describe('RFC 8252 §7.3 — loopback redirect URIs', () => {
   });
 });
 
-describe('the login form', () => {
-  async function loginPage() {
+describe('the sign-in page', () => {
+  async function signInPage() {
     const res = await fetch(authorizeUrl(validParams()));
     return { res, html: await res.text() };
   }
 
   it('RFC 6749 §10.13: forbids framing (clickjacking)', async () => {
-    const { res } = await loginPage();
+    const { res } = await signInPage();
     expect(res.headers.get('x-frame-options')).toBe('DENY');
     expect(res.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
   });
 
   it('is not cached and leaks no referrer', async () => {
-    const { res } = await loginPage();
+    const { res } = await signInPage();
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(res.headers.get('referrer-policy')).toBe('no-referrer');
   });
@@ -273,45 +275,29 @@ describe('the login form', () => {
     expect(html).not.toContain('<script>alert(1)</script>');
   });
 
-  it('a POST whose hidden fields were changed is refused (no code issued)', async () => {
-    const { res, html } = await loginPage();
-    const fields = hiddenFields(html);
-    for (const [k, v] of Object.entries({
-      code_challenge: pkce().challenge,
-      redirect_uri: 'http://127.0.0.1:9999/other',
-      scope: 'mcp:tools mcp:admin',
-      state: 'forged',
-    })) {
-      const login = await fetch(
-        `${s.base}/auth/login`,
-        form(
-          { ...fields, [k]: v, username: 'alice', password: NC_PASSWORD },
-          { cookie: cookieHeader(res) }
-        )
-      );
-      expect(login.status, k).toBe(400);
-      expect(login.headers.get('location'), k).toBeNull();
-    }
+  it('asks for no password: the user signs in on Nextcloud', async () => {
+    const { html } = await signInPage();
+    expect(html).not.toMatch(/type="password"/);
+    expect(flowPage(html).loginUrl).toMatch(new RegExp(`^${s.nc.url}/login/v2/flow/`));
   });
 
-  it('a POST that never went through /authorize is refused', async () => {
-    const login = await fetch(
-      `${s.base}/auth/login`,
-      form({
-        client_id: clientId,
-        redirect_uri: REDIRECT_URI,
-        code_challenge: pkce().challenge,
-        username: 'alice',
-        password: NC_PASSWORD,
-      })
-    );
-    expect(login.status).toBe(400);
-    expect(login.headers.get('location')).toBeNull();
+  it('names the client as the device Nextcloud shows on its grant page', async () => {
+    const { html } = await signInPage();
+    const token = new URL(flowPage(html).loginUrl).pathname.split('/').pop()!;
+    expect(s.nc.flows.get(token)?.deviceName).toBe('AIquila MCP (RFC test client)');
+  });
+
+  it('an unknown or malformed flow id is refused', async () => {
+    for (const id of ['x'.repeat(43), 'not-a-flow']) {
+      const res = await fetch(`${s.base}/auth/flow/${id}`, { redirect: 'manual' });
+      expect(res.status, id).toBe(400);
+      expect(res.headers.get('location'), id).toBeNull();
+    }
   });
 });
 
 describe('RFC 6749 §10.12 — login CSRF', () => {
-  // Its own stack: the file's logins are near the per-IP limit already.
+  // Its own stack: the file's sign-ins are near the per-IP limit already.
   let outer: Stack;
   let outerClient: string;
   beforeAll(async () => {
@@ -326,7 +312,7 @@ describe('RFC 6749 §10.12 — login CSRF', () => {
     clientId = outerClient;
   });
 
-  async function formAndCookie() {
+  async function startSignIn(cookie?: string) {
     const q = new URLSearchParams({
       response_type: 'code',
       client_id: clientId,
@@ -334,12 +320,12 @@ describe('RFC 6749 §10.12 — login CSRF', () => {
       code_challenge: pkce().challenge,
       code_challenge_method: 'S256',
     });
-    const res = await fetch(`${s.base}/authorize?${q}`);
-    return { res, fields: hiddenFields(await res.text()) };
+    const res = await fetch(`${s.base}/authorize?${q}`, cookie ? { headers: { cookie } } : {});
+    return { res, ...flowPage(await res.text()) };
   }
 
   it('/authorize binds the browser with an HttpOnly, SameSite cookie', async () => {
-    const { res } = await formAndCookie();
+    const { res } = await startSignIn();
     const cookie = res.headers.getSetCookie().find((c) => c.startsWith('aiquila-login='));
     expect(cookie).toBeDefined();
     expect(cookie).toContain('HttpOnly');
@@ -347,41 +333,43 @@ describe('RFC 6749 §10.12 — login CSRF', () => {
     expect(cookie).toContain('Path=/');
   });
 
-  it("an attacker's valid form posted from the victim's browser issues no code", async () => {
-    // The attacker fetches a form for themselves; the victim's browser has
-    // no binding cookie, or its own.
-    const { fields } = await formAndCookie();
-    const { res: victim } = await formAndCookie();
-    for (const cookie of [undefined, cookieHeader(victim)]) {
-      const login = await fetch(
-        `${s.base}/auth/login`,
-        form({ ...fields, username: 'alice', password: NC_PASSWORD }, cookie ? { cookie } : {})
-      );
-      expect(login.status).toBe(400);
-      expect(login.headers.get('location')).toBeNull();
+  it("an attacker's granted flow completed in the victim's browser issues no code", async () => {
+    // The attacker starts a sign-in and grants it as themselves; the victim's
+    // browser has no binding cookie, or its own.
+    const attacker = await startSignIn();
+    s.nc.grant(attacker.loginUrl, 'bob');
+    const victim = await startSignIn();
+    for (const cookie of [undefined, cookieHeader(victim.res)]) {
+      const res = await fetch(`${s.base}/auth/flow/${attacker.flowId}`, {
+        redirect: 'manual',
+        ...(cookie ? { headers: { cookie } } : {}),
+      });
+      expect(res.status).toBe(400);
+      expect(res.headers.get('location')).toBeNull();
     }
   });
 
   it('the binding is reused, so parallel sign-ins in one browser all work', async () => {
-    const first = await formAndCookie();
+    const first = await startSignIn();
     const cookie = cookieHeader(first.res);
-    const q = new URLSearchParams({
-      response_type: 'code',
-      client_id: clientId,
-      redirect_uri: REDIRECT_URI,
-      code_challenge: pkce().challenge,
-      code_challenge_method: 'S256',
+    const second = await startSignIn(cookie);
+    expect(cookieHeader(second.res)).toBe(cookie);
+    s.nc.grant(first.loginUrl);
+    const res = await fetch(`${s.base}/auth/flow/${first.flowId}`, {
+      redirect: 'manual',
+      headers: { cookie: cookieHeader(second.res) },
     });
-    const second = await fetch(`${s.base}/authorize?${q}`, { headers: { cookie } });
-    expect(cookieHeader(second)).toBe(cookie);
-    const login = await fetch(
-      `${s.base}/auth/login`,
-      form(
-        { ...first.fields, username: 'alice', password: NC_PASSWORD },
-        { cookie: cookieHeader(second) }
-      )
-    );
-    expect(login.status).toBe(302);
+    expect(res.status).toBe(302);
+  });
+
+  it('a flow completes once: its reload after the redirect issues no second code', async () => {
+    const { res, loginUrl, flowId } = await startSignIn();
+    s.nc.grant(loginUrl);
+    const opts = { redirect: 'manual' as const, headers: { cookie: cookieHeader(res) } };
+    expect((await fetch(`${s.base}/auth/flow/${flowId}`, opts)).status).toBe(302);
+    const again = await fetch(`${s.base}/auth/flow/${flowId}`, opts);
+    expect(again.status).toBe(400);
+    expect(again.headers.get('location')).toBeNull();
   });
 });
 

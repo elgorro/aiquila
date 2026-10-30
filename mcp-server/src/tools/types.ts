@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { z } from 'zod';
+import { currentIdentity, isIdentityRequired, SignInRequiredError } from '../nc-context.js';
 
 /**
  * Shared type definitions for MCP tools
@@ -68,33 +69,71 @@ export const FileContentSchema = z.object({
 });
 
 /**
- * Environment variable configuration
+ * The Nextcloud account a request acts as.
  */
 export interface NextcloudConfig {
   url: string;
+  /** The uid, for DAV paths such as /remote.php/dav/files/<user>. */
   user: string;
+  /** The name to authenticate with; can differ from the uid. */
+  loginName: string;
   password: string;
 }
 
-/**
- * Get Nextcloud configuration from environment variables
- */
-export function getNextcloudConfig(): NextcloudConfig {
+/** NEXTCLOUD_URL, normalized: no trailing slash, https:// if no scheme is given. */
+export function nextcloudBaseUrl(): string {
   const url = process.env.NEXTCLOUD_URL;
-  const user = process.env.NEXTCLOUD_USER;
-  const password = process.env.NEXTCLOUD_PASSWORD;
-
-  if (!url || !user || !password) {
-    throw new Error(
-      'NEXTCLOUD_URL, NEXTCLOUD_USER, and NEXTCLOUD_PASSWORD environment variables must be set'
-    );
-  }
-
+  if (!url) throw new Error('NEXTCLOUD_URL environment variable must be set');
   // Strip trailing slashes to prevent double-slash URLs in CalDAV paths
   let normalizedUrl = url.replace(/\/+$/, '');
   // Prepend https:// if no scheme is present (bare domain)
   if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
     normalizedUrl = 'https://' + normalizedUrl;
   }
-  return { url: normalizedUrl, user, password };
+  return normalizedUrl;
+}
+
+/**
+ * The account from NEXTCLOUD_USER / NEXTCLOUD_PASSWORD.
+ *
+ * @deprecated under OAuth: there it serves only MCP_INTERNAL_TOKEN, and that
+ * service identity is being replaced. stdio and unauthenticated HTTP keep it.
+ */
+function serviceAccountConfig(): NextcloudConfig {
+  const user = process.env.NEXTCLOUD_USER;
+  const password = process.env.NEXTCLOUD_PASSWORD;
+  if (!process.env.NEXTCLOUD_URL || !user || !password) {
+    throw new Error(
+      'NEXTCLOUD_URL, NEXTCLOUD_USER, and NEXTCLOUD_PASSWORD environment variables must be set'
+    );
+  }
+  return { url: nextcloudBaseUrl(), user, loginName: user, password };
+}
+
+/** True when NEXTCLOUD_USER or NEXTCLOUD_PASSWORD is set. */
+export function serviceAccountConfigured(): boolean {
+  return !!(process.env.NEXTCLOUD_USER || process.env.NEXTCLOUD_PASSWORD);
+}
+
+/**
+ * The Nextcloud account of the request being served: the signed-in user's
+ * app password under OAuth, the environment account otherwise. An OAuth
+ * request never falls back to the environment account.
+ */
+export function getNextcloudConfig(): NextcloudConfig {
+  const identity = currentIdentity();
+  if (identity?.kind === 'user') {
+    const { userId, loginName, appPassword } = identity.user;
+    return { url: nextcloudBaseUrl(), user: userId, loginName, password: appPassword };
+  }
+  if (identity?.kind === 'anonymous') throw new SignInRequiredError();
+  if (!identity && isIdentityRequired()) {
+    throw new Error('Nextcloud was called outside a request identity context');
+  }
+  return serviceAccountConfig();
+}
+
+/** The base64 Basic credential for `config`, without the "Basic " prefix. */
+export function basicAuth(config: NextcloudConfig): string {
+  return Buffer.from(`${config.loginName}:${config.password}`).toString('base64');
 }

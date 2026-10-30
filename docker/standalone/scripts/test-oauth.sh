@@ -22,8 +22,14 @@ if [ ! -f "$STANDALONE_DIR/.env" ]; then
 fi
 set -a; source "$STANDALONE_DIR/.env"; set +a
 
-NC_USER="${NEXTCLOUD_USER:?NEXTCLOUD_USER not set in .env}"
-NC_PASS="${NEXTCLOUD_PASSWORD:?NEXTCLOUD_PASSWORD not set in .env}"
+# The Nextcloud account the test signs in with through Login Flow v2: an app
+# password, or the account password (plus TEST_NC_TOTP_SECRET with 2FA).
+NC_USER="${TEST_NC_USER:-${NEXTCLOUD_USER:-}}"
+NC_PASS="${TEST_NC_PASSWORD:-${NEXTCLOUD_PASSWORD:-}}"
+NC_TOTP="${TEST_NC_TOTP_SECRET:-}"
+[ -n "$NC_USER" ] && [ -n "$NC_PASS" ] || { echo "ERROR: set TEST_NC_USER and TEST_NC_PASSWORD in .env" >&2; exit 1; }
+# shellcheck source=nc-login-flow.sh
+source "$SCRIPT_DIR/nc-login-flow.sh"
 
 REDIRECT_URI="https://localhost/callback"  # dummy — we just capture the redirect
 
@@ -83,15 +89,14 @@ echo "$REG_RESP" | python3 -m json.tool
 CLIENT_ID=$(echo "$REG_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['client_id'])")
 echo "client_id: $CLIENT_ID"
 
-# ── Step 4: Login → capture auth code from redirect ───────────────────────────
-sep "Step 4 — POST /auth/login (Nextcloud credentials → auth code)"
-# The login form carries the authorization request back with a MAC, so it has
-# to come from /authorize; its hidden fields are posted back unchanged.
-# /authorize sets a cookie binding the login form to this client; the login
-# POST must send it back, as a browser would.
+# ── Step 4: Sign in on Nextcloud → capture auth code from redirect ───────────
+sep "Step 4 — Nextcloud Login Flow v2 (sign in, grant access → auth code)"
+# /authorize sets a cookie binding the sign-in to this client, and shows a
+# page linking to Nextcloud. The user signs in there and grants access; the
+# page, reloaded with the cookie, redirects with the code.
 COOKIE_JAR=$(mktemp)
 trap 'rm -f "$COOKIE_JAR"' EXIT
-AUTHZ_HTML=$($CURL -c "$COOKIE_JAR" -G "$BASE/authorize" \
+LOCATION=$(mcp_authorize "$BASE" "$COOKIE_JAR" \
   --data-urlencode "response_type=code" \
   --data-urlencode "client_id=$CLIENT_ID" \
   --data-urlencode "redirect_uri=$REDIRECT_URI" \
@@ -99,31 +104,12 @@ AUTHZ_HTML=$($CURL -c "$COOKIE_JAR" -G "$BASE/authorize" \
   --data-urlencode "code_challenge=$CODE_CHALLENGE" \
   --data-urlencode "code_challenge_method=S256" \
   --data-urlencode "resource=$RESOURCE")
-FORM_FIELDS=()
-while IFS= read -r field; do FORM_FIELDS+=(--data-urlencode "$field"); done < <(
-  echo "$AUTHZ_HTML" | python3 -c "
-import sys, re, html
-for name, value in re.findall(r'<input type=\"hidden\" name=\"([^\"]+)\" value=\"([^\"]*)\"', sys.stdin.read()):
-    print(f'{name}={html.unescape(value)}')
-")
-[ ${#FORM_FIELDS[@]} -eq 0 ] && { echo "ERROR: /authorize did not render the login form" >&2; echo "$AUTHZ_HTML" >&2; exit 1; }
-
-LOGIN_HEADERS=$($CURL -D - -o /dev/null --max-redirs 0 \
-  -b "$COOKIE_JAR" -X POST "$BASE/auth/login" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "username=$NC_USER" \
-  --data-urlencode "password=$NC_PASS" \
-  "${FORM_FIELDS[@]}")
-
-LOCATION=$(echo "$LOGIN_HEADERS" | grep -i '^location:' | tr -d '\r' | sed 's/[Ll]ocation: //')
 echo "Redirect location: $LOCATION"
 
 CODE=$(echo "$LOCATION" | grep -o 'code=[^&]*' | cut -d= -f2)
 if [ -z "$CODE" ]; then
   echo ""
-  echo "ERROR: No auth code in redirect — login failed." >&2
-  echo "Full response headers:" >&2
-  echo "$LOGIN_HEADERS" >&2
+  echo "ERROR: No auth code in redirect — sign-in failed." >&2
   exit 1
 fi
 echo "auth code: ${CODE:0:12}..."

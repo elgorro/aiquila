@@ -17,6 +17,7 @@ type Env struct {
 	NextcloudPassword string
 	Domain            string
 	AuthSecret        string
+	CredentialKey     string
 	ClientSecret      string
 	// Pre-filled static values
 	AuthIssuer          string
@@ -51,6 +52,7 @@ type FullEnv struct {
 	NCMCPPassword      string
 	PostgresPassword   string
 	AuthSecret         string
+	CredentialKey      string
 	ClientSecret       string
 	AuthIssuer         string
 	ClientID           string
@@ -67,6 +69,11 @@ func Generate(ncURL, ncUser, ncPassword, domain, acmeEmail string) (*Env, error)
 	authSecret, err := randomHex(32)
 	if err != nil {
 		return nil, fmt.Errorf("generate auth secret: %w", err)
+	}
+	// 512 bits of key material for the credential store (HKDF-SHA-512 → AES-256-GCM).
+	credentialKey, err := randomHex(64)
+	if err != nil {
+		return nil, fmt.Errorf("generate credential key: %w", err)
 	}
 	clientSecret, err := randomHex(32)
 	if err != nil {
@@ -95,6 +102,7 @@ func Generate(ncURL, ncUser, ncPassword, domain, acmeEmail string) (*Env, error)
 		NextcloudPassword:   ncPassword,
 		Domain:              domain,
 		AuthSecret:          authSecret,
+		CredentialKey:       credentialKey,
 		ClientSecret:        clientSecret,
 		AuthIssuer:          "https://" + domain,
 		ClientID:            "",
@@ -113,8 +121,12 @@ func (e *Env) Render() string {
 
 	b.WriteString("# Nextcloud connection\n")
 	b.WriteString(fmt.Sprintf("NEXTCLOUD_URL=%s\n", e.NextcloudURL))
-	b.WriteString(fmt.Sprintf("NEXTCLOUD_USER=%s\n", e.NextcloudUser))
-	b.WriteString(fmt.Sprintf("NEXTCLOUD_PASSWORD=%s\n", e.NextcloudPassword))
+	if e.NextcloudUser != "" || e.NextcloudPassword != "" {
+		b.WriteString("# Deprecated: with OAuth every tool call acts as the signed-in user.\n")
+		b.WriteString("# Only MCP_INTERNAL_TOKEN still uses this account.\n")
+		b.WriteString(fmt.Sprintf("NEXTCLOUD_USER=%s\n", e.NextcloudUser))
+		b.WriteString(fmt.Sprintf("NEXTCLOUD_PASSWORD=%s\n", e.NextcloudPassword))
+	}
 	b.WriteString("\n")
 
 	b.WriteString("# MCP transport\n")
@@ -125,6 +137,8 @@ func (e *Env) Render() string {
 	b.WriteString("# OAuth 2.0\n")
 	b.WriteString("MCP_AUTH_ENABLED=true\n")
 	b.WriteString(fmt.Sprintf("MCP_AUTH_SECRET=%s\n", e.AuthSecret))
+	b.WriteString("# Encrypts the Nextcloud app passwords of signed-in users at rest\n")
+	b.WriteString(fmt.Sprintf("MCP_CREDENTIAL_KEY=%s\n", e.CredentialKey))
 	b.WriteString(fmt.Sprintf("MCP_AUTH_ISSUER=%s\n", e.AuthIssuer))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_ID=%s\n", e.ClientID))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_SECRET=%s\n", e.ClientSecret))
@@ -219,6 +233,11 @@ func GenerateFull(ncDomain, mcpDomain, ncAdminUser, ncAdminPassword, ncMCPUser, 
 	if err != nil {
 		return nil, fmt.Errorf("generate auth secret: %w", err)
 	}
+	// 512 bits of key material for the credential store (HKDF-SHA-512 → AES-256-GCM).
+	credentialKey, err := randomHex(64)
+	if err != nil {
+		return nil, fmt.Errorf("generate credential key: %w", err)
+	}
 	clientSecret, err := randomHex(32)
 	if err != nil {
 		return nil, fmt.Errorf("generate client secret: %w", err)
@@ -248,6 +267,7 @@ func GenerateFull(ncDomain, mcpDomain, ncAdminUser, ncAdminPassword, ncMCPUser, 
 		NCMCPPassword:       ncMCPPassword,
 		PostgresPassword:    postgresPassword,
 		AuthSecret:          authSecret,
+		CredentialKey:       credentialKey,
 		ClientSecret:        clientSecret,
 		AuthIssuer:          "https://" + mcpDomain,
 		ClientID:            "",
@@ -276,7 +296,7 @@ func (e *FullEnv) Render() string {
 	b.WriteString(fmt.Sprintf("NC_ADMIN_PASSWORD=%s\n", e.NCAdminPassword))
 	b.WriteString("\n")
 
-	b.WriteString("# Nextcloud user for MCP (app password)\n")
+	b.WriteString("# Nextcloud user for MCP_INTERNAL_TOKEN (deprecated; OAuth sign-ins act as the signed-in user)\n")
 	b.WriteString(fmt.Sprintf("NC_MCP_USER=%s\n", e.NCMCPUser))
 	b.WriteString(fmt.Sprintf("NC_MCP_PASSWORD=%s\n", e.NCMCPPassword))
 	b.WriteString("\n")
@@ -288,6 +308,8 @@ func (e *FullEnv) Render() string {
 	b.WriteString("# OAuth 2.0\n")
 	b.WriteString("MCP_AUTH_ENABLED=true\n")
 	b.WriteString(fmt.Sprintf("MCP_AUTH_SECRET=%s\n", e.AuthSecret))
+	b.WriteString("# Encrypts the Nextcloud app passwords of signed-in users at rest\n")
+	b.WriteString(fmt.Sprintf("MCP_CREDENTIAL_KEY=%s\n", e.CredentialKey))
 	b.WriteString(fmt.Sprintf("MCP_AUTH_ISSUER=%s\n", e.AuthIssuer))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_ID=%s\n", e.ClientID))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_SECRET=%s\n", e.ClientSecret))
@@ -321,6 +343,25 @@ func (e *FullEnv) Render() string {
 	b.WriteString("LOG_LEVEL=info\n")
 
 	return b.String()
+}
+
+// ExistingCredentialKey returns the MCP_CREDENTIAL_KEY of an existing .env, or
+// "" when it has none or the value is not at least 32 bytes of hex. A rebuild
+// must keep it: the state volume holds app passwords sealed with it, and a new
+// key would leave every one unreadable (and undeletable in Nextcloud).
+func ExistingCredentialKey(envFile string) string {
+	for _, line := range strings.Split(envFile, "\n") {
+		v, ok := strings.CutPrefix(strings.TrimSpace(line), "MCP_CREDENTIAL_KEY=")
+		if !ok {
+			continue
+		}
+		v = strings.Trim(strings.TrimSpace(v), `"'`)
+		if b, err := hex.DecodeString(v); err == nil && len(b) >= 32 {
+			return v
+		}
+		return ""
+	}
+	return ""
 }
 
 func randomHex(n int) (string, error) {

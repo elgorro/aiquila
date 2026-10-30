@@ -64,9 +64,8 @@ export HCLOUD_TOKEN=your_token
 # MCP-only (external Nextcloud):
 aiquila-hetzner create \
   --mcp-domain mcp.example.com \
-  --nc-url https://nextcloud.example.com \
-  --nc-user admin \
-  --nc-password your-app-password
+  --nc-url https://nextcloud.example.com
+# Users sign in with their own Nextcloud account; no service account is needed.
 
 # Nextcloud-only:
 aiquila-hetzner create \

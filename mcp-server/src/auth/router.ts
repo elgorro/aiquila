@@ -300,7 +300,7 @@ function authorizationHandler(options: AuthRouterOptions) {
         throw new OAuthError(OAuthErrorCode.InvalidRequest, 'code_challenge is malformed');
       }
       checkResource(p.resource);
-      // Bind the login form to this browser (see LoginFormRequest.browserBinding).
+      // Bind the sign-in to this browser (see AuthorizationParams.browserBinding).
       const browserBinding = readBrowserBinding(req) ?? newBrowserBinding();
       res.append('Set-Cookie', browserBindingCookie(browserBinding));
       await provider.authorize(
@@ -311,6 +311,7 @@ function authorizationHandler(options: AuthRouterOptions) {
           state,
           scopes: p.scope ? p.scope.split(' ').filter(Boolean) : [],
           browserBinding,
+          clientAddress: req.ip,
         },
         res
       );
@@ -434,8 +435,8 @@ function revocationHandler(provider: NextcloudOAuthProvider) {
 
 /**
  * The authorization server's routes. Mount at the application root. Rate
- * limits per client IP: /authorize 100 per 15 min, /token 50 per 15 min,
- * /register 20 per hour, /revoke 50 per 15 min.
+ * limits per client IP: /authorize 100 per 15 min, /auth/flow 600 per 15 min,
+ * /token 50 per 15 min, /register 20 per hour, /revoke 50 per 15 min.
  */
 export function authRouter(options: AuthRouterOptions): express.Router {
   const { provider, registrationToken } = options;
@@ -460,6 +461,19 @@ export function authRouter(options: AuthRouterOptions): express.Router {
     form,
     limiter(minutes(15), 100, 'authorization'),
     authorizationHandler(options)
+  );
+
+  // The sign-in page reloads itself here every FLOW_PAGE_REFRESH_SECS while the
+  // user signs in on Nextcloud (up to 20 minutes): about 300 reloads per tab
+  // per window, and several people may sign in from behind one address. The
+  // provider polls Nextcloud at most once per second per flow whatever the rate.
+  router.get(
+    '/auth/flow/:id',
+    limiter(minutes(15), 3000, 'sign-in'),
+    async (req: any, res: any) => {
+      res.setHeader('Cache-Control', 'no-store');
+      await provider.continueFlow(String(req.params.id), readBrowserBinding(req), res);
+    }
   );
 
   router.use(

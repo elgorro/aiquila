@@ -12,8 +12,6 @@ They are saved to `~/.config/aiquila-hetzner/config.json` (mode 0600).
 aiquila-hetzner profile add --name myprofile \
   --token hcloud_... \
   --nc-url https://nc.example.com \
-  --nc-user admin \
-  --nc-password secret \
   --acme-email me@example.com
 
 # Use it once
@@ -59,8 +57,8 @@ aiquila-hetzner rebuild --config hetzner/examples/deploy-mcp.yaml
 | `domain` | string | `--mcp-domain` | FQDN for the MCP server |
 | `nc_domain` | string | `--nc-domain` | FQDN for Nextcloud (nextcloud/full stacks) |
 | `nc_url` | string | `--nc-url` | External NC URL (mcp stack) |
-| `nc_user` | string | `--nc-user` | External NC username (mcp stack) |
-| `nc_password` | string | `--nc-password` | External NC app password (mcp stack) |
+| `nc_user` | string | `--nc-user` | Deprecated: service account for `MCP_INTERNAL_TOKEN` (mcp stack) |
+| `nc_password` | string | `--nc-password` | Deprecated: its app password (mcp stack) |
 | `nc_admin_user` | string | `--nc-admin-user` | NC admin username (nextcloud/full; default: `admin`) |
 | `nc_admin_password` | string | `--nc-admin-password` | NC admin password (nextcloud/full) |
 | `nc_app_version` | string | `--nc-app-version` | AIquila app version (nextcloud/full; default: `latest`) |
@@ -102,8 +100,6 @@ The CLI resolves each value in this order (first non-empty wins):
 ```bash
 export HCLOUD_TOKEN=your_hcloud_token
 export NEXTCLOUD_URL=https://nextcloud.example.com
-export NEXTCLOUD_USER=admin
-export NEXTCLOUD_PASSWORD=your-app-password
 ```
 
 For persistence across shells, add these lines to `~/.bashrc` or `~/.zshrc`.
@@ -120,8 +116,6 @@ aiquila-hetzner profile add \
   --name my-setup \
   --token $HCLOUD_TOKEN \
   --nc-url https://nextcloud.example.com \
-  --nc-user admin \
-  --nc-password your-app-password \
   --acme-email you@example.com
 
 # Set it as the active default
@@ -147,6 +141,6 @@ directly.
 |----------|---------|-------|
 | `HCLOUD_TOKEN` | All commands (incl. DNS) | Hetzner Cloud API token |
 | `NEXTCLOUD_URL` | `create`, `rebuild` (MCP/full stacks) | Falls back to active profile |
-| `NEXTCLOUD_USER` | `create`, `rebuild` (MCP/full stacks) | Falls back to active profile |
-| `NEXTCLOUD_PASSWORD` | `create`, `rebuild` (MCP/full stacks) | Falls back to active profile |
+| `NEXTCLOUD_USER` | `create`, `rebuild` (MCP stack) | Deprecated, optional: only `MCP_INTERNAL_TOKEN` uses it; users sign in as themselves |
+| `NEXTCLOUD_PASSWORD` | `create`, `rebuild` (MCP stack) | Deprecated, optional, as above |
 | `HETZNER_STORAGE_BOX_PASSWORD` | `create --storage-box` | CIFS mount password for storage box |

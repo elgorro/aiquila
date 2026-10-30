@@ -359,7 +359,8 @@ The list is enforced twice, and an invocation must pass both:
 
    An invocation it refuses returns `403` with the reason.
 
-`run_occ` needs the service account to be a Nextcloud admin.
+`run_occ` needs the account it acts as to be a Nextcloud admin: under OAuth, the signed-in
+user; for stdio, `NEXTCLOUD_USER`.
 
 ---
 

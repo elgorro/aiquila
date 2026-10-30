@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { logger } from '../logger.js';
+import { basicAuth, getNextcloudConfig } from '../tools/types.js';
 
 /**
  * Build a regex that matches an XML element with any namespace prefix.
@@ -63,14 +64,7 @@ export async function fetchCalDAV(
     headers?: Record<string, string>;
   } = {}
 ): Promise<Response> {
-  const NEXTCLOUD_USER = process.env.NEXTCLOUD_USER;
-  const NEXTCLOUD_PASSWORD = process.env.NEXTCLOUD_PASSWORD;
-
-  if (!NEXTCLOUD_USER || !NEXTCLOUD_PASSWORD) {
-    throw new Error('NEXTCLOUD_USER and NEXTCLOUD_PASSWORD environment variables must be set');
-  }
-
-  const auth = Buffer.from(`${NEXTCLOUD_USER}:${NEXTCLOUD_PASSWORD}`).toString('base64');
+  const auth = basicAuth(getNextcloudConfig());
 
   const method = options.method || 'GET';
 

@@ -41,12 +41,12 @@ const FEDERATION_WARNING =
   'A public post is world-readable.';
 
 const STATUS_ERRORS = {
-  401: 'Not authenticated to Nextcloud Social. Check NEXTCLOUD_USER and NEXTCLOUD_PASSWORD, and that the Social app is enabled for that user.',
+  401: 'Not authenticated to Nextcloud Social. Check that the Social app is enabled for this account.',
   404: 'No such status — it may have been deleted, or it is not visible to you.',
 };
 
 const ACCOUNT_ERRORS = {
-  401: 'Not authenticated to Nextcloud Social. Check NEXTCLOUD_USER and NEXTCLOUD_PASSWORD, and that the Social app is enabled for that user.',
+  401: 'Not authenticated to Nextcloud Social. Check that the Social app is enabled for this account.',
   404: 'No such account. Use the full handle (user@server) for a remote account.',
 };
 

@@ -64,7 +64,7 @@ describe('App Management Tools', () => {
       mockFetchOCS.mockRejectedValue(
         new Error(
           'Permission denied. This operation requires admin or sub-admin privileges. ' +
-            'Ensure the configured Nextcloud user has sufficient permissions.'
+            'This Nextcloud account does not have them.'
         )
       );
 

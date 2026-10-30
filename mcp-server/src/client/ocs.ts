@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { getNextcloudConfig } from '../tools/types.js';
+import { basicAuth, getNextcloudConfig, nextcloudBaseUrl } from '../tools/types.js';
 import { logger } from '../logger.js';
 
 /**
@@ -57,7 +57,7 @@ export async function fetchOCS<T = unknown>(
   options: OcsRequestOptions = {}
 ): Promise<OcsResponse<T> | null> {
   const config = getNextcloudConfig();
-  const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
+  const auth = basicAuth(config);
 
   let url = `${config.url}${path}`;
   if (options.queryParams) {
@@ -106,7 +106,7 @@ export async function fetchOCS<T = unknown>(
     if (response.status === 403) {
       throw new Error(
         'Permission denied. This operation requires admin or sub-admin privileges. ' +
-          'Ensure the configured Nextcloud user has sufficient permissions.'
+          'This Nextcloud account does not have them.'
       );
     }
     const text = await response.text();
@@ -128,18 +128,13 @@ export async function fetchOCS<T = unknown>(
 
 /**
  * Fetch the plain /status.php endpoint (not OCS, returns JSON directly).
+ * It is public, so it is fetched without credentials: the startup probe runs
+ * before any user has signed in.
  */
 export async function fetchStatus(): Promise<Record<string, unknown>> {
-  const config = getNextcloudConfig();
-  const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
-
-  const statusUrl = `${config.url}/status.php`;
+  const statusUrl = `${nextcloudBaseUrl()}/status.php`;
   const t0 = Date.now();
-  const response = await fetch(statusUrl, {
-    headers: {
-      Authorization: `Basic ${auth}`,
-    },
-  });
+  const response = await fetch(statusUrl);
   logger.trace(
     { method: 'GET', url: statusUrl, status: response.status, ms: Date.now() - t0 },
     '[nc] HTTP'

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { getNextcloudConfig } from '../tools/types.js';
+import { basicAuth, getNextcloudConfig } from '../tools/types.js';
 import { logger } from '../logger.js';
 
 /**
@@ -63,7 +63,7 @@ export async function fetchMapsAPI<T = unknown>(
   options: FetchOptions = {}
 ): Promise<T> {
   const config = getNextcloudConfig();
-  const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
+  const auth = basicAuth(config);
   const url = buildUrl(`${config.url}/apps/maps`, endpoint, options.queryParams);
   const body = options.body ? JSON.stringify(options.body) : undefined;
 

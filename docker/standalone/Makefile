@@ -98,14 +98,14 @@ test-tools:
 	@bash scripts/test-tools.sh
 
 # MCP-Connector integration test: OAuth PKCE → Messages API beta → Claude calls AIquila tools
-# Requires: MCP_AUTH_ENABLED=true, ANTHROPIC_API_KEY, NEXTCLOUD_USER, NEXTCLOUD_PASSWORD in .env
+# Requires: MCP_AUTH_ENABLED=true, ANTHROPIC_API_KEY, TEST_NC_USER, TEST_NC_PASSWORD in .env
 test-mcp-connector:
 	@set -a; . ./.env; set +a; \
 	cd ../../mcp-server/scripts && npm install --silent && \
 	NODE_TLS_REJECT_UNAUTHORIZED=0 MCP_URL=https://localhost:3340 tsx test-mcp-connector.ts
 
 # Mistral × MCP test: OAuth PKCE → MCP tools/list → Mistral function-calling drives AIquila tools
-# Requires: MCP_AUTH_ENABLED=true, MISTRAL_API_KEY, NEXTCLOUD_USER, NEXTCLOUD_PASSWORD in .env
+# Requires: MCP_AUTH_ENABLED=true, MISTRAL_API_KEY, TEST_NC_USER, TEST_NC_PASSWORD in .env
 test-mistral:
 	@set -a; . ./.env; set +a; \
 	cd ../../mcp-server/scripts && npm install --silent && \
@@ -123,6 +123,6 @@ test:
 		|| echo "❌ FAIL: MCP server not responding on https://localhost:3340"
 	@echo ""
 	@echo "--- Nextcloud connectivity (from container) ---"
-	@$(COMPOSE) exec mcp-server sh -c 'curl -sf -o /dev/null -w "HTTP %{http_code}" -u "$$NEXTCLOUD_USER:$$NEXTCLOUD_PASSWORD" "$$NEXTCLOUD_URL/status.php"' \
+	@$(COMPOSE) exec mcp-server sh -c 'curl -sf -o /dev/null -w "HTTP %{http_code}" "$$NEXTCLOUD_URL/status.php"' \
 		&& echo " ✅" \
 		|| echo "❌ FAIL: Cannot reach Nextcloud from MCP container"

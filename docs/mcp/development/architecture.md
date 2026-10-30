@@ -435,19 +435,18 @@ of the message, so raw bodies and stack traces never reach the model.
 
 Required variables (validated at runtime):
 - `NEXTCLOUD_URL`
-- `NEXTCLOUD_USER`
-- `NEXTCLOUD_PASSWORD`
+- `NEXTCLOUD_USER` and `NEXTCLOUD_PASSWORD` for stdio and unauthenticated HTTP. With OAuth,
+  each request acts as the signed-in user instead
+  (see [Request identity](../../dev/mcp-server-architecture.md#request-identity))
 
 ### Validation
 
-**At Client Creation:**
+**At Client Creation:** every client takes its account from `getNextcloudConfig()`, which
+throws when none is available for the request:
 ```typescript
 export function getWebDAVClient(): WebDAVClient {
-  if (!NEXTCLOUD_URL || !NEXTCLOUD_USER || !NEXTCLOUD_PASSWORD) {
-    throw new Error('Missing required environment variables');
-  }
-  // ... create client
-}
+  const config = getNextcloudConfig(); // the request's account
+  // ... create (or reuse) the client for that account
 ```
 
 **Early Failure:**

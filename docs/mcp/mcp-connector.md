@@ -54,8 +54,9 @@ Key endpoints discovered from `GET /.well-known/oauth-authorization-server`:
 | Step | Endpoint | Notes |
 |------|----------|-------|
 | Register | `registration_endpoint` | Dynamic client registration (PKCE, no secret) |
-| Authorize | `authorization_endpoint` | `GET` renders the login form; its hidden fields (including `request_iat` and `request_mac`) must be posted back unchanged |
-| Login | `POST /auth/login` | Returns 302 with `code` in Location |
+| Authorize | `authorization_endpoint` | `GET` renders the sign-in page and sets a binding cookie; the page links to a Nextcloud Login Flow v2 |
+| Sign in | Nextcloud's login URL | Sign in on Nextcloud and grant access |
+| Continue | `GET /auth/flow/<id>` | The page's reload, with the cookie. Returns 302 with `code` in Location once access is granted |
 | Token | `token_endpoint` | `grant_type=authorization_code` + `code_verifier` |
 
 The returned `access_token` is a short-lived JWT (1 hour). Pass it directly as
@@ -197,7 +198,9 @@ MCP_URL=http://localhost:3339 tsx test-mcp-connector.ts
 DEFER_TOOLS=true tsx test-mcp-connector.ts
 ```
 
-Required env vars: `ANTHROPIC_API_KEY`, `NEXTCLOUD_USER`, `NEXTCLOUD_PASSWORD`.
+Required env vars: `ANTHROPIC_API_KEY`, `TEST_NC_USER`, `TEST_NC_PASSWORD` (the account the
+script signs in with; an app password works, and `TEST_NC_TOTP_SECRET` covers a 2FA account's
+password).
 Optional: `MCP_URL` (default `http://localhost:3339`), `DEFER_TOOLS` (default `false`).
 
 > **OAuth required.** The test script requires `MCP_AUTH_ENABLED=true` on the server.

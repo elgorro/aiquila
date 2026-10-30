@@ -167,12 +167,6 @@ func runRebuild(cmd *cobra.Command, _ []string) error {
 	if ncURL == "" {
 		missing = append(missing, "--nc-url / $NEXTCLOUD_URL")
 	}
-	if ncUser == "" {
-		missing = append(missing, "--nc-user / $NEXTCLOUD_USER")
-	}
-	if ncPassword == "" {
-		missing = append(missing, "--nc-password / $NEXTCLOUD_PASSWORD")
-	}
 	if sshKey == "" {
 		missing = append(missing, "--ssh-key / config.ssh_key")
 	}
@@ -215,6 +209,13 @@ func runRebuild(cmd *cobra.Command, _ []string) error {
 	env, err := config.Generate(ncURL, ncUser, ncPassword, domain, acmeEmail)
 	if err != nil {
 		return err
+	}
+	// Keep the credential key: app passwords in the state volume are sealed with it.
+	if existing, err := provision.RunCommand(sshClient, "cat /opt/aiquila/.env 2>/dev/null || true"); err == nil {
+		if key := config.ExistingCredentialKey(existing); key != "" {
+			env.CredentialKey = key
+			fmt.Println("  Kept the existing MCP_CREDENTIAL_KEY")
+		}
 	}
 
 	// ── 9. Upload files via SFTP ──────────────────────────────────────────

@@ -34,8 +34,9 @@ Edit `.env` with your Nextcloud connection details:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `NEXTCLOUD_URL` | Full URL of your Nextcloud instance | `https://cloud.example.com` |
-| `NEXTCLOUD_USER` | Nextcloud username | `admin` |
-| `NEXTCLOUD_PASSWORD` | Password or app password | `xxxxx-xxxxx-xxxxx` |
+| `NEXTCLOUD_USER` | Nextcloud username. Only without OAuth; with `MCP_AUTH_ENABLED=true` every user signs in as themselves (see [OAuth](oauth.md#every-tool-call-acts-as-you)) | `alice` |
+| `NEXTCLOUD_PASSWORD` | App password of `NEXTCLOUD_USER` | `xxxxx-xxxxx-xxxxx` |
+| `MCP_CREDENTIAL_KEY` | With OAuth: encrypts signed-in users' app passwords (`openssl rand -hex 64`) | |
 | `MCP_TRUST_PROXY` | Hop count or `true` when behind a reverse proxy (see [Reverse proxy](#reverse-proxy-traefik-nginx)) | `1` |
 | `LOG_LEVEL` | Log verbosity: `trace`, `debug`, `info`, `warn`, `error`, `fatal` (default: `info`) | `warn` |
 

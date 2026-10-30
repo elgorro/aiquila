@@ -171,6 +171,10 @@ services:
     environment:
       # MCP talks to Nextcloud over the internal Docker network — no HTTPS needed
       NEXTCLOUD_URL: http://nc
+      # Browsers reach Nextcloud on its domain: the sign-in link points there
+      NEXTCLOUD_PUBLIC_URL: https://${NC_DOMAIN}
+      # Deprecated: only MCP_INTERNAL_TOKEN (the Nextcloud app) uses this account;
+      # OAuth sign-ins act as the signed-in user.
       NEXTCLOUD_USER: ${NC_MCP_USER}
       NEXTCLOUD_PASSWORD: ${NC_MCP_PASSWORD}
       NODE_ENV: production
@@ -178,6 +182,11 @@ services:
       MCP_PORT: "${MCP_PORT:-3339}"
       MCP_AUTH_ENABLED: ${MCP_AUTH_ENABLED:-true}
       MCP_AUTH_SECRET: ${MCP_AUTH_SECRET:?Set MCP_AUTH_SECRET in .env}
+      MCP_CREDENTIAL_KEY: ${MCP_CREDENTIAL_KEY:?Set MCP_CREDENTIAL_KEY in .env}
+      MCP_OPENBAO_ADDR: ${MCP_OPENBAO_ADDR:-}
+      MCP_OPENBAO_TOKEN: ${MCP_OPENBAO_TOKEN:-}
+      MCP_OPENBAO_TRANSIT_MOUNT: ${MCP_OPENBAO_TRANSIT_MOUNT:-}
+      MCP_OPENBAO_TRANSIT_KEY: ${MCP_OPENBAO_TRANSIT_KEY:-}
       MCP_AUTH_ISSUER: ${MCP_AUTH_ISSUER:?Set MCP_AUTH_ISSUER in .env}
       MCP_CLIENT_ID: ${MCP_CLIENT_ID:-}
       MCP_CLIENT_SECRET: ${MCP_CLIENT_SECRET:-}

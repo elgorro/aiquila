@@ -29,6 +29,7 @@ vi.mock('../logger.js', () => ({
 }));
 
 import { logger } from '../logger.js';
+import { runAs } from '../nc-context.js';
 import {
   getFilteredToolSets,
   _resetCache,
@@ -171,7 +172,6 @@ describe('tool-registry', () => {
       await getFilteredToolSets();
 
       const text = warnText();
-      expect(text).toMatch(/admin/i);
       expect(text).toContain('MCP_TOOLS');
     });
 
@@ -230,6 +230,57 @@ describe('tool-registry', () => {
       const result = await getFilteredToolSets();
       const names = flatToolNames(result);
       expect(names).toContain('translate_text');
+    });
+  });
+
+  describe('per-account detection', () => {
+    const asUser = (userId: string) =>
+      ({
+        kind: 'user',
+        user: { userId, loginName: userId, appPassword: 'pw', grantId: `g-${userId}` },
+      }) as const;
+
+    /** A non-admin: /cloud/apps is forbidden, capabilities and navigation are not. */
+    function nonAdmin(caps: string[], nav: string[]) {
+      mockFetchOCS.mockImplementation(async (path: string) => {
+        if (path.startsWith('/ocs/v2.php/cloud/apps')) {
+          throw new Error('OCS request failed: 403 Forbidden');
+        }
+        if (path === '/ocs/v2.php/cloud/capabilities') {
+          return { ocs: { data: { capabilities: Object.fromEntries(caps.map((c) => [c, {}])) } } };
+        }
+        return { ocs: { data: nav.map((id) => ({ id })) } };
+      });
+    }
+
+    it('a non-admin gets the apps their capabilities and navigation show', async () => {
+      nonAdmin(['spreed'], ['notes']);
+      const names = flatToolNames(await runAs(asUser('bob'), () => getFilteredToolSets()));
+      expect(names).toContain('talk_list_conversations');
+      expect(names).toContain('list_notes');
+      expect(names).not.toContain('deck_list_boards');
+    });
+
+    it('apps a non-admin cannot see either way stay listed', async () => {
+      nonAdmin([], []);
+      const names = flatToolNames(await runAs(asUser('bob'), () => getFilteredToolSets()));
+      expect(names).toContain('translate_text');
+    });
+
+    it('detects once per signed-in user', async () => {
+      mockFetchOCS.mockResolvedValue({ ocs: { data: { apps: ['calendar'] } } });
+      await runAs(asUser('alice'), () => getFilteredToolSets());
+      await runAs(asUser('alice'), () => getFilteredToolSets());
+      expect(mockFetchOCS).toHaveBeenCalledTimes(1);
+      await runAs(asUser('bob'), () => getFilteredToolSets());
+      expect(mockFetchOCS).toHaveBeenCalledTimes(2);
+    });
+
+    it('a request without a token gets every tool and asks Nextcloud nothing', async () => {
+      const result = await runAs({ kind: 'anonymous' }, () => getFilteredToolSets());
+      const allToolCount = TOOL_REGISTRY.reduce((sum, e) => sum + e.tools.length, 0);
+      expect(flatToolNames(result).length).toBe(allToolCount);
+      expect(mockFetchOCS).not.toHaveBeenCalled();
     });
   });
 

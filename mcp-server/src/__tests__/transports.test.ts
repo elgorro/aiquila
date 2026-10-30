@@ -70,17 +70,12 @@ vi.mock('../client/ocs.js', () => ({
 }));
 
 // Mock the auth provider and login handler
-const mockProviderInstance = {};
+const mockCredentialFor = vi.fn();
+const mockProviderInstance = { credentialFor: mockCredentialFor };
 vi.mock('../auth/provider.js', () => ({
   NextcloudOAuthProvider: vi.fn(function () {
     return mockProviderInstance;
   }),
-  renderLoginForm: vi.fn(() => '<form></form>'),
-}));
-
-const mockLoginHandlerFn = vi.fn();
-vi.mock('../auth/login.js', () => ({
-  loginHandler: vi.fn(() => mockLoginHandlerFn),
 }));
 
 // ---- stdio transport ----
@@ -241,6 +236,7 @@ describe('http transport with auth enabled', () => {
       ...savedEnv,
       MCP_AUTH_ENABLED: 'true',
       MCP_AUTH_SECRET: 'test-secret-min-32-chars-required!!',
+      MCP_CREDENTIAL_KEY: '0'.repeat(128),
       MCP_AUTH_ISSUER: 'https://mcp.example.com',
       MCP_AUTH_STATE_DIR: stateDir,
     };
@@ -269,16 +265,16 @@ describe('http transport with auth enabled', () => {
     expect(mockUse).toHaveBeenCalledWith(mockMcpAuthMiddleware);
   });
 
-  it('mounts urlencoded body parser via app.use', async () => {
+  it('serves no password login of its own: users sign in on Nextcloud', async () => {
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
-    expect(mockUse).toHaveBeenCalledWith('urlencoded-middleware');
+    expect(mockPost).not.toHaveBeenCalledWith('/auth/login', expect.anything(), expect.anything());
   });
 
-  it('registers POST /auth/login handler', async () => {
+  it('refuses to start without a credential key', async () => {
+    delete process.env.MCP_CREDENTIAL_KEY;
     const { startHttp } = await import('../transports/http.js');
-    await startHttp();
-    expect(mockPost).toHaveBeenCalledWith('/auth/login', expect.any(Function), mockLoginHandlerFn);
+    await expect(startHttp()).rejects.toThrow('MCP_CREDENTIAL_KEY');
   });
 
   it('mounts /mcp with the lazy-auth gate ahead of the bearer middleware', async () => {
@@ -370,11 +366,55 @@ describe('http transport with auth enabled', () => {
     const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
     const handler = mcpCall?.[mcpCall.length - 1] as (req: unknown, res: unknown) => Promise<void>;
     expect(handler).toBeDefined();
-    const req = { body: { jsonrpc: '2.0', id: 1, method: 'tools/call' } };
+    mockCredentialFor.mockResolvedValue({
+      userId: 'alice',
+      loginName: 'alice',
+      appPassword: 'pw',
+      grantId: 'g',
+    });
+    const req = { body: { jsonrpc: '2.0', id: 1, method: 'tools/call' }, auth: { extra: {} } };
     const res = { on: vi.fn() };
     await handler(req, res);
 
     expect(mockNodeHandler).toHaveBeenCalledWith(req, res, req.body);
+  });
+
+  it('answers 401 when the grant has no Nextcloud credential any more (RFC 6750 §3.1)', async () => {
+    const { startHttp } = await import('../transports/http.js');
+    await startHttp();
+
+    const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
+    const handler = mcpCall?.[mcpCall.length - 1] as (req: unknown, res: unknown) => Promise<void>;
+    mockCredentialFor.mockResolvedValue(undefined);
+    const res: any = { on: vi.fn(), status: vi.fn(), set: vi.fn(), json: vi.fn() };
+    res.status.mockReturnValue(res);
+    res.set.mockReturnValue(res);
+    await handler({ body: { method: 'tools/call' }, auth: { extra: {} } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.set).toHaveBeenCalledWith(
+      'WWW-Authenticate',
+      expect.stringContaining('error="invalid_token"')
+    );
+    expect(mockNodeHandler).not.toHaveBeenCalled();
+  });
+
+  it('answers 503 with Retry-After, not 401, while the key service is down', async () => {
+    const { startHttp } = await import('../transports/http.js');
+    const { CredentialBackendUnavailableError } = await import('../auth/credential-store.js');
+    await startHttp();
+
+    const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
+    const handler = mcpCall?.[mcpCall.length - 1] as (req: unknown, res: unknown) => Promise<void>;
+    mockCredentialFor.mockRejectedValue(new CredentialBackendUnavailableError('down'));
+    const res: any = { on: vi.fn(), status: vi.fn(), set: vi.fn(), json: vi.fn() };
+    res.status.mockReturnValue(res);
+    res.set.mockReturnValue(res);
+    await handler({ body: { method: 'tools/call' }, auth: { extra: {} } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.set).toHaveBeenCalledWith('Retry-After', '10');
+    expect(mockNodeHandler).not.toHaveBeenCalled();
   });
 
   // ---- CORS ----
