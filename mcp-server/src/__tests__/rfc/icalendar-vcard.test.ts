@@ -198,6 +198,58 @@ describe('RFC 5545 — create_task', () => {
   });
 });
 
+describe('RFC 5545 — update_task', () => {
+  it('§3.1: the rewritten VTODO is folded to 75 octets and unfolds to the value', async () => {
+    const vtodo =
+      '<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">' +
+      '<d:response><d:href>/t.ics</d:href><d:propstat><d:prop><d:getetag>"t"</d:getetag>' +
+      '<c:calendar-data>BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VTODO\nUID:t\nSUMMARY:x\nEND:VTODO\nEND:VCALENDAR</c:calendar-data>' +
+      '</d:prop></d:propstat></d:response></d:multistatus>';
+    const base = global.fetch;
+    global.fetch = vi.fn(async (url: string, init: RequestInit = {}) =>
+      init.method === 'REPORT'
+        ? { ok: true, status: 207, text: async () => vtodo, headers: new Headers() }
+        : base(url, init)
+    ) as unknown as typeof fetch;
+
+    const { updateTaskTool } = await import('../../tools/apps/tasks.js');
+    await updateTaskTool.handler({ uid: 't', calendarName: 'tasks', description: LONG } as any);
+    expect(puts).toHaveLength(1);
+    expectWellFormedContentLines(puts[0].body);
+    const { unescapeICalValue } = await import('../../tools/dav-utils.js');
+    const lines = unfold(puts[0].body);
+    expect(unescapeICalValue(property(lines, 'DESCRIPTION')!.slice('DESCRIPTION:'.length))).toBe(
+      LONG
+    );
+  });
+});
+
+describe('RFC 5545 §3.1 / RFC 6350 §3.2 — folding', () => {
+  it('unfold(fold(x)) == x, and no folded line exceeds 75 octets', async () => {
+    const { foldContentLine } = await import('../../tools/dav-utils.js');
+    // One-, two-, three- and four-octet code points, so every split offset is hit.
+    for (const unit of ['a', 'ü', '終', '😀']) {
+      for (let n = 60; n < 160; n++) {
+        const line = `DESCRIPTION:${unit.repeat(n)}`;
+        const folded = foldContentLine(line);
+        expect(folded.replace(/\r\n /g, '')).toBe(line);
+        for (const part of folded.split('\r\n')) {
+          expect(Buffer.byteLength(part, 'utf8')).toBeLessThanOrEqual(75);
+          // A multi-octet sequence MUST NOT be split: a split one (or a lone
+          // surrogate) does not survive a UTF-8 round trip.
+          expect(Buffer.from(part, 'utf8').toString('utf8')).toBe(part);
+        }
+      }
+    }
+  });
+
+  it('formatICalendar does not fold an already folded object twice', async () => {
+    const { formatICalendar } = await import('../../tools/dav-utils.js');
+    const once = formatICalendar(`BEGIN:VCALENDAR\nSUMMARY:${'x'.repeat(200)}\nEND:VCALENDAR`);
+    expect(formatICalendar(once)).toBe(once);
+  });
+});
+
 describe('RFC 6350 / 2426 — create_contact', () => {
   async function create(args: Record<string, unknown> = {}) {
     const { createContactTool } = await import('../../tools/apps/contacts.js');
