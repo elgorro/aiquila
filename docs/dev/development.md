@@ -98,12 +98,13 @@ until that dependency drops it — declare what you `import`.
 
 Two constraints are worth knowing before bumping anything:
 
-- **`@nextcloud/vue` pins `@nextcloud/files`.** Each `@nextcloud/vue` release
-  peer-requires a specific `@nextcloud/files` major, so the two move together.
+- **`@nextcloud/vue` pins `@nextcloud/files` and `@nextcloud/dialogs`.** Each
+  `@nextcloud/vue` release peer-requires specific majors of both, so a major bump
+  of either may need a newer `@nextcloud/vue` first.
   Check with `npm view @nextcloud/vue@<version> peerDependencies`.
-- **The `@nextcloud/*` family declares support only up to Node 24**, while this
-  repo builds on Node 26. `npm install` therefore prints `EBADENGINE` warnings for
-  those packages. They are advisory — the builds and tests pass — but an
+- **Most of the `@nextcloud/*` family declares support only up to Node 24**, while
+  this repo builds on Node 26. `npm install` therefore prints `EBADENGINE` warnings
+  for those packages. They are advisory — the builds and tests pass — but an
   `engine-strict` install would fail on them.
 
 Use `npm view <pkg> dist-tags` to find the current release. `npm outdated`

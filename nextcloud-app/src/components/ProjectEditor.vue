@@ -102,7 +102,6 @@ import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import ChatIcon from 'vue-material-design-icons/Chat.vue'
 import PlusIcon from 'vue-material-design-icons/Plus.vue'
 import { getFilePickerBuilder, FilePickerClosed } from '@nextcloud/dialogs'
-import '@nextcloud/dialogs/style.css'
 
 import {
 	updateProject,
