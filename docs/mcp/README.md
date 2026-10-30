@@ -12,6 +12,7 @@ The Model Context Protocol (MCP) is an open standard developed by Anthropic that
 - **[OAuth 2.0](oauth.md)** - OAuth authentication for remote MCP clients
 - **[MCP-Connector Integration](mcp-connector.md)** - Use AIquila via the Anthropic Messages API (beta)
 - **[Tools Reference](#tools-reference)** - Available tools and their usage
+- **[Tool Upstream Matrix](upstream-apis.md)** - The Nextcloud app and API behind each tool category, and when it was last verified
 - **[Development](development/)** - Guides for extending the server
 
 ## Features

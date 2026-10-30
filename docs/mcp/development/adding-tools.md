@@ -83,7 +83,9 @@ npm test
 
 ### 5. Document the Tool
 
-Create or update documentation in `/docs/mcp/tools/`:
+Create or update documentation in `/docs/mcp/tools/`, and update the category's
+`Last verified` in the [tool upstream matrix](../upstream-apis.md) once you have
+checked the tool against the upstream API reference:
 
 ```markdown
 ### my_new_tool

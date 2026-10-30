@@ -144,7 +144,7 @@ Where things live:
 | Changed | Update |
 |---|---|
 | Workflows, CI behaviour | `docs/dev/ci-cd.md` |
-| MCP tools | `docs/mcp/tools/**`, and the tool table in `docs/mcp/README.md` |
+| MCP tools | `docs/mcp/tools/**`, the tool table in `docs/mcp/README.md`, and the category's row in `docs/mcp/upstream-apis.md` |
 | Env vars, transports, auth | `docs/mcp/setup.md`, the table in this file |
 | Nextcloud endpoints | `docs/dev/openapi.md`, plus regenerating the spec |
 | Install or deploy steps | `docs/installation/**`, `docs/hetzner/**` |
@@ -193,6 +193,19 @@ the revision here.
   depends on it (e.g. `RFC 6749 §5.2`), so reviewers can check the same text.
 - Where the MCP specification or Nextcloud deviates from or profiles an RFC, verify
   against that spec revision too and note the deviation.
+
+**Upstream app APIs.** `docs/mcp/upstream-apis.md` maps every `MCP_TOOLS` category to the
+Nextcloud app and API it calls, the upstream reference, when it shipped, and when it was
+last verified. Before working on a tool category, read its row:
+
+- Check the implementation against the linked reference for the upstream version you
+  target, not against the existing code. A `Last verified` that is `—` or older than the
+  current Nextcloud major means the code may follow an API that has since moved.
+- In the same PR, update `Last verified` (app version from `occ app:list`, Nextcloud
+  version from `occ status`, date) for every category whose behaviour you exercised,
+  and fix the reference link if it moved.
+- A new category gets a new row, with `Introduced` filled in and its registry entry in
+  `src/tool-registry.ts` matching the `Upstream` column.
 
 **MCP protocol.** The MCP specification is not an RFC, but the same rule applies: verify
 against the published revision, not memory. The latest revision is **`2026-07-28`**
