@@ -149,8 +149,8 @@ func buildCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&createNCDomain, "nc-domain", "", "FQDN for the Nextcloud server (required for --stack nextcloud/full)")
 	// External NC flags (--stack mcp)
 	cmd.Flags().StringVar(&createNCURL, "nc-url", "", "Nextcloud URL (--stack mcp; or $NEXTCLOUD_URL)")
-	cmd.Flags().StringVar(&createNCUser, "nc-user", "", "Nextcloud username (--stack mcp; or $NEXTCLOUD_USER)")
-	cmd.Flags().StringVar(&createNCPassword, "nc-password", "", "Nextcloud app password (--stack mcp; or $NEXTCLOUD_PASSWORD)")
+	cmd.Flags().StringVar(&createNCUser, "nc-user", "", "Deprecated: Nextcloud service account, only used by MCP_INTERNAL_TOKEN (--stack mcp; or $NEXTCLOUD_USER)")
+	cmd.Flags().StringVar(&createNCPassword, "nc-password", "", "Deprecated: app password of the service account (--stack mcp; or $NEXTCLOUD_PASSWORD)")
 	// Self-hosted NC flags (--stack nextcloud/full)
 	cmd.Flags().StringVar(&createNCAdminUser, "nc-admin-user", "admin", "Nextcloud admin username (--stack nextcloud/full)")
 	cmd.Flags().StringVar(&createNCAdminPassword, "nc-admin-password", "", "Nextcloud admin password (--stack nextcloud/full)")
@@ -335,12 +335,6 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 		}
 		if createNCURL == "" {
 			missing = append(missing, "--nc-url / $NEXTCLOUD_URL")
-		}
-		if createNCUser == "" {
-			missing = append(missing, "--nc-user / $NEXTCLOUD_USER")
-		}
-		if createNCPassword == "" {
-			missing = append(missing, "--nc-password / $NEXTCLOUD_PASSWORD")
 		}
 	case "nextcloud":
 		if createNCDomain == "" {

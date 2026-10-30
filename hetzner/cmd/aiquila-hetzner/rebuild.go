@@ -167,12 +167,6 @@ func runRebuild(cmd *cobra.Command, _ []string) error {
 	if ncURL == "" {
 		missing = append(missing, "--nc-url / $NEXTCLOUD_URL")
 	}
-	if ncUser == "" {
-		missing = append(missing, "--nc-user / $NEXTCLOUD_USER")
-	}
-	if ncPassword == "" {
-		missing = append(missing, "--nc-password / $NEXTCLOUD_PASSWORD")
-	}
 	if sshKey == "" {
 		missing = append(missing, "--ssh-key / config.ssh_key")
 	}
