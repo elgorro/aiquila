@@ -36,8 +36,8 @@ export const listTrashTool = {
     <d:displayname />
     <d:getlastmodified />
     <d:getcontentlength />
-    <oc:trashbin-original-location />
-    <oc:trashbin-delete-timestamp />
+    <nc:trashbin-original-location />
+    <nc:trashbin-deletion-time />
   </d:prop>
 </d:propfind>`;
 
@@ -69,12 +69,11 @@ export const listTrashTool = {
           r.match(/<d:displayname>([^<]*)<\/d:displayname>/)?.[1] ?? ''
         );
         const originalLocation = decodeXmlEntities(
-          r.match(/<oc:trashbin-original-location>([^<]*)<\/oc:trashbin-original-location>/)?.[1] ??
+          r.match(/<nc:trashbin-original-location>([^<]*)<\/nc:trashbin-original-location>/)?.[1] ??
             ''
         );
         const deleteTimestamp =
-          r.match(/<oc:trashbin-delete-timestamp>([^<]*)<\/oc:trashbin-delete-timestamp>/)?.[1] ??
-          '';
+          r.match(/<nc:trashbin-deletion-time>([^<]*)<\/nc:trashbin-deletion-time>/)?.[1] ?? '';
         const size = r.match(/<d:getcontentlength>([^<]*)<\/d:getcontentlength>/)?.[1] ?? '';
 
         const deletedAt = deleteTimestamp
@@ -82,7 +81,8 @@ export const listTrashTool = {
           : '';
         const sizeStr = size ? ` (${Math.round(parseInt(size, 10) / 1024)} KB)` : '';
         // Extract the trash item key from href for restore operations
-        const trashKey = href.split('/trash/')[1]?.replace(/\/$/, '') ?? '';
+        // The href is percent-encoded; davPath() re-encodes the key on restore.
+        const trashKey = decodeURIComponent(href.split('/trash/')[1]?.replace(/\/$/, '') ?? '');
 
         return `- ${displayname || trashKey}${sizeStr}\n  Original: ${originalLocation}\n  Deleted: ${deletedAt}\n  Key: ${trashKey}`;
       });

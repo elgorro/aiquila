@@ -524,18 +524,18 @@ describe('OCS-based Tools', () => {
   describe('list_trash', () => {
     it('should list trash items', async () => {
       const xml = `<?xml version="1.0"?>
-<d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+<d:multistatus xmlns:d="DAV:" xmlns:nc="http://nextcloud.org/ns">
   <d:response>
     <d:href>/remote.php/dav/trashbin/admin/trash/</d:href>
     <d:propstat><d:prop></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
   </d:response>
   <d:response>
-    <d:href>/remote.php/dav/trashbin/admin/trash/doc.pdf.d1711234567</d:href>
+    <d:href>/remote.php/dav/trashbin/admin/trash/my%20doc.pdf.d1711234567</d:href>
     <d:propstat><d:prop>
-      <d:displayname>doc.pdf</d:displayname>
+      <d:displayname>my doc.pdf</d:displayname>
       <d:getcontentlength>10240</d:getcontentlength>
-      <oc:trashbin-original-location>Documents/doc.pdf</oc:trashbin-original-location>
-      <oc:trashbin-delete-timestamp>1711234567</oc:trashbin-delete-timestamp>
+      <nc:trashbin-original-location>Documents/my doc.pdf</nc:trashbin-original-location>
+      <nc:trashbin-deletion-time>1711234567</nc:trashbin-deletion-time>
     </d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>
   </d:response>
 </d:multistatus>`;
@@ -551,8 +551,10 @@ describe('OCS-based Tools', () => {
       const { listTrashTool } = await import('../tools/apps/trash.js');
       const result = await listTrashTool.handler();
 
-      expect(result.content[0].text).toContain('doc.pdf');
-      expect(result.content[0].text).toContain('Documents/doc.pdf');
+      expect(result.content[0].text).toContain('Original: Documents/my doc.pdf');
+      expect(result.content[0].text).toContain('Deleted: 2024-03-23T22:56:07.000Z');
+      // Decoded, so restore_from_trash can re-encode it
+      expect(result.content[0].text).toContain('Key: my doc.pdf.d1711234567');
     });
 
     it('should handle empty trash', async () => {
