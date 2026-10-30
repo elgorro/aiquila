@@ -88,7 +88,7 @@ this repository ([OpenAPI](../dev/openapi.md)) rather than an external reference
 | `cookbook` | `apps/cookbook.ts` | `cookbook` | WebDAV (recipe files) | [nextcloud/cookbook](https://github.com/nextcloud/cookbook) | 0.1.2 · `33a6ce8` · 2025-11-21 | — |
 | `maps` | `apps/maps.ts` | `maps` | App REST | [nextcloud/maps](https://github.com/nextcloud/maps) | 0.1.13 · `1915054` · 2026-02-12 | — |
 | `photos` | `apps/photos.ts` | `photos` | WebDAV | [nextcloud/photos](https://github.com/nextcloud/photos) | 0.2.10 · `500fc1c` · 2026-03-28 | — |
-| `talk` | `apps/talk.ts` | `spreed` | OCS | [Talk API](https://nextcloud-talk.readthedocs.io/en/latest/) | 0.2.7 · `f6ca299` · 2026-03-21 | — |
+| `talk` | `apps/talk.ts` | `spreed` | OCS | [Talk API](https://nextcloud-talk.readthedocs.io/en/latest/) | 0.2.7 · `f6ca299` · 2026-03-21 | spreed 24.0.6 · NC 34.0.5 · 2026-10-30 |
 | `circles` | `apps/circles.ts` | `circles` | OCS | [nextcloud/circles](https://github.com/nextcloud/circles) | 0.2.10 · `3741789` · 2026-03-28 | — |
 | `bookmarks` | `apps/bookmarks.ts` | `bookmarks` | App REST v2 | [Bookmarks API](https://nextcloud-bookmarks.readthedocs.io/en/latest/) | 0.1.13 · `1915054` · 2026-02-12 | — |
 | `polls` | `apps/polls.ts` | `polls` | App REST v1.0 | [Polls API v1.0](https://github.com/nextcloud/polls/blob/main/docs/API_v1.0.md) | 0.3.4 · `fbf3f55` · 2026-04-22 | — |

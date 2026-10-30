@@ -398,6 +398,11 @@ describe('Talk Tools', () => {
 
       expect(result.content[0].text).toContain('attendeeId: 10');
       expect(result.content[0].text).toContain('removed');
+
+      const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(url).toContain('/api/v4/room/abc123/attendees?attendeeId=10');
+      expect(init.method).toBe('DELETE');
+      expect(init.body).toBeUndefined();
     });
 
     it('should handle API errors', async () => {
