@@ -223,6 +223,16 @@ describe('tool-registry', () => {
       expect(names).toContain('talk_list_conversations');
     });
 
+    it('should detect translate2 for translate tools', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: { data: { apps: ['translate2'] } },
+      });
+
+      const result = await getFilteredToolSets();
+      const names = flatToolNames(result);
+      expect(names).toContain('translate_text');
+    });
+
     it('should detect text_translate for translate tools', async () => {
       mockFetchOCS.mockResolvedValue({
         ocs: { data: { apps: ['text_translate'] } },
@@ -338,7 +348,7 @@ describe('tool-registry', () => {
       expect([...rows.keys()].sort()).toEqual(TOOL_REGISTRY.map((e) => e.category).sort());
 
       for (const { category, appIds } of TOOL_REGISTRY) {
-        const upstream = [...rows.get(category)!.matchAll(/`([a-z_*]+)`/g)].map((m) => m[1]);
+        const upstream = [...rows.get(category)!.matchAll(/`([a-z0-9_*]+)`/g)].map((m) => m[1]);
         for (const appId of appIds ?? []) {
           const listed = upstream.some((u) =>
             u.endsWith('*') ? appId.startsWith(u.slice(0, -1)) : u === appId

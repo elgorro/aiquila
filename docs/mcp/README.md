@@ -586,6 +586,11 @@ Nextcloud apps and administration:
 |------|-------------|---------------|
 | `translate_text` | Translate text between languages using Nextcloud's configured translation provider | — |
 
+`translate_text` runs as the `core:text2text:translate` AI task when a TaskProcessing provider
+offers it (translate2, the AIquila app, LLM apps), and falls back to the older Translation API,
+deprecated since Nextcloud 30, when none does. The category is registered when `translate2`,
+`aiquila`, `text_translate` or `translate` is enabled.
+
 #### Recommendations (1 tool)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
