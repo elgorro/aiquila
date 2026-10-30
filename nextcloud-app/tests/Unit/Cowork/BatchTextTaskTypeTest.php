@@ -315,7 +315,7 @@ class BatchTextTaskTypeTest extends TestCase {
         ]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('did not end within 26 hours');
+        $this->expectExceptionMessageIsOrContains('did not end within 26 hours');
         $this->task->resume(
             $this->coworker(),
             $this->newRun(),

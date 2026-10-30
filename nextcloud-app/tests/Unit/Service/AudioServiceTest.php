@@ -69,7 +69,7 @@ class AudioServiceTest extends TestCase {
         $logger->expects($this->once())->method('error');
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Rate limited');
+        $this->expectExceptionMessageIsOrContains('Rate limited');
         (new AudioService($logger))->transcribe($provider, $this->file(), 'alice');
     }
 
@@ -78,7 +78,7 @@ class AudioServiceTest extends TestCase {
         $provider->method('synthesizeSpeech')->willReturn(['audio' => '', 'mimeType' => 'audio/mpeg']);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Mistral returned no audio.');
+        $this->expectExceptionMessageIsOrContains('Mistral returned no audio.');
         (new AudioService(new NullLogger()))->speak($provider, 'Hello', 'alice');
     }
 
@@ -87,7 +87,7 @@ class AudioServiceTest extends TestCase {
         $provider->method('transcribeAudio')->willReturn(['response' => 'Hello']);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Mistral returned no timestamps');
+        $this->expectExceptionMessageIsOrContains('Mistral returned no timestamps');
         (new AudioService(new NullLogger()))->segments($provider, $this->file(), 'alice');
     }
 }

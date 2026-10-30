@@ -92,7 +92,7 @@ class TextProvidersTest extends TestCase {
 
     public function testChatRejectsAnEmptyMessage(): void {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No chat message provided');
+        $this->expectExceptionMessageIsOrContains('No chat message provided');
         (new ChatProvider($this->resolver))->process('alice', ['input' => ''], static fn (float $p) => null);
     }
 
@@ -127,7 +127,7 @@ class TextProvidersTest extends TestCase {
 
     public function testContextWriteNeedsBothInputs(): void {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No source material provided');
+        $this->expectExceptionMessageIsOrContains('No source material provided');
         (new ContextWriteProvider($this->resolver))->process('alice', [
             'style_input' => 'a formal memo',
         ], static fn (float $p) => null);
@@ -137,7 +137,7 @@ class TextProvidersTest extends TestCase {
         $this->llm->method('ask')->willReturn(['error' => 'rate limited']);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('rate limited');
+        $this->expectExceptionMessageIsOrContains('rate limited');
         (new ReformatParagraphsProvider($this->resolver))->process('alice', [
             'input' => 'one long wall of text',
         ], static fn (float $p) => null);
@@ -179,7 +179,7 @@ class TextProvidersTest extends TestCase {
 
     public function testImproveRejectsEmptyInput(): void {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No input text provided');
+        $this->expectExceptionMessageIsOrContains('No input text provided');
         (new ImproveProvider($this->resolver))->process('alice', [
             'input' => '',
             'instructions' => 'Make it shorter',
@@ -190,7 +190,7 @@ class TextProvidersTest extends TestCase {
         $this->llm->method('ask')->willReturn(['error' => 'rate limited']);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('rate limited');
+        $this->expectExceptionMessageIsOrContains('rate limited');
         (new ImproveProvider($this->resolver))->process('alice', [
             'input' => 'text',
             'instructions' => 'Make it shorter',

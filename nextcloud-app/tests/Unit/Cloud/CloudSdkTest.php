@@ -35,7 +35,7 @@ class CloudSdkTest extends TestCase {
         $sdk = $this->sdk('', $logger);
 
         $this->assertFalse($sdk->isAvailable(CloudSdk::GOOGLE));
-        $this->expectExceptionMessage(CloudSdk::SYSTEM_CONFIG_KEY);
+        $this->expectExceptionMessageIsOrContains(CloudSdk::SYSTEM_CONFIG_KEY);
         $sdk->require(CloudSdk::GOOGLE, 'Vertex');
     }
 }

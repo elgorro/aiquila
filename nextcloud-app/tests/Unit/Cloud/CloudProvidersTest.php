@@ -297,7 +297,7 @@ class CloudProvidersTest extends TestCase {
             'region_bedrock' => 'us-east-1',
             'auth_mode_bedrock' => AbstractCloudClaudeProvider::AUTH_DEFAULT_CHAIN,
         ];
-        $this->expectExceptionMessage(CloudSdk::AWS);
+        $this->expectExceptionMessageIsOrContains(CloudSdk::AWS);
         $this->client($this->provider(BedrockProvider::class));
     }
 
@@ -308,7 +308,7 @@ class CloudProvidersTest extends TestCase {
             'auth_mode_vertex' => AbstractCloudClaudeProvider::AUTH_ACCESS_TOKEN,
         ];
         $this->secrets['vertex_access_token'] = 'ya29.token';
-        $this->expectExceptionMessage(CloudSdk::GOOGLE);
+        $this->expectExceptionMessageIsOrContains(CloudSdk::GOOGLE);
         $this->client($this->provider(VertexProvider::class));
     }
 

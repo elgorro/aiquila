@@ -66,7 +66,7 @@ class SummaryProviderTest extends TestCase {
         $this->factory->method('getProviderForUser')->willReturn($local);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('upstream is down');
+        $this->expectExceptionMessageIsOrContains('upstream is down');
         $this->provider->process('alice', ['input' => 'Some long text'], static fn (float $p) => null);
     }
 
@@ -77,7 +77,7 @@ class SummaryProviderTest extends TestCase {
         $this->factory->expects($this->never())->method('getProviderForUser');
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No input text provided');
+        $this->expectExceptionMessageIsOrContains('No input text provided');
         $this->provider->process('alice', ['input' => ''], static fn (float $p) => null);
     }
 }

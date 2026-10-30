@@ -124,14 +124,14 @@ class ChatWithToolsProviderTest extends TestCase {
 
     public function testAnEmptyTaskIsRejected(): void {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No chat message provided');
+        $this->expectExceptionMessageIsOrContains('No chat message provided');
 
         $this->provider->process('alice', [], static fn (float $p) => null);
     }
 
     public function testMalformedToolsJsonIsRejected(): void {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('not valid JSON');
+        $this->expectExceptionMessageIsOrContains('not valid JSON');
 
         $this->provider->process('alice', [
             'input' => 'Weather?',
@@ -143,7 +143,7 @@ class ChatWithToolsProviderTest extends TestCase {
         $this->llm->method('chatToolsTurn')->willReturn(['error' => 'Rate limit exceeded.']);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Rate limit exceeded.');
+        $this->expectExceptionMessageIsOrContains('Rate limit exceeded.');
 
         $this->provider->process('alice', ['input' => 'Weather?'], static fn (float $p) => null);
     }
