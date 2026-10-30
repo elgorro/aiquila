@@ -44,6 +44,24 @@ describe('Tag Tools', () => {
       expect(result.isError).toBeUndefined();
     });
 
+    it('should decode XML entities in tag names', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 207,
+        text: () =>
+          Promise.resolve(
+            '<d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:response>' +
+              '<d:propstat><d:prop><oc:tags><oc:tag>R&amp;D</oc:tag></oc:tags></d:prop>' +
+              '</d:propstat></d:response></d:multistatus>'
+          ),
+      });
+
+      const { getFileTagsTool } = await import('../tools/system/tags.js');
+      const result = await getFileTagsTool.handler({ path: '/a.txt' });
+
+      expect(result.content[0].text).toBe('Tags for /a.txt: R&D');
+    });
+
     it('should handle file with no tags', async () => {
       const propfindResponse = `<?xml version="1.0"?>
 <d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
@@ -151,6 +169,21 @@ describe('Tag Tools', () => {
       expect(body).toContain('<oc:tag>TagA</oc:tag>');
       expect(body).toContain('<oc:tag>TagB</oc:tag>');
       expect(callArgs[1].method).toBe('PROPPATCH');
+    });
+
+    it('should XML-escape tag names in the PROPPATCH body', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 207,
+        text: () => Promise.resolve(''),
+      });
+
+      const { setFileTagsTool } = await import('../tools/system/tags.js');
+      await setFileTagsTool.handler({ path: '/a.txt', tags: ['R&D', '<b>'] });
+
+      const body = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string;
+      expect(body).toContain('<oc:tag>R&amp;D</oc:tag>');
+      expect(body).toContain('<oc:tag>&lt;b&gt;</oc:tag>');
     });
 
     it('should clear all tags when given empty array', async () => {

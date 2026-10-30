@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { z } from 'zod';
-import { fetchCalDAV } from '../../client/caldav.js';
+import { decodeXmlEntities, encodeXmlEntities, fetchCalDAV } from '../../client/caldav.js';
 import { davFilePath, davPath } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
@@ -61,7 +61,9 @@ export const getFileTagsTool = {
 
       // Parse <oc:tag> elements from response
       const tagMatches = text.match(/<oc:tag[^>]*>([^<]*)<\/oc:tag>/g) || [];
-      const tags = tagMatches.map((m) => m.replace(/<\/?oc:tag[^>]*>/g, '').trim());
+      const tags = tagMatches.map((m) =>
+        decodeXmlEntities(m.replace(/<\/?oc:tag[^>]*>/g, '').trim())
+      );
 
       return {
         content: [
@@ -115,7 +117,9 @@ export const setFileTagsTool = {
 
       const tagElements =
         args.tags.length > 0
-          ? args.tags.map((t) => `<oc:tag>${t}</oc:tag>`).join('\n                ')
+          ? args.tags
+              .map((t) => `<oc:tag>${encodeXmlEntities(t)}</oc:tag>`)
+              .join('\n                ')
           : '';
 
       const body = `<?xml version="1.0"?>
@@ -372,7 +376,7 @@ export const listSystemTagsTool = {
         if (id && name) {
           tags.push({
             id,
-            name,
+            name: decodeXmlEntities(name),
             userVisible: userVisible || 'true',
             userAssignable: userAssignable || 'true',
             canAssign: canAssign || 'true',
