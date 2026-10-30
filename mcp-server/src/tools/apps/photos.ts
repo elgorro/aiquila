@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { fetchCalDAV, nsTagContent, decodeXmlEntities } from '../../client/caldav.js';
+import { davFilePath, davPath } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -27,11 +28,11 @@ function wrapError(action: string, err: unknown) {
 }
 
 function albumsUrl(config: { url: string; user: string }): string {
-  return `${config.url}/remote.php/dav/photos/${config.user}/albums`;
+  return `${config.url}${davPath('photos', config.user, 'albums')}`;
 }
 
 function filesUrl(config: { url: string; user: string }): string {
-  return `${config.url}/remote.php/dav/files/${config.user}`;
+  return `${config.url}${davPath('files', config.user)}`;
 }
 
 /** Extract all <d:response> blocks from a multistatus XML response. */
@@ -395,7 +396,7 @@ export const photosAddToAlbumTool = {
 
         try {
           // Step 1: Get file ID via PROPFIND
-          const fileUrl = `${filesUrl(config)}${normalizedPath}`;
+          const fileUrl = `${filesUrl(config)}/${davFilePath(normalizedPath)}`;
           const propRes = await fetchCalDAV(fileUrl, {
             method: 'PROPFIND',
             body: FILE_ID_PROPFIND,
@@ -543,7 +544,7 @@ export const photosGetMetadataTool = {
     try {
       const config = getNextcloudConfig();
       const normalizedPath = args.path.startsWith('/') ? args.path : `/${args.path}`;
-      const url = `${filesUrl(config)}${normalizedPath}`;
+      const url = `${filesUrl(config)}/${davFilePath(normalizedPath)}`;
 
       const response = await fetchCalDAV(url, {
         method: 'PROPFIND',
@@ -674,7 +675,7 @@ export const photosSetFavoriteTool = {
     try {
       const config = getNextcloudConfig();
       const normalizedPath = args.path.startsWith('/') ? args.path : `/${args.path}`;
-      const url = `${filesUrl(config)}${normalizedPath}`;
+      const url = `${filesUrl(config)}/${davFilePath(normalizedPath)}`;
 
       const body = `<?xml version="1.0"?>
 <d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">

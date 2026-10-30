@@ -7,7 +7,13 @@ import {
   fetchCalDAV,
   nsTagContent,
 } from '../../client/caldav.js';
-import { escapeICalValue, formatICalendar, ICAL_DATE_OR_DATE_TIME } from '../dav-utils.js';
+import {
+  davPath,
+  escapeICalValue,
+  formatICalendar,
+  ICAL_DATE_OR_DATE_TIME,
+  lastHrefSegment,
+} from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 import { parseCalendars, type ParsedCalendar } from './calendar.js';
 
@@ -288,7 +294,7 @@ function formatTask(task: ParsedTask): string {
  * `calendarName` is the URL slug the other task tools expect.
  */
 function formatTaskList(cal: ParsedCalendar, detailed = false): string {
-  const slug = cal.url.split('/').filter(Boolean).pop() ?? '';
+  const slug = lastHrefSegment(cal.url);
   let line = decodeXmlEntities(cal.displayName);
   if (cal.color) line += ` [${cal.color}]`;
   if (!cal.enabled) line += ' (disabled)';
@@ -317,7 +323,7 @@ async function resolveTaskByUid(
   uid: string
 ): Promise<{ href: string; etag: string; icalData: string }> {
   const config = getNextcloudConfig();
-  const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/${calendarName}/`;
+  const calDavUrl = `${config.url}${davPath('calendars', config.user, calendarName)}/`;
 
   const reportBody = `<?xml version="1.0" encoding="UTF-8"?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
@@ -398,7 +404,7 @@ export const listTaskListsTool = {
   handler: async (args: { detailed?: boolean } = {}) => {
     try {
       const config = getNextcloudConfig();
-      const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/`;
+      const calDavUrl = `${config.url}${davPath('calendars', config.user)}/`;
 
       const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
 <d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:x1="http://apple.com/ns/ical/" xmlns:x2="http://owncloud.org/ns">
@@ -484,7 +490,7 @@ export const listTasksTool = {
   handler: async (args: { calendarName: string; status?: string }) => {
     try {
       const config = getNextcloudConfig();
-      const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/${args.calendarName}/`;
+      const calDavUrl = `${config.url}${davPath('calendars', config.user, args.calendarName)}/`;
 
       const reportBody = `<?xml version="1.0" encoding="UTF-8"?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
@@ -623,74 +629,86 @@ export const createTaskTool = {
     classification?: string;
     url?: string;
   }) => {
-    const config = getNextcloudConfig();
-    const taskUid = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/${args.calendarName}/${taskUid}.ics`;
-    const now = icalNow();
+    try {
+      const config = getNextcloudConfig();
+      const taskUid = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const calDavUrl = `${config.url}${davPath('calendars', config.user, args.calendarName, `${taskUid}.ics`)}`;
+      const now = icalNow();
 
-    let vtodo = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//AIquila//MCP Server//EN\r\nBEGIN:VTODO\r\nUID:${taskUid}\r\nDTSTAMP:${now}\r\nCREATED:${now}\r\nLAST-MODIFIED:${now}\r\nSUMMARY:${escapeICalValue(args.summary)}\r\nSTATUS:NEEDS-ACTION`;
+      let vtodo = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//AIquila//MCP Server//EN\r\nBEGIN:VTODO\r\nUID:${taskUid}\r\nDTSTAMP:${now}\r\nCREATED:${now}\r\nLAST-MODIFIED:${now}\r\nSUMMARY:${escapeICalValue(args.summary)}\r\nSTATUS:NEEDS-ACTION`;
 
-    if (args.description) {
-      vtodo += `\r\nDESCRIPTION:${escapeICalValue(args.description)}`;
-    }
-    if (args.priority !== undefined && args.priority > 0) {
-      vtodo += `\r\nPRIORITY:${args.priority}`;
-    }
-    if (args.due) {
-      vtodo += args.due.length === 8 ? `\r\nDUE;VALUE=DATE:${args.due}` : `\r\nDUE:${args.due}`;
-    }
-    if (args.dtstart) {
-      vtodo +=
-        args.dtstart.length === 8
-          ? `\r\nDTSTART;VALUE=DATE:${args.dtstart}`
-          : `\r\nDTSTART:${args.dtstart}`;
-    }
-    if (args.location) {
-      vtodo += `\r\nLOCATION:${escapeICalValue(args.location)}`;
-    }
-    if (args.categories && args.categories.length > 0) {
-      vtodo += `\r\nCATEGORIES:${args.categories.map(escapeICalValue).join(',')}`;
-    }
-    if (args.relatedTo) {
-      vtodo += `\r\nRELATED-TO;RELTYPE=PARENT:${escapeICalValue(args.relatedTo)}`;
-    }
-    if (args.percentComplete !== undefined && args.percentComplete > 0) {
-      vtodo += `\r\nPERCENT-COMPLETE:${args.percentComplete}`;
-    }
-    if (args.classification) {
-      vtodo += `\r\nCLASS:${args.classification}`;
-    }
-    if (args.url) {
-      vtodo += `\r\nURL:${args.url}`;
-    }
+      if (args.description) {
+        vtodo += `\r\nDESCRIPTION:${escapeICalValue(args.description)}`;
+      }
+      if (args.priority !== undefined && args.priority > 0) {
+        vtodo += `\r\nPRIORITY:${args.priority}`;
+      }
+      if (args.due) {
+        vtodo += args.due.length === 8 ? `\r\nDUE;VALUE=DATE:${args.due}` : `\r\nDUE:${args.due}`;
+      }
+      if (args.dtstart) {
+        vtodo +=
+          args.dtstart.length === 8
+            ? `\r\nDTSTART;VALUE=DATE:${args.dtstart}`
+            : `\r\nDTSTART:${args.dtstart}`;
+      }
+      if (args.location) {
+        vtodo += `\r\nLOCATION:${escapeICalValue(args.location)}`;
+      }
+      if (args.categories && args.categories.length > 0) {
+        vtodo += `\r\nCATEGORIES:${args.categories.map(escapeICalValue).join(',')}`;
+      }
+      if (args.relatedTo) {
+        vtodo += `\r\nRELATED-TO;RELTYPE=PARENT:${escapeICalValue(args.relatedTo)}`;
+      }
+      if (args.percentComplete !== undefined && args.percentComplete > 0) {
+        vtodo += `\r\nPERCENT-COMPLETE:${args.percentComplete}`;
+      }
+      if (args.classification) {
+        vtodo += `\r\nCLASS:${args.classification}`;
+      }
+      if (args.url) {
+        vtodo += `\r\nURL:${args.url}`;
+      }
 
-    vtodo += `\r\nEND:VTODO\r\nEND:VCALENDAR`;
+      vtodo += `\r\nEND:VTODO\r\nEND:VCALENDAR`;
 
-    const response = await fetchCalDAV(calDavUrl, {
-      method: 'PUT',
-      body: formatICalendar(vtodo),
-      headers: {
-        'Content-Type': 'text/calendar; charset=utf-8',
-        'If-None-Match': '*',
-      },
-    });
-
-    // CalDAV PUT for creation should return 201 (Created) or 204 (No Content)
-    if (response.status !== 201 && response.status !== 204) {
-      const errorText = await response.text();
-      throw new Error(
-        `Failed to create task: server returned ${response.status} (expected 201 or 204) - ${errorText}`
-      );
-    }
-
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `Task created successfully: ${args.summary} (UID: ${taskUid})`,
+      const response = await fetchCalDAV(calDavUrl, {
+        method: 'PUT',
+        body: formatICalendar(vtodo),
+        headers: {
+          'Content-Type': 'text/calendar; charset=utf-8',
+          'If-None-Match': '*',
         },
-      ],
-    };
+      });
+
+      // CalDAV PUT for creation should return 201 (Created) or 204 (No Content)
+      if (response.status !== 201 && response.status !== 204) {
+        const errorText = await response.text();
+        throw new Error(
+          `Failed to create task: server returned ${response.status} (expected 201 or 204) - ${errorText}`
+        );
+      }
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Task created successfully: ${args.summary} (UID: ${taskUid})`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error creating task: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   },
 };
 

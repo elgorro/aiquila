@@ -7,7 +7,13 @@ import {
   fetchCalDAV,
   nsTagContent,
 } from '../../client/caldav.js';
-import { escapeVCardValue, sanitizeVCardUriValue, unescapeVCardValue } from '../dav-utils.js';
+import {
+  davPath,
+  lastHrefSegment,
+  escapeVCardValue,
+  sanitizeVCardUriValue,
+  unescapeVCardValue,
+} from '../dav-utils.js';
 import {
   getParamValues,
   getProperty,
@@ -137,7 +143,7 @@ function parseAddressBooks(responseXml: string): ParsedAddressBook[] {
     const ctagMatch = block.match(/<cs:getctag>([^<]*)<\/cs:getctag>/);
 
     const url = hrefMatch?.[1] || '';
-    const name = displayNameMatch?.[1] || url.split('/').filter(Boolean).pop() || '';
+    const name = displayNameMatch?.[1] || lastHrefSegment(url);
 
     books.push({
       displayName: name,
@@ -372,7 +378,7 @@ async function resolveContactByUid(
   uid: string
 ): Promise<{ href: string; etag: string; vcardData: string }> {
   const config = getNextcloudConfig();
-  const cardDavUrl = `${config.url}/remote.php/dav/addressbooks/users/${config.user}/${addressBookName}/`;
+  const cardDavUrl = `${config.url}${davPath('addressbooks', 'users', config.user, addressBookName)}/`;
 
   const reportBody = `<?xml version="1.0" encoding="UTF-8"?>
 <cr:addressbook-query xmlns:d="DAV:" xmlns:cr="urn:ietf:params:xml:ns:carddav">
@@ -444,7 +450,7 @@ export const listAddressBooksTool = {
   handler: async () => {
     try {
       const config = getNextcloudConfig();
-      const cardDavUrl = `${config.url}/remote.php/dav/addressbooks/users/${config.user}/`;
+      const cardDavUrl = `${config.url}${davPath('addressbooks', 'users', config.user)}/`;
 
       const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
 <d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:cr="urn:ietf:params:xml:ns:carddav">
@@ -531,7 +537,7 @@ export const listContactsTool = {
   handler: async (args: { addressBookName: string; search?: string; limit?: number }) => {
     try {
       const config = getNextcloudConfig();
-      const cardDavUrl = `${config.url}/remote.php/dav/addressbooks/users/${config.user}/${args.addressBookName}/`;
+      const cardDavUrl = `${config.url}${davPath('addressbooks', 'users', config.user, args.addressBookName)}/`;
       const limit = args.limit || 50;
 
       let filterXml = '';
@@ -752,7 +758,7 @@ export const createContactTool = {
     try {
       const config = getNextcloudConfig();
       const contactUid = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
-      const cardDavUrl = `${config.url}/remote.php/dav/addressbooks/users/${config.user}/${args.addressBookName}/${contactUid}.vcf`;
+      const cardDavUrl = `${config.url}${davPath('addressbooks', 'users', config.user, args.addressBookName, `${contactUid}.vcf`)}`;
       const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 
       // Build N property: family;given;additional;prefix;suffix

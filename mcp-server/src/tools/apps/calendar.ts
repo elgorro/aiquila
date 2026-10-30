@@ -15,6 +15,8 @@ import {
   IANA_TZID,
   quoteICalParam,
   formatICalendar,
+  davPath,
+  lastHrefSegment,
 } from '../dav-utils.js';
 import { fetchOCS } from '../../client/ocs.js';
 import { getNextcloudConfig } from '../types.js';
@@ -387,7 +389,7 @@ export function parseCalendars(responseXml: string): ParsedCalendar[] {
     const components = compSet ? compSet[1] : '';
 
     const url = hrefMatch?.[1] || '';
-    const name = displayNameMatch?.[1] || url.split('/').filter(Boolean).pop() || '';
+    const name = displayNameMatch?.[1] || lastHrefSegment(url);
 
     calendars.push({
       displayName: name,
@@ -680,7 +682,7 @@ function formatCalendar(cal: ParsedCalendar): string {
  */
 async function resolveCalendarSlug(nameOrSlug: string): Promise<string> {
   const config = getNextcloudConfig();
-  const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/`;
+  const calDavUrl = `${config.url}${davPath('calendars', config.user)}/`;
   const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
 <d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
   <d:prop><d:resourcetype /><d:displayname /></d:prop>
@@ -694,14 +696,17 @@ async function resolveCalendarSlug(nameOrSlug: string): Promise<string> {
     if (!response.ok) return nameOrSlug;
     const text = await response.text();
     const calendars = parseCalendars(text);
+    // The slug in an href is percent-encoded; tools take it decoded. The
+    // encoded form still matches, so a slug copied from a URL also works.
     for (const cal of calendars) {
-      const slug = cal.url.split('/').filter(Boolean).pop() ?? '';
-      if (slug === nameOrSlug) return nameOrSlug;
+      const raw = cal.url.split('/').filter(Boolean).pop() ?? '';
+      const slug = lastHrefSegment(cal.url);
+      if (slug === nameOrSlug || raw === nameOrSlug) return slug;
     }
     const lower = nameOrSlug.toLowerCase();
     for (const cal of calendars) {
       if (cal.displayName.toLowerCase() === lower) {
-        return cal.url.split('/').filter(Boolean).pop() ?? nameOrSlug;
+        return lastHrefSegment(cal.url) || nameOrSlug;
       }
     }
   } catch {
@@ -765,7 +770,7 @@ async function resolveEventByUid(
 ): Promise<{ href: string; etag: string; icalData: string }> {
   const config = getNextcloudConfig();
   let slug = calendarName;
-  const buildUrl = () => `${config.url}/remote.php/dav/calendars/${config.user}/${slug}/`;
+  const buildUrl = () => `${config.url}${davPath('calendars', config.user, slug)}/`;
 
   const reportBody = `<?xml version="1.0" encoding="UTF-8"?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
@@ -851,7 +856,7 @@ export const listCalendarsTool = {
   handler: async () => {
     try {
       const config = getNextcloudConfig();
-      const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/`;
+      const calDavUrl = `${config.url}${davPath('calendars', config.user)}/`;
 
       const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
 <d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:x1="http://apple.com/ns/ical/" xmlns:x2="http://owncloud.org/ns">
@@ -950,7 +955,7 @@ export const listEventsTool = {
     try {
       const config = getNextcloudConfig();
       let slug = args.calendarName;
-      const buildUrl = () => `${config.url}/remote.php/dav/calendars/${config.user}/${slug}/`;
+      const buildUrl = () => `${config.url}${davPath('calendars', config.user, slug)}/`;
       const limit = args.limit || 50;
 
       // Default time range: today to 30 days from now
@@ -1220,7 +1225,7 @@ export const createEventTool = {
       const config = getNextcloudConfig();
       const eventUid = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
       let slug = args.calendarName;
-      const baseUrl = () => `${config.url}/remote.php/dav/calendars/${config.user}/${slug}/`;
+      const baseUrl = () => `${config.url}${davPath('calendars', config.user, slug)}/`;
 
       // Validate the calendar supports VEVENT before building and sending the iCal payload.
       // If the original name is a display name (not a slug), retry once after resolving.
