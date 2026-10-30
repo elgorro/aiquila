@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import https from 'node:https';
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { createMcpExpressApp, requireBearerAuth } from '@modelcontextprotocol/express';
@@ -219,7 +219,7 @@ export async function createHttpApp(): Promise<express.Express> {
   // Mounted ahead of every other route so that preflights are answered before
   // the auth chain runs — an OPTIONS request carries no Authorization header
   // and would otherwise be rejected with 401 by requireBearerAuth.
-  app.use((req: any, res: any, next: any) => {
+  app.use((req: Request, res: Response, next: NextFunction) => {
     const origin = req.headers?.origin;
     if (typeof origin === 'string' && allowedOrigins.has(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
@@ -245,7 +245,7 @@ export async function createHttpApp(): Promise<express.Express> {
   // Stylesheet for the OAuth login page. Served as its own document so the page
   // needs no inline <style>, which lets its CSP drop 'unsafe-inline'. Must stay
   // ahead of the auth middleware — the login page is shown to anonymous users.
-  app.get(LOGIN_STYLESHEET_PATH, (_req: any, res: any) => {
+  app.get(LOGIN_STYLESHEET_PATH, (_req: Request, res: Response) => {
     res
       .set('Content-Type', 'text/css; charset=utf-8')
       .set('Cache-Control', 'public, max-age=86400')
@@ -256,7 +256,7 @@ export async function createHttpApp(): Promise<express.Express> {
 
   // Simple health check — bypasses all auth middleware so Docker health checks
   // work even before OAuth is fully configured or TLS is verified.
-  app.get('/health', (_req: any, res: any) => {
+  app.get('/health', (_req: Request, res: Response) => {
     res.status(200).json({ status: 'ok' });
   });
 
@@ -294,14 +294,14 @@ export async function createHttpApp(): Promise<express.Express> {
       onerror: (err) => logger.warn({ err: err.message }, '[mcp] Request error'),
     })
   );
-  const handleMcpRequest = (req: any, res: any) => mcpHandler(req, res, req.body);
+  const handleMcpRequest = (req: Request, res: Response) => mcpHandler(req, res, req.body);
 
   // MCP 2026-07-28, Streamable HTTP, Security §1: the Origin header MUST be
   // validated on every request to the MCP endpoint, and one that is present
   // and not allowed is answered 403 (DNS rebinding). Requests without Origin
   // (server-side clients, the Nextcloud app) are unaffected. The allowed set
   // is the CORS one: the issuer origin plus MCP_CORS_ORIGINS.
-  const checkOrigin = (req: any, res: any, next: any) => {
+  const checkOrigin = (req: Request, res: Response, next: NextFunction) => {
     const origin = req.headers?.origin;
     if (typeof origin === 'string' && !allowedOrigins.has(origin)) {
       logger.warn({ origin }, '[mcp] Request from a disallowed Origin rejected');
@@ -396,7 +396,7 @@ export async function createHttpApp(): Promise<express.Express> {
     // OAuth discovery + authorization server endpoints
     const oauthPaths = ['/.well-known', '/register', '/authorize', '/token', '/revoke'];
     for (const p of oauthPaths) {
-      app.use(p, (req: any, _res: any, next: any) => {
+      app.use(p, (req: Request, _res: Response, next: NextFunction) => {
         logger.debug({ method: req.method, path: req.path }, '[oauth] Request');
         next();
       });
@@ -426,7 +426,7 @@ export async function createHttpApp(): Promise<express.Express> {
 
     // Protect /mcp (and / as alias) with Bearer token auth
     const authMiddleware = [
-      (req: any, res: any, next: any) => {
+      (req: Request, res: Response, next: NextFunction) => {
         res.on('finish', () => {
           if (res.statusCode === 401 || res.statusCode === 403) {
             logger.warn(
@@ -442,7 +442,7 @@ export async function createHttpApp(): Promise<express.Express> {
         // the internal service token, which carries none). Advertise the scope
         // without enforcing it by decorating the header on its way out.
         const setHeader = res.setHeader.bind(res);
-        res.setHeader = (name: string, value: any) => {
+        res.setHeader = (name: string, value: Parameters<Response['setHeader']>[1]) => {
           if (
             typeof name === 'string' &&
             name.toLowerCase() === 'www-authenticate' &&
@@ -463,7 +463,7 @@ export async function createHttpApp(): Promise<express.Express> {
       // every JSON-RPC method requires a bearer token.
       ...(lazyAuthEnabled
         ? [
-            async (req: any, res: any, next: any) => {
+            async (req: Request, res: Response, next: NextFunction) => {
               if (!req.headers.authorization && isPublicRequest(req.body)) {
                 logger.debug(
                   { rpcMethod: req.body?.method },
@@ -479,7 +479,7 @@ export async function createHttpApp(): Promise<express.Express> {
 
       // MCP_INTERNAL_TOKEN works only on a direct connection from an internal
       // address; through the reverse proxy it is an invalid token.
-      (req: any, res: any, next: any) => {
+      (req: Request, res: Response, next: NextFunction) => {
         const header = req.headers.authorization;
         const token =
           typeof header === 'string' && /^Bearer /i.test(header) ? header.slice(7).trim() : '';
@@ -504,7 +504,7 @@ export async function createHttpApp(): Promise<express.Express> {
         verifier: provider,
         resourceMetadataUrl: new URL('/.well-known/oauth-protected-resource/mcp', issuerUrl).href,
       }),
-      async (req: any, res: any) => {
+      async (req: Request, res: Response) => {
         logger.debug({ method: req.method, rpcMethod: req.body?.method }, '[mcp] Request received');
         if (req.auth?.extra?.service === true) {
           await runAs({ kind: 'service' }, () => handleMcpRequest(req, res));
@@ -515,7 +515,8 @@ export async function createHttpApp(): Promise<express.Express> {
         // any invalid token, so the client signs in again (RFC 6750 §3.1).
         let user;
         try {
-          user = await provider.credentialFor(req.auth);
+          // requireBearerAuth above sets req.auth or answers 401 itself.
+          user = await provider.credentialFor(req.auth!);
         } catch (err) {
           if (!(err instanceof CredentialBackendUnavailableError)) throw err;
           // The key service is down: the grant is fine, the request just
@@ -546,7 +547,7 @@ export async function createHttpApp(): Promise<express.Express> {
     app.all(MCP_PATH, ...authMiddleware);
     app.all('/', ...authMiddleware);
   } else {
-    const mcpHandler = async (req: any, res: any) => {
+    const mcpHandler = async (req: Request, res: Response) => {
       await handleMcpRequest(req, res);
     };
     app.all(MCP_PATH, mcpHandler);

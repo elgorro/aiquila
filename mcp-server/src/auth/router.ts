@@ -7,7 +7,7 @@
 // check on /mcp uses.
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { mcpAuthMetadataRouter } from '@modelcontextprotocol/express';
 import {
@@ -99,7 +99,7 @@ function asOAuthError(err: unknown, context: string): OAuthError {
   return new OAuthError(OAuthErrorCode.ServerError, 'Internal Server Error');
 }
 
-function sendJsonError(res: any, err: unknown, context: string): void {
+function sendJsonError(res: Response, err: unknown, context: string): void {
   const oauthErr = asOAuthError(err, context);
   res.status(statusFor(oauthErr)).json(oauthErr.toResponseObject());
 }
@@ -204,7 +204,7 @@ async function authenticateClient(
 
 /** Answers any method not in `methods` with 405 and an Allow header. */
 function allowMethods(methods: string[]) {
-  return (req: any, res: any, next: any) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     if (methods.includes(req.method)) return next();
     res
       .status(405)
@@ -223,7 +223,7 @@ function allowMethods(methods: string[]) {
  * wildcard is safe; the app-wide CORS middleware has already echoed a trusted
  * origin with credentials, and that is left in place.
  */
-function anyOrigin(_req: any, res: any, next: any) {
+function anyOrigin(_req: Request, res: Response, next: NextFunction) {
   if (!res.getHeader('Access-Control-Allow-Origin')) {
     res.setHeader('Access-Control-Allow-Origin', '*');
   }
@@ -248,7 +248,7 @@ function authorizationHandler(options: AuthRouterOptions) {
   const checkResource = resourceChecker(options);
   const issuer = options.issuerUrl.href;
 
-  return async (req: any, res: any) => {
+  return async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
 
     // Until client_id and redirect_uri are verified, errors go to the user
@@ -331,7 +331,7 @@ function authorizationHandler(options: AuthRouterOptions) {
 function tokenHandler(options: AuthRouterOptions) {
   const { provider } = options;
   const checkResource = resourceChecker(options);
-  return async (req: any, res: any) => {
+  return async (req: Request, res: Response) => {
     // RFC 6749 §5.1: responses carrying tokens must not be cached.
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Pragma', 'no-cache');
@@ -376,7 +376,7 @@ function tokenHandler(options: AuthRouterOptions) {
 
 function registrationHandler(provider: NextcloudOAuthProvider) {
   const registerClient = provider.clientsStore.registerClient!;
-  return async (req: any, res: any) => {
+  return async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     try {
       const result = specTypeSchemas.OAuthClientMetadata['~standard'].validate(req.body ?? {});
@@ -416,7 +416,7 @@ function registrationHandler(provider: NextcloudOAuthProvider) {
 }
 
 function revocationHandler(provider: NextcloudOAuthProvider) {
-  return async (req: any, res: any) => {
+  return async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     try {
       const p = params(req.body);
@@ -470,7 +470,7 @@ export function authRouter(options: AuthRouterOptions): express.Router {
   router.get(
     '/auth/flow/:id',
     limiter(minutes(15), 3000, 'sign-in'),
-    async (req: any, res: any) => {
+    async (req: Request, res: Response) => {
       res.setHeader('Cache-Control', 'no-store');
       await provider.continueFlow(String(req.params.id), readBrowserBinding(req), res);
     }
@@ -492,7 +492,7 @@ export function authRouter(options: AuthRouterOptions): express.Router {
       allowMethods(['POST']),
       ...(registrationToken
         ? [
-            (req: any, res: any, next: any) => {
+            (req: Request, res: Response, next: NextFunction) => {
               const header = req.headers.authorization;
               if (
                 typeof header !== 'string' ||

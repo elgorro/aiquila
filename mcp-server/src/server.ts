@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { createRequire } from 'node:module';
-import { McpServer } from '@modelcontextprotocol/server';
+import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { logger } from './logger.js';
 import { getFilteredToolSets } from './tool-registry.js';
 import { reportToolFailure } from './nc-context.js';
@@ -37,14 +37,14 @@ export async function createServer(): Promise<McpServer> {
           title: tool.title,
           description: tool.description,
           annotations: tool.annotations,
-          inputSchema: tool.inputSchema as any,
+          inputSchema: tool.inputSchema,
         },
         async (...args: unknown[]) => {
           const start = Date.now();
           logger.debug({ tool: name }, '[tool] Called');
-          let result: any;
+          let result: CallToolResult;
           try {
-            result = await (tool.handler as (...a: unknown[]) => Promise<any>)(...args);
+            result = await (tool.handler as (...a: unknown[]) => Promise<CallToolResult>)(...args);
           } catch (err) {
             reportToolFailure();
             throw err;
@@ -52,7 +52,8 @@ export async function createServer(): Promise<McpServer> {
           const ms = Date.now() - start;
           if (result?.isError) {
             reportToolFailure();
-            const errorText = result.content?.[0]?.text ?? 'unknown error';
+            const first = result.content?.[0];
+            const errorText = first?.type === 'text' ? first.text : 'unknown error';
             logger.warn({ tool: name, error: errorText, ms }, '[tool] Error response');
           } else {
             logger.debug({ tool: name, ms }, '[tool] Completed');

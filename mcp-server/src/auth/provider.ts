@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { randomBytes, randomUUID } from 'node:crypto';
+import type { Response } from 'express';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import {
   OAuthError,
@@ -322,7 +323,7 @@ export class NextcloudOAuthProvider {
   async authorize(
     client: OAuthClientInformationFull,
     params: AuthorizationParams,
-    res: any
+    res: Response
   ): Promise<void> {
     const clientName = clientDisplayName(client);
     const fromAddress = params.clientAddress
@@ -372,7 +373,11 @@ export class NextcloudOAuthProvider {
    * user has granted access, issues the authorization code and redirects to
    * the client with it.
    */
-  async continueFlow(flowId: string, browserBinding: string | undefined, res: any): Promise<void> {
+  async continueFlow(
+    flowId: string,
+    browserBinding: string | undefined,
+    res: Response
+  ): Promise<void> {
     const pending = FLOW_ID.test(flowId) ? this.flows.get(flowId) : undefined;
     // The flow completes only in the browser that started it.
     if (!pending || !browserBinding || pending.params.browserBinding !== browserBinding) {
@@ -501,7 +506,7 @@ export class NextcloudOAuthProvider {
     }
   }
 
-  private sendFlowPage(res: any, status: number, page: FlowPage): void {
+  private sendFlowPage(res: Response, status: number, page: FlowPage): void {
     applySecurityHeaders(res).status(status).type('html').send(renderFlowPage(page));
   }
 
