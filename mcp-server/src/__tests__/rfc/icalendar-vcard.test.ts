@@ -9,6 +9,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('webdav', () => ({ createClient: vi.fn(() => ({})) }));
 
+/** What `/ocs/v2.php/cloud/user` answers for the signed-in user. */
+let ocsUser: Record<string, unknown> = {};
+
 const puts: { url: string; body: string; headers: Record<string, string> }[] = [];
 
 const MULTISTATUS =
@@ -21,6 +24,7 @@ const MULTISTATUS =
 
 beforeEach(() => {
   puts.length = 0;
+  ocsUser = { id: 'admin', email: 'ada@example.com', displayname: 'Ada, Admin' };
   process.env.NEXTCLOUD_URL = 'https://cloud.example.com';
   process.env.NEXTCLOUD_USER = 'admin';
   process.env.NEXTCLOUD_PASSWORD = 'testpass';
@@ -32,6 +36,10 @@ beforeEach(() => {
         headers: init.headers as Record<string, string>,
       });
       return { ok: true, status: 201, text: async () => '', headers: new Headers() };
+    }
+    if (url.includes('/ocs/v2.php/cloud/user')) {
+      const meta = { status: 'ok', statuscode: 200, message: 'OK' };
+      return { ok: true, status: 200, json: async () => ({ ocs: { meta, data: ocsUser } }) };
     }
     return { ok: true, status: 207, text: async () => MULTISTATUS, headers: new Headers() };
   }) as unknown as typeof fetch;
@@ -132,6 +140,18 @@ describe('RFC 5545 — create_event', () => {
     const lines = unfold((await create({ dtstart: '20240315' })).body);
     expect(property(lines, 'DTSTART')).toBe('DTSTART;VALUE=DATE:20240315');
     expect(property(lines, 'DTEND')).toBe('DTEND;VALUE=DATE:20240316');
+  });
+
+  it('§3.8.4.3 / §3.3.3: ORGANIZER is a mailto: of the user email, CN a quoted-string (§3.2)', async () => {
+    const lines = unfold((await create({ attendees: [{ email: 'bob@example.com' }] })).body);
+    expect(property(lines, 'ORGANIZER')).toBe('ORGANIZER;CN="Ada, Admin":mailto:ada@example.com');
+  });
+
+  it('§3.8.4.3: without a known email ORGANIZER is omitted, never mailto:<login name>', async () => {
+    ocsUser = { id: 'admin', email: '', displayname: 'admin' };
+    const lines = unfold((await create({ attendees: [{ email: 'bob@example.com' }] })).body);
+    expect(property(lines, 'ORGANIZER')).toBeUndefined();
+    expect(lines.join('\n')).not.toContain('mailto:admin\n');
   });
 
   it('§3.6.6: every VALARM has ACTION and TRIGGER, and DISPLAY has DESCRIPTION', async () => {

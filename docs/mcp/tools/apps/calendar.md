@@ -93,7 +93,7 @@ Create a new calendar event with date/time, location, description, attendees, an
 - `status` (enum, optional): `TENTATIVE`, `CONFIRMED`, `CANCELLED`
 - `transp` (enum, optional): `OPAQUE` (busy) or `TRANSPARENT` (free)
 - `categories` (string[], optional): Tags/categories
-- `attendees` (object[], optional): Attendees with email, display name, role, RSVP
+- `attendees` (object[], optional): Attendees with email, display name, role, RSVP. The signed-in user becomes the `ORGANIZER`, addressed by the email set in their Nextcloud profile; without one the property is left out and Nextcloud's scheduling fills it in
 - `rrule` (string, optional): Recurrence rule (e.g. `FREQ=WEEKLY;BYDAY=MO,WE,FR`)
 - `accessClass` (enum, optional): `PUBLIC`, `PRIVATE`, `CONFIDENTIAL`
 - `alarm` (number, optional): Single reminder in minutes before the event
@@ -146,6 +146,7 @@ Update an existing calendar event's fields by UID. Uses CalDAV ETag-based optimi
 - `rrule` (string|null, optional): New recurrence rule, or `null` to remove
 - `alarm` (number|null, optional): Single reminder in minutes before the event, or `null` to remove all existing alarms
 - `alarms` (number[], optional): Multiple reminders in minutes before the event (e.g. `[1440, 60]`). Replaces existing alarms; combined with `alarm` if both are set.
+- `attendees` (object[]|null, optional): Replace all attendees, or `null` to remove them and the organizer. An existing `ORGANIZER` with an email address is kept; otherwise it is set as for `create_event`
 
 **Returns:**
 Confirmation message.

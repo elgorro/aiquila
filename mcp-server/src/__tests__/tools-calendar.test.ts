@@ -6,6 +6,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('webdav', () => ({ createClient: vi.fn(() => ({})) }));
 global.fetch = vi.fn();
 
+/** `/ocs/v2.php/cloud/user` for the signed-in user. */
+function ocsUser(data: Record<string, unknown>) {
+  return {
+    ok: true,
+    status: 200,
+    json: () =>
+      Promise.resolve({ ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data } }),
+  };
+}
+
 describe('Calendar Tools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -393,6 +403,9 @@ END:VCALENDAR</c:calendar-data>
     it('should create event with attendees and alarm', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce(propfindVeventOk)
+        .mockResolvedValueOnce(
+          ocsUser({ id: 'admin', email: 'admin@example.com', displayname: 'Ada Admin' })
+        )
         .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
         .mockResolvedValueOnce({
           ok: true,
@@ -409,13 +422,14 @@ END:VCALENDAR</c:calendar-data>
         alarm: 15,
       });
 
-      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
+      const putCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[2];
+      expect(putCall[1].method).toBe('PUT');
       // Long content lines are folded (RFC 5545 §3.1); compare unfolded.
       putCall[1].body = putCall[1].body.replace(/\r\n[ \t]/g, '');
       expect(putCall[1].body).toContain('ATTENDEE');
       expect(putCall[1].body).toContain('CN="Bob"');
       expect(putCall[1].body).toContain('mailto:bob@example.com');
-      expect(putCall[1].body).toContain('ORGANIZER');
+      expect(putCall[1].body).toContain('ORGANIZER;CN="Ada Admin":mailto:admin@example.com');
       expect(putCall[1].body).toContain('BEGIN:VALARM');
       expect(putCall[1].body).toContain('TRIGGER:-PT15M');
       expect(putCall[1].body).toContain('END:VALARM');
@@ -818,6 +832,9 @@ END:VCALENDAR</c:calendar-data>
     it('should add attendees to event', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(resolveResponse) })
+        .mockResolvedValueOnce(
+          ocsUser({ id: 'admin', email: 'admin@example.com', displayname: 'Ada Admin' })
+        )
         .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
 
       const { updateEventTool } = await import('../tools/apps/calendar.js');
@@ -832,17 +849,82 @@ END:VCALENDAR</c:calendar-data>
 
       expect(result.content[0].text).toContain('updated successfully');
       // Long content lines are folded (RFC 5545 §3.1); compare unfolded.
-      const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body.replace(
+      const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[2][1].body.replace(
         /\r\n[ \t]/g,
         ''
       );
-      expect(putBody).toContain('ORGANIZER;CN="admin":mailto:admin');
+      expect(putBody).toContain('ORGANIZER;CN="Ada Admin":mailto:admin@example.com');
       expect(putBody).toContain(
         'ATTENDEE;CN="Alice";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:alice@example.com'
       );
       expect(putBody).toContain(
         'ATTENDEE;ROLE=OPT-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bob@example.com'
       );
+    });
+
+    describe('ORGANIZER (RFC 5545 §3.8.4.3)', () => {
+      const withOrganizer = (organizer: string) =>
+        resolveResponse.replace(
+          'END:VEVENT',
+          `${organizer}\nATTENDEE:mailto:old@example.com\nEND:VEVENT`
+        );
+
+      async function update(ical: string, ...extra: unknown[]) {
+        const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+        fetchMock.mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(ical) });
+        for (const r of extra) fetchMock.mockResolvedValueOnce(r);
+        fetchMock.mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+
+        const { updateEventTool } = await import('../tools/apps/calendar.js');
+        const result = await updateEventTool.handler({
+          uid: 'event-1',
+          calendarName: 'personal',
+          attendees: [{ email: 'alice@example.com' }],
+        });
+        expect(result.content[0].text).toContain('updated successfully');
+        const put = fetchMock.mock.calls.find((c) => c[1]?.method === 'PUT')!;
+        return { body: String(put[1].body).replace(/\r\n[ \t]/g, ''), calls: fetchMock.mock.calls };
+      }
+
+      it('keeps an existing mailto: organizer and does not look one up', async () => {
+        const { body, calls } = await update(
+          withOrganizer('ORGANIZER;CN="Carol":mailto:carol@example.com')
+        );
+        expect(body).toContain('ORGANIZER;CN="Carol":mailto:carol@example.com');
+        expect(body.match(/^ORGANIZER/gm)).toHaveLength(1);
+        expect(body).not.toContain('old@example.com');
+        expect(calls.some((c) => String(c[0]).includes('/cloud/user'))).toBe(false);
+      });
+
+      it('replaces a mailto:<login name> organizer with the user email', async () => {
+        const { body } = await update(
+          withOrganizer('ORGANIZER;CN=admin:mailto:admin'),
+          ocsUser({ id: 'admin', email: 'admin@example.com', displayname: 'Ada Admin' })
+        );
+        expect(body).toContain('ORGANIZER;CN="Ada Admin":mailto:admin@example.com');
+        expect(body).not.toMatch(/mailto:admin\r?$/m);
+      });
+
+      it('leaves ORGANIZER out when the user has no email address', async () => {
+        const { body } = await update(
+          withOrganizer('ORGANIZER;CN=admin:mailto:admin'),
+          ocsUser({ id: 'admin', email: null, displayname: 'Ada Admin' })
+        );
+        expect(body).not.toMatch(/^ORGANIZER/m);
+        expect(body).toContain(
+          'ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:alice@example.com'
+        );
+      });
+
+      it('leaves ORGANIZER out when Nextcloud cannot be asked', async () => {
+        const { body } = await update(withOrganizer('ORGANIZER:mailto:admin'), {
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+          text: () => Promise.resolve(''),
+        });
+        expect(body).not.toMatch(/^ORGANIZER/m);
+      });
     });
 
     it('should remove attendees when set to null', async () => {
