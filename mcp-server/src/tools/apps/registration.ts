@@ -63,8 +63,9 @@ export const getRegistrationSettingsTool = {
     try {
       const entries = await Promise.all(
         KNOWN_KEYS.map(async (key) => {
-          const result = await fetchOCS<string>(`${APPCONFIG_BASE}/${key}`);
-          return [key, result.ocs.data] as const;
+          // provisioning_api wraps the value: { data: "<value>" }
+          const result = await fetchOCS<{ data: string }>(`${APPCONFIG_BASE}/${key}`);
+          return [key, result.ocs.data.data] as const;
         })
       );
 
