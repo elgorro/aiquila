@@ -85,7 +85,7 @@ this repository ([OpenAPI](../dev/openapi.md)) rather than an external reference
 | `mail` | `apps/mail.ts` | `mail` | App REST, OCS (send) | [nextcloud/mail](https://github.com/nextcloud/mail) | 0.1.7 · `b98bd51` · 2026-02-08 | mail 5.12.6 · NC 34.0.5 · 2026-10-30 |
 | `deck` | `apps/deck.ts` | `deck` | App REST v1.0 | [Deck API](https://deck.readthedocs.io/en/latest/API/) | 0.2.10 · `5ac75d0` · 2026-03-28 | deck 1.18.6 · NC 34.0.5 · 2026-10-30 |
 | `passman` | `apps/passman.ts` | `passman` | App REST v2 | [Passman API](https://github.com/nextcloud/passman/blob/master/docs/api.md) | 0.3.24 · `a1c8f7e` · 2026-06-27 | passman 2.6.5 · NC 34.0.5 · 2026-10-30 |
-| `cookbook` | `apps/cookbook.ts` | `cookbook` | WebDAV (recipe files) | [nextcloud/cookbook](https://github.com/nextcloud/cookbook) | 0.1.2 · `33a6ce8` · 2025-11-21 | — |
+| `cookbook` | `apps/cookbook.ts` | `cookbook` | WebDAV (recipe files), App REST (config, reindex) | [nextcloud/cookbook](https://github.com/nextcloud/cookbook) | 0.1.2 · `33a6ce8` · 2025-11-21 | cookbook 0.11.12 · NC 34.0.5 · 2026-10-30 |
 | `maps` | `apps/maps.ts` | `maps` | App REST | [nextcloud/maps](https://github.com/nextcloud/maps) | 0.1.13 · `1915054` · 2026-02-12 | — |
 | `photos` | `apps/photos.ts` | `photos` | WebDAV | [nextcloud/photos](https://github.com/nextcloud/photos) | 0.2.10 · `500fc1c` · 2026-03-28 | — |
 | `talk` | `apps/talk.ts` | `spreed` | OCS | [Talk API](https://nextcloud-talk.readthedocs.io/en/latest/) | 0.2.7 · `f6ca299` · 2026-03-21 | spreed 24.0.6 · NC 34.0.5 · 2026-10-30 |
