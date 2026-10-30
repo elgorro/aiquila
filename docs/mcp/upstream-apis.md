@@ -67,7 +67,7 @@ this repository ([OpenAPI](../dev/openapi.md)) rather than an external reference
 
 | Category | Source | Upstream | API | Reference | Introduced | Last verified |
 |---|---|---|---|---|---|---|
-| `aiquila` | `apps/aiquila.ts` | `aiquila` | OCC | [OpenAPI](../dev/openapi.md) | 0.1.2 · `a3fccfc` · 2026-02-01 | — |
+| `aiquila` | `apps/aiquila.ts` | `aiquila` | OCC | [OpenAPI](../dev/openapi.md) | 0.1.2 · `a3fccfc` · 2026-02-01 | aiquila 0.5.1 · NC 34.0.5 · 2026-10-30 |
 | `security` | `system/security.ts` | `aiquila` | OCC | [OpenAPI](../dev/openapi.md) | 0.1.5 · `8f5df8b` · 2026-02-07 | — |
 | `occ` | `system/occ.ts` | `aiquila` | OCC | [OpenAPI](../dev/openapi.md) | 0.1.8 · `1962222` · 2026-02-08 | — |
 | `projects` | `apps/projects.ts` | `aiquila` | App REST | [OpenAPI](../dev/openapi.md) | 0.2.11 · `6f8e108` · 2026-04-02 | — |

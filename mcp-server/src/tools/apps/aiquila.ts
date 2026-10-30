@@ -21,7 +21,8 @@ async function runOCC(command: string, args: string[] = []): Promise<string> {
   const result = await executeOCC(command, args);
 
   if (!result.success) {
-    const errorMsg = result.stderr || result.error || 'Unknown error';
+    // aiquila:* commands report failures on stdout, not stderr
+    const errorMsg = result.stderr || result.stdout?.trim() || result.error || 'Unknown error';
     throw new Error(`OCC command failed (exit ${result.exitCode}): ${errorMsg}`);
   }
 
@@ -61,6 +62,7 @@ export const showConfigTool = {
             text: `Error: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
+        isError: true,
       };
     }
   },
@@ -167,6 +169,7 @@ export const configureTool = {
             text: `Error: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
+        isError: true,
       };
     }
   },
@@ -207,6 +210,7 @@ export const testTool = {
             text: `Error: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
+        isError: true,
       };
     }
   },

@@ -52,6 +52,7 @@ describe('AIquila Internal Tools', () => {
 
       expect(result.content[0].text).toContain('Error');
       expect(result.content[0].text).toContain('Command not found');
+      expect(result.isError).toBe(true);
     });
 
     it('should handle thrown errors', async () => {
@@ -181,6 +182,22 @@ describe('AIquila Internal Tools', () => {
 
       expect(result.content[0].text).toContain('Error');
       expect(result.content[0].text).toContain('API timeout');
+      expect(result.isError).toBe(true);
+    });
+
+    it('should surface the failure that aiquila:test prints on stdout', async () => {
+      mockExecuteOCC.mockResolvedValue({
+        success: false,
+        exitCode: 1,
+        stdout: '\n✗ Error: Invalid API key. Please check your configuration.\n',
+        stderr: '',
+      });
+
+      const { testTool } = await import('../tools/apps/aiquila.js');
+      const result = await testTool.handler({ prompt: 'test' });
+
+      expect(result.content[0].text).toContain('Invalid API key');
+      expect(result.isError).toBe(true);
     });
   });
 });
