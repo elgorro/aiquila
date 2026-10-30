@@ -6,6 +6,9 @@ contribution so your time isn't wasted on rework.
 Code isn't the only way to help: reporting issues, improving the docs and
 [funding the project](#supporting-the-project) all count.
 
+**Found a security problem?** Don't open an issue — report it privately as
+described in [SECURITY.md](SECURITY.md).
+
 ## Before you write code
 
 **Open an issue first, or comment on an existing one to claim it.**
