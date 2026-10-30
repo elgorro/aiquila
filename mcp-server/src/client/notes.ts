@@ -46,7 +46,7 @@ export async function fetchNotesAPI<T = unknown>(
 
   if (options.ifMatch) {
     // Notes API returns etag as an unquoted hash in JSON but requires a quoted
-    // value in the If-Match header per RFC 7232. Wrap if not already quoted.
+    // value in the If-Match header (RFC 9110 §13.1.1, §8.8.3). Wrap if not already quoted.
     const tag = options.ifMatch;
     headers['If-Match'] = tag.startsWith('"') ? tag : `"${tag}"`;
   }
