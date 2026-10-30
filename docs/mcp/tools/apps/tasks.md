@@ -57,7 +57,7 @@ Ask Claude: "What task lists do I have in Nextcloud?"
 List tasks from a Nextcloud Tasks calendar with full field details.
 
 **Parameters:**
-- `calendarName` (string, optional): The calendar/task list name. Default: `"tasks"`
+- `calendarName` (string, optional): The task list. Default: your first task list (see `list_task_lists`), preferring your own lists over app-generated ones such as Deck boards
 - `status` (enum, optional): Filter by status - `NEEDS-ACTION`, `COMPLETED`, `IN-PROCESS`, `CANCELLED`
 
 **Returns:**
@@ -83,7 +83,7 @@ Create a new task in a Nextcloud task list.
 
 **Parameters:**
 - `summary` (string, required): The task title/summary
-- `calendarName` (string, optional): The calendar/task list name. Default: `"tasks"`
+- `calendarName` (string, optional): The task list. Default: your first task list (see `list_task_lists`), preferring your own lists over app-generated ones such as Deck boards
 - `description` (string, optional): Detailed description of the task
 - `priority` (number, optional): Task priority from 0-9 (0=undefined, 1=highest, 9=lowest)
 - `due` (string, optional): Due date in `YYYYMMDD` or `YYYYMMDDTHHmmssZ` format
@@ -127,7 +127,7 @@ Update an existing task's fields by UID. Uses CalDAV ETag-based optimistic concu
 
 **Parameters:**
 - `uid` (string, required): The UID of the task to update
-- `calendarName` (string, optional): The calendar name. Default: `"tasks"`
+- `calendarName` (string, optional): The task list. Default: your first task list (see `list_task_lists`)
 - `summary` (string, optional): New task title
 - `description` (string, optional): New description
 - `priority` (number, optional): New priority (0-9, 0 removes priority)
@@ -161,7 +161,7 @@ Mark a task as completed or reopen it. Sets STATUS, PERCENT-COMPLETE, and COMPLE
 
 **Parameters:**
 - `uid` (string, required): The UID of the task
-- `calendarName` (string, optional): The calendar name. Default: `"tasks"`
+- `calendarName` (string, optional): The task list. Default: your first task list (see `list_task_lists`)
 - `completed` (boolean, optional): `true` = mark completed, `false` = reopen. Default: `true`
 
 **Returns:**
@@ -182,7 +182,7 @@ Delete a task from Nextcloud Tasks by UID. This action is irreversible.
 
 **Parameters:**
 - `uid` (string, required): The UID of the task to delete
-- `calendarName` (string, optional): The calendar name. Default: `"tasks"`
+- `calendarName` (string, optional): The task list. Default: your first task list (see `list_task_lists`)
 
 **Returns:**
 Success message confirming deletion.

@@ -311,6 +311,68 @@ END:VCALENDAR</c:calendar-data></d:prop></d:propstat></d:response>
       expect(result.content[0].text).toContain('No tasks found');
     });
 
+    it('should default to the first own task list, not a list named "tasks"', async () => {
+      const lists = `<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+  <d:response><d:href>/remote.php/dav/calendars/admin/app-generated--deck--board-1/</d:href>
+    <d:propstat><d:prop><d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>
+      <cal:supported-calendar-component-set><cal:comp name="VTODO"/></cal:supported-calendar-component-set>
+    </d:prop></d:propstat></d:response>
+  <d:response><d:href>/remote.php/dav/calendars/admin/my-todos/</d:href>
+    <d:propstat><d:prop><d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>
+      <cal:supported-calendar-component-set><cal:comp name="VTODO"/></cal:supported-calendar-component-set>
+    </d:prop></d:propstat></d:response>
+</d:multistatus>`;
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(lists) })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: () => Promise.resolve('<d:multistatus xmlns:d="DAV:"></d:multistatus>'),
+        });
+
+      const { listTasksTool } = await import('../tools/apps/tasks.js');
+      const result = await listTasksTool.handler({});
+
+      const [url] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
+      expect(url).toBe('https://cloud.example.com/remote.php/dav/calendars/admin/my-todos/');
+      expect(result.content[0].text).toContain('No tasks found in "my-todos"');
+    });
+
+    it('should say so when the user has no task list', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve('<d:multistatus xmlns:d="DAV:"></d:multistatus>'),
+      });
+
+      const { listTasksTool } = await import('../tools/apps/tasks.js');
+      const result = await listTasksTool.handler({});
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('No task list found');
+    });
+
+    it('should decode XML entities in calendar-data', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        text: () =>
+          Promise.resolve(
+            '<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:response>' +
+              '<d:href>/t.ics</d:href><d:propstat><d:prop><d:getetag>"e"</d:getetag>' +
+              '<c:calendar-data>BEGIN:VCALENDAR&#13;\nBEGIN:VTODO&#13;\nUID:t1&#13;\n' +
+              'SUMMARY:R&amp;D &lt;sync&gt;&#13;\nDESCRIPTION:a\\nb\\, c&#13;\n' +
+              'END:VTODO&#13;\nEND:VCALENDAR</c:calendar-data>' +
+              '</d:prop></d:propstat></d:response></d:multistatus>'
+          ),
+      });
+
+      const { listTasksTool } = await import('../tools/apps/tasks.js');
+      const result = await listTasksTool.handler({ calendarName: 'todo' });
+
+      expect(result.content[0].text).toContain('R&D <sync>');
+      expect(result.content[0].text).not.toContain('&amp;');
+      // TEXT escapes are undone (RFC 5545 §3.3.11)
+      expect(result.content[0].text).toContain('a\nb, c');
+    });
+
     it('should handle errors', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Network error'));
 
