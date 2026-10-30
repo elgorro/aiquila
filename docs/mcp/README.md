@@ -512,7 +512,7 @@ Nextcloud apps and administration:
 #### Out of Office (3 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `get_out_of_office` | Get a user's current out-of-office / absence status (NC 28+) | — |
+| `get_out_of_office` | Get a user's configured out-of-office / absence, active or scheduled (NC 28+) | — |
 | `set_out_of_office` | Set an out-of-office / absence period with status message (NC 28+) | — |
 | `clear_out_of_office` | Clear a user's out-of-office / absence status (NC 28+) | — |
 

@@ -154,6 +154,8 @@ describe('User Status & Absence Tools', () => {
 
       expect(result.content[0].text).toContain('Vacation');
       expect(result.content[0].text).toContain('2026-04-01');
+      // The configured absence, not /now, which 404s until the absence starts
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/apps/dav/api/v1/outOfOffice/admin');
     });
 
     it('should handle 404 gracefully', async () => {
