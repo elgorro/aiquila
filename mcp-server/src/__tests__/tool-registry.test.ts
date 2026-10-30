@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock webdav (required by file tools)
@@ -320,6 +321,30 @@ describe('tool-registry', () => {
       for (const cat of CORE_CATEGORIES) {
         const entry = TOOL_REGISTRY.find((e) => e.category === cat);
         expect(entry?.appIds).toBeNull();
+      }
+    });
+
+    it('should have one row per category in the tool upstream matrix', () => {
+      const doc = readFileSync(
+        new URL('../../../docs/mcp/upstream-apis.md', import.meta.url),
+        'utf8'
+      );
+      // | `category` | `source.ts` | `app`, `app` | ...
+      const rows = new Map<string, string>();
+      for (const m of doc.matchAll(/^\| `([a-z_]+)` \| `[^`]+\.ts` \| ([^|]+) \|/gm)) {
+        expect(rows.has(m[1]), `duplicate row ${m[1]}`).toBe(false);
+        rows.set(m[1], m[2]);
+      }
+      expect([...rows.keys()].sort()).toEqual(TOOL_REGISTRY.map((e) => e.category).sort());
+
+      for (const { category, appIds } of TOOL_REGISTRY) {
+        const upstream = [...rows.get(category)!.matchAll(/`([a-z_*]+)`/g)].map((m) => m[1]);
+        for (const appId of appIds ?? []) {
+          const listed = upstream.some((u) =>
+            u.endsWith('*') ? appId.startsWith(u.slice(0, -1)) : u === appId
+          );
+          expect(listed, `${category}: ${appId} missing from Upstream`).toBe(true);
+        }
       }
     });
   });

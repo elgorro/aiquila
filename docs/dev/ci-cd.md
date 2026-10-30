@@ -28,7 +28,7 @@ component; each test job then gates its steps on the relevant one.
 
 | Job (status check) | Runs when | Does |
 |---|---|---|
-| `MCP Server Tests` | `mcp-server/**` changed (excluding `*.md`) | `npm ci`, `npm test`, `npm run build` |
+| `MCP Server Tests` | `mcp-server/**` changed (excluding `*.md`), or `docs/mcp/upstream-apis.md`, which a test checks against the tool registry | `npm ci`, `npm test`, `npm run build` |
 | `Nextcloud App Tests` | `nextcloud-app/**` changed (excluding `*.md`) | Composer install, `composer test`, `composer psalm`, regenerate the OpenAPI spec and fail if it differs |
 | `Hetzner CLI Tests` | `hetzner/**` changed (excluding `*.md`) | `go vet ./...`, `go test ./...` |
 

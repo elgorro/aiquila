@@ -48,6 +48,8 @@ jobs:
           }
 
           mcp=$(match '^mcp-server/')
+          # A test checks this page against the tool registry, so it counts as code.
+          if printf '%s\n' "$files" | grep -qx 'docs/mcp/upstream-apis.md'; then mcp=true; fi
           nextcloud=$(match '^nextcloud-app/')
           hetzner=$(match '^hetzner/')
 
