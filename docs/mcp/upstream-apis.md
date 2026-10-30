@@ -102,6 +102,6 @@ this repository ([OpenAPI](../dev/openapi.md)) rather than an external reference
 | `announcements` | `apps/announcements.ts` | `announcementcenter` | OCS | [nextcloud/announcementcenter](https://github.com/nextcloud/announcementcenter) | 0.3.23 · `d228c35` · 2026-06-14 | — |
 | `registration` | `apps/registration.ts` | `registration` | OCS | [nextcloud/registration](https://github.com/nextcloud/registration) | 0.3.23 · `e46df78` · 2026-06-14 | — |
 | `terms_of_service` | `apps/terms-of-service.ts` | `terms_of_service` | OCS | [nextcloud/terms_of_service](https://github.com/nextcloud/terms_of_service) | 0.3.23 · `9ba9bc6` · 2026-06-20 | — |
-| `recommendations` | `apps/recommendations.ts` | `recommendations` | OCS | [Recommendations API](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-recommendations-api.html) | 0.3.24 · `fcab4f5` · 2026-06-20 | — |
+| `recommendations` | `apps/recommendations.ts` | `recommendations` | OCS | [Recommendations API](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-recommendations-api.html) | 0.3.24 · `fcab4f5` · 2026-06-20 | recommendations 7.0.0 · NC 34.0.5 · 2026-10-30 |
 | `social` | `apps/social.ts` | `social` | App REST (Mastodon-style `/api/v1`) | [nextcloud/social](https://github.com/nextcloud/social) | 0.4.15 · `007e921` · 2026-09-19 | — |
 | `social_sharing` | `apps/social-sharing.ts` | `socialsharing_*` | OCS (shares), share URLs built locally | [nextcloud/socialsharing](https://github.com/nextcloud/socialsharing) | 0.3.24 · `82288dd` · 2026-06-27 | — |
