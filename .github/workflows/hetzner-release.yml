@@ -14,7 +14,6 @@ jobs:
     outputs:
       version-changed: ${{ steps.check.outputs.changed }}
       version: ${{ steps.check.outputs.version }}
-      previous-version: ${{ steps.check.outputs.previous }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -85,10 +84,12 @@ jobs:
       - name: Generate changelog
         run: |
           VERSION=$(cat hetzner/VERSION)
-          PREV_VERSION=${{ needs.check-version.outputs.previous-version }}
-          PREV_TAG="hetzner-v${PREV_VERSION}"
-
-          if git rev-parse "${PREV_TAG}" >/dev/null 2>&1; then
+          # Diff against the nearest earlier hetzner-v* tag reachable from HEAD, not the
+          # tag named after the previous version: a release that failed before tagging
+          # leaves that tag missing, and the notes would fall back to the whole history.
+          # The excluded tag is this release's own, present when the job is re-run.
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'hetzner-v*' --exclude "hetzner-v${VERSION}" HEAD 2>/dev/null || true)
+          if [ -n "${PREV_TAG}" ]; then
             RANGE="${PREV_TAG}..HEAD"
           else
             RANGE="HEAD"
