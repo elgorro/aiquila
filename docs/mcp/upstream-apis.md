@@ -57,7 +57,7 @@ category to `TOOL_REGISTRY`; after a squash merge, that is the merge commit on `
 | `shares` | `apps/shares.ts` | `files_sharing` | OCS | [OCS Share API](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-share-api.html) | 0.1.5 · `8f5df8b` · 2026-02-07 | files_sharing 1.26.0 · NC 34.0.5 · 2026-10-30 |
 | `absence` | `apps/absence.ts` | `dav` | OCS | [Out-of-office API](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-out-of-office-api.html) | 0.2.8 · `bacc1f2` · 2026-03-24 | dav 1.40.0 · NC 34.0.5 · 2026-10-30 |
 | `trash` | `apps/trash.ts` | `files_trashbin` | WebDAV | [Trashbin](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/trashbin.html) | 0.2.8 · `bacc1f2` · 2026-03-24 | files_trashbin 1.24.0 · NC 34.0.5 · 2026-10-30 |
-| `versions` | `apps/versions.ts` | `files_versions` | WebDAV | [Versions](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/versions.html) | 0.2.8 · `bacc1f2` · 2026-03-24 | — |
+| `versions` | `apps/versions.ts` | `files_versions` | WebDAV | [Versions](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/versions.html) | 0.2.8 · `bacc1f2` · 2026-03-24 | files_versions 1.27.0 · NC 34.0.5 · 2026-10-30 |
 
 ### AIquila Nextcloud app
 
