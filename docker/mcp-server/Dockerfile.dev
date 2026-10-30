@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM node:26-alpine
 
 # Install development dependencies
@@ -13,7 +14,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install all dependencies (including dev dependencies)
-RUN npm install
+RUN --mount=type=cache,target=/root/.npm npm install
 
 # Copy source code (will be overridden by volume mount in dev)
 COPY . .
