@@ -447,7 +447,8 @@ docker compose exec -T -u www-data nc php occ background:cron
 docker compose up -d nc-cron
 ```
 
-`aiquila-hetzner deploy` does not re-upload the compose file, so step 3 is manual.
+`aiquila-hetzner upgrade` writes the current template, which has `nc-cron`, but does not
+start it: do steps 1 and 2 before the next `docker compose up -d`, which would.
 
 ## Upgrading PostgreSQL to 18
 

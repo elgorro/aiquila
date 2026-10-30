@@ -120,6 +120,7 @@ uploads a production docker-compose stack (Traefik + CrowdSec), and starts the s
 	rootCmd.AddCommand(buildNetworkCmd())
 	rootCmd.AddCommand(buildSnapshotCmd())
 	rootCmd.AddCommand(buildRebuildCmd())
+	rootCmd.AddCommand(buildUpgradeCmd())
 	rootCmd.AddCommand(buildOptionsCmd())
 
 	runErr := rootCmd.Execute()

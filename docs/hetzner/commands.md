@@ -144,9 +144,58 @@ without tearing down infrastructure.
 
 ---
 
+## `upgrade`
+
+Bring an existing deployment (any stack) to a new release without editing files by hand.
+Over SSH it:
+
+1. **Checks** the server: stack type, running MCP and AIquila app versions, at least 2 GiB
+   free on `/opt/aiquila` and `/var/lib/docker`, Nextcloud not in maintenance mode and with no
+   pending upgrade, and no directory in `custom_apps/` that is not an app.
+2. **Plans** the changes and prints them. Keys added to `.env` are named; values never are.
+   When nothing would change it stops here, so running it twice is a no-op.
+3. **Backs up** to `/opt/aiquila/backups/<UTC timestamp>/` (mode 700): `.env`,
+   `docker-compose.yml`, a `pg_dump` of the database, a tarball of Nextcloud's `config/` and
+   `custom_apps/aiquila`, the MCP state volume, and the MCP image id. Only the newest
+   `--keep-backups` are kept.
+4. **Migrates the configuration**: adds what the release needs to `.env`, generating values
+   where that is safe (`MCP_CREDENTIAL_KEY`), keeps every existing value, and replaces
+   `docker-compose.yml` with this CLI's template, MCP image pinned to the release. A variable
+   the template requires that cannot be generated stops the upgrade before anything changes.
+5. **Updates** only the components: the AIquila app from the release's `aiquila.tar.gz`
+   (old copy moved outside the webroot, put back if `occ upgrade` fails), then
+   `docker compose up -d mcp`. Every compose call includes the monitoring profile when it
+   is running, and none uses `--remove-orphans`. Nextcloud core, PostgreSQL, Redis and the
+   proxy containers are not recreated; compose changes to them apply when you next
+   recreate them yourself.
+6. **Verifies**: the MCP healthcheck, both versions, no pending Nextcloud upgrade, and an MCP
+   smoke test (`server/discover`, `tools/list`) from inside the container.
+
+It ends with the commands that restore the previous configuration, image and app from the
+backup; on a failure it prints them straight away.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--name` | — | Server name (required) |
+| `--version` | this CLI's version | Release to upgrade to (e.g. `0.5.0`); a development build defaults to `latest` |
+| `--dry-run` | `false` | Run the checks and print the plan without changing anything |
+| `--noconfirm` | `false` | Apply the plan without asking |
+| `--keep-backups` | `5` | Backups to keep in `/opt/aiquila/backups` |
+| `--ssh-key` | `~/.ssh/aiquila_ed25519` | SSH private key path |
+| `--token` | `$HCLOUD_TOKEN` | Hetzner API token |
+
+```bash
+aiquila-hetzner upgrade --name my-server --dry-run
+aiquila-hetzner upgrade --name my-server
+```
+
+---
+
 ## `deploy`
 
-Pull the latest Docker image and restart services on a running server.
+Pull the latest images of **every** service and recreate the stack on a running server.
+This can upgrade Nextcloud core along the way; to move to a new AIquila release, use
+[`upgrade`](#upgrade).
 
 | Flag | Default | Description |
 |------|---------|-------------|
