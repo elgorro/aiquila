@@ -324,7 +324,7 @@ Run it locally (needs the Docker buildx plugin):
 
 ```bash
 cd docker/e2e
-docker compose up -d --build
+COMPOSE_BAKE=false docker compose up -d --build   # bake refuses the out-of-context Dockerfile
 ./scripts/test-internal-host.sh
 docker compose down -v
 ```

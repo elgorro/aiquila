@@ -39,7 +39,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # Compose's bake builder refuses the Dockerfile, which lives outside the
+      # build context (docker/mcp-server/ vs mcp-server/); the classic builder reads it.
       - name: Start Nextcloud and the MCP server
+        env:
+          COMPOSE_BAKE: 'false'
         run: docker compose up -d --build
 
       - name: Run the test

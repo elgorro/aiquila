@@ -12,7 +12,7 @@
 #     in Nextcloud, and the access token then gets 401.
 # Finally, with NEXTCLOUD_PUBLIC_URL unset, the server must warn at startup.
 #
-# Usage: docker compose up -d --build && ./scripts/test-internal-host.sh
+# Usage: COMPOSE_BAKE=false docker compose up -d --build && ./scripts/test-internal-host.sh
 # Extra compose files can be passed through COMPOSE_FILE, as with docker compose.
 
 set -euo pipefail
