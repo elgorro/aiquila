@@ -54,6 +54,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: hetzner/go.mod
+          cache-dependency-path: hetzner/go.sum
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v4.1.2
