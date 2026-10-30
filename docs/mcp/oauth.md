@@ -20,12 +20,36 @@ the MCP authorization specification builds on:
 When OAuth is enabled, the standard flow looks like this:
 
 1. **The MCP client discovers** your server via the OAuth metadata endpoint (`/.well-known/oauth-authorization-server`)
-2. **The client redirects you** to a Nextcloud login form hosted by the MCP server
-3. **You enter your Nextcloud credentials** — the server validates them against your Nextcloud instance
-4. **An access token (JWT) is issued** and stored by the client
-5. **All subsequent MCP requests** carry this token automatically
+2. **The client opens the server's sign-in page**, which links to your Nextcloud
+3. **You sign in on Nextcloud itself** — with your password, two-factor authentication,
+   SSO or whatever your instance requires — and grant access to *AIquila MCP*
+4. **Nextcloud issues an app password** for this connection, and the page continues to the
+   client on its own
+5. **An access token (JWT) is issued** and stored by the client; all subsequent MCP requests
+   carry it automatically
 
-Your Nextcloud credentials are only used during login and are never stored by the MCP server.
+Signing in uses Nextcloud
+[Login Flow v2](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/LoginFlow/index.html#login-flow-v2),
+the same flow the Nextcloud desktop and mobile clients use. The MCP server never sees your
+password or second factor.
+
+### Every tool call acts as you
+
+Tools run with the app password Nextcloud issued to *you*, so Nextcloud applies your
+permissions to every call: you see your own files, calendars and conversations, and an
+admin-only tool (`run_occ`, `list_users`, `disable_user`, …) works only if you are an
+admin. There is no shared service account behind OAuth sign-ins; `NEXTCLOUD_USER` and
+`NEXTCLOUD_PASSWORD` are not used for them.
+
+Each connection appears in your Nextcloud under **Settings → Security → Devices &
+sessions** as `AIquila MCP (<client>)`. Removing it there ends the connection: the next tool
+call fails, and the one after it is answered `401` so the client asks you to sign in again.
+
+The tool list is detected per user as well: the apps enabled for an admin, or for anyone
+else the apps that publish a capability or a navigation entry to them. A few apps that show
+regular users neither (Text, Translate, Registration, Terms of service, Assistant, the social
+sharing apps) stay listed, and a call reports the app missing if it is. Before you sign in,
+`tools/list` shows every tool. `MCP_TOOLS` overrides detection in every case.
 
 ## Lazy authentication
 
@@ -72,25 +96,31 @@ Lazy auth enabled — tools/list and public tools are readable without a token (
 
 - AIquila MCP server running in HTTP transport mode (e.g. via [Standalone Docker](standalone-docker.md))
 - A **public HTTPS URL** for the MCP server — the client must be able to reach it over the internet with a valid TLS certificate
-- `openssl` available locally to generate a signing key
+- Your Nextcloud reachable **from the browser** of whoever signs in, since they sign in on it
+- `openssl` available locally to generate the secrets
 
 ## Setup
 
-### 1. Generate a JWT signing secret
+### 1. Generate the secrets
 
 ```bash
-openssl rand -hex 32
+openssl rand -hex 32   # MCP_AUTH_SECRET: signs access tokens
+openssl rand -hex 64   # MCP_CREDENTIAL_KEY: encrypts the app passwords of signed-in users
 ```
 
-Copy the output — you'll use it as `MCP_AUTH_SECRET`. Keep it safe; anyone with this value can forge tokens.
+Keep both safe. Anyone with `MCP_AUTH_SECRET` can forge tokens; anyone with
+`MCP_CREDENTIAL_KEY` *and* a copy of the state directory can read the stored app passwords.
+To keep the credential key out of the server entirely, use
+[OpenBao](#keeping-the-key-in-openbao) instead.
 
 ### 2. Configure your `.env`
 
-In `docker/standalone/.env`, add the three auth variables below the Nextcloud block:
+In `docker/standalone/.env`, add the auth variables below the Nextcloud block:
 
 ```env
 MCP_AUTH_ENABLED=true
-MCP_AUTH_SECRET=<paste the openssl output here>
+MCP_AUTH_SECRET=<first openssl output>
+MCP_CREDENTIAL_KEY=<second openssl output>
 MCP_AUTH_ISSUER=https://mcp.example.com
 ```
 
@@ -98,9 +128,19 @@ MCP_AUTH_ISSUER=https://mcp.example.com
 |---|---|---|
 | `MCP_AUTH_ENABLED` | — | Set to `true` to enable OAuth. Default: `false` |
 | `MCP_AUTH_SECRET` | When auth on | HS256 signing key. Min 32 characters. Generate with `openssl rand -hex 32` |
+| `MCP_CREDENTIAL_KEY` | When auth on, unless OpenBao | Hex key material, at least 32 bytes; 64 recommended (`openssl rand -hex 64`). See [Stored credentials](#stored-credentials) |
 | `MCP_AUTH_ISSUER` | When auth on | Public HTTPS base URL of your MCP server (no trailing slash) |
+| `NEXTCLOUD_PUBLIC_URL` | When `NEXTCLOUD_URL` is internal | The Nextcloud URL browsers use. The sign-in link points there. Default: `NEXTCLOUD_URL` |
 
 `MCP_AUTH_ISSUER` must exactly match the public URL your MCP client uses to reach your server. It appears in the OAuth metadata that clients fetch, so any mismatch will break the flow.
+
+Set `NEXTCLOUD_PUBLIC_URL` when the MCP server reaches Nextcloud over an internal address,
+such as `http://nc` on a Docker network. The server calls Nextcloud on `NEXTCLOUD_URL` and
+sends the browser to the same path on `NEXTCLOUD_PUBLIC_URL`. It refuses a sign-in link
+Nextcloud returns on any other origin.
+
+`NEXTCLOUD_USER` and `NEXTCLOUD_PASSWORD` are not needed with OAuth on. They are used only by
+`MCP_INTERNAL_TOKEN`, which is deprecated (see [Security Notes](#security-notes)).
 
 ### 3. Configure client registration
 
@@ -289,7 +329,7 @@ In Claude.ai, go to **Settings** → **Integrations** → **Add MCP Server** and
 https://mcp.example.com/mcp
 ```
 
-Claude.ai will walk you through the OAuth login flow. When the Nextcloud login form appears, enter the credentials for the Nextcloud account you want Claude.ai to act as.
+Claude.ai will walk you through the OAuth flow: open your Nextcloud from the sign-in page, sign in there as the account you want Claude.ai to act as, and grant access. Claude.ai then acts as that account.
 
 In Claude Code (CLI), add the server:
 
@@ -326,8 +366,9 @@ The refresh lifetime is sliding: every rotation issues a token with the full lif
 client used at least once per period stays signed in. Set `MCP_REFRESH_TOKEN_TTL` in
 seconds to change it, for example `86400` to require a daily sign-in.
 
-Refresh tokens and revocations are kept in `MCP_AUTH_STATE_DIR`, so sessions survive a
-restart as long as that directory is persistent and writable.
+Refresh tokens, revocations and the encrypted app passwords are kept in
+`MCP_AUTH_STATE_DIR`, so sessions survive a restart as long as that directory is persistent
+and writable.
 
 ### Ending a session
 
@@ -344,41 +385,92 @@ issued along the way, all belong to that grant.
   it revokes everything and logs `Refresh token reuse detected` at `warn` (RFC 9700
   §4.14.2). A client that retries a refresh after a lost response triggers this too, and
   has to sign in again.
-- **Disabling or deleting the user in Nextcloud** ends the grant at the next refresh, so
-  within an hour at most. The server asks the provisioning API about the user, as
-  `NEXTCLOUD_USER`. That needs admin rights. Without them the check cannot see other
-  users, logs a warning once and lets the refresh through.
-- **Changing the Nextcloud password does not end a grant.** The server never keeps the
-  password, so it cannot tell that it changed. Nextcloud handles its own app passwords the
-  same way. To cut off a client after a password change, revoke its refresh token, or
-  disable the user until the next refresh has been refused.
+- **Removing the device in Nextcloud** (Settings → Security → Devices & sessions), or
+  disabling or deleting the user, ends the grant: Nextcloud rejects its app password. The
+  server notices at the next refresh, after a failed tool call, or within five minutes,
+  whichever comes first.
+- **Ending a grant deletes its app password in Nextcloud.** Whichever way a grant ends, the
+  server deletes the app password, so the device disappears from the user's list. If
+  Nextcloud cannot be reached at that moment, a warning is logged and the user can remove
+  the device themselves.
+- **Changing the Nextcloud password does not end a grant**, just as it does not end the
+  desktop or mobile clients' app passwords. To cut off a client, remove its device in
+  Nextcloud or revoke its refresh token.
+
+## Stored credentials
+
+Each grant holds the app password Nextcloud issued for it. The server needs it for every
+tool call, so it is stored, encrypted, in `credentials.json` in `MCP_AUTH_STATE_DIR` (file
+mode `0600`). The plaintext exists only in memory while a request that needs it runs, and
+never appears in the logs.
+
+- **Cipher:** AES-256-GCM with a random 96-bit IV per value. 256 bits is the largest AES key.
+- **Key:** HKDF-SHA-512 (RFC 5869) over `MCP_CREDENTIAL_KEY`. A 64-byte (512-bit) key is
+  recommended.
+- **Binding:** the grant id and user id are authenticated as associated data, so a stored
+  value cannot be moved to another grant or user.
+- **Changing `MCP_CREDENTIAL_KEY`** makes every stored app password unreadable: each grant
+  ends at its next use, and its user signs in again. The server cannot delete those app
+  passwords in Nextcloud any more, so users may want to remove the old *AIquila MCP*
+  devices themselves.
+
+`MCP_CREDENTIAL_KEY` is separate from `MCP_AUTH_SECRET`: rotating the token-signing secret
+ends sessions, but the app passwords can still be read and are deleted in Nextcloud.
+
+### Keeping the key in OpenBao
+
+With `MCP_OPENBAO_ADDR` set, values are encrypted by the
+[Transit](https://openbao.org/docs/secrets/transit/) engine of an
+[OpenBao](https://openbao.org) server instead, and the key never leaves it. OpenBao rotates
+the key (`rotate`, then `rewrap`) without the MCP server noticing. Its API is Vault's, so a
+HashiCorp Vault server works too. `MCP_CREDENTIAL_KEY` is then not needed.
+
+| Variable | Default | Description |
+|---|---|---|
+| `MCP_OPENBAO_ADDR` | — | OpenBao URL, e.g. `https://bao.internal:8200`. Turns the backend on |
+| `MCP_OPENBAO_TOKEN` | — | Token the server authenticates with. Required with `MCP_OPENBAO_ADDR` |
+| `MCP_OPENBAO_TRANSIT_MOUNT` | `transit` | Mount path of the Transit engine |
+| `MCP_OPENBAO_TRANSIT_KEY` | `aiquila-credentials` | Transit key name |
+
+The key must be an AEAD type: `aes256-gcm96` (the default), `chacha20-poly1305` or
+`xchacha20-poly1305`. Give the server a token that can only encrypt and decrypt with that key,
+and make it periodic. The server renews it every hour.
+
+```bash
+bao secrets enable transit
+bao write -f transit/keys/aiquila-credentials type=aes256-gcm96
+bao policy write aiquila-mcp - <<'POLICY'
+path "transit/encrypt/aiquila-credentials" { capabilities = ["update"] }
+path "transit/decrypt/aiquila-credentials" { capabilities = ["update"] }
+path "auth/token/renew-self"               { capabilities = ["update"] }
+POLICY
+bao token create -orphan -policy=aiquila-mcp -no-default-policy -period=24h
+```
+
+If OpenBao cannot be reached at startup, the server logs an error and keeps running. Sign-ins
+and tool calls fail until OpenBao answers.
 
 ## Security Notes
 
 - **`MCP_AUTH_SECRET` is critical.** Rotate it by updating the env var and restarting. Every session ends: access tokens no longer verify, and refresh tokens issued under the old secret are dropped from the state directory on start, so clients sign in again.
-- The MCP server validates Nextcloud credentials on every login by calling your Nextcloud instance's OCS API. If Nextcloud is unreachable, logins will fail.
-- Use a Nextcloud **app password** (not your main password) for the MCP login. This limits the blast radius if the credential is ever exposed. See [Security Best Practice: App Passwords](setup.md#security-best-practice-app-passwords).
-- The login form is served over HTTPS (enforced by your reverse proxy). Never run the auth-enabled server without TLS.
-- **The login form is bound to the browser that opened it.** `/authorize` sets a cookie
-  (`__Host-aiquila-login` over HTTPS; `HttpOnly`, `SameSite=Lax`) and the form's integrity
-  check covers its value, so a form fetched by someone else, or posted cross-site, issues
-  no code (login CSRF, RFC 6749 §10.12). A script that drives the flow with `curl` must keep
-  cookies between `/authorize` and `/auth/login` (`-c` / `-b`).
-- **Brute-force protection on `/auth/login`.** Each client IP gets 10 attempts per 15
-  minutes. Failed logins are also counted per username: after 10 within 15 minutes, further
-  attempts for that account are refused with `429` without asking Nextcloud, until the
-  window ends. That also means a third party can lock an account out of *this* login form
-  for 15 minutes; Nextcloud itself is unaffected. Behind a reverse proxy, set
-  `MCP_TRUST_PROXY` so the per-IP limit sees client addresses.
-- **Nextcloud's own brute-force protection** sees the MCP server's address, not the end
-  user's, unless Nextcloud trusts the MCP server as a proxy. The login check sends the
-  client address in `X-Forwarded-For`; add the MCP server's address to Nextcloud's
-  `trusted_proxies` (and `forwarded_for_headers` if you changed it) for Nextcloud to use it.
-  Without that, Nextcloud throttles every user of the connector together.
+- **The MCP server never handles your Nextcloud password.** You sign in on Nextcloud, so
+  Nextcloud's own brute-force protection, password policy and two-factor authentication
+  apply unchanged. If Nextcloud is unreachable, sign-ins fail.
+- The sign-in page is served over HTTPS (enforced by your reverse proxy). Never run the auth-enabled server without TLS.
+- **A sign-in is bound to the browser that started it.** `/authorize` sets a cookie
+  (`__Host-aiquila-login` over HTTPS; `HttpOnly`, `SameSite=Lax`), and the sign-in page
+  completes only when that cookie comes back, so a flow started by someone else issues no code
+  (login CSRF, RFC 6749 §10.12). A script that drives the flow with `curl` must keep cookies
+  between `/authorize` and `/auth/flow/…` (`-c` / `-b`).
+- **Granting access is a decision on Nextcloud's page.** Like any device-style sign-in (see
+  RFC 8628 §5.4), someone could start a flow and send you its Nextcloud link. Nextcloud's
+  grant page names the requesting device, `AIquila MCP (<client>)`: grant access only to
+  a connection you started yourself.
 - **`MCP_INTERNAL_TOKEN`** is a static bearer token for service-to-service calls (the
   Nextcloud container calling the MCP container on the Docker network). It bypasses OAuth
   entirely: anyone holding it can call every tool as `NEXTCLOUD_USER`, and it never
-  expires. It is accepted only on a direct connection from a loopback or private address
+  expires. **Deprecated:** this shared service identity is being replaced, and the server
+  logs a warning at startup while it is set. It is accepted only on a direct connection from a loopback or private address
   (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `::1`,
   `fc00::/7`) that carries no `Forwarded`, `X-Forwarded-For` or `X-Real-IP` header, so it
   never works through the public reverse proxy. `MCP_INTERNAL_TOKEN_NETWORKS` (comma-separated
@@ -440,19 +532,32 @@ silently refreshes. Upgrade if you see 500s correlated with the one-hour token l
 
 `MCP_AUTH_ISSUER` must exactly match the URL your MCP client uses to reach the server, including scheme and any subdomain. Compare the value in `/.well-known/oauth-authorization-server` → `"issuer"` with the URL you entered in your client.
 
-### Login form appears but credentials are rejected
+### The sign-in page does not continue after granting access
 
-- Confirm `NEXTCLOUD_URL` is set and reachable from inside the container: `make shell` → `curl $NEXTCLOUD_URL/status.php`
-- Verify the Nextcloud username and password are correct
-- If using an app password, make sure it hasn't expired or been revoked
+- The page reloads itself every few seconds; keep it open while you sign in on Nextcloud
+  in the other tab. A sign-in expires after 20 minutes.
+- Confirm `NEXTCLOUD_URL` is reachable from inside the container: `make shell` → `curl $NEXTCLOUD_URL/status.php`
+- The page must be completed in the browser that opened it. A client that hands the
+  authorization URL to a different browser than the one it receives the redirect in breaks
+  the cookie binding.
 
-### `MCP_AUTH_SECRET` or `MCP_AUTH_ISSUER` missing on startup
+### "Nextcloud sign-in is unavailable"
+
+The server could not start a Login Flow v2: Nextcloud is unreachable from the MCP server, or
+answered with an error. Check the log for `Could not start Login Flow v2`.
+
+### The "Open Nextcloud" link points at an internal host
+
+Set `NEXTCLOUD_PUBLIC_URL` to the address browsers use; see [step 2](#2-configure-your-env).
+
+### `MCP_AUTH_SECRET`, `MCP_CREDENTIAL_KEY` or `MCP_AUTH_ISSUER` missing on startup
 
 The server will exit with a clear error message if either variable is missing when `MCP_AUTH_ENABLED=true`:
 
 ```
 Error: MCP_AUTH_ISSUER must be set when MCP_AUTH_ENABLED=true
 Error: MCP_AUTH_SECRET must be set when MCP_AUTH_ENABLED=true
+Error: MCP_CREDENTIAL_KEY must be set when MCP_AUTH_ENABLED=true (openssl rand -hex 64), or MCP_OPENBAO_ADDR to keep the key in OpenBao
 ```
 
 Set the missing variable in `.env` and restart.

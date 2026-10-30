@@ -21,7 +21,7 @@ for a Nextcloud file and needs no fediverse account.
 - Social serves the Mastodon routes under `/index.php/apps/social/` rather than at the domain
   root, which is why third-party Mastodon clients cannot reach it yet. The base path lives in
   one constant in `mcp-server/src/client/social.ts`; upstream intends to move it.
-- Authentication is the usual `NEXTCLOUD_USER` / `NEXTCLOUD_PASSWORD` app password. No OAuth
+- Authentication is the usual Nextcloud app password of the account the request acts as. No OAuth
   registration is needed — Social accepts the Nextcloud session, and the `OCS-APIRequest`
   header every AIquila client sends satisfies its CSRF check.
 - The account acts as the Nextcloud user's own fediverse actor, which Social creates on first

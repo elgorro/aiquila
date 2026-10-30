@@ -6,11 +6,11 @@
 
 ```bash
 aiquila-hetzner create --mcp-domain mcp.example.com \
-  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
+  --nc-url https://nc.example.com \
   --volume-size 20   # plain ext4, mounted at /opt/aiquila
 
 aiquila-hetzner create --mcp-domain mcp.example.com \
-  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
+  --nc-url https://nc.example.com \
   --volume-size 20 --luks   # LUKS-encrypted (experimental)
 ```
 
@@ -25,7 +25,7 @@ The volume is auto-unlocked on reboot via `/etc/crypttab`.
 
 ```bash
 aiquila-hetzner create --mcp-domain mcp.example.com \
-  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
+  --nc-url https://nc.example.com \
   --monitoring
 ```
 
@@ -41,7 +41,7 @@ Install additional OS packages during cloud-init before Docker starts:
 
 ```bash
 aiquila-hetzner create --mcp-domain mcp.example.com \
-  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
+  --nc-url https://nc.example.com \
   --package htop --package bash-completion
 ```
 
@@ -56,7 +56,7 @@ Useful for small instance types (`cpx11`, `cx22`) that have limited RAM:
 
 ```bash
 aiquila-hetzner create --mcp-domain mcp.example.com \
-  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
+  --nc-url https://nc.example.com \
   --swap 2G
 ```
 
@@ -72,7 +72,7 @@ aiquila-hetzner network create --name mynet --cidr 10.0.0.0/16
 
 # Attach during provisioning
 aiquila-hetzner create --mcp-domain mcp.example.com \
-  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
+  --nc-url https://nc.example.com \
   --network mynet
 
 # Or attach to an existing server
@@ -97,7 +97,7 @@ change. Pass the range you actually administer the server from:
 
 ```bash
 aiquila-hetzner create --mcp-domain mcp.example.com \
-  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
+  --nc-url https://nc.example.com \
   --ssh-allow-cidr 203.0.113.0/24
 ```
 
@@ -206,7 +206,7 @@ Create A (and AAAA) records automatically after the server IP is assigned:
 
 ```bash
 aiquila-hetzner create --mcp-domain mcp.example.com \
-  --nc-url https://nc.example.com --nc-user admin --nc-password pass \
+  --nc-url https://nc.example.com \
   --dns-zone example.com
 ```
 
@@ -253,12 +253,13 @@ and what to expect from `rebuild`.
 | Variable | Source | Description |
 |----------|--------|-------------|
 | `NEXTCLOUD_URL` | `--nc-url` | Nextcloud instance URL |
-| `NEXTCLOUD_USER` | `--nc-user` | Nextcloud username |
-| `NEXTCLOUD_PASSWORD` | `--nc-password` | Nextcloud app password |
+| `NEXTCLOUD_USER` | `--nc-user` | Deprecated, written only when given: service account for `MCP_INTERNAL_TOKEN` |
+| `NEXTCLOUD_PASSWORD` | `--nc-password` | Deprecated, as above |
 | `MCP_TRANSPORT` | static `http` | Transport mode (always HTTP in Docker) |
 | `MCP_PORT` | static `3339` | Internal MCP port |
 | `MCP_AUTH_ENABLED` | static `true` | OAuth 2.0 enabled |
 | `MCP_AUTH_SECRET` | auto 64-char hex | JWT signing key |
+| `MCP_CREDENTIAL_KEY` | auto 128-char hex (512 bits) | Encrypts signed-in users' app passwords at rest |
 | `MCP_AUTH_ISSUER` | `https://<domain>` | OAuth issuer URL |
 | `MCP_CLIENT_ID` | empty | OAuth client ID (set for static pre-seeded client) |
 | `MCP_CLIENT_SECRET` | auto 64-char hex | OAuth client secret |
@@ -290,8 +291,8 @@ and what to expect from `rebuild`.
 
 | Variable | Source | Description |
 |----------|--------|-------------|
-| `NC_MCP_USER` | generated via OCC | Nextcloud username the MCP container uses |
-| `NC_MCP_PASSWORD` | generated via OCC | Nextcloud app password for the MCP container |
+| `NC_MCP_USER` | generated via OCC | Deprecated: the account `MCP_INTERNAL_TOKEN` (the Nextcloud app) acts as. OAuth sign-ins act as the signed-in user |
+| `NC_MCP_PASSWORD` | generated via OCC | Deprecated: its app password |
 
 ### How to update a variable in-place
 

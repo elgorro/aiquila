@@ -35,19 +35,19 @@ The MCP server is a TypeScript/Node.js implementation of the [Model Context Prot
 mcp-server/src/
 ├── index.ts             # Transport selector ($MCP_TRANSPORT)
 ├── server.ts            # McpServer factory + tool registration
+├── nc-context.ts        # Per-request Nextcloud identity (AsyncLocalStorage)
 ├── logger.ts            # pino → stderr
 ├── transports/
 │   ├── stdio.ts         # StdioServerTransport (local MCP clients)
 │   └── http.ts          # createHttpApp(): Express app + MCP handler + auth middleware; startHttp() listens
 ├── auth/
-│   ├── provider.ts      # NextcloudOAuthProvider — JWT sign/verify, code issuance
+│   ├── provider.ts      # NextcloudOAuthProvider — sign-in flows, JWT sign/verify, grants
+│   ├── login-flow.ts    # Nextcloud Login Flow v2 client, app password check and deletion
+│   ├── credential-store.ts # Encrypted per-grant app passwords (AES-256-GCM or OpenBao Transit)
 │   ├── store.ts         # ClientsStore, CodeStore, RefreshStore, RevocationList (disk-persisted)
-│   ├── nc-user.ts       # Provisioning-API check that a grant's Nextcloud user is still active
-│   ├── login.ts         # POST /auth/login — Nextcloud credential validation
-│   ├── login-throttle.ts # Per-IP and per-username login limits
 │   └── internal-token.ts # Where MCP_INTERNAL_TOKEN is accepted from
 ├── client/
-│   ├── webdav.ts        # WebDAV singleton
+│   ├── webdav.ts        # WebDAV clients, one per account
 │   ├── caldav.ts        # CalDAV helper (authenticated fetch)
 │   ├── ocs.ts           # OCS API (Nextcloud REST)
 │   ├── aiquila.ts       # AIquila app client
@@ -55,7 +55,7 @@ mcp-server/src/
 │   ├── mail.ts          # Mail client
 │   └── maps.ts          # Maps client
 ├── tools/
-│   ├── types.ts         # ToolResponse, NextcloudConfig, shared Zod schemas
+│   ├── types.ts         # getNextcloudConfig (the request's account), shared Zod schemas
 │   ├── system/          # files, status, apps, occ, security, tags
 │   └── apps/            # tasks, calendar, notes, mail, contacts, bookmarks,
 │                        #   cookbook, maps, shares, groups, users, aiquila
@@ -151,24 +151,48 @@ When `MCP_AUTH_ENABLED=true`, the server runs a built-in OAuth 2.1 + PKCE author
                   (PKCE auth code request; a URL client_id is fetched and
                   validated here, see src/auth/cimd.ts)
 
-4. Server      →  200 HTML login form (POST /auth/login)
+4. Server      →  POST {NEXTCLOUD_URL}/index.php/login/v2  (Login Flow v2)
+                  200 HTML sign-in page: a link to Nextcloud's login URL, and a
+                  meta refresh to /auth/flow/<id>
 
-5. User        →  POST /auth/login  {username, password, code_challenge, ...,
-                                     request_iat, request_mac}
+5. User        →  signs in on Nextcloud (password, 2FA, SSO…) and grants access
 
-6. Server      →  validates credentials against OCS API
-                  /ocs/v2.php/cloud/user
+6. Browser     →  GET /auth/flow/<id>  (the page reloading itself, with the
+                  binding cookie). Server polls Nextcloud; once it answers with
+                  {loginName, appPassword}, it reads the uid from
+                  /ocs/v2.php/cloud/user with that app password
 
-7. Server      →  302 redirect to client redirect_uri?code=<uuid>
+7. Server      →  302 redirect to client redirect_uri?code=<uuid>&state&iss
 
 8. MCP Client  →  POST /token  {code, code_verifier}
                   (PKCE token exchange)
 
-9. Server      →  {access_token: <HS256 JWT, 1h>, refresh_token: <256-bit random, 24h>}
+9. Server      →  {access_token: <HS256 JWT, 1h>, refresh_token: <256-bit random, 30 d>}
+                  The app password moves from the code to the grant, encrypted
 
 10. MCP Client →  POST /mcp  Authorization: Bearer <access_token>
-                  (every MCP request verified via requireBearerAuth middleware)
+                  (verified via requireBearerAuth, then run as the grant's user)
 ```
+
+### Request identity
+
+Under OAuth every `/mcp` request runs inside an identity context (`src/nc-context.ts`,
+`AsyncLocalStorage`) set by `http.ts`:
+
+| Request | Identity | Nextcloud account |
+|---|---|---|
+| OAuth bearer token | `user` | The grant's app password, decrypted for the request |
+| `MCP_INTERNAL_TOKEN` | `service` | `NEXTCLOUD_USER` (deprecated) |
+| Lazy-auth request without a token | `anonymous` | None: `getNextcloudConfig()` throws |
+
+`getNextcloudConfig()` in `tools/types.ts` is the only place credentials come from; every
+client builds its `Authorization` header from it (`basicAuth(config)`), and `user` is the uid
+for DAV paths while `loginName` authenticates. With OAuth on, a call outside a context throws
+instead of falling back to the environment account. stdio, and HTTP with auth off, run without
+a context and use `NEXTCLOUD_USER`. A test (`nc-context.test.ts`) fails if any module other
+than `tools/types.ts` reads `NEXTCLOUD_USER` or `NEXTCLOUD_PASSWORD`.
+
+Tool detection (`tool-registry.ts`) runs as the same identity and is cached per user.
 
 ### Token Details
 
@@ -186,16 +210,24 @@ Token state is persisted to `MCP_AUTH_STATE_DIR` (default `/app/state`):
 - `refresh-tokens.json` — active refresh tokens, keyed by their SHA-256 hash (`RefreshStore`). Entries from older versions, keyed by the token itself, are hashed on load
 - `revoked.json` — revoked grants and access tokens, each kept until the access tokens it
   covers have expired (`RevocationList`)
+- `credentials.json` (mode `0600`) — each grant's app password, sealed by `CredentialStore`
+  with AES-256-GCM (key: HKDF-SHA-512 over `MCP_CREDENTIAL_KEY`) or by OpenBao Transit; the
+  grant and user ids are the associated data
 
 A grant is one sign-in. Its id (`gid` in the access token, `grantId` in the refresh entry)
-stays the same across refresh rotations. On every refresh, `checkNextcloudUser` asks the
-provisioning API whether the user still exists and is enabled; a disabled or deleted user
-gets `invalid_grant` and the grant is revoked.
+stays the same across refresh rotations. The grant's app password is checked against
+`/ocs/v2.php/cloud/user` on every refresh, after a failed tool call (at most every 30 s), and
+otherwise at most every 5 minutes; a `401` (device removed, user disabled or deleted) revokes
+the grant. `revokeGrant` is the single place a grant ends, and it deletes the app password in
+Nextcloud (`DELETE /ocs/v2.php/core/apppassword`). A periodic sweep ends grants whose
+credential expired and deletes the app passwords of codes never redeemed and of flows never
+finished.
 
 A refresh token is marked `spent` when exchanged rather than deleted, and kept until it
 would have expired. Presenting a spent token revokes its grant (RFC 9700 §4.14.2).
 
-Authorization codes are in-memory only (5-min TTL, lost on restart by design).
+Authorization codes and pending sign-in flows are in-memory only (5 min and 20 min, lost on
+restart by design).
 
 ### Authorization server
 
@@ -206,7 +238,7 @@ Authorization codes are in-memory only (5-min TTL, lost on restart by design).
 | `/.well-known/oauth-authorization-server` | RFC 8414 | Built by `buildAuthorizationServerMetadata`, served via `mcpAuthMetadataRouter` |
 | `/.well-known/oauth-protected-resource/mcp` | RFC 9728 | Also served at the root path by `http.ts` |
 | `/authorize` | RFC 6749 §4.1.1, RFC 7636 | 100 req / 15 min per IP. Errors before `client_id` and `redirect_uri` are verified are a `400` JSON body, never a redirect (§4.1.2.1); afterwards they redirect with `error`, `state` and `iss` (RFC 9207 §2) |
-| `/auth/login` | — | Nextcloud credential check, issues the code. 10 req / 15 min per IP. Accepts only a form `/authorize` rendered: `request_mac` is an HMAC (keyed by `MCP_AUTH_SECRET`) over the request fields and `request_iat`, valid 30 minutes, so the user agent cannot alter `redirect_uri`, the PKCE challenge, state or scope |
+| `/auth/flow/:id` | — | The sign-in page's reload. 600 req / 15 min per IP. Polls Nextcloud at most once per second and issues the code once access is granted. The flow is kept server-side, so the user agent cannot alter `redirect_uri`, the PKCE challenge, state or scope; it completes only with the binding cookie `/authorize` set |
 | `/token` | OAuth 2.1 §4.1.3, §10.2; RFC 6749 §6 | 50 req / 15 min per IP. `no-store` + `Pragma: no-cache` (§5.1). `redirect_uri` optional; if sent, must equal the authorization request's. Refresh may narrow, never widen, the granted scope |
 | `/register` | RFC 7591 | 20 req / hour per IP. Mounted only with `MCP_REGISTRATION_ENABLED=true` |
 | `/revoke` | RFC 7009 | 50 req / 15 min per IP. A refresh token revokes its whole grant (§2.1), an access token only itself. Only tokens issued to the calling client; always `200` |
@@ -218,8 +250,7 @@ Access tokens are always audience-restricted to the MCP endpoint.
 
 Every error, on these endpoints and in the bearer check on `/mcp`, is the SDK's v2
 `OAuthError`. Redirect URIs match exactly, except loopback URIs, which match on any port
-(RFC 8252 §7.3) — `src/auth/redirect-uri.ts` applies the same rule at `/authorize` and at
-`/auth/login`.
+(RFC 8252 §7.3) — `src/auth/redirect-uri.ts` applies the rule at `/authorize`.
 
 ### Client Configuration
 
@@ -261,8 +292,11 @@ MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
 | Variable | Required | Default | Notes |
 |----------|----------|---------|-------|
 | `NEXTCLOUD_URL` | Yes | — | Trailing slash stripped automatically |
-| `NEXTCLOUD_USER` | Yes | — | |
-| `NEXTCLOUD_PASSWORD` | Yes | — | Use an app password |
+| `NEXTCLOUD_PUBLIC_URL` | No | `NEXTCLOUD_URL` | Browser-facing Nextcloud URL for the sign-in link |
+| `NEXTCLOUD_USER` | stdio, HTTP without auth | — | With OAuth only used by `MCP_INTERNAL_TOKEN` (deprecated) |
+| `NEXTCLOUD_PASSWORD` | stdio, HTTP without auth | — | Use an app password |
+| `MCP_CREDENTIAL_KEY` | With OAuth, unless OpenBao | — | Hex, ≥ 32 bytes (`openssl rand -hex 64`); encrypts stored app passwords |
+| `MCP_OPENBAO_ADDR` / `MCP_OPENBAO_TOKEN` | No | — | Keep the credential key in OpenBao Transit instead; see [OAuth](../mcp/oauth.md#keeping-the-key-in-openbao) |
 | `MCP_TRANSPORT` | No | `stdio` | `stdio` or `http` |
 | `MCP_MAX_FILE_SIZE` | No | `1073741824` | Max `write_file` content length in bytes (1 GB) |
 | `LOG_LEVEL` | No | `info` | `trace` / `debug` / `info` / `warn` / `error` / `fatal` |
@@ -375,11 +409,11 @@ All errors are logged via pino before being surfaced.
 
 ## Security
 
-- **Credentials** — environment variables only; never logged
+- **Credentials** — under OAuth, each user's own app password from Login Flow v2, encrypted at rest; the environment account for stdio. Never logged
 - **Input validation** — Zod schemas on all tool inputs; prevents injection via type enforcement
 - **OAuth/JWT** — PKCE enforced; access tokens are short-lived (1h) `at+jwt` JWTs whose type, signature, issuer and audience are verified by `jose`; the internal service token (`MCP_INTERNAL_TOKEN`) is compared with `timingSafeEqual` and accepted only on direct connections from internal addresses (`src/auth/internal-token.ts`)
 - **HTTPS** — enforced by the reverse proxy (Traefik/Caddy); the MCP container itself serves plain HTTP internally
-- **Rate limiting** — the OAuth endpoints are limited per client IP; `/auth/login` also counts failed logins per username (`src/auth/login-throttle.ts`)
+- **Rate limiting** — the OAuth endpoints are limited per client IP; password guessing is Nextcloud's to throttle, since users sign in there
 - **DNS rebinding** — `allowedHosts` derived from `MCP_AUTH_ISSUER` hostname; `localhost`/`127.0.0.1` always allowed for health checks. A request to `/mcp` whose `Origin` is not an allowed CORS origin gets `403`
 
 ## Logging

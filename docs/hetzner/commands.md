@@ -27,8 +27,8 @@ Provision a new AIquila server end-to-end.
 |------|---------|-------------|
 | `--mcp-domain` | — | FQDN for the MCP server |
 | `--nc-url` | `NEXTCLOUD_URL` | External Nextcloud URL |
-| `--nc-user` | `NEXTCLOUD_USER` | External Nextcloud username |
-| `--nc-password` | `NEXTCLOUD_PASSWORD` | Nextcloud app password |
+| `--nc-user` | `NEXTCLOUD_USER` | Deprecated, optional: service account for `MCP_INTERNAL_TOKEN`. Users sign in as themselves |
+| `--nc-password` | `NEXTCLOUD_PASSWORD` | Deprecated, optional: its app password |
 
 **Required — `--stack nextcloud`:**
 

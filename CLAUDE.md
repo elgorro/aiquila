@@ -398,7 +398,7 @@ Both components stay on the same version number.
 ## Architecture Notes
 
 - **Transports**: stdio (Claude Desktop) or Streamable HTTP (Docker/Claude.ai)
-- **Auth**: built-in OAuth 2.0 provider (`MCP_AUTH_ENABLED=true`), PKCE, HS256 JWT via `jose`
+- **Auth**: built-in OAuth 2.1 provider (`MCP_AUTH_ENABLED=true`), PKCE, HS256 JWT via `jose`. Users sign in on Nextcloud through Login Flow v2; every tool call acts as the signed-in user with the app password Nextcloud issued (`src/nc-context.ts`), stored encrypted per grant
 - **Logging**: structured JSON to stderr via pino (`LOG_LEVEL` env var, default `info`)
 - **Logging is always to stderr** — stdout is reserved for the MCP protocol (stdio transport)
 
@@ -409,18 +409,21 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | Variable | Required | Notes |
 |----------|----------|-------|
 | `NEXTCLOUD_URL` | Yes | trailing slash stripped automatically |
-| `NEXTCLOUD_USER` | Yes | |
-| `NEXTCLOUD_PASSWORD` | Yes | use app password |
+| `NEXTCLOUD_PUBLIC_URL` | No | Browser-facing Nextcloud URL for the Login Flow v2 sign-in link, when `NEXTCLOUD_URL` is internal. Default `NEXTCLOUD_URL` |
+| `NEXTCLOUD_USER` | stdio / no auth | The account stdio and unauthenticated HTTP act as. With OAuth, tools act as the signed-in user; only `MCP_INTERNAL_TOKEN` (deprecated) uses it |
+| `NEXTCLOUD_PASSWORD` | stdio / no auth | use app password |
 | `MCP_TRANSPORT` | No | `stdio` (default) or `http` |
 | `MCP_AUTH_ENABLED` | No | `true` to enable OAuth for Claude.ai |
 | `MCP_AUTH_SECRET` | If auth | `openssl rand -hex 32` |
 | `MCP_AUTH_ISSUER` | If auth | public HTTPS URL of this server |
+| `MCP_CREDENTIAL_KEY` | If auth, unless OpenBao | Hex key (`openssl rand -hex 64`); HKDF-SHA-512 → AES-256-GCM over the stored per-grant app passwords |
+| `MCP_OPENBAO_ADDR` / `MCP_OPENBAO_TOKEN` | No | Seal the stored app passwords with OpenBao (or Vault) Transit instead. `MCP_OPENBAO_TRANSIT_MOUNT` (default `transit`), `MCP_OPENBAO_TRANSIT_KEY` (default `aiquila-credentials`) |
 | `MCP_AUTH_STATE_DIR` | No | Directory for persisted OAuth state (default `/app/state`) |
 | `MCP_CIMD_ENABLED` | No | Accept Client ID Metadata Document URLs as `client_id`. Default on, off when `MCP_REGISTRATION_TOKEN` is set |
 | `MCP_REDIRECT_ALLOWLIST` | No | Extra redirect hosts (or `scheme:` entries, or `*`) dynamically registered clients may use. Loopback, `claude.ai`, `claude.com` and the `NEXTCLOUD_URL` host are always allowed |
 | `MCP_LAZY_AUTH` | No | `false` requires a bearer token on every JSON-RPC method. Default `true`: `server/discover`, `initialize`, `tools/list` and `get_local_time` are served without one |
 | `MCP_REFRESH_TOKEN_TTL` | No | Refresh token lifetime in seconds, sliding on each rotation (default `2592000` = 30 days) |
-| `MCP_INTERNAL_TOKEN` | No | Static service-to-service bearer token that bypasses OAuth. Accepted only on direct connections (no forwarding headers) from internal addresses |
+| `MCP_INTERNAL_TOKEN` | No | Deprecated. Static service-to-service bearer token that bypasses OAuth and acts as `NEXTCLOUD_USER`. Accepted only on direct connections (no forwarding headers) from internal addresses |
 | `MCP_INTERNAL_TOKEN_NETWORKS` | No | Comma-separated CIDRs / addresses `MCP_INTERNAL_TOKEN` is accepted from; replaces the loopback + private-range default |
 | `MCP_LOCALE` | No | BCP 47 locale tag for `localTime` in `get_local_time` (e.g. `sv-SE`); defaults to system locale |
 | `MCP_MAX_FILE_SIZE` | No | Max `write_file` content length in bytes (default `1073741824` = 1 GB) |
@@ -444,14 +447,16 @@ Do not use `--no-verify` to skip hooks.
 ### OAuth end-to-end test
 
 `docker/standalone/scripts/test-oauth.sh` acts as an OAuth 2.1 client against a live server:
-discovery (incl. the RFC 9728 `resource`) → client registration → `/authorize` form → login
-(checks the RFC 9207 `iss`) → token exchange with `resource` and without `redirect_uri` →
+discovery (incl. the RFC 9728 `resource`) → client registration → `/authorize` → Nextcloud
+Login Flow v2 sign-in (`scripts/nc-login-flow.sh`; checks the RFC 9207 `iss`) → token exchange
+with `resource` and without `redirect_uri` →
 MCP initialize → tools/list → `2026-07-28` `server/discover` → `2026-07-28` tools/list →
 refresh rotation → access-token revocation (RFC 7009) → refresh-token reuse ends the grant
 (RFC 9700 §4.14.2).
 
 ```bash
-# Requires: docker/standalone/.env with NEXTCLOUD_USER + NEXTCLOUD_PASSWORD + auth vars
+# Requires: docker/standalone/.env with TEST_NC_USER + TEST_NC_PASSWORD (an app password, or the
+# password plus TEST_NC_TOTP_SECRET for a 2FA account) + auth vars
 cd docker/standalone
 ./scripts/test-oauth.sh               # default: http://localhost:3339
 ./scripts/test-oauth.sh https://localhost:3340   # via Caddy (add -k to CURL in the script)

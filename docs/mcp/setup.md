@@ -37,6 +37,11 @@ The MCP server requires three environment variables to connect to your Nextcloud
 - `NEXTCLOUD_USER` - Your Nextcloud username
 - `NEXTCLOUD_PASSWORD` - Your Nextcloud password or app-specific password
 
+These are the account stdio and unauthenticated HTTP act as. With OAuth on
+(`MCP_AUTH_ENABLED=true`) each user signs in with their own Nextcloud account and the server
+acts as them, so `NEXTCLOUD_USER` and `NEXTCLOUD_PASSWORD` are not needed; set
+`MCP_CREDENTIAL_KEY` instead. See [OAuth](oauth.md).
+
 Optional:
 
 - `MCP_MAX_FILE_SIZE` - Maximum `write_file` content length in bytes (default `1073741824` = 1 GB)
