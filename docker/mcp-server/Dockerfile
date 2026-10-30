@@ -1,8 +1,9 @@
+# syntax=docker/dockerfile:1
 # Stage 1: Build TypeScript
 FROM node:26-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY . .
 RUN npm run build
 
@@ -19,7 +20,7 @@ ENV NODE_ENV=production
 # poppler-utils provides pdftotext, used by mail_get_attachment for PDF text extraction
 RUN apk add --no-cache poppler-utils
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 RUN mkdir -p /app/state && chown -R node:node /app
 EXPOSE 3339

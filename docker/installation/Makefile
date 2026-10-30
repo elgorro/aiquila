@@ -1,4 +1,4 @@
-.PHONY: help build-tarball build up up-tools down restart logs logs-nc logs-mcp logs-follow status shell shell-mcp shell-db nc-log test test-mcp clean reset standalone-up standalone-down standalone-logs standalone-test
+.PHONY: help check-buildx build-tarball build up up-tools down restart logs logs-nc logs-mcp logs-follow status shell shell-mcp shell-db nc-log test test-mcp clean reset standalone-up standalone-down standalone-logs standalone-test
 
 SCRIPTS_DIR := ../scripts
 COMPOSE := docker compose
@@ -49,13 +49,28 @@ help:
 	@echo "  Nextcloud:  http://localhost:8080"
 	@echo "  MCP Server: http://localhost:3339/mcp"
 
+# Image builds need BuildKit. Without the buildx plugin, `docker compose build`
+# silently falls back to the deprecated legacy builder, which ignores
+# RUN --mount cache mounts and is going away.
+check-buildx:
+	@docker buildx version >/dev/null 2>&1 || { \
+		echo "ERROR: the Docker buildx plugin is not installed."; \
+		echo "Image builds need BuildKit via buildx. Install it, then re-run:"; \
+		echo "  Arch:          pacman -S docker-buildx"; \
+		echo "  Debian/Ubuntu: apt install docker-buildx-plugin  (Docker's apt repo)"; \
+		echo "  Fedora/RHEL:   dnf install docker-buildx-plugin  (Docker's dnf repo)"; \
+		echo "  macOS/Windows: Docker Desktop ships buildx"; \
+		echo "See https://docs.docker.com/go/buildx/"; \
+		exit 1; \
+	}
+
 # Build tarball from source
 build-tarball:
 	@echo "=== Building aiquila.tar.gz ==="
 	@bash $(SCRIPTS_DIR)/build-tarball.sh
 
 # Build Docker image (requires tarball)
-build: aiquila.tar.gz
+build: check-buildx aiquila.tar.gz
 	@echo "=== Building Docker image ==="
 	$(COMPOSE) build --pull --no-cache
 
@@ -66,7 +81,7 @@ aiquila.tar.gz:
 # Start everything (builds if needed)
 # --pull re-checks the nextcloud base image so upstream security rebuilds
 # land; without it a cached base is reused indefinitely.
-up: aiquila.tar.gz
+up: check-buildx aiquila.tar.gz
 	$(COMPOSE) build --pull nextcloud
 	$(COMPOSE) up -d --build
 	@echo ""
@@ -78,7 +93,7 @@ up: aiquila.tar.gz
 	@echo "Adminer:      make up-tools"
 
 # Start everything plus the opt-in tools (Adminer)
-up-tools: aiquila.tar.gz
+up-tools: check-buildx aiquila.tar.gz
 	$(COMPOSE) build --pull nextcloud
 	$(COMPOSE) --profile tools up -d --build
 	@echo "Adminer:      http://localhost:8081"
@@ -142,7 +157,7 @@ clean:
 	@echo "Cleaned up."
 
 # Full reset: rebuild everything from scratch
-reset: clean build-tarball
+reset: check-buildx clean build-tarball
 	$(COMPOSE) build --pull nextcloud
 	$(COMPOSE) up -d --build
 	@echo ""

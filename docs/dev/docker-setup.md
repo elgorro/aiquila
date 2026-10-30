@@ -24,6 +24,9 @@ The AIquila app is installed automatically on first start from a pre-built tarba
 
 - Docker Engine 20.10+
 - Docker Compose 2.0+
+- The Docker **buildx** plugin: images are built with BuildKit. Docker Desktop ships it;
+  on Linux install `docker-buildx-plugin` from Docker's apt/dnf repository, or
+  `docker-buildx` on Arch. `docker buildx version` should print a version.
 - 4GB+ RAM available for Docker
 - **Linux:** Ensure your user is in the `docker` group
 
@@ -203,6 +206,13 @@ curl -u testuser:testpass123 http://nextcloud/remote.php/dav/files/testuser/
 The MCP server uses `MCP_TRANSPORT=http` in Docker. For local development outside Docker, stdio is the default.
 
 ## Troubleshooting
+
+### `buildx plugin is not installed`
+`make build`, `make up`, `make up-tools` and `make reset` stop with this message when
+`docker buildx version` fails. Without the plugin, Compose would fall back to Docker's
+deprecated legacy builder, which ignores the `RUN --mount=type=cache` steps in the
+Dockerfiles. Install buildx (see [Prerequisites](#prerequisites)) and re-run.
+`make build-tarball` only runs a container, so it works without buildx.
 
 ### Services won't start
 ```bash
