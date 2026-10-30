@@ -590,9 +590,11 @@ const sendMessageTool = {
       const ccRecipients = args.cc?.map((email) => ({ label: email, email })) || [];
       const bccRecipients = args.bcc?.map((email) => ({ label: email, email })) || [];
 
-      const response = await fetchMailAPI('/messages/send', {
+      // Mail's public OCS API (openapi.json). 200 = sent; 202 = accepted but not
+      // yet sent by the SMTP server, which Mail retries on its own.
+      const response = await fetchOCS<string>('/ocs/v2.php/apps/mail/message/send', {
         method: 'POST',
-        body: {
+        jsonBody: {
           accountId: args.accountId,
           fromEmail: account.emailAddress,
           subject: args.subject,
@@ -603,15 +605,16 @@ const sendMessageTool = {
           bcc: bccRecipients,
         },
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to send: HTTP ${response.status} - ${errorText}`);
-      }
+      const queued = response.ocs.meta.statuscode === 202;
 
       return {
         content: [
-          { type: 'text' as const, text: `Email sent successfully to ${args.to.join(', ')}` },
+          {
+            type: 'text' as const,
+            text: queued
+              ? `Email to ${args.to.join(', ')} accepted; the SMTP server has not taken it yet and Mail will retry.`
+              : `Email sent successfully to ${args.to.join(', ')}`,
+          },
         ],
       };
     } catch (error) {
@@ -741,7 +744,8 @@ const setMessageFlagsTool = {
     try {
       const response = await fetchMailAPI(`/messages/${args.messageId}/flags`, {
         method: 'PUT',
-        body: args.flags,
+        // MessagesController::setFlags(int $id, array $flags)
+        body: { flags: args.flags },
       });
 
       if (!response.ok) {
