@@ -80,7 +80,7 @@ func runDeploy(_ *cobra.Command, _ []string) error {
 	// Auto-detect whether monitoring profile is active.
 	profileFlag := ""
 	monCheck, _ := provision.RunCommand(sshClient,
-		"docker ps -q --filter name=aiquila-grafana 2>/dev/null")
+		"docker ps -q --filter name=aiq-grafana 2>/dev/null")
 	if strings.TrimSpace(monCheck) != "" {
 		profileFlag = "--profile monitoring"
 		fmt.Println("  Monitoring profile detected — including in deploy.")
