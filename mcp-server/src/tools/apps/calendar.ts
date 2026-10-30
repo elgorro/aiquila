@@ -446,112 +446,124 @@ function parseVEvents(responseXml: string): ParsedEvent[] {
     const calDataMatch = responseBlock.match(nsTagContent('calendar-data'));
     if (!calDataMatch) continue;
 
-    const icalData = calDataMatch[1];
-    const veventBlocks = icalData.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g);
-    if (!veventBlocks) continue;
+    // calendar-data is XML text: `&` arrives as `&amp;`, CR as `&#13;`
+    events.push(
+      ...parseICalEvents(decodeXmlEntities(calDataMatch[1]), etagMatch?.[1], hrefMatch?.[1])
+    );
+  }
 
-    for (const block of veventBlocks) {
-      const unfolded = unfoldICalLines(block);
-      const lines = unfolded.split(/\r?\n/);
+  return events;
+}
 
-      const event: ParsedEvent = {
-        uid: '',
-        summary: '',
-        dtstart: '',
-        isAllDay: false,
-        categories: [],
-        attendees: [],
-        etag: etagMatch?.[1],
-        href: hrefMatch?.[1],
-      };
+/**
+ * Parse the VEVENTs of an iCalendar object (already XML-decoded).
+ */
+function parseICalEvents(icalData: string, etag?: string, href?: string): ParsedEvent[] {
+  const events: ParsedEvent[] = [];
+  const veventBlocks = icalData.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g);
+  if (!veventBlocks) return events;
 
-      for (const line of lines) {
-        // Handle ATTENDEE lines specially (they have complex params)
-        if (line.startsWith('ATTENDEE')) {
-          event.attendees.push(parseAttendee(line));
-          continue;
-        }
+  for (const block of veventBlocks) {
+    const unfolded = unfoldICalLines(block);
+    const lines = unfolded.split(/\r?\n/);
 
-        // Handle ORGANIZER
-        if (line.startsWith('ORGANIZER')) {
-          const cnMatch = line.match(/CN=([^;:]+)/i);
-          const valueMatch = line.match(/:(?:mailto:)?(.+)$/i);
-          event.organizer = cnMatch
-            ? `${cnMatch[1].replace(/"/g, '')} <${valueMatch?.[1] || ''}>`
-            : valueMatch?.[1] || '';
-          continue;
-        }
+    const event: ParsedEvent = {
+      uid: '',
+      summary: '',
+      dtstart: '',
+      isAllDay: false,
+      categories: [],
+      attendees: [],
+      etag,
+      href,
+    };
 
-        const propMatch = line.match(/^([A-Z][A-Z0-9-]*)(;[^:]*)?:(.*)/);
-        if (!propMatch) continue;
-
-        const [, name, params, value] = propMatch;
-
-        switch (name) {
-          case 'UID':
-            event.uid = value;
-            break;
-          case 'SUMMARY':
-            event.summary = unescapeICalValue(value);
-            break;
-          case 'DTSTART':
-            event.dtstart = value;
-            event.isAllDay =
-              params?.includes('VALUE=DATE') === true && !params?.includes('VALUE=DATE-TIME');
-            break;
-          case 'DTEND':
-            event.dtend = value;
-            break;
-          case 'DURATION':
-            event.duration = value;
-            break;
-          case 'LOCATION':
-            event.location = unescapeICalValue(value);
-            break;
-          case 'DESCRIPTION':
-            event.description = unescapeICalValue(value);
-            break;
-          case 'STATUS':
-            event.status = value;
-            break;
-          case 'TRANSP':
-            event.transp = value;
-            break;
-          case 'URL':
-            event.url = value;
-            break;
-          case 'COLOR':
-            event.color = value;
-            break;
-          case 'CLASS':
-            event.accessClass = value;
-            break;
-          case 'CREATED':
-            event.created = value;
-            break;
-          case 'LAST-MODIFIED':
-            event.lastModified = value;
-            break;
-          case 'RRULE':
-            event.rrule = value;
-            break;
-          case 'RECURRENCE-ID':
-            event.recurrenceId = value;
-            break;
-          case 'CATEGORIES':
-            event.categories.push(
-              ...value
-                .split(',')
-                .map((c) => c.trim())
-                .filter(Boolean)
-            );
-            break;
-        }
+    for (const line of lines) {
+      // Handle ATTENDEE lines specially (they have complex params)
+      if (line.startsWith('ATTENDEE')) {
+        event.attendees.push(parseAttendee(line));
+        continue;
       }
 
-      if (event.uid) {
-        events.push(event);
+      // Handle ORGANIZER
+      if (line.startsWith('ORGANIZER')) {
+        const cnMatch = line.match(/CN=([^;:]+)/i);
+        const valueMatch = line.match(/:(?:mailto:)?(.+)$/i);
+        event.organizer = cnMatch
+          ? `${cnMatch[1].replace(/"/g, '')} <${valueMatch?.[1] || ''}>`
+          : valueMatch?.[1] || '';
+        continue;
       }
+
+      const propMatch = line.match(/^([A-Z][A-Z0-9-]*)(;[^:]*)?:(.*)/);
+      if (!propMatch) continue;
+
+      const [, name, params, value] = propMatch;
+
+      switch (name) {
+        case 'UID':
+          event.uid = value;
+          break;
+        case 'SUMMARY':
+          event.summary = unescapeICalValue(value);
+          break;
+        case 'DTSTART':
+          event.dtstart = value;
+          event.isAllDay =
+            params?.includes('VALUE=DATE') === true && !params?.includes('VALUE=DATE-TIME');
+          break;
+        case 'DTEND':
+          event.dtend = value;
+          break;
+        case 'DURATION':
+          event.duration = value;
+          break;
+        case 'LOCATION':
+          event.location = unescapeICalValue(value);
+          break;
+        case 'DESCRIPTION':
+          event.description = unescapeICalValue(value);
+          break;
+        case 'STATUS':
+          event.status = value;
+          break;
+        case 'TRANSP':
+          event.transp = value;
+          break;
+        case 'URL':
+          event.url = value;
+          break;
+        case 'COLOR':
+          event.color = value;
+          break;
+        case 'CLASS':
+          event.accessClass = value;
+          break;
+        case 'CREATED':
+          event.created = value;
+          break;
+        case 'LAST-MODIFIED':
+          event.lastModified = value;
+          break;
+        case 'RRULE':
+          event.rrule = value;
+          break;
+        case 'RECURRENCE-ID':
+          event.recurrenceId = value;
+          break;
+        case 'CATEGORIES':
+          event.categories.push(
+            ...value
+              .split(',')
+              .map((c) => c.trim())
+              .filter(Boolean)
+          );
+          break;
+      }
+    }
+
+    if (event.uid) {
+      events.push(event);
     }
   }
 
@@ -1068,7 +1080,7 @@ export const getEventTool = {
   description:
     'Get detailed information about a single calendar event by its UID, including full description, attendees, and recurrence rules.',
   inputSchema: z.object({
-    uid: z.string().describe('The UID of the event'),
+    uid: z.string().min(1).describe('The UID of the event'),
     calendarName: z
       .string()
       .describe('The calendar name. Use list_calendars to find available calendar names.'),
@@ -1077,9 +1089,8 @@ export const getEventTool = {
     try {
       const { icalData } = await resolveEventByUid(args.calendarName, args.uid);
 
-      // Parse and format the full event
-      const fakeResponse = `<d:response><d:href>/</d:href><d:propstat><d:prop><d:getetag>"x"</d:getetag><c:calendar-data>${icalData}</c:calendar-data></d:prop></d:propstat></d:response>`;
-      const events = parseVEvents(fakeResponse);
+      // resolveEventByUid returns the iCalendar text already XML-decoded
+      const events = parseICalEvents(icalData);
 
       if (events.length === 0) {
         throw new Error(`Event with UID "${args.uid}" could not be parsed`);
@@ -1413,7 +1424,7 @@ export const updateEventTool = {
   description:
     "Update an existing calendar event's fields by UID. Uses CalDAV ETag-based optimistic concurrency.",
   inputSchema: z.object({
-    uid: z.string().describe('The UID of the event to update'),
+    uid: z.string().min(1).describe('The UID of the event to update'),
     calendarName: z
       .string()
       .describe('The calendar name. Use list_calendars to find available calendar names.'),
@@ -1671,7 +1682,7 @@ export const deleteEventTool = {
   },
   description: 'Delete a calendar event from Nextcloud by UID. This action is irreversible.',
   inputSchema: z.object({
-    uid: z.string().describe('The UID of the event to delete'),
+    uid: z.string().min(1).describe('The UID of the event to delete'),
     calendarName: z
       .string()
       .describe('The calendar name. Use list_calendars to find available calendar names.'),

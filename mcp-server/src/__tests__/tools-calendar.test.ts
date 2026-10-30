@@ -172,6 +172,28 @@ END:VCALENDAR</c:calendar-data>
   </d:response>
 </d:multistatus>`;
 
+    it('should decode XML entities in calendar-data', async () => {
+      // Sabre serialises calendar-data as XML text: & as &amp;, CR as &#13;
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        text: () =>
+          Promise.resolve(
+            '<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:response>' +
+              '<d:href>/e.ics</d:href><d:propstat><d:prop><d:getetag>"e"</d:getetag>' +
+              '<c:calendar-data>BEGIN:VCALENDAR&#13;\nBEGIN:VEVENT&#13;\nUID:e1&#13;\n' +
+              'SUMMARY:R&amp;D &lt;sync&gt;&#13;\nDTSTART:20240315T090000Z&#13;\n' +
+              'END:VEVENT&#13;\nEND:VCALENDAR</c:calendar-data>' +
+              '</d:prop></d:propstat></d:response></d:multistatus>'
+          ),
+      });
+
+      const { listEventsTool } = await import('../tools/apps/calendar.js');
+      const result = await listEventsTool.handler({ calendarName: 'personal' });
+
+      expect(result.content[0].text).toContain('R&D <sync>');
+      expect(result.content[0].text).not.toContain('&amp;');
+    });
+
     it('should return formatted event list with all details', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: true,
