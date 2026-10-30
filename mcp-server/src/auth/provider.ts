@@ -10,7 +10,14 @@ import {
   type OAuthTokens,
   type OAuthTokenRevocationRequest,
 } from '@modelcontextprotocol/server';
-import { ClientsStore, CodeStore, RefreshStore, RevocationList, refreshTtlMs } from './store.js';
+import {
+  ClientsStore,
+  CodeStore,
+  CODE_TTL_MS,
+  RefreshStore,
+  RevocationList,
+  refreshTtlMs,
+} from './store.js';
 import { CredentialBackendUnavailableError, CredentialStore } from './credential-store.js';
 import {
   checkCredential,
@@ -222,6 +229,9 @@ export interface AuthorizationParams {
   // The sign-in binding cookie of the browser /authorize answered. The flow
   // it starts completes only in that browser (login CSRF, RFC 6749 §10.12).
   browserBinding?: string;
+  // The address the request came from, to bound the sign-ins one client
+  // address can hold open.
+  clientAddress?: string;
 }
 
 // --- OAuth Provider ---
@@ -246,6 +256,12 @@ const FLOW_ID = /^[A-Za-z0-9_-]{43}$/;
 // Past this many in progress, new sign-ins are refused rather than letting
 // anonymous requests pile up flows here and in Nextcloud.
 const MAX_PENDING_FLOWS = 500;
+// And per client address, so one address cannot take all of them.
+const MAX_PENDING_FLOWS_PER_ADDRESS = 20;
+// How long an "unknown" credential check (Nextcloud unreachable) is trusted
+// before Nextcloud is asked again, so an outage does not make every request
+// wait on it.
+const UNKNOWN_RECHECK_MS = 30 * 1000;
 
 /** A sign-in in progress: the authorization request and its Login Flow v2. */
 interface PendingFlow {
@@ -256,8 +272,9 @@ interface PendingFlow {
   expiresAt: number;
   lastPolledAt: number;
   polling?: Promise<void>;
-  // Set once Nextcloud has answered: the user's credential, or why it failed.
-  granted?: { userId: string } & GrantedFlow;
+  // Set once Nextcloud has answered: the grant whose credential is now sealed
+  // in the credential store, or why it failed.
+  granted?: { grantId: string; userId: string };
   error?: string;
   // Collected but not yet confirmed (Nextcloud could not be asked); the next
   // poll asks again instead of polling the spent flow.
@@ -284,6 +301,8 @@ export class NextcloudOAuthProvider {
   private readonly confirmedAt = new Map<string, number>();
   // When a failed tool call last made a grant's credential be checked.
   private readonly failureCheckedAt = new Map<string, number>();
+  // A credential check of each grant in progress, shared by concurrent requests.
+  private readonly checking = new Map<string, Promise<boolean>>();
 
   constructor(clientsStore: ClientsStore = ClientsStore.fromEnv(), options: ProviderOptions = {}) {
     this._clientsStore = clientsStore;
@@ -306,8 +325,15 @@ export class NextcloudOAuthProvider {
     res: any
   ): Promise<void> {
     const clientName = clientDisplayName(client);
-    if (this.flows.size >= MAX_PENDING_FLOWS) {
-      logger.warn({ pending: this.flows.size }, '[auth] Too many sign-ins in progress');
+    const fromAddress = params.clientAddress
+      ? [...this.flows.values()].filter((f) => f.params.clientAddress === params.clientAddress)
+          .length
+      : 0;
+    if (this.flows.size >= MAX_PENDING_FLOWS || fromAddress >= MAX_PENDING_FLOWS_PER_ADDRESS) {
+      logger.warn(
+        { pending: this.flows.size, fromAddress },
+        '[auth] Too many sign-ins in progress'
+      );
       throw new OAuthError(
         OAuthErrorCode.TemporarilyUnavailable,
         'Too many sign-ins in progress; try again shortly'
@@ -394,16 +420,16 @@ export class NextcloudOAuthProvider {
     }
 
     this.flows.delete(flowId);
-    const { userId, loginName, appPassword } = pending.granted;
+    const { grantId, userId } = pending.granted;
     const { params } = pending;
-    const code = this.issueAuthCode({
+    const code = this.codeForGrant({
       pkceChallenge: params.codeChallenge,
       clientId: pending.clientId,
       scopes: params.scopes,
       redirectUri: params.redirectUri,
       userId,
       state: params.state,
-      credential: { loginName, appPassword },
+      grantId,
     });
     logger.info({ user: userId, client: pending.clientId }, '[auth] Login successful');
 
@@ -437,7 +463,25 @@ export class NextcloudOAuthProvider {
           pending.error = 'Nextcloud did not confirm the new app password. Please try again.';
           return;
         }
-        pending.granted = { userId: check.userId, ...granted };
+        // Sealed and persisted at once: should this server restart before the
+        // code is exchanged, the store's expiry still deletes the app password.
+        const grantId = randomUUID();
+        try {
+          await this.credentials.put(
+            { grantId, userId: check.userId, ...granted },
+            pending.expiresAt
+          );
+        } catch (err) {
+          // The key service is down: keep the credential and try again next poll.
+          if (err instanceof CredentialBackendUnavailableError) {
+            pending.collected = granted;
+            throw err;
+          }
+          void deleteAppPassword(granted.loginName, granted.appPassword);
+          pending.error = 'Could not complete the sign-in. Please try again.';
+          throw err;
+        }
+        pending.granted = { grantId, userId: check.userId };
       } catch (err) {
         logger.warn({ err: (err as Error).message }, '[auth] Login Flow v2 poll failed');
       } finally {
@@ -451,8 +495,10 @@ export class NextcloudOAuthProvider {
   private dropFlow(flowId: string): void {
     const pending = this.flows.get(flowId);
     this.flows.delete(flowId);
-    const cred = pending?.granted ?? pending?.collected;
-    if (cred) void deleteAppPassword(cred.loginName, cred.appPassword);
+    if (pending?.granted) this.revokeGrant(pending.granted.grantId);
+    else if (pending?.collected) {
+      void deleteAppPassword(pending.collected.loginName, pending.collected.appPassword);
+    }
   }
 
   private sendFlowPage(res: any, status: number, page: FlowPage): void {
@@ -498,8 +544,8 @@ export class NextcloudOAuthProvider {
     // code used twice MUST be denied and the tokens issued from it SHOULD be
     // revoked. The router has already checked client and code_verifier, so
     // this replay carries valid parameters and the grant ends.
-    if (entry.redeemedGrantId) {
-      this.revokeGrant(entry.redeemedGrantId);
+    if (entry.redeemed) {
+      this.revokeGrant(entry.grantId);
       logger.warn(
         { user: entry.userId, client: client.client_id },
         '[token] Authorization code replayed — grant revoked'
@@ -507,27 +553,13 @@ export class NextcloudOAuthProvider {
       throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid authorization code');
     }
 
-    const credential = entry.credential;
-    if (!credential) {
+    const { grantId } = entry;
+    if (!this.credentials.has(grantId)) {
       throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid authorization code');
     }
-    const grantId = randomUUID();
-    // Also drops the credential from the code: from here on the grant holds it.
-    this.codeStore.markRedeemed(authorizationCode, grantId);
-    try {
-      await this.credentials.put(
-        { grantId, userId: entry.userId, ...credential },
-        Date.now() + refreshTtlMs()
-      );
-    } catch (err) {
-      // Nothing holds the app password now, so it goes in Nextcloud too.
-      void deleteAppPassword(credential.loginName, credential.appPassword);
-      logger.error(
-        { user: entry.userId, err: (err as Error).message },
-        "[token] Could not store the grant's credential"
-      );
-      throw new OAuthError(OAuthErrorCode.ServerError, 'Could not complete the sign-in');
-    }
+    // Redeemed before the first await, so a concurrent replay is recognised.
+    this.codeStore.markRedeemed(authorizationCode);
+    this.credentials.extend(grantId, Date.now() + refreshTtlMs());
     this.confirmedAt.set(grantId, Date.now());
     const accessToken = await this.signAccessToken(
       grantId,
@@ -535,6 +567,11 @@ export class NextcloudOAuthProvider {
       entry.clientId,
       entry.scopes
     );
+    // A replay that arrived during the await has ended the grant: issue no
+    // refresh token for it.
+    if (this.revocations.isGrantRevoked(grantId)) {
+      throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid authorization code');
+    }
     const refreshToken = this.refreshStore.store({
       grantId,
       userId: entry.userId,
@@ -717,14 +754,30 @@ export class NextcloudOAuthProvider {
     }
     const last = this.confirmedAt.get(grantId);
     if (!force && last !== undefined && Date.now() - last < CREDENTIAL_RECHECK_MS) return cred;
-    const check = await checkCredential(cred.loginName, cred.appPassword);
-    if (check.state === 'rejected' || (check.state === 'valid' && check.userId !== userId)) {
-      logger.warn({ user: userId }, "[auth] Nextcloud rejected the grant's app password");
-      this.revokeGrant(grantId);
-      return undefined;
+    // Concurrent requests share one check.
+    let check = this.checking.get(grantId);
+    if (!check) {
+      check = this.checkGrant(cred).finally(() => this.checking.delete(grantId));
+      this.checking.set(grantId, check);
     }
-    if (check.state === 'valid') this.confirmedAt.set(grantId, Date.now());
-    return cred;
+    return (await check) ? cred : undefined;
+  }
+
+  /** Asks Nextcloud about a grant's credential; false once it ended the grant. */
+  private async checkGrant(cred: NextcloudUserCredential): Promise<boolean> {
+    const check = await checkCredential(cred.loginName, cred.appPassword);
+    if (check.state === 'rejected' || (check.state === 'valid' && check.userId !== cred.userId)) {
+      logger.warn({ user: cred.userId }, "[auth] Nextcloud rejected the grant's app password");
+      this.revokeGrant(cred.grantId);
+      return false;
+    }
+    // Nextcloud unreachable: the credential stands, and is asked about again
+    // after UNKNOWN_RECHECK_MS rather than on every request meanwhile.
+    this.confirmedAt.set(
+      cred.grantId,
+      check.state === 'valid' ? Date.now() : Date.now() - CREDENTIAL_RECHECK_MS + UNKNOWN_RECHECK_MS
+    );
+    return true;
   }
 
   /**
@@ -800,11 +853,8 @@ export class NextcloudOAuthProvider {
    */
   async sweep(): Promise<void> {
     for (const { grantId } of this.credentials.expired()) this.revokeGrant(grantId);
-    for (const entry of this.codeStore.takeExpired()) {
-      if (entry.credential && !entry.redeemedGrantId) {
-        void deleteAppPassword(entry.credential.loginName, entry.credential.appPassword);
-      }
-    }
+    // An unredeemed code's credential expires with it in the store above.
+    this.codeStore.takeExpired();
     const now = Date.now();
     const polls: Promise<void>[] = [];
     for (const [flowId, pending] of this.flows) {
@@ -855,8 +905,11 @@ export class NextcloudOAuthProvider {
     );
   }
 
-  /** Issues an authorization code for a user who signed in on Nextcloud. */
-  issueAuthCode(params: {
+  /**
+   * Issues an authorization code for a user who signed in on Nextcloud,
+   * sealing their credential under a new grant first.
+   */
+  async issueAuthCode(params: {
     pkceChallenge: string;
     clientId: string;
     scopes: string[];
@@ -864,7 +917,20 @@ export class NextcloudOAuthProvider {
     userId: string;
     state?: string;
     credential: { loginName: string; appPassword: string };
-  }): string {
+  }): Promise<string> {
+    const { credential, ...rest } = params;
+    const grantId = randomUUID();
+    await this.credentials.put(
+      { grantId, userId: params.userId, ...credential },
+      Date.now() + CODE_TTL_MS
+    );
+    return this.codeForGrant({ ...rest, grantId });
+  }
+
+  /** Issues an authorization code for a grant whose credential is sealed. */
+  private codeForGrant(params: Parameters<CodeStore['store']>[0]): string {
+    // The credential lasts as long as the code; the exchange extends it.
+    this.credentials.extend(params.grantId, Date.now() + CODE_TTL_MS);
     return this.codeStore.store(params);
   }
 

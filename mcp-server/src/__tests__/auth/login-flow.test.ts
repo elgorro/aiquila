@@ -50,6 +50,19 @@ describe('startLoginFlow', () => {
     expect(flow.loginUrl).toBe('https://cloud.example.com/login/v2/flow/abc');
   });
 
+  it('swaps the internal webroot for the public one', async () => {
+    process.env.NEXTCLOUD_URL = 'http://nc/internal';
+    process.env.NEXTCLOUD_PUBLIC_URL = 'https://example.com/nextcloud';
+    started('http://nc/internal/index.php/login/v2/flow/abc', 'http://nc/internal/login/v2/poll');
+    const flow = await startLoginFlow('d');
+    expect(flow.loginUrl).toBe('https://example.com/nextcloud/index.php/login/v2/flow/abc');
+    process.env.NEXTCLOUD_URL = 'http://nc';
+    started('http://nc/index.php/login/v2/flow/abc');
+    expect((await startLoginFlow('d')).loginUrl).toBe(
+      'https://example.com/nextcloud/index.php/login/v2/flow/abc'
+    );
+  });
+
   it('accepts URLs Nextcloud already built on its public origin', async () => {
     process.env.NEXTCLOUD_PUBLIC_URL = 'https://cloud.example.com';
     started(

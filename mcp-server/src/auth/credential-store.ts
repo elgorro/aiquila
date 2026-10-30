@@ -96,6 +96,8 @@ export class LocalCipher implements CredentialCipher {
 
 // --- Optional: OpenBao (or Vault) Transit ---
 
+// OpenBao Transit's errors for a ciphertext that is malformed or fails authentication.
+const OPENBAO_VALUE_ERROR = /message authentication failed|invalid ciphertext/i;
 const OPENBAO_PREFIX = 'openbao:';
 const OPENBAO_TIMEOUT_MS = 5000;
 // A periodic token must be renewed within its period; renewing hourly covers
@@ -154,10 +156,12 @@ export class OpenBaoCipher implements CredentialCipher {
       // The error body names the failing check; it never echoes the plaintext.
       const detail = (await resp.text().catch(() => '')).slice(0, 200);
       const message = `OpenBao ${path} failed: ${resp.status} ${detail}`;
-      // 400 is OpenBao judging the value itself (it does not decrypt under this
-      // grant's associated data). Anything else — a refused or expired token,
-      // a sealed or overloaded server — is about OpenBao, not the value.
-      if (resp.status === 400) throw new Error(message);
+      // Only a 400 naming the ciphertext is about the value itself (it does not
+      // decrypt under this grant's associated data). OpenBao answers 400 for
+      // configuration errors too — a missing transit key, say — and those, like
+      // a refused or expired token or a sealed or overloaded server, are about
+      // OpenBao: treating them as bad values would end every grant.
+      if (resp.status === 400 && OPENBAO_VALUE_ERROR.test(detail)) throw new Error(message);
       throw new CredentialBackendUnavailableError(message);
     }
     return resp.json();

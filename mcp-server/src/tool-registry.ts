@@ -297,7 +297,12 @@ export async function getFilteredToolSets(): Promise<ToolArray[]> {
         ? 'anonymous'
         : 'env';
   const cached = cachedToolSets.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.toolSets;
+  if (cached && cached.expiresAt > Date.now()) {
+    // Re-inserted, so the map's insertion order is least recently used first.
+    cachedToolSets.delete(cacheKey);
+    cachedToolSets.set(cacheKey, cached);
+    return cached.toolSets;
+  }
 
   let toolSets: ToolArray[];
   let source: string;
@@ -314,10 +319,15 @@ export async function getFilteredToolSets(): Promise<ToolArray[]> {
   }
 
   const isUser = cacheKey.startsWith('user:');
+  cachedToolSets.delete(cacheKey);
   if (isUser && cachedToolSets.size >= MAX_CACHED_USERS) {
-    // Maps iterate in insertion order: drop the oldest user's entry.
-    const oldest = [...cachedToolSets.keys()].find((k) => k.startsWith('user:'));
-    if (oldest) cachedToolSets.delete(oldest);
+    const now = Date.now();
+    for (const [k, v] of cachedToolSets) if (v.expiresAt <= now) cachedToolSets.delete(k);
+    // Still full: drop the least recently used user's entry.
+    if (cachedToolSets.size >= MAX_CACHED_USERS) {
+      const oldest = [...cachedToolSets.keys()].find((k) => k.startsWith('user:'));
+      if (oldest) cachedToolSets.delete(oldest);
+    }
   }
   cachedToolSets.set(cacheKey, {
     toolSets,

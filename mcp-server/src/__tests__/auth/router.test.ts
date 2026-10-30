@@ -152,7 +152,7 @@ async function tokens(ctx: Ctx) {
     form({
       grant_type: 'authorization_code',
       client_id: PUBLIC_CLIENT,
-      code: issueCode(ctx),
+      code: await issueCode(ctx),
       code_verifier: VERIFIER,
       redirect_uri: REDIRECT,
     })
@@ -366,7 +366,7 @@ describe('/token', () => {
       form({
         grant_type: 'authorization_code',
         client_id: PUBLIC_CLIENT,
-        code: issueCode(ctx),
+        code: await issueCode(ctx),
         code_verifier: VERIFIER,
         redirect_uri: REDIRECT,
         resource: 'https://other.example.com/mcp',
@@ -382,7 +382,7 @@ describe('/token', () => {
       form({
         grant_type: 'authorization_code',
         client_id: PUBLIC_CLIENT,
-        code: issueCode(ctx),
+        code: await issueCode(ctx),
         code_verifier: VERIFIER,
         redirect_uri: REDIRECT,
         resource: 'https://mcp.example.com/mcp',
@@ -397,7 +397,7 @@ describe('/token', () => {
       form({
         grant_type: 'authorization_code',
         client_id: PUBLIC_CLIENT,
-        code: issueCode(ctx),
+        code: await issueCode(ctx),
         code_verifier: VERIFIER,
         redirect_uri: REDIRECT,
       })
@@ -417,7 +417,7 @@ describe('/token', () => {
       form({
         grant_type: 'authorization_code',
         client_id: PUBLIC_CLIENT,
-        code: issueCode(ctx),
+        code: await issueCode(ctx),
         code_verifier: 'b'.repeat(43),
         redirect_uri: REDIRECT,
       })
@@ -432,7 +432,7 @@ describe('/token', () => {
       form({
         grant_type: 'authorization_code',
         client_id: PUBLIC_CLIENT,
-        code: issueCode(ctx),
+        code: await issueCode(ctx),
         code_verifier: VERIFIER,
       })
     );

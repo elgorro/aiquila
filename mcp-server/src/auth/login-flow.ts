@@ -61,6 +61,21 @@ function ownUrl(raw: unknown, what: string): URL {
 }
 
 /**
+ * The browser-facing form of a URL Nextcloud built on its internal address:
+ * the internal base URL (webroot included) swapped for the public one. A URL
+ * already on the public origin is left as it is.
+ */
+function toPublic(url: URL): URL {
+  const pub = new URL(nextcloudPublicUrl());
+  if (url.origin === pub.origin) return url;
+  const internalRoot = new URL(nextcloudBaseUrl()).pathname.replace(/\/+$/, '');
+  const path = url.pathname.startsWith(`${internalRoot}/`)
+    ? url.pathname.slice(internalRoot.length)
+    : url.pathname;
+  return new URL(`${pub.pathname.replace(/\/+$/, '')}${path}${url.search}${url.hash}`, pub.origin);
+}
+
+/**
  * Starts a flow. `deviceName` is sent as the User-Agent, which Nextcloud
  * shows on the grant page and as the app password's name under
  * Security → Devices & sessions.
@@ -81,11 +96,8 @@ export async function startLoginFlow(deviceName: string): Promise<StartedFlow> {
   if (typeof body.poll?.token !== 'string' || body.poll.token === '') {
     throw new Error('Nextcloud returned no poll token');
   }
-  const publicOrigin = new URL(nextcloudPublicUrl());
-  login.protocol = publicOrigin.protocol;
-  login.host = publicOrigin.host;
   return {
-    loginUrl: login.href,
+    loginUrl: toPublic(login).href,
     pollToken: body.poll.token,
     pollPath: endpoint.pathname,
   };

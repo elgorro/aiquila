@@ -402,7 +402,9 @@ issued along the way, all belong to that grant.
 Each grant holds the app password Nextcloud issued for it. The server needs it for every
 tool call, so it is stored, encrypted, in `credentials.json` in `MCP_AUTH_STATE_DIR` (file
 mode `0600`). The plaintext exists only in memory while a request that needs it runs, and
-never appears in the logs.
+never appears in the logs. The app password is sealed the moment Nextcloud hands it over,
+before the client has exchanged its code. If the server restarts mid sign-in, the stored
+value still expires, and its app password is then deleted in Nextcloud.
 
 - **Cipher:** AES-256-GCM with a random 96-bit IV per value. 256 bits is the largest AES key.
 - **Key:** HKDF-SHA-512 (RFC 5869) over `MCP_CREDENTIAL_KEY`. A 64-byte (512-bit) key is
@@ -447,8 +449,9 @@ POLICY
 bao token create -orphan -policy=aiquila-mcp -no-default-policy -period=24h
 ```
 
-If OpenBao cannot be reached at startup, the server logs an error and keeps running. Sign-ins
-and tool calls fail until OpenBao answers.
+If OpenBao cannot be reached at startup, the server logs an error and keeps running. Tool
+calls get `503` until OpenBao answers, and sessions are kept. A sign-in granted meanwhile
+completes once OpenBao is back, as long as its page is still open.
 
 ## Security Notes
 

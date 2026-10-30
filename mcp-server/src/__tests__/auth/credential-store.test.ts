@@ -125,6 +125,11 @@ describe('OpenBaoCipher (Transit)', () => {
     await expect(bad).rejects.toThrow(/400/);
     await expect(bad).rejects.not.toBeInstanceOf(CredentialBackendUnavailableError);
     for (const fail of [
+      // A configuration error is not a bad value: it must not end every grant.
+      () =>
+        fetchMock.mockResolvedValueOnce(
+          new Response('{"errors":["encryption key not found"]}', { status: 400 })
+        ),
       () => fetchMock.mockResolvedValueOnce(new Response('{}', { status: 403 })),
       () => fetchMock.mockResolvedValueOnce(new Response('{}', { status: 503 })),
       () => fetchMock.mockRejectedValueOnce(new Error('ECONNREFUSED')),

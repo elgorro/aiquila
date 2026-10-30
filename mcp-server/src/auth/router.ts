@@ -311,6 +311,7 @@ function authorizationHandler(options: AuthRouterOptions) {
           state,
           scopes: p.scope ? p.scope.split(' ').filter(Boolean) : [],
           browserBinding,
+          clientAddress: req.ip,
         },
         res
       );
@@ -463,11 +464,17 @@ export function authRouter(options: AuthRouterOptions): express.Router {
   );
 
   // The sign-in page reloads itself here every FLOW_PAGE_REFRESH_SECS while the
-  // user signs in on Nextcloud (up to 20 minutes), hence the higher limit.
-  router.get('/auth/flow/:id', limiter(minutes(15), 600, 'sign-in'), async (req: any, res: any) => {
-    res.setHeader('Cache-Control', 'no-store');
-    await provider.continueFlow(String(req.params.id), readBrowserBinding(req), res);
-  });
+  // user signs in on Nextcloud (up to 20 minutes): about 300 reloads per tab
+  // per window, and several people may sign in from behind one address. The
+  // provider polls Nextcloud at most once per second per flow whatever the rate.
+  router.get(
+    '/auth/flow/:id',
+    limiter(minutes(15), 3000, 'sign-in'),
+    async (req: any, res: any) => {
+      res.setHeader('Cache-Control', 'no-store');
+      await provider.continueFlow(String(req.params.id), readBrowserBinding(req), res);
+    }
+  );
 
   router.use(
     '/token',

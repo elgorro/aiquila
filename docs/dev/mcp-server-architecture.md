@@ -349,7 +349,7 @@ Infrastructure adapters for each Nextcloud API surface:
 |------|---------|---------|
 | `webdav.ts` | Singleton | files, notes, cookbook |
 | `caldav.ts` | Functional helper | tasks, calendar |
-| `ocs.ts` | Functional helper | auth/login, system tools |
+| `ocs.ts` | Functional helper | system tools |
 | `mail.ts`, `maps.ts`, etc. | Functional helpers | app tools |
 
 The WebDAV client is a singleton to reuse connections across tool calls. CalDAV and OCS helpers are stateless functions.

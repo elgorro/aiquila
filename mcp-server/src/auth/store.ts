@@ -19,12 +19,13 @@ export interface CodeEntry {
   redirectUri: string;
   userId: string;
   state?: string;
-  // The Nextcloud credential Login Flow v2 returned, held until the code is
-  // exchanged and the grant takes it over. Codes live in memory only.
-  credential?: { loginName: string; appPassword: string };
-  // Set once the code has been exchanged: the grant it started. The entry is
-  // kept until it expires so a replay can be recognised and the grant ended.
-  redeemedGrantId?: string;
+  // The grant the code starts. Its Nextcloud credential is already sealed in
+  // the credential store under this id, so an app password outlives neither
+  // the code nor a restart: the store's expiry sweep deletes it.
+  grantId: string;
+  // Set once the code has been exchanged. The entry is kept until it expires
+  // so a replay can be recognised and the grant ended.
+  redeemed?: boolean;
   expiresAt: number;
 }
 
@@ -53,7 +54,7 @@ function authSecretId(): string {
     .slice(0, 16);
 }
 
-const CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+export const CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const DEFAULT_REFRESH_TTL_SECS = 30 * 24 * 60 * 60; // 30 days
 
 // Spent refresh tokens kept per grant for reuse detection. Each rotation adds
@@ -436,13 +437,10 @@ export class CodeStore {
     this.codes.delete(code);
   }
 
-  /** Marks a code as exchanged for `grantId`. It no longer redeems, but is still recognised. */
-  markRedeemed(code: string, grantId: string): void {
+  /** Marks a code as exchanged. It no longer redeems, but is still recognised. */
+  markRedeemed(code: string): void {
     const entry = this.codes.get(code);
-    if (entry) {
-      entry.redeemedGrantId = grantId;
-      entry.credential = undefined;
-    }
+    if (entry) entry.redeemed = true;
   }
 }
 
