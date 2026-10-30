@@ -138,7 +138,7 @@ export class OpenBaoCipher implements CredentialCipher {
     });
   }
 
-  private async call(path: string, body?: unknown): Promise<any> {
+  private async call(path: string, body?: unknown): Promise<{ data?: Record<string, unknown> }> {
     let resp: Response;
     try {
       resp = await fetch(`${this.base}/${path}`, {

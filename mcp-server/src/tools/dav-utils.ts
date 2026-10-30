@@ -141,3 +141,55 @@ export function formatICalendar(text: string): string {
     .filter((line) => line !== '');
   return lines.map(foldContentLine).join('\r\n') + '\r\n';
 }
+
+// --- Request paths (RFC 3986 §3.3, §2.1) ---
+
+/**
+ * One path segment taken from tool input or config (a user id, a calendar or
+ * address book name, a file name), percent-encoded so it addresses exactly
+ * that resource. A path segment admits only `pchar`; `/`, `?`, `#`, `%` or a
+ * space would end it, start the query or fragment, or break the URL. `.` and
+ * `..` are dot-segments that a URL parser resolves (§5.2.4), walking out of
+ * the collection, so they are rejected; so is an empty segment.
+ */
+export function davSegment(value: string | number): string {
+  const text = String(value);
+  if (text === '' || text === '.' || text === '..') {
+    throw new Error(`Invalid name for a DAV path: "${text}"`);
+  }
+  return encodeURIComponent(text);
+}
+
+/**
+ * A path under `/remote.php/dav/`, every segment encoded with davSegment.
+ * Collections need the trailing slash added by the caller.
+ */
+export function davPath(...segments: (string | number)[]): string {
+  return `/remote.php/dav/${segments.map(davSegment).join('/')}`;
+}
+
+/**
+ * A slash-separated file path (`/Documents/a b.txt`) as encoded segments.
+ * Leading, trailing and doubled slashes carry no segment and are dropped.
+ */
+export function davFilePath(path: string): string {
+  return path
+    .split('/')
+    .filter((segment) => segment !== '')
+    .map(davSegment)
+    .join('/');
+}
+
+/**
+ * The last segment of an href the server sent, decoded: the name the tools
+ * take as input and encode again. An href with a malformed escape is returned
+ * as it is.
+ */
+export function lastHrefSegment(href: string): string {
+  const segment = href.split('/').filter(Boolean).pop() ?? '';
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}

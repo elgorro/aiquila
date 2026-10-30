@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { fetchCalDAV } from '../../client/caldav.js';
+import { davFilePath, davPath } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -29,7 +30,7 @@ export const getFileTagsTool = {
   handler: async (args: { path: string }) => {
     try {
       const config = getNextcloudConfig();
-      const url = `${config.url}/remote.php/dav/files/${config.user}/${args.path.replace(/^\//, '')}`;
+      const url = `${config.url}${davPath('files', config.user)}/${davFilePath(args.path)}`;
 
       const body = `<?xml version="1.0"?>
 <d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
@@ -110,7 +111,7 @@ export const setFileTagsTool = {
   handler: async (args: { path: string; tags: string[] }) => {
     try {
       const config = getNextcloudConfig();
-      const url = `${config.url}/remote.php/dav/files/${config.user}/${args.path.replace(/^\//, '')}`;
+      const url = `${config.url}${davPath('files', config.user)}/${davFilePath(args.path)}`;
 
       const tagElements =
         args.tags.length > 0
@@ -192,7 +193,7 @@ export const assignSystemTagTool = {
   handler: async (args: { fileId: number; tagId: number }) => {
     try {
       const config = getNextcloudConfig();
-      const url = `${config.url}/remote.php/dav/systemtags-relations/files/${args.fileId}/${args.tagId}`;
+      const url = `${config.url}${davPath('systemtags-relations', 'files', args.fileId, args.tagId)}`;
 
       const response = await fetchCalDAV(url, {
         method: 'PUT',
@@ -256,7 +257,7 @@ export const removeSystemTagTool = {
   handler: async (args: { fileId: number; tagId: number }) => {
     try {
       const config = getNextcloudConfig();
-      const url = `${config.url}/remote.php/dav/systemtags-relations/files/${args.fileId}/${args.tagId}`;
+      const url = `${config.url}${davPath('systemtags-relations', 'files', args.fileId, args.tagId)}`;
 
       const response = await fetchCalDAV(url, {
         method: 'DELETE',
@@ -318,7 +319,7 @@ export const listSystemTagsTool = {
   handler: async () => {
     try {
       const config = getNextcloudConfig();
-      const url = `${config.url}/remote.php/dav/systemtags/`;
+      const url = `${config.url}${davPath('systemtags')}/`;
 
       const body = `<?xml version="1.0"?>
 <d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
@@ -439,7 +440,7 @@ export const createSystemTagTool = {
   handler: async (args: { name: string; userVisible: boolean; userAssignable: boolean }) => {
     try {
       const config = getNextcloudConfig();
-      const url = `${config.url}/remote.php/dav/systemtags/`;
+      const url = `${config.url}${davPath('systemtags')}/`;
 
       const response = await fetchCalDAV(url, {
         method: 'POST',

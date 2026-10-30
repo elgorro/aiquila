@@ -61,7 +61,9 @@ status check, so it always runs, and uses the same inline change detection: it l
 only when a non-Markdown file under `mcp-server/` outside `tests/` changed.
 
 **Checks:**
-- ESLint for TypeScript errors (warnings are allowed, errors fail)
+- ESLint for TypeScript errors (warnings are allowed, errors fail). `no-explicit-any` is
+  an error in production code and off under `src/__tests__/`, where mocks are cast to
+  `any`; a needed `any` elsewhere takes an `eslint-disable-next-line` comment
 - `tsc --noEmit` type check (`npm run typecheck`) — the only type check in CI, since
   `npm run build` emits with `--noCheck` and vitest transpiles without checking
 - Prettier for formatting consistency
@@ -272,7 +274,9 @@ git push origin main
 3. Generates SHA-256 checksums
 4. Signs all artifacts with cosign (GitHub OIDC — no secrets needed), one
    `<artifact>.sigstore.json` bundle each, carrying both the signature and the
-   certificate. Verify with `cosign verify-blob --bundle <artifact>.sigstore.json`
+   certificate. Verify with `cosign verify-blob --bundle <artifact>.sigstore.json`.
+   Each signature is tried three times, since the runner's OIDC token endpoint
+   fails transiently now and then
 5. Creates tag `hetzner-vX.X.X` and GitHub Release
 
 **How to release:**

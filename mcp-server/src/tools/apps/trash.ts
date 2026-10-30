@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { fetchCalDAV, decodeXmlEntities } from '../../client/caldav.js';
+import { davPath } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -27,7 +28,7 @@ export const listTrashTool = {
   handler: async () => {
     try {
       const config = getNextcloudConfig();
-      const url = `${config.url}/remote.php/dav/trashbin/${config.user}/trash/`;
+      const url = `${config.url}${davPath('trashbin', config.user, 'trash')}/`;
 
       const body = `<?xml version="1.0"?>
 <d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
@@ -135,8 +136,8 @@ export const restoreFromTrashTool = {
   handler: async (args: { trashKey: string }) => {
     try {
       const config = getNextcloudConfig();
-      const sourceUrl = `${config.url}/remote.php/dav/trashbin/${config.user}/trash/${args.trashKey}`;
-      const destUrl = `${config.url}/remote.php/dav/trashbin/${config.user}/restore/${args.trashKey}`;
+      const sourceUrl = `${config.url}${davPath('trashbin', config.user, 'trash', args.trashKey)}`;
+      const destUrl = `${config.url}${davPath('trashbin', config.user, 'restore', args.trashKey)}`;
 
       const response = await fetchCalDAV(sourceUrl, {
         method: 'MOVE',
@@ -199,7 +200,7 @@ export const emptyTrashTool = {
   handler: async () => {
     try {
       const config = getNextcloudConfig();
-      const url = `${config.url}/remote.php/dav/trashbin/${config.user}/trash/`;
+      const url = `${config.url}${davPath('trashbin', config.user, 'trash')}/`;
 
       const response = await fetchCalDAV(url, { method: 'DELETE' });
 

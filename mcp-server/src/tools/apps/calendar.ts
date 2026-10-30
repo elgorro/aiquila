@@ -15,7 +15,10 @@ import {
   IANA_TZID,
   quoteICalParam,
   formatICalendar,
+  davPath,
+  lastHrefSegment,
 } from '../dav-utils.js';
+import { fetchOCS } from '../../client/ocs.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -319,6 +322,44 @@ function collectAlarmMinutes(alarm: number | null | undefined, alarms?: number[]
   return [...(alarms ?? []), ...(alarm !== undefined && alarm !== null ? [alarm] : [])];
 }
 
+/**
+ * An email address usable in a `mailto:` URI: an RFC 6068 §2 `addr-spec`
+ * (`local@domain`), without the characters that would need percent-encoding
+ * or end the iCalendar content line.
+ */
+const MAILTO_ADDR_SPEC = /^[^\s@<>"(),;:\\[\]]+@[^\s@<>"(),;:\\[\]]+$/;
+
+/**
+ * The ORGANIZER line for the signed-in user, or null when Nextcloud has no
+ * email address for them.
+ *
+ * ORGANIZER is a CAL-ADDRESS (RFC 5545 §3.8.4.3), a `mailto:` URI for an email
+ * address (§3.3.3), and that URI needs an addr-spec (RFC 6068 §2). The login
+ * name is not one. Without an address the property is left out, and
+ * Nextcloud's scheduling fills in the owner's principal address on PUT.
+ */
+async function buildOrganizerLine(): Promise<string | null> {
+  try {
+    const result = await fetchOCS<{ email?: unknown; displayname?: unknown }>(
+      '/ocs/v2.php/cloud/user'
+    );
+    const { email, displayname } = result.ocs.data;
+    if (typeof email !== 'string' || !MAILTO_ADDR_SPEC.test(email)) return null;
+    const cn = typeof displayname === 'string' && displayname !== '' ? displayname : email;
+    return `ORGANIZER;CN=${quoteICalParam(cn)}:mailto:${email}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether an existing ORGANIZER line carries a usable mailto: address. */
+function hasMailtoOrganizer(vevent: string): boolean {
+  const match = vevent.match(/^ORGANIZER[;:].*$/m);
+  if (!match) return false;
+  const address = match[0].match(/:mailto:(.*)$/i)?.[1];
+  return address !== undefined && MAILTO_ADDR_SPEC.test(address);
+}
+
 // ---------------------------------------------------------------------------
 // Parsing
 // ---------------------------------------------------------------------------
@@ -348,7 +389,7 @@ export function parseCalendars(responseXml: string): ParsedCalendar[] {
     const components = compSet ? compSet[1] : '';
 
     const url = hrefMatch?.[1] || '';
-    const name = displayNameMatch?.[1] || url.split('/').filter(Boolean).pop() || '';
+    const name = displayNameMatch?.[1] || lastHrefSegment(url);
 
     calendars.push({
       displayName: name,
@@ -641,7 +682,7 @@ function formatCalendar(cal: ParsedCalendar): string {
  */
 async function resolveCalendarSlug(nameOrSlug: string): Promise<string> {
   const config = getNextcloudConfig();
-  const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/`;
+  const calDavUrl = `${config.url}${davPath('calendars', config.user)}/`;
   const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
 <d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
   <d:prop><d:resourcetype /><d:displayname /></d:prop>
@@ -655,14 +696,17 @@ async function resolveCalendarSlug(nameOrSlug: string): Promise<string> {
     if (!response.ok) return nameOrSlug;
     const text = await response.text();
     const calendars = parseCalendars(text);
+    // The slug in an href is percent-encoded; tools take it decoded. The
+    // encoded form still matches, so a slug copied from a URL also works.
     for (const cal of calendars) {
-      const slug = cal.url.split('/').filter(Boolean).pop() ?? '';
-      if (slug === nameOrSlug) return nameOrSlug;
+      const raw = cal.url.split('/').filter(Boolean).pop() ?? '';
+      const slug = lastHrefSegment(cal.url);
+      if (slug === nameOrSlug || raw === nameOrSlug) return slug;
     }
     const lower = nameOrSlug.toLowerCase();
     for (const cal of calendars) {
       if (cal.displayName.toLowerCase() === lower) {
-        return cal.url.split('/').filter(Boolean).pop() ?? nameOrSlug;
+        return lastHrefSegment(cal.url) || nameOrSlug;
       }
     }
   } catch {
@@ -726,7 +770,7 @@ async function resolveEventByUid(
 ): Promise<{ href: string; etag: string; icalData: string }> {
   const config = getNextcloudConfig();
   let slug = calendarName;
-  const buildUrl = () => `${config.url}/remote.php/dav/calendars/${config.user}/${slug}/`;
+  const buildUrl = () => `${config.url}${davPath('calendars', config.user, slug)}/`;
 
   const reportBody = `<?xml version="1.0" encoding="UTF-8"?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
@@ -812,7 +856,7 @@ export const listCalendarsTool = {
   handler: async () => {
     try {
       const config = getNextcloudConfig();
-      const calDavUrl = `${config.url}/remote.php/dav/calendars/${config.user}/`;
+      const calDavUrl = `${config.url}${davPath('calendars', config.user)}/`;
 
       const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
 <d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:x1="http://apple.com/ns/ical/" xmlns:x2="http://owncloud.org/ns">
@@ -911,7 +955,7 @@ export const listEventsTool = {
     try {
       const config = getNextcloudConfig();
       let slug = args.calendarName;
-      const buildUrl = () => `${config.url}/remote.php/dav/calendars/${config.user}/${slug}/`;
+      const buildUrl = () => `${config.url}${davPath('calendars', config.user, slug)}/`;
       const limit = args.limit || 50;
 
       // Default time range: today to 30 days from now
@@ -1181,7 +1225,7 @@ export const createEventTool = {
       const config = getNextcloudConfig();
       const eventUid = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
       let slug = args.calendarName;
-      const baseUrl = () => `${config.url}/remote.php/dav/calendars/${config.user}/${slug}/`;
+      const baseUrl = () => `${config.url}${davPath('calendars', config.user, slug)}/`;
 
       // Validate the calendar supports VEVENT before building and sending the iCal payload.
       // If the original name is a display name (not a slug), retry once after resolving.
@@ -1278,8 +1322,9 @@ export const createEventTool = {
 
       // Add attendees
       if (args.attendees && args.attendees.length > 0) {
-        // Add organizer (current user)
-        vevent += `\r\nORGANIZER;CN=${quoteICalParam(config.user)}:mailto:${config.user}`;
+        // Organizer: the signed-in user's email, or none (see buildOrganizerLine)
+        const organizer = await buildOrganizerLine();
+        if (organizer) vevent += `\r\n${organizer}`;
 
         for (const attendee of args.attendees) {
           let atLine = 'ATTENDEE';
@@ -1532,12 +1577,26 @@ export const updateEventTool = {
 
       // Handle attendees
       if (args.attendees !== undefined) {
-        // Remove the event's ATTENDEE and ORGANIZER lines (EMAIL VALARMs keep theirs)
-        modified = editFirstVEvent(modified, (vevent) =>
-          vevent.replace(/^(ATTENDEE|ORGANIZER)[;:].*\r?\n?/gm, '')
-        );
-        if (args.attendees !== null && args.attendees.length > 0) {
-          let attendeeLines = `ORGANIZER;CN=${quoteICalParam(config.user)}:mailto:${config.user}`;
+        const addAttendees = args.attendees !== null && args.attendees.length > 0;
+        // The organizer of an event stays its organizer while the attendee list
+        // changes, so a valid one is kept. One without a mailto: address (the
+        // `mailto:<login name>` older versions wrote) is replaced.
+        let keepOrganizer = false;
+        editFirstVEvent(modified, (vevent) => {
+          keepOrganizer = addAttendees && hasMailtoOrganizer(vevent);
+          return vevent;
+        });
+        // Remove the event's ATTENDEE (and ORGANIZER) lines; EMAIL VALARMs keep theirs
+        const removed = keepOrganizer
+          ? /^ATTENDEE[;:].*\r?\n?/gm
+          : /^(ATTENDEE|ORGANIZER)[;:].*\r?\n?/gm;
+        modified = editFirstVEvent(modified, (vevent) => vevent.replace(removed, ''));
+        if (addAttendees && args.attendees) {
+          const attendeeLines: string[] = [];
+          if (!keepOrganizer) {
+            const organizer = await buildOrganizerLine();
+            if (organizer) attendeeLines.push(organizer);
+          }
           for (const attendee of args.attendees) {
             let atLine = 'ATTENDEE';
             if (attendee.cn) atLine += `;CN=${quoteICalParam(attendee.cn)}`;
@@ -1545,9 +1604,12 @@ export const updateEventTool = {
             atLine += `;PARTSTAT=NEEDS-ACTION`;
             if (attendee.rsvp !== false) atLine += `;RSVP=TRUE`;
             atLine += `:mailto:${attendee.email}`;
-            attendeeLines += `\r\n${atLine}`;
+            attendeeLines.push(atLine);
           }
-          modified = modified.replace(/END:VEVENT/, () => `${attendeeLines}\r\nEND:VEVENT`);
+          modified = modified.replace(
+            /END:VEVENT/,
+            () => `${attendeeLines.join('\r\n')}\r\nEND:VEVENT`
+          );
         }
       }
 

@@ -2,6 +2,7 @@
 
 import { createClient, WebDAVClient } from 'webdav';
 import { currentIdentity } from '../nc-context.js';
+import { davPath } from '../tools/dav-utils.js';
 import { getNextcloudConfig } from '../tools/types.js';
 
 // The environment account's client, reused across requests (stdio, the
@@ -15,7 +16,7 @@ let envClient: WebDAVClient | null = null;
 export function getWebDAVClient(): WebDAVClient {
   const config = getNextcloudConfig();
   const create = () =>
-    createClient(`${config.url}/remote.php/dav/files/${config.user}`, {
+    createClient(`${config.url}${davPath('files', config.user)}`, {
       username: config.loginName,
       password: config.password,
     });

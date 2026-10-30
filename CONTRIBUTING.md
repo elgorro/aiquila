@@ -87,7 +87,7 @@ All commands run from `mcp-server/`:
 npm run build               # compile TypeScript → dist/
 npm run dev                 # hot reload via tsx
 npm test                    # vitest unit tests
-npm run lint                # eslint (warnings ok, errors fail CI)
+npm run lint                # eslint (warnings ok, errors fail CI; `any` is an error outside tests)
 npm run format              # prettier --write src/
 npx prettier --check src/   # check only — run before committing
 ```

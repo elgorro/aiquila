@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { fetchCalDAV } from '../../client/caldav.js';
+import { davPath } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
 /**
@@ -29,7 +30,7 @@ export const listFileVersionsTool = {
   handler: async (args: { fileId: number }) => {
     try {
       const config = getNextcloudConfig();
-      const url = `${config.url}/remote.php/dav/versions/${config.user}/versions/${args.fileId}`;
+      const url = `${config.url}${davPath('versions', config.user, 'versions', args.fileId)}`;
 
       const body = `<?xml version="1.0"?>
 <d:propfind xmlns:d="DAV:">
@@ -129,8 +130,8 @@ export const restoreFileVersionTool = {
   handler: async (args: { fileId: number; versionId: string }) => {
     try {
       const config = getNextcloudConfig();
-      const sourceUrl = `${config.url}/remote.php/dav/versions/${config.user}/versions/${args.fileId}/${args.versionId}`;
-      const destUrl = `${config.url}/remote.php/dav/versions/${config.user}/restore/target`;
+      const sourceUrl = `${config.url}${davPath('versions', config.user, 'versions', args.fileId, args.versionId)}`;
+      const destUrl = `${config.url}${davPath('versions', config.user, 'restore', 'target')}`;
 
       const response = await fetchCalDAV(sourceUrl, {
         method: 'MOVE',
