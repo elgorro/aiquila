@@ -79,6 +79,8 @@ aiquila-hetzner create \
   --mcp-domain mcp.example.com \
   --nc-domain nc.example.com \
   --nc-admin-password your-admin-password
+# Creates the non-admin aiquila-mcp account and its app password for the
+# Nextcloud app's MCP connection, and registers the MCP server in the app.
 ```
 
 Use `--dry-run` to preview what would be created without making any API calls.

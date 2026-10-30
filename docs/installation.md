@@ -92,7 +92,7 @@ Single-command provisioning of a production-ready AIquila server with Traefik, C
 ```bash
 # 1. Install the CLI
 # Download from GitHub Releases or build from source
-cd hetzner && go build -o aiquila-hetzner .
+cd hetzner && go build -o aiquila-hetzner ./cmd/aiquila-hetzner
 
 # 2. Provision a server
 ./aiquila-hetzner create \
