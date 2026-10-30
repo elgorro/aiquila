@@ -20,8 +20,14 @@ if [ ! -f "$STANDALONE_DIR/.env" ]; then
 fi
 set -a; source "$STANDALONE_DIR/.env"; set +a
 
-NC_USER="${NEXTCLOUD_USER:?NEXTCLOUD_USER not set in .env}"
-NC_PASS="${NEXTCLOUD_PASSWORD:?NEXTCLOUD_PASSWORD not set in .env}"
+# The Nextcloud account the test signs in with through Login Flow v2: an app
+# password, or the account password (plus TEST_NC_TOTP_SECRET with 2FA).
+NC_USER="${TEST_NC_USER:-${NEXTCLOUD_USER:-}}"
+NC_PASS="${TEST_NC_PASSWORD:-${NEXTCLOUD_PASSWORD:-}}"
+NC_TOTP="${TEST_NC_TOTP_SECRET:-}"
+[ -n "$NC_USER" ] && [ -n "$NC_PASS" ] || { echo "ERROR: set TEST_NC_USER and TEST_NC_PASSWORD in .env" >&2; exit 1; }
+# shellcheck source=nc-login-flow.sh
+source "$SCRIPT_DIR/nc-login-flow.sh"
 
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
 TEST_DIR="/__aiquila-test__"
@@ -129,36 +135,19 @@ REG_RESP=$($CURL -X POST "$BASE$REGISTER_PATH" \
 CLIENT_ID=$(echo "$REG_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['client_id'])")
 echo "client_id : $CLIENT_ID"
 
-# The login form carries the authorization request back with a MAC, so it has
-# to come from /authorize; its hidden fields are posted back unchanged.
-# /authorize sets a cookie binding the login form to this client; the login
-# POST must send it back, as a browser would.
+# /authorize, then the Nextcloud sign-in (Login Flow v2); the sign-in page,
+# reloaded with the binding cookie, redirects with the code.
 COOKIE_JAR=$(mktemp)
 trap 'rm -f "$TMPFILE" "$COOKIE_JAR"' EXIT
-AUTHZ_HTML=$($CURL -c "$COOKIE_JAR" -G "$BASE/authorize" \
+LOCATION=$(mcp_authorize "$BASE" "$COOKIE_JAR" \
   --data-urlencode "response_type=code" \
   --data-urlencode "client_id=$CLIENT_ID" \
   --data-urlencode "redirect_uri=$REDIRECT_URI" \
   --data-urlencode "state=$STATE" \
   --data-urlencode "code_challenge=$CODE_CHALLENGE" \
   --data-urlencode "code_challenge_method=S256")
-FORM_FIELDS=()
-while IFS= read -r field; do FORM_FIELDS+=(--data-urlencode "$field"); done < <(
-  echo "$AUTHZ_HTML" | python3 -c "
-import sys, re, html
-for name, value in re.findall(r'<input type=\"hidden\" name=\"([^\"]+)\" value=\"([^\"]*)\"', sys.stdin.read()):
-    print(f'{name}={html.unescape(value)}')
-")
-[ ${#FORM_FIELDS[@]} -eq 0 ] && { echo "ERROR: /authorize did not render the login form" >&2; echo "$AUTHZ_HTML" >&2; exit 1; }
-
-LOGIN_HEADERS=$($CURL -D - -o /dev/null --max-redirs 0 \
-  -b "$COOKIE_JAR" -X POST "$BASE/auth/login" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "username=$NC_USER" \
-  --data-urlencode "password=$NC_PASS" \
-  "${FORM_FIELDS[@]}")
-CODE=$(echo "$LOGIN_HEADERS" | grep -i '^location:' | tr -d '\r' | sed 's/[Ll]ocation: //' | grep -o 'code=[^&]*' | cut -d= -f2)
-[ -z "$CODE" ] && { echo "ERROR: Login failed — no auth code in redirect" >&2; exit 1; }
+CODE=$(echo "$LOCATION" | grep -o 'code=[^&]*' | cut -d= -f2)
+[ -z "$CODE" ] && { echo "ERROR: Sign-in failed — no auth code in redirect" >&2; exit 1; }
 
 TOKEN_RESP=$($CURL -X POST "$BASE$TOKEN_PATH" \
   -H "Content-Type: application/x-www-form-urlencoded" \

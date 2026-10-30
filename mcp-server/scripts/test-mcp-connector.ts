@@ -12,10 +12,11 @@
  *
  * Required env vars:
  *   ANTHROPIC_API_KEY     Anthropic API key
- *   NEXTCLOUD_USER        Nextcloud username
- *   NEXTCLOUD_PASSWORD    Nextcloud password (or app password)
+ *   TEST_NC_USER          Nextcloud account to sign in with (falls back to NEXTCLOUD_USER)
+ *   TEST_NC_PASSWORD      Its app password or password (falls back to NEXTCLOUD_PASSWORD)
  *
  * Optional env vars:
+ *   TEST_NC_TOTP_SECRET   TOTP secret, when signing in with a 2FA account's password
  *   MCP_URL               Base URL of the MCP server (default: http://localhost:3339)
  *   DEFER_TOOLS           Set to "true" to demo defer_loading optimization (default: false)
  *
@@ -29,10 +30,14 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import * as crypto from 'node:crypto';
+import { authorizeWithLoginFlow } from './nc-login-flow.js';
 
 const BASE_URL = (process.env.MCP_URL ?? 'http://localhost:3339').replace(/\/$/, '');
-const NC_USER = process.env.NEXTCLOUD_USER ?? '';
-const NC_PASS = process.env.NEXTCLOUD_PASSWORD ?? '';
+// The account the test signs in with through Login Flow v2: an app password,
+// or the account password (plus TEST_NC_TOTP_SECRET with 2FA).
+const NC_USER = process.env.TEST_NC_USER ?? process.env.NEXTCLOUD_USER ?? '';
+const NC_PASS = process.env.TEST_NC_PASSWORD ?? process.env.NEXTCLOUD_PASSWORD ?? '';
+const NC_TOTP = process.env.TEST_NC_TOTP_SECRET || undefined;
 const DEFER_TOOLS = process.env.DEFER_TOOLS === 'true';
 
 const REDIRECT_URI = 'https://localhost/callback';
@@ -77,7 +82,6 @@ async function getAccessToken(): Promise<string> {
   // Mirrors the approach used by test-oauth.sh.
   const registrationUrl = BASE_URL + new URL(discovery.registration_endpoint).pathname;
   const tokenUrl = BASE_URL + new URL(discovery.token_endpoint).pathname;
-  const loginUrl = `${BASE_URL}/auth/login`;
   log(`registration → ${registrationUrl}`);
   log(`token        → ${tokenUrl}`);
 
@@ -107,60 +111,25 @@ async function getAccessToken(): Promise<string> {
   const codeChallenge = generateCodeChallenge(codeVerifier);
   const state = crypto.randomBytes(8).toString('hex');
 
-  // 4. Login — POST credentials, follow redirect manually to extract auth code
+  // 4. Sign in on Nextcloud → auth code
   sep('OAuth — Login');
-  // The login form carries the authorization request back with a MAC, so it
-  // has to come from /authorize; its hidden fields are posted back unchanged.
-  const authorizeUrl = new URL(`${BASE_URL}/authorize`);
-  authorizeUrl.search = new URLSearchParams({
-    response_type: 'code',
-    client_id: clientId,
-    redirect_uri: REDIRECT_URI,
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
-  }).toString();
-  const authorizeHtml = await (await fetch(authorizeUrl)).text();
-  const formFields = [
-    ...authorizeHtml.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g),
-  ].map(([, name, value]) => [
-    name,
-    value
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&'),
-  ]);
-  if (formFields.length === 0) {
-    throw new Error(`/authorize did not render the login form:\n${authorizeHtml.slice(0, 200)}`);
-  }
-  const loginParams = new URLSearchParams([
-    ['username', NC_USER],
-    ['password', NC_PASS],
-    ...formFields,
-  ]);
-
-  const loginRes = await fetch(loginUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: loginParams.toString(),
-    redirect: 'manual',
+  // /authorize shows a page linking to Nextcloud; signing in there and
+  // granting access lets the page redirect with the code (Login Flow v2).
+  const authCode = await authorizeWithLoginFlow({
+    baseUrl: BASE_URL,
+    params: {
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: REDIRECT_URI,
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+    },
+    user: NC_USER,
+    password: NC_PASS,
+    totpSecret: NC_TOTP,
+    log,
   });
-
-  const locationHeader = loginRes.headers.get('location');
-  if (!locationHeader) {
-    const body = await loginRes.text();
-    throw new Error(
-      `Login failed — no redirect location. Status: ${loginRes.status}\n${body.slice(0, 200)}`
-    );
-  }
-
-  const locationUrl = new URL(locationHeader, BASE_URL);
-  const authCode = locationUrl.searchParams.get('code');
-  if (!authCode) {
-    throw new Error(`Login failed — no code in redirect location: ${locationHeader}`);
-  }
   log('Login succeeded (auth code received)');
 
   // 5. Token exchange
@@ -266,8 +235,8 @@ async function main() {
   // Validate required env vars
   const missing: string[] = [];
   if (!process.env.ANTHROPIC_API_KEY) missing.push('ANTHROPIC_API_KEY');
-  if (!NC_USER) missing.push('NEXTCLOUD_USER');
-  if (!NC_PASS) missing.push('NEXTCLOUD_PASSWORD');
+  if (!NC_USER) missing.push('TEST_NC_USER');
+  if (!NC_PASS) missing.push('TEST_NC_PASSWORD');
   if (missing.length > 0) {
     log(`ERROR: Missing required env vars: ${missing.join(', ')}`);
     process.exit(1);
