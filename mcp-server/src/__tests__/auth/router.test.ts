@@ -10,6 +10,20 @@ import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import express from 'express';
+
+// The routes are under test here, not Nextcloud: Login Flow v2 always starts,
+// and every app password checks out as alice's.
+vi.mock('../../auth/login-flow.js', () => ({
+  startLoginFlow: vi.fn(async () => ({
+    loginUrl: 'https://cloud.example.com/login/v2/flow/t',
+    pollToken: 't',
+    pollPath: '/login/v2/poll',
+  })),
+  pollLoginFlow: vi.fn(async () => null),
+  checkCredential: vi.fn(async () => ({ state: 'valid', userId: 'alice' })),
+  deleteAppPassword: vi.fn(async () => true),
+}));
+
 import { authRouter, type AuthRouterOptions } from '../../auth/router.js';
 import { NextcloudOAuthProvider } from '../../auth/provider.js';
 import { ClientsStore } from '../../auth/store.js';
@@ -31,6 +45,7 @@ beforeAll(() => {
   process.env = {
     ...savedEnv,
     MCP_AUTH_SECRET: 'test-secret-min-32-chars-required!!',
+    MCP_CREDENTIAL_KEY: '0'.repeat(128),
     MCP_AUTH_ISSUER: ISSUER,
     MCP_AUTH_STATE_DIR: stateDir,
   };
@@ -126,6 +141,7 @@ function issueCode(ctx: Ctx, overrides?: Record<string, unknown>) {
     scopes: ['mcp:tools'],
     redirectUri: REDIRECT,
     userId: 'alice',
+    credential: { loginName: 'alice', appPassword: 'app-password' },
     ...overrides,
   });
 }
@@ -219,11 +235,11 @@ describe('/authorize', () => {
     state: 'xyz',
   };
 
-  it('renders the login form for a valid request', async () => {
+  it('renders the Nextcloud sign-in page for a valid request', async () => {
     const res = await authorize(valid);
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
-    expect(await res.text()).toContain('action="/auth/login"');
+    expect(await res.text()).toContain('href="https://cloud.example.com/login/v2/flow/t"');
   });
 
   it('accepts a loopback redirect on another port (RFC 8252 §7.3)', async () => {
@@ -287,7 +303,7 @@ describe('/authorize', () => {
     const { redirect_uri: _omitted, ...rest } = valid;
     const res = await authorize({ ...rest, client_id: 'single-uri-client' });
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain(`name="redirect_uri" value="${REDIRECT}"`);
+    expect(await res.text()).toContain(`<code>${REDIRECT}</code>`);
   });
 
   it('requires redirect_uri when several are registered', async () => {

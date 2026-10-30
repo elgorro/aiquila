@@ -2,8 +2,9 @@
 
 // Test harness for the RFC conformance suite: the real HTTP app from
 // createHttpApp() on an ephemeral port, in front of a fake Nextcloud that
-// answers the few OCS endpoints the authorization server calls. Each suite
-// starts its own stack, so rate limits and stores start empty.
+// implements Login Flow v2, app passwords, and the few OCS endpoints the
+// server calls. Each suite starts its own stack, so rate limits and stores
+// start empty.
 
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -22,14 +23,31 @@ export interface FakeUser {
   enabled: boolean;
 }
 
+export interface FakeAppPassword {
+  user: string;
+  deviceName: string;
+}
+
+interface FakeFlow {
+  deviceName: string;
+  // The app password, once the user has granted access; cleared when collected.
+  granted?: { loginName: string; appPassword: string };
+  collected?: boolean;
+}
+
 /** A Nextcloud that knows the endpoints the auth flow and the startup probe use. */
 export class FakeNextcloud {
   readonly users = new Map<string, FakeUser>([
     ['alice', { password: NC_PASSWORD, enabled: true }],
     ['bob', { password: NC_PASSWORD, enabled: true }],
   ]);
+  // Login names that differ from the uid (an email login, say).
+  readonly loginNames = new Map<string, string>([['alice@example.com', 'alice']]);
+  // App passwords issued through Login Flow v2: the "devices" of each user.
+  readonly appPasswords = new Map<string, FakeAppPassword>();
+  readonly flows = new Map<string, FakeFlow>();
   // Every request's headers, newest last.
-  readonly requests: { url: string; headers: IncomingMessage['headers'] }[] = [];
+  readonly requests: { method: string; url: string; headers: IncomingMessage['headers'] }[] = [];
   private server?: Server;
   url = '';
 
@@ -43,16 +61,57 @@ export class FakeNextcloud {
     return new Promise((r) => (this.server ? this.server.close(() => r()) : r()));
   }
 
+  /**
+   * The user granting access on Nextcloud's page: the flow behind `loginUrl`
+   * gets a fresh app password for `loginName`.
+   */
+  grant(loginUrl: string, loginName = 'alice'): string {
+    const token = new URL(loginUrl).pathname.split('/').pop()!;
+    const flow = this.flows.get(token);
+    if (!flow) throw new Error(`no flow for ${loginUrl}`);
+    const user = this.loginNames.get(loginName) ?? loginName;
+    const appPassword = randomBytes(24).toString('base64url');
+    this.appPasswords.set(appPassword, { user, deviceName: flow.deviceName });
+    flow.granted = { loginName, appPassword };
+    return appPassword;
+  }
+
+  /** The user removing a device under Security → Devices & sessions. */
+  revokeDevicesOf(user: string): void {
+    for (const [pw, ap] of this.appPasswords) if (ap.user === user) this.appPasswords.delete(pw);
+  }
+
+  /** The uid behind Basic credentials: a real password or an app password. */
   private basicUser(req: IncomingMessage): string | undefined {
     const header = req.headers.authorization ?? '';
     if (!header.startsWith('Basic ')) return undefined;
-    const [user, ...rest] = Buffer.from(header.slice(6), 'base64').toString().split(':');
-    const known = this.users.get(user);
-    return known && known.password === rest.join(':') && known.enabled ? user : undefined;
+    const [login, ...rest] = Buffer.from(header.slice(6), 'base64').toString().split(':');
+    const password = rest.join(':');
+    const uid = this.loginNames.get(login) ?? login;
+    const known = this.users.get(uid);
+    if (!known?.enabled) return undefined;
+    if (known.password === password) return uid;
+    return this.appPasswords.get(password)?.user === uid ? uid : undefined;
+  }
+
+  /** The uid a request authenticated as, or undefined; for assertions. */
+  userOf(i: number): string | undefined {
+    const header = this.requests[i]?.headers.authorization ?? '';
+    if (!header.startsWith('Basic ')) return undefined;
+    const [login] = Buffer.from(header.slice(6), 'base64').toString().split(':');
+    return this.loginNames.get(login) ?? login;
+  }
+
+  private readBody(req: IncomingMessage): Promise<string> {
+    return new Promise((resolve) => {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => resolve(body));
+    });
   }
 
   private handle(req: IncomingMessage, res: ServerResponse): void {
-    this.requests.push({ url: req.url ?? '', headers: req.headers });
+    this.requests.push({ method: req.method ?? 'GET', url: req.url ?? '', headers: req.headers });
     const json = (status: number, statuscode: number, data: unknown) => {
       res.writeHead(status, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ocs: { meta: { statuscode }, data } }));
@@ -62,6 +121,43 @@ export class FakeNextcloud {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ installed: true, version: '34.0.0' }));
       return;
+    }
+    if (url.pathname === '/index.php/login/v2' && req.method === 'POST') {
+      const token = randomBytes(32).toString('hex');
+      this.flows.set(token, { deviceName: String(req.headers['user-agent'] ?? '') });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          poll: { token, endpoint: `${this.url}/login/v2/poll` },
+          login: `${this.url}/login/v2/flow/${token}`,
+        })
+      );
+      return;
+    }
+    if (url.pathname === '/login/v2/poll' && req.method === 'POST') {
+      void this.readBody(req).then((body) => {
+        const flow = this.flows.get(new URLSearchParams(body).get('token') ?? '');
+        // Nextcloud answers 404 until access is granted, and the result only once.
+        if (!flow?.granted || flow.collected) {
+          res.writeHead(404).end();
+          return;
+        }
+        flow.collected = true;
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ server: this.url, ...flow.granted }));
+      });
+      return;
+    }
+    if (url.pathname === '/ocs/v2.php/core/apppassword' && req.method === 'DELETE') {
+      if (!this.basicUser(req)) return json(401, 997, []);
+      const header = req.headers.authorization ?? '';
+      const password = Buffer.from(header.slice(6), 'base64')
+        .toString()
+        .split(':')
+        .slice(1)
+        .join(':');
+      this.appPasswords.delete(password);
+      return json(200, 200, []);
     }
     if (url.pathname === '/ocs/v2.php/cloud/user') {
       const user = this.basicUser(req);
@@ -111,6 +207,7 @@ export async function startStack(env: Record<string, string | undefined> = {}): 
     MCP_REGISTRATION_ENABLED: 'true',
     MCP_CIMD_ENABLED: 'false',
     MCP_TOOLS: 'status',
+    MCP_CREDENTIAL_KEY: randomBytes(64).toString('hex'),
     NEXTCLOUD_URL: nc.url,
     NEXTCLOUD_USER: 'service',
     NEXTCLOUD_PASSWORD: 'service-password',
@@ -178,22 +275,6 @@ export async function register(
   return res.json();
 }
 
-/** The hidden fields of the login form /authorize rendered. */
-export function hiddenFields(html: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [, name, value] of html.matchAll(
-    /<input type="hidden" name="([^"]+)" value="([^"]*)">/g
-  )) {
-    out[name] = value
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&');
-  }
-  return out;
-}
-
 /** The cookies a response set, as a Cookie request header value. */
 export function cookieHeader(res: Response): string {
   return res.headers
@@ -209,13 +290,21 @@ export interface AuthorizeOptions {
   scope?: string;
   redirectUri?: string;
   resource?: string;
+  /** Who grants access on Nextcloud's page; a login name or uid. */
   username?: string;
-  password?: string;
+}
+
+/** What the sign-in page /authorize rendered: the Nextcloud link and the flow. */
+export function flowPage(html: string): { loginUrl: string; flowId: string } {
+  const login = html.match(/<a class="button" href="([^"]+)"/)?.[1];
+  const flowId = html.match(/url=\/auth\/flow\/([A-Za-z0-9_-]+)"/)?.[1];
+  if (!login || !flowId) throw new Error(`not a sign-in page: ${html.slice(0, 200)}`);
+  return { loginUrl: login.replace(/&amp;/g, '&'), flowId };
 }
 
 /**
- * /authorize, then the login POST a browser would make. Returns the redirect
- * the login answered with.
+ * /authorize, the user granting access on Nextcloud, then the reload of the
+ * sign-in page a browser makes. Returns the redirect that reload answered with.
  */
 export async function authorizeAndLogin(s: Stack, o: AuthorizeOptions): Promise<Response> {
   const q = new URLSearchParams({
@@ -230,14 +319,12 @@ export async function authorizeAndLogin(s: Stack, o: AuthorizeOptions): Promise<
   });
   const page = await fetch(`${s.base}/authorize?${q}`, { redirect: 'manual' });
   if (page.status !== 200) throw new Error(`authorize: ${page.status} ${await page.text()}`);
-  const fields = hiddenFields(await page.text());
-  return fetch(
-    `${s.base}/auth/login`,
-    form(
-      { ...fields, username: o.username ?? 'alice', password: o.password ?? NC_PASSWORD },
-      { cookie: cookieHeader(page) }
-    )
-  );
+  const { loginUrl, flowId } = flowPage(await page.text());
+  s.nc.grant(loginUrl, o.username ?? 'alice');
+  return fetch(`${s.base}/auth/flow/${flowId}`, {
+    redirect: 'manual',
+    headers: { cookie: cookieHeader(page) },
+  });
 }
 
 /** Runs the whole authorization code flow and returns the token response. */

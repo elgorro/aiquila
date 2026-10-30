@@ -8,6 +8,7 @@ describe('MCP_INTERNAL_TOKEN', () => {
   let provider: NextcloudOAuthProvider;
 
   beforeEach(() => {
+    process.env.MCP_CREDENTIAL_KEY = '0'.repeat(128);
     provider = new NextcloudOAuthProvider();
     process.env.MCP_INTERNAL_TOKEN = INTERNAL_TOKEN;
     // Auth secret is needed for JWT fallback path
@@ -17,6 +18,7 @@ describe('MCP_INTERNAL_TOKEN', () => {
   afterEach(() => {
     delete process.env.MCP_INTERNAL_TOKEN;
     delete process.env.MCP_AUTH_SECRET;
+    delete process.env.MCP_CREDENTIAL_KEY;
   });
 
   it('accepts a matching internal token', async () => {

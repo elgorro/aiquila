@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { getNextcloudConfig } from '../tools/types.js';
+import { basicAuth, getNextcloudConfig } from '../tools/types.js';
 import { logger } from '../logger.js';
 import { ApiError } from './aiquila.js';
 
@@ -124,7 +124,7 @@ export async function fetchPollsAPI<T = unknown>(
   } = {}
 ): Promise<T> {
   const config = getNextcloudConfig();
-  const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
+  const auth = basicAuth(config);
 
   let url = `${config.url}/index.php/apps/polls/api/v1.0${endpoint}`;
   if (options.queryParams) {

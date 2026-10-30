@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/server';
 import { logger } from './logger.js';
 import { getFilteredToolSets } from './tool-registry.js';
+import { reportToolFailure } from './nc-context.js';
 
 const SERVER_NAME = 'aiquila';
 const _require = createRequire(import.meta.url);
@@ -41,9 +42,16 @@ export async function createServer(): Promise<McpServer> {
         async (...args: unknown[]) => {
           const start = Date.now();
           logger.debug({ tool: name }, '[tool] Called');
-          const result = await (tool.handler as (...a: unknown[]) => Promise<any>)(...args);
+          let result: any;
+          try {
+            result = await (tool.handler as (...a: unknown[]) => Promise<any>)(...args);
+          } catch (err) {
+            reportToolFailure();
+            throw err;
+          }
           const ms = Date.now() - start;
           if (result?.isError) {
+            reportToolFailure();
             const errorText = result.content?.[0]?.text ?? 'unknown error';
             logger.warn({ tool: name, error: errorText, ms }, '[tool] Error response');
           } else {

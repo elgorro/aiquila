@@ -19,6 +19,9 @@ export interface CodeEntry {
   redirectUri: string;
   userId: string;
   state?: string;
+  // The Nextcloud credential Login Flow v2 returned, held until the code is
+  // exchanged and the grant takes it over. Codes live in memory only.
+  credential?: { loginName: string; appPassword: string };
   // Set once the code has been exchanged: the grant it started. The entry is
   // kept until it expires so a replay can be recognised and the grant ended.
   redeemedGrantId?: string;
@@ -76,7 +79,7 @@ export function refreshTtlMs(): number {
 
 const DEFAULT_STATE_DIR = '/app/state';
 
-function stateDir(): string {
+export function stateDir(): string {
   return (process.env.MCP_AUTH_STATE_DIR ?? DEFAULT_STATE_DIR).replace(/\/+$/, '');
 }
 
@@ -119,7 +122,7 @@ function warnPersistFailed(dir: string, code: string | undefined, err: unknown):
   logger.warn({ dir, code }, stateUnwritableMessage(dir, code));
 }
 
-function ensureDir(dir: string): void {
+export function ensureDir(dir: string): void {
   try {
     mkdirSync(dir, { recursive: true });
   } catch (err) {
@@ -129,7 +132,7 @@ function ensureDir(dir: string): void {
   }
 }
 
-function loadJson<T>(filePath: string): T | null {
+export function loadJson<T>(filePath: string): T | null {
   try {
     return JSON.parse(readFileSync(filePath, 'utf8')) as T;
   } catch (err: unknown) {
@@ -145,10 +148,13 @@ function loadJson<T>(filePath: string): T | null {
   }
 }
 
-function saveJson(filePath: string, data: unknown): void {
+/** Writes `data` atomically. `mode` applies to a newly created file (e.g. 0o600 for secrets). */
+export function saveJson(filePath: string, data: unknown, mode?: number): void {
   const tmp = filePath + '.tmp';
   try {
-    writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+    const json = JSON.stringify(data, null, 2);
+    if (mode === undefined) writeFileSync(tmp, json, 'utf8');
+    else writeFileSync(tmp, json, { encoding: 'utf8', mode });
     renameSync(tmp, filePath);
   } catch (err) {
     try {
@@ -409,12 +415,21 @@ export class CodeStore {
 
   get(code: string): CodeEntry | undefined {
     const entry = this.codes.get(code);
-    if (!entry) return undefined;
-    if (Date.now() > entry.expiresAt) {
-      this.codes.delete(code);
-      return undefined;
-    }
+    // An expired code stays until takeExpired() hands it over for clean-up.
+    if (!entry || Date.now() > entry.expiresAt) return undefined;
     return entry;
+  }
+
+  /** Removes and returns every expired code. */
+  takeExpired(now = Date.now()): CodeEntry[] {
+    const out: CodeEntry[] = [];
+    for (const [code, entry] of this.codes) {
+      if (now > entry.expiresAt) {
+        this.codes.delete(code);
+        out.push(entry);
+      }
+    }
+    return out;
   }
 
   delete(code: string): void {
@@ -424,7 +439,10 @@ export class CodeStore {
   /** Marks a code as exchanged for `grantId`. It no longer redeems, but is still recognised. */
   markRedeemed(code: string, grantId: string): void {
     const entry = this.codes.get(code);
-    if (entry) entry.redeemedGrantId = grantId;
+    if (entry) {
+      entry.redeemedGrantId = grantId;
+      entry.credential = undefined;
+    }
   }
 }
 

@@ -14,9 +14,10 @@ import {
   markStateUnwritableWarned,
   cimdEnabledFromEnv,
 } from '../auth/store.js';
-import { loginHandler } from '../auth/login.js';
-import { LoginThrottle } from '../auth/login-throttle.js';
 import { authRouter } from '../auth/router.js';
+import { cipherFromEnv, CredentialStore, OpenBaoCipher } from '../auth/credential-store.js';
+import { onUserToolFailure, requireIdentityContext, runAs } from '../nc-context.js';
+import { serviceAccountConfigured } from '../tools/types.js';
 import { LOGIN_STYLESHEET, LOGIN_STYLESHEET_PATH } from '../auth/login-page-css.js';
 import { isPublicRequest } from './lazy-auth.js';
 import { internalNetworks, internalTokenAllowed, isInternalToken } from '../auth/internal-token.js';
@@ -130,6 +131,9 @@ export async function createHttpApp(): Promise<express.Express> {
   // before signing in. Operators who treat /mcp as a fully closed endpoint can
   // set MCP_LAZY_AUTH=false to require a bearer token on every JSON-RPC method.
   const lazyAuthEnabled = process.env.MCP_LAZY_AUTH !== 'false';
+  // Set again below once OAuth is configured; an app built without it (and
+  // stdio) uses the NEXTCLOUD_USER account.
+  requireIdentityContext(false);
 
   if (!authEnabled) {
     if (process.env.MCP_ALLOW_UNAUTHENTICATED !== 'true') {
@@ -338,8 +342,39 @@ export async function createHttpApp(): Promise<express.Express> {
       }
     }
 
-    const provider = new NextcloudOAuthProvider();
+    // Grants' Nextcloud app passwords are encrypted at rest; fail at startup,
+    // not at the first sign-in, when no key is configured.
+    const cipher = cipherFromEnv();
+    if (cipher instanceof OpenBaoCipher) {
+      // An unreachable OpenBao must not crash-loop the server: sign-ins and
+      // tool calls fail until it answers, everything else keeps working.
+      await cipher
+        .start()
+        .then(() => logger.info('[startup] OpenBao Transit reachable — credentials are kept there'))
+        .catch((err) =>
+          logger.error({ err: (err as Error).message }, '[startup] OpenBao Transit unreachable')
+        );
+    }
+    const provider = new NextcloudOAuthProvider(undefined, {
+      credentials: CredentialStore.fromEnv(cipher),
+    });
     const internalTokens = internalNetworks();
+    onUserToolFailure((user) => provider.recheckAfterFailure(user));
+
+    // From here on Nextcloud is reached only as the identity of the request
+    // being served (see nc-context.ts).
+    requireIdentityContext();
+    if (process.env.MCP_INTERNAL_TOKEN) {
+      logger.warn(
+        '[startup] DEPRECATED: MCP_INTERNAL_TOKEN acts as the NEXTCLOUD_USER account. This ' +
+          'service identity is being replaced; OAuth sign-ins never use it.'
+      );
+    } else if (serviceAccountConfigured()) {
+      logger.warn(
+        '[startup] NEXTCLOUD_USER / NEXTCLOUD_PASSWORD are ignored with OAuth on: every tool ' +
+          'call acts as the signed-in user. They are only used by MCP_INTERNAL_TOKEN (deprecated).'
+      );
+    }
 
     if (!registrationEnabled && !hasStaticClient && !cimdEnabled) {
       logger.warn(
@@ -377,23 +412,6 @@ export async function createHttpApp(): Promise<express.Express> {
         resource_documentation: 'https://github.com/elgorro/aiquila',
       });
     });
-
-    // Parse URL-encoded form submissions from the login page
-    app.use(express.urlencoded({ extended: false }));
-
-    // Nextcloud credential validation → auth code issuance. Throttled per IP
-    // here, and per username inside the handler.
-    const loginThrottle = new LoginThrottle();
-    const loginRateLimit = (req: any, res: any, next: any) => {
-      const ip = req.ip ?? 'unknown';
-      if (!loginThrottle.allowIp(ip)) {
-        logger.warn({ ip }, '[auth] Login rate limit exceeded');
-        res.status(429).json({ error: 'too_many_requests' });
-        return;
-      }
-      next();
-    };
-    app.post('/auth/login', loginRateLimit, loginHandler(provider, loginThrottle));
 
     // Protect /mcp (and / as alias) with Bearer token auth
     const authMiddleware = [
@@ -440,7 +458,7 @@ export async function createHttpApp(): Promise<express.Express> {
                   { rpcMethod: req.body?.method },
                   '[mcp] Public request (unauthenticated)'
                 );
-                await handleMcpRequest(req, res);
+                await runAs({ kind: 'anonymous' }, () => handleMcpRequest(req, res));
                 return;
               }
               next();
@@ -477,7 +495,25 @@ export async function createHttpApp(): Promise<express.Express> {
       }),
       async (req: any, res: any) => {
         logger.debug({ method: req.method, rpcMethod: req.body?.method }, '[mcp] Request received');
-        await handleMcpRequest(req, res);
+        if (req.auth?.extra?.service === true) {
+          await runAs({ kind: 'service' }, () => handleMcpRequest(req, res));
+          return;
+        }
+        // Tools act as the signed-in user, with the app password Nextcloud
+        // issued for this grant. Without one the grant is over: answer as for
+        // any invalid token, so the client signs in again (RFC 6750 §3.1).
+        const user = await provider.credentialFor(req.auth);
+        if (!user) {
+          res
+            .status(401)
+            .set(
+              'WWW-Authenticate',
+              `Bearer error="invalid_token", error_description="Sign in to Nextcloud again", resource_metadata="${new URL('/.well-known/oauth-protected-resource/mcp', issuerUrl).href}"`
+            )
+            .json({ error: 'invalid_token', error_description: 'Sign in to Nextcloud again' });
+          return;
+        }
+        await runAs({ kind: 'user', user }, () => handleMcpRequest(req, res));
       },
     ];
     app.all(MCP_PATH, ...authMiddleware);

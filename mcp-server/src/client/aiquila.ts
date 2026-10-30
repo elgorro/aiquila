@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { getNextcloudConfig } from '../tools/types.js';
+import { basicAuth, getNextcloudConfig } from '../tools/types.js';
 import { logger } from '../logger.js';
 
 /**
@@ -67,11 +67,11 @@ export function formatOccError(error: unknown): string {
   if (error instanceof ApiError) {
     switch (error.statusCode) {
       case 401:
-        return 'Authentication failed. Check that NEXTCLOUD_USER and NEXTCLOUD_PASSWORD are correct.';
+        return "Authentication failed. Nextcloud no longer accepts this account's credentials; sign in again.";
       case 403:
         // The app's own refusal (OCC allowlist) carries a reason; the admin check does not.
         if (error.detail) return `Refused by Nextcloud: ${error.detail}`;
-        return 'Permission denied. OCC commands require admin rights. Ensure the Nextcloud user is an admin.';
+        return 'Permission denied. OCC commands require admin rights, and this Nextcloud account is not an admin.';
       case 404:
         return 'OCC endpoint not found. Ensure the AIquila app is installed and enabled.';
       default:
@@ -107,7 +107,7 @@ export async function fetchAiquilaAPI<T = unknown>(
   } = {}
 ): Promise<T> {
   const config = getNextcloudConfig();
-  const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
+  const auth = basicAuth(config);
 
   let url = `${config.url}/index.php/apps/aiquila/api${endpoint}`;
   if (options.queryParams) {

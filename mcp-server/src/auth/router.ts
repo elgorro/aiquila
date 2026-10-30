@@ -434,8 +434,8 @@ function revocationHandler(provider: NextcloudOAuthProvider) {
 
 /**
  * The authorization server's routes. Mount at the application root. Rate
- * limits per client IP: /authorize 100 per 15 min, /token 50 per 15 min,
- * /register 20 per hour, /revoke 50 per 15 min.
+ * limits per client IP: /authorize 100 per 15 min, /auth/flow 600 per 15 min,
+ * /token 50 per 15 min, /register 20 per hour, /revoke 50 per 15 min.
  */
 export function authRouter(options: AuthRouterOptions): express.Router {
   const { provider, registrationToken } = options;
@@ -461,6 +461,13 @@ export function authRouter(options: AuthRouterOptions): express.Router {
     limiter(minutes(15), 100, 'authorization'),
     authorizationHandler(options)
   );
+
+  // The sign-in page reloads itself here every FLOW_PAGE_REFRESH_SECS while the
+  // user signs in on Nextcloud (up to 20 minutes), hence the higher limit.
+  router.get('/auth/flow/:id', limiter(minutes(15), 600, 'sign-in'), async (req: any, res: any) => {
+    res.setHeader('Cache-Control', 'no-store');
+    await provider.continueFlow(String(req.params.id), readBrowserBinding(req), res);
+  });
 
   router.use(
     '/token',
