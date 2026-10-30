@@ -6,6 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  CredentialBackendUnavailableError,
   CredentialStore,
   LocalCipher,
   OpenBaoCipher,
@@ -116,9 +117,31 @@ describe('OpenBaoCipher (Transit)', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).ciphertext).toBe('vault:v1:abc');
   });
 
-  it('fails when OpenBao refuses', async () => {
-    fetchMock.mockResolvedValue(new Response('{"errors":["permission denied"]}', { status: 403 }));
-    await expect(cipher.encrypt(Buffer.from('x'), Buffer.from('a'))).rejects.toThrow(/403/);
+  it('a 400 is about the value; a refused token, an outage or a timeout is about OpenBao', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('{"errors":["cipher: message authentication failed"]}', { status: 400 })
+    );
+    const bad = cipher.decrypt('openbao:vault:v1:x', Buffer.from('a'));
+    await expect(bad).rejects.toThrow(/400/);
+    await expect(bad).rejects.not.toBeInstanceOf(CredentialBackendUnavailableError);
+    for (const fail of [
+      () => fetchMock.mockResolvedValueOnce(new Response('{}', { status: 403 })),
+      () => fetchMock.mockResolvedValueOnce(new Response('{}', { status: 503 })),
+      () => fetchMock.mockRejectedValueOnce(new Error('ECONNREFUSED')),
+    ]) {
+      fail();
+      await expect(cipher.encrypt(Buffer.from('x'), Buffer.from('a'))).rejects.toBeInstanceOf(
+        CredentialBackendUnavailableError
+      );
+    }
+  });
+
+  it('schedules token renewal even when the first renewal fails', async () => {
+    const interval = vi.spyOn(globalThis, 'setInterval');
+    fetchMock.mockRejectedValue(new Error('not up yet'));
+    await expect(cipher.start()).rejects.toThrow();
+    expect(interval).toHaveBeenCalledWith(expect.any(Function), 60 * 60 * 1000);
+    interval.mockRestore();
   });
 });
 
@@ -155,6 +178,20 @@ describe('CredentialStore', () => {
     const data = JSON.parse(readFileSync(file, 'utf8'));
     writeFileSync(file, JSON.stringify({ g2: data.g1 }));
     await expect(new CredentialStore(cipher, file).get('g2', 'alice')).resolves.toBeUndefined();
+  });
+
+  it('passes an unavailable key service up instead of reporting no credential', async () => {
+    const store = new CredentialStore(cipher, file);
+    await store.put(CRED, LATER());
+    const down = new CredentialStore(
+      {
+        name: 'down',
+        encrypt: () => Promise.reject(new CredentialBackendUnavailableError('down')),
+        decrypt: () => Promise.reject(new CredentialBackendUnavailableError('down')),
+      },
+      file
+    );
+    await expect(down.get('g1', 'alice')).rejects.toBeInstanceOf(CredentialBackendUnavailableError);
   });
 
   it('does not hand out an expired credential, but reports it for clean-up', async () => {

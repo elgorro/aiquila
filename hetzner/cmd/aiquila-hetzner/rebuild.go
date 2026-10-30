@@ -210,6 +210,13 @@ func runRebuild(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	// Keep the credential key: app passwords in the state volume are sealed with it.
+	if existing, err := provision.RunCommand(sshClient, "cat /opt/aiquila/.env 2>/dev/null || true"); err == nil {
+		if key := config.ExistingCredentialKey(existing); key != "" {
+			env.CredentialKey = key
+			fmt.Println("  Kept the existing MCP_CREDENTIAL_KEY")
+		}
+	}
 
 	// ── 9. Upload files via SFTP ──────────────────────────────────────────
 	fmt.Println("\n── Uploading files to /opt/aiquila")

@@ -399,6 +399,24 @@ describe('http transport with auth enabled', () => {
     expect(mockNodeHandler).not.toHaveBeenCalled();
   });
 
+  it('answers 503 with Retry-After, not 401, while the key service is down', async () => {
+    const { startHttp } = await import('../transports/http.js');
+    const { CredentialBackendUnavailableError } = await import('../auth/credential-store.js');
+    await startHttp();
+
+    const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
+    const handler = mcpCall?.[mcpCall.length - 1] as (req: unknown, res: unknown) => Promise<void>;
+    mockCredentialFor.mockRejectedValue(new CredentialBackendUnavailableError('down'));
+    const res: any = { on: vi.fn(), status: vi.fn(), set: vi.fn(), json: vi.fn() };
+    res.status.mockReturnValue(res);
+    res.set.mockReturnValue(res);
+    await handler({ body: { method: 'tools/call' }, auth: { extra: {} } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.set).toHaveBeenCalledWith('Retry-After', '10');
+    expect(mockNodeHandler).not.toHaveBeenCalled();
+  });
+
   // ---- CORS ----
 
   /** Runs the CORS middleware (the first app.use registered) against a fake request. */

@@ -30,7 +30,7 @@ export interface StartedFlow {
   /** The Nextcloud sign-in page, on the public origin. */
   loginUrl: string;
   pollToken: string;
-  /** Path of the poll endpoint, called on the internal origin. */
+  /** Path of the poll endpoint (with Nextcloud's webroot), called on the internal origin. */
   pollPath: string;
 }
 
@@ -96,7 +96,9 @@ export async function startLoginFlow(deviceName: string): Promise<StartedFlow> {
  * credentials are returned exactly once; the flow is spent afterwards.
  */
 export async function pollLoginFlow(flow: StartedFlow): Promise<GrantedFlow | null> {
-  const resp = await fetch(`${nextcloudBaseUrl()}${flow.pollPath}`, {
+  // pollPath is the full path Nextcloud returned, webroot included, so it goes
+  // on the origin alone (NEXTCLOUD_URL may itself carry the webroot).
+  const resp = await fetch(`${new URL(nextcloudBaseUrl()).origin}${flow.pollPath}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
     body: new URLSearchParams({ token: flow.pollToken }).toString(),

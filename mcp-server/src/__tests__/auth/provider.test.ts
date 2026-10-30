@@ -15,6 +15,12 @@ const flow = vi.hoisted(() => ({
 vi.mock('../../auth/login-flow.js', () => flow);
 
 import { NextcloudOAuthProvider, renderFlowPage, LOGIN_PAGE_CSP } from '../../auth/provider.js';
+import {
+  CredentialBackendUnavailableError,
+  CredentialStore,
+  LocalCipher,
+  type CredentialCipher,
+} from '../../auth/credential-store.js';
 import { LOGIN_STYLESHEET_PATH } from '../../auth/login-page-css.js';
 
 const TEST_SECRET = 'super-secret-32-char-key-for-testing!!';
@@ -202,14 +208,14 @@ describe('NextcloudOAuthProvider', () => {
       expect(flow.pollLoginFlow).not.toHaveBeenCalled();
     });
 
-    it('deletes an app password Nextcloud does not confirm, and issues no code', async () => {
+    it('issues no code for an app password Nextcloud rejects', async () => {
       const { flowId } = await start();
       flow.pollLoginFlow.mockResolvedValue(CRED);
       flow.checkCredential.mockResolvedValue({ state: 'rejected' });
       const res = mockRes();
       await provider.continueFlow(flowId, binding, res);
       expect(res.redirect).not.toHaveBeenCalled();
-      expect(flow.deleteAppPassword).toHaveBeenCalledWith('alice', 'app-password-1');
+      expect(res.send).toHaveBeenCalledWith(expect.stringContaining('did not confirm'));
     });
 
     it('polls Nextcloud at most once per second', async () => {
@@ -217,6 +223,47 @@ describe('NextcloudOAuthProvider', () => {
       await provider.continueFlow(flowId, binding, mockRes());
       await provider.continueFlow(flowId, binding, mockRes());
       expect(flow.pollLoginFlow).toHaveBeenCalledTimes(1);
+    });
+
+    it('two reloads racing on one poll issue a single code', async () => {
+      const { flowId } = await start();
+      flow.pollLoginFlow.mockResolvedValue(CRED);
+      const a = mockRes();
+      const b = mockRes();
+      await Promise.all([
+        provider.continueFlow(flowId, binding, a),
+        provider.continueFlow(flowId, binding, b),
+      ]);
+      const redirects = [a, b].filter((r) => r.redirect.mock.calls.length > 0);
+      expect(redirects).toHaveLength(1);
+    });
+
+    it('retries an app password Nextcloud could not confirm, instead of deleting it', async () => {
+      const { flowId } = await start();
+      flow.pollLoginFlow.mockResolvedValueOnce(CRED).mockResolvedValue(null);
+      flow.checkCredential.mockResolvedValueOnce({ state: 'unknown' });
+      const first = mockRes();
+      await provider.continueFlow(flowId, binding, first);
+      expect(first.redirect).not.toHaveBeenCalled();
+      expect(flow.deleteAppPassword).not.toHaveBeenCalled();
+      await new Promise((r) => setTimeout(r, 1100));
+      const second = mockRes();
+      await provider.continueFlow(flowId, binding, second);
+      // Nextcloud returns the credentials once; the kept ones are confirmed now.
+      expect(flow.pollLoginFlow).toHaveBeenCalledTimes(1);
+      expect(second.redirect).toHaveBeenCalled();
+    });
+
+    it('refuses new sign-ins once too many are in progress', async () => {
+      for (let i = 0; i < 500; i++) await provider.authorize(CLIENT, params, mockRes() as any);
+      await expect(provider.authorize(CLIENT, params, mockRes() as any)).rejects.toMatchObject({
+        code: 'temporarily_unavailable',
+      });
+    });
+
+    it('shows the requested scopes', async () => {
+      const { res } = await start();
+      expect(res.send.mock.calls[0][0]).toContain('<code>mcp:tools</code>');
     });
   });
 
@@ -693,6 +740,79 @@ describe('NextcloudOAuthProvider', () => {
       process.env.MCP_INTERNAL_TOKEN = 'i'.repeat(40);
       const auth = await provider.verifyAccessToken('i'.repeat(40));
       expect(auth.extra).toEqual({ service: true });
+    });
+  });
+
+  // ---- the key service being unavailable ----
+
+  describe('when the key service is unavailable', () => {
+    /** A cipher whose backend can be switched off, as OpenBao going down. */
+    class FlakyCipher implements CredentialCipher {
+      readonly name = 'flaky';
+      down = false;
+      private readonly inner = new LocalCipher(randomBytes(64));
+      encrypt(p: Buffer, aad: Buffer) {
+        if (this.down) return Promise.reject(new CredentialBackendUnavailableError('down'));
+        return this.inner.encrypt(p, aad);
+      }
+      decrypt(s: string, aad: Buffer) {
+        if (this.down) return Promise.reject(new CredentialBackendUnavailableError('down'));
+        return this.inner.decrypt(s, aad);
+      }
+    }
+    let cipher: FlakyCipher;
+    let p: NextcloudOAuthProvider;
+    beforeEach(() => {
+      cipher = new FlakyCipher();
+      p = new NextcloudOAuthProvider(undefined, {
+        credentials: new CredentialStore(cipher, join(stateDir, 'credentials.json')),
+      });
+    });
+    async function login() {
+      const code = p.issueAuthCode({
+        credential: CRED,
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: [],
+        redirectUri: 'https://r.com',
+        userId: 'alice',
+      });
+      return p.exchangeAuthorizationCode(CLIENT, code);
+    }
+
+    it('a request fails, but the grant survives the outage', async () => {
+      const { access_token } = await login();
+      const auth = await p.verifyAccessToken(access_token);
+      cipher.down = true;
+      await expect(p.credentialFor(auth)).rejects.toBeInstanceOf(CredentialBackendUnavailableError);
+      cipher.down = false;
+      await expect(p.credentialFor(auth)).resolves.toMatchObject(CRED);
+      expect(flow.deleteAppPassword).not.toHaveBeenCalled();
+    });
+
+    it('refresh still works during the outage', async () => {
+      const { refresh_token } = await login();
+      cipher.down = true;
+      await expect(p.exchangeRefreshToken(CLIENT, refresh_token!)).resolves.toBeDefined();
+    });
+
+    it('a grant revoked during the outage keeps its sealed value until it can be deleted', async () => {
+      const { refresh_token } = await login();
+      cipher.down = true;
+      await p.revokeToken(CLIENT, { token: refresh_token! });
+      await new Promise((r) => setTimeout(r, 10));
+      expect(flow.deleteAppPassword).not.toHaveBeenCalled();
+      cipher.down = false;
+      await p.sweep();
+      await vi.waitFor(() =>
+        expect(flow.deleteAppPassword).toHaveBeenCalledWith('alice', 'app-password-1')
+      );
+    });
+
+    it('storing the credential fails: no tokens, and the app password is deleted', async () => {
+      cipher.down = true;
+      await expect(login()).rejects.toMatchObject({ code: 'server_error' });
+      expect(flow.deleteAppPassword).toHaveBeenCalledWith('alice', 'app-password-1');
     });
   });
 });

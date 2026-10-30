@@ -18,6 +18,18 @@ export interface CredentialCipher {
   decrypt(sealed: string, aad: Buffer): Promise<Buffer>;
 }
 
+/**
+ * The key service could not be asked (OpenBao unreachable, timing out, or
+ * refusing the token). Says nothing about the stored value, so it must never
+ * end a grant: the request fails and the value is tried again later.
+ */
+export class CredentialBackendUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CredentialBackendUnavailableError';
+  }
+}
+
 // --- Built-in: AES-256-GCM, key derived from MCP_CREDENTIAL_KEY ---
 
 const LOCAL_PREFIX = 'local:v1:';
@@ -125,16 +137,28 @@ export class OpenBaoCipher implements CredentialCipher {
   }
 
   private async call(path: string, body?: unknown): Promise<any> {
-    const resp = await fetch(`${this.base}/${path}`, {
-      method: 'POST',
-      headers: { 'X-Vault-Token': this.opts.token, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body ?? {}),
-      signal: AbortSignal.timeout(OPENBAO_TIMEOUT_MS),
-    });
+    let resp: Response;
+    try {
+      resp = await fetch(`${this.base}/${path}`, {
+        method: 'POST',
+        headers: { 'X-Vault-Token': this.opts.token, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body ?? {}),
+        signal: AbortSignal.timeout(OPENBAO_TIMEOUT_MS),
+      });
+    } catch (err) {
+      throw new CredentialBackendUnavailableError(
+        `OpenBao ${path} unreachable: ${(err as Error).message}`
+      );
+    }
     if (!resp.ok) {
       // The error body names the failing check; it never echoes the plaintext.
-      const detail = await resp.text().catch(() => '');
-      throw new Error(`OpenBao ${path} failed: ${resp.status} ${detail.slice(0, 200)}`);
+      const detail = (await resp.text().catch(() => '')).slice(0, 200);
+      const message = `OpenBao ${path} failed: ${resp.status} ${detail}`;
+      // 400 is OpenBao judging the value itself (it does not decrypt under this
+      // grant's associated data). Anything else — a refused or expired token,
+      // a sealed or overloaded server — is about OpenBao, not the value.
+      if (resp.status === 400) throw new Error(message);
+      throw new CredentialBackendUnavailableError(message);
     }
     return resp.json();
   }
@@ -160,14 +184,19 @@ export class OpenBaoCipher implements CredentialCipher {
     return Buffer.from(pt, 'base64');
   }
 
-  /** Confirms the token works and keeps a periodic token alive. */
+  /**
+   * Keeps a periodic token alive, and confirms it works. Renewal is scheduled
+   * before the first attempt, so an OpenBao that is not up yet at boot still
+   * gets its token renewed once it is.
+   */
   async start(): Promise<void> {
-    await this.call('auth/token/renew-self');
+    const renew = () => this.call('auth/token/renew-self');
     setInterval(() => {
-      this.call('auth/token/renew-self').catch((err) =>
+      renew().catch((err) =>
         logger.warn({ err: (err as Error).message }, '[credentials] OpenBao token renewal failed')
       );
     }, OPENBAO_RENEW_MS).unref();
+    await renew();
   }
 }
 
@@ -257,6 +286,8 @@ export class CredentialStore {
    * The credential of `grantId`, or undefined when there is none, it has
    * expired, it belongs to another user, or it no longer decrypts (the key
    * changed). Callers treat all of these alike: the grant cannot be used.
+   * Throws CredentialBackendUnavailableError when the key service cannot be
+   * asked, which says nothing about the grant.
    */
   async get(grantId: string, userId: string): Promise<NextcloudUserCredential | undefined> {
     const e = this.entries.get(grantId);
@@ -268,7 +299,7 @@ export class CredentialStore {
     return this.entries.has(grantId);
   }
 
-  /** Slides the expiry along with the grant's refresh token. */
+  /** Slides the expiry along with the grant's refresh token; `Date.now()` marks it for the sweep. */
   extend(grantId: string, expiresAt: number): void {
     const e = this.entries.get(grantId);
     if (!e) return;
@@ -303,6 +334,7 @@ export class CredentialStore {
       if (typeof p.loginName !== 'string' || typeof p.appPassword !== 'string') return undefined;
       return { grantId, userId: e.userId, loginName: p.loginName, appPassword: p.appPassword };
     } catch (err) {
+      if (err instanceof CredentialBackendUnavailableError) throw err;
       logger.warn(
         { grant: grantId, cipher: this.cipher.name, err: (err as Error).message },
         '[credentials] Stored credential could not be decrypted'

@@ -15,7 +15,12 @@ import {
   cimdEnabledFromEnv,
 } from '../auth/store.js';
 import { authRouter } from '../auth/router.js';
-import { cipherFromEnv, CredentialStore, OpenBaoCipher } from '../auth/credential-store.js';
+import {
+  cipherFromEnv,
+  CredentialBackendUnavailableError,
+  CredentialStore,
+  OpenBaoCipher,
+} from '../auth/credential-store.js';
 import { onUserToolFailure, requireIdentityContext, runAs } from '../nc-context.js';
 import { serviceAccountConfigured } from '../tools/types.js';
 import { LOGIN_STYLESHEET, LOGIN_STYLESHEET_PATH } from '../auth/login-page-css.js';
@@ -502,7 +507,23 @@ export async function createHttpApp(): Promise<express.Express> {
         // Tools act as the signed-in user, with the app password Nextcloud
         // issued for this grant. Without one the grant is over: answer as for
         // any invalid token, so the client signs in again (RFC 6750 §3.1).
-        const user = await provider.credentialFor(req.auth);
+        let user;
+        try {
+          user = await provider.credentialFor(req.auth);
+        } catch (err) {
+          if (!(err instanceof CredentialBackendUnavailableError)) throw err;
+          // The key service is down: the grant is fine, the request just
+          // cannot be served now (RFC 9110 §15.6.4).
+          logger.error({ err: err.message }, '[mcp] Credential store unavailable');
+          res
+            .status(503)
+            .set('Retry-After', '10')
+            .json({
+              jsonrpc: '2.0',
+              error: { code: -32603, message: 'Credential store unavailable, try again shortly' },
+            });
+          return;
+        }
         if (!user) {
           res
             .status(401)

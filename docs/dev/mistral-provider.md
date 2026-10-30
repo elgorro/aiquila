@@ -208,7 +208,7 @@ function-calling → MCP `tools/call` → final answer:
 
 ```bash
 cd docker/standalone
-# .env needs MCP_AUTH_ENABLED=true, MISTRAL_API_KEY, NEXTCLOUD_USER, NEXTCLOUD_PASSWORD
+# .env needs MCP_AUTH_ENABLED=true, MISTRAL_API_KEY, TEST_NC_USER, TEST_NC_PASSWORD
 make up
 make test-mistral
 ```

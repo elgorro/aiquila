@@ -325,6 +325,10 @@ for every auto-generated field. Running `rebuild` will:
 - Regenerate the Grafana admin password (`GRAFANA_PASSWORD`)
 - Regenerate the PostgreSQL password (`POSTGRES_PASSWORD`) on Nextcloud/full stacks
 
+It keeps `MCP_CREDENTIAL_KEY` from the existing `.env`: the state volume holds app passwords
+sealed with it, and a new key would leave every one unreadable. Users still sign in again,
+because the new `MCP_AUTH_SECRET` ends their sessions.
+
 Use `rebuild` when you want a clean slate or when you need to rotate all secrets at
 once. **Do not use `rebuild` just to change `LOG_LEVEL`** — edit `.env` directly
 and restart instead.

@@ -345,6 +345,25 @@ func (e *FullEnv) Render() string {
 	return b.String()
 }
 
+// ExistingCredentialKey returns the MCP_CREDENTIAL_KEY of an existing .env, or
+// "" when it has none or the value is not at least 32 bytes of hex. A rebuild
+// must keep it: the state volume holds app passwords sealed with it, and a new
+// key would leave every one unreadable (and undeletable in Nextcloud).
+func ExistingCredentialKey(envFile string) string {
+	for _, line := range strings.Split(envFile, "\n") {
+		v, ok := strings.CutPrefix(strings.TrimSpace(line), "MCP_CREDENTIAL_KEY=")
+		if !ok {
+			continue
+		}
+		v = strings.Trim(strings.TrimSpace(v), `"'`)
+		if b, err := hex.DecodeString(v); err == nil && len(b) >= 32 {
+			return v
+		}
+		return ""
+	}
+	return ""
+}
+
 func randomHex(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {

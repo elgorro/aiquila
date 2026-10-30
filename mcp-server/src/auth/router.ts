@@ -300,7 +300,7 @@ function authorizationHandler(options: AuthRouterOptions) {
         throw new OAuthError(OAuthErrorCode.InvalidRequest, 'code_challenge is malformed');
       }
       checkResource(p.resource);
-      // Bind the login form to this browser (see LoginFormRequest.browserBinding).
+      // Bind the sign-in to this browser (see AuthorizationParams.browserBinding).
       const browserBinding = readBrowserBinding(req) ?? newBrowserBinding();
       res.append('Set-Cookie', browserBindingCookie(browserBinding));
       await provider.authorize(

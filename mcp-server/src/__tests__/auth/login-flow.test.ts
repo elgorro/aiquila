@@ -80,6 +80,13 @@ describe('pollLoginFlow', () => {
     expect(init.body).toBe('token=tok');
   });
 
+  it('polls the returned path on the origin, so a webroot is not doubled', async () => {
+    process.env.NEXTCLOUD_URL = 'https://example.com/nextcloud';
+    fetchMock.mockResolvedValue(new Response('', { status: 404 }));
+    await pollLoginFlow({ ...flow, pollPath: '/nextcloud/login/v2/poll' });
+    expect(fetchMock.mock.calls[0][0]).toBe('https://example.com/nextcloud/login/v2/poll');
+  });
+
   it('returns the credentials, and ignores the server Nextcloud names', async () => {
     fetchMock.mockResolvedValue(
       new Response(
