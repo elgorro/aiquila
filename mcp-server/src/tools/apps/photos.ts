@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: MIT
 
 import { z } from 'zod';
-import { fetchCalDAV, nsTagContent, decodeXmlEntities } from '../../client/caldav.js';
+import {
+  fetchCalDAV,
+  nsTagContent,
+  decodeXmlEntities,
+  encodeXmlEntities,
+} from '../../client/caldav.js';
 import { davFilePath, davPath } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
@@ -38,6 +43,13 @@ function filesUrl(config: { url: string; user: string }): string {
 /** Extract all <d:response> blocks from a multistatus XML response. */
 function parseResponses(xml: string): string[] {
   return xml.match(/<d:response>[\s\S]*?<\/d:response>/g) || [];
+}
+
+/** The album name: the decoded last segment of a response's href. */
+function albumNameFromHref(responseXml: string): string {
+  const href = responseXml.match(/<d:href>([^<]*)<\/d:href>/)?.[1] ?? '';
+  const segment = href.replace(/\/+$/, '').split('/').pop() ?? '';
+  return decodeURIComponent(decodeXmlEntities(segment));
 }
 
 /** Extract text content of an XML tag, with optional namespace prefix handling. */
@@ -81,7 +93,8 @@ const ALBUM_CONTENTS_PROPFIND = `<?xml version="1.0"?>
     <oc:fileid />
     <oc:size />
     <nc:has-preview />
-    <nc:favorite />
+    <oc:favorite />
+    <nc:file-name />
   </d:prop>
 </d:propfind>`;
 
@@ -100,7 +113,7 @@ const METADATA_PROPFIND = `<?xml version="1.0"?>
     <d:getcontenttype />
     <d:getcontentlength />
     <d:getlastmodified />
-    <nc:favorite />
+    <oc:favorite />
     <nc:metadata-photos-size />
     <nc:metadata-photos-gps />
     <nc:metadata-photos-ifd0 />
@@ -144,7 +157,8 @@ export const photosListAlbumsTool = {
       const responses = parseResponses(xml);
       // Skip the first response (the albums container itself)
       const albums = responses.slice(1).map((r) => {
-        const name = tagContent(r, 'displayname');
+        // Albums have no displayname; the name is the last segment of the href
+        const name = albumNameFromHref(r);
         const nbItems = tagContent(r, 'nbItems');
         const location = tagContent(r, 'location');
         const dateRange = tagContent(r, 'dateRange');
@@ -219,7 +233,8 @@ export const photosGetAlbumTool = {
       // Remaining responses are files in the album
       const files = responses.slice(1).map((r, i) => {
         const fileId = tagContent(r, 'fileid');
-        const displayName = tagContent(r, 'displayname');
+        // Album entries carry the file name in nc:file-name, not displayname
+        const displayName = tagContent(r, 'file-name') || tagContent(r, 'displayname');
         const contentType = tagContent(r, 'getcontenttype');
         const size = tagContent(r, 'getcontentlength') || tagContent(r, 'size');
         const favorite = tagContent(r, 'favorite') === '1' ? ' *' : '';
@@ -795,24 +810,38 @@ export const photosAddCollaboratorsTool = {
       const config = getNextcloudConfig();
       const url = `${albumsUrl(config)}/${encodeURIComponent(args.albumName)}`;
 
-      // Build collaborator XML elements
-      const collabElements = args.collaborators
-        .map(
-          (c) =>
-            `      <nc:collaborator>
-        <id>${c.id.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</id>
-        <type>${c.type}</type>
-      </nc:collaborator>`
-        )
-        .join('\n');
+      // Photos replaces the whole list on PROPPATCH, so read the current one
+      // (PROPFIND serialises it as <nc:collaborator> elements) and merge.
+      const current = await fetchCalDAV(url, {
+        method: 'PROPFIND',
+        body: `<?xml version="1.0"?>
+<d:propfind xmlns:d="DAV:" xmlns:nc="http://nextcloud.org/ns">
+  <d:prop><nc:collaborators /></d:prop>
+</d:propfind>`,
+        headers: { Depth: '0' },
+      });
+      if (current.status === 404) {
+        return error(`Album "${args.albumName}" not found.`);
+      }
+      const existing = [
+        ...(await current.text()).matchAll(/<nc:collaborator>([\s\S]*?)<\/nc:collaborator>/g),
+      ]
+        .map((m) => ({
+          id: decodeXmlEntities(m[1].match(/<id>([^<]*)<\/id>/)?.[1] ?? ''),
+          type: Number(m[1].match(/<type>([^<]*)<\/type>/)?.[1]),
+        }))
+        .filter((c) => c.id !== '');
+      const merged = [...existing];
+      for (const c of args.collaborators) {
+        if (!merged.some((e) => e.id === c.id && e.type === c.type)) merged.push(c);
+      }
 
+      // The property value is a JSON array, which PropFindPlugin json_decode()s
       const body = `<?xml version="1.0"?>
 <d:propertyupdate xmlns:d="DAV:" xmlns:nc="http://nextcloud.org/ns">
   <d:set>
     <d:prop>
-      <nc:collaborators>
-${collabElements}
-      </nc:collaborators>
+      <nc:collaborators>${encodeXmlEntities(JSON.stringify(merged))}</nc:collaborators>
     </d:prop>
   </d:set>
 </d:propertyupdate>`;
