@@ -66,6 +66,8 @@ export async function fetchBookmarksAPI<T = unknown>(
   }
 
   const json = (await response.json()) as { status: string; data?: unknown; item?: unknown };
+  // GET /tag answers with a bare array of tag names, without the status envelope
+  if (Array.isArray(json)) return json as T;
   if (json.status !== 'success') {
     throw new Error(`Bookmarks API error: ${JSON.stringify(json)}`);
   }
