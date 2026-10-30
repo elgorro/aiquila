@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -52,6 +53,7 @@ var (
 	// NC self-hosted flags (--stack nextcloud / full)
 	createNCAdminUser     string
 	createNCAdminPassword string
+	createNCMCPUser       string
 	// Hetzner Inference (experimental) — preconfigures the AIquila app's LLM provider
 	createInferenceToken     string
 	createInferenceModel     string
@@ -118,6 +120,7 @@ uploads a production docker-compose stack (Traefik + CrowdSec), and starts the s
 	rootCmd.AddCommand(buildNetworkCmd())
 	rootCmd.AddCommand(buildSnapshotCmd())
 	rootCmd.AddCommand(buildRebuildCmd())
+	rootCmd.AddCommand(buildUpgradeCmd())
 	rootCmd.AddCommand(buildOptionsCmd())
 
 	runErr := rootCmd.Execute()
@@ -154,6 +157,8 @@ func buildCreateCmd() *cobra.Command {
 	// Self-hosted NC flags (--stack nextcloud/full)
 	cmd.Flags().StringVar(&createNCAdminUser, "nc-admin-user", "admin", "Nextcloud admin username (--stack nextcloud/full)")
 	cmd.Flags().StringVar(&createNCAdminPassword, "nc-admin-password", "", "Nextcloud admin password (--stack nextcloud/full)")
+	cmd.Flags().StringVar(&createNCMCPUser, "nc-mcp-user", defaultNCMCPUser,
+		"Non-admin account the Nextcloud app's MCP connection acts as, created during provisioning (--stack full)")
 	cmd.Flags().StringVar(&createInferenceToken, "hetzner-inference-token", "",
 		"Hetzner Inference API token — preconfigures AIquila to use it as LLM provider\n\t\t\t\t(--stack nextcloud/full; or $HETZNER_INFERENCE_TOKEN;\n\t\t\t\t create one at https://experiments.hetzner.com/inference)")
 	cmd.Flags().StringVar(&createInferenceModel, "hetzner-inference-model", "",
@@ -304,6 +309,9 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	if createNCAdminPassword == "" && fileCfg.NCAdminPassword != "" {
 		createNCAdminPassword = fileCfg.NCAdminPassword
 	}
+	if !cmd.Flags().Changed("nc-mcp-user") && fileCfg.NCMCPUser != "" {
+		createNCMCPUser = fileCfg.NCMCPUser
+	}
 	if createInferenceToken == "" && fileCfg.InferenceToken != "" {
 		createInferenceToken = fileCfg.InferenceToken
 	}
@@ -352,6 +360,9 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 		}
 		if createNCAdminPassword == "" {
 			missing = append(missing, "--nc-admin-password")
+		}
+		if createNCMCPUser == "" {
+			missing = append(missing, "--nc-mcp-user")
 		}
 	default:
 		return fmt.Errorf("unknown --stack %q: must be mcp, nextcloud, or full", createStack)
@@ -770,12 +781,12 @@ func provisionNCStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, priv
 func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, privKeyPath string) error {
 	fmt.Println("\n── Generating configuration")
 	// For the full stack, MCP connects to NC over the internal Docker network.
-	// We generate a placeholder MCP password; the real app password is created
-	// via OCC after NC is up and written back to the .env automatically.
+	// NC_MCP_PASSWORD stays empty until the service account exists: it is
+	// created via OCC once NC is up, and the .env is uploaded again with it.
 	fullEnv, err := config.GenerateFull(
 		createNCDomain, createMCPDomain,
 		createNCAdminUser, createNCAdminPassword,
-		createNCAdminUser, "", // NC_MCP_USER/PASSWORD: updated after OCC
+		createNCMCPUser, "",
 		createAcmeEmail,
 	)
 	if err != nil {
@@ -845,30 +856,18 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 		return err
 	}
 
-	// Generate an app password for the MCP user and patch the .env
-	fmt.Printf("\n── Creating Nextcloud app password for MCP user %q\n", createNCAdminUser)
-	appPassCmd := fmt.Sprintf(
-		`docker compose -f /opt/aiquila/docker-compose.yml exec -T nc php occ user:add-app-password %s 2>/dev/null | tail -1`,
-		createNCAdminUser,
-	)
-	appPass, err := provision.RunCommand(sshClient, appPassCmd)
+	appPass, err := createMCPServiceAccount(sshClient, createNCMCPUser)
 	if err != nil {
-		return fmt.Errorf("generate app password: %w", err)
+		return err
 	}
-	appPass = strings.TrimSpace(appPass)
-	if appPass == "" {
-		return fmt.Errorf("OCC returned empty app password — check NC logs")
+	fullEnv.NCMCPPassword = appPass
+	if err := uploader.WriteFile("/opt/aiquila/.env", fullEnv.Render()); err != nil {
+		return fmt.Errorf("upload .env with the MCP app password: %w", err)
 	}
-	fmt.Println("  App password generated.")
-
-	// Patch NC_MCP_PASSWORD in the .env on the server
-	patchCmd := fmt.Sprintf(
-		`sed -i 's|^NC_MCP_PASSWORD=.*|NC_MCP_PASSWORD=%s|' /opt/aiquila/.env`,
-		appPass,
-	)
-	if _, err := provision.RunCommand(sshClient, patchCmd); err != nil {
-		return fmt.Errorf("patch .env with app password: %w", err)
+	if err := uploader.Chmod("/opt/aiquila/.env", 0o600); err != nil {
+		return fmt.Errorf("secure .env: %w", err)
 	}
+	fmt.Println("  NC_MCP_USER / NC_MCP_PASSWORD written to /opt/aiquila/.env")
 
 	// Auto-register the MCP server in the AIquila NC app so it connects on first boot
 	fmt.Println("\n── Registering MCP server in AIquila app")
@@ -894,6 +893,57 @@ func provisionFullStack(sshClient *xssh.Client, srv *hcloud.Server, serverIP, pr
 
 	return printFullSummary(srv, serverIP, privKeyPath)
 }
+
+// defaultNCMCPUser is the service account the full stack creates for the
+// Nextcloud app's MCP connection (MCP_INTERNAL_TOKEN acts as it).
+const defaultNCMCPUser = "aiquila-mcp"
+
+// createMCPServiceAccount creates the Nextcloud account MCP_INTERNAL_TOKEN acts
+// as and returns a fresh app password for it. A new account gets a random login
+// password that never leaves the server; it is only needed so the app password
+// carries it. An existing account (e.g. --nc-mcp-user set to the admin) is kept
+// and only gets a new app password.
+func createMCPServiceAccount(sshClient *xssh.Client, user string) (string, error) {
+	fmt.Printf("\n── Creating Nextcloud service account %q for the MCP server\n", user)
+	u := shellQuote(user)
+	script := `set -e
+cd /opt/aiquila
+if docker compose exec -T nc php occ user:info ` + u + ` >/dev/null 2>&1; then
+  echo "  Account exists — adding an app password only." >&2
+  docker compose exec -T nc php occ user:auth-tokens:add --no-interaction --name "AIquila MCP" ` + u + `
+else
+  NC_PASS="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  export NC_PASS
+  docker compose exec -T -e NC_PASS nc php occ user:add --password-from-env --display-name "AIquila MCP" ` + u + ` >&2
+  docker compose exec -T -e NC_PASS nc php occ user:auth-tokens:add --password-from-env --no-interaction --name "AIquila MCP" ` + u + `
+fi`
+	out, err := provision.RunCommand(sshClient, "bash -c "+shellQuote(script))
+	if err != nil {
+		return "", fmt.Errorf("create MCP service account: %w", err)
+	}
+	appPass, ok := parseAppPassword(out)
+	if !ok {
+		return "", fmt.Errorf("create MCP service account: no app password in OCC output — check the Nextcloud log")
+	}
+	fmt.Println("  App password generated.")
+	return appPass, nil
+}
+
+// parseAppPassword picks the token from `occ user:auth-tokens:add`, which
+// prints "app password:" followed by the token on its own line. Other output
+// (warnings, the account creation message) is ignored.
+func parseAppPassword(out string) (string, bool) {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		tok := strings.TrimSpace(lines[i])
+		if appPasswordRe.MatchString(tok) {
+			return tok, true
+		}
+	}
+	return "", false
+}
+
+var appPasswordRe = regexp.MustCompile(`^[A-Za-z0-9]{32,}$`)
 
 // installAiquilaAppFromStore installs the AIquila Nextcloud app from the app store via occ app:install.
 func installAiquilaAppFromStore(sshClient *xssh.Client) error {

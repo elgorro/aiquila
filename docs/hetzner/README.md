@@ -79,9 +79,15 @@ aiquila-hetzner create \
   --mcp-domain mcp.example.com \
   --nc-domain nc.example.com \
   --nc-admin-password your-admin-password
+# Creates the non-admin aiquila-mcp account and its app password for the
+# Nextcloud app's MCP connection, and registers the MCP server in the app.
 ```
 
 Use `--dry-run` to preview what would be created without making any API calls.
+
+To move an existing deployment to a new release, run
+`aiquila-hetzner upgrade --name <server>`: it backs up, adds the configuration the release
+needs, and upgrades only the MCP server and the AIquila app. See [`upgrade`](commands.md#upgrade).
 
 The CLI prints a cost warning and asks for confirmation before the first
 billable API call. Use `--noconfirm` to skip the prompt in CI/CD pipelines.

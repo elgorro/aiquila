@@ -291,8 +291,8 @@ and what to expect from `rebuild`.
 
 | Variable | Source | Description |
 |----------|--------|-------------|
-| `NC_MCP_USER` | generated via OCC | Deprecated: the account `MCP_INTERNAL_TOKEN` (the Nextcloud app) acts as. OAuth sign-ins act as the signed-in user |
-| `NC_MCP_PASSWORD` | generated via OCC | Deprecated: its app password |
+| `NC_MCP_USER` | `--nc-mcp-user` (default `aiquila-mcp`) | The non-admin account `MCP_INTERNAL_TOKEN` (the Nextcloud app) acts as, created via OCC. OAuth sign-ins act as the signed-in user |
+| `NC_MCP_PASSWORD` | generated via OCC | Its app password |
 
 ### How to update a variable in-place
 
@@ -352,10 +352,12 @@ Some variables cannot be changed by simply editing `.env` and restarting:
 
 - **`NC_MCP_PASSWORD`** (full stack only) — this is a Nextcloud app password. Changing
   it in `.env` alone will not work because the old password still exists in Nextcloud.
-  Generate a new app password via OCC and update `.env` to match:
+  Generate a new app password via OCC, update `.env` to match, then revoke the old one:
   ```bash
-  docker compose exec nc php occ user:generate-app-password <nc-mcp-user>
-  # Copy the output, then update NC_MCP_PASSWORD in .env and restart
+  docker compose exec nc php occ user:auth-tokens:add --name "AIquila MCP" aiquila-mcp
+  # Copy the output into NC_MCP_PASSWORD in .env, then: docker compose up -d mcp
+  docker compose exec nc php occ user:auth-tokens:list aiquila-mcp
+  docker compose exec nc php occ user:auth-tokens:delete aiquila-mcp <old-token-id>
   ```
 
 ## Nextcloud image and PHP
@@ -445,7 +447,8 @@ docker compose exec -T -u www-data nc php occ background:cron
 docker compose up -d nc-cron
 ```
 
-`aiquila-hetzner deploy` does not re-upload the compose file, so step 3 is manual.
+`aiquila-hetzner upgrade` writes the current template, which has `nc-cron`, but does not
+start it: do steps 1 and 2 before the next `docker compose up -d`, which would.
 
 ## Upgrading PostgreSQL to 18
 

@@ -1,0 +1,58 @@
+name: E2E
+
+# Not a required check, so a paths filter is safe here: a skipped run never
+# leaves a required status waiting.
+on:
+  pull_request:
+    paths:
+      - 'mcp-server/**'
+      - 'docker/mcp-server/**'
+      - 'docker/e2e/**'
+      - 'docker/standalone/scripts/nc-login-flow.sh'
+      - '.github/workflows/e2e.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'mcp-server/**'
+      - 'docker/mcp-server/**'
+      - 'docker/e2e/**'
+      - 'docker/standalone/scripts/nc-login-flow.sh'
+      - '.github/workflows/e2e.yml'
+  schedule:
+    # Nightly: catches a new nextcloud:34-apache image breaking the sign-in.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  internal-host:
+    name: MCP reaching Nextcloud by its internal hostname
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: docker/e2e
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # Compose's bake builder refuses the Dockerfile, which lives outside the
+      # build context (docker/mcp-server/ vs mcp-server/); the classic builder reads it.
+      - name: Start Nextcloud and the MCP server
+        env:
+          COMPOSE_BAKE: 'false'
+        run: docker compose up -d --build
+
+      - name: Run the test
+        run: ./scripts/test-internal-host.sh
+
+      - name: Logs
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

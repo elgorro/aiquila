@@ -1,0 +1,37 @@
+# End-to-end stack for the topology of the Hetzner full stack and most
+# single-host Docker setups: the MCP server reaches Nextcloud by its container
+# name (NEXTCLOUD_URL=http://nc), while browsers use NEXTCLOUD_PUBLIC_URL.
+# Driven by scripts/test-internal-host.sh; nothing here is fit for production.
+name: aiquila-e2e
+
+services:
+  nc:
+    image: nextcloud:34-apache
+    environment:
+      SQLITE_DATABASE: nextcloud
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: e2e-Admin-Passw0rd!
+      # The container name for the MCP server, localhost for the test runner.
+      NEXTCLOUD_TRUSTED_DOMAINS: nc localhost
+    ports:
+      - "127.0.0.1:${E2E_NC_PORT:-18080}:80"
+
+  mcp:
+    build:
+      context: ../../mcp-server
+      dockerfile: ../docker/mcp-server/Dockerfile
+    depends_on:
+      - nc
+    environment:
+      NEXTCLOUD_URL: http://nc
+      # Unset (E2E_PUBLIC_URL=) for the negative case: the server warns at startup.
+      NEXTCLOUD_PUBLIC_URL: ${E2E_PUBLIC_URL-http://localhost:18080}
+      MCP_TRANSPORT: http
+      MCP_AUTH_ENABLED: "true"
+      MCP_REGISTRATION_ENABLED: "true"
+      MCP_AUTH_ISSUER: http://localhost:${E2E_MCP_PORT:-13339}
+      MCP_AUTH_SECRET: 4f1c0d6ad1a0f1e5b2c8e7a9d3f6b1c24f1c0d6ad1a0f1e5b2c8e7a9d3f6b1c2
+      MCP_CREDENTIAL_KEY: 9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7081
+      LOG_LEVEL: info
+    ports:
+      - "127.0.0.1:${E2E_MCP_PORT:-13339}:3339"

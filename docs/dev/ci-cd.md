@@ -16,6 +16,7 @@ AIquila uses GitHub Actions for continuous integration and deployment.
 | `nc-release.yml` | Version change in `nextcloud-app/` | Auto-release & publish NC app (nightly + stable) |
 | `hetzner-release.yml` | Version change in `hetzner/` | Auto-release Hetzner CLI (GitHub Release + cosign) |
 | `hetzner-integration-test.yml` | Manual dispatch | Full two-server E2E integration test |
+| `e2e.yml` | PRs and pushes touching the MCP server or `docker/e2e/`, nightly, manual | Docker E2E: MCP reaching Nextcloud by its internal hostname |
 
 ## Test Workflow (`test.yml`)
 
@@ -303,6 +304,30 @@ git push origin main
 **Required secrets:** `HCLOUD_TOKEN`, `ANTHROPIC_API_KEY`
 
 See [`docs/hetzner/ci-flow.md`](../hetzner/ci-flow.md) for the detailed timeline and cost breakdown.
+
+### Docker E2E (`e2e.yml`)
+
+**Triggers:** pull requests and pushes to `main` touching `mcp-server/`, `docker/mcp-server/`,
+`docker/e2e/` or the shared Login Flow helper; nightly; manual dispatch. It is not a required
+check, so its `paths:` filter cannot leave a PR waiting.
+
+**What it does:** builds the MCP image from the checkout and starts it next to a stock
+`nextcloud:34-apache` in `docker/e2e/`, with `NEXTCLOUD_URL=http://nc` and
+`NEXTCLOUD_PUBLIC_URL` on the runner's localhost — the topology of the Hetzner full stack.
+`docker/e2e/scripts/test-internal-host.sh` then signs in a non-admin user and a TOTP user
+through OAuth 2.1 and Login Flow v2, and checks that the sign-in link is on the public URL,
+that tools act as the signed-in user and admin-only tools are refused, and that revoking the
+refresh token removes the "AIquila MCP" device in Nextcloud. It ends by starting the server
+without `NEXTCLOUD_PUBLIC_URL` and expecting the startup warning. No secrets are used.
+
+Run it locally (needs the Docker buildx plugin):
+
+```bash
+cd docker/e2e
+COMPOSE_BAKE=false docker compose up -d --build   # bake refuses the out-of-context Dockerfile
+./scripts/test-internal-host.sh
+docker compose down -v
+```
 
 ### Secrets
 

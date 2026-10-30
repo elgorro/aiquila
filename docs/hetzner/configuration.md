@@ -61,6 +61,7 @@ aiquila-hetzner rebuild --config hetzner/examples/deploy-mcp.yaml
 | `nc_password` | string | `--nc-password` | Deprecated: its app password (mcp stack) |
 | `nc_admin_user` | string | `--nc-admin-user` | NC admin username (nextcloud/full; default: `admin`) |
 | `nc_admin_password` | string | `--nc-admin-password` | NC admin password (nextcloud/full) |
+| `nc_mcp_user` | string | `--nc-mcp-user` | Account the Nextcloud app's MCP connection acts as (full; default: `aiquila-mcp`) |
 | `nc_app_version` | string | `--nc-app-version` | AIquila app version (nextcloud/full; default: `latest`) |
 | `hetzner_inference_token` | string | `--hetzner-inference-token` | [Hetzner Inference](../dev/hetzner-provider.md) token (nextcloud/full) |
 | `hetzner_inference_model` | string | `--hetzner-inference-model` | Model id for the Hetzner Inference provider |

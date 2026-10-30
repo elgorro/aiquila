@@ -15,7 +15,6 @@ jobs:
     outputs:
       version-changed: ${{ steps.check.outputs.changed }}
       version: ${{ steps.check.outputs.version }}
-      previous-version: ${{ steps.check.outputs.previous }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -104,14 +103,14 @@ jobs:
       - name: Generate changelog
         run: |
           VERSION=${{ needs.check-version.outputs.version }}
-          PREV_VERSION=${{ needs.check-version.outputs.previous-version }}
-          PREV_TAG="mcp-v${PREV_VERSION}"
-
-          # Check if previous tag exists
-          if git rev-parse "${PREV_TAG}" >/dev/null 2>&1; then
+          # Diff against the nearest earlier mcp-v* tag reachable from HEAD, not the
+          # tag named after the previous version: a release that failed before tagging
+          # leaves that tag missing, and the notes would fall back to the whole history.
+          # The excluded tag is this release's own, present when the job is re-run.
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'mcp-v*' --exclude "mcp-v${VERSION}" HEAD 2>/dev/null || true)
+          if [ -n "${PREV_TAG}" ]; then
             RANGE="${PREV_TAG}..HEAD"
           else
-            # Fallback: use all commits touching mcp-server/
             RANGE="HEAD"
           fi
 
