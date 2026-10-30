@@ -74,12 +74,21 @@ jobs:
       # signature fails with `create bundle file: open : no such file or directory`
       # — which is what stalled the 0.4.18 and 0.4.19 releases. One .sigstore.json
       # per artifact now carries both the signature and the certificate.
+      #
+      # Signing fetches an OIDC token from the runner for Fulcio. That endpoint
+      # occasionally answers with a non-JSON error page (`fetching ambient OIDC
+      # credentials: invalid character ...`), so each signature gets three tries.
       - name: Generate checksums and sign artifacts
         run: |
           cd dist
           sha256sum aiquila-hetzner-linux-amd64 aiquila-hetzner-linux-arm64 > checksums.txt
           for f in aiquila-hetzner-linux-amd64 aiquila-hetzner-linux-arm64 checksums.txt; do
-            cosign sign-blob --yes --bundle "${f}.sigstore.json" "${f}"
+            for attempt in 1 2 3; do
+              cosign sign-blob --yes --bundle "${f}.sigstore.json" "${f}" && break
+              if [ "${attempt}" = 3 ]; then exit 1; fi
+              echo "::warning::Signing ${f} failed (attempt ${attempt}), retrying"
+              sleep $((attempt * 15))
+            done
           done
 
       - name: Generate changelog

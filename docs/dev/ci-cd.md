@@ -274,7 +274,9 @@ git push origin main
 3. Generates SHA-256 checksums
 4. Signs all artifacts with cosign (GitHub OIDC — no secrets needed), one
    `<artifact>.sigstore.json` bundle each, carrying both the signature and the
-   certificate. Verify with `cosign verify-blob --bundle <artifact>.sigstore.json`
+   certificate. Verify with `cosign verify-blob --bundle <artifact>.sigstore.json`.
+   Each signature is tried three times, since the runner's OIDC token endpoint
+   fails transiently now and then
 5. Creates tag `hetzner-vX.X.X` and GitHub Release
 
 **How to release:**
