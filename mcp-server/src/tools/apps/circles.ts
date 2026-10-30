@@ -141,6 +141,25 @@ export const circlesListTool = {
 // circles_get
 // ---------------------------------------------------------------------------
 
+/**
+ * Fetch one circle. The circles app ships GET /circles/{circleId} without
+ * #[NoAdminRequired] on its stable branches, so Nextcloud answers 403 to every
+ * non-admin, the circle's owner included. GET /circles is open to members and
+ * serialises the same Circle, so a 403 falls back to finding it there.
+ */
+async function getCircle(circleId: string): Promise<Circle> {
+  try {
+    const result = await fetchOCS<Circle>(`${API_BASE}/circles/${encodeURIComponent(circleId)}`);
+    return result.ocs.data;
+  } catch (err) {
+    if (!(err instanceof Error) || !err.message.startsWith('Permission denied')) throw err;
+    const list = await fetchOCS<Circle[]>(`${API_BASE}/circles`);
+    const match = list.ocs.data.find((c) => c.id === circleId);
+    if (!match) throw err;
+    return match;
+  }
+}
+
 export const circlesGetTool = {
   name: 'circles_get',
   title: 'Get Circle',
@@ -157,10 +176,7 @@ export const circlesGetTool = {
   }),
   handler: async (args: { circleId: string }) => {
     try {
-      const result = await fetchOCS<Circle>(
-        `${API_BASE}/circles/${encodeURIComponent(args.circleId)}`
-      );
-      const c = result.ocs.data;
+      const c = await getCircle(args.circleId);
 
       const lines: string[] = [
         `# ${c.displayName || c.name}`,
