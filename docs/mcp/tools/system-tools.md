@@ -1,16 +1,19 @@
 # System Tools Documentation
 
-System tools provide core operations for your Nextcloud instance including file management (via WebDAV) and system diagnostics (via OCC commands).
+System tools provide core operations for your Nextcloud instance including file management (via WebDAV and the AIquila app) and system diagnostics (via OCC commands).
 
 ## Overview
 
 System tools are divided into two categories:
-- **File Operations**: WebDAV-based file and folder management
+- **File Operations**: file and folder management over WebDAV and the AIquila app
 - **System Status**: OCC-based system diagnostics and monitoring
 
 ## File Operation Tools
 
-All file operation tools use WebDAV. Paths are relative to your user's home directory (e.g., `/Documents/file.txt`).
+`list_files`, `read_file`, `write_file`, `create_folder`, `delete`, `move_file`, `copy_file`
+and `bulk_file_operations` use WebDAV. `get_file_info`, `search_files`, `get_file_content`,
+`analyze_image` and the archive tools (`create_archive`, `extract_archive`, `list_archive`)
+call the AIquila app's `/api/files/*` endpoints, so they need the app installed. Paths are relative to your user's home directory (e.g., `/Documents/file.txt`).
 
 ### list_files
 
