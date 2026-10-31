@@ -84,6 +84,29 @@ class RegisteredProvidersTest extends TestCase {
         }
     }
 
+    /**
+     * Every task type Nextcloud ships is either served or recorded as not
+     * served, so bumping nextcloud/ocp to a new major surfaces new types here.
+     */
+    public function testEveryShippedTaskTypeIsServedOrRecorded(): void {
+        $served = [];
+        foreach (ProviderRegistry::PROVIDERS as $class) {
+            $served[] = (new \ReflectionClass($class))->newInstanceWithoutConstructor()->getTaskTypeId();
+        }
+
+        foreach (array_keys($this->shippedTaskTypes()) as $id) {
+            $this->assertTrue(
+                in_array($id, $served, true) || array_key_exists($id, ProviderRegistry::NOT_SERVED),
+                "Nextcloud ships \"{$id}\" — serve it or add it to ProviderRegistry::NOT_SERVED with a reason"
+            );
+        }
+
+        foreach (ProviderRegistry::NOT_SERVED as $id => $reason) {
+            $this->assertNotContains($id, $served, "\"{$id}\" is served but still listed as not served");
+            $this->assertNotSame('', trim($reason), "\"{$id}\" needs a reason");
+        }
+    }
+
     public function testOnlyKnownTaskTypesSkipTheOcpConstant(): void {
         foreach ($this->providerClasses() as $class) {
             $source = (string)file_get_contents((string)(new \ReflectionClass($class))->getFileName());
