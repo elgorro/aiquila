@@ -42,6 +42,13 @@
 					</NcCheckboxRadioSwitch>
 				</NcSettingsSection>
 
+				<NcSettingsSection :name="t('aiquila', 'Anthropic Files API')"
+					:description="t('aiquila', 'Uploads images and PDFs attached in a chat once and refers to them by ID afterwards, instead of sending the file again on every turn. Anthropic keeps an uploaded file for 30 days; it is not covered by zero data retention. When switched off, attachments are sent inline and the daily cleanup deletes what was uploaded before. Only affects the Claude API.')">
+					<NcCheckboxRadioSwitch :model-value="filesApi" @update:model-value="saveFilesApi">
+						{{ t('aiquila', 'Upload attachments to the Files API') }}
+					</NcCheckboxRadioSwitch>
+				</NcSettingsSection>
+
 				<NcSettingsSection :name="t('aiquila', 'Model defaults')"
 					:description="t('aiquila', 'Model, token limits, effort and thinking are configured per provider, because they mean different things to each one. Open a provider card on the Providers tab to change them.')">
 					<NcButton type="secondary" @click="tab = 'providers'">
@@ -160,6 +167,7 @@ export default {
 			defaultProvider: '',
 			searchEnabled: false,
 			autoCache: true,
+			filesApi: true,
 			savingNativeMcp: false,
 			nativeMcpMessage: '',
 			nativeMcpMessageType: 'success',
@@ -186,6 +194,7 @@ export default {
 		const dataset = document.getElementById('aiquila-admin-settings')?.dataset
 		this.searchEnabled = dataset?.searchEnabled === '1'
 		this.autoCache = dataset?.autoCache !== '0'
+		this.filesApi = dataset?.filesApi !== '0'
 		await Promise.all([this.load(), this.loadNativeMcp()])
 	},
 	methods: {
@@ -225,6 +234,10 @@ export default {
 		async saveAutoCache(enabled) {
 			this.autoCache = enabled
 			await saveAdminSettings({ auto_cache: enabled ? '1' : '0' })
+		},
+		async saveFilesApi(enabled) {
+			this.filesApi = enabled
+			await saveAdminSettings({ files_api: enabled ? '1' : '0' })
 		},
 		async loadNativeMcp() {
 			const { data } = await getNativeMcpStatus()

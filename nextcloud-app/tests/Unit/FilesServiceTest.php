@@ -24,7 +24,8 @@ class FilesServiceTest extends TestCase {
         $this->buildService();
     }
 
-    private function buildService(): void {
+    private function buildService(bool $filesApi = true): void {
+        $this->claudeService->method('supportsFilesApi')->willReturn($filesApi);
         $this->service = new FilesService($this->claudeService, $this->mapper, $this->logger);
     }
 
@@ -61,8 +62,8 @@ class FilesServiceTest extends TestCase {
         $this->mapper->expects($this->once())->method('findByHash')->with('bob', $sha)->willReturn(null);
         $this->claudeService->expects($this->once())
             ->method('uploadFile')
-            ->with('pdfbytes', 'doc.pdf', 'application/pdf', 'bob')
-            ->willReturn('file_fresh_abc');
+            ->with('pdfbytes', 'doc.pdf', 'application/pdf', 'bob', FilesService::TTL_SECONDS)
+            ->willReturn(['id' => 'file_fresh_abc', 'expiresAt' => 1_900_000_000]);
 
         $insertedRows = [];
         $this->mapper->expects($this->once())
@@ -79,6 +80,57 @@ class FilesServiceTest extends TestCase {
         $this->assertSame('bob', $insertedRows[0]->getUserId());
         $this->assertSame($sha, $insertedRows[0]->getSha256());
         $this->assertSame('file_fresh_abc', $insertedRows[0]->getAnthropicFileId());
+        $this->assertSame(1_900_000_000, $insertedRows[0]->getExpiresAt());
+    }
+
+    public function testDisabledFilesApiNeverUploads(): void {
+        $this->claudeService = $this->createMock(ClaudeSDKService::class);
+        $this->mapper = $this->createMock(FileUploadMapper::class);
+        $this->buildService(false);
+
+        $this->mapper->expects($this->never())->method('findByHash');
+        $this->claudeService->expects($this->never())->method('uploadFile');
+
+        $this->assertNull($this->service->getOrUploadFileId('bytes', 'x.pdf', 'application/pdf', 'alice'));
+    }
+
+    public function testFileCloseToExpiryIsUploadedAgain(): void {
+        $this->claudeService = $this->createMock(ClaudeSDKService::class);
+        $this->mapper = $this->createMock(FileUploadMapper::class);
+        $this->buildService();
+
+        $cached = new FileUpload();
+        $cached->setAnthropicFileId('file_old');
+        $cached->setUploadedAt(time() - FilesService::TTL_SECONDS);
+        $cached->setExpiresAt(time() + 3600);
+        $this->mapper->method('findByHash')->willReturn($cached);
+
+        // It expires on its own; no remote delete needed.
+        $this->claudeService->expects($this->never())->method('deleteFile');
+        $this->mapper->expects($this->once())->method('delete')->with($cached);
+        $this->claudeService->expects($this->once())->method('uploadFile')
+            ->willReturn(['id' => 'file_new', 'expiresAt' => null]);
+        $this->mapper->expects($this->once())->method('insert')->willReturnArgument(0);
+
+        $this->assertSame('file_new', $this->service->getOrUploadFileId('bytes', 'x.pdf', 'application/pdf', 'alice'));
+    }
+
+    public function testOldUploadWithoutExpiryIsDeletedRemotelyWhenReplaced(): void {
+        $this->claudeService = $this->createMock(ClaudeSDKService::class);
+        $this->mapper = $this->createMock(FileUploadMapper::class);
+        $this->buildService();
+
+        $cached = new FileUpload();
+        $cached->setAnthropicFileId('file_legacy');
+        $cached->setUploadedAt(time() - FilesService::TTL_SECONDS);
+        $this->mapper->method('findByHash')->willReturn($cached);
+
+        $this->claudeService->expects($this->once())->method('deleteFile')->with('file_legacy', 'alice');
+        $this->mapper->expects($this->once())->method('delete')->with($cached);
+        $this->claudeService->method('uploadFile')->willReturn(['id' => 'file_new', 'expiresAt' => null]);
+        $this->mapper->method('insert')->willReturnArgument(0);
+
+        $this->assertSame('file_new', $this->service->getOrUploadFileId('bytes', 'x.pdf', 'application/pdf', 'alice'));
     }
 
     public function testReturnsNullAndLogsOnUploadFailure(): void {
@@ -136,7 +188,7 @@ class FilesServiceTest extends TestCase {
         $this->buildService();
 
         $this->mapper->method('findByHash')->willReturn(null);
-        $this->claudeService->method('uploadFile')->willReturn('file_raced_999');
+        $this->claudeService->method('uploadFile')->willReturn(['id' => 'file_raced_999', 'expiresAt' => null]);
         $this->mapper->method('insert')->willThrowException(new \RuntimeException('UNIQUE constraint'));
         $this->logger->expects($this->once())->method('debug');
 
