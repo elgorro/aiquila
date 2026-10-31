@@ -73,11 +73,12 @@ php occ aiquila:configure --model claude-sonnet-4-6
 
 ## What You Get
 
-AIquila provides three main features:
+AIquila provides four main features:
 
 1. **Chat Interface**: Interactive chat with your AI provider at `/apps/aiquila`
 2. **TaskProcessing Provider**: Native integration with the Nextcloud Assistant
-3. **Public API**: RESTful endpoints for other apps to use AIquila
+3. **Cowork**: Scheduled, repeating AI jobs over your files
+4. **Public API**: RESTful endpoints for other apps to use AIquila
 
 ## Installation
 
@@ -420,7 +421,51 @@ upstream response, so the full text is not shown there. It stays in the task's
 `errorMessage`, the Nextcloud log and the failure notification. An error that fits
 none of these kinds gets no user-facing reason.
 
-### 3. Public API
+### 3. Cowork: scheduled jobs
+
+A **coworker** is an AI job that runs on a schedule, for example "every night at
+03:00, summarize the new documents in `Reports`". Open AIquila and choose **Cowork**
+in the sidebar. Start from a template under **Add a coworker**, or build a
+**Custom coworker**. Each coworker has:
+
+- a **task**: what it does (see below);
+- a **source folder** it works on, and optionally an output folder;
+- a **schedule** in five-field cron syntax (`minute hour day-of-month month
+  day-of-week`): `0 3 * * *` is every day at 03:00, `0 8 * * 1` every Monday at
+  08:00, `*/30 * * * *` every half hour. Schedules are evaluated in **UTC**;
+- a **provider and model**, and optionally effort and thinking. Otherwise the
+  background-task defaults apply (see [Thinking and effort](#thinking-and-effort)).
+
+| Task | What it does | Options |
+|---|---|---|
+| `vision:classify` | Labels each image and stores the labels as collaborative tags, so they can be searched and filtered in Files | `maxTags` (1–30, default 8), `recursive` |
+| `docs:summarize` | Writes `<name>.summary.md` beside each text document (`text/*` and JSON by default; PDFs are not read) | `recursive`, `force`, `outputFolder`, `mimeTypes`, `maxBytesPerFile` (default 1 MiB) |
+| `docs:translate` | Writes `<name>.<language>.md` beside each document | `targetLanguage`, plus the options of `docs:summarize` |
+
+The document tasks only redo a file when it changed since its result was written,
+unless `force` is set, and never process their own output. A run handles up to 200
+documents; the rest wait for the next run. `vision:classify` needs a `vision` provider.
+
+Each coworker can be paused, run immediately with **Run now**, and keeps a run
+history with a summary of what it did. The **Coworkers** and **Coworker output**
+Dashboard widgets show the latest results, and the [MCP cowork tools](../mcp/tools/apps/cowork.md)
+manage coworkers from Claude.
+
+How it runs:
+
+- Coworkers run from Nextcloud's background jobs, so **cron must be running**
+  (Settings → Administration → Basic settings → Background jobs → Cron). A due
+  coworker starts on the first cron run after its scheduled time, so with the usual
+  5-minute cron interval it can start up to five minutes late.
+- On the Claude API, the document tasks submit their work through Anthropic's
+  [Message Batches API](../dev/batch-processing.md) at half the price. The run then
+  stays *pending* until the batch finishes, which is usually minutes and at most 24
+  hours. Other providers process the files one by one within the run, at the normal
+  price.
+- Other apps can register coworkers and their own task types through the
+  [Cowork management API](../cowork-api.md).
+
+### 4. Public API
 
 Other Nextcloud apps can programmatically use AIquila:
 
