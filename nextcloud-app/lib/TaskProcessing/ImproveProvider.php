@@ -91,7 +91,7 @@ class ImproveProvider implements ISynchronousProvider {
         $instructions = $input['instructions'] ?? '';
 
         if (!is_string($text) || $text === '') {
-            throw new \RuntimeException('No input text provided');
+            throw TaskFailure::userFacing('No input text provided');
         }
         if (!is_string($instructions) || trim($instructions) === '') {
             $instructions = self::DEFAULT_INSTRUCTIONS;
@@ -108,7 +108,7 @@ class ImproveProvider implements ISynchronousProvider {
         );
 
         if (isset($result['error'])) {
-            throw new \RuntimeException($result['error']);
+            throw TaskFailure::fromProviderError($result['error']);
         }
 
         return ['output' => $result['response'] ?? ''];

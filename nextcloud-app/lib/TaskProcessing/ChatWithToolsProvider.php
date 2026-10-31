@@ -95,7 +95,7 @@ class ChatWithToolsProvider implements ISynchronousProvider {
         $toolMessage = is_string($toolMessage) ? $toolMessage : '';
 
         if ($message === '' && $toolMessage === '') {
-            throw new \RuntimeException('No chat message provided');
+            throw TaskFailure::userFacing('No chat message provided');
         }
 
         $system = $input['system_prompt'] ?? '';
@@ -113,7 +113,7 @@ class ChatWithToolsProvider implements ISynchronousProvider {
         }
 
         if ($messages === []) {
-            throw new \RuntimeException('No chat message provided');
+            throw TaskFailure::userFacing('No chat message provided');
         }
 
         $reportProgress(0.1);
@@ -127,7 +127,7 @@ class ChatWithToolsProvider implements ISynchronousProvider {
         );
 
         if (isset($result['error'])) {
-            throw new \RuntimeException($result['error']);
+            throw TaskFailure::fromProviderError($result['error']);
         }
 
         return [
@@ -152,7 +152,7 @@ class ChatWithToolsProvider implements ISynchronousProvider {
 
         $decoded = json_decode($tools, true);
         if (!is_array($decoded)) {
-            throw new \RuntimeException('The "tools" input is not valid JSON');
+            throw TaskFailure::userFacing('The "tools" input is not valid JSON');
         }
 
         $out = [];

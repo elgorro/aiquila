@@ -94,7 +94,7 @@ class AudioToAudioChatProvider implements ISynchronousProvider {
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $file = $input['input'] ?? null;
         if (!$file instanceof File) {
-            throw new \RuntimeException('No audio file provided');
+            throw TaskFailure::userFacing('No audio file provided');
         }
 
         $provider = $this->providers->resolveVoiceChatCapable($userId, $this->providers->requestedId($input));
@@ -114,11 +114,11 @@ class AudioToAudioChatProvider implements ISynchronousProvider {
             LLMProviderInterface::TASK_OPTIONS,
         );
         if (isset($answered['error'])) {
-            throw new \RuntimeException($answered['error']);
+            throw TaskFailure::fromProviderError($answered['error']);
         }
         $answer = $answered['response'] ?? '';
         if (trim($answer) === '') {
-            throw new \RuntimeException('The provider returned an empty reply.');
+            throw TaskFailure::userFacing('The provider returned an empty reply.');
         }
         $reportProgress(0.7);
 

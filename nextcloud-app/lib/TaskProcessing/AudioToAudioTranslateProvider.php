@@ -92,11 +92,11 @@ class AudioToAudioTranslateProvider implements ISynchronousProvider {
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $file = $input['input'] ?? null;
         if (!$file instanceof File) {
-            throw new \RuntimeException('No audio file provided');
+            throw TaskFailure::userFacing('No audio file provided');
         }
         $target = $input['target_language'] ?? '';
         if (!is_string($target) || $target === '') {
-            throw new \RuntimeException('No target language provided');
+            throw TaskFailure::userFacing('No target language provided');
         }
         $origin = Translation::origin($input['origin_language'] ?? '');
 
@@ -109,7 +109,7 @@ class AudioToAudioTranslateProvider implements ISynchronousProvider {
 
         $translated = $this->translation->translate($provider, $transcript, $origin, $target, $userId);
         if (trim($translated) === '') {
-            throw new \RuntimeException('The provider returned an empty translation.');
+            throw TaskFailure::userFacing('The provider returned an empty translation.');
         }
         $reportProgress(0.7);
 

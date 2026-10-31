@@ -73,7 +73,7 @@ class SummaryProvider implements ISynchronousProvider {
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $text = $input['input'] ?? '';
         if (!is_string($text) || $text === '') {
-            throw new \RuntimeException('No input text provided');
+            throw TaskFailure::userFacing('No input text provided');
         }
 
         $provider = $this->providers->resolve($userId);
@@ -90,7 +90,7 @@ class SummaryProvider implements ISynchronousProvider {
         }
 
         if (isset($result['error'])) {
-            throw new \RuntimeException($result['error']);
+            throw TaskFailure::fromProviderError($result['error']);
         }
 
         return ['output' => $result['response'] ?? ''];

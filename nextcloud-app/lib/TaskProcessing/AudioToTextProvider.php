@@ -93,7 +93,7 @@ class AudioToTextProvider implements ISynchronousProvider {
         // the raw bytes never travel through the task input.
         $file = $input['input'] ?? null;
         if (!$file instanceof File) {
-            throw new \RuntimeException('No audio file provided');
+            throw TaskFailure::userFacing('No audio file provided');
         }
 
         $provider = $this->providers->resolveAudioCapable($userId, $this->providers->requestedId($input));

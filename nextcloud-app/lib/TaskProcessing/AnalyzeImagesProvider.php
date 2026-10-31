@@ -97,11 +97,11 @@ class AnalyzeImagesProvider implements ISynchronousProvider {
         // calling us — the raw bytes never travel through the task input.
         $imageList = $input['images'] ?? [];
         if (!is_array($imageList) || $imageList === []) {
-            throw new \RuntimeException('No images provided');
+            throw TaskFailure::userFacing('No images provided');
         }
 
         if (count($imageList) > ImageOptimizer::MAX_IMAGES) {
-            throw new \RuntimeException('Too many images. Maximum is ' . ImageOptimizer::MAX_IMAGES);
+            throw TaskFailure::userFacing('Too many images. Maximum is ' . ImageOptimizer::MAX_IMAGES);
         }
 
         $provider = $this->providers->resolveVisionCapable($userId, $this->providers->requestedId($input));
@@ -116,7 +116,7 @@ class AnalyzeImagesProvider implements ISynchronousProvider {
         $total = count($imageList);
         foreach (array_values($imageList) as $i => $file) {
             if (!$file instanceof File) {
-                throw new \RuntimeException('Image ' . ($i + 1) . ' is not a file');
+                throw TaskFailure::userFacing('Image ' . ($i + 1) . ' is not a file');
             }
 
             $images[] = $this->imageOptimizer->prepare($file->getContent(), $file->getMimetype());
@@ -146,7 +146,7 @@ class AnalyzeImagesProvider implements ISynchronousProvider {
 
         if (isset($result['error'])) {
             $this->logger->error('AIquila AnalyzeImages: Error', ['error' => $result['error'], 'provider' => $provider->getId()]);
-            throw new \RuntimeException($result['error']);
+            throw TaskFailure::fromProviderError($result['error']);
         }
 
         return ['output' => $result['response'] ?? ''];

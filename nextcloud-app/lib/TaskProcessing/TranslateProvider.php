@@ -77,10 +77,10 @@ class TranslateProvider implements ISynchronousProvider {
         $targetLanguage = $input['target_language'] ?? '';
 
         if (!is_string($text) || $text === '') {
-            throw new \RuntimeException('No input text provided');
+            throw TaskFailure::userFacing('No input text provided');
         }
         if (!is_string($targetLanguage) || $targetLanguage === '') {
-            throw new \RuntimeException('No target language provided');
+            throw TaskFailure::userFacing('No target language provided');
         }
 
         $reportProgress(0.1);
