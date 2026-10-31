@@ -142,8 +142,8 @@ export const circlesListTool = {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch one circle. The circles app ships GET /circles/{circleId} without
- * #[NoAdminRequired] on its stable branches, so Nextcloud answers 403 to every
+ * Fetch one circle. Before circles 35 (Nextcloud 35), GET /circles/{circleId}
+ * lacks #[NoAdminRequired], so Nextcloud 33 and 34 answer 403 to every
  * non-admin, the circle's owner included. GET /circles is open to members and
  * serialises the same Circle, so a 403 falls back to finding it there.
  */
