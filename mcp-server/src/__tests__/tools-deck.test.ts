@@ -70,6 +70,8 @@ describe('Deck Tools', () => {
       expect(result.content[0].text).toContain('Project Board');
       expect(result.content[0].text).toContain('Boards (1)');
       expect(result.content[0].text).toContain('1 labels');
+      // Deck leaves labels empty on GET /boards unless details=true is passed.
+      expect(mockFetchDeckAPI).toHaveBeenCalledWith('/boards?details=true');
     });
 
     it('should handle empty boards', async () => {
