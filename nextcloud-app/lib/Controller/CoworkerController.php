@@ -19,7 +19,7 @@ use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\IRequest;
 use Psr\Log\LoggerInterface;
 
@@ -39,7 +39,7 @@ class CoworkerController extends Controller {
         IRequest $request,
         private readonly CoworkerService $service,
         private readonly CoworkerTaskRegistry $registry,
-        private readonly IConfig $config,
+        private readonly AppSettings $config,
         private readonly ?string $userId,
         private readonly LoggerInterface $logger,
     ) {

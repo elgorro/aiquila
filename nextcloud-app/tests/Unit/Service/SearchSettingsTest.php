@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\Tests\Unit\Service;
 
 use OCA\AIquila\Service\SearchSettings;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -21,7 +21,7 @@ class SearchSettingsTest extends TestCase {
 
     #[DataProvider('storedValues')]
     public function testIsEnabled(?string $stored, bool $expected): void {
-        $config = $this->createMock(IConfig::class);
+        $config = $this->createMock(AppSettings::class);
         $config->expects($this->once())
             ->method('getAppValue')
             ->with('aiquila', 'search_enabled', SearchSettings::DEFAULT)
@@ -31,14 +31,14 @@ class SearchSettingsTest extends TestCase {
     }
 
     public function testSetEnabledWritesOne(): void {
-        $config = $this->createMock(IConfig::class);
+        $config = $this->createMock(AppSettings::class);
         $config->expects($this->once())->method('setAppValue')->with('aiquila', 'search_enabled', '1');
 
         (new SearchSettings($config))->setEnabled(true);
     }
 
     public function testSetEnabledWritesZero(): void {
-        $config = $this->createMock(IConfig::class);
+        $config = $this->createMock(AppSettings::class);
         $config->expects($this->once())->method('setAppValue')->with('aiquila', 'search_enabled', '0');
 
         (new SearchSettings($config))->setEnabled(false);

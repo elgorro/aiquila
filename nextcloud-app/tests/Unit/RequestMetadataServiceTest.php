@@ -4,7 +4,7 @@ namespace OCA\AIquila\Tests\Unit;
 
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\RequestMetadataService;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\Security\ISecureRandom;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -12,7 +12,7 @@ use Psr\Log\LoggerInterface;
 class RequestMetadataServiceTest extends TestCase {
     private const SALT = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
 
-    private IConfig $config;
+    private AppSettings $config;
     private CredentialService $credentials;
     private ISecureRandom $random;
     private LoggerInterface $logger;
@@ -21,7 +21,7 @@ class RequestMetadataServiceTest extends TestCase {
     private array $secrets = [];
 
     protected function setUp(): void {
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->logger = $this->createStub(LoggerInterface::class);
 
         $this->credentials = $this->createStub(CredentialService::class);

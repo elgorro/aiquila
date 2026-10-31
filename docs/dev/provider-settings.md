@@ -16,6 +16,7 @@ Anthropic's — wrong for four of the five providers.
 | `LLMProviderInterface::getCapabilities()` | What it supports; drives capability chips and provider-aware validation |
 | `ProviderSettingsSchema` | Field factories and the scope/type constants |
 | `ProviderSettingsService` | Reads and writes fields from their descriptors; caches model lists |
+| `AppSettings` | App and user settings on `IAppConfig` / `IUserConfig`; every value is read and written as a string |
 | `ProviderSettingsController` | `GET|POST /api/providers[/{id}]` and the `/api/admin/…` twins |
 | `src/components/settings/SchemaField.vue` | One renderer for every field type |
 | `src/components/settings/ProviderCard.vue` | One card per provider, in either scope |
@@ -77,7 +78,9 @@ Where it is stored depends on one more key:
   away from the API keys so a secret name cannot collide with a provider id, and
   `SCOPE_ADMIN` by construction. Submitting an empty value clears it.
 
-Either way the value never reaches `IConfig`.
+Either way the value never reaches the app or user config. The plaintext
+`api_key` settings early releases stored are moved into `CredentialService` by
+the `RepairMovePlaintextApiKeys` repair step on upgrade.
 
 ## Fields no provider declares
 
@@ -89,7 +92,7 @@ provider gets them automatically and cannot forget them.
 
 They carry `storage => 'access'` instead of a config key: `describe()` fills
 their value from `ProviderAccessService::getLists()` and `writeAdmin()` routes
-them to `setLists()` rather than `IConfig`. Being `SCOPE_ADMIN`, they are
+them to `setLists()` rather than to the app config. Being `SCOPE_ADMIN`, they are
 filtered off the personal page by the ordinary scope rules.
 
 ## Buttons instead of values
@@ -144,8 +147,8 @@ provider that forgets to declare one fails closed rather than open. The same
 goes for anything a URL is built from — a cloud region, project or resource name
 is an endpoint in all but spelling.
 
-API keys are marked `sensitive`. They live in `CredentialService`, never in
-`IConfig`, and their values are never returned to the client — the API reports
+API keys are marked `sensitive`. They live in `CredentialService`, never in the
+app or user config, and their values are never returned to the client — the API reports
 only whether a key exists in the requested scope, which is how the personal page
 distinguishes your own key from an inherited instance one.
 

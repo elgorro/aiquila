@@ -9,7 +9,7 @@ use OCA\AIquila\Http\SseStreaming;
 use OCA\AIquila\Service\CredentialService;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -44,7 +44,7 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
 
     public function __construct(
         protected readonly IClientService $clientService,
-        protected readonly IConfig $config,
+        protected readonly AppSettings $config,
         protected readonly CredentialService $credentials,
         protected readonly LoggerInterface $logger,
     ) {

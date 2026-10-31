@@ -6,7 +6,6 @@ declare(strict_types=1);
 namespace OCA\AIquila\Service;
 
 use OCA\AIquila\AppInfo\Application;
-use OCP\IConfig;
 
 /**
  * Which OCC invocations `POST /api/occ` may run.
@@ -46,7 +45,7 @@ class OccAllowlist {
     ];
 
     public function __construct(
-        private readonly IConfig $config,
+        private readonly AppSettings $config,
     ) {
     }
 

@@ -6,7 +6,6 @@ declare(strict_types=1);
 namespace OCA\AIquila\Service;
 
 use OCA\AIquila\Db\McpServerMapper;
-use OCP\IConfig;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -20,13 +19,13 @@ class NativeMcpService {
 
     private McpServerMapper $mapper;
     private CredentialService $credentials;
-    private IConfig $config;
+    private AppSettings $config;
     private HttpClientInterface $httpClient;
 
     public function __construct(
         McpServerMapper $mapper,
         CredentialService $credentials,
-        IConfig $config,
+        AppSettings $config,
     ) {
         $this->mapper = $mapper;
         $this->credentials = $credentials;

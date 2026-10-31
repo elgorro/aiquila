@@ -11,7 +11,7 @@ use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICache;
 use OCP\ICacheFactory;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -65,14 +65,14 @@ class AutoStreamTestableService extends ClaudeSDKService {
 }
 
 class ClaudeSDKServiceAutoStreamTest extends TestCase {
-    private IConfig $config;
+    private AppSettings $config;
     private LoggerInterface $logger;
     private CredentialService $credentials;
     private ICacheFactory $cacheFactory;
     private RequestMetadataService $requestMetadata;
 
     protected function setUp(): void {
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->logger = $this->createStub(LoggerInterface::class);
         $this->credentials = $this->createStub(CredentialService::class);
         $this->credentials->method('getApiKey')->willReturn('test-key');
@@ -162,7 +162,7 @@ class ClaudeSDKServiceAutoStreamTest extends TestCase {
     }
 
     public function testSmallMaxTokensKeepsNonStreamingTransport(): void {
-        $config = $this->createStub(IConfig::class);
+        $config = $this->createStub(AppSettings::class);
         $config->method('getUserValue')->willReturn('');
         $config->method('getAppValue')
             ->willReturnCallback(fn($app, $key, $default) => match ($key) {

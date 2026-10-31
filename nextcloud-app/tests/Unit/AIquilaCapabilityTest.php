@@ -9,7 +9,7 @@ use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\SearchSettings;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\TaskTypes\AudioToText;
 use OCP\TaskProcessing\TaskTypes\TextToText;
@@ -18,13 +18,13 @@ use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 
 class AIquilaCapabilityTest extends TestCase {
-    private IConfig $config;
+    private AppSettings $config;
     private CredentialService $credentialService;
     private IAppManager $appManager;
     private AIquilaCapability $capability;
 
     protected function setUp(): void {
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->credentialService = $this->createStub(CredentialService::class);
         $this->appManager = $this->createStub(IAppManager::class);
 

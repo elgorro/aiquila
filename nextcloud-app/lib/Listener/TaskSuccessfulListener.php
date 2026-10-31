@@ -7,7 +7,7 @@ namespace OCA\AIquila\Listener;
 
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\TaskProcessing\Events\TaskSuccessfulEvent;
 use OCP\TaskProcessing\IManager as ITaskProcessingManager;
@@ -23,7 +23,7 @@ class TaskSuccessfulListener implements IEventListener {
     public function __construct(
         private INotificationManager $notificationManager,
         private ITaskProcessingManager $taskProcessingManager,
-        private IConfig $config,
+        private AppSettings $config,
         private LoggerInterface $logger,
     ) {
     }
