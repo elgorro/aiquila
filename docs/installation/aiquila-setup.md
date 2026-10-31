@@ -357,6 +357,7 @@ two serves the editor.
 | `core:text2text` | Free-form prompt |
 | `core:text2text:chat` | Multi-turn chat, with history and a system prompt |
 | `core:text2text:chatwithtools` | Multi-turn chat where the caller supplies the tools and runs them |
+| `core:text2text:multimodal-chatwithtools` | The same, with images, PDFs and text files attached to the message; returns no files (Nextcloud 35+) |
 | `core:text2text:summary` | Summarize |
 | `core:text2text:headline` | Suggest a headline |
 | `core:text2text:topics` | Extract topics |
@@ -388,10 +389,11 @@ matching capability, shown as a chip on the provider's card in the AIquila setti
 
 | Action | Needs | Providers that offer it |
 |---|---|---|
-| Image questions and OCR | `vision` | Claude, Mistral, Hetzner (model-dependent), Local (admin flag) |
+| Image questions and OCR, images attached to a tool chat | `vision` | Claude, Mistral, Hetzner (model-dependent), Local (admin flag) |
 | Transcription, subtitles, voice chat, audio translation | `transcription` | Mistral, Local (admin flag) |
 | Generated speech, voice chat, audio translation | `speech` | Mistral, Local (admin flag) |
 | Generated images | `image generation` | Mistral |
+| PDFs attached to a tool chat | `documents` | Claude |
 
 Picking a provider without the capability an action needs is an error rather than a
 silent hand-off to a different one — the point of choosing a provider is that the data
