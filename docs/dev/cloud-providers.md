@@ -61,6 +61,11 @@ thinking defaults.
 1. Fill in the endpoint fields:
    - **AWS** — the region, e.g. `us-east-1`. On `claude_aws` also the
      `wrkspc_…` workspace ID, whose region must match.
+     The hosts take the region's partition suffix: `amazonaws.com` and
+     `api.aws` commercially and in GovCloud, `amazonaws.com.cn` and
+     `api.amazonwebservices.com.cn` in China, `amazonaws.eu` and
+     `api.amazonwebservices.eu` in the European Sovereign Cloud
+     (`eusc-de-east-1`). `claude_aws` is offered in the commercial regions only.
    - **Google Cloud** — the project ID and location. Use `global` unless you
      need a multi-region (`us`, `eu`) or regional (`us-east5`) Vertex endpoint.
      On `claude_gcp` also the workspace ID; leave the location at `global`.
