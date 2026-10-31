@@ -73,11 +73,12 @@ php occ aiquila:configure --model claude-sonnet-4-6
 
 ## What You Get
 
-AIquila provides three main features:
+AIquila provides four main features:
 
 1. **Chat Interface**: Interactive chat with your AI provider at `/apps/aiquila`
 2. **TaskProcessing Provider**: Native integration with the Nextcloud Assistant
-3. **Public API**: RESTful endpoints for other apps to use AIquila
+3. **Flow operation**: Process files automatically when a Flow rule matches
+4. **Public API**: RESTful endpoints for other apps to use AIquila
 
 ## Installation
 
@@ -420,7 +421,35 @@ upstream response, so the full text is not shown there. It stays in the task's
 `errorMessage`, the Nextcloud log and the failure notification. An error that fits
 none of these kinds gets no user-facing reason.
 
-### 3. Public API
+### 3. Flow: process files automatically
+
+With Nextcloud's **Flow** app (`workflowengine`, shipped with the server), AIquila
+adds the operation **Process with AIquila** under **Settings → Personal → Flow**
+(your own files) and **Settings → Administration → Flow** (everyone's). Combine it
+with any file trigger and conditions, for example *File created* with
+*File name matches* `/\.pdf$/` and *File is in folder* `Invoices`, or with
+*Tag assigned*.
+
+| Action | What it does |
+|---|---|
+| **Summarize text and PDFs, describe images** (default) | Picks summarize or describe by file type |
+| **Summarize** | A one-sentence overview, then the key points |
+| **Describe** | What the file shows, including any visible text |
+| **Ask a question** | Runs your own prompt (up to 4000 characters) against the file |
+
+The answer is saved as `<file name>.aiquila.md` in the same folder, replacing the
+previous one, with the prompt quoted for **Ask a question**. These result files never
+trigger the operation themselves.
+
+The work runs in a background job, so cron has to be running, and results arrive
+on the next cron run rather than during the upload. The file is processed as its
+owner, on the provider that owner has selected and within the admin's access rules.
+Text files (`text/*`, JSON, XML, YAML) work everywhere. Images need a `vision`
+provider and PDFs a `documents` provider (see the capability table above). For
+other types, an incapable provider, or a folder the owner cannot write to, nothing
+is written and the reason is logged.
+
+### 4. Public API
 
 Other Nextcloud apps can programmatically use AIquila:
 
