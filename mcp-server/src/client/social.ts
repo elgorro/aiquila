@@ -7,14 +7,21 @@ import { ApiError } from './aiquila.js';
 /**
  * Nextcloud Social — Mastodon client API.
  *
- * Pinned against Nextcloud Social v0.24.1. The app is pre-1.0 and its API is
- * still moving; re-check the routes before bumping the pinned version.
+ * Pinned against Social v0.24.1, the latest release, and checked against
+ * AlohaSocial/social `main` (0.26.280). The app is pre-1.0 and its API is still
+ * moving; re-check the routes before bumping the pinned version.
+ *
+ * Every status and notification id is a stream nid — the published second
+ * times 10^9 plus a random suffix — so it is far past
+ * `Number.MAX_SAFE_INTEGER`. Social sends them as decimal strings, and they
+ * have to stay strings on the way back in: a JSON number would round to a
+ * different post.
  *
  * Social registers every API route as a `FrontpageRoute`, so the Mastodon
  * paths are served under `/index.php/apps/social/` rather than at the domain
- * root — which is why third-party Mastodon clients cannot reach it yet.
- * Upstream intends to move them, so SOCIAL_API_BASE below is the single place
- * that has to change when they do.
+ * root; third-party Mastodon clients reach them through root `/api` and
+ * `/oauth` proxy rules. These tools use the app path directly, and
+ * SOCIAL_API_BASE below is the single place that has to change if it moves.
  *
  * Authentication is Basic auth with a Nextcloud app password, not an OAuth
  * bearer token. Social resolves the caller from the bearer token *or* from the
@@ -73,9 +80,10 @@ export interface SocialPoll {
 
 /** Mastodon Status entity, as Social exports it (`Stream::exportAsLocal()`). */
 export interface SocialStatus {
+  /** The nid as a decimal string; the one every `{nid}` route takes. */
   id: string;
-  /** Social's own numeric id; the one every `{nid}` route takes. */
-  nid: number;
+  /** The same nid, also a decimal string (`0` for a status that has none). */
+  nid: string | 0;
   uri: string;
   url: string;
   created_at: string;
@@ -154,12 +162,57 @@ export interface SocialList {
  */
 export async function fetchSocialAPI<T = unknown>(
   endpoint: string,
-  options: {
-    method?: string;
-    body?: unknown;
-    queryParams?: Record<string, string | number | boolean | undefined>;
-  } = {}
+  options: SocialRequestOptions = {}
 ): Promise<T> {
+  return (await request<T>(endpoint, options)).data;
+}
+
+/** One page of a paged list, with the cursor for the next (older) page. */
+export interface SocialPage<T> {
+  items: T[];
+  /** The `max_id` that reads the next page, or undefined on the last one. */
+  next?: string;
+}
+
+/**
+ * Read one page of a paged list. Social pages with a `Link` header, as
+ * Mastodon does, and its cursor is not always a status id — favourites and
+ * bookmarks are cut on the id of the mark, follower lists on the follow — so
+ * the next page has to be read from the header rather than from the items.
+ */
+export async function fetchSocialAPIPage<T = unknown>(
+  endpoint: string,
+  options: SocialRequestOptions = {}
+): Promise<SocialPage<T>> {
+  const { data, headers } = await request<T[]>(endpoint, options);
+  return { items: data ?? [], next: nextMaxId(headers.get('link')) };
+}
+
+/** The `max_id` of the `rel="next"` entry of a Link header (RFC 8288). */
+export function nextMaxId(link: string | null): string | undefined {
+  if (!link) return undefined;
+  for (const part of link.split(',')) {
+    const match = part.match(/<([^>]*)>\s*;(.*)/);
+    if (!match || !/\brel="?next"?/.test(match[2])) continue;
+    try {
+      return new URL(match[1], 'http://localhost').searchParams.get('max_id') ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+interface SocialRequestOptions {
+  method?: string;
+  body?: unknown;
+  queryParams?: Record<string, string | number | boolean | undefined>;
+}
+
+async function request<T>(
+  endpoint: string,
+  options: SocialRequestOptions
+): Promise<{ data: T; headers: Headers }> {
   const config = getNextcloudConfig();
   const auth = basicAuth(config);
 
@@ -196,8 +249,8 @@ export async function fetchSocialAPI<T = unknown>(
   }
 
   if (response.headers.get('content-type')?.includes('application/json')) {
-    return (await response.json()) as T;
+    return { data: (await response.json()) as T, headers: response.headers };
   }
 
-  return undefined as T;
+  return { data: undefined as T, headers: response.headers };
 }

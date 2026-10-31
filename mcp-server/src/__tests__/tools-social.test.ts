@@ -5,10 +5,19 @@ import { ApiError } from '../client/aiquila.js';
 
 // Mock the Social API client module
 const mockFetchSocialAPI = vi.fn();
+/** The `max_id` the next page's Link header would carry. */
+const mockNextCursor = vi.fn<() => string | undefined>();
 
 vi.mock('../client/social.js', () => ({
   fetchSocialAPI: (...args: unknown[]) => mockFetchSocialAPI(...args),
+  fetchSocialAPIPage: async (...args: unknown[]) => ({
+    items: (await mockFetchSocialAPI(...args)) ?? [],
+    next: mockNextCursor(),
+  }),
 }));
+
+/** A real stream nid: the published second times 10^9 plus a random suffix. */
+const BIG_NID = '1789123456123456789';
 
 const sampleAccount = {
   id: '12',
@@ -29,7 +38,7 @@ const sampleAccount = {
 
 const sampleStatus = {
   id: '99',
-  nid: 99,
+  nid: '99',
   uri: 'https://cloud.example.com/index.php/apps/social/@alice/99',
   url: 'https://cloud.example.com/index.php/apps/social/@alice/99',
   created_at: '2026-09-18T10:00:00.000Z',
@@ -63,6 +72,7 @@ async function tool(name: string) {
 describe('Social Tools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNextCursor.mockReturnValue(undefined);
     process.env.NEXTCLOUD_URL = 'https://cloud.example.com';
     process.env.NEXTCLOUD_USER = 'testuser';
     process.env.NEXTCLOUD_PASSWORD = 'testpass';
@@ -94,6 +104,23 @@ describe('Social Tools', () => {
         '/api/v1/timelines/home/',
         expect.objectContaining({ queryParams: expect.objectContaining({ limit: 50 }) })
       );
+    });
+
+    it('hands back the Link header cursor for the next page', async () => {
+      mockFetchSocialAPI.mockResolvedValue([sampleStatus]);
+      mockNextCursor.mockReturnValue(BIG_NID);
+
+      const result = await (await tool('social_home_timeline')).handler({});
+
+      expect(result.content[0].text).toContain(`pass max_id: "${BIG_NID}"`);
+    });
+
+    it('says nothing about more on the last page', async () => {
+      mockFetchSocialAPI.mockResolvedValue([sampleStatus]);
+
+      const result = await (await tool('social_home_timeline')).handler({});
+
+      expect(result.content[0].text).not.toContain('max_id');
     });
 
     it('reports an empty timeline', async () => {
@@ -198,7 +225,7 @@ describe('Social Tools', () => {
     it('reads one status without the thread by default', async () => {
       mockFetchSocialAPI.mockResolvedValue(sampleStatus);
 
-      const result = await (await tool('social_get_status')).handler({ status_id: 99 });
+      const result = await (await tool('social_get_status')).handler({ status_id: '99' });
 
       expect(mockFetchSocialAPI).toHaveBeenCalledTimes(1);
       expect(mockFetchSocialAPI).toHaveBeenCalledWith('/api/v1/statuses/99');
@@ -214,7 +241,7 @@ describe('Social Tools', () => {
       const result = await (
         await tool('social_get_status')
       ).handler({
-        status_id: 99,
+        status_id: '99',
         include_context: true,
       });
 
@@ -225,10 +252,27 @@ describe('Social Tools', () => {
       expect(result.content[0].text).toContain('the answer');
     });
 
+    it('keeps a nid past the safe-integer range intact in the path', async () => {
+      mockFetchSocialAPI.mockResolvedValue({ ...sampleStatus, id: BIG_NID });
+
+      const result = await (await tool('social_get_status')).handler({ status_id: BIG_NID });
+
+      expect(mockFetchSocialAPI).toHaveBeenCalledWith(`/api/v1/statuses/${BIG_NID}`);
+      expect(result.content[0].text).toContain(`ID: ${BIG_NID}`);
+    });
+
+    it('takes ids as strings, since a JSON number would already be rounded', async () => {
+      const schema = (await tool('social_get_status')).inputSchema;
+
+      expect(schema.safeParse({ status_id: BIG_NID }).success).toBe(true);
+      expect(schema.safeParse({ status_id: Number(BIG_NID) }).success).toBe(false);
+      expect(schema.safeParse({ status_id: '12abc' }).success).toBe(false);
+    });
+
     it('maps a 404 to a plain sentence', async () => {
       mockFetchSocialAPI.mockRejectedValue(new ApiError(404, 'Not Found', ''));
 
-      const result = await (await tool('social_get_status')).handler({ status_id: 1 });
+      const result = await (await tool('social_get_status')).handler({ status_id: '1' });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('No such status');
@@ -242,7 +286,7 @@ describe('Social Tools', () => {
         { created_at: '2026-09-18T11:00:00.000Z', content: '<p>second</p>' },
       ]);
 
-      const result = await (await tool('social_status_history')).handler({ status_id: 99 });
+      const result = await (await tool('social_status_history')).handler({ status_id: '99' });
 
       expect(mockFetchSocialAPI).toHaveBeenCalledWith('/api/v1/statuses/99/history');
       expect(result.content[0].text).toContain('Edit history (2)');
@@ -252,7 +296,7 @@ describe('Social Tools', () => {
     it('says so when the post was never edited', async () => {
       mockFetchSocialAPI.mockResolvedValue([]);
 
-      const result = await (await tool('social_status_history')).handler({ status_id: 99 });
+      const result = await (await tool('social_status_history')).handler({ status_id: '99' });
 
       expect(result.content[0].text).toContain('never been edited');
     });
@@ -294,14 +338,25 @@ describe('Social Tools', () => {
   });
 
   describe('social_post_status', () => {
-    it('defaults to public visibility', async () => {
+    it('leaves visibility to the account default when none is given', async () => {
       mockFetchSocialAPI.mockResolvedValue(sampleStatus);
 
       await (await tool('social_post_status')).handler({ status: 'Hello' });
 
       expect(mockFetchSocialAPI).toHaveBeenCalledWith('/api/v1/statuses', {
         method: 'POST',
-        body: { status: 'Hello', visibility: 'public' },
+        body: { status: 'Hello' },
+      });
+    });
+
+    it('replies to a status whose id is past the safe-integer range', async () => {
+      mockFetchSocialAPI.mockResolvedValue(sampleStatus);
+
+      await (await tool('social_post_status')).handler({ status: 'Hi', in_reply_to_id: BIG_NID });
+
+      expect(mockFetchSocialAPI).toHaveBeenCalledWith('/api/v1/statuses', {
+        method: 'POST',
+        body: { status: 'Hi', in_reply_to_id: BIG_NID },
       });
     });
 
@@ -316,7 +371,7 @@ describe('Social Tools', () => {
         spoiler_text: 'politics',
         sensitive: true,
         media_ids: ['77'],
-        in_reply_to_id: 98,
+        in_reply_to_id: '98',
         language: 'en',
         poll: { options: ['yes', 'no'], expires_in: 86400, multiple: false },
       });
@@ -326,7 +381,7 @@ describe('Social Tools', () => {
         body: {
           status: 'Vote please',
           visibility: 'unlisted',
-          in_reply_to_id: 98,
+          in_reply_to_id: '98',
           media_ids: ['77'],
           poll: { options: ['yes', 'no'], expires_in: 86400, multiple: false },
           spoiler_text: 'politics',
@@ -348,7 +403,7 @@ describe('Social Tools', () => {
     it('deletes by id', async () => {
       mockFetchSocialAPI.mockResolvedValue(undefined);
 
-      const result = await (await tool('social_delete_status')).handler({ status_id: 99 });
+      const result = await (await tool('social_delete_status')).handler({ status_id: '99' });
 
       expect(mockFetchSocialAPI).toHaveBeenCalledWith('/api/v1/statuses/99', { method: 'DELETE' });
       expect(result.content[0].text).toContain('Deleted status 99');
@@ -368,7 +423,7 @@ describe('Social Tools', () => {
     it.each(cases)('%s posts the %s action', async (name, act) => {
       mockFetchSocialAPI.mockResolvedValue(sampleStatus);
 
-      await (await tool(name)).handler({ status_id: 99 });
+      await (await tool(name)).handler({ status_id: '99' });
 
       expect(mockFetchSocialAPI).toHaveBeenCalledWith(`/api/v1/statuses/99/${act}`, {
         method: 'POST',
@@ -561,7 +616,7 @@ describe('Social Tools', () => {
     it('dismisses one notification by id', async () => {
       mockFetchSocialAPI.mockResolvedValue(undefined);
 
-      await (await tool('social_dismiss_notifications')).handler({ notification_id: 501 });
+      await (await tool('social_dismiss_notifications')).handler({ notification_id: '501' });
 
       expect(mockFetchSocialAPI).toHaveBeenCalledWith('/api/v1/notifications/501/dismiss', {
         method: 'POST',
@@ -624,5 +679,28 @@ describe('Social Tools', () => {
       const local = writes.filter((t) => !t.annotations.openWorldHint).map((t) => t.name);
       expect(local).toEqual(['social_upload_media', 'social_dismiss_notifications']);
     });
+  });
+});
+
+describe('nextMaxId', () => {
+  async function nextMaxId(link: string | null) {
+    const actual =
+      await vi.importActual<typeof import('../client/social.js')>('../client/social.js');
+    return actual.nextMaxId(link);
+  }
+
+  it('reads max_id from the rel="next" entry', async () => {
+    const link =
+      `<https://cloud.example.com/index.php/apps/social/api/v1/favourites/?max_id=${BIG_NID}>; rel="next", ` +
+      '<https://cloud.example.com/index.php/apps/social/api/v1/favourites/?min_id=42>; rel="prev"';
+
+    expect(await nextMaxId(link)).toBe(BIG_NID);
+  });
+
+  it('is undefined on the last page, which has only a prev link', async () => {
+    expect(await nextMaxId('<https://x.example/api/v1/bookmarks?min_id=42>; rel="prev"')).toBe(
+      undefined
+    );
+    expect(await nextMaxId(null)).toBe(undefined);
   });
 });
