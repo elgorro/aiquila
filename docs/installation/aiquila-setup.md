@@ -73,13 +73,14 @@ php occ aiquila:configure --model claude-sonnet-4-6
 
 ## What You Get
 
-AIquila provides five main features:
+AIquila provides six main features:
 
 1. **Chat Interface**: Interactive chat with your AI provider at `/apps/aiquila`
 2. **TaskProcessing Provider**: Native integration with the Nextcloud Assistant
 3. **Flow operation**: Process files automatically when a Flow rule matches
 4. **Cowork**: Scheduled, repeating AI jobs over your files
-5. **Public API**: RESTful endpoints for other apps to use AIquila
+5. **Talk bot**: Answers in Nextcloud Talk conversations when addressed
+6. **Public API**: RESTful endpoints for other apps to use AIquila
 
 ## Installation
 
@@ -525,7 +526,46 @@ How it runs:
 - Other apps can register coworkers and their own task types through the
   [Cowork management API](../cowork-api.md).
 
-### 5. Public API
+### 5. Talk bot
+
+AIquila can take part in Nextcloud Talk conversations. Write `@AIquila` in a message,
+or reply to one of its messages, and it answers in the conversation. The last 30
+messages serve as context, so "@AIquila summarize what we decided" works. It works in
+group conversations and one-to-one chats alike.
+
+Talk only accepts bots set up by an administrator:
+
+```bash
+occ aiquila:talk-bot install      # register the bot with Talk
+occ aiquila:talk-bot status
+occ aiquila:talk-bot uninstall    # remove it and delete the stored messages
+```
+
+After installing, a moderator adds **AIquila** to a conversation under
+**Conversation settings → Bots**. An administrator can also do it with
+`occ talk:bot:list` and `occ talk:bot:setup <bot-id> <conversation-token>`.
+
+How it works:
+
+- It is a Talk *app bot*: Talk hands AIquila every message of the conversations the
+  bot is enabled in, inside Nextcloud, with no webhook. AIquila keeps the last 30
+  messages of each such conversation in its database, because Talk gives a bot no way
+  to read history. Messages sent before the bot was added are not known to it.
+- An addressed message gets a 👀 reaction straight away. The answer comes from a
+  background job, so it arrives with the next cron run. For prompt answers, run a
+  dedicated worker such as
+  `occ background-job:worker 'OCA\AIquila\BackgroundJob\TalkBotReplyJob'`.
+- The answer is generated on the asking user's AIquila provider, within the admin's
+  access rules. Guests and federated users get the instance default.
+- Replies are posted through Talk's bot API on this server, at its `overwrite.cli.url`.
+  If the server cannot reach itself there (a reverse proxy only reachable from
+  outside, a container port mapping), give the internal address:
+  `occ aiquila:talk-bot install --base-url=http://localhost`. An empty `--base-url=`
+  goes back to `overwrite.cli.url`.
+
+Requires Talk on Nextcloud 33 or later.
+
+### 6. Public API
 
 Other Nextcloud apps can programmatically use AIquila:
 

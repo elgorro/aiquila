@@ -39,3 +39,4 @@ spl_autoload_register(static function (string $class): void {
 });
 
 require_once __DIR__ . '/stubs/oc-private.php';
+require_once __DIR__ . '/stubs/talk.php';
