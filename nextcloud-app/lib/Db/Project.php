@@ -25,6 +25,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setUpdatedAt(int $updatedAt)
  */
 class Project extends Entity implements \JsonSerializable {
+    use InsertsFullRow;
+
     protected string $userId = '';
     protected string $title = '';
     protected ?string $description = null;
@@ -41,6 +43,7 @@ class Project extends Entity implements \JsonSerializable {
         $this->addType('isActive', 'integer');
         $this->addType('createdAt', 'integer');
         $this->addType('updatedAt', 'integer');
+        $this->markFieldsForInsert();
     }
 
     public function jsonSerialize(): array {

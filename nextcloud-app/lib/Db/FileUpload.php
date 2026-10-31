@@ -24,6 +24,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setUploadedAt(int $uploadedAt)
  */
 class FileUpload extends Entity {
+    use InsertsFullRow;
+
     protected string $userId = '';
     protected string $sha256 = '';
     protected string $anthropicFileId = '';
@@ -34,5 +36,6 @@ class FileUpload extends Entity {
         $this->addType('sha256', 'string');
         $this->addType('anthropicFileId', 'string');
         $this->addType('uploadedAt', 'integer');
+        $this->markFieldsForInsert();
     }
 }

@@ -29,6 +29,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setCacheReadTokens(?int $cacheReadTokens)
  */
 class UsageStat extends Entity {
+    use InsertsFullRow;
+
     protected string $userId = '';
     protected string $model = '';
     protected int $inputTokens = 0;
@@ -49,5 +51,6 @@ class UsageStat extends Entity {
         $this->addType('createdAt', 'integer');
         $this->addType('cacheCreationTokens', 'integer');
         $this->addType('cacheReadTokens', 'integer');
+        $this->markFieldsForInsert();
     }
 }

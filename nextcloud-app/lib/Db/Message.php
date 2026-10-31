@@ -35,6 +35,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setThinkingSummary(?string $thinkingSummary)
  */
 class Message extends Entity implements \JsonSerializable {
+    use InsertsFullRow;
+
     protected int $conversationId = 0;
     protected string $role = '';
     protected string $content = '';
@@ -62,6 +64,7 @@ class Message extends Entity implements \JsonSerializable {
         $this->addType('citations', 'string');
         $this->addType('documents', 'string');
         $this->addType('thinkingSummary', 'string');
+        $this->markFieldsForInsert();
     }
 
     /**

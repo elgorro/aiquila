@@ -46,6 +46,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setOauthRegistrationToken(?string $oauthRegistrationToken)
  */
 class McpServer extends Entity {
+    use InsertsFullRow;
+
     protected string $displayName = '';
     protected string $url = '';
     protected string $authType = 'none';
@@ -86,6 +88,7 @@ class McpServer extends Entity {
         $this->addType('oauthState', 'string');
         $this->addType('oauthMetadata', 'string');
         $this->addType('oauthRegistrationToken', 'string');
+        $this->markFieldsForInsert();
     }
 
     public function getIsEnabled(): bool {

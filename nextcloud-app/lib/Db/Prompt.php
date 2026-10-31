@@ -25,6 +25,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setUpdatedAt(int $updatedAt)
  */
 class Prompt extends Entity {
+    use InsertsFullRow;
+
     protected string $userId = '';
     protected string $title = '';
     protected ?string $description = null;
@@ -41,5 +43,6 @@ class Prompt extends Entity {
         $this->addType('isActive', 'integer');
         $this->addType('createdAt', 'integer');
         $this->addType('updatedAt', 'integer');
+        $this->markFieldsForInsert();
     }
 }
