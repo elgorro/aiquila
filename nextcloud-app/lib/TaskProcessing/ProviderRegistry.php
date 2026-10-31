@@ -53,4 +53,20 @@ final class ProviderRegistry {
         SubtitlesProvider::class,
         AudioToAudioTranslateProvider::class,
     ];
+
+    /**
+     * Nextcloud task types AIquila deliberately does not serve, with the reason.
+     *
+     * Every task type the OCP package declares is either served by a provider
+     * above or listed here; RegisteredProvidersTest fails on a type that is
+     * neither, so a new Nextcloud major cannot add one unnoticed.
+     *
+     * @var array<string, string> task type id => reason
+     */
+    public const NOT_SERVED = [
+        'core:text2text:multimodal-chatwithtools' => 'Not yet implemented: needs attachment handling on top of chatwithtools.',
+        'core:contextagent:interaction' => 'Context Agent types run an agent loop over Nextcloud tools; the context_agent app owns that loop.',
+        'core:contextagent:audio-interaction' => 'Context Agent types run an agent loop over Nextcloud tools; the context_agent app owns that loop.',
+        'core:contextagent:multimodal-interaction' => 'Context Agent types run an agent loop over Nextcloud tools; the context_agent app owns that loop.',
+    ];
 }
