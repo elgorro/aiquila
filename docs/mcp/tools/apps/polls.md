@@ -9,7 +9,8 @@ Integration with the [Nextcloud Polls](https://apps.nextcloud.com/apps/polls) ap
 
 ## API
 
-Uses the documented Polls REST API at `/index.php/apps/polls/api/v1.0/…`. Note: the Polls API documentation is marked as DRAFT by upstream, so response shapes may shift in future Polls releases.
+Uses the Polls API v1.0, which Polls serves over OCS at `/ocs/v2.php/apps/polls/api/v1.0/…`
+and describes in its [OpenAPI spec](https://github.com/nextcloud/polls/blob/main/docs/API_v1.0.md).
 
 ## Available Tools
 
@@ -47,7 +48,8 @@ Update any subset of a poll's configuration. Only the fields you pass are change
 - `title`, `description` (string)
 - `expire` (number) — unix timestamp; `0` = no expiration; negative = close immediately
 - `access` (`open` | `private`)
-- `anonymous`, `allowComment`, `allowMaybe`, `allowProposals`, `autoReminder`, `hideBookedUp`, `useNo` (boolean)
+- `anonymous`, `allowComment`, `allowMaybe`, `autoReminder`, `hideBookedUp`, `useNo` (boolean)
+- `allowProposals` (`allow` | `disallow` | `review`, or a boolean for allow / disallow)
 - `showResults` (`never` | `always` | `closed`)
 - `maxVotesPerOption`, `maxVotesPerUser` (number, ≥ 0)
 
@@ -146,7 +148,9 @@ Subscribe or unsubscribe yourself from poll notifications (new votes, comments).
 - `pollId` (number)
 - `subscribe` (boolean)
 
-Current subscription status is exposed on `get_poll` via `currentUserStatus.isSubscribed`, so there is no separate getter.
+Current subscription status is shown by `get_poll`, so there is no separate getter. Polls only
+subscribes accounts that have an email address; otherwise it refuses without an error, and the
+tool reports that.
 
 ## Example Workflow
 

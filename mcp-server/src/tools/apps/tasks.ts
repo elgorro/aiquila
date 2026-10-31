@@ -13,6 +13,7 @@ import {
   formatICalendar,
   ICAL_DATE_OR_DATE_TIME,
   lastHrefSegment,
+  unescapeICalValue,
 } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 import { parseCalendars, type ParsedCalendar } from './calendar.js';
@@ -143,7 +144,8 @@ function parseVTodos(responseXml: string): ParsedTask[] {
     const calDataMatch = responseBlock.match(nsTagContent('calendar-data'));
     if (!calDataMatch) continue;
 
-    const icalData = calDataMatch[1];
+    // calendar-data is XML text: `&` arrives as `&amp;`, CR as `&#13;`
+    const icalData = decodeXmlEntities(calDataMatch[1]);
     const vtodoBlocks = icalData.match(/BEGIN:VTODO[\s\S]*?END:VTODO/g);
     if (!vtodoBlocks) continue;
 
@@ -175,8 +177,9 @@ function parseVTodos(responseXml: string): ParsedTask[] {
           case 'UID':
             task.uid = value;
             break;
+          // TEXT values (RFC 5545 §3.3.11); written with escapeICalValue
           case 'SUMMARY':
-            task.summary = value;
+            task.summary = unescapeICalValue(value);
             break;
           case 'STATUS':
             task.status = value;
@@ -188,7 +191,7 @@ function parseVTodos(responseXml: string): ParsedTask[] {
             task.percentComplete = parseInt(value, 10) || 0;
             break;
           case 'DESCRIPTION':
-            task.description = value;
+            task.description = unescapeICalValue(value);
             break;
           case 'DUE':
             task.due = value;
@@ -206,7 +209,7 @@ function parseVTodos(responseXml: string): ParsedTask[] {
             task.lastModified = value;
             break;
           case 'LOCATION':
-            task.location = value;
+            task.location = unescapeICalValue(value);
             break;
           case 'URL':
             task.url = value;
@@ -403,36 +406,7 @@ export const listTaskListsTool = {
   }),
   handler: async (args: { detailed?: boolean } = {}) => {
     try {
-      const config = getNextcloudConfig();
-      const calDavUrl = `${config.url}${davPath('calendars', config.user)}/`;
-
-      const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
-<d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:x1="http://apple.com/ns/ical/" xmlns:x2="http://owncloud.org/ns">
-  <d:prop>
-    <d:resourcetype />
-    <d:displayname />
-    <cs:getctag />
-    <x1:calendar-color />
-    <x1:calendar-order />
-    <x2:calendar-enabled />
-    <c:supported-calendar-component-set />
-  </d:prop>
-</d:propfind>`;
-
-      const response = await fetchCalDAV(calDavUrl, {
-        method: 'PROPFIND',
-        body: propfindBody,
-        headers: { Depth: '1' },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`CalDAV PROPFIND failed: ${response.status} - ${errorText}`);
-      }
-
-      const taskLists = parseCalendars(await response.text())
-        .filter((cal) => cal.supportsTasks)
-        .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
+      const taskLists = await fetchTaskLists();
 
       if (taskLists.length === 0) {
         return {
@@ -464,6 +438,60 @@ export const listTaskListsTool = {
 };
 
 /**
+ * The user's VTODO-capable calendars, in their display order.
+ */
+async function fetchTaskLists(): Promise<ParsedCalendar[]> {
+  const config = getNextcloudConfig();
+  const calDavUrl = `${config.url}${davPath('calendars', config.user)}/`;
+
+  const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:x1="http://apple.com/ns/ical/" xmlns:x2="http://owncloud.org/ns">
+  <d:prop>
+    <d:resourcetype />
+    <d:displayname />
+    <cs:getctag />
+    <x1:calendar-color />
+    <x1:calendar-order />
+    <x2:calendar-enabled />
+    <c:supported-calendar-component-set />
+  </d:prop>
+</d:propfind>`;
+
+  const response = await fetchCalDAV(calDavUrl, {
+    method: 'PROPFIND',
+    body: propfindBody,
+    headers: { Depth: '1' },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`CalDAV PROPFIND failed: ${response.status} - ${errorText}`);
+  }
+
+  return parseCalendars(await response.text())
+    .filter((cal) => cal.supportsTasks)
+    .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
+}
+
+/**
+ * The task list to use when none is given: the first of the user's own lists,
+ * else the first app-generated one (a Deck board). Nextcloud creates no list
+ * named "tasks", and its default "Personal" calendar holds events only.
+ */
+async function resolveTaskList(calendarName?: string): Promise<string> {
+  if (calendarName) return calendarName;
+  const lists = await fetchTaskLists();
+  const names = lists.map((l) => lastHrefSegment(l.url));
+  const pick = names.find((n) => !n.startsWith('app-generated--')) ?? names[0];
+  if (!pick) {
+    throw new Error(
+      'No task list found. Create one in the Tasks or Calendar app, or pass calendarName.'
+    );
+  }
+  return pick;
+}
+
+/**
  * List tasks from a Nextcloud Tasks calendar
  */
 export const listTasksTool = {
@@ -480,17 +508,18 @@ export const listTasksTool = {
   inputSchema: z.object({
     calendarName: z
       .string()
-      .default('tasks')
-      .describe("The calendar/task list name (default: 'tasks')"),
+      .optional()
+      .describe('The calendar/task list name (default: your first task list; see list_task_lists)'),
     status: z
       .enum(['NEEDS-ACTION', 'COMPLETED', 'IN-PROCESS', 'CANCELLED'])
       .optional()
       .describe('Filter tasks by status'),
   }),
-  handler: async (args: { calendarName: string; status?: string }) => {
+  handler: async (args: { calendarName?: string; status?: string }) => {
     try {
+      const calendarName = await resolveTaskList(args.calendarName);
       const config = getNextcloudConfig();
-      const calDavUrl = `${config.url}${davPath('calendars', config.user, args.calendarName)}/`;
+      const calDavUrl = `${config.url}${davPath('calendars', config.user, calendarName)}/`;
 
       const reportBody = `<?xml version="1.0" encoding="UTF-8"?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
@@ -516,7 +545,7 @@ export const listTasksTool = {
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(
-          `CalDAV REPORT failed for calendar "${args.calendarName}": ${response.status} - ${errorText}`
+          `CalDAV REPORT failed for calendar "${calendarName}": ${response.status} - ${errorText}`
         );
       }
 
@@ -532,7 +561,7 @@ export const listTasksTool = {
           content: [
             {
               type: 'text' as const,
-              text: `No tasks found in "${args.calendarName}"${args.status ? ` with status ${args.status}` : ''}.`,
+              text: `No tasks found in "${calendarName}"${args.status ? ` with status ${args.status}` : ''}.`,
             },
           ],
         };
@@ -543,7 +572,7 @@ export const listTasksTool = {
         content: [
           {
             type: 'text' as const,
-            text: `Tasks in "${args.calendarName}" (${tasks.length} found):\n\n${formatted}`,
+            text: `Tasks in "${calendarName}" (${tasks.length} found):\n\n${formatted}`,
           },
         ],
       };
@@ -577,7 +606,10 @@ export const createTaskTool = {
     'Create a new task in Nextcloud Tasks with optional due date, start date, tags, location, and subtask relationships.',
   inputSchema: z.object({
     summary: z.string().describe('The task summary/title'),
-    calendarName: z.string().default('tasks').describe("The calendar name (default: 'tasks')"),
+    calendarName: z
+      .string()
+      .optional()
+      .describe('The calendar/task list name (default: your first task list; see list_task_lists)'),
     description: z.string().optional().describe('Detailed description of the task'),
     priority: z
       .number()
@@ -617,7 +649,7 @@ export const createTaskTool = {
   }),
   handler: async (args: {
     summary: string;
-    calendarName: string;
+    calendarName?: string;
     description?: string;
     priority?: number;
     due?: string;
@@ -631,8 +663,9 @@ export const createTaskTool = {
   }) => {
     try {
       const config = getNextcloudConfig();
+      const calendarName = await resolveTaskList(args.calendarName);
       const taskUid = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
-      const calDavUrl = `${config.url}${davPath('calendars', config.user, args.calendarName, `${taskUid}.ics`)}`;
+      const calDavUrl = `${config.url}${davPath('calendars', config.user, calendarName, `${taskUid}.ics`)}`;
       const now = icalNow();
 
       let vtodo = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//AIquila//MCP Server//EN\r\nBEGIN:VTODO\r\nUID:${taskUid}\r\nDTSTAMP:${now}\r\nCREATED:${now}\r\nLAST-MODIFIED:${now}\r\nSUMMARY:${escapeICalValue(args.summary)}\r\nSTATUS:NEEDS-ACTION`;
@@ -727,8 +760,11 @@ export const updateTaskTool = {
   description:
     "Update an existing task's fields by UID. Uses CalDAV ETag-based optimistic concurrency.",
   inputSchema: z.object({
-    uid: z.string().describe('The UID of the task to update'),
-    calendarName: z.string().default('tasks').describe("The calendar name (default: 'tasks')"),
+    uid: z.string().min(1).describe('The UID of the task to update'),
+    calendarName: z
+      .string()
+      .optional()
+      .describe('The calendar/task list name (default: your first task list; see list_task_lists)'),
     summary: z.string().optional().describe('New task title'),
     description: z.string().optional().describe('New description'),
     priority: z
@@ -770,7 +806,7 @@ export const updateTaskTool = {
   }),
   handler: async (args: {
     uid: string;
-    calendarName: string;
+    calendarName?: string;
     summary?: string;
     description?: string;
     priority?: number;
@@ -787,7 +823,8 @@ export const updateTaskTool = {
   }) => {
     try {
       const config = getNextcloudConfig();
-      const { href, etag, icalData } = await resolveTaskByUid(args.calendarName, args.uid);
+      const calendarName = await resolveTaskList(args.calendarName);
+      const { href, etag, icalData } = await resolveTaskByUid(calendarName, args.uid);
 
       let modified = unfoldICalLines(icalData);
 
@@ -915,13 +952,17 @@ export const deleteTaskTool = {
   },
   description: 'Delete a task from Nextcloud Tasks by UID. This action is irreversible.',
   inputSchema: z.object({
-    uid: z.string().describe('The UID of the task to delete'),
-    calendarName: z.string().default('tasks').describe("The calendar name (default: 'tasks')"),
+    uid: z.string().min(1).describe('The UID of the task to delete'),
+    calendarName: z
+      .string()
+      .optional()
+      .describe('The calendar/task list name (default: your first task list; see list_task_lists)'),
   }),
-  handler: async (args: { uid: string; calendarName: string }) => {
+  handler: async (args: { uid: string; calendarName?: string }) => {
     try {
+      const calendarName = await resolveTaskList(args.calendarName);
       const config = getNextcloudConfig();
-      const { href, etag } = await resolveTaskByUid(args.calendarName, args.uid);
+      const { href, etag } = await resolveTaskByUid(calendarName, args.uid);
 
       const deleteUrl = `${config.url}${href}`;
       const response = await fetchCalDAV(deleteUrl, {
@@ -975,17 +1016,21 @@ export const completeTaskTool = {
   description:
     'Mark a task as completed or reopen it. Sets STATUS, PERCENT-COMPLETE, and COMPLETED date atomically.',
   inputSchema: z.object({
-    uid: z.string().describe('The UID of the task'),
-    calendarName: z.string().default('tasks').describe("The calendar name (default: 'tasks')"),
+    uid: z.string().min(1).describe('The UID of the task'),
+    calendarName: z
+      .string()
+      .optional()
+      .describe('The calendar/task list name (default: your first task list; see list_task_lists)'),
     completed: z
       .boolean()
       .default(true)
       .describe('true = mark completed, false = reopen (default: true)'),
   }),
-  handler: async (args: { uid: string; calendarName: string; completed: boolean }) => {
+  handler: async (args: { uid: string; calendarName?: string; completed: boolean }) => {
     try {
+      const calendarName = await resolveTaskList(args.calendarName);
       const config = getNextcloudConfig();
-      const { href, etag, icalData } = await resolveTaskByUid(args.calendarName, args.uid);
+      const { href, etag, icalData } = await resolveTaskByUid(calendarName, args.uid);
 
       let modified = unfoldICalLines(icalData);
       const now = icalNow();

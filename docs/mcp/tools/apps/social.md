@@ -330,7 +330,7 @@ register. Either enable it, or set `MCP_TOOLS=social` to register the category r
 
 ## References
 
-- [Nextcloud Social](https://github.com/nextcloud/social)
+- [Aloha Social](https://github.com/AlohaSocial/social)
 - [Mastodon client API](https://docs.joinmastodon.org/client/intro/) — the entities and
   parameters Social follows
 - [Adding App Tools](../../development/adding-apps.md)

@@ -1,9 +1,46 @@
 // SPDX-License-Identifier: MIT
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock fetch for OCS
 global.fetch = vi.fn();
+
+const ocs = (data: unknown) => {
+  const body = { ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data } };
+  return {
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
+  };
+};
+
+const TRANSLATE_TYPE = {
+  'core:text2text:translate': {
+    inputShapeEnumValues: {
+      origin_language: [
+        { name: 'Detect language', value: 'detect_language' },
+        { name: 'English', value: 'en' },
+      ],
+      target_language: [
+        { name: 'English', value: 'en' },
+        { name: 'Deutsch', value: 'de' },
+      ],
+    },
+  },
+};
+
+/** Route fetch by URL; `types` is what /taskprocessing/tasktypes reports. */
+function route(types: Record<string, unknown>, handlers: Record<string, () => unknown>) {
+  (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: string) => {
+    if (url.includes('/taskprocessing/tasktypes')) return Promise.resolve(ocs({ types }));
+    for (const [fragment, handler] of Object.entries(handlers)) {
+      if (url.includes(fragment)) return Promise.resolve(ocs(handler()));
+    }
+    return Promise.reject(new Error(`unexpected fetch ${url}`));
+  });
+}
+
+const calls = () => (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
 
 describe('Translate Tools', () => {
   beforeEach(() => {
@@ -13,50 +50,90 @@ describe('Translate Tools', () => {
     process.env.NEXTCLOUD_PASSWORD = 'testpass';
   });
 
-  describe('translate_text', () => {
-    it('should list available language pairs when no text is provided', async () => {
-      const ocsResponse = {
-        ocs: {
-          meta: { status: 'ok', statuscode: 200, message: 'OK' },
-          data: {
-            languages: [
-              { from: 'en', to: 'de' },
-              { from: 'de', to: 'en' },
-              { from: 'en', to: 'fr' },
-            ],
-          },
-        },
-      };
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(ocsResponse),
-        text: () => Promise.resolve(JSON.stringify(ocsResponse)),
+  describe('with a TaskProcessing translate provider', () => {
+    it('should list the task type languages when no text is provided', async () => {
+      route(TRANSLATE_TYPE, {});
+
+      const { translateTextTool } = await import('../tools/apps/translate.js');
+      const result = await translateTextTool.handler({});
+
+      expect(result.content[0].text).toContain('Source languages: detect_language');
+      expect(result.content[0].text).toContain('Target languages: en (English), de (Deutsch)');
+      expect(calls().some(([url]) => url.includes('/translation/'))).toBe(false);
+    });
+
+    it('should schedule a translate task and return its output', async () => {
+      route(TRANSLATE_TYPE, {
+        '/taskprocessing/schedule': () => ({
+          task: { id: 7, type: 'core:text2text:translate', status: 'STATUS_SCHEDULED' },
+        }),
+        '/taskprocessing/task/7': () => ({
+          task: { id: 7, status: 'STATUS_SUCCESSFUL', output: { output: 'Hallo Welt' } },
+        }),
       });
+      vi.useFakeTimers();
+
+      const { translateTextTool } = await import('../tools/apps/translate.js');
+      const pending = translateTextTool.handler({ text: 'Hello world', toLanguage: 'de' });
+      await vi.advanceTimersByTimeAsync(1_000);
+      const result = await pending;
+
+      expect(result.content[0].text).toBe('Hallo Welt');
+      const schedule = calls().find(([url]) => url.includes('/taskprocessing/schedule'));
+      expect(JSON.parse(schedule![1].body)).toEqual({
+        type: 'core:text2text:translate',
+        appId: 'aiquila-mcp',
+        input: { input: 'Hello world', origin_language: 'detect_language', target_language: 'de' },
+      });
+    });
+
+    it('should report a failed task as an error', async () => {
+      route(TRANSLATE_TYPE, {
+        '/taskprocessing/schedule': () => ({
+          task: { id: 8, status: 'STATUS_FAILED', userFacingErrorMessage: 'Quota exceeded' },
+        }),
+      });
+
+      const { translateTextTool } = await import('../tools/apps/translate.js');
+      const result = await translateTextTool.handler({ text: 'x', toLanguage: 'de' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Quota exceeded');
+    });
+
+    it('should hand back the task ID when the task outlasts the wait', async () => {
+      route(TRANSLATE_TYPE, {
+        '/taskprocessing/schedule': () => ({ task: { id: 9, status: 'STATUS_SCHEDULED' } }),
+        '/taskprocessing/task/9': () => ({ task: { id: 9, status: 'STATUS_RUNNING' } }),
+      });
+      vi.useFakeTimers();
+
+      const { translateTextTool } = await import('../tools/apps/translate.js');
+      const pending = translateTextTool.handler({ text: 'x', toLanguage: 'de' });
+      await vi.advanceTimersByTimeAsync(31_000);
+      const result = await pending;
+
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain('get_task_result with taskId 9');
+    });
+  });
+
+  describe('without a TaskProcessing translate provider', () => {
+    it('should list legacy language pairs', async () => {
+      route({}, { '/translation/languages': () => ({ languages: [{ from: 'en', to: 'de' }] }) });
 
       const { translateTextTool } = await import('../tools/apps/translate.js');
       const result = await translateTextTool.handler({});
 
       expect(result.content[0].text).toContain('"from": "en"');
-      expect(result.content[0].text).toContain('"to": "de"');
-      expect(result.isError).toBeUndefined();
     });
 
-    it('should return message when no translation providers are configured', async () => {
-      const ocsResponse = {
-        ocs: {
-          meta: { status: 'ok', statuscode: 200, message: 'OK' },
-          data: { languages: [] },
-        },
-      };
-
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(ocsResponse),
-        text: () => Promise.resolve(JSON.stringify(ocsResponse)),
-      });
+    it('should say when no provider is configured', async () => {
+      route({}, { '/translation/languages': () => ({ languages: [] }) });
 
       const { translateTextTool } = await import('../tools/apps/translate.js');
       const result = await translateTextTool.handler({});
@@ -64,86 +141,40 @@ describe('Translate Tools', () => {
       expect(result.content[0].text).toBe('No translation providers are configured in Nextcloud.');
     });
 
-    it('should translate text when all parameters are provided', async () => {
-      const ocsResponse = {
-        ocs: {
-          meta: { status: 'ok', statuscode: 200, message: 'OK' },
-          data: { text: 'Hallo Welt' },
-        },
-      };
-
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(ocsResponse),
-        text: () => Promise.resolve(JSON.stringify(ocsResponse)),
-      });
+    it('should translate through the legacy Translation API', async () => {
+      route({}, { '/translation/translate': () => ({ text: 'Hallo Welt' }) });
 
       const { translateTextTool } = await import('../tools/apps/translate.js');
       const result = await translateTextTool.handler({
-        text: 'Hello World',
+        text: 'Hello world',
         fromLanguage: 'en',
         toLanguage: 'de',
       });
 
       expect(result.content[0].text).toBe('Hallo Welt');
-      expect(result.isError).toBeUndefined();
+      const call = calls().find(([url]) => url.includes('/translation/translate'));
+      expect(call![1].method).toBe('POST');
+      expect(call![1].body).toContain('fromLanguage=en');
     });
+  });
 
-    it('should return error when text is provided without fromLanguage', async () => {
-      const { translateTextTool } = await import('../tools/apps/translate.js');
-      const result = await translateTextTool.handler({
-        text: 'Hello',
-        toLanguage: 'de',
-      });
+  it('should require toLanguage when text is given', async () => {
+    route(TRANSLATE_TYPE, {});
 
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Both fromLanguage and toLanguage are required');
-    });
+    const { translateTextTool } = await import('../tools/apps/translate.js');
+    const result = await translateTextTool.handler({ text: 'Hello' });
 
-    it('should return error when text is provided without toLanguage', async () => {
-      const { translateTextTool } = await import('../tools/apps/translate.js');
-      const result = await translateTextTool.handler({
-        text: 'Hello',
-        fromLanguage: 'en',
-      });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('toLanguage is required');
+  });
 
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Both fromLanguage and toLanguage are required');
-    });
+  it('should return an error when the API fails', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Network error'));
 
-    it('should handle API errors', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-        text: () => Promise.resolve('Server error'),
-      });
+    const { translateTextTool } = await import('../tools/apps/translate.js');
+    const result = await translateTextTool.handler({ text: 'Hello', toLanguage: 'de' });
 
-      const { translateTextTool } = await import('../tools/apps/translate.js');
-      const result = await translateTextTool.handler({
-        text: 'Hello',
-        fromLanguage: 'en',
-        toLanguage: 'de',
-      });
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Error translating text');
-    });
-
-    it('should handle network errors', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Connection refused'));
-
-      const { translateTextTool } = await import('../tools/apps/translate.js');
-      const result = await translateTextTool.handler({
-        text: 'Hello',
-        fromLanguage: 'en',
-        toLanguage: 'de',
-      });
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Error translating text');
-      expect(result.content[0].text).toContain('Connection refused');
-    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Network error');
   });
 });

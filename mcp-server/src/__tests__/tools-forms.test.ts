@@ -75,6 +75,14 @@ describe('Forms Tools', () => {
       expect(result.content[0].text).toContain('No forms found');
     });
 
+    it('omits the owner for the partial forms the list returns', async () => {
+      const { ownerId: _ownerId, ...partial } = sampleForm;
+      mockFetchFormsAPI.mockResolvedValue([partial]);
+      const { listFormsTool } = await import('../tools/apps/forms.js');
+      const result = await listFormsTool.handler({});
+      expect(result.content[0].text).not.toContain('owner=undefined');
+    });
+
     it('passes type=shared as a query param', async () => {
       mockFetchFormsAPI.mockResolvedValue([]);
       const { listFormsTool } = await import('../tools/apps/forms.js');
@@ -138,13 +146,13 @@ describe('Forms Tools', () => {
   });
 
   describe('update_form', () => {
-    it('PATCHes only provided fields (no wrapping)', async () => {
-      mockFetchFormsAPI.mockResolvedValue(sampleForm);
+    it('PATCHes only provided fields, wrapped in keyValuePairs', async () => {
+      mockFetchFormsAPI.mockResolvedValueOnce(42).mockResolvedValueOnce(sampleForm);
       const { updateFormTool } = await import('../tools/apps/forms.js');
       await updateFormTool.handler({ formId: 42, title: 'New title', submitMultiple: true });
       expect(mockFetchFormsAPI).toHaveBeenCalledWith('/forms/42', {
         method: 'PATCH',
-        body: { title: 'New title', submitMultiple: true },
+        body: { keyValuePairs: { title: 'New title', submitMultiple: true } },
       });
     });
 
@@ -155,16 +163,34 @@ describe('Forms Tools', () => {
       expect(result.content[0].text).toContain('No fields');
       expect(mockFetchFormsAPI).not.toHaveBeenCalled();
     });
+
+    it('sends state in a request of its own and re-reads the form', async () => {
+      // Forms answers 403 "State may only be changed on its own" otherwise
+      mockFetchFormsAPI
+        .mockResolvedValueOnce(42)
+        .mockResolvedValueOnce(42)
+        .mockResolvedValueOnce({ ...sampleForm, state: 1 });
+      const { updateFormTool } = await import('../tools/apps/forms.js');
+      const result = await updateFormTool.handler({ formId: 42, title: 'T', state: 1 });
+      expect(mockFetchFormsAPI.mock.calls).toEqual([
+        ['/forms/42', { method: 'PATCH', body: { keyValuePairs: { title: 'T' } } }],
+        ['/forms/42', { method: 'PATCH', body: { keyValuePairs: { state: 1 } } }],
+        ['/forms/42'],
+      ]);
+      expect(result.content[0].text).toContain('closed');
+    });
   });
 
   describe('transfer_form_owner', () => {
     it('PATCHes ownerId', async () => {
-      mockFetchFormsAPI.mockResolvedValue({ ...sampleForm, ownerId: 'bob' });
+      // The transfer answers the new owner id
+      mockFetchFormsAPI.mockResolvedValue('bob');
       const { transferFormOwnerTool } = await import('../tools/apps/forms.js');
-      await transferFormOwnerTool.handler({ formId: 42, ownerId: 'bob' });
+      const result = await transferFormOwnerTool.handler({ formId: 42, ownerId: 'bob' });
+      expect(result.content[0].text).toContain('transferred to bob');
       expect(mockFetchFormsAPI).toHaveBeenCalledWith('/forms/42', {
         method: 'PATCH',
-        body: { ownerId: 'bob' },
+        body: { keyValuePairs: { ownerId: 'bob' } },
       });
     });
   });
@@ -227,7 +253,7 @@ describe('Forms Tools', () => {
       });
       expect(mockFetchFormsAPI).toHaveBeenCalledWith('/forms/42/questions/7', {
         method: 'PATCH',
-        body: { text: 'New text', isRequired: false },
+        body: { keyValuePairs: { text: 'New text', isRequired: false } },
       });
     });
 
@@ -299,7 +325,7 @@ describe('Forms Tools', () => {
       });
       expect(mockFetchFormsAPI).toHaveBeenCalledWith('/forms/42/questions/7/options/1', {
         method: 'PATCH',
-        body: { text: 'Ramen' },
+        body: { keyValuePairs: { text: 'Ramen' } },
       });
     });
   });
@@ -309,7 +335,7 @@ describe('Forms Tools', () => {
       mockFetchFormsAPI.mockResolvedValue(undefined);
       const { reorderFormOptionsTool } = await import('../tools/apps/forms.js');
       await reorderFormOptionsTool.handler({ formId: 42, questionId: 7, newOrder: [2, 1] });
-      expect(mockFetchFormsAPI).toHaveBeenCalledWith('/forms/42/questions/7/options/reorder', {
+      expect(mockFetchFormsAPI).toHaveBeenCalledWith('/forms/42/questions/7/options', {
         method: 'PATCH',
         body: { newOrder: [2, 1] },
       });
@@ -405,7 +431,7 @@ describe('Forms Tools', () => {
       });
       expect(mockFetchFormsAPI).toHaveBeenCalledWith('/forms/42/shares/1', {
         method: 'PATCH',
-        body: { permissions: ['submit', 'results'] },
+        body: { keyValuePairs: { permissions: ['submit', 'results'] } },
       });
     });
   });

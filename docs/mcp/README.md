@@ -512,7 +512,7 @@ Nextcloud apps and administration:
 #### Out of Office (3 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `get_out_of_office` | Get a user's current out-of-office / absence status (NC 28+) | — |
+| `get_out_of_office` | Get a user's configured out-of-office / absence, active or scheduled (NC 28+) | — |
 | `set_out_of_office` | Set an out-of-office / absence period with status message (NC 28+) | — |
 | `clear_out_of_office` | Clear a user's out-of-office / absence status (NC 28+) | — |
 
@@ -585,6 +585,11 @@ Nextcloud apps and administration:
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `translate_text` | Translate text between languages using Nextcloud's configured translation provider | — |
+
+`translate_text` runs as the `core:text2text:translate` AI task when a TaskProcessing provider
+offers it (translate2, the AIquila app, LLM apps), and falls back to the older Translation API,
+deprecated since Nextcloud 30, when none does. The category is registered when `translate2`,
+`aiquila`, `text_translate` or `translate` is enabled.
 
 #### Recommendations (1 tool)
 | Tool | Description | Documentation |

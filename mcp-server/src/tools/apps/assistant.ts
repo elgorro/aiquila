@@ -26,25 +26,30 @@ interface TaskType {
   outputShape?: Record<string, unknown>;
 }
 
-interface Task {
+/** TaskProcessingTask in core's OpenAPI spec */
+export interface Task {
   id: number;
   type: string;
-  status: number; // 0=unknown,1=scheduled,2=running,3=successful,4=failed
-  output?: Record<string, unknown>;
+  status: TaskStatus;
+  output?: Record<string, unknown> | null;
   input?: Record<string, unknown>;
   appId?: string;
-  customId?: string;
-  errorMessage?: string;
+  customId?: string | null;
+  userFacingErrorMessage?: string | null;
 }
 
-// NC TaskProcessing status codes
-const STATUS_LABELS: Record<number, string> = {
-  0: 'unknown',
-  1: 'scheduled',
-  2: 'running',
-  3: 'successful',
-  4: 'failed',
-};
+export type TaskStatus =
+  | 'STATUS_UNKNOWN'
+  | 'STATUS_SCHEDULED'
+  | 'STATUS_RUNNING'
+  | 'STATUS_SUCCESSFUL'
+  | 'STATUS_FAILED'
+  | 'STATUS_CANCELLED';
+
+/** `STATUS_SCHEDULED` → `scheduled` */
+export function statusLabel(status: string): string {
+  return status.replace(/^STATUS_/, '').toLowerCase();
+}
 
 // ---------------------------------------------------------------------------
 // list_text_tasks
@@ -145,7 +150,7 @@ export const processTextTool = {
         content: [
           {
             type: 'text' as const,
-            text: `Task scheduled. ID: ${task.id} | Status: ${STATUS_LABELS[task.status] ?? task.status}\n\nUse get_task_result with taskId ${task.id} to retrieve the result.`,
+            text: `Task scheduled. ID: ${task.id} | Status: ${statusLabel(task.status)}\n\nUse get_task_result with taskId ${task.id} to retrieve the result.`,
           },
         ],
       };
@@ -177,7 +182,7 @@ export const getTaskResultTool = {
     openWorldHint: false,
   },
   description:
-    'Get the status and result of a Nextcloud AI task previously created by process_text or generate_image. Status: 1=scheduled, 2=running, 3=successful, 4=failed.',
+    'Get the status and result of a Nextcloud AI task previously created by process_text or generate_image. Status is scheduled, running, successful, failed or cancelled.',
   inputSchema: z.object({
     taskId: z.number().describe('The task ID returned by process_text or generate_image'),
   }),
@@ -185,10 +190,9 @@ export const getTaskResultTool = {
     try {
       const data = await fetchOCS<{ task: Task }>(`/ocs/v2.php/taskprocessing/task/${args.taskId}`);
       const task = data.ocs.data.task;
-      const statusLabel = STATUS_LABELS[task.status] ?? String(task.status);
+      const label = statusLabel(task.status);
 
-      if (task.status === 3) {
-        // successful
+      if (task.status === 'STATUS_SUCCESSFUL') {
         const output = task.output;
         const text =
           typeof output?.output === 'string' ? output.output : JSON.stringify(output, null, 2);
@@ -202,13 +206,12 @@ export const getTaskResultTool = {
         };
       }
 
-      if (task.status === 4) {
-        // failed
+      if (task.status === 'STATUS_FAILED' || task.status === 'STATUS_CANCELLED') {
         return {
           content: [
             {
               type: 'text' as const,
-              text: `Task ${task.id} failed: ${task.errorMessage ?? 'Unknown error'}`,
+              text: `Task ${task.id} ${label}: ${task.userFacingErrorMessage || 'no error message given'}`,
             },
           ],
           isError: true,
@@ -219,7 +222,7 @@ export const getTaskResultTool = {
         content: [
           {
             type: 'text' as const,
-            text: `Task ${task.id} status: ${statusLabel}. Poll again shortly.`,
+            text: `Task ${task.id} status: ${label}. Poll again shortly.`,
           },
         ],
       };
@@ -282,7 +285,7 @@ export const generateImageTool = {
       const task = data.ocs.data.task;
       const lines = [
         `Image generation task scheduled. ID: ${task.id}`,
-        `Status: ${STATUS_LABELS[task.status] ?? task.status}`,
+        `Status: ${statusLabel(task.status)}`,
         '',
         `Use get_task_result with taskId ${task.id} to check progress.`,
       ];

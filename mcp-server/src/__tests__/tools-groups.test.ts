@@ -49,6 +49,8 @@ describe('Group Management Tools', () => {
       expect(result.content[0].text).toContain('alice');
       expect(result.content[0].text).toContain('bob');
       expect(result.content[0].text).toContain('admin');
+      // GET /cloud/groups/{groupId} is deprecated upstream
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/cloud/groups/admin/users');
     });
   });
 
@@ -92,7 +94,7 @@ describe('Group Management Tools', () => {
       expect(result.content[0].text).toContain('marketing');
       expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/cloud/users/alice/groups', {
         method: 'DELETE',
-        body: { groupid: 'marketing' },
+        queryParams: { groupid: 'marketing' },
       });
     });
   });

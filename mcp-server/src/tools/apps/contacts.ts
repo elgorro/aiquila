@@ -629,7 +629,7 @@ export const getContactTool = {
   description:
     'Get detailed information about a single contact by its UID, including all properties like name, email, phone, address, organization, birthday, notes, and groups.',
   inputSchema: z.object({
-    uid: z.string().describe('The UID of the contact'),
+    uid: z.string().min(1).describe('The UID of the contact'),
     addressBookName: z
       .string()
       .default('contacts')
@@ -863,7 +863,7 @@ export const updateContactTool = {
   description:
     "Update an existing contact's fields by UID. Uses CardDAV ETag-based optimistic concurrency. Only provided fields are changed.",
   inputSchema: z.object({
-    uid: z.string().describe('The UID of the contact to update'),
+    uid: z.string().min(1).describe('The UID of the contact to update'),
     addressBookName: z
       .string()
       .default('contacts')
@@ -1077,7 +1077,7 @@ export const deleteContactTool = {
   description:
     'Delete a contact from a Nextcloud address book by UID. This action is irreversible.',
   inputSchema: z.object({
-    uid: z.string().describe('The UID of the contact to delete'),
+    uid: z.string().min(1).describe('The UID of the contact to delete'),
     addressBookName: z
       .string()
       .default('contacts')

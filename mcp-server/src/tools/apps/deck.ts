@@ -444,19 +444,23 @@ export const moveCardTool = {
     order?: number;
   }) => {
     try {
-      const card = await fetchDeckAPI<DeckCard>(
+      // Deck answers with the target stack's cards in their new order
+      const cards = await fetchDeckAPI<DeckCard[]>(
         `/boards/${args.boardId}/stacks/${args.stackId}/cards/${args.cardId}/reorder`,
         {
           method: 'PUT',
           body: { order: args.order ?? 0, stackId: args.targetStackId },
         }
       );
+      const card = cards.find((c) => c.id === args.cardId);
 
       return {
         content: [
           {
             type: 'text' as const,
-            text: `Card moved to stack ${args.targetStackId}: ${formatCard(card)}`,
+            text: card
+              ? `Card moved to stack ${args.targetStackId}: ${formatCard(card)}`
+              : `Card ${args.cardId} moved to stack ${args.targetStackId}.`,
           },
         ],
       };

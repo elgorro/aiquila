@@ -268,7 +268,9 @@ SUMMARY:${title}`;
         recipeYield: 4,
       });
 
-      expect(mockClient.createDirectory).toHaveBeenCalledWith('/Recipes/pasta-carbonara');
+      expect(mockClient.createDirectory).toHaveBeenCalledWith('/Recipes/pasta-carbonara', {
+        recursive: true,
+      });
       expect(mockClient.putFileContents).toHaveBeenCalledWith(
         '/Recipes/pasta-carbonara/recipe.json',
         expect.stringContaining('"name": "Pasta Carbonara"'),
@@ -276,6 +278,31 @@ SUMMARY:${title}`;
       );
       expect(result.content[0].text).toContain('created successfully');
       expect(result.content[0].text).toContain('pasta-carbonara');
+    });
+
+    it("should write to the user's Cookbook folder and create it when missing", async () => {
+      // GET /apps/cookbook/api/v1/config answers the per-user folder
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ folder: '/Kochbuch/' }),
+      });
+      mockClient.getDirectoryContents.mockRejectedValue(
+        Object.assign(new Error('Not Found'), { status: 404 })
+      );
+      mockClient.createDirectory.mockResolvedValue(undefined);
+      mockClient.putFileContents.mockResolvedValue(undefined);
+
+      const { createRecipeTool } = await import('../tools/apps/cookbook.js');
+      const result = await createRecipeTool.handler({ name: 'Soup' });
+
+      expect(result.isError).toBeUndefined();
+      expect(mockClient.createDirectory).toHaveBeenCalledWith('/Kochbuch/soup', {
+        recursive: true,
+      });
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/index.php/apps/cookbook/api/v1/reindex'),
+        expect.objectContaining({ method: 'POST' })
+      );
     });
 
     it('should append suffix for duplicate folder names', async () => {
@@ -288,7 +315,9 @@ SUMMARY:${title}`;
       const { createRecipeTool } = await import('../tools/apps/cookbook.js');
       const result = await createRecipeTool.handler({ name: 'Pasta Carbonara' });
 
-      expect(mockClient.createDirectory).toHaveBeenCalledWith('/Recipes/pasta-carbonara-2');
+      expect(mockClient.createDirectory).toHaveBeenCalledWith('/Recipes/pasta-carbonara-2', {
+        recursive: true,
+      });
       expect(result.content[0].text).toContain('pasta-carbonara-2');
     });
 

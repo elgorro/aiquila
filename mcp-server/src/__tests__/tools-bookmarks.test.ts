@@ -75,7 +75,7 @@ describe('Bookmarks Tools', () => {
 
       expect(mockFetchBookmarksAPI).toHaveBeenCalledWith('/bookmark', {
         queryParams: {
-          'search[]': ['test'],
+          search: ['test'],
           tags: ['tech'],
           folder: '5',
           limit: '10',
@@ -317,8 +317,7 @@ describe('Bookmarks Tools', () => {
             description: '',
             added: 1700000000,
             userId: 'testuser',
-            tags: [],
-            folders: [1],
+            // folder children carry neither tags nor folders
             clickcount: 0,
             available: true,
             archivedFile: null,
@@ -418,10 +417,8 @@ describe('Bookmarks Tools', () => {
 
   describe('list_bookmark_tags', () => {
     it('should return sorted tag list', async () => {
-      mockFetchBookmarksAPI.mockResolvedValue({
-        status: 'success',
-        data: ['tech', 'news', 'art', 'music'],
-      });
+      // GET /tag answers with a bare array
+      mockFetchBookmarksAPI.mockResolvedValue(['tech', 'news', 'art', 'music']);
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
       const tool = bookmarksTools.find((t) => t.name === 'list_bookmark_tags')!;
@@ -435,7 +432,7 @@ describe('Bookmarks Tools', () => {
     });
 
     it('should handle empty tag list', async () => {
-      mockFetchBookmarksAPI.mockResolvedValue({ status: 'success', data: [] });
+      mockFetchBookmarksAPI.mockResolvedValue([]);
 
       const { bookmarksTools } = await import('../tools/apps/bookmarks.js');
       const tool = bookmarksTools.find((t) => t.name === 'list_bookmark_tags')!;

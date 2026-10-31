@@ -16,9 +16,17 @@ const ocsWrap = <T>(data: T) => ({
  * Route mock responses by OCS path: the shares endpoint returns the given share,
  * the apps endpoint returns the given enabled-app list.
  */
-function setupMocks(opts: { share?: unknown; sharesList?: unknown[]; enabledApps: string[] }) {
+function setupMocks(opts: {
+  share?: unknown;
+  sharesList?: unknown[];
+  /** null: the account is not an admin, so /cloud/apps answers 403 */
+  enabledApps: string[] | null;
+}) {
   mockFetchOCS.mockImplementation((path: string) => {
     if (path.startsWith('/ocs/v2.php/cloud/apps')) {
+      if (opts.enabledApps === null) {
+        return Promise.reject(new Error('Permission denied. This operation requires admin'));
+      }
       return Promise.resolve(ocsWrap({ apps: opts.enabledApps }));
     }
     if (path.includes('/files_sharing/api/v1/shares')) {
@@ -53,6 +61,19 @@ describe('Social Sharing Tools', () => {
     expect(text).toContain('tok123');
     // email app not enabled → not listed
     expect(text).not.toContain('email:');
+  });
+
+  it('lists every network for a non-admin, who cannot read the app list', async () => {
+    setupMocks({ share: { id: 7, share_type: 3, token: 'tok123' }, enabledApps: null });
+
+    const { generateSocialShareLinksTool } = await import('../tools/apps/social-sharing.js');
+    const result = await generateSocialShareLinksTool.handler({ share_id: 7 });
+
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain('email:');
+    expect(text).toContain('diaspora:');
+    expect(text).toContain('only an admin can see');
   });
 
   it('honors the networks filter', async () => {

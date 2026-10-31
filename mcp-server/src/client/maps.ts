@@ -56,7 +56,8 @@ function buildHeaders(auth: string, hasBody: boolean): Record<string, string> {
 
 /**
  * Fetch from the internal Maps controller endpoints.
- * Base: /apps/maps
+ * Base: /index.php/apps/maps. The /apps/maps form only resolves where the
+ * server rewrites pretty URLs, and answers 404 everywhere else.
  */
 export async function fetchMapsAPI<T = unknown>(
   endpoint: string,
@@ -64,7 +65,7 @@ export async function fetchMapsAPI<T = unknown>(
 ): Promise<T> {
   const config = getNextcloudConfig();
   const auth = basicAuth(config);
-  const url = buildUrl(`${config.url}/apps/maps`, endpoint, options.queryParams);
+  const url = buildUrl(`${config.url}/index.php/apps/maps`, endpoint, options.queryParams);
   const body = options.body ? JSON.stringify(options.body) : undefined;
 
   const t0 = Date.now();

@@ -108,6 +108,31 @@ describe('News Tools', () => {
       expect(result.content[0].text).toContain('Hello world');
       expect(result.content[0].text).not.toContain('<b>');
     });
+
+    it('should always send getRead=true for the starred list', async () => {
+      mockFetchNewsAPI.mockResolvedValue({ items: [] });
+
+      const { newsTools } = await import('../tools/apps/news.js');
+      const tool = newsTools.find((t) => t.name === 'list_news_items')!;
+      await tool.handler({ type: 'starred' });
+
+      expect(mockFetchNewsAPI).toHaveBeenCalledWith('/items', {
+        queryParams: { type: 2, id: 0, batchSize: 20, getRead: true, oldestFirst: false },
+      });
+    });
+
+    it('should report the message News answers a rejected query with', async () => {
+      mockFetchNewsAPI.mockResolvedValue({
+        message: 'Setting getRead on an already filtered list is not allowed!',
+      });
+
+      const { newsTools } = await import('../tools/apps/news.js');
+      const tool = newsTools.find((t) => t.name === 'list_news_items')!;
+      const result = await tool.handler({ type: 'feed', id: 4 });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('already filtered');
+    });
   });
 
   describe('mark_item_read', () => {

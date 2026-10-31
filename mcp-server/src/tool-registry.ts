@@ -111,7 +111,11 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
   { category: 'forms', appIds: ['forms'], tools: formsTools },
   { category: 'text', appIds: ['text'], tools: textTools },
   { category: 'assistant', appIds: ['assistant'], tools: assistantTools },
-  { category: 'translate', appIds: ['text_translate', 'translate'], tools: translateTools },
+  {
+    category: 'translate',
+    appIds: ['translate2', 'aiquila', 'text_translate', 'translate'],
+    tools: translateTools,
+  },
   { category: 'user_status', appIds: ['user_status'], tools: userStatusTools },
   { category: 'notifications', appIds: ['notifications'], tools: notificationsTools },
   { category: 'activity', appIds: ['activity'], tools: activityTools },
@@ -174,6 +178,7 @@ function parseMcpTools(): { categories: Set<string>; toolNames: Set<string> } | 
 const UNDETECTABLE_FOR_USERS: ReadonlySet<string> = new Set([
   'text',
   'translate',
+  'translate2',
   'text_translate',
   'registration',
   'terms_of_service',

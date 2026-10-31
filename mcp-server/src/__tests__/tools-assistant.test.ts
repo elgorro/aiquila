@@ -68,7 +68,7 @@ describe('Assistant / AI Task Processing Tools', () => {
       mockFetchOCS.mockResolvedValue({
         ocs: {
           meta: { status: 'ok', statuscode: 200, message: 'OK' },
-          data: { task: { id: 42, type: 'core:summarize', status: 1 } },
+          data: { task: { id: 42, type: 'core:summarize', status: 'STATUS_SCHEDULED' } },
         },
       });
 
@@ -97,7 +97,7 @@ describe('Assistant / AI Task Processing Tools', () => {
       mockFetchOCS.mockResolvedValue({
         ocs: {
           meta: { status: 'ok', statuscode: 200, message: 'OK' },
-          data: { task: { id: 43, type: 'core:summarize', status: 1 } },
+          data: { task: { id: 43, type: 'core:summarize', status: 'STATUS_SCHEDULED' } },
         },
       });
 
@@ -137,7 +137,7 @@ describe('Assistant / AI Task Processing Tools', () => {
           data: {
             task: {
               id: 42,
-              status: 3,
+              status: 'STATUS_SUCCESSFUL',
               output: { output: 'This is the summary.' },
             },
           },
@@ -159,7 +159,7 @@ describe('Assistant / AI Task Processing Tools', () => {
           data: {
             task: {
               id: 42,
-              status: 3,
+              status: 'STATUS_SUCCESSFUL',
               output: { topics: ['AI', 'ML'] },
             },
           },
@@ -180,8 +180,8 @@ describe('Assistant / AI Task Processing Tools', () => {
           data: {
             task: {
               id: 42,
-              status: 4,
-              errorMessage: 'Provider unavailable',
+              status: 'STATUS_FAILED',
+              userFacingErrorMessage: 'Provider unavailable',
             },
           },
         },
@@ -199,7 +199,7 @@ describe('Assistant / AI Task Processing Tools', () => {
       mockFetchOCS.mockResolvedValue({
         ocs: {
           meta: { status: 'ok', statuscode: 200, message: 'OK' },
-          data: { task: { id: 42, status: 2 } },
+          data: { task: { id: 42, status: 'STATUS_RUNNING' } },
         },
       });
 
@@ -226,7 +226,7 @@ describe('Assistant / AI Task Processing Tools', () => {
       mockFetchOCS.mockResolvedValue({
         ocs: {
           meta: { status: 'ok', statuscode: 200, message: 'OK' },
-          data: { task: { id: 50, status: 1 } },
+          data: { task: { id: 50, status: 'STATUS_SCHEDULED' } },
         },
       });
 
@@ -251,7 +251,7 @@ describe('Assistant / AI Task Processing Tools', () => {
       mockFetchOCS.mockResolvedValue({
         ocs: {
           meta: { status: 'ok', statuscode: 200, message: 'OK' },
-          data: { task: { id: 51, status: 1 } },
+          data: { task: { id: 51, status: 'STATUS_SCHEDULED' } },
         },
       });
 

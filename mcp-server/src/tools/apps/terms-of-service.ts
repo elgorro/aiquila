@@ -27,7 +27,8 @@ interface Terms {
 }
 
 interface AdminFormData {
-  terms: Terms[];
+  // Keyed by terms id. PHP serialises the empty map as `[]`, so both shapes occur.
+  terms: Record<string, Terms> | Terms[];
   countries: Record<string, string>;
   languages: Record<string, string>;
   tos_on_public_shares: string;
@@ -62,11 +63,12 @@ export const getTermsOfServiceTool = {
     try {
       const result = await fetchOCS<AdminFormData>(`${OCS_BASE}/terms/admin`);
       const data = result.ocs.data;
+      const terms = Object.values(data.terms);
 
       const termsText =
-        data.terms.length === 0
+        terms.length === 0
           ? '(none)'
-          : data.terms
+          : terms
               .map((t) => `- #${t.id} [${t.countryCode}/${t.languageCode}] ${preview(t.body)}`)
               .join('\n');
 

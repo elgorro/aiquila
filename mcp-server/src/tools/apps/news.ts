@@ -21,7 +21,9 @@ interface FoldersResponse {
 }
 
 interface ItemsResponse {
-  items: Item[];
+  items?: Item[];
+  /** News answers 200 with only a message when it rejects the query */
+  message?: string;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -392,7 +394,12 @@ export const listNewsItemsTool = {
       .describe('Feed or folder ID when type is "feed" or "folder" (default 0)'),
     batchSize: z.number().optional().describe('Max items to return (default 20, -1 for all)'),
     offset: z.number().optional().describe('Return items older than this item ID (pagination)'),
-    getRead: z.boolean().optional().describe('Include already-read items (default false)'),
+    getRead: z
+      .boolean()
+      .optional()
+      .describe(
+        'Include already-read items (default false). Ignored for "starred", which always includes them.'
+      ),
     oldestFirst: z
       .boolean()
       .optional()
@@ -412,12 +419,16 @@ export const listNewsItemsTool = {
         type: typeMap[args.type ?? 'all'],
         id: args.id ?? 0,
         batchSize: args.batchSize ?? 20,
-        getRead: args.getRead ?? false,
+        // News refuses getRead=false on the starred list ("already filtered")
+        getRead: args.type === 'starred' ? true : (args.getRead ?? false),
         oldestFirst: args.oldestFirst ?? false,
       };
       if (args.offset !== undefined) queryParams.offset = args.offset;
 
       const result = await fetchNewsAPI<ItemsResponse>('/items', { queryParams });
+      if (!result.items && result.message) {
+        return err('listing items', new Error(result.message));
+      }
       if (!result.items || result.items.length === 0) {
         return text('No items found.');
       }

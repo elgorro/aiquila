@@ -162,14 +162,22 @@ export const createShareTool = {
       if (args.expireDate !== undefined) body.expireDate = args.expireDate;
       if (args.label !== undefined) body.label = args.label;
       if (args.note !== undefined) body.note = args.note;
-      if (args.hideDownload !== undefined) body.hideDownload = args.hideDownload ? 'true' : 'false';
 
       const result = await fetchOCS<ShareEntry>('/ocs/v2.php/apps/files_sharing/api/v1/shares', {
         method: 'POST',
         body,
       });
 
-      const share = result.ocs.data;
+      let share = result.ocs.data;
+      // POST /shares does not take hideDownload — only PUT /shares/{id} does —
+      // so it is applied to the new share in a second request.
+      if (args.hideDownload !== undefined) {
+        const updated = await fetchOCS<ShareEntry>(
+          `/ocs/v2.php/apps/files_sharing/api/v1/shares/${share.id}`,
+          { method: 'PUT', body: { hideDownload: args.hideDownload ? 'true' : 'false' } }
+        );
+        share = updated.ocs.data;
+      }
       const typeLabel = SHARE_TYPE_LABELS[share.share_type] ?? `Type ${share.share_type}`;
       const parts = [`Share created (ID: ${share.id}, type: ${typeLabel})`];
       if (share.token) parts.push(`Token: ${share.token}`);

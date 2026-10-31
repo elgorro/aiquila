@@ -281,6 +281,6 @@ To extend group management tools:
 
 ## References
 
-- [Nextcloud Groups Documentation](https://docs.nextcloud.com/server/latest/admin_manual/configuration_user/user_auth_ldap.html#group-management)
+- [Group provisioning API](https://docs.nextcloud.com/server/latest/admin_manual/configuration_user/instruction_set_for_groups.html)
 - [OCC Group Commands](https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/occ_command.html#group-commands)
 - [Group Folders App](https://apps.nextcloud.com/apps/groupfolders)

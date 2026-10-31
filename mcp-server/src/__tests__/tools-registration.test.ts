@@ -25,8 +25,9 @@ describe('Registration Tools', () => {
   describe('get_registration_settings', () => {
     it('should read each known key and format the result', async () => {
       mockFetchOCS.mockImplementation((path: string) => {
-        if (path.endsWith('/admin_approval_required')) return Promise.resolve(ok('yes'));
-        return Promise.resolve(ok(''));
+        // provisioning_api answers GET config/apps/{app}/{key} with { data: "<value>" }
+        if (path.endsWith('/admin_approval_required')) return Promise.resolve(ok({ data: 'yes' }));
+        return Promise.resolve(ok({ data: '' }));
       });
 
       const { getRegistrationSettingsTool } = await import('../tools/apps/registration.js');

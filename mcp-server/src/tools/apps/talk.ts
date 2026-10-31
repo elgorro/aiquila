@@ -421,7 +421,9 @@ export const removeParticipantTool = {
     try {
       await fetchOCS(`${API_V4}/room/${args.token}/attendees`, {
         method: 'DELETE',
-        body: { attendeeId: String(args.attendeeId) },
+        // spreed declares attendeeId as a query parameter; content on a DELETE
+        // has no defined semantics (RFC 9110 §9.3.5).
+        queryParams: { attendeeId: String(args.attendeeId) },
       });
       return text(
         `Participant (attendeeId: ${args.attendeeId}) removed from conversation ${args.token}.`

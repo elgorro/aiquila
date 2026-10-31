@@ -2,13 +2,57 @@
 
 import { z } from 'zod';
 import { getWebDAVClient } from '../../client/webdav.js';
+import { basicAuth, getNextcloudConfig } from '../types.js';
 
 /**
  * Nextcloud Cookbook App Tools
- * Manages recipes as schema.org Recipe JSON files in per-recipe subfolders
+ * Manages recipes as schema.org Recipe JSON files in per-recipe subfolders of
+ * the user's Cookbook folder, and asks Cookbook to reindex after a change.
  */
 
-const RECIPES_ROOT = '/Recipes';
+/** Cookbook's default for its per-user `folder` setting. */
+const DEFAULT_RECIPES_ROOT = '/Recipes';
+
+async function cookbookAPI(endpoint: string, method = 'GET'): Promise<Response> {
+  const config = getNextcloudConfig();
+  return fetch(`${config.url}/index.php/apps/cookbook/api/v1${endpoint}`, {
+    method,
+    headers: { Authorization: `Basic ${basicAuth(config)}`, Accept: 'application/json' },
+  });
+}
+
+/** The user's recipe folder (GET /api/v1/config `folder`); /Recipes if unreadable. */
+async function recipesRoot(): Promise<string> {
+  try {
+    const response = await cookbookAPI('/config');
+    if (!response.ok) return DEFAULT_RECIPES_ROOT;
+    const { folder } = (await response.json()) as { folder?: string };
+    return folder ? folder.replace(/\/+$/, '') || DEFAULT_RECIPES_ROOT : DEFAULT_RECIPES_ROOT;
+  } catch {
+    return DEFAULT_RECIPES_ROOT;
+  }
+}
+
+/**
+ * Ask Cookbook to rebuild its index so a change shows up at once rather than at
+ * its next scheduled scan. Best effort: the files are written either way.
+ */
+async function reindex(): Promise<void> {
+  await cookbookAPI('/reindex', 'POST').catch(() => undefined);
+}
+
+/** Subfolders of the recipe folder; none when it does not exist yet. */
+async function recipeFolders(root: string): Promise<string[]> {
+  try {
+    const items = await getWebDAVClient().getDirectoryContents(`${root}/`);
+    return (Array.isArray(items) ? items : [])
+      .filter((i: { type: string }) => i.type === 'directory')
+      .map((i: { basename: string }) => i.basename);
+  } catch (error) {
+    if ((error as { status?: number }).status === 404) return [];
+    throw error;
+  }
+}
 
 interface RecipeNutrition {
   '@type': 'NutritionInformation';
@@ -148,18 +192,16 @@ function formatRecipeDetail(folderName: string, recipe: Recipe): string {
 
 async function readAllRecipes(): Promise<{ folderName: string; recipe: Recipe }[]> {
   const client = getWebDAVClient();
-  const items = await client.getDirectoryContents(`${RECIPES_ROOT}/`);
-  const dirs = (Array.isArray(items) ? items : []).filter(
-    (item: { type: string }) => item.type === 'directory'
-  );
+  const root = await recipesRoot();
+  const dirs = await recipeFolders(root);
 
   const results = await Promise.allSettled(
-    dirs.map(async (dir: { basename: string }) => {
-      const json = await client.getFileContents(`${RECIPES_ROOT}/${dir.basename}/recipe.json`, {
+    dirs.map(async (dir) => {
+      const json = await client.getFileContents(`${root}/${dir}/recipe.json`, {
         format: 'text',
       });
       return {
-        folderName: dir.basename,
+        folderName: dir,
         recipe: JSON.parse(json as string) as Recipe,
       };
     })
@@ -323,7 +365,8 @@ export const getRecipeTool = {
   handler: async (args: { folderName: string }) => {
     try {
       const client = getWebDAVClient();
-      const json = await client.getFileContents(`${RECIPES_ROOT}/${args.folderName}/recipe.json`, {
+      const root = await recipesRoot();
+      const json = await client.getFileContents(`${root}/${args.folderName}/recipe.json`, {
         format: 'text',
       });
       const recipe = JSON.parse(json as string) as Recipe;
@@ -417,12 +460,8 @@ export const createRecipeTool = {
 
       // Find unique folder name
       let folderName = slugify(args.name);
-      const items = await client.getDirectoryContents(`${RECIPES_ROOT}/`);
-      const existing = new Set(
-        (Array.isArray(items) ? items : [])
-          .filter((i: { type: string }) => i.type === 'directory')
-          .map((i: { basename: string }) => i.basename)
-      );
+      const root = await recipesRoot();
+      const existing = new Set(await recipeFolders(root));
 
       if (existing.has(folderName)) {
         let suffix = 2;
@@ -439,12 +478,14 @@ export const createRecipeTool = {
         nutrition,
       });
 
-      await client.createDirectory(`${RECIPES_ROOT}/${folderName}`);
+      // recursive: the recipe folder itself does not exist before the first recipe
+      await client.createDirectory(`${root}/${folderName}`, { recursive: true });
       await client.putFileContents(
-        `${RECIPES_ROOT}/${folderName}/recipe.json`,
+        `${root}/${folderName}/recipe.json`,
         JSON.stringify(recipe, null, 2),
         { overwrite: true }
       );
+      await reindex();
 
       return {
         content: [
@@ -523,7 +564,7 @@ export const updateRecipeTool = {
   }) => {
     try {
       const client = getWebDAVClient();
-      const recipePath = `${RECIPES_ROOT}/${args.folderName}/recipe.json`;
+      const recipePath = `${await recipesRoot()}/${args.folderName}/recipe.json`;
 
       const json = await client.getFileContents(recipePath, {
         format: 'text',
@@ -550,6 +591,7 @@ export const updateRecipeTool = {
       await client.putFileContents(recipePath, JSON.stringify(recipe, null, 2), {
         overwrite: true,
       });
+      await reindex();
 
       return {
         content: [
@@ -593,7 +635,8 @@ export const deleteRecipeTool = {
   handler: async (args: { folderName: string }) => {
     try {
       const client = getWebDAVClient();
-      await client.deleteFile(`${RECIPES_ROOT}/${args.folderName}`);
+      await client.deleteFile(`${await recipesRoot()}/${args.folderName}`);
+      await reindex();
 
       return {
         content: [

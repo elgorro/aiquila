@@ -4,12 +4,17 @@ import { basicAuth, getNextcloudConfig } from '../tools/types.js';
 import { logger } from '../logger.js';
 import { ApiError } from './aiquila.js';
 
-export interface PollOwner {
+/** User in the Polls OpenAPI spec (owner, voter, commenter, share recipient). */
+export interface PollUser {
+  id?: string;
   userId: string;
   displayName: string;
   emailAddress?: string;
   type?: string;
 }
+
+/** Kept for callers that still import the old name. */
+export type PollOwner = PollUser;
 
 export interface PollConfiguration {
   title: string;
@@ -17,7 +22,8 @@ export interface PollConfiguration {
   access?: string;
   allowComment?: boolean;
   allowMaybe?: boolean;
-  allowProposals?: string | boolean;
+  /** 'disallow' | 'allow' | 'review' */
+  allowProposals?: string;
   anonymous?: boolean;
   autoReminder?: boolean;
   expire?: number;
@@ -32,8 +38,9 @@ export interface PollConfiguration {
 export interface PollStatus {
   lastInteraction?: number;
   created?: number;
-  deleted?: boolean;
-  expired?: boolean;
+  isArchived?: boolean;
+  isExpired?: boolean;
+  countParticipants?: number;
 }
 
 export interface PollCurrentUserStatus {
@@ -45,15 +52,15 @@ export interface PollCurrentUserStatus {
   yesVotes?: number;
   countVotes?: number;
   orphanedVotes?: number;
-  isSubscribed?: boolean;
 }
 
 export interface Poll {
   id: number;
   type: string;
+  votingVariant?: string;
   configuration: PollConfiguration;
   descriptionSafe?: string;
-  owner: PollOwner;
+  owner: PollUser;
   status?: PollStatus;
   currentUserStatus?: PollCurrentUserStatus;
 }
@@ -61,39 +68,31 @@ export interface Poll {
 export interface PollOption {
   id: number;
   pollId: number;
-  pollOptionText?: string;
   text?: string;
   timestamp?: number;
   duration?: number;
   order?: number;
   confirmed?: number;
-  no?: number;
-  yes?: number;
-  maybe?: number;
-  realNo?: number;
-  realYes?: number;
-  realMaybe?: number;
-  votes?: Record<string, number>;
+  votes?: { yes: number; no: number; maybe: number; count: number; currentUser?: string | null };
 }
 
 export interface PollVote {
   id: number;
   pollId: number;
   optionId?: number;
-  userId?: string;
-  voteAnswer?: string;
   optionText?: string;
+  /** 'yes' | 'no' | 'maybe' */
+  answer?: string;
+  user?: PollUser;
 }
 
 export interface PollComment {
   id: number;
   pollId: number;
-  userId?: string;
-  user?: PollOwner;
   comment?: string;
   timestamp?: number;
-  dt?: string;
-  deleted?: number;
+  confidential?: number | boolean;
+  user?: PollUser;
 }
 
 export interface PollShare {
@@ -101,19 +100,19 @@ export interface PollShare {
   token: string;
   type: string;
   pollId: number;
-  userId?: string;
-  emailAddress?: string;
   label?: string;
   URL?: string;
   locked?: boolean;
   invitationSent?: boolean;
-  user?: PollOwner;
+  user?: PollUser;
 }
 
 /**
- * Make an authenticated request to the Nextcloud Polls REST API v1.0.
+ * Make an authenticated request to the Nextcloud Polls API v1.0 and return the
+ * OCS `data` payload.
  *
- * Base path: /index.php/apps/polls/api/v1.0
+ * Base path: /ocs/v2.php/apps/polls/api/v1.0. The API is served as OCS routes
+ * (#[ApiRoute]); /index.php/apps/polls/api/v1.0 only answers CORS preflights.
  */
 export async function fetchPollsAPI<T = unknown>(
   endpoint: string,
@@ -126,7 +125,7 @@ export async function fetchPollsAPI<T = unknown>(
   const config = getNextcloudConfig();
   const auth = basicAuth(config);
 
-  let url = `${config.url}/index.php/apps/polls/api/v1.0${endpoint}`;
+  let url = `${config.url}/ocs/v2.php/apps/polls/api/v1.0${endpoint}`;
   if (options.queryParams) {
     const params = new URLSearchParams(options.queryParams);
     url += `?${params.toString()}`;
@@ -160,7 +159,8 @@ export async function fetchPollsAPI<T = unknown>(
 
   const contentType = response.headers.get('content-type') ?? '';
   if (contentType.includes('application/json')) {
-    return (await response.json()) as T;
+    const json = (await response.json()) as { ocs?: { data?: unknown } };
+    return (json.ocs ? json.ocs.data : json) as T;
   }
 
   return undefined as T;

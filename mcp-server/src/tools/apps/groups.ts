@@ -80,8 +80,10 @@ export const getGroupInfoTool = {
   }),
   handler: async (args: { groupId: string }) => {
     try {
+      // GET /cloud/groups/{groupId} is deprecated in provisioning_api; /users
+      // returns the same { users: string[] } payload.
       const result = await fetchOCS<{ users: string[] }>(
-        `/ocs/v2.php/cloud/groups/${encodeURIComponent(args.groupId)}`
+        `/ocs/v2.php/cloud/groups/${encodeURIComponent(args.groupId)}/users`
       );
 
       const users = result.ocs.data.users;
@@ -175,7 +177,9 @@ export const removeUserFromGroupTool = {
     try {
       await fetchOCS(`/ocs/v2.php/cloud/users/${encodeURIComponent(args.userId)}/groups`, {
         method: 'DELETE',
-        body: { groupid: args.groupId },
+        // provisioning_api declares groupid as a query parameter here; content on a
+        // DELETE has no defined semantics (RFC 9110 §9.3.5).
+        queryParams: { groupid: args.groupId },
       });
 
       return {

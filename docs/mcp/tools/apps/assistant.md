@@ -74,13 +74,10 @@ Get the status and result of a Nextcloud AI task previously created by `process_
 **Returns:**
 Task status and result (if completed).
 
-**Status codes:**
-| Status | Meaning |
-|--------|---------|
-| 1 | Scheduled |
-| 2 | Running |
-| 3 | Successful |
-| 4 | Failed |
+**Status:** Nextcloud reports `STATUS_SCHEDULED`, `STATUS_RUNNING`, `STATUS_SUCCESSFUL`,
+`STATUS_FAILED`, `STATUS_CANCELLED` or `STATUS_UNKNOWN`; the tool shows them as `scheduled`,
+`running` and so on. A failed or cancelled task is returned as an error, with the provider's
+message when it gives one.
 
 **Example Usage:**
 ```

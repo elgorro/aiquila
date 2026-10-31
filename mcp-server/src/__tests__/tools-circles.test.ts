@@ -157,6 +157,37 @@ describe('Circles (Teams) Tools', () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Error getting circle');
     });
+
+    it('should fall back to the circle list when the details route answers 403', async () => {
+      // circles ships GET /circles/{circleId} without #[NoAdminRequired]
+      mockFetchOCS
+        .mockRejectedValueOnce(new Error('Permission denied. This operation requires admin'))
+        .mockResolvedValueOnce(
+          ocsWrap([
+            { id: 'other', name: 'Other', config: 0 },
+            { id: 'abc123', name: 'Mine', displayName: 'Mine', config: 0 },
+          ])
+        );
+
+      const { circlesGetTool } = await import('../tools/apps/circles.js');
+      const result = await circlesGetTool.handler({ circleId: 'abc123' });
+
+      expect(mockFetchOCS).toHaveBeenLastCalledWith('/ocs/v2.php/apps/circles/circles');
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain('# Mine');
+    });
+
+    it('should keep the 403 when the circle is not in the list either', async () => {
+      mockFetchOCS
+        .mockRejectedValueOnce(new Error('Permission denied. This operation requires admin'))
+        .mockResolvedValueOnce(ocsWrap([]));
+
+      const { circlesGetTool } = await import('../tools/apps/circles.js');
+      const result = await circlesGetTool.handler({ circleId: 'abc123' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Permission denied');
+    });
   });
 
   // -------------------------------------------------------------------------

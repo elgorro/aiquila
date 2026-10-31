@@ -18,8 +18,8 @@ interface Bookmark {
   description: string;
   added: number;
   userId: string;
-  tags: string[];
-  folders: number[];
+  tags?: string[];
+  folders?: number[];
   clickcount: number;
   available: boolean;
   archivedFile: string | null;
@@ -58,11 +58,6 @@ interface FolderChildrenResponse {
   data: (BookmarkFolder | Bookmark)[];
 }
 
-interface TagListResponse {
-  status: string;
-  data: string[]; // tag list is just an array of tag name strings
-}
-
 interface StatusResponse {
   status: string;
 }
@@ -71,8 +66,9 @@ interface StatusResponse {
 
 function formatBookmarkSummary(b: Bookmark): string {
   const parts = [`- **${b.title || '(untitled)'}** — ${b.url}`];
-  if (b.tags.length > 0) parts.push(`  Tags: ${b.tags.join(', ')}`);
-  if (b.folders.length > 0) parts.push(`  Folders: ${b.folders.join(', ')}`);
+  // Folder children (GET /folder/{id}/children) carry neither tags nor folders
+  if (b.tags?.length) parts.push(`  Tags: ${b.tags.join(', ')}`);
+  if (b.folders?.length) parts.push(`  Folders: ${b.folders.join(', ')}`);
   parts.push(`  ID: ${b.id}`);
   return parts.join('\n');
 }
@@ -84,8 +80,8 @@ function formatBookmarkDetail(b: Bookmark): string {
   lines.push(`- URL: ${b.url}`);
   lines.push(`- ID: ${b.id}`);
   if (b.description) lines.push(`- Description: ${b.description}`);
-  if (b.tags.length > 0) lines.push(`- Tags: ${b.tags.join(', ')}`);
-  if (b.folders.length > 0) lines.push(`- Folders: ${b.folders.join(', ')}`);
+  if (b.tags?.length) lines.push(`- Tags: ${b.tags.join(', ')}`);
+  if (b.folders?.length) lines.push(`- Folders: ${b.folders.join(', ')}`);
   lines.push(`- Added: ${new Date(b.added * 1000).toISOString()}`);
   lines.push(`- Clicks: ${b.clickcount}`);
   lines.push(`- Available: ${b.available}`);
@@ -151,7 +147,8 @@ export const listBookmarksTool = {
   }) => {
     try {
       const queryParams: Record<string, string | string[]> = {};
-      if (args.search) queryParams['search[]'] = [args.search];
+      // fetchBookmarksAPI appends [] to array-valued keys: search[]=…
+      if (args.search) queryParams['search'] = [args.search];
       if (args.tags && args.tags.length > 0) queryParams['tags'] = args.tags;
       if (args.folder !== undefined) queryParams['folder'] = String(args.folder);
       if (args.page !== undefined) queryParams['page'] = String(args.page);
@@ -666,15 +663,16 @@ export const listBookmarkTagsTool = {
   inputSchema: z.object({}),
   handler: async () => {
     try {
-      const result = await fetchBookmarksAPI<TagListResponse>('/tag');
+      // GET /tag returns a bare array of tag names
+      const tags = await fetchBookmarksAPI<string[]>('/tag');
 
-      if (result.data.length === 0) {
+      if (tags.length === 0) {
         return {
           content: [{ type: 'text' as const, text: 'No bookmark tags found.' }],
         };
       }
 
-      const formatted = result.data
+      const formatted = [...tags]
         .sort()
         .map((t) => `- ${t}`)
         .join('\n');
@@ -683,7 +681,7 @@ export const listBookmarkTagsTool = {
         content: [
           {
             type: 'text' as const,
-            text: `Bookmark tags (${result.data.length}):\n\n${formatted}`,
+            text: `Bookmark tags (${tags.length}):\n\n${formatted}`,
           },
         ],
       };

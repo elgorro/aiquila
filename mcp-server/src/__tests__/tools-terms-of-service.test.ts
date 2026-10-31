@@ -27,7 +27,8 @@ describe('Terms of Service Tools', () => {
     it('should fetch admin form data and format terms, settings and codes', async () => {
       mockFetchOCS.mockResolvedValue(
         ok({
-          terms: [{ id: 3, countryCode: '--', languageCode: 'en', body: 'Be nice.' }],
+          // A map keyed by terms id, as AdminFormData declares
+          terms: { '3': { id: 3, countryCode: '--', languageCode: 'en', body: 'Be nice.' } },
           countries: { '--': 'Global', DE: 'Germany' },
           languages: { en: 'English', de: 'German' },
           tos_on_public_shares: '0',

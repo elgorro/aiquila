@@ -22,7 +22,9 @@ export const getOutOfOfficeTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: "Get a user's current out-of-office / absence status (NC 28+)",
+  description:
+    "Get a user's configured out-of-office / absence (NC 28+), whether it is active now or scheduled for later. " +
+    'The result includes firstDay and lastDay.',
   inputSchema: z.object({
     userId: z
       .string()
@@ -32,8 +34,10 @@ export const getOutOfOfficeTool = {
   handler: async (args: { userId?: string }) => {
     try {
       const userId = args.userId ?? getNextcloudConfig().user;
+      // /outOfOffice/{userId}/now only answers while the absence is in effect;
+      // the configured absence is what set_out_of_office writes.
       const result = await fetchOCS<Record<string, unknown>>(
-        `/ocs/v2.php/apps/dav/api/v1/outOfOffice/${encodeURIComponent(userId)}/now`
+        `/ocs/v2.php/apps/dav/api/v1/outOfOffice/${encodeURIComponent(userId)}`
       );
 
       return {

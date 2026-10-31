@@ -521,43 +521,6 @@ describe('Mail Tools', () => {
   });
 
   describe('mail_send_message', () => {
-    it('should send email successfully', async () => {
-      // First call: GET /accounts to find fromEmail
-      // Second call: POST /messages/send
-      let callCount = 0;
-      mockFetchMailAPI.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve([{ id: 1, name: 'Personal', emailAddress: 'me@example.com' }]),
-          });
-        }
-        return Promise.resolve({ ok: true, status: 200 });
-      });
-
-      const { mailTools } = await import('../tools/apps/mail.js');
-      const tool = mailTools.find((t) => t.name === 'mail_send_message')!;
-      const result = await tool.handler({
-        accountId: 1,
-        to: ['alice@example.com'],
-        subject: 'Test',
-        body: 'Hello!',
-      });
-
-      expect(result.content[0].text).toContain('Email sent successfully');
-      expect(result.content[0].text).toContain('alice@example.com');
-
-      // Verify send was called with correct params
-      expect(mockFetchMailAPI).toHaveBeenCalledTimes(2);
-      const sendCall = mockFetchMailAPI.mock.calls[1];
-      expect(sendCall[0]).toBe('/messages/send');
-      expect(sendCall[1].method).toBe('POST');
-      expect(sendCall[1].body.fromEmail).toBe('me@example.com');
-      expect(sendCall[1].body.subject).toBe('Test');
-    });
-
     it('should handle account not found', async () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
@@ -575,6 +538,55 @@ describe('Mail Tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Account with ID 999 not found');
+    });
+  });
+
+  describe('mail_send_message', () => {
+    const account = {
+      ok: true,
+      json: () => Promise.resolve([{ id: 1, name: 'Me', emailAddress: 'me@example.com' }]),
+    };
+
+    it('should POST to the OCS message/send endpoint', async () => {
+      mockFetchMailAPI.mockResolvedValue(account);
+      mockFetchOCS.mockResolvedValue({ ocs: { meta: { statuscode: 200 }, data: '' } });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_send_message')!;
+      const result = await tool.handler({
+        accountId: 1,
+        to: ['you@example.com'],
+        subject: 'Hi',
+        body: 'Hello',
+      });
+
+      // /index.php/apps/mail/api/messages/send does not exist (405)
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/apps/mail/message/send', {
+        method: 'POST',
+        jsonBody: {
+          accountId: 1,
+          fromEmail: 'me@example.com',
+          subject: 'Hi',
+          body: 'Hello',
+          isHtml: false,
+          to: [{ label: 'you@example.com', email: 'you@example.com' }],
+          cc: [],
+          bcc: [],
+        },
+      });
+      expect(result.content[0].text).toContain('sent successfully');
+    });
+
+    it('should say when Mail only queued the message (202)', async () => {
+      mockFetchMailAPI.mockResolvedValue(account);
+      mockFetchOCS.mockResolvedValue({ ocs: { meta: { statuscode: 202 }, data: '' } });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_send_message')!;
+      const result = await tool.handler({ accountId: 1, to: ['x@y.z'], subject: 's', body: 'b' });
+
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain('will retry');
     });
   });
 
@@ -650,7 +662,7 @@ describe('Mail Tools', () => {
       expect(result.content[0].text).toContain('flagged=true');
       expect(mockFetchMailAPI).toHaveBeenCalledWith('/messages/100/flags', {
         method: 'PUT',
-        body: { seen: true, flagged: true },
+        body: { flags: { seen: true, flagged: true } },
       });
     });
 

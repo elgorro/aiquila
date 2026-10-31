@@ -1672,7 +1672,11 @@ export const updateMapTool = {
 
       return {
         content: [
-          { type: 'text' as const, text: `Map ${args.id} updated.\n\n${formatMyMap(result)}` },
+          // Maps answers with the changed values only, without the id
+          {
+            type: 'text' as const,
+            text: `Map ${args.id} updated.\n\n${formatMyMap({ ...result, id: args.id })}`,
+          },
         ],
       };
     } catch (error) {
@@ -1769,7 +1773,9 @@ export const exportMapRouteTool = {
       if (args.totTime !== undefined) body.totTime = args.totTime;
       if (args.myMapId !== undefined) body.myMapId = args.myMapId;
 
-      const result = await fetchMapsAPI<Track>('/exportRoute', {
+      // Maps answers with the track from its index, which is null until the new
+      // file has been scanned; the GPX file is written either way.
+      const result = await fetchMapsAPI<Track | null>('/exportRoute', {
         method: 'POST',
         body,
       });
@@ -1778,7 +1784,9 @@ export const exportMapRouteTool = {
         content: [
           {
             type: 'text' as const,
-            text: `Route "${args.name}" exported as GPX.\n\n${formatTrack(result)}`,
+            text: result
+              ? `Route "${args.name}" exported as GPX.\n\n${formatTrack(result)}`
+              : `Route "${args.name}" exported as "${args.name}.gpx" in the Maps folder; it appears in list_map_tracks once Maps has indexed it.`,
           },
         ],
       };

@@ -343,8 +343,9 @@ describe('Deck Tools', () => {
 
   describe('deck_move_card', () => {
     it('should move card to target stack', async () => {
+      // Deck answers with the target stack's cards
       const movedCard = { ...sampleCard, stackId: 6 };
-      mockFetchDeckAPI.mockResolvedValue(movedCard);
+      mockFetchDeckAPI.mockResolvedValue([{ ...sampleCard, id: 99 }, movedCard]);
 
       const { moveCardTool } = await import('../tools/apps/deck.js');
       const result = await moveCardTool.handler({
@@ -355,6 +356,7 @@ describe('Deck Tools', () => {
       });
 
       expect(result.content[0].text).toContain('Card moved to stack 6');
+      expect(result.content[0].text).toContain('Fix login bug');
       expect(mockFetchDeckAPI).toHaveBeenCalledWith('/boards/1/stacks/5/cards/100/reorder', {
         method: 'PUT',
         body: { order: 0, stackId: 6 },
@@ -362,7 +364,7 @@ describe('Deck Tools', () => {
     });
 
     it('should support custom order', async () => {
-      mockFetchDeckAPI.mockResolvedValue(sampleCard);
+      mockFetchDeckAPI.mockResolvedValue([sampleCard]);
 
       const { moveCardTool } = await import('../tools/apps/deck.js');
       await moveCardTool.handler({
