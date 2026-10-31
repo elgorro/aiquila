@@ -35,3 +35,7 @@ docs/
 
 # CI/CD
 .github/
+
+# Docker (BuildKit still reads the Dockerfile; this keeps it out of the image)
+Dockerfile*
+.dockerignore

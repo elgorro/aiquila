@@ -6,7 +6,6 @@ on:
   pull_request:
     paths:
       - 'mcp-server/**'
-      - 'docker/mcp-server/**'
       - 'docker/e2e/**'
       - 'docker/standalone/scripts/nc-login-flow.sh'
       - '.github/workflows/e2e.yml'
@@ -15,7 +14,6 @@ on:
       - main
     paths:
       - 'mcp-server/**'
-      - 'docker/mcp-server/**'
       - 'docker/e2e/**'
       - 'docker/standalone/scripts/nc-login-flow.sh'
       - '.github/workflows/e2e.yml'
@@ -39,11 +37,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      # Compose's bake builder refuses the Dockerfile, which lives outside the
-      # build context (docker/mcp-server/ vs mcp-server/); the classic builder reads it.
       - name: Start Nextcloud and the MCP server
-        env:
-          COMPOSE_BAKE: 'false'
         run: docker compose up -d --build
 
       - name: Run the test

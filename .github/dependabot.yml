@@ -69,7 +69,7 @@ updates:
   - package-ecosystem: docker
     directories:
       - /docker/installation
-      - /docker/mcp-server
+      - /mcp-server
       - /docker/standalone
       - /hetzner/docker/mcp
       - /hetzner/docker/nextcloud
