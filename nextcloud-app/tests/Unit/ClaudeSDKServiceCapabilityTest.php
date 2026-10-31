@@ -820,32 +820,24 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $this->assertArrayNotHasKey('speed', $service->lastCreateParams);
     }
 
-    /**
-     * Both beta flags have to survive together. The seam used to return one
-     * header, so whichever flag was added second would have silently replaced
-     * the other.
-     */
-    public function testFastModeAndFilesApiBetasAreBothSent(): void {
+    /** The Files API is GA, so a file_id beside fast mode adds no second beta flag. */
+    public function testFileIdBesideFastModeSendsOnlyTheFastModeBeta(): void {
         $service = $this->makeServiceForModel(ClaudeModels::OPUS_5);
         $service->chat([[
             'role' => 'user',
             'content' => [['type' => 'document', 'source' => ['type' => 'file', 'file_id' => 'file_123']]],
         ]], null, 'testuser', ['speed' => true]);
 
-        $header = $service->lastRequestOptions['extraHeaders']['anthropic-beta'];
-        $this->assertStringContainsString('files-api-2025-04-14', $header);
-        $this->assertStringContainsString('fast-mode-2026-02-01', $header);
-        $this->assertCount(2, explode(',', $header));
+        $this->assertSame('fast-mode-2026-02-01', $service->lastRequestOptions['extraHeaders']['anthropic-beta']);
     }
 
-    public function testFilesApiBetaAloneCarriesNoSpeedBody(): void {
+    public function testFileIdAloneCarriesNoRequestOptions(): void {
         $service = $this->makeServiceForModel(ClaudeModels::OPUS_5);
         $service->chat([[
             'role' => 'user',
             'content' => [['type' => 'document', 'source' => ['type' => 'file', 'file_id' => 'file_123']]],
         ]], null, 'testuser');
 
-        $this->assertSame('files-api-2025-04-14', $service->lastRequestOptions['extraHeaders']['anthropic-beta']);
-        $this->assertArrayNotHasKey('extraBodyParams', $service->lastRequestOptions);
+        $this->assertNull($service->lastRequestOptions);
     }
 }

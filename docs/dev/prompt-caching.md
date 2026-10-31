@@ -73,7 +73,8 @@ follow-up questions still see it. Images and PDFs go by their Files API
 `file_id`, which stays the same while the file's bytes do, and text files go
 inline. An unchanged file therefore renders the same bytes each turn and sits
 inside the cached prefix. Editing it in Nextcloud invalidates the cache from
-that message onwards.
+that message onwards, and so does the re-upload a day before an upload's 30-day
+expiry (`FilesService::TTL_SECONDS`), which gives the file a new `file_id`.
 
 The automatic breakpoint consumes one of the four slots, so it stands down when
 the explicit markers have already taken all four rather than letting the request

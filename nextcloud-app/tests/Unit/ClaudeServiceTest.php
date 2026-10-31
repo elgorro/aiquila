@@ -726,7 +726,7 @@ class ClaudeServiceTest extends TestCase {
         $this->assertNull($this->testable->lastRequestOptions);
     }
 
-    public function testRequestOptionsCarryFilesBetaWhenContentReferencesFileId(): void {
+    public function testFileIdReferencesNeedNoBetaHeader(): void {
         $this->configWithApiKey();
 
         $messages = [
@@ -740,10 +740,8 @@ class ClaudeServiceTest extends TestCase {
         ];
         $this->testable->chat($messages, null, 'testuser');
 
-        $opts = $this->testable->lastRequestOptions;
-        $this->assertIsArray($opts);
-        $this->assertArrayHasKey('extraHeaders', $opts);
-        $this->assertSame('files-api-2025-04-14', $opts['extraHeaders']['anthropic-beta']);
+        // The Files API is GA: a file_id needs no beta header.
+        $this->assertNull($this->testable->lastRequestOptions);
     }
 
     // ── chat() ────────────────────────────────────────────────────────────

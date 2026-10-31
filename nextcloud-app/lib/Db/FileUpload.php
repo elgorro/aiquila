@@ -22,6 +22,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setAnthropicFileId(string $anthropicFileId)
  * @method int getUploadedAt()
  * @method void setUploadedAt(int $uploadedAt)
+ * @method int|null getExpiresAt()
+ * @method void setExpiresAt(?int $expiresAt)
  */
 class FileUpload extends Entity {
     use InsertsFullRow;
@@ -30,12 +32,15 @@ class FileUpload extends Entity {
     protected string $sha256 = '';
     protected string $anthropicFileId = '';
     protected int $uploadedAt = 0;
+    /** When Anthropic expires the file; null for uploads made without an expiry. */
+    protected ?int $expiresAt = null;
 
     public function __construct() {
         $this->addType('userId', 'string');
         $this->addType('sha256', 'string');
         $this->addType('anthropicFileId', 'string');
         $this->addType('uploadedAt', 'integer');
+        $this->addType('expiresAt', 'integer');
         $this->markFieldsForInsert();
     }
 }
