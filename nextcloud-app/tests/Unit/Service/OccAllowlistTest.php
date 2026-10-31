@@ -3,12 +3,12 @@
 namespace OCA\AIquila\Tests\Unit\Service;
 
 use OCA\AIquila\Service\OccAllowlist;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use PHPUnit\Framework\TestCase;
 
 class OccAllowlistTest extends TestCase {
     private function allowlist(string $configured = ''): OccAllowlist {
-        $config = $this->createStub(IConfig::class);
+        $config = $this->createStub(AppSettings::class);
         $config->method('getAppValue')->willReturn($configured);
         return new OccAllowlist($config);
     }

@@ -21,7 +21,7 @@ use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICache;
 use OCP\ICacheFactory;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -187,7 +187,7 @@ class BatchTestableService extends ClaudeSDKService {
 
 class ClaudeSDKServiceBatchTest extends TestCase {
     private function makeService(array $appConfig = []): BatchTestableService {
-        $config = $this->createStub(IConfig::class);
+        $config = $this->createStub(AppSettings::class);
         $config->method('getAppValue')->willReturnCallback(
             fn ($app, $key, $default) => $appConfig[$key] ?? $default
         );

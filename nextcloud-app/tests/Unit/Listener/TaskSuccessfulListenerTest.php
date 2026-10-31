@@ -3,7 +3,7 @@
 namespace OCA\AIquila\Tests\Unit\Listener;
 
 use OCA\AIquila\Listener\TaskSuccessfulListener;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\Notification\INotification;
 use OCP\TaskProcessing\Events\TaskSuccessfulEvent;
@@ -16,7 +16,7 @@ use Psr\Log\LoggerInterface;
 class TaskSuccessfulListenerTest extends TestCase {
     private INotificationManager $notificationManager;
     private ITaskProcessingManager $taskProcessingManager;
-    private IConfig $config;
+    private AppSettings $config;
     private LoggerInterface $logger;
     /** Stubbed preference value; null lets getUserValue return its own default. */
     private ?string $prefValue = null;
@@ -26,7 +26,7 @@ class TaskSuccessfulListenerTest extends TestCase {
         $this->notificationManager = $this->createStub(INotificationManager::class);
         $this->taskProcessingManager = $this->createStub(ITaskProcessingManager::class);
         $this->logger = $this->createStub(LoggerInterface::class);
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->config->method('getUserValue')
             ->willReturnCallback(fn (string $u, string $a, string $k, $d = '') => $this->prefValue ?? $d);
         $this->buildListener();

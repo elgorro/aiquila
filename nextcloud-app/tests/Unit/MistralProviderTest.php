@@ -8,7 +8,7 @@ use OCA\AIquila\Service\Provider\MistralProvider;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use Psr\Log\LoggerInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -23,7 +23,7 @@ class MistralProviderTest extends TestCase {
     protected function setUp(): void {
         $this->clientService = $this->createStub(IClientService::class);
         $this->client        = $this->createStub(IClient::class);
-        $this->config        = $this->createStub(IConfig::class);
+        $this->config        = $this->createStub(AppSettings::class);
         $this->credentials   = $this->createStub(CredentialService::class);
         $this->logger        = $this->createStub(LoggerInterface::class);
 

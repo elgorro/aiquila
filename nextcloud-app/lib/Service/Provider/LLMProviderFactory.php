@@ -12,7 +12,7 @@ use OCA\AIquila\Service\Provider\Cloud\ClaudePlatformAwsProvider;
 use OCA\AIquila\Service\Provider\Cloud\ClaudePlatformGoogleCloudProvider;
 use OCA\AIquila\Service\Provider\Cloud\FoundryProvider;
 use OCA\AIquila\Service\Provider\Cloud\VertexProvider;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 
 /**
  * Resolves the active LLM provider for the chat experience.
@@ -37,7 +37,7 @@ class LLMProviderFactory {
     public const DEFAULT_PROVIDER = 'anthropic';
 
     public function __construct(
-        private readonly IConfig $config,
+        private readonly AppSettings $config,
         private readonly ClaudeSDKService $anthropic,
         private readonly MistralProvider $mistral,
         private readonly DeepSeekProvider $deepseek,

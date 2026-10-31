@@ -10,7 +10,7 @@ use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use OCA\AIquila\Service\Provider\ProviderActionsInterface;
 use OCA\AIquila\Service\Provider\ProviderSettingsService;
 use OCP\AppFramework\Http;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\IGroupManager;
 use OCP\IRequest;
 use OCP\IUserManager;
@@ -28,7 +28,7 @@ class ProviderSettingsControllerTest extends TestCase {
     private ProviderSettingsController $ctrl;
 
     protected function setUp(): void {
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->config->method('getUserValue')->willReturn('');
         $this->config->method('getAppValue')->willReturnArgument(2);
 
@@ -88,7 +88,7 @@ class ProviderSettingsControllerTest extends TestCase {
     }
 
     public function testUpdateRefusesADeniedProvider(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->settings = $this->createMock(ProviderSettingsService::class);
         $this->buildCtrl();
 

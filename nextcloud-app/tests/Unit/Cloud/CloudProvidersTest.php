@@ -25,7 +25,7 @@ use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICache;
 use OCP\ICacheFactory;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -60,12 +60,12 @@ class CloudProvidersTest extends TestCase {
     private array $keys = [];
     private bool $sdkAvailable = true;
 
-    private IConfig $config;
+    private AppSettings $config;
     private CredentialService $credentials;
     private CloudSdk $sdk;
 
     protected function setUp(): void {
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->config->method('getAppValue')->willReturnCallback(
             fn (string $app, string $key, string $default = '') => $this->app[$key] ?? $default,
         );

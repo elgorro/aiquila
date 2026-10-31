@@ -28,7 +28,7 @@ namespace OCA\AIquila\Service\Provider;
  * cannot accidentally expose one by leaving the scope off — the default is
  * admin-only.
  *
- * `sensitive` fields (API keys) live in CredentialService, never in IConfig, and
+ * `sensitive` fields (API keys) live in CredentialService, never in app config, and
  * their values are never returned to the client; the API reports only whether a
  * key exists in the requested scope.
  */
@@ -80,7 +80,7 @@ final class ProviderSettingsSchema {
     public const GROUP_ADVANCED = 'advanced';
 
     /**
-     * Not stored in IConfig at all: the value is a list of principals held in
+     * Not stored in app config at all: the value is a list of principals held in
      * `aiquila_provider_access` and written through ProviderAccessService.
      */
     public const STORAGE_ACCESS = 'access';

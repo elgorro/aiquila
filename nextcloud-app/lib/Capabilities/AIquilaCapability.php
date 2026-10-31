@@ -11,7 +11,7 @@ use OCA\AIquila\Service\SearchSettings;
 use OCA\AIquila\TaskProcessing\ProviderRegistry;
 use OCP\App\IAppManager;
 use OCP\Capabilities\ICapability;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\TaskProcessing\ISynchronousProvider;
 use Psr\Container\ContainerInterface;
 
@@ -19,7 +19,7 @@ class AIquilaCapability implements ICapability {
     private const APP_ID = 'aiquila';
 
     public function __construct(
-        private IConfig $config,
+        private AppSettings $config,
         private CredentialService $credentialService,
         private IAppManager $appManager,
         private ContainerInterface $container,

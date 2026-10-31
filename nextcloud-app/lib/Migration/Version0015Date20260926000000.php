@@ -8,7 +8,7 @@ namespace OCA\AIquila\Migration;
 use Closure;
 use OCP\DB\ISchemaWrapper;
 use OCP\DB\Types;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
@@ -28,7 +28,7 @@ use OCP\Migration\SimpleMigrationStep;
  */
 class Version0015Date20260926000000 extends SimpleMigrationStep {
     public function __construct(
-        private readonly IConfig $config,
+        private readonly AppSettings $config,
     ) {
     }
 

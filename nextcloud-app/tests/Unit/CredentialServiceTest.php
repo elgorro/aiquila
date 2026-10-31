@@ -3,7 +3,7 @@
 namespace OCA\AIquila\Tests\Unit;
 
 use OCA\AIquila\Service\CredentialService;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\Security\ICrypto;
 use OCP\Security\ICredentialsManager;
 use PHPUnit\Framework\TestCase;
@@ -12,14 +12,14 @@ use Psr\Log\LoggerInterface;
 class CredentialServiceTest extends TestCase {
     private ICredentialsManager $credManager;
     private ICrypto $crypto;
-    private IConfig $config;
+    private AppSettings $config;
     private LoggerInterface $logger;
     private CredentialService $service;
 
     protected function setUp(): void {
         $this->credManager = $this->createStub(ICredentialsManager::class);
         $this->crypto = $this->createStub(ICrypto::class);
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->logger = $this->createStub(LoggerInterface::class);
         $this->buildService();
     }
@@ -45,9 +45,9 @@ class CredentialServiceTest extends TestCase {
         $this->assertEquals('sk-ant-secure-key', $result);
     }
 
-    public function testGetApiKeyMigratesFromIConfig(): void {
+    public function testGetApiKeyMigratesFromUserConfig(): void {
         $this->credManager = $this->createMock(ICredentialsManager::class);
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $this->credManager->expects($this->once())->method('retrieve')
@@ -73,7 +73,7 @@ class CredentialServiceTest extends TestCase {
     }
 
     public function testGetApiKeyFallsBackToAppKey(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         // User key not found in either store
@@ -103,9 +103,9 @@ class CredentialServiceTest extends TestCase {
         $this->assertEquals('sk-ant-app-key', $result);
     }
 
-    public function testGetApiKeyAppScopeMigratesFromIConfig(): void {
+    public function testGetApiKeyAppScopeMigratesFromAppConfig(): void {
         $this->credManager = $this->createMock(ICredentialsManager::class);
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $this->credManager->expects($this->once())->method('retrieve')
@@ -141,7 +141,7 @@ class CredentialServiceTest extends TestCase {
 
     public function testHasApiKeyFalse(): void {
         $this->credManager = $this->createMock(ICredentialsManager::class);
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $this->credManager->expects($this->once())->method('retrieve')
@@ -157,7 +157,7 @@ class CredentialServiceTest extends TestCase {
 
     public function testHasApiKeyChecksPlaintextFallback(): void {
         $this->credManager = $this->createMock(ICredentialsManager::class);
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $this->credManager->expects($this->once())->method('retrieve')
@@ -173,7 +173,7 @@ class CredentialServiceTest extends TestCase {
 
     public function testSetApiKeyStoresAndCleansPlaintext(): void {
         $this->credManager = $this->createMock(ICredentialsManager::class);
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $this->credManager->expects($this->once())
@@ -189,7 +189,7 @@ class CredentialServiceTest extends TestCase {
 
     public function testSetApiKeyAppScope(): void {
         $this->credManager = $this->createMock(ICredentialsManager::class);
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $this->credManager->expects($this->once())
@@ -205,7 +205,7 @@ class CredentialServiceTest extends TestCase {
 
     public function testDeleteApiKey(): void {
         $this->credManager = $this->createMock(ICredentialsManager::class);
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $this->credManager->expects($this->once())

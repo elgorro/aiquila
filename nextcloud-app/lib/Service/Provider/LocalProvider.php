@@ -36,7 +36,7 @@ namespace OCA\AIquila\Service\Provider;
  * outbound requests to whatever is configured, with the SSRF guard disabled, so
  * a user-settable endpoint would be an SSRF vector — and user-settable headers
  * on top of it would be a way to post an instance credential wherever the user
- * likes. Secrets go through CredentialService, never IConfig.
+ * likes. Secrets go through CredentialService, never app config.
  */
 class LocalProvider extends AbstractOpenAiCompatibleProvider {
     private const PROVIDER_ID = 'local';

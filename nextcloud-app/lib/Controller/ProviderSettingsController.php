@@ -19,7 +19,7 @@ use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\IGroupManager;
 use OCP\IRequest;
 use OCP\IUserManager;
@@ -51,7 +51,7 @@ class ProviderSettingsController extends Controller {
         string $appName,
         IRequest $request,
         private readonly ?string $userId,
-        private readonly IConfig $config,
+        private readonly AppSettings $config,
         private readonly LLMProviderFactory $providerFactory,
         private readonly ProviderSettingsService $providerSettings,
         private readonly CredentialService $credentials,

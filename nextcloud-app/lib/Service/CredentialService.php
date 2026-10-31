@@ -5,7 +5,6 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Service;
 
-use OCP\IConfig;
 use OCP\Security\ICrypto;
 use OCP\Security\ICredentialsManager;
 use Psr\Log\LoggerInterface;
@@ -34,13 +33,13 @@ class CredentialService {
     public function __construct(
         private ICredentialsManager $credentialsManager,
         private ICrypto $crypto,
-        private IConfig $config,
+        private AppSettings $config,
         private LoggerInterface $logger,
     ) {
     }
 
     /**
-     * Get API key from secure storage, migrating from plaintext IConfig if needed.
+     * Get API key from secure storage, migrating a plaintext app or user setting if needed.
      *
      * @param string|null $userId User ID, or null for app-scope key
      * @param string $provider Provider id (default 'anthropic' = legacy key slot)
@@ -55,26 +54,11 @@ class CredentialService {
             return $key;
         }
 
-        // Plaintext IConfig migration only ever applied to the legacy default key.
+        // Plaintext migration only ever applied to the legacy default key.
         if ($provider === self::DEFAULT_PROVIDER) {
-            if ($userId !== null) {
-                $plaintext = $this->config->getUserValue($userId, self::APP_NAME, 'api_key', '');
-            } else {
-                $plaintext = $this->config->getAppValue(self::APP_NAME, 'api_key', '');
-            }
-
-            if ($plaintext !== '') {
-                // Migrate: store encrypted, delete plaintext
-                $this->credentialsManager->store($credUserId, $credKey, $plaintext);
-                if ($userId !== null) {
-                    $this->config->deleteUserValue($userId, self::APP_NAME, 'api_key');
-                } else {
-                    $this->config->deleteAppValue(self::APP_NAME, 'api_key');
-                }
-                $this->logger->info('Migrated API key from plaintext to secure storage', [
-                    'scope' => $userId !== null ? 'user' : 'app',
-                ]);
-                return $plaintext;
+            $migrated = $this->migratePlaintextApiKey($userId, false);
+            if ($migrated !== '') {
+                return $migrated;
             }
         }
 
@@ -84,6 +68,42 @@ class CredentialService {
         }
 
         return '';
+    }
+
+    /**
+     * Move a plaintext `api_key` setting left by early releases into the
+     * credential manager and delete it. A key already in the credential manager
+     * wins; the plaintext copy is deleted either way.
+     *
+     * @param bool|null $hasStoredKey Whether the credential manager already holds
+     *                                a key for this scope; null looks it up
+     * @return string The key that was moved, or '' when there was nothing to move
+     */
+    public function migratePlaintextApiKey(?string $userId, ?bool $hasStoredKey = null): string {
+        $plaintext = $userId !== null
+            ? $this->config->getUserValue($userId, self::APP_NAME, 'api_key', '')
+            : $this->config->getAppValue(self::APP_NAME, 'api_key', '');
+        if ($plaintext === '') {
+            return '';
+        }
+
+        $credUserId = $userId ?? '';
+        if ($hasStoredKey === null) {
+            $stored = $this->credentialsManager->retrieve($credUserId, self::CREDENTIAL_KEY);
+            $hasStoredKey = is_string($stored) && $stored !== '';
+        }
+        if (!$hasStoredKey) {
+            $this->credentialsManager->store($credUserId, self::CREDENTIAL_KEY, $plaintext);
+        }
+        if ($userId !== null) {
+            $this->config->deleteUserValue($userId, self::APP_NAME, 'api_key');
+        } else {
+            $this->config->deleteAppValue(self::APP_NAME, 'api_key');
+        }
+        $this->logger->info('Migrated API key from plaintext to secure storage', [
+            'scope' => $userId !== null ? 'user' : 'app',
+        ]);
+        return $hasStoredKey ? '' : $plaintext;
     }
 
     /**
@@ -183,7 +203,7 @@ class CredentialService {
      * The per-provider API key covers "the one credential a provider needs";
      * some providers need a second one — the local provider's extra request
      * headers (a Cloudflare Access client secret lives in there) and its client
-     * key passphrase. Those go here rather than into IConfig so they stay
+     * key passphrase. Those go here rather than into app config so they stay
      * encrypted at rest, and rather than into credentialKey() so they cannot
      * collide with a provider id.
      *

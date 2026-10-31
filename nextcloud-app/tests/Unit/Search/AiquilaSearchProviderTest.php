@@ -8,7 +8,7 @@ use OCA\AIquila\Db\Message;
 use OCA\AIquila\Db\MessageMapper;
 use OCA\AIquila\Search\AiquilaSearchProvider;
 use OCA\AIquila\Service\SearchSettings;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\IUser;
@@ -37,7 +37,7 @@ class AiquilaSearchProviderTest extends TestCase {
     }
 
     private function provider(?string $stored): AiquilaSearchProvider {
-        $config = $this->createStub(IConfig::class);
+        $config = $this->createStub(AppSettings::class);
         $config->method('getAppValue')->willReturnCallback(
             fn (string $app, string $key, string $default): string => $stored ?? $default
         );

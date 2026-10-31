@@ -8,7 +8,7 @@ use OCA\AIquila\Service\Provider\HetznerProvider;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use Psr\Log\LoggerInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -23,7 +23,7 @@ class HetznerProviderTest extends TestCase {
     protected function setUp(): void {
         $this->clientService = $this->createStub(IClientService::class);
         $this->client        = $this->createStub(IClient::class);
-        $this->config        = $this->createStub(IConfig::class);
+        $this->config        = $this->createStub(AppSettings::class);
         $this->credentials   = $this->createStub(CredentialService::class);
         $this->logger        = $this->createStub(LoggerInterface::class);
 
@@ -42,7 +42,7 @@ class HetznerProviderTest extends TestCase {
 
     /** Provider with specific app config values (everything else = default). */
     private function provider(array $appValues): HetznerProvider {
-        $config = $this->createStub(IConfig::class);
+        $config = $this->createStub(AppSettings::class);
         $config->method('getUserValue')->willReturn('');
         $config->method('getAppValue')->willReturnCallback(
             fn($app, $key, $default = '') => $appValues[$key] ?? $default

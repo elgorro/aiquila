@@ -12,7 +12,7 @@ use OCA\AIquila\Service\Provider\ProviderSettingsService;
 use OCA\AIquila\Service\Provider\ThinkingProfileInterface;
 use OCP\ICache;
 use OCP\ICacheFactory;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\IGroupManager;
 use OCP\IUserManager;
 use PHPUnit\Framework\TestCase;
@@ -30,7 +30,7 @@ class ProviderSettingsServiceTest extends TestCase {
     private ProviderSettingsService $service;
 
     protected function setUp(): void {
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->credentials = $this->createStub(CredentialService::class);
         $this->cacheFactory = $this->createStub(ICacheFactory::class);
         $this->cache = $this->createStub(ICache::class);
@@ -90,7 +90,7 @@ class ProviderSettingsServiceTest extends TestCase {
     // ── Scope enforcement (the SSRF guard) ──────────────────────────────
 
     public function testUserWriteRejectsAdminOnlyEndpointField(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $provider = $this->provider($this->mixedScopeSchema());
@@ -108,7 +108,7 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testUserWriteAcceptsBothScopedField(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $provider = $this->provider($this->mixedScopeSchema());
@@ -123,7 +123,7 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testUserWriteRejectsUnknownField(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $provider = $this->provider($this->mixedScopeSchema());
@@ -144,7 +144,7 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testEmptyUserValueClearsTheOverride(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $provider = $this->provider($this->mixedScopeSchema());
@@ -247,7 +247,7 @@ class ProviderSettingsServiceTest extends TestCase {
     // ── Value validation ────────────────────────────────────────────────
 
     public function testAdminWriteRejectsNonHttpEndpoint(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $provider = $this->provider($this->mixedScopeSchema());
@@ -266,7 +266,7 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testAdminWriteIsAllOrNothing(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $provider = $this->provider($this->mixedScopeSchema());
@@ -283,7 +283,7 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testAdminWriteAcceptsValidEndpoint(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $provider = $this->provider($this->mixedScopeSchema());
@@ -494,7 +494,7 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testNamedSecretGoesToTheCredentialStoreNotConfig(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->credentials = $this->createMock(CredentialService::class);
         $this->buildService();
 
@@ -582,7 +582,7 @@ class ProviderSettingsServiceTest extends TestCase {
     }
 
     public function testReadableCertificatePathIsAccepted(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $provider = $this->provider($this->secretSchema());
@@ -612,7 +612,7 @@ class ProviderSettingsServiceTest extends TestCase {
     // ── Cloud endpoint formats ──────────────────────────────────────────
 
     public function testCloudEndpointPartsAreValidatedBeforeStorage(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $provider = $this->provider([

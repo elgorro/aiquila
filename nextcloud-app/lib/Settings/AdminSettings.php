@@ -7,7 +7,7 @@ namespace OCA\AIquila\Settings;
 
 use OCA\AIquila\Service\SearchSettings;
 use OCP\AppFramework\Http\TemplateResponse;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\Settings\ISettings;
 
 /**
@@ -20,7 +20,7 @@ use OCP\Settings\ISettings;
  */
 class AdminSettings implements ISettings {
     public function __construct(
-        private readonly IConfig $config,
+        private readonly AppSettings $config,
         private readonly SearchSettings $searchSettings,
     ) {
     }
