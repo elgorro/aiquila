@@ -337,6 +337,26 @@ END:VCALENDAR</c:calendar-data></d:prop></d:propstat></d:response>
       expect(result.content[0].text).toContain('No tasks found in "my-todos"');
     });
 
+    it('should not create a task in a read-only Deck list', async () => {
+      const lists = `<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+  <d:response><d:href>/remote.php/dav/calendars/admin/app-generated--deck--board-1/</d:href>
+    <d:propstat><d:prop><d:resourcetype><d:collection/><cal:calendar/></d:resourcetype>
+      <cal:supported-calendar-component-set><cal:comp name="VTODO"/></cal:supported-calendar-component-set>
+    </d:prop></d:propstat></d:response>
+</d:multistatus>`;
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(lists),
+      });
+
+      const { createTaskTool } = await import('../tools/apps/tasks.js');
+      const result = await createTaskTool.handler({ summary: 'x' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('read-only');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
     it('should say so when the user has no task list', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,

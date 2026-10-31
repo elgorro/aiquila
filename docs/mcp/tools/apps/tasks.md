@@ -45,10 +45,9 @@ Ask Claude: "Show me my task lists"
 Ask Claude: "What task lists do I have in Nextcloud?"
 ```
 
-**Common Task List Names:**
-- `personal` - Default personal task list
-- `work` - Work-related tasks
-- `tasks` - General task list
+**Task list names:** Nextcloud creates no task list for a new account; its default
+`personal` calendar holds events only. Lists come from the Tasks or Calendar app, and
+Deck adds a read-only `app-generated--deck--board-<id>` list per board.
 
 ---
 
@@ -83,7 +82,7 @@ Create a new task in a Nextcloud task list.
 
 **Parameters:**
 - `summary` (string, required): The task title/summary
-- `calendarName` (string, optional): The task list. Default: your first task list (see `list_task_lists`), preferring your own lists over app-generated ones such as Deck boards
+- `calendarName` (string, optional): The task list. Default: your first own task list (see `list_task_lists`). App-generated lists such as Deck boards are read-only, so they are never picked here
 - `description` (string, optional): Detailed description of the task
 - `priority` (number, optional): Task priority from 0-9 (0=undefined, 1=highest, 9=lowest)
 - `due` (string, optional): Due date in `YYYYMMDD` or `YYYYMMDDTHHmmssZ` format
@@ -127,7 +126,7 @@ Update an existing task's fields by UID. Uses CalDAV ETag-based optimistic concu
 
 **Parameters:**
 - `uid` (string, required): The UID of the task to update
-- `calendarName` (string, optional): The task list. Default: your first task list (see `list_task_lists`)
+- `calendarName` (string, optional): The task list. Default: your first own task list (see `list_task_lists`). App-generated lists such as Deck boards are read-only, so they are never picked here
 - `summary` (string, optional): New task title
 - `description` (string, optional): New description
 - `priority` (number, optional): New priority (0-9, 0 removes priority)
@@ -161,7 +160,7 @@ Mark a task as completed or reopen it. Sets STATUS, PERCENT-COMPLETE, and COMPLE
 
 **Parameters:**
 - `uid` (string, required): The UID of the task
-- `calendarName` (string, optional): The task list. Default: your first task list (see `list_task_lists`)
+- `calendarName` (string, optional): The task list. Default: your first own task list (see `list_task_lists`). App-generated lists such as Deck boards are read-only, so they are never picked here
 - `completed` (boolean, optional): `true` = mark completed, `false` = reopen. Default: `true`
 
 **Returns:**
@@ -182,7 +181,7 @@ Delete a task from Nextcloud Tasks by UID. This action is irreversible.
 
 **Parameters:**
 - `uid` (string, required): The UID of the task to delete
-- `calendarName` (string, optional): The task list. Default: your first task list (see `list_task_lists`)
+- `calendarName` (string, optional): The task list. Default: your first own task list (see `list_task_lists`). App-generated lists such as Deck boards are read-only, so they are never picked here
 
 **Returns:**
 Success message confirming deletion.
