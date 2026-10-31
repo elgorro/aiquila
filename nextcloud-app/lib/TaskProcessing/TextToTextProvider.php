@@ -75,7 +75,7 @@ class TextToTextProvider implements ISynchronousProvider {
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $prompt = $input['input'] ?? '';
         if (!is_string($prompt) || $prompt === '') {
-            throw new \RuntimeException('No input text provided');
+            throw TaskFailure::userFacing('No input text provided');
         }
 
         $this->logger->debug('AIquila Text2Text: Processing', [
@@ -87,7 +87,7 @@ class TextToTextProvider implements ISynchronousProvider {
         $result = $this->providers->resolve($userId)->ask($prompt, '', $userId, LLMProviderInterface::TASK_OPTIONS);
 
         if (isset($result['error'])) {
-            throw new \RuntimeException($result['error']);
+            throw TaskFailure::fromProviderError($result['error']);
         }
 
         return ['output' => $result['response'] ?? ''];

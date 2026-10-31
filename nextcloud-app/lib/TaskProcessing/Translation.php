@@ -79,7 +79,7 @@ class Translation {
         );
 
         if (isset($result['error'])) {
-            throw new \RuntimeException($result['error']);
+            throw TaskFailure::fromProviderError($result['error']);
         }
 
         return $result['response'] ?? '';

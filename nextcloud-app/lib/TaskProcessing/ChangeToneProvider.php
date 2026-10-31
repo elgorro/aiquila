@@ -90,7 +90,7 @@ class ChangeToneProvider implements ISynchronousProvider {
         $tone = $input['tone'] ?? self::DEFAULT_TONE;
 
         if (!is_string($text) || $text === '') {
-            throw new \RuntimeException('No input text provided');
+            throw TaskFailure::userFacing('No input text provided');
         }
         if (!is_string($tone) || $tone === '') {
             $tone = self::DEFAULT_TONE;
@@ -106,7 +106,7 @@ class ChangeToneProvider implements ISynchronousProvider {
         );
 
         if (isset($result['error'])) {
-            throw new \RuntimeException($result['error']);
+            throw TaskFailure::fromProviderError($result['error']);
         }
 
         return ['output' => $result['response'] ?? ''];

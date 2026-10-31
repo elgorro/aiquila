@@ -103,7 +103,7 @@ class SubtitlesProvider implements ISynchronousProvider {
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $file = $input['input'] ?? null;
         if (!$file instanceof File) {
-            throw new \RuntimeException('No audio or video file provided');
+            throw TaskFailure::userFacing('No audio or video file provided');
         }
 
         $provider = $this->providers->resolveAudioCapable($userId, $this->providers->requestedId($input));

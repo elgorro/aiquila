@@ -19,7 +19,6 @@ services:
   mcp:
     build:
       context: ../../mcp-server
-      dockerfile: ../docker/mcp-server/Dockerfile
     depends_on:
       - nc
     environment:

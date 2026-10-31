@@ -83,10 +83,10 @@ class ContextWriteProvider implements ISynchronousProvider {
         $style = $input['style_input'] ?? '';
         $source = $input['source_input'] ?? '';
         if (!is_string($style) || $style === '') {
-            throw new \RuntimeException('No writing style provided');
+            throw TaskFailure::userFacing('No writing style provided');
         }
         if (!is_string($source) || $source === '') {
-            throw new \RuntimeException('No source material provided');
+            throw TaskFailure::userFacing('No source material provided');
         }
 
         $reportProgress(0.1);
@@ -100,7 +100,7 @@ class ContextWriteProvider implements ISynchronousProvider {
         );
 
         if (isset($result['error'])) {
-            throw new \RuntimeException($result['error']);
+            throw TaskFailure::fromProviderError($result['error']);
         }
 
         return ['output' => $result['response'] ?? ''];

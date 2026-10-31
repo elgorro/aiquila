@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\Service;
 
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\TaskProcessing\TaskFailure;
 use OCP\Files\File;
 use Psr\Log\LoggerInterface;
 
@@ -37,7 +38,11 @@ class AudioService {
      * @throws \RuntimeException when the recording is refused or the provider fails
      */
     public function transcribe(LLMProviderInterface $provider, File $file, ?string $userId, array $options = []): array {
-        AudioLimits::assertAcceptable((int)$file->getSize(), $file->getMimetype());
+        try {
+            AudioLimits::assertAcceptable((int)$file->getSize(), $file->getMimetype());
+        } catch (\RuntimeException $e) {
+            throw TaskFailure::userFacing($e->getMessage(), $e);
+        }
 
         $result = $provider->transcribeAudio(
             $file->getContent(),
@@ -48,7 +53,7 @@ class AudioService {
         );
         if (isset($result['error'])) {
             $this->logger->error('AIquila audio: transcription failed', ['error' => $result['error'], 'provider' => $provider->getId()]);
-            throw new \RuntimeException($result['error']);
+            throw TaskFailure::fromProviderError($result['error']);
         }
 
         return [
@@ -68,7 +73,7 @@ class AudioService {
     public function transcribeRequired(LLMProviderInterface $provider, File $file, ?string $userId, array $options = []): string {
         $text = $this->transcribe($provider, $file, $userId, $options)['text'];
         if (trim($text) === '') {
-            throw new \RuntimeException('Nothing could be transcribed from this recording.');
+            throw TaskFailure::userFacing('Nothing could be transcribed from this recording.');
         }
         return $text;
     }
@@ -82,7 +87,7 @@ class AudioService {
     public function segments(LLMProviderInterface $provider, File $file, ?string $userId): array {
         $segments = $this->transcribe($provider, $file, $userId, ['timestamps' => true])['segments'];
         if ($segments === []) {
-            throw new \RuntimeException($provider->getLabel() . ' returned no timestamps for this recording, so no subtitles can be made from it.');
+            throw TaskFailure::userFacing($provider->getLabel() . ' returned no timestamps for this recording, so no subtitles can be made from it.');
         }
         return $segments;
     }
@@ -97,11 +102,11 @@ class AudioService {
         $result = $provider->synthesizeSpeech($text, $userId, $options);
         if (isset($result['error'])) {
             $this->logger->error('AIquila audio: speech synthesis failed', ['error' => $result['error'], 'provider' => $provider->getId()]);
-            throw new \RuntimeException($result['error']);
+            throw TaskFailure::fromProviderError($result['error']);
         }
         $audio = $result['audio'] ?? '';
         if ($audio === '') {
-            throw new \RuntimeException($provider->getLabel() . ' returned no audio.');
+            throw TaskFailure::userFacing($provider->getLabel() . ' returned no audio.');
         }
         return $audio;
     }

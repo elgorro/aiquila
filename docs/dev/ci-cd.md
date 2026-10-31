@@ -311,8 +311,8 @@ See [`docs/hetzner/ci-flow.md`](../hetzner/ci-flow.md) for the detailed timeline
 
 ### Docker E2E (`e2e.yml`)
 
-**Triggers:** pull requests and pushes to `main` touching `mcp-server/`, `docker/mcp-server/`,
-`docker/e2e/` or the shared Login Flow helper; nightly; manual dispatch. It is not a required
+**Triggers:** pull requests and pushes to `main` touching `mcp-server/`, `docker/e2e/`
+or the shared Login Flow helper; nightly; manual dispatch. It is not a required
 check, so its `paths:` filter cannot leave a PR waiting.
 
 **What it does:** builds the MCP image from the checkout and starts it next to a stock
@@ -328,7 +328,7 @@ Run it locally (needs the Docker buildx plugin):
 
 ```bash
 cd docker/e2e
-COMPOSE_BAKE=false docker compose up -d --build   # bake refuses the out-of-context Dockerfile
+docker compose up -d --build
 ./scripts/test-internal-host.sh
 docker compose down -v
 ```

@@ -83,7 +83,7 @@ class ChatProvider implements ISynchronousProvider {
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $message = $input['input'] ?? '';
         if (!is_string($message) || $message === '') {
-            throw new \RuntimeException('No chat message provided');
+            throw TaskFailure::userFacing('No chat message provided');
         }
 
         $system = $input['system_prompt'] ?? '';
@@ -102,7 +102,7 @@ class ChatProvider implements ISynchronousProvider {
         );
 
         if (isset($result['error'])) {
-            throw new \RuntimeException($result['error']);
+            throw TaskFailure::fromProviderError($result['error']);
         }
 
         return ['output' => $result['response'] ?? ''];

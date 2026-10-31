@@ -100,11 +100,11 @@ class ImageToTextProvider implements ISynchronousProvider {
         // us — the raw bytes never travel through the task input.
         $files = $input['input'] ?? [];
         if (!is_array($files) || $files === []) {
-            throw new \RuntimeException('No images provided');
+            throw TaskFailure::userFacing('No images provided');
         }
 
         if (count($files) > ImageOptimizer::MAX_IMAGES) {
-            throw new \RuntimeException('Too many images. Maximum is ' . ImageOptimizer::MAX_IMAGES);
+            throw TaskFailure::userFacing('Too many images. Maximum is ' . ImageOptimizer::MAX_IMAGES);
         }
 
         $prompt = $input['prompt'] ?? '';
@@ -123,7 +123,7 @@ class ImageToTextProvider implements ISynchronousProvider {
         $total = count($files);
         foreach (array_values($files) as $i => $file) {
             if (!$file instanceof File) {
-                throw new \RuntimeException('Image ' . ($i + 1) . ' is not a file');
+                throw TaskFailure::userFacing('Image ' . ($i + 1) . ' is not a file');
             }
 
             $image = $this->imageOptimizer->prepare($file->getContent(), $file->getMimetype());
@@ -143,7 +143,7 @@ class ImageToTextProvider implements ISynchronousProvider {
                     'provider' => $provider->getId(),
                     'file' => $file->getId(),
                 ]);
-                throw new \RuntimeException($result['error']);
+                throw TaskFailure::fromProviderError($result['error']);
             }
 
             $texts[] = (string)($result['response'] ?? '');

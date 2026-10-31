@@ -410,6 +410,16 @@ successful task notifies nobody unless the user turns it on under
 it usually means AIquila itself needs attention, such as a rejected API key, an
 exhausted quota or an unreachable endpoint.
 
+A failed task also carries a reason for whoever reads it — the Assistant, and the MCP
+`get_task_result` and `translate_text` tools — in the task's `userFacingErrorMessage`.
+AIquila's own refusals (missing input, a provider without the needed capability) appear
+as written. A provider's error is reduced to a fixed sentence for its kind of failure:
+provider unreachable, credentials rejected, rate limit or quota reached, model not
+offered, input too large, or provider not set up. Provider errors often quote the
+upstream response, so the full text is not shown there. It stays in the task's
+`errorMessage`, the Nextcloud log and the failure notification. An error that fits
+none of these kinds gets no user-facing reason.
+
 ### 3. Public API
 
 Other Nextcloud apps can programmatically use AIquila:

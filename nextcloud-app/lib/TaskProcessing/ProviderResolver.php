@@ -18,10 +18,9 @@ use OCA\AIquila\Service\Provider\NoPermittedProviderException;
  * the admin's per-user and per-group access rules — a provider reached directly
  * would bypass them.
  *
- * The framework expects process() to fail with a RuntimeException, so the two
- * things that can go wrong here — no permitted provider at all, and a provider
- * missing the modality the task needs — are translated into one, with a message
- * that tells the user what to switch to.
+ * The two things that can go wrong here — no permitted provider at all, and a
+ * provider missing the modality the task needs — fail as a user-facing
+ * TaskFailure, with a message that tells the user what to switch to.
  */
 class ProviderResolver {
 
@@ -50,7 +49,7 @@ class ProviderResolver {
         try {
             return $this->providerFactory->getProviderForUser($userId, $requestedId);
         } catch (NoPermittedProviderException $e) {
-            throw new \RuntimeException(NoPermittedProviderException::USER_MESSAGE, 0, $e);
+            throw TaskFailure::userFacing(NoPermittedProviderException::USER_MESSAGE, $e);
         }
     }
 
@@ -134,7 +133,7 @@ class ProviderResolver {
         }
 
         $alternatives = $this->capableLabels($userId, $capability);
-        throw new \RuntimeException(
+        throw TaskFailure::userFacing(
             $alternatives === []
                 ? $provider->getLabel() . ' cannot ' . $cannot . ', and no ' . $needs . ' AI provider is available for your account. Ask your administrator.'
                 : $provider->getLabel() . ' cannot ' . $cannot . '. Pick a ' . $needs . ' provider in your AIquila settings — available: ' . implode(', ', $alternatives) . '.'

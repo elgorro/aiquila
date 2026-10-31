@@ -91,7 +91,7 @@ class TextToImageProvider implements ISynchronousProvider {
     public function process(?string $userId, array $input, callable $reportProgress): array {
         $prompt = $input['input'] ?? '';
         if (!is_string($prompt) || trim($prompt) === '') {
-            throw new \RuntimeException('No input text provided');
+            throw TaskFailure::userFacing('No input text provided');
         }
 
         $requested = $input['numberOfImages'] ?? 1;
@@ -104,12 +104,12 @@ class TextToImageProvider implements ISynchronousProvider {
         $result = $provider->generateImages($prompt, $count, $userId);
         if (isset($result['error'])) {
             $this->logger->error('AIquila TextToImage: Error', ['error' => $result['error'], 'provider' => $provider->getId()]);
-            throw new \RuntimeException($result['error']);
+            throw TaskFailure::fromProviderError($result['error']);
         }
 
         $images = $result['images'] ?? [];
         if ($images === []) {
-            throw new \RuntimeException('No images were generated.');
+            throw TaskFailure::userFacing('No images were generated.');
         }
 
         $reportProgress(1.0);
