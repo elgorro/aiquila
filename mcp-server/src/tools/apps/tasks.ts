@@ -475,17 +475,26 @@ async function fetchTaskLists(): Promise<ParsedCalendar[]> {
 
 /**
  * The task list to use when none is given: the first of the user's own lists,
- * else the first app-generated one (a Deck board). Nextcloud creates no list
- * named "tasks", and its default "Personal" calendar holds events only.
+ * else, for reading, the first app-generated one (a Deck board). Nextcloud
+ * creates no list named "tasks", and its default "Personal" calendar holds
+ * events only. App-generated lists are read-only — Deck's calendar grants
+ * {DAV:}read and refuses every PUT and DELETE — so a write never falls back
+ * to one.
  */
-async function resolveTaskList(calendarName?: string): Promise<string> {
+async function resolveTaskList(
+  calendarName?: string,
+  { write = false }: { write?: boolean } = {}
+): Promise<string> {
   if (calendarName) return calendarName;
   const lists = await fetchTaskLists();
   const names = lists.map((l) => lastHrefSegment(l.url));
-  const pick = names.find((n) => !n.startsWith('app-generated--')) ?? names[0];
+  const own = names.find((n) => !n.startsWith('app-generated--'));
+  const pick = write ? own : (own ?? names[0]);
   if (!pick) {
     throw new Error(
-      'No task list found. Create one in the Tasks or Calendar app, or pass calendarName.'
+      write && names.length > 0
+        ? 'No task list of your own to write to: app-generated lists (Deck boards) are read-only. Create one in the Tasks or Calendar app, or pass calendarName.'
+        : 'No task list found. Create one in the Tasks or Calendar app, or pass calendarName.'
     );
   }
   return pick;
@@ -663,7 +672,7 @@ export const createTaskTool = {
   }) => {
     try {
       const config = getNextcloudConfig();
-      const calendarName = await resolveTaskList(args.calendarName);
+      const calendarName = await resolveTaskList(args.calendarName, { write: true });
       const taskUid = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
       const calDavUrl = `${config.url}${davPath('calendars', config.user, calendarName, `${taskUid}.ics`)}`;
       const now = icalNow();
@@ -823,7 +832,7 @@ export const updateTaskTool = {
   }) => {
     try {
       const config = getNextcloudConfig();
-      const calendarName = await resolveTaskList(args.calendarName);
+      const calendarName = await resolveTaskList(args.calendarName, { write: true });
       const { href, etag, icalData } = await resolveTaskByUid(calendarName, args.uid);
 
       let modified = unfoldICalLines(icalData);
@@ -960,7 +969,7 @@ export const deleteTaskTool = {
   }),
   handler: async (args: { uid: string; calendarName?: string }) => {
     try {
-      const calendarName = await resolveTaskList(args.calendarName);
+      const calendarName = await resolveTaskList(args.calendarName, { write: true });
       const config = getNextcloudConfig();
       const { href, etag } = await resolveTaskByUid(calendarName, args.uid);
 
@@ -1028,7 +1037,7 @@ export const completeTaskTool = {
   }),
   handler: async (args: { uid: string; calendarName?: string; completed: boolean }) => {
     try {
-      const calendarName = await resolveTaskList(args.calendarName);
+      const calendarName = await resolveTaskList(args.calendarName, { write: true });
       const config = getNextcloudConfig();
       const { href, etag, icalData } = await resolveTaskByUid(calendarName, args.uid);
 

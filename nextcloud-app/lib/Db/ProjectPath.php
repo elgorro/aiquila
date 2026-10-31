@@ -19,6 +19,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setCreatedAt(int $createdAt)
  */
 class ProjectPath extends Entity implements \JsonSerializable {
+    use InsertsFullRow;
+
     protected int $projectId = 0;
     protected string $path = '';
     protected string $pathType = 'file';
@@ -29,6 +31,7 @@ class ProjectPath extends Entity implements \JsonSerializable {
         $this->addType('path', 'string');
         $this->addType('pathType', 'string');
         $this->addType('createdAt', 'integer');
+        $this->markFieldsForInsert();
     }
 
     public function jsonSerialize(): array {

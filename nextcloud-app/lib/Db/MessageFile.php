@@ -21,6 +21,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setCreatedAt(int $createdAt)
  */
 class MessageFile extends Entity implements \JsonSerializable {
+    use InsertsFullRow;
+
     protected int $messageId = 0;
     protected string $filePath = '';
     protected string $fileName = '';
@@ -33,6 +35,7 @@ class MessageFile extends Entity implements \JsonSerializable {
         $this->addType('fileName', 'string');
         $this->addType('mimeType', 'string');
         $this->addType('createdAt', 'integer');
+        $this->markFieldsForInsert();
     }
 
     /**

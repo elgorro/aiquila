@@ -65,7 +65,7 @@ php occ aiquila:configure --model claude-sonnet-4-6
 
 ## Prerequisites
 
-- Nextcloud 34 — see [Nextcloud compatibility](../nextcloud-compatibility.md) for the supported version window
+- Nextcloud 35 — see [Nextcloud compatibility](../nextcloud-compatibility.md) for the supported version window
 - PHP 8.4 or higher with Composer
 - Node.js 26 or higher (for building frontend)
 - npm 10 or higher

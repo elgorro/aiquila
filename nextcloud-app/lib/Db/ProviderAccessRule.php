@@ -27,6 +27,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setPrincipalId(string $principalId)
  */
 class ProviderAccessRule extends Entity {
+    use InsertsFullRow;
+
     public const RULE_ALLOW = 'allow';
     public const RULE_BLOCK = 'block';
     public const PRINCIPAL_USER = 'user';
@@ -47,5 +49,6 @@ class ProviderAccessRule extends Entity {
         $this->addType('ruleType', 'string');
         $this->addType('principalType', 'string');
         $this->addType('principalId', 'string');
+        $this->markFieldsForInsert();
     }
 }

@@ -30,6 +30,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setState(?string $state)
  */
 class CoworkerRun extends Entity implements \JsonSerializable {
+    use InsertsFullRow;
+
     public const STATUS_RUNNING = 'running';
     /** Submitted, waiting on work that finishes outside this process. */
     public const STATUS_PENDING = 'pending';
@@ -63,6 +65,7 @@ class CoworkerRun extends Entity implements \JsonSerializable {
         $this->addType('startedAt', 'integer');
         $this->addType('finishedAt', 'integer');
         $this->addType('state', 'string');
+        $this->markFieldsForInsert();
     }
 
     /**

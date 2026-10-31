@@ -20,7 +20,7 @@ No supporters are listed yet.
 ## Core platforms
 | Project | Version | Role |
 |---------|---------|------|
-| [Nextcloud](https://nextcloud.com) | 33–35 | Self-hosted cloud platform — files, tasks, notes, and recipes |
+| [Nextcloud](https://nextcloud.com) | 33–36 | Self-hosted cloud platform — files, tasks, notes, and recipes |
 | [Claude / Anthropic](https://anthropic.com) | — | AI model powering all chat, summarise, and text-tool features |
 | [Model Context Protocol](https://modelcontextprotocol.io) | — | Open standard connecting Claude to external tools and data |
 

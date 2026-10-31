@@ -257,6 +257,33 @@ describe('Mail Tools', () => {
       expect(result.content[0].text).toContain('attachment');
     });
 
+    it('should sync a mailbox Mail has not cached yet, then list it', async () => {
+      mockFetchMailAPI
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 400,
+          text: () =>
+            Promise.resolve(
+              '{"status":"fail","data":{"message":"mailbox 5 is not cached","type":"OCA\\\\Mail\\\\Exception\\\\MailboxNotCachedException"}}'
+            ),
+        })
+        .mockResolvedValueOnce({ ok: false, status: 202 })
+        .mockResolvedValueOnce({ ok: true, status: 200 })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve([]) });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_list_messages')!;
+      const result = await tool.handler({ mailboxId: 5 });
+
+      expect(result.isError).toBeFalsy();
+      expect(mockFetchMailAPI).toHaveBeenNthCalledWith(2, '/mailboxes/5/sync', {
+        method: 'POST',
+        body: { init: true },
+      });
+      expect(mockFetchMailAPI).toHaveBeenCalledTimes(4);
+      expect(result.content[0].text).toContain('No messages found');
+    });
+
     it('should handle empty results', async () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,

@@ -94,7 +94,8 @@ export const listBoardsTool = {
   inputSchema: z.object({}),
   handler: async () => {
     try {
-      const boards = await fetchDeckAPI<DeckBoard[]>('/boards');
+      // Without details=true Deck returns every board with an empty labels array.
+      const boards = await fetchDeckAPI<DeckBoard[]>('/boards?details=true');
 
       if (boards.length === 0) {
         return { content: [{ type: 'text' as const, text: 'No boards found.' }] };

@@ -1,3 +1,27 @@
+/**
+ * Mail serves a mailbox's messages from its cache and refuses one it has never
+ * synced — any folder the user has not opened in the Mail app — with 400
+ * MailboxNotCachedException. The web client runs an initial sync first
+ * (POST /api/mailboxes/{id}/sync with init=true); this does the same and
+ * reports whether the caller should retry. Mail answers 202 while a large
+ * initial sync is still incomplete, so it is repeated a few times.
+ */
+async function syncedUncachedMailbox(
+  mailboxId: number,
+  status: number,
+  errorText: string
+): Promise<boolean> {
+  if (status !== 400 || !errorText.includes('MailboxNotCachedException')) return false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const sync = await fetchMailAPI(`/mailboxes/${mailboxId}/sync`, {
+      method: 'POST',
+      body: { init: true },
+    });
+    if (sync.status !== 202) return sync.ok;
+  }
+  return true;
+}
+
 // SPDX-License-Identifier: MIT
 
 import { spawnSync } from 'node:child_process';
@@ -245,9 +269,17 @@ const listMessagesTool = {
       if (args.cursor) queryParts.push(`cursor=${args.cursor}`);
       if (args.filter && args.filter !== 'all') queryParts.push(`filter=${args.filter}`);
 
-      const response = await fetchMailAPI(`/messages?${queryParts.join('&')}`);
+      const path = `/messages?${queryParts.join('&')}`;
+      let response = await fetchMailAPI(path);
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        const errorText = await response.text();
+        if (!(await syncedUncachedMailbox(args.mailboxId, response.status, errorText))) {
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+        response = await fetchMailAPI(path);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        }
       }
       const data = (await response.json()) as
         MailMessageSummary[] | { messages?: MailMessageSummary[]; data?: MailMessageSummary[] };

@@ -119,7 +119,7 @@ export class FakeNextcloud {
     const url = new URL(req.url ?? '/', 'http://nc');
     if (url.pathname === '/status.php') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ installed: true, version: '34.0.0' }));
+      res.end(JSON.stringify({ installed: true, version: '35.0.0' }));
       return;
     }
     if (url.pathname === '/index.php/login/v2' && req.method === 'POST') {

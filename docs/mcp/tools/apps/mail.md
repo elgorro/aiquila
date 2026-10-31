@@ -61,7 +61,7 @@ Ask Claude: "What mail folders do I have?"
 
 ### mail_list_messages
 
-List email messages in a Nextcloud Mail mailbox. Supports pagination via cursor.
+List email messages in a Nextcloud Mail mailbox. Supports pagination via cursor. A mailbox the Mail app has not synced yet (one the user never opened there) is synced first, as the Mail web client does.
 
 **Parameters:**
 - `mailboxId` (number, required): The mailbox ID

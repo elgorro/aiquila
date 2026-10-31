@@ -73,7 +73,7 @@ Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Mode
     <donation type="other" title="Liberapay">https://liberapay.com/elgorro/donate</donation>
     <dependencies>
         <php min-version="8.4" max-version="8.5"/>
-        <nextcloud min-version="33" max-version="35"/>
+        <nextcloud min-version="33" max-version="36"/>
     </dependencies>
     <settings>
         <admin>OCA\AIquila\Settings\AdminSettings</admin>

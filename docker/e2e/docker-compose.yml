@@ -6,7 +6,7 @@ name: aiquila-e2e
 
 services:
   nc:
-    image: nextcloud:34-apache
+    image: nextcloud:35-apache
     environment:
       SQLITE_DATABASE: nextcloud
       NEXTCLOUD_ADMIN_USER: admin

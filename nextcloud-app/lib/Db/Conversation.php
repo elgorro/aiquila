@@ -33,6 +33,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setSpeedFast(?bool $speedFast)
  */
 class Conversation extends Entity implements \JsonSerializable {
+    use InsertsFullRow;
+
     protected string $userId = '';
     protected ?string $title = null;
     protected string $model = '';
@@ -60,6 +62,7 @@ class Conversation extends Entity implements \JsonSerializable {
         $this->addType('thinking', 'boolean');
         $this->addType('thinkingBudget', 'integer');
         $this->addType('speedFast', 'boolean');
+        $this->markFieldsForInsert();
     }
 
     /**

@@ -37,6 +37,8 @@ describe('Notification Tools', () => {
       const result = await listNotificationsTool.handler();
 
       expect(result.content[0].text).toContain('Alice shared doc.pdf');
+      // get_notification and mark_notification_read take this id.
+      expect(result.content[0].text).toContain('(id: 1)');
     });
 
     it('should handle empty notifications', async () => {

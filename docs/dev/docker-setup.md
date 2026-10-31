@@ -8,7 +8,7 @@ The Docker environment provides a complete, isolated development setup with:
 
 - **Caddy 2** - Reverse proxy with automatic HTTPS (self-signed certs for dev)
 - **PostgreSQL 18** - Production-grade database
-- **Nextcloud 34** - Test instance with AIquila pre-installed from tarball
+- **Nextcloud 35** - Test instance with AIquila pre-installed from tarball
 - **Redis 8** - Caching and performance
 - **MCP Server** - Development container with hot reload (HTTP transport on port 3339)
 - **MailHog** - Email testing and debugging
@@ -179,7 +179,7 @@ stacks apply the same settings; see
 
 ### Updating base images
 
-The Nextcloud image is built `FROM nextcloud:34-apache`, a floating tag that upstream
+The Nextcloud image is built `FROM nextcloud:35-apache`, a floating tag that upstream
 rebuilds for PHP and Nextcloud security releases. `make up`, `make up-tools` and
 `make reset` pass `--pull`, so each run picks up a newer base; `make build` is a full
 `--pull --no-cache` rebuild. A plain `docker compose up --build` reuses the cached
