@@ -337,6 +337,13 @@ curl -s -u "$NEXTCLOUD_USER:$NEXTCLOUD_PASSWORD" -H 'OCS-APIRequest: true' \
   "$NEXTCLOUD_URL/index.php/apps/social/api/v1/timelines/home/?limit=1"
 ```
 
+**Every call answers 401 "the access_token was revoked"** — despite the wording, that is
+Social's answer to any failure to set up the caller, not only to a bad token. On a fresh
+install the usual cause is that Social has not been set up yet: it records the cloud and
+Social URLs the first time an admin opens the app in the browser. Open it once, or set them
+with `occ config:app:set social cloud_url` and `social_url`. The Nextcloud log (app
+`social`, `initViewer failed`) names the real exception.
+
 **The tools are missing entirely** — the `social` app is not enabled, so the category did not
 register. Either enable it, or set `MCP_TOOLS=social` to register the category regardless.
 
