@@ -8,18 +8,18 @@ use OCA\AIquila\Cowork\CoworkerTaskRegistry;
 use OCA\AIquila\Db\Coworker;
 use OCA\AIquila\Service\CoworkerService;
 use OCP\AppFramework\Db\DoesNotExistException;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\IRequest;
 use PHPUnit\Framework\TestCase;
 
 class CoworkerDashboardTest extends TestCase {
     private CoworkerService $service;
-    private IConfig $config;
+    private AppSettings $config;
     private CoworkerController $ctrl;
 
     protected function setUp(): void {
         $this->service = $this->createStub(CoworkerService::class);
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->buildCtrl();
     }
 
@@ -33,7 +33,7 @@ class CoworkerDashboardTest extends TestCase {
     }
 
     public function testGetReturnsStoredSelection(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildCtrl();
 
         $this->config->expects($this->once())->method('getUserValue')
@@ -53,7 +53,7 @@ class CoworkerDashboardTest extends TestCase {
 
     public function testSetPersistsOwnedCoworker(): void {
         $this->service = $this->createMock(CoworkerService::class);
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildCtrl();
 
         $this->service->expects($this->once())
@@ -67,7 +67,7 @@ class CoworkerDashboardTest extends TestCase {
     }
 
     public function testSetRejectsForeignCoworker(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildCtrl();
 
         $this->service->method('findForUser')
@@ -79,7 +79,7 @@ class CoworkerDashboardTest extends TestCase {
     }
 
     public function testSetNullClearsSelection(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildCtrl();
 
         $this->config->expects($this->once())

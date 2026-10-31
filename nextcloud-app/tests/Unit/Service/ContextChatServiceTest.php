@@ -12,8 +12,8 @@ use OCA\AIquila\Service\ContextChatService;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\ContextChat\ContentItem;
 use OCP\ContextChat\IContentManager;
-use OCP\IServerContainer;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 class ContextChatServiceTest extends TestCase {
@@ -26,7 +26,7 @@ class ContextChatServiceTest extends TestCase {
     protected function setUp(): void {
         $this->conversationMapper = $this->createStub(ConversationMapper::class);
         $this->messageMapper = $this->createStub(MessageMapper::class);
-        $this->container = $this->createStub(IServerContainer::class);
+        $this->container = $this->createStub(ContainerInterface::class);
         $this->manager = $this->createStub(IContentManager::class);
         $this->container->method('get')->willReturnCallback(
             fn (string $id) => match ($id) { IContentManager::class => $this->manager },

@@ -13,7 +13,7 @@ use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICache;
 use OCP\ICacheFactory;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -69,7 +69,7 @@ class CapabilityTestableService extends ClaudeSDKService {
 }
 
 class ClaudeSDKServiceCapabilityTest extends TestCase {
-    private IConfig $config;
+    private AppSettings $config;
     private LoggerInterface $logger;
     private CredentialService $credentials;
     private ICache $cache;
@@ -77,7 +77,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
     private RequestMetadataService $requestMetadata;
 
     protected function setUp(): void {
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->logger = $this->createStub(LoggerInterface::class);
         $this->credentials = $this->createStub(CredentialService::class);
         $this->credentials->method('getApiKey')->willReturn('test-key');
@@ -228,7 +228,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $this->cache->method('get')->willReturn(null);
         $this->cache->expects($this->atLeastOnce())->method('set');
 
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->config->method('getUserValue')->willReturn('');
         $this->config->method('getAppValue')
             ->willReturnCallback(fn($app, $key, $default) => match ($key) {
@@ -279,7 +279,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $this->cache->method('get')->willReturn(null);
 
         // Use Haiku which doesn't support thinking/effort
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->config->method('getUserValue')->willReturn('');
         $this->config->method('getAppValue')
             ->willReturnCallback(fn($app, $key, $default) => match ($key) {
@@ -328,7 +328,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
 
     /** Build a service for a given model with cached caps and optional admin config. */
     private function makeServiceForModel(string $model, array $appConfig = [], bool $supportsEnabledThinking = true, array $userConfig = []): CapabilityTestableService {
-        $config = $this->createStub(IConfig::class);
+        $config = $this->createStub(AppSettings::class);
         $config->method('getUserValue')
             ->willReturnCallback(fn($uid, $app, $key, $default = '') => $userConfig[$key] ?? $default);
         $config->method('getAppValue')

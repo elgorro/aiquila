@@ -6,7 +6,7 @@ namespace OCA\AIquila\Tests\Unit\Settings;
 
 use OCA\AIquila\Service\SearchSettings;
 use OCA\AIquila\Settings\AdminSettings;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -22,7 +22,7 @@ class AdminSettingsTest extends TestCase {
 
     #[DataProvider('storedValues')]
     public function testSearchToggleMatchesStoredValue(?string $stored, bool $expected): void {
-        $config = $this->createStub(IConfig::class);
+        $config = $this->createStub(AppSettings::class);
         $config->method('getAppValue')->willReturnCallback(
             fn (string $app, string $key, string $default): string =>
                 $key === SearchSettings::KEY ? ($stored ?? $default) : $default

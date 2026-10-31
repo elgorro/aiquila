@@ -12,7 +12,7 @@ use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICacheFactory;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -56,7 +56,7 @@ abstract class AbstractCloudClaudeProvider extends ClaudeSDKService {
     private ?BaseClient $client = null;
 
     public function __construct(
-        IConfig $config,
+        AppSettings $config,
         LoggerInterface $logger,
         CredentialService $credentials,
         ICacheFactory $cacheFactory,

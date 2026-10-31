@@ -10,7 +10,7 @@ use OCP\TaskProcessing\Task;
 /**
  * Shared helpers for the TaskProcessing event listeners. Using classes must
  * inject OCP\TaskProcessing\IManager as $taskProcessingManager and
- * OCP\IConfig as $config.
+ * AppSettings as $config.
  */
 trait TaskListenerTrait {
 

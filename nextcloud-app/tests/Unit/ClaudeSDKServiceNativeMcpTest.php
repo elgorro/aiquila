@@ -10,7 +10,7 @@ use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICache;
 use OCP\ICacheFactory;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -56,7 +56,7 @@ class NativeMcpTestableService extends ClaudeSDKService {
 }
 
 class ClaudeSDKServiceNativeMcpTest extends TestCase {
-    private IConfig $config;
+    private AppSettings $config;
     private LoggerInterface $logger;
     private CredentialService $credentials;
     private ICache $cache;
@@ -64,7 +64,7 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
     private RequestMetadataService $requestMetadata;
 
     protected function setUp(): void {
-        $this->config = $this->createStub(IConfig::class);
+        $this->config = $this->createStub(AppSettings::class);
         $this->logger = $this->createStub(LoggerInterface::class);
         $this->credentials = $this->createStub(CredentialService::class);
         $this->credentials->method('getApiKey')->willReturn('test-key');

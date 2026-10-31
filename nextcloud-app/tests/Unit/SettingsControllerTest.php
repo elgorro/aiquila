@@ -9,7 +9,7 @@ use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\ProviderSettingsService;
 use OCA\AIquila\Service\SearchSettings;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\IRequest;
 use PHPUnit\Framework\TestCase;
 
@@ -24,7 +24,7 @@ class SettingsControllerTest extends TestCase {
     private SettingsController $ctrl;
 
     protected function setUp(): void {
-        $this->config      = $this->createStub(IConfig::class);
+        $this->config      = $this->createStub(AppSettings::class);
         $this->request     = $this->createStub(IRequest::class);
         $this->factory     = $this->createStub(LLMProviderFactory::class);
         $this->provider    = $this->createStub(LLMProviderInterface::class);
@@ -106,6 +106,8 @@ class SettingsControllerTest extends TestCase {
                 ['testuser', 'aiquila', 'default_system_prompt', '', ''],
                 ['testuser', 'aiquila', 'default_verbose', '0', '0'],
                 ['testuser', 'aiquila', 'native_mcp_enabled', '', ''],
+                ['testuser', 'aiquila', 'task_success_notifications', '0', '0'],
+                ['testuser', 'aiquila', 'task_failure_notifications', '1', '1'],
             ]);
         $this->provider->method('listModels')->willReturn(null);
 
@@ -152,7 +154,7 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testSaveStoresApiKeyAndModel(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->credentials = $this->createMock(CredentialService::class);
         $this->buildCtrl();
 
@@ -171,7 +173,7 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testSaveWithEmptyModelDeletesUserValue(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->credentials = $this->createMock(CredentialService::class);
         $this->buildCtrl();
 
@@ -199,7 +201,7 @@ class SettingsControllerTest extends TestCase {
     }
 
     public function testSaveStoresProviderOverrideAndScopesKey(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->credentials = $this->createMock(CredentialService::class);
         $this->buildCtrl();
 

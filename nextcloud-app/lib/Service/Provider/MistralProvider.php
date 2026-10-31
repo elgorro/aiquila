@@ -9,7 +9,7 @@ use OCA\AIquila\Http\SseStreaming;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\MistralModels;
 use OCP\Http\Client\IClientService;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -44,7 +44,7 @@ class MistralProvider implements LLMProviderInterface {
 
     public function __construct(
         private readonly IClientService $clientService,
-        private readonly IConfig $config,
+        private readonly AppSettings $config,
         private readonly CredentialService $credentials,
         private readonly LoggerInterface $logger,
     ) {

@@ -20,7 +20,7 @@ use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICache;
 use OCP\ICacheFactory;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -189,7 +189,7 @@ class ClaudeServiceTest extends TestCase {
     private TestableClaudeSDKService $testable;
 
     protected function setUp(): void {
-        $this->config      = $this->createStub(IConfig::class);
+        $this->config      = $this->createStub(AppSettings::class);
         $this->logger      = $this->createStub(LoggerInterface::class);
         $this->credentials = $this->createStub(CredentialService::class);
 
@@ -276,7 +276,7 @@ class ClaudeServiceTest extends TestCase {
     // ── getModel ──────────────────────────────────────────────────────────
 
     public function testGetModelReturnsDefault(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $this->config->expects($this->once())->method('getAppValue')
@@ -294,7 +294,7 @@ class ClaudeServiceTest extends TestCase {
     }
 
     public function testGetModelFallsBackToAdminWhenUserHasNoPref(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $this->config->method('getUserValue')->willReturn('');
@@ -306,7 +306,7 @@ class ClaudeServiceTest extends TestCase {
     }
 
     public function testGetModelWithNullUserIdSkipsUserLookup(): void {
-        $this->config = $this->createMock(IConfig::class);
+        $this->config = $this->createMock(AppSettings::class);
         $this->buildService();
 
         $this->config->expects($this->never())->method('getUserValue');

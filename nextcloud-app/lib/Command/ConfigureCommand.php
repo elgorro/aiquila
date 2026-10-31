@@ -9,18 +9,18 @@ use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\ThinkingPolicy;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 class ConfigureCommand extends Base {
-    private IConfig $config;
+    private AppSettings $config;
     private CredentialService $credentials;
     private LLMProviderFactory $providerFactory;
     private const APP_NAME = 'aiquila';
 
-    public function __construct(IConfig $config, CredentialService $credentials, LLMProviderFactory $providerFactory) {
+    public function __construct(AppSettings $config, CredentialService $credentials, LLMProviderFactory $providerFactory) {
         parent::__construct();
         $this->config = $config;
         $this->credentials = $credentials;

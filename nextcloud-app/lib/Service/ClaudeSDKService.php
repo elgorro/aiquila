@@ -39,7 +39,6 @@ use OCA\AIquila\Service\Provider\ThinkingProfileInterface;
 use OCA\AIquila\Service\Provider\UnsupportedModalities;
 use OCP\ICache;
 use OCP\ICacheFactory;
-use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -52,7 +51,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     // Anthropic publishes no transcription, speech or image-generation endpoint.
     use UnsupportedModalities;
 
-    protected IConfig $config;
+    protected AppSettings $config;
     protected LoggerInterface $logger;
     protected CredentialService $credentials;
     private ICache $cache;
@@ -111,7 +110,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     private const ACTION_REVEAL_SALT = 'reveal_metadata_salt';
     private const ACTION_ROTATE_SALT = 'rotate_metadata_salt';
 
-    public function __construct(IConfig $config, LoggerInterface $logger, CredentialService $credentials, ICacheFactory $cacheFactory, RequestMetadataService $requestMetadata) {
+    public function __construct(AppSettings $config, LoggerInterface $logger, CredentialService $credentials, ICacheFactory $cacheFactory, RequestMetadataService $requestMetadata) {
         $this->config = $config;
         $this->logger = $logger;
         $this->credentials = $credentials;

@@ -5,7 +5,6 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Service;
 
-use OCP\IConfig;
 use OCP\Security\ISecureRandom;
 use Psr\Log\LoggerInterface;
 
@@ -43,7 +42,7 @@ class RequestMetadataService {
     private const SALT_BYTES = 32;
 
     public function __construct(
-        private IConfig $config,
+        private AppSettings $config,
         private CredentialService $credentials,
         private ISecureRandom $random,
         private LoggerInterface $logger,

@@ -8,7 +8,7 @@ namespace OCA\AIquila\Service\Provider;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\Cloud\CloudEndpoints;
 use OCP\ICacheFactory;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use OCP\IGroupManager;
 use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
@@ -64,7 +64,7 @@ class ProviderSettingsService {
     private const FAILURE_MARKER = ['__aiquila_failed' => true];
 
     public function __construct(
-        private readonly IConfig $config,
+        private readonly AppSettings $config,
         private readonly CredentialService $credentials,
         private readonly ProviderAccessService $access,
         private readonly IUserManager $userManager,
@@ -490,7 +490,7 @@ class ProviderSettingsService {
             $out['options'] = $this->listModels($provider, $admin ? null : $userId, $refreshModels);
         }
 
-        // Access lists live in their own table, not IConfig, and only ever have
+        // Access lists live in their own table, not app config, and only ever have
         // an instance value — there is no user scope to inherit from.
         if (($field['storage'] ?? null) === ProviderSettingsSchema::STORAGE_ACCESS) {
             $out['options'] = [];
@@ -526,7 +526,7 @@ class ProviderSettingsService {
         if ($key === null) {
             return $field['default'] ?? '';
         }
-        $raw = (string)$this->config->getAppValue(self::APP_NAME, $key, $this->encodeDefault($field));
+        $raw = $this->config->getAppValue(self::APP_NAME, $key, $this->encodeDefault($field));
         return $this->decode($field, $raw);
     }
 
@@ -535,7 +535,7 @@ class ProviderSettingsService {
         if ($key === null || $userId === null) {
             return $field['type'] === ProviderSettingsSchema::TYPE_CHECKBOX ? null : '';
         }
-        $raw = (string)$this->config->getUserValue($userId, self::APP_NAME, $key, '');
+        $raw = $this->config->getUserValue($userId, self::APP_NAME, $key, '');
         // '' means "not set — follow the instance default", which the UI renders
         // as an empty picker rather than as a false checkbox.
         return $raw === '' ? '' : $this->decode($field, $raw);

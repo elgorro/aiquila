@@ -16,7 +16,7 @@ use OCA\AIquila\Service\Provider\LocalProvider;
 use OCA\AIquila\Service\Provider\MistralProvider;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use OCA\AIquila\Service\Provider\ProviderAccessService;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use PHPUnit\Framework\TestCase;
 
 class LLMProviderFactoryTest extends TestCase {
@@ -32,7 +32,7 @@ class LLMProviderFactoryTest extends TestCase {
     private LLMProviderFactory $factory;
 
     protected function setUp(): void {
-        $this->config    = $this->createStub(IConfig::class);
+        $this->config    = $this->createStub(AppSettings::class);
         $this->anthropic = $this->createStub(ClaudeSDKService::class);
         $this->mistral   = $this->createStub(MistralProvider::class);
         $this->deepseek  = $this->createStub(DeepSeekProvider::class);

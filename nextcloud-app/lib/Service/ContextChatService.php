@@ -13,7 +13,7 @@ use OCA\AIquila\Db\MessageMapper;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\ContextChat\ContentItem;
 use OCP\ContextChat\IContentManager;
-use OCP\IServerContainer;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -37,7 +37,7 @@ class ContextChatService {
     public function __construct(
         private readonly ConversationMapper $conversationMapper,
         private readonly MessageMapper $messageMapper,
-        private readonly IServerContainer $container,
+        private readonly ContainerInterface $container,
         private readonly LoggerInterface $logger,
     ) {
     }

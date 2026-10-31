@@ -16,13 +16,13 @@ use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use Psr\Log\LoggerInterface;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 
 class SettingsController extends Controller {
     use ErrorResponseTrait;
     use RequiresUserIdTrait;
 
-    private IConfig $config;
+    private AppSettings $config;
     private ?string $userId;
     private LLMProviderFactory $providerFactory;
     private CredentialService $credentials;
@@ -34,7 +34,7 @@ class SettingsController extends Controller {
     public function __construct(
         string $appName,
         IRequest $request,
-        IConfig $config,
+        AppSettings $config,
         ?string $userId,
         LLMProviderFactory $providerFactory,
         CredentialService $credentials,
@@ -92,7 +92,7 @@ class SettingsController extends Controller {
         } catch (NoPermittedProviderException $e) {
             return $this->noProviderAvailable();
         }
-        $userProvider     = $this->config->getUserValue($this->userId, $this->appName, 'user_provider', '');
+        $userProvider     = $this->config->getUserValue($this->requireUserId(), $this->appName, 'user_provider', '');
 
         // Per-provider metadata: label, whether a personal key exists, the user's
         // preferred model, and the available model list (cached live listing,
@@ -110,7 +110,7 @@ class SettingsController extends Controller {
                 'label'          => $provider->getLabel(),
                 'configured'     => $provider->isConfigured($this->userId),
                 'hasUserKey'     => $this->credentials->hasApiKey($this->userId, $id),
-                'userModel'      => $this->config->getUserValue($this->userId, $this->appName, $this->userModelKey($id), ''),
+                'userModel'      => $this->config->getUserValue($this->requireUserId(), $this->appName, $this->userModelKey($id), ''),
                 'availableModels' => $models[$id],
             ];
         }
@@ -118,22 +118,22 @@ class SettingsController extends Controller {
         // Backward-compatible flat fields reflect the active provider.
         $active = $this->providerFactory->getProviderById($activeProviderId);
         $hasUserKey      = $this->credentials->hasApiKey($this->userId, $activeProviderId);
-        $userModel       = $this->config->getUserValue($this->userId, $this->appName, $this->userModelKey($activeProviderId), '');
+        $userModel       = $this->config->getUserValue($this->requireUserId(), $this->appName, $this->userModelKey($activeProviderId), '');
         // The loop above already resolved every permitted provider's list; the
         // active one is always among them, so reuse it rather than paying for a
         // second lookup.
         $availableModels = $models[$activeProviderId] ?? $this->providerSettings->listModels($active, $this->userId);
 
-        $defaultSystemPrompt = $this->config->getUserValue($this->userId, $this->appName, 'default_system_prompt', '');
-        $defaultVerbose = $this->config->getUserValue($this->userId, $this->appName, 'default_verbose', '0') === '1';
+        $defaultSystemPrompt = $this->config->getUserValue($this->requireUserId(), $this->appName, 'default_system_prompt', '');
+        $defaultVerbose = $this->config->getUserValue($this->requireUserId(), $this->appName, 'default_verbose', '0') === '1';
 
         // Notifications for tasks other apps scheduled. Success is opt-in;
         // failure defaults on because it points at AIquila's own configuration.
-        $taskSuccessNotifications = $this->config->getUserValue($this->userId, $this->appName, 'task_success_notifications', '0') === '1';
-        $taskFailureNotifications = $this->config->getUserValue($this->userId, $this->appName, 'task_failure_notifications', '1') === '1';
+        $taskSuccessNotifications = $this->config->getUserValue($this->requireUserId(), $this->appName, 'task_success_notifications', '0') === '1';
+        $taskFailureNotifications = $this->config->getUserValue($this->requireUserId(), $this->appName, 'task_failure_notifications', '1') === '1';
 
         // Native MCP connector toggle. User value is '1', '0', or '' (inherit admin).
-        $userNativeMcp = $this->config->getUserValue($this->userId, $this->appName, 'native_mcp_enabled', '');
+        $userNativeMcp = $this->config->getUserValue($this->requireUserId(), $this->appName, 'native_mcp_enabled', '');
         $adminNativeMcp = $this->config->getAppValue($this->appName, 'native_mcp_enabled', '0') === '1';
 
         return new JSONResponse([

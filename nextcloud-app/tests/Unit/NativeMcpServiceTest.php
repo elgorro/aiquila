@@ -6,7 +6,7 @@ namespace OCA\AIquila\Tests\Unit;
 use OCA\AIquila\Db\McpServerMapper;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\NativeMcpService;
-use OCP\IConfig;
+use OCA\AIquila\Service\AppSettings;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -14,7 +14,7 @@ class NativeMcpServiceTest extends TestCase {
     private function service(string $connectorIds): NativeMcpService {
         $mapper = $this->createStub(McpServerMapper::class);
         $credentials = $this->createStub(CredentialService::class);
-        $config = $this->createStub(IConfig::class);
+        $config = $this->createStub(AppSettings::class);
         $logger = $this->createStub(LoggerInterface::class);
         $config->method('getAppValue')->willReturnCallback(
             fn($app, $key, $default = '') => $key === 'mistral_connector_ids' ? $connectorIds : $default
