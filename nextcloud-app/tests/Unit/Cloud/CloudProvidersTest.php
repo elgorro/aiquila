@@ -354,6 +354,17 @@ class CloudProvidersTest extends TestCase {
         $this->assertTrue($this->provider(ClaudePlatformGoogleCloudProvider::class)->getCapabilities()['fast_mode']);
     }
 
+    public function testMidConversationSystemMessagesFollowThePlatformList(): void {
+        // GA on the Claude API, Claude Platform on AWS, Bedrock and Google-managed Vertex.
+        foreach ([ClaudePlatformAwsProvider::class, BedrockProvider::class, BedrockInvokeProvider::class, VertexProvider::class] as $class) {
+            $this->assertTrue($this->provider($class)->supportsMidConversationSystem(ClaudeModels::OPUS_4_8), $class);
+            $this->assertFalse($this->provider($class)->supportsMidConversationSystem(ClaudeModels::SONNET_5), $class);
+        }
+        foreach ([FoundryProvider::class, ClaudePlatformGoogleCloudProvider::class] as $class) {
+            $this->assertFalse($this->provider($class)->supportsMidConversationSystem(ClaudeModels::OPUS_4_8), $class);
+        }
+    }
+
     public function testUploadFileIsRefusedWithoutAFilesApi(): void {
         $this->expectException(\RuntimeException::class);
         $this->provider(BedrockProvider::class)->uploadFile('bytes', 'a.pdf', 'application/pdf', 'alice');

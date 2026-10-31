@@ -659,6 +659,9 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
      * carrying multiple tool_result blocks).
      */
     protected function toOpenAiMessages(array $messages, ?string $system, ?string $userId = null): array {
+        // Mid-conversation system messages are a Claude feature; fold them into
+        // the user turn, which every chat template accepts.
+        $messages = SystemMessages::prepare($messages, false);
         $out = [];
         if ($system !== null && $system !== '') {
             $out[] = ['role' => 'system', 'content' => $system];

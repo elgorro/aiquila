@@ -47,4 +47,12 @@ abstract class AbstractAwsClaudeProvider extends AbstractCloudClaudeProvider {
         }
         return $id;
     }
+
+    /**
+     * Mid-conversation system messages are GA on Amazon Bedrock and Claude
+     * Platform on AWS, the two platforms behind this class.
+     */
+    protected function platformFeatures(): array {
+        return [self::FEATURE_MID_CONVERSATION_SYSTEM => true] + parent::platformFeatures();
+    }
 }

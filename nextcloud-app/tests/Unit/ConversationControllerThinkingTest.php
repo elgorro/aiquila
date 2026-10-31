@@ -11,6 +11,7 @@ use OCA\AIquila\Db\ProjectMapper;
 use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ContextChatService;
+use OCA\AIquila\Service\RuntimeContextService;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
@@ -100,6 +101,7 @@ class ConversationControllerThinkingTest extends TestCase {
             $this->createStub(NativeMcpService::class),
             $this->createStub(IJobList::class),
             $this->createStub(ContextChatService::class),
+            $this->createStub(RuntimeContextService::class),
             'testuser',
             $this->createStub(LoggerInterface::class),
         );
