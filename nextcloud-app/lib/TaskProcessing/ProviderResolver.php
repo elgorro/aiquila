@@ -113,6 +113,24 @@ class ProviderResolver {
     }
 
     /**
+     * Same as resolve(), but for a chat turn carrying attachments: images need
+     * `vision`, PDFs need `documents`. Text attachments need nothing beyond
+     * plain chat.
+     *
+     * @throws \RuntimeException when the resolved provider cannot read what is attached
+     */
+    public function resolveAttachmentCapable(?string $userId, ?string $requestedId, bool $images, bool $documents): LLMProviderInterface {
+        $provider = $this->resolve($userId, $requestedId);
+        if ($images) {
+            $this->requireCapability($provider, $userId, 'vision', 'process images', 'vision-capable');
+        }
+        if ($documents) {
+            $this->requireCapability($provider, $userId, 'documents', 'read PDF documents', 'document-capable');
+        }
+        return $provider;
+    }
+
+    /**
      * Hand back $provider when it declares $capability, or fail with a message
      * that names what to switch to.
      *

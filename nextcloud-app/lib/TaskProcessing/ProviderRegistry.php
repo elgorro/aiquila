@@ -46,11 +46,13 @@ final class ProviderRegistry {
         GenerateEmojiProvider::class,
 
         // Newer than the declared min-version: reformatparagraphs is Nextcloud
-        // 34+; improve, subtitles and audio translation are 35+. Where the task
+        // 34+; improve, subtitles, audio translation and multimodal chat with
+        // tools are 35+. Where the task
         // type is not registered the provider is never offered.
         ReformatParagraphsProvider::class,
         ImproveProvider::class,
         SubtitlesProvider::class,
         AudioToAudioTranslateProvider::class,
+        MultimodalChatWithToolsProvider::class,
     ];
 }
