@@ -14,13 +14,18 @@ for a Nextcloud file and needs no fediverse account.
 
 ## Prerequisites
 
-- The Nextcloud **Social** app must be installed and enabled. The `social` tool category
-  registers only when it is.
-- Written against **Social v0.24.1**. The app is pre-1.0 and its API is still moving; check
-  the routes against the installed version if something 404s.
-- Social serves the Mastodon routes under `/index.php/apps/social/` rather than at the domain
-  root, which is why third-party Mastodon clients cannot reach it yet. The base path lives in
-  one constant in `mcp-server/src/client/social.ts`; upstream intends to move it.
+- The **Social** app (app id `social`, maintained as
+  [Aloha Social](https://github.com/AlohaSocial/social)) must be installed and enabled. The
+  `social` tool category registers only when it is. It is not in the Nextcloud app store;
+  install it from the release tarball on GitHub, and check the `<nextcloud>` range in its
+  `appinfo/info.xml` against your server first.
+- Written against **Social v0.24.1** and checked against the upstream `main` branch. The app
+  is pre-1.0 and its API is still moving; check the routes against the installed version if
+  something 404s.
+- Social serves the Mastodon routes under `/index.php/apps/social/`. Third-party Mastodon
+  clients need root `/api` and `/oauth` proxy rules to reach them; these tools do not, and
+  use the app path directly. The base path lives in one constant in
+  `mcp-server/src/client/social.ts`.
 - Authentication is the usual Nextcloud app password of the account the request acts as. No OAuth
   registration is needed — Social accepts the Nextcloud session, and the `OCS-APIRequest`
   header every AIquila client sends satisfies its CSRF check.
@@ -58,14 +63,23 @@ for a Nextcloud file and needs no fediverse account.
 
 ## Timeline Tools
 
-Every timeline tool takes the same pagination parameters. Ids are Social's numeric status
-ids, used as cursors.
+Every timeline tool takes the same pagination parameters.
+
+**Ids are strings.** Status and notification ids are stream nids — the published second
+times 10⁹ plus a random suffix — far past the largest integer a JSON number carries exactly.
+Every id parameter on this page is therefore a string of digits, passed back exactly as a
+tool returned it.
 
 **Common parameters:**
 
 - `limit` (number, optional): Statuses to return (default 20, max 50 — the server's own cap)
-- `max_id` (number, optional): Only statuses older than this id — page backwards
-- `min_id` (number, optional): Only statuses newer than this id — page forwards
+- `max_id` (string, optional): Page backwards — the cursor a previous call returned
+- `min_id` (string, optional): Only entries newer than this cursor — page forwards
+
+When there is an older page, the output ends with the `max_id` to pass for it. Social pages
+with a `Link` header, and the cursor is not always a status id — favourites and bookmarks
+are cut on the id of the mark, follower lists on the follow — so take it from that line
+rather than from the last status shown.
 
 ### social_home_timeline
 
@@ -119,7 +133,7 @@ Creating and editing lists is not covered; do that in the Social app.
 
 **Parameters:**
 
-- `status_id` (number, required): The numeric status id
+- `status_id` (string, required): The status id
 - `include_context` (boolean, optional): Also fetch the thread — the posts it replies to and
   the replies to it (default `false`, one extra request when `true`)
 
@@ -127,7 +141,7 @@ Creating and editing lists is not covered; do that in the Social app.
 
 **Parameters:**
 
-- `status_id` (number, required): The numeric status id
+- `status_id` (string, required): The status id
 
 **Returns:** each version with its timestamp, or a note that the post has never been edited.
 
@@ -153,10 +167,10 @@ Publishes a post. **Public and irreversible** — see the warning at the top of 
 **Parameters:**
 
 - `status` (string, required): The text of the post
-- `visibility` (string, optional): `public` (default — world-readable and listed), `unlisted`,
-  `private` (followers only) or `direct` (mentioned accounts only). Social treats an
-  unrecognised value as `direct`.
-- `in_reply_to_id` (number, optional): The status this replies to
+- `visibility` (string, optional): `public` (world-readable and listed), `unlisted`,
+  `private` (followers only) or `direct` (mentioned accounts only). Omitted, the account's
+  default post privacy applies. A reply to a direct message is direct whatever this says.
+- `in_reply_to_id` (string, optional): The status this replies to
 - `media_ids` (string[], optional): Media ids from `social_upload_media`
 - `poll` (object, optional): `{ options: string[], expires_in: number, multiple?: boolean }`
   — `expires_in` is in seconds, e.g. `86400` for a day
@@ -170,7 +184,7 @@ Social rate-limits posting to 30 per minute per user.
 
 **Parameters:**
 
-- `status_id` (number, required): The numeric status id
+- `status_id` (string, required): The status id
 
 Only the author can delete a post.
 
@@ -178,7 +192,7 @@ Only the author can delete a post.
 
 ## Interaction Tools
 
-All six take a single `status_id` (number, required) and are idempotent.
+All six take a single `status_id` (string, required) and are idempotent.
 
 ### social_favourite / social_unfavourite
 
@@ -256,7 +270,7 @@ rather than forty.
 **Parameters:**
 
 - `limit` (number, optional): Notifications to read before grouping (default 20, max 50)
-- `max_id` (number, optional): Only notifications older than this id
+- `max_id` (string, optional): Only notifications older than this notification id
 - `types` (string[], optional): Only these types, e.g. `["mention", "follow"]`
 - `exclude_types` (string[], optional): Skip these types
 
@@ -267,7 +281,7 @@ the notification id and the post it refers to.
 
 **Parameters:**
 
-- `notification_id` (number, optional): The notification to dismiss. **Omit it to clear every
+- `notification_id` (string, optional): The notification to dismiss. **Omit it to clear every
   notification.**
 
 Dismissed notifications cannot be brought back.
@@ -303,7 +317,8 @@ Ask Claude:
 ## Limitations
 
 - **Read caps.** Social clamps a timeline read to 50 statuses; the tools pass a larger
-  `limit` through as 50. Page with `max_id` rather than asking for more.
+  `limit` through as 50. Page with the `max_id` the output ends with rather than asking for
+  more.
 - **Out of scope in this module:** reports, blocks, mutes and flags; the Pixelfed and
   PeerTube routes; admin and moderation endpoints; filters; creating and editing lists;
   scheduled statuses; account migration. Use the Social web UI for those.

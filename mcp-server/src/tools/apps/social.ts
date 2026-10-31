@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import {
   fetchSocialAPI,
+  fetchSocialAPIPage,
   type SocialAccount,
   type SocialList,
   type SocialMediaAttachment,
@@ -18,8 +19,8 @@ import { handleAppError } from '../error-utils.js';
  * Nextcloud Social App Tools
  *
  * Reads and writes the fediverse through the Mastodon client API that
- * Nextcloud Social exposes. Pinned against Social v0.24.1 — the app is pre-1.0
- * and its API is still moving.
+ * Nextcloud Social exposes. Pinned against Social v0.24.1 and checked against
+ * AlohaSocial/social `main` — the app is pre-1.0 and its API is still moving.
  *
  * Out of scope in this module, deliberately: reports, blocks, mutes and flags;
  * the Pixelfed and PeerTube routes; admin and moderation; filters; list,
@@ -52,6 +53,18 @@ const ACCOUNT_ERRORS = {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * A stream nid. Status and notification ids exceed `Number.MAX_SAFE_INTEGER`,
+ * so they are taken as decimal strings: a JSON number would already have been
+ * rounded to some other post before the handler saw it.
+ */
+function nidSchema(what: string) {
+  return z
+    .string()
+    .regex(/^\d+$/, 'a decimal id, as a string')
+    .describe(`${what}, as a string of digits exactly as Social returned it`);
+}
+
 function text(body: string) {
   return { content: [{ type: 'text' as const, text: body }] };
 }
@@ -69,14 +82,14 @@ function stripHtml(html: string, max = 280): string {
 /** The pagination arguments every timeline-shaped tool accepts. */
 interface PageArgs {
   limit?: number;
-  max_id?: number;
-  min_id?: number;
+  max_id?: string;
+  min_id?: string;
 }
 
 const pageSchema = {
   limit: z.number().optional().describe(`Statuses to return (default 20, max ${TIMELINE_MAX})`),
-  max_id: z.number().optional().describe('Only statuses older than this status id (page back)'),
-  min_id: z.number().optional().describe('Only statuses newer than this status id (page forward)'),
+  max_id: nidSchema('Page back: the next-page cursor a previous call returned').optional(),
+  min_id: nidSchema('Page forward: only entries newer than this cursor').optional(),
 };
 
 function pageParams(args: PageArgs): Record<string, string | number | boolean | undefined> {
@@ -134,9 +147,9 @@ function formatAccount(a: SocialAccount): string {
   return lines.join('\n');
 }
 
-function formatStatuses(statuses: SocialStatus[], heading: string, empty: string) {
-  if (!statuses || statuses.length === 0) return text(empty);
-  return text(`${heading} (${statuses.length}):\n\n${statuses.map(formatStatus).join('\n\n')}`);
+/** The closing line that tells the caller how to read the next page. */
+function nextPage(next: string | undefined): string {
+  return next ? `\n\nMore: pass max_id: "${next}" for the next page.` : '';
 }
 
 /** Read one timeline, with the same pagination and rendering everywhere. */
@@ -147,10 +160,14 @@ async function timeline(
   heading: string,
   empty: string
 ) {
-  const statuses = await fetchSocialAPI<SocialStatus[]>(endpoint, {
+  const page = await fetchSocialAPIPage<SocialStatus>(endpoint, {
     queryParams: { ...pageParams(args), ...extra },
   });
-  return formatStatuses(statuses, heading, empty);
+  if (page.items.length === 0) return text(empty);
+  return text(
+    `${heading} (${page.items.length}):\n\n${page.items.map(formatStatus).join('\n\n')}` +
+      nextPage(page.next)
+  );
 }
 
 const READ_ONLY = {
@@ -312,13 +329,13 @@ export const getStatusTool = {
   description:
     'Read one post in Nextcloud Social by its id, optionally with the thread around it (the posts it replies to and the replies to it).',
   inputSchema: z.object({
-    status_id: z.number().describe('The numeric status id'),
+    status_id: nidSchema('The status id'),
     include_context: z
       .boolean()
       .optional()
       .describe('Also fetch the surrounding thread (default false)'),
   }),
-  handler: async (args: { status_id: number; include_context?: boolean }) => {
+  handler: async (args: { status_id: string; include_context?: boolean }) => {
     try {
       const status = await fetchSocialAPI<SocialStatus>(`/api/v1/statuses/${args.status_id}`);
       const sections = [formatStatus(status)];
@@ -354,9 +371,9 @@ export const statusHistoryTool = {
   annotations: READ_ONLY,
   description: 'List the successive versions of a post that has been edited in Nextcloud Social.',
   inputSchema: z.object({
-    status_id: z.number().describe('The numeric status id'),
+    status_id: nidSchema('The status id'),
   }),
-  handler: async (args: { status_id: number }) => {
+  handler: async (args: { status_id: string }) => {
     try {
       const history = await fetchSocialAPI<SocialStatusEdit[]>(
         `/api/v1/statuses/${args.status_id}/history`
@@ -435,9 +452,9 @@ export const postStatusTool = {
       .enum(VISIBILITIES)
       .optional()
       .describe(
-        'Who sees it: public (default, world-readable and listed), unlisted, private (followers only), direct (mentioned accounts only). An unrecognised value is treated as direct'
+        'Who sees it: public (world-readable and listed), unlisted, private (followers only), direct (mentioned accounts only). Omitted, the account’s default post privacy applies; a reply to a direct message is direct whatever this says'
       ),
-    in_reply_to_id: z.number().optional().describe('Numeric id of the status this replies to'),
+    in_reply_to_id: nidSchema('The id of the status this replies to').optional(),
     media_ids: z.array(z.string()).optional().describe('Media ids returned by social_upload_media'),
     poll: z
       .object({
@@ -457,7 +474,7 @@ export const postStatusTool = {
   handler: async (args: {
     status: string;
     visibility?: (typeof VISIBILITIES)[number];
-    in_reply_to_id?: number;
+    in_reply_to_id?: string;
     media_ids?: string[];
     poll?: { options: string[]; expires_in: number; multiple?: boolean };
     spoiler_text?: string;
@@ -465,10 +482,9 @@ export const postStatusTool = {
     language?: string;
   }) => {
     try {
-      const body: Record<string, unknown> = {
-        status: args.status,
-        visibility: args.visibility ?? 'public',
-      };
+      // no visibility means the account's default privacy, as in Mastodon
+      const body: Record<string, unknown> = { status: args.status };
+      if (args.visibility !== undefined) body.visibility = args.visibility;
       if (args.in_reply_to_id !== undefined) body.in_reply_to_id = args.in_reply_to_id;
       if (args.media_ids?.length) body.media_ids = args.media_ids;
       if (args.poll) body.poll = args.poll;
@@ -506,9 +522,9 @@ export const deleteStatusTool = {
   description:
     'Delete one of this user’s own posts in Nextcloud Social. A delete is federated to the servers that received the post, but copies already shown or cached elsewhere may remain.',
   inputSchema: z.object({
-    status_id: z.number().describe('The numeric status id'),
+    status_id: nidSchema('The status id'),
   }),
-  handler: async (args: { status_id: number }) => {
+  handler: async (args: { status_id: string }) => {
     try {
       await fetchSocialAPI(`/api/v1/statuses/${args.status_id}`, { method: 'DELETE' });
       return text(`Deleted status ${args.status_id}.`);
@@ -543,9 +559,9 @@ function interactionTool(config: {
     },
     description: config.description,
     inputSchema: z.object({
-      status_id: z.number().describe('The numeric status id'),
+      status_id: nidSchema('The status id'),
     }),
-    handler: async (args: { status_id: number }) => {
+    handler: async (args: { status_id: string }) => {
       try {
         await fetchSocialAPI(`/api/v1/statuses/${args.status_id}/${config.act}`, {
           method: 'POST',
@@ -675,16 +691,17 @@ export const listAccountFollowsTool = {
   }),
   handler: async (args: PageArgs & { account: string; direction: 'followers' | 'following' }) => {
     try {
-      const accounts = await fetchSocialAPI<SocialAccount[]>(
+      const page = await fetchSocialAPIPage<SocialAccount>(
         `/api/v1/accounts/${encodeURIComponent(args.account.replace(/^@/, ''))}/${args.direction}`,
         { queryParams: pageParams(args) }
       );
-      if (!accounts || accounts.length === 0) {
+      if (page.items.length === 0) {
         return text(`No ${args.direction} found for ${args.account}.`);
       }
       return text(
         `${args.direction === 'followers' ? 'Followers of' : 'Followed by'} ${args.account} ` +
-          `(${accounts.length}):\n\n${accounts.map(formatAccount).join('\n\n')}`
+          `(${page.items.length}):\n\n${page.items.map(formatAccount).join('\n\n')}` +
+          nextPage(page.next)
       );
     } catch (error) {
       return handleAppError(error, `Error listing ${args.direction}`, ACCOUNT_ERRORS);
@@ -819,7 +836,7 @@ export const listNotificationsTool = {
       .number()
       .optional()
       .describe(`Notifications to read before grouping (default 20, max ${TIMELINE_MAX})`),
-    max_id: z.number().optional().describe('Only notifications older than this id (page back)'),
+    max_id: nidSchema('Only notifications older than this notification id (page back)').optional(),
     types: z
       .array(z.string())
       .optional()
@@ -827,7 +844,7 @@ export const listNotificationsTool = {
     exclude_types: z.array(z.string()).optional().describe('Skip these types'),
   }),
   handler: async (
-    args: { limit?: number; max_id?: number; types?: string[]; exclude_types?: string[] } = {}
+    args: { limit?: number; max_id?: string; types?: string[]; exclude_types?: string[] } = {}
   ) => {
     try {
       const queryParams: Record<string, string | number | boolean | undefined> = {
@@ -887,12 +904,11 @@ export const dismissNotificationsTool = {
   description:
     'Dismiss one Nextcloud Social notification, or clear all of them when no id is given. Dismissed notifications cannot be brought back.',
   inputSchema: z.object({
-    notification_id: z
-      .number()
-      .optional()
-      .describe('The notification to dismiss; omit to clear every notification'),
+    notification_id: nidSchema(
+      'The notification to dismiss (its Notification ID); omit to clear every notification'
+    ).optional(),
   }),
-  handler: async (args: { notification_id?: number } = {}) => {
+  handler: async (args: { notification_id?: string } = {}) => {
     try {
       if (args.notification_id === undefined) {
         await fetchSocialAPI('/api/v1/notifications/clear', { method: 'POST' });
