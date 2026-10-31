@@ -427,7 +427,6 @@ AIquila does not serve these Nextcloud task types:
 
 | Task type | Why not |
 |---|---|
-| `core:text2text:multimodal-chatwithtools` | Not implemented yet; `core:text2text:chatwithtools` covers text-only tool chat |
 | `core:contextagent:interaction`, `core:contextagent:audio-interaction`, `core:contextagent:multimodal-interaction` | The Context Agent runs its own agent loop over Nextcloud tools; install the `context_agent` app, which drives its model through `core:text2text:chatwithtools` — so AIquila can still be the model behind it |
 
 Some features in Nextcloud's AI overview are built on top of these task types rather

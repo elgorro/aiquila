@@ -66,7 +66,6 @@ final class ProviderRegistry {
      * @var array<string, string> task type id => reason
      */
     public const NOT_SERVED = [
-        'core:text2text:multimodal-chatwithtools' => 'Not yet implemented: needs attachment handling on top of chatwithtools.',
         'core:contextagent:interaction' => 'Context Agent types run an agent loop over Nextcloud tools; the context_agent app owns that loop.',
         'core:contextagent:audio-interaction' => 'Context Agent types run an agent loop over Nextcloud tools; the context_agent app owns that loop.',
         'core:contextagent:multimodal-interaction' => 'Context Agent types run an agent loop over Nextcloud tools; the context_agent app owns that loop.',
