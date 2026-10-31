@@ -52,7 +52,7 @@ export const listNotificationsTool = {
       const formatted = notifications.map((n) => {
         const time = n.datetime ? ` (${n.datetime})` : '';
         const msg = n.message ? `\n  ${n.message}` : '';
-        return `- [${n.app}] ${n.subject}${time}${msg}`;
+        return `- [${n.app}] ${n.subject} (id: ${n.notification_id})${time}${msg}`;
       });
 
       return {
