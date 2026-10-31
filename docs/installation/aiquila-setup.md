@@ -399,9 +399,18 @@ goes where you chose. The action fails with a message naming the providers you c
 switch to. Voice chat needs one provider holding both audio capabilities, so that a
 spoken message and its reply do not travel to two different vendors.
 
-The Context Agent task types (`core:contextagent:interaction` and
-`core:contextagent:audiointeraction`) are not served by AIquila — install a dedicated
-provider app for those.
+AIquila does not serve these Nextcloud task types:
+
+| Task type | Why not |
+|---|---|
+| `core:text2text:multimodal-chatwithtools` | Not implemented yet; `core:text2text:chatwithtools` covers text-only tool chat |
+| `core:contextagent:interaction`, `core:contextagent:audio-interaction`, `core:contextagent:multimodal-interaction` | The Context Agent runs its own agent loop over Nextcloud tools; install the `context_agent` app, which drives its model through `core:text2text:chatwithtools` — so AIquila can still be the model behind it |
+
+Some features in Nextcloud's AI overview are built on top of these task types rather
+than being task types themselves. **Document generation** in Nextcloud Office runs
+on `core:text2text`, so AIquila serves it once Office is installed. **Live
+transcription** in Talk calls comes from the `live_transcription` ExApp and does not
+go through TaskProcessing at all.
 
 AIquila answers these tasks but never starts them, and the app that did — the
 Assistant, Files, Mail — normally puts the result in front of you already. So a
