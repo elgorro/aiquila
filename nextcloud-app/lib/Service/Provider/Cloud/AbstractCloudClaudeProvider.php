@@ -128,6 +128,7 @@ abstract class AbstractCloudClaudeProvider extends ClaudeSDKService {
             self::FEATURE_SERVICE_TIER => false,
             self::FEATURE_METADATA => false,
             self::FEATURE_AUTO_CACHE => true,
+            self::FEATURE_MID_CONVERSATION_SYSTEM => false,
         ];
     }
 

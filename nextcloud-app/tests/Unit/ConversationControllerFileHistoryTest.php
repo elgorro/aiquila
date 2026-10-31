@@ -12,6 +12,7 @@ use OCA\AIquila\Db\MessageMapper;
 use OCA\AIquila\Db\ProjectMapper;
 use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Service\ContextChatService;
+use OCA\AIquila\Service\RuntimeContextService;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
@@ -131,6 +132,7 @@ class ConversationControllerFileHistoryTest extends TestCase {
             $nativeMcp,
             $this->createStub(IJobList::class),
             $this->createStub(ContextChatService::class),
+            $this->createStub(RuntimeContextService::class),
             'testuser',
             $this->createStub(LoggerInterface::class),
         );

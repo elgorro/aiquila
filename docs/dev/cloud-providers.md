@@ -33,6 +33,7 @@ platform lacks, so a request never fails on a missing endpoint:
 | Files API uploads | ✓ | — | — | — | — | — | — |
 | Service tier, extended batch output | ✓ | — | — | — | — | — | — |
 | Automatic prompt caching | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
+| Mid-conversation system messages | ✓ | ✓ | — | ✓ | ✓ | ✓ | — |
 
 Where a feature is off:
 
@@ -45,6 +46,8 @@ Where a feature is off:
 - **Files API** — attachments are sent inline with each request. The Files API is
   only used through the Claude API card's key, which no cloud workspace can read,
   so even the Anthropic-operated platforms inline.
+- **Mid-conversation system messages** — the date and time-zone note goes to the
+  model as a `<system-reminder>` block in the user's turn instead.
 - **InvokeModel** — explicit cache breakpoints still go out; only the top-level
   automatic one is left off, because that route rejects it. Requests carry
   `anthropic_version: bedrock-2023-05-31`: Bedrock serves the SDK's current API

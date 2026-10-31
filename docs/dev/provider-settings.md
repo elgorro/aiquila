@@ -187,7 +187,7 @@ The Claude providers share one implementation, `ClaudeSDKService`, and differ in
 which parts of the Claude API besides the Messages endpoint their platform
 serves. `platformFeatures()` lists them — `files_api`, `batches`, `models_api`,
 `native_mcp`, `fast_mode`, `extended_batch_output`, `service_tier`, `metadata`,
-`auto_cache` — and every code path that touches one asks `hasFeature()` first:
+`auto_cache`, `mid_conversation_system` — and every code path that touches one asks `hasFeature()` first:
 
 - `supportsBatch()` decides whether summaries and coworkers take the Batch API;
 - `supportsFilesApi()` decides whether attachments are uploaded
@@ -195,7 +195,10 @@ serves. `platformFeatures()` lists them — `files_api`, `batches`, `models_api`
 - without `models_api`, `listModels()` returns null, the probe sends a one-token
   request instead of listing models, and capabilities come from `ClaudeModels`;
 - `service_tier`, `metadata`, `fast_mode` and `auto_cache` decide whether those
-  request fields are sent at all.
+  request fields are sent at all;
+- `mid_conversation_system` decides, together with the model, whether `system`
+  messages inside the conversation are sent as such or folded into the user turn
+  (see [Prompt caching](prompt-caching.md#context-the-model-learns-mid-conversation)).
 
 The Claude API card has every feature. The cloud cards switch off what their
 platform lacks; see [Claude on cloud platforms](cloud-providers.md). The same

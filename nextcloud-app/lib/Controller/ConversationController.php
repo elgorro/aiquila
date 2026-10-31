@@ -34,6 +34,7 @@ use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCA\AIquila\BackgroundJob\IndexConversationJob;
 use OCA\AIquila\Service\ContextChatService;
+use OCA\AIquila\Service\RuntimeContextService;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\BackgroundJob\IJobList;
@@ -57,6 +58,7 @@ class ConversationController extends Controller {
     private NativeMcpService $nativeMcp;
     private IJobList $jobList;
     private ContextChatService $contextChat;
+    private RuntimeContextService $runtimeContext;
     private ?string $userId;
     private LoggerInterface $logger;
 
@@ -76,6 +78,7 @@ class ConversationController extends Controller {
         NativeMcpService $nativeMcp,
         IJobList $jobList,
         ContextChatService $contextChat,
+        RuntimeContextService $runtimeContext,
         ?string $userId,
         LoggerInterface $logger
     ) {
@@ -94,6 +97,7 @@ class ConversationController extends Controller {
         $this->nativeMcp = $nativeMcp;
         $this->jobList = $jobList;
         $this->contextChat = $contextChat;
+        $this->runtimeContext = $runtimeContext;
         $this->userId = $userId;
     }
 
@@ -589,6 +593,10 @@ class ConversationController extends Controller {
             $fileEntities[] = $mf;
         }
 
+        // Today's date and the user's time zone, as a system row after the
+        // user's message — only when it changed since the last one.
+        $this->runtimeContext->recordIfChanged($id, $this->requireUserId(), $now);
+
         // 3-4. Build messages from the full history, re-attaching every file
         //      sent in this conversation so follow-ups keep their context.
         ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id, $this->usesFilesApi($conversation));
@@ -778,6 +786,8 @@ class ConversationController extends Controller {
         }
 
         yield ['type' => 'user_message', 'userMessage' => $this->serializeMessage($userMsg, $fileEntities)];
+
+        $this->runtimeContext->recordIfChanged($id, $this->requireUserId(), $now);
 
         // 2. Build messages + system prompt (mirrors message()).
         ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id, $this->usesFilesApi($conversation));
@@ -995,8 +1005,9 @@ class ConversationController extends Controller {
         $newConv->setUpdatedAt($now);
         $newConv = $this->conversationMapper->insert($newConv);
 
-        // Clone messages and their files
-        $messages = $this->messageMapper->findByConversation($id);
+        // Clone messages and their files, context notes included, so the copy
+        // renders the same requests as the original.
+        $messages = $this->messageMapper->findByConversation($id, true);
         foreach ($messages as $msg) {
             $newMsg = new MessageEntity();
             $newMsg->setConversationId($newConv->getId());
@@ -1077,7 +1088,7 @@ class ConversationController extends Controller {
     private function buildHistory(int $conversationId, bool $useFilesApi = true): array {
         $messages = [];
         $documents = [];
-        foreach ($this->messageMapper->findByConversation($conversationId) as $msg) {
+        foreach ($this->messageMapper->findByConversation($conversationId, true) as $msg) {
             $content = $msg->getContent();
             if ($msg->getRole() === 'user') {
                 $paths = array_map(
