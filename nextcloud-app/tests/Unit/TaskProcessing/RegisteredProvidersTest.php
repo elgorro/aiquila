@@ -33,6 +33,7 @@ class RegisteredProvidersTest extends TestCase {
         'core:text2text:improve' => '35.0.0',
         'core:audio2text:subtitles' => '35.0.0',
         'core:audio2audio:translate' => '35.0.0',
+        'core:text2text:multimodal-chatwithtools' => '35.0.0',
     ];
 
     /** @return list<string> */

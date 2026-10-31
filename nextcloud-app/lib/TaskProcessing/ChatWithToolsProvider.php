@@ -29,7 +29,7 @@ use OCP\TaskProcessing\TaskTypes\TextToTextChatWithTools;
 class ChatWithToolsProvider implements ISynchronousProvider {
 
     public function __construct(
-        private ProviderResolver $providers,
+        protected ProviderResolver $providers,
     ) {
     }
 
@@ -88,13 +88,33 @@ class ChatWithToolsProvider implements ISynchronousProvider {
     }
 
     public function process(?string $userId, array $input, callable $reportProgress): array {
+        return $this->runTurn(
+            $userId,
+            $input,
+            $reportProgress,
+            fn (): LLMProviderInterface => $this->providers->resolve($userId, $this->providers->requestedId($input)),
+        );
+    }
+
+    /**
+     * One model turn: build the conversation, ask the resolved provider, and
+     * translate the result back to the task type's output shape.
+     *
+     * $resolve is called only once the input is known to be usable, so a bad
+     * request fails on its own merits rather than on provider selection.
+     *
+     * @param callable(): LLMProviderInterface $resolve
+     * @param list<array<string, mixed>> $attachments Content blocks sent with the user's message
+     * @return array{output: string, tool_calls: string}
+     */
+    protected function runTurn(?string $userId, array $input, callable $reportProgress, callable $resolve, array $attachments = []): array {
         $message = $input['input'] ?? '';
         $message = is_string($message) ? $message : '';
 
         $toolMessage = $input['tool_message'] ?? '';
         $toolMessage = is_string($toolMessage) ? $toolMessage : '';
 
-        if ($message === '' && $toolMessage === '') {
+        if ($message === '' && $toolMessage === '' && $attachments === []) {
             throw TaskFailure::userFacing('No chat message provided');
         }
 
@@ -102,7 +122,13 @@ class ChatWithToolsProvider implements ISynchronousProvider {
         $system = is_string($system) ? $system : '';
 
         $messages = ChatHistory::toMessages($input['history'] ?? []);
-        if ($message !== '') {
+        if ($attachments !== []) {
+            $content = $attachments;
+            if ($message !== '') {
+                $content[] = ['type' => 'text', 'text' => $message];
+            }
+            $messages[] = ['role' => 'user', 'content' => $content];
+        } elseif ($message !== '') {
             $messages[] = ['role' => 'user', 'content' => $message];
         }
         // The task type carries tool results as free text and keeps no record of
@@ -118,7 +144,7 @@ class ChatWithToolsProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId, $this->providers->requestedId($input))->chatToolsTurn(
+        $result = $resolve()->chatToolsTurn(
             $messages,
             $this->toInternalTools($input['tools'] ?? ''),
             $system !== '' ? $system : null,
