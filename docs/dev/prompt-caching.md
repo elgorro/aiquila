@@ -75,6 +75,35 @@ inline. An unchanged file therefore renders the same bytes each turn and sits
 inside the cached prefix. Editing it in Nextcloud invalidates the cache from
 that message onwards.
 
+### Context the model learns mid-conversation
+
+Anything that changes during a conversation has to be appended, never edited in
+place. Editing the top-level `system` field changes the prefix ahead of the whole
+history, so every cached turn is processed again. AIquila tells the model today's
+date and the user's time zone this way. `RuntimeContextService` stores the note as a
+`system` row right after the user's message, writes it only when it changed (the first
+turn, a new day, a new time zone), and the history replays it on every later
+turn. Each request is then a pure extension of the previous one.
+
+The row reaches the model as a
+[mid-conversation system message](https://platform.claude.com/docs/en/build-with-claude/mid-conversation-system-messages)
+(`role: "system"` inside `messages`) where that is accepted, and as a
+`<system-reminder>` block appended to the preceding user turn everywhere else.
+`Provider\SystemMessages` makes that call per request:
+
+- **Claude, natively**: on models in `ClaudeModels::supportsMidConversationSystem()`
+  (Fable 5 and 5.1, Opus 5 and 5.5, Opus 4.8; not Sonnet 5) and on platforms with
+  `FEATURE_MID_CONVERSATION_SYSTEM` (the Claude API, Claude Platform on AWS,
+  Bedrock, Vertex AI). A system message must directly follow a user turn and be
+  last or followed by an assistant turn; one in any other position is folded even
+  there. If the API still rejects the role, the request is retried once, folded,
+  and a warning is logged.
+- **Folded**: other Claude models and platforms, and every non-Claude provider. A
+  folded note is rendered the same way on every turn, so it caches too.
+
+`system` rows never show up in the chat, search or Context Chat;
+`MessageMapper::findByConversation()` returns them only when asked to.
+
 The automatic breakpoint consumes one of the four slots, so it stands down when
 the explicit markers have already taken all four rather than letting the request
 fail.

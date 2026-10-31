@@ -408,6 +408,29 @@ class ClaudeModels {
         return self::SUPPORTS_FAST_MODE[self::canonicalId($model)] ?? false;
     }
 
+    // ── Mid-conversation system messages ──────────────────────────────────
+
+    /**
+     * Models that accept `role: "system"` entries inside `messages`. GA, no
+     * beta header. Not Sonnet 5, and not the 4.x line before Opus 4.8; the
+     * Models API has no flag for it, so the table is hand-maintained.
+     */
+    private const SUPPORTS_MID_CONVERSATION_SYSTEM = [
+        self::FABLE_5_1 => true,
+        self::FABLE_5   => true,
+        self::OPUS_5_5  => true,
+        self::OPUS_5    => true,
+        self::OPUS_4_8  => true,
+    ];
+
+    /**
+     * Whether a model accepts mid-conversation system messages. Elsewhere they
+     * are folded into the user turn (see Provider\SystemMessages).
+     */
+    public static function supportsMidConversationSystem(string $model): bool {
+        return self::SUPPORTS_MID_CONVERSATION_SYSTEM[self::canonicalId($model)] ?? false;
+    }
+
     // ── Extended output on the Batch API ──────────────────────────────────
 
     /** Output ceiling with the extended-output beta, where the model supports it. */

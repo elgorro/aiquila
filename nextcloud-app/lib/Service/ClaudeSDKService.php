@@ -34,6 +34,7 @@ use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\ProviderActionsInterface;
 use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
+use OCA\AIquila\Service\Provider\SystemMessages;
 use OCA\AIquila\Service\Provider\ThinkingProfileInterface;
 use OCA\AIquila\Service\Provider\UnsupportedModalities;
 use OCP\ICache;
@@ -83,6 +84,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     public const FEATURE_METADATA = 'metadata';
     /** Top-level automatic `cache_control` (explicit breakpoints work everywhere). */
     public const FEATURE_AUTO_CACHE = 'auto_cache';
+    /** `role: "system"` entries inside `messages` (GA, model-gated). */
+    public const FEATURE_MID_CONVERSATION_SYSTEM = 'mid_conversation_system';
 
     private const CAPABILITY_CACHE_TTL = 3600; // 1 hour
     /** Smallest budget the Messages API accepts for thinking type 'enabled'. */
@@ -141,6 +144,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             self::FEATURE_SERVICE_TIER => true,
             self::FEATURE_METADATA => true,
             self::FEATURE_AUTO_CACHE => true,
+            self::FEATURE_MID_CONVERSATION_SYSTEM => true,
         ];
     }
 
@@ -150,6 +154,15 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
     public function supportsNativeMcp(): bool {
         return $this->hasFeature(self::FEATURE_NATIVE_MCP);
+    }
+
+    /**
+     * Whether `role: "system"` messages go to $model as such; otherwise
+     * SystemMessages folds them into the user turn.
+     */
+    public function supportsMidConversationSystem(string $model): bool {
+        return $this->hasFeature(self::FEATURE_MID_CONVERSATION_SYSTEM)
+            && ClaudeModels::supportsMidConversationSystem($model);
     }
 
     /** Whether the Message Batches API is available, i.e. the batch paths may be used. */
@@ -414,7 +427,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         $params = [
             'model'      => $model,
             'max_tokens' => $this->getMaxTokens($userId),
-            'messages'   => $messages,
+            'messages'   => SystemMessages::prepare($messages, $this->supportsMidConversationSystem($model)),
         ];
 
         // Pseudonymous attribution for Anthropic's abuse detection. Never the
@@ -937,10 +950,40 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * create call. Callers receive the same Message shape either way.
      */
     protected function createMessage(BaseClient $client, array $params): Message {
-        if (($params['max_tokens'] ?? 0) > self::STREAMING_THRESHOLD) {
-            return $this->createViaStream($client, $params);
+        return $this->withSystemRoleFallback($params, function (array $params) use ($client): Message {
+            if (($params['max_tokens'] ?? 0) > self::STREAMING_THRESHOLD) {
+                return $this->createViaStream($client, $params);
+            }
+            return $this->callCreate($client, $params);
+        });
+    }
+
+    /**
+     * Send $params; if the API rejects a `role: "system"` message on this
+     * model, send it again with those messages folded into the user turn.
+     *
+     * ClaudeModels decides up front which models get the role, so this only
+     * fires when that table is wrong for a model or a platform. It is logged,
+     * so it gets fixed rather than costing a second request forever.
+     *
+     * @template T
+     * @param callable(array): T $send
+     * @return T
+     */
+    private function withSystemRoleFallback(array $params, callable $send): mixed {
+        try {
+            return $send($params);
+        } catch (\Throwable $e) {
+            if (!SystemMessages::contains($params['messages'] ?? []) || !SystemMessages::isRejection($e)) {
+                throw $e;
+            }
+            $this->logger->warning('AIquila SDK: model rejected mid-conversation system messages; folding them into the user turn', [
+                'model' => $params['model'] ?? null,
+                'error' => $e->getMessage(),
+            ]);
+            $params['messages'] = SystemMessages::prepare($params['messages'], false);
+            return $send($params);
         }
-        return $this->callCreate($client, $params);
     }
 
     /**
@@ -2619,7 +2662,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         ]);
 
         try {
-            $stream = $this->callCreateStream($client, $this->buildRequestParams($messages, $userId, $options));
+            $stream = $this->withSystemRoleFallback(
+                $this->buildRequestParams($messages, $userId, $options),
+                fn (array $p): BaseStream => $this->callCreateStream($client, $p),
+            );
 
             foreach ($stream as $event) {
                 if ($event->type === 'content_block_delta' && isset($event->delta->text)) {
@@ -2706,7 +2752,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         for ($i = 0; $i < $maxIterations; $i++) {
             $params = $this->buildRequestParams($messages, $userId, $options);
             try {
-                $stream = $this->callCreateStream($client, $params);
+                $stream = $this->withSystemRoleFallback($params, fn (array $p): BaseStream => $this->callCreateStream($client, $p));
             } catch (\Throwable $e) {
                 $this->logger->error('AIquila SDK: chatWithToolsStream open failed', $this->buildErrorLogContext($e));
                 yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];
@@ -3025,7 +3071,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         $params = $this->buildRequestParams($messages, $userId, $options);
 
         try {
-            $stream = $this->callBetaCreateStreamWithMcp($client, $params, $mcpServers);
+            $stream = $this->withSystemRoleFallback(
+                $params,
+                fn (array $p): BaseStream => $this->callBetaCreateStreamWithMcp($client, $p, $mcpServers),
+            );
         } catch (\Throwable $e) {
             $this->logger->error('AIquila SDK: chatWithNativeMcp open failed', $this->buildErrorLogContext($e));
             yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];

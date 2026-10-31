@@ -990,6 +990,9 @@ class MistralProvider implements LLMProviderInterface {
      * (e.g. a user turn carrying multiple tool_result blocks).
      */
     private function toMistralMessages(array $messages, ?string $system): array {
+        // Mid-conversation system messages are a Claude feature; fold them into
+        // the user turn, which every chat template accepts.
+        $messages = SystemMessages::prepare($messages, false);
         $out = [];
         if ($system !== null && $system !== '') {
             $out[] = ['role' => 'system', 'content' => $system];
