@@ -1,5 +1,5 @@
 # AIquila Nextcloud — Hetzner Production (Nextcloud-only stack)
-# Nextcloud 34 (+ cron sidecar) + PostgreSQL + Redis + Traefik v3 + CrowdSec
+# Nextcloud 35 (+ cron sidecar) + PostgreSQL + Redis + Traefik v3 + CrowdSec
 #
 # AIquila app is installed via OCC at provisioning time (not baked into image).
 #
@@ -10,7 +10,7 @@
 
 services:
   nc:
-    image: nextcloud:34-apache
+    image: nextcloud:35-apache
     container_name: aiq-nc
     restart: unless-stopped
     depends_on:
@@ -78,7 +78,7 @@ services:
   # runtime config (redis.config.php, reverse-proxy.config.php) reads the env.
   # Background-jobs mode is switched to "cron" at provisioning time.
   nc-cron:
-    image: nextcloud:34-apache
+    image: nextcloud:35-apache
     container_name: aiq-nc-cron
     restart: unless-stopped
     entrypoint: /cron.sh

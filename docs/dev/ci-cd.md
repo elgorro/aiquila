@@ -88,7 +88,7 @@ It runs weekly, on demand, and on PRs that touch `docker/**` or `hetzner/docker/
 It is **not** a required check, which is why its trigger may carry a `paths:` filter;
 keep it out of branch protection, or an upstream lag would block every PR.
 
-**When it goes red:** a floating tag (`nextcloud:34-apache`) usually catches up within
+**When it goes red:** a floating tag (`nextcloud:35-apache`) usually catches up within
 a day of a PHP release — re-run it then. A pinned tag (`adminer:<version>`) needs a
 bump to a release built on the fixed PHP. Run it locally with
 `docker/scripts/check-php-images.sh`, or pass `image:tag` arguments to check other
@@ -316,7 +316,7 @@ See [`docs/hetzner/ci-flow.md`](../hetzner/ci-flow.md) for the detailed timeline
 check, so its `paths:` filter cannot leave a PR waiting.
 
 **What it does:** builds the MCP image from the checkout and starts it next to a stock
-`nextcloud:34-apache` in `docker/e2e/`, with `NEXTCLOUD_URL=http://nc` and
+`nextcloud:35-apache` in `docker/e2e/`, with `NEXTCLOUD_URL=http://nc` and
 `NEXTCLOUD_PUBLIC_URL` on the runner's localhost — the topology of the Hetzner full stack.
 `docker/e2e/scripts/test-internal-host.sh` then signs in a non-admin user and a TOTP user
 through OAuth 2.1 and Login Flow v2, and checks that the sign-in link is on the public URL,

@@ -362,7 +362,7 @@ Some variables cannot be changed by simply editing `.env` and restarting:
 
 ## Nextcloud image and PHP
 
-The `nextcloud` and `full` stacks run the stock `nextcloud:34-apache` image. It is a
+The `nextcloud` and `full` stacks run the stock `nextcloud:35-apache` image. It is a
 floating tag: upstream rebuilds it for Nextcloud point releases and for PHP security
 releases, but a server keeps running the image it pulled until you pull again.
 

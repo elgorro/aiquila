@@ -9,24 +9,25 @@ stack installs. It is the version where a bug report is actionable as written.
 
 | Nextcloud | Status | What this means |
 |---|---|---|
-| **34** | **Supported** | Developed and tested against. Bugs are fixed here first. |
-| 33 | Permitted, untested | Installs and is expected to work. No targeted testing; issues get best-effort treatment. |
-| 35 | Permitted, unreleased | Pre-declared so the app is not blocked on release day. Becomes the supported version once we move to it. |
-| ≤ 32, ≥ 36 | Unsupported | Outside the declared window. The app store will not offer the app. |
+| **35** | **Supported** | Developed and tested against. Bugs are fixed here first. |
+| 33, 34 | Permitted, untested | Installs and is expected to work. No targeted testing; issues get best-effort treatment. |
+| 36 | Permitted, unreleased | Pre-declared so the app is not blocked on release day. Becomes the supported version once we move to it. |
+| ≤ 32, ≥ 37 | Unsupported | Outside the declared window. The app store will not offer the app. |
 
 ## Why the declared window is wider than the supported version
 
 `appinfo/info.xml` declares:
 
 ```xml
-<nextcloud min-version="33" max-version="35"/>
+<nextcloud min-version="33" max-version="36"/>
 ```
 
-Three versions, one of them supported. That gap is deliberate, and it is not a
+Four versions, one of them supported. That gap is deliberate, and it is not a
 contradiction — the two numbers answer different questions:
 
-- **`min-version`** keeps existing installs on the previous major working. Dropping it the
-  day a new Nextcloud ships would strand users mid-upgrade, for no benefit.
+- **`min-version`** keeps existing installs on older majors working for as long as
+  Nextcloud itself maintains them. Dropping one the day a new Nextcloud ships would strand
+  users mid-upgrade, for no benefit.
 - **`max-version`** is pre-declared one major ahead. Nextcloud blocks installation above
   `max-version`, so an app that declares only the current release becomes uninstallable the
   moment the next one lands, until a release goes out purely to raise a number.
@@ -43,19 +44,19 @@ The same shape applies to PHP, for the same reason.
 
 | PHP | Status | What this means |
 |---|---|---|
-| **8.5** | **Supported** | What CI runs, what the `nextcloud:34-apache` image ships, and what the development stack installs. |
+| **8.5** | **Supported** | What CI runs, what the `nextcloud:35-apache` image ships, and what the development stack installs. |
 | 8.4 | Permitted, untested | The declared floor in `appinfo/info.xml` and `composer.json`. Installs and is expected to work; no targeted testing. |
-| ≤ 8.3 | Unsupported | Below the declared floor, even though Nextcloud 34 itself runs on 8.2+. |
+| ≤ 8.3 | Unsupported | Below the declared floor, even though Nextcloud 35 itself runs on 8.3+ (and 33 and 34 on 8.2+). |
 
-Nextcloud 34 boots on PHP 8.2 through 8.5 — `lib/versioncheck.php` refuses anything below
-8.2 or at 8.6 and above. AIquila declares a higher floor than that on purpose:
+Nextcloud 35 boots on PHP 8.3 through 8.5 — `lib/versioncheck.php` refuses anything below
+8.3 or at 8.6 and above. AIquila declares a higher floor than that on purpose:
 
 ```xml
 <php min-version="8.4" max-version="8.5"/>
 ```
 
 `max-version` is what Nextcloud's own app upgrade guide recommends declaring, and it
-matters here for the same reason it does on the Nextcloud dependency: Nextcloud 34
+matters here for the same reason it does on the Nextcloud dependency: Nextcloud 35
 refuses to boot on PHP 8.6 or above, so an app that declares no ceiling advertises
 itself as installable on a runtime the server will not start.
 
@@ -72,7 +73,9 @@ When a new Nextcloud major is released, all of the following move forward togeth
   the new API surface
 - the `nextcloud:<major>-apache` base image in `docker/installation/Dockerfile` and the
   Hetzner `nextcloud` and `full` stacks
-- `min-version` and `max-version` in `appinfo/info.xml`
+- `max-version` in `appinfo/info.xml`, to the next unreleased major
+- `min-version` in `appinfo/info.xml`, to the oldest major Nextcloud still maintains — see
+  the upstream [maintenance and release schedule](https://github.com/nextcloud/server/wiki/Maintenance-and-Release-Schedule)
 - this page
 
 Psalm runs at `errorLevel=3` with no baseline over the new `OCP\*` sources, which is what

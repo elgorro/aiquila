@@ -20,7 +20,7 @@ on:
       - 'docker/standalone/scripts/nc-login-flow.sh'
       - '.github/workflows/e2e.yml'
   schedule:
-    # Nightly: catches a new nextcloud:34-apache image breaking the sign-in.
+    # Nightly: catches a new nextcloud:35-apache image breaking the sign-in.
     - cron: '17 3 * * *'
   workflow_dispatch:
 
