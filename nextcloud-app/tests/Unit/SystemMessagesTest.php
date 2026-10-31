@@ -4,6 +4,7 @@ namespace OCA\AIquila\Tests\Unit;
 
 use Anthropic\Client;
 use Anthropic\Messages\Message;
+use OCA\AIquila\Service\AppSettings;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
@@ -11,7 +12,6 @@ use OCA\AIquila\Service\Provider\SystemMessages;
 use OCA\AIquila\Service\RequestMetadataService;
 use OCP\ICache;
 use OCP\ICacheFactory;
-use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -151,7 +151,7 @@ class SystemMessagesTest extends TestCase {
     }
 
     private function service(string $model): SystemRoleTestableService {
-        $config = $this->createStub(IConfig::class);
+        $config = $this->createStub(AppSettings::class);
         $config->method('getUserValue')->willReturn('');
         $config->method('getAppValue')->willReturnCallback(fn ($app, $key, $default) => match ($key) {
             'model' => $model,
