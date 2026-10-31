@@ -98,6 +98,12 @@ class ConfigureCommand extends Base {
                 'Let the API place a cache breakpoint on the growing end of a conversation (on|off, default: on)'
             )
             ->addOption(
+                'files-api',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Upload attachments to the Anthropic Files API instead of inlining them each turn (on|off, default: on)'
+            )
+            ->addOption(
                 'timeout',
                 null,
                 InputOption::VALUE_REQUIRED,
@@ -316,6 +322,21 @@ class ConfigureCommand extends Base {
             $updated = true;
         }
 
+        // Set Files API uploads
+        $filesApi = $input->getOption('files-api');
+        if ($filesApi !== null) {
+            if (!in_array($filesApi, ['on', 'off'], true)) {
+                $output->writeln('<error>Files API must be "on" or "off"</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'files_api', $filesApi === 'on' ? '1' : '0');
+            $output->writeln('<info>✓ Files API uploads updated to: ' . $filesApi . '</info>');
+            if ($filesApi === 'off') {
+                $output->writeln('<comment>  Files already uploaded are deleted by the daily cleanup job.</comment>');
+            }
+            $updated = true;
+        }
+
         // Set timeout
         $timeout = $input->getOption('timeout');
         if ($timeout !== null) {
@@ -355,6 +376,7 @@ class ConfigureCommand extends Base {
         $serviceTier = $this->config->getAppValue(self::APP_NAME, 'service_tier', '');
         $fast = in_array($this->config->getAppValue(self::APP_NAME, 'speed_fast', 'false'), ['true', '1'], true);
         $autoCache = in_array($this->config->getAppValue(self::APP_NAME, 'auto_cache', '1'), ['true', '1'], true);
+        $filesApi = in_array($this->config->getAppValue(self::APP_NAME, 'files_api', '1'), ['true', '1'], true);
         $timeout = $this->config->getAppValue(self::APP_NAME, 'api_timeout', '30');
 
         $output->writeln('');
@@ -378,6 +400,7 @@ class ConfigureCommand extends Base {
         $output->writeln('  Tier:       <comment>' . ($serviceTier !== '' ? $serviceTier : '(account default)') . '</comment>');
         $output->writeln('  Fast mode:  <comment>' . ($fast ? 'on' : 'off') . '</comment>');
         $output->writeln('  Auto cache: <comment>' . ($autoCache ? 'on' : 'off') . '</comment>');
+        $output->writeln('  Files API:  <comment>' . ($filesApi ? 'on' : 'off') . '</comment>');
         $output->writeln('  Timeout:    <comment>' . $timeout . ' seconds</comment>');
         $output->writeln('');
 

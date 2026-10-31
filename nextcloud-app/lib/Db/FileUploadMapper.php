@@ -37,21 +37,42 @@ class FileUploadMapper extends QBMapper {
     }
 
     /**
-     * Delete cache rows older than $olderThan (unix seconds). Used by the
-     * cleanup job — Anthropic file IDs expire after the API's retention
-     * window, so stale rows would point to deleted files.
+     * Rows whose remote file Anthropic has already expired: nothing to delete
+     * remotely, only the row.
      */
-    public function deleteOlderThan(int $olderThan): int {
+    public function deleteExpired(int $now): int {
         $qb = $this->db->getQueryBuilder();
         $qb->delete($this->getTableName())
-            ->where($qb->expr()->lt('uploaded_at', $qb->createNamedParameter($olderThan, IQueryBuilder::PARAM_INT)));
+            ->where($qb->expr()->isNotNull('expires_at'))
+            ->andWhere($qb->expr()->lt('expires_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT)));
         return $qb->executeStatement();
+    }
+
+    /**
+     * Rows whose remote file the cleanup job has to delete itself, oldest
+     * first: uploads made without an expiry once they are older than
+     * $legacyCutoff, or every row when $all is set (the Files API was
+     * switched off).
+     *
+     * @return list<FileUpload>
+     */
+    public function findToDelete(int $legacyCutoff, bool $all, int $limit): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->orderBy('uploaded_at', 'ASC')
+            ->setMaxResults($limit);
+        if (!$all) {
+            $qb->where($qb->expr()->isNull('expires_at'))
+                ->andWhere($qb->expr()->lt('uploaded_at', $qb->createNamedParameter($legacyCutoff, IQueryBuilder::PARAM_INT)));
+        }
+        return $this->findEntities($qb);
     }
 
     /**
      * Delete the cache row for a specific Anthropic file_id. Used by the
      * lazy-fallback path when the API rejects a cached file_id (the file
-     * was evicted Anthropic-side before our daily cleanup ran).
+     * is gone Anthropic-side before our daily cleanup ran).
      */
     public function deleteByFileId(string $fileId): int {
         $qb = $this->db->getQueryBuilder();

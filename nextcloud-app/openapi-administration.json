@@ -106,6 +106,14 @@
                                         ],
                                         "default": null,
                                         "description": "Top-level automatic prompt caching ('1' enabled, '0' disabled, null keeps unchanged)"
+                                    },
+                                    "files_api": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Upload attachments to the Anthropic Files API ('1' enabled, '0' disabled, null keeps unchanged)"
                                     }
                                 }
                             }

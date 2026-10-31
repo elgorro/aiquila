@@ -58,9 +58,10 @@ Today every byte of conversation state is in the Nextcloud database:
 `aiquila_conversations` pins the model, provider, effort and thinking settings;
 `aiquila_messages` holds the turns with their per-message token, cache, latency and
 citation columns; `aiquila_message_files` holds attachments. The one thing that
-outlives a request on Anthropic's side is a Files API upload, and
-`aiquila_file_uploads` tracks those ids so a background job can delete them on a
-retention window.
+outlives a request on Anthropic's side is a Files API upload. Each one is made
+with a 30-day expiry, and `aiquila_file_uploads` tracks the ids and expiries so a
+background job can drop stale references and delete older uploads that have no
+expiry.
 
 Sessions would invert that. Mid-conversation state, the full event history and the
 container filesystem would live with Anthropic, and AIquila would keep its own tables

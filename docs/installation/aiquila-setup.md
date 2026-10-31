@@ -273,6 +273,27 @@ than guess:
 occ aiquila:benchmark-tier --model claude-opus-5 --runs 5
 ```
 
+#### Attachments and the Files API
+
+On the Claude API, images and PDFs attached in a chat are uploaded once to
+Anthropic's [Files API](https://platform.claude.com/docs/en/build-with-claude/files)
+and referred to by ID on later turns, instead of being sent again with every
+message. Each upload is deduplicated per user and expires on Anthropic's side after
+30 days. AIquila uploads the file again shortly before that, and a daily job drops
+the expired references.
+
+Uploaded files are kept by Anthropic until they expire, so the Files API is **not
+eligible for zero data retention**. If your Anthropic agreement requires ZDR, switch
+it off under **Defaults** → *Upload attachments to the Files API*, or with:
+
+```bash
+occ aiquila:configure --files-api=off
+```
+
+Attachments are then sent inline on every turn, and the daily job deletes whatever
+was uploaded before, using each user's key. The cloud-platform providers always
+send attachments inline (see [Cloud providers](../dev/cloud-providers.md)).
+
 It reports p50/p95 latency and output tokens per second for each variant the
 model can run, plus the tier the API says it actually served. The requests are
 real and are billed to your account, so it asks before starting.

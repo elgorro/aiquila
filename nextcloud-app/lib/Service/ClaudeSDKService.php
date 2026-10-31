@@ -4,7 +4,6 @@
 namespace OCA\AIquila\Service;
 
 use Anthropic\Beta\AnthropicBeta;
-use Anthropic\Beta\Files\BetaFileMetadata;
 use Anthropic\Bedrock\MantleClient;
 use Anthropic\Beta\Messages\BetaMetadata;
 use Anthropic\Client;
@@ -18,6 +17,7 @@ use Anthropic\Core\Exceptions\InternalServerException;
 use Anthropic\Core\Exceptions\PermissionDeniedException;
 use Anthropic\Core\Exceptions\RateLimitException;
 use Anthropic\Core\FileParam;
+use Anthropic\Files\FileMetadata;
 use Anthropic\Foundry\Client as FoundryClient;
 use Anthropic\Messages\Batches\MessageBatch;
 use Anthropic\Messages\Batches\MessageBatchCanceledResult;
@@ -170,9 +170,15 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         return $this->hasFeature(self::FEATURE_BATCHES);
     }
 
-    /** Whether uploads to the Files API are possible; otherwise callers inline base64. */
+    /**
+     * Whether uploads to the Files API are possible and allowed; otherwise
+     * callers inline base64. The admin can switch uploads off (app config
+     * `files_api`): uploaded files are kept by Anthropic until they expire,
+     * so the Files API is not eligible for zero data retention.
+     */
     public function supportsFilesApi(): bool {
-        return $this->hasFeature(self::FEATURE_FILES_API);
+        return $this->hasFeature(self::FEATURE_FILES_API)
+            && in_array($this->appValue('files_api', '1'), ['true', '1'], true);
     }
 
     public function isConfigured(?string $userId = null): bool {
@@ -822,14 +828,16 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     }
 
     /**
-     * Upload bytes to Anthropic's beta Files API and return the resulting
-     * BetaFileMetadata. Overridable for testing.
+     * Upload bytes to Anthropic's Files API and return the file's metadata.
+     * Overridable for testing.
      */
-    protected function callFilesUpload(Client $client, FileParam $file): BetaFileMetadata {
-        return $client->beta->files->upload(
-            file: $file,
-            betas: [AnthropicBeta::FILES_API_2025_04_14],
-        );
+    protected function callFilesUpload(Client $client, FileParam $file, ?int $expiresInSeconds): FileMetadata {
+        return $client->files->upload(file: $file, expiresInSeconds: $expiresInSeconds);
+    }
+
+    /** Delete a file from Anthropic's Files API. Overridable for testing. */
+    protected function callFilesDelete(Client $client, string $fileId): void {
+        $client->files->delete($fileId);
     }
 
     /**
@@ -837,42 +845,48 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * as `source: { type: 'file', file_id: ... }` on document/image content
      * blocks instead of inlining base64.
      *
-     * @return string Anthropic file_id
+     * Without $expiresInSeconds the file stays on Anthropic's side until it is
+     * deleted; with it (3600 – 7776000) Anthropic expires it by itself.
+     *
+     * @return array{id: string, expiresAt: ?int} Anthropic file_id and expiry (unix seconds)
      */
-    public function uploadFile(string $bytes, string $filename, string $mimeType, ?string $userId = null): string {
+    public function uploadFile(string $bytes, string $filename, string $mimeType, ?string $userId = null, ?int $expiresInSeconds = null): array {
         if (!$this->supportsFilesApi()) {
             throw new \RuntimeException($this->getLabel() . ' has no Files API.');
         }
         $client = $this->getFullClient($userId);
         $param = FileParam::fromString($bytes, $filename, $mimeType);
-        $meta = $this->callFilesUpload($client, $param);
-        return $meta->id;
+        $meta = $this->callFilesUpload($client, $param, $expiresInSeconds);
+        return ['id' => $meta->id, 'expiresAt' => $meta->expiresAt?->getTimestamp()];
+    }
+
+    /**
+     * Delete an uploaded file with $userId's key. A file that is already gone
+     * counts as deleted.
+     */
+    public function deleteFile(string $fileId, ?string $userId = null): void {
+        try {
+            $this->callFilesDelete($this->getFullClient($userId), $fileId);
+        } catch (\Anthropic\Core\Exceptions\NotFoundException) {
+        }
     }
 
     /**
      * Build per-request options (extra headers, extra body params). Returns
      * null when none are needed.
      *
-     * Two things ride through here:
-     *
-     *  - the Files API beta header, when the messages reference an uploaded
-     *    file_id;
-     *  - fast mode, which the GA `messages->create()` signature has no argument
+     * What rides through here is fast mode, which the GA `messages->create()` signature has no argument
      *    for. `speed` is a plain top-level body field, so it goes in as an
      *    extra body param (merged by the SDK in Core\BaseClient) together with
      *    its beta flag. That keeps the GA endpoint — and its `Message` return
      *    type — instead of moving every call to `beta->messages`.
      *
-     * Beta flags accumulate into a single comma-separated header: a fast-mode
-     * request that also carries an uploaded file needs both.
+     * Beta flags accumulate into a single comma-separated header. Uploaded
+     * file_ids need none: the Files API is GA.
      */
     protected function requestOptionsForMessages(array $params): ?array {
         $betas = [];
         $options = [];
-
-        if ($this->messagesReferenceFileId($params['messages'] ?? [])) {
-            $betas[] = AnthropicBeta::FILES_API_2025_04_14->value;
-        }
 
         if (($params['speed'] ?? null) === 'fast') {
             $betas[] = AnthropicBeta::FAST_MODE_2026_02_01->value;
@@ -884,29 +898,6 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         }
 
         return $options === [] ? null : $options;
-    }
-
-    /**
-     * Walk message content blocks to detect any `source.type === 'file'`
-     * reference, which signals the Files API beta is in use.
-     */
-    private function messagesReferenceFileId(array $messages): bool {
-        foreach ($messages as $msg) {
-            $content = $msg['content'] ?? null;
-            if (!is_array($content)) {
-                continue;
-            }
-            foreach ($content as $block) {
-                if (!is_array($block)) {
-                    continue;
-                }
-                $source = $block['source'] ?? null;
-                if (is_array($source) && ($source['type'] ?? null) === 'file') {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     /**
