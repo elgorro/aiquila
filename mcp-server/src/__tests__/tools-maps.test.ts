@@ -690,8 +690,9 @@ describe('Maps Tools', () => {
 
   describe('get_map_track', () => {
     it('should return track detail with content', async () => {
+      // Maps sends metadata JSON-encoded (TracksService::generateTrackMetadata).
       mockFetchMapsAPI.mockResolvedValue({
-        metadata: { name: 'Morning Run', distance: 5200 },
+        metadata: JSON.stringify({ name: 'Morning Run', distance: 5200 }),
         content: '<gpx><trk><name>Morning Run</name></trk></gpx>',
       });
 
@@ -699,8 +700,9 @@ describe('Maps Tools', () => {
       const tool = mapsTools.find((t) => t.name === 'get_map_track')!;
       const result = await tool.handler({ id: 1 });
 
-      expect(result.content[0].text).toContain('Morning Run');
-      expect(result.content[0].text).toContain('5200');
+      expect(result.content[0].text).toContain('- name: "Morning Run"');
+      expect(result.content[0].text).toContain('- distance: 5200');
+      expect(result.content[0].text).not.toContain('- 0: ');
       expect(result.content[0].text).toContain('<gpx>');
     });
   });

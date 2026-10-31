@@ -76,8 +76,20 @@ interface Track {
 }
 
 interface TrackDetail {
-  metadata: Record<string, unknown>;
+  /** JSON-encoded by Maps (TracksService::generateTrackMetadata returns ?string). */
+  metadata: string | Record<string, unknown> | null;
   content: string;
+}
+
+function parseTrackMetadata(metadata: TrackDetail['metadata']): Record<string, unknown> | null {
+  if (!metadata) return null;
+  if (typeof metadata !== 'string') return metadata;
+  try {
+    const parsed: unknown = JSON.parse(metadata);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 interface Photo {
@@ -1021,9 +1033,10 @@ export const getMapTrackTool = {
       const result = await fetchMapsAPI<TrackDetail>(`/tracks/${args.id}`);
 
       const lines = [`# Track ${args.id}`, ''];
-      if (result.metadata) {
+      const metadata = parseTrackMetadata(result.metadata);
+      if (metadata) {
         lines.push('## Metadata');
-        for (const [k, v] of Object.entries(result.metadata)) {
+        for (const [k, v] of Object.entries(metadata)) {
           lines.push(`- ${k}: ${JSON.stringify(v)}`);
         }
         lines.push('');
@@ -1786,7 +1799,7 @@ export const exportMapRouteTool = {
             type: 'text' as const,
             text: result
               ? `Route "${args.name}" exported as GPX.\n\n${formatTrack(result)}`
-              : `Route "${args.name}" exported as "${args.name}.gpx" in the Maps folder; it appears in list_map_tracks once Maps has indexed it.`,
+              : `Route "${args.name}" exported as "${args.name}.gpx" in the Maps folder. list_map_tracks leaves out tracks inside the Maps folder; move the file elsewhere to list it.`,
           },
         ],
       };

@@ -448,7 +448,7 @@ Confirmation message.
 
 ### list_map_tracks
 
-List GPS tracks (GPX/KML files) from Nextcloud Maps.
+List GPS tracks (GPX/KML files) from Nextcloud Maps. Without `myMapId`, Maps leaves out files inside the `/Maps` folder, including routes written by `export_map_route`.
 
 **Parameters:**
 - `myMapId` (number, optional): Custom map ID to scope to
@@ -487,7 +487,7 @@ Confirmation message.
 
 ### export_map_route
 
-Export a route or track as a GPX file to the user's Nextcloud `/Maps` folder.
+Export a route or track as a GPX file to the user's Nextcloud `/Maps` folder. Maps does not list tracks inside that folder, so move the file elsewhere for it to appear in `list_map_tracks`.
 
 **Parameters:**
 - `name` (string, required): Route name (used as filename)
