@@ -19,6 +19,9 @@ class PromptMapper extends QBMapper {
     }
 
     /**
+     * A user's own prompt. Instance prompts are never found here, so a user
+     * route can't edit one.
+     *
      * @throws DoesNotExistException
      */
     public function findByIdAndUser(int $id, string $userId): Prompt {
@@ -26,25 +29,57 @@ class PromptMapper extends QBMapper {
         $qb->select('*')
             ->from($this->getTableName())
             ->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
-            ->andWhere($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)));
+            ->andWhere($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->eq('scope', $qb->createNamedParameter(Prompt::SCOPE_USER, IQueryBuilder::PARAM_STR)));
 
         return $this->findEntity($qb);
     }
 
     /**
+     * @throws DoesNotExistException
+     */
+    public function findInstanceById(int $id): Prompt {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->eq('scope', $qb->createNamedParameter(Prompt::SCOPE_INSTANCE, IQueryBuilder::PARAM_STR)));
+
+        return $this->findEntity($qb);
+    }
+
+    /**
+     * A user's own prompts.
+     *
      * @return list<Prompt>
      */
     public function findAllByUser(string $userId, bool $activeOnly = false): array {
         $qb = $this->db->getQueryBuilder();
         $qb->select('*')
             ->from($this->getTableName())
-            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)));
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->eq('scope', $qb->createNamedParameter(Prompt::SCOPE_USER, IQueryBuilder::PARAM_STR)));
 
         if ($activeOnly) {
             $qb->andWhere($qb->expr()->eq('is_active', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)));
         }
 
         $qb->orderBy('title', 'ASC');
+
+        return $this->findEntities($qb);
+    }
+
+    /**
+     * Every prompt an admin published for the instance.
+     *
+     * @return list<Prompt>
+     */
+    public function findAllInstance(): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('scope', $qb->createNamedParameter(Prompt::SCOPE_INSTANCE, IQueryBuilder::PARAM_STR)))
+            ->orderBy('title', 'ASC');
 
         return $this->findEntities($qb);
     }

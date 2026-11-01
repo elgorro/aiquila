@@ -265,7 +265,7 @@ class MistralProvider implements LLMProviderInterface {
                 ['type' => 'text', 'text' => $prompt],
             ],
         ]];
-        return $this->chat($messages, null, $userId, $this->visionOptions($userId) + $options);
+        return $this->chat($messages, $options['system'] ?? null, $userId, $this->visionOptions($userId) + $options);
     }
 
     public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null, array $options = []): array {
@@ -277,7 +277,7 @@ class MistralProvider implements LLMProviderInterface {
             $content[] = ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $img['mimeType'], 'data' => $img['base64']]];
         }
         $content[] = ['type' => 'text', 'text' => $prompt];
-        return $this->chat([['role' => 'user', 'content' => $content]], null, $userId, $this->visionOptions($userId) + $options);
+        return $this->chat([['role' => 'user', 'content' => $content]], $options['system'] ?? null, $userId, $this->visionOptions($userId) + $options);
     }
 
     /**

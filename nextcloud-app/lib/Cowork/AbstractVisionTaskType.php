@@ -5,10 +5,12 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Cowork;
 
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Db\Coworker;
 use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
@@ -31,7 +33,20 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
         protected readonly ImageOptimizer $imageOptimizer,
         protected readonly LLMProviderFactory $providerFactory,
         protected readonly LoggerInterface $logger,
+        protected readonly ?InstructionsService $instructions = null,
     ) {
+    }
+
+    /**
+     * Request options for one call of this run, with the admin's instance
+     * instructions as the system prompt when they are enabled for coworkers.
+     *
+     * @param array<string, mixed> $options the coworker's decoded options
+     * @return array<string, mixed>
+     */
+    protected function requestOptions(Coworker $coworker, LLMProviderInterface $provider, array $options): array {
+        $system = $this->instructions?->withInstance(InstructionsService::SCOPE_COWORKERS, $coworker->getUserId(), null);
+        return CoworkerRequestOptions::build($coworker, $provider, $options, $system);
     }
 
     public function getFamily(): string {
@@ -66,7 +81,7 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
         $provider = $this->providerFactory->getProviderForUser($userId, $coworker->getProvider());
         $providerId = $provider->getId();
         $prompt = $this->buildPrompt($options);
-        $requestOptions = CoworkerRequestOptions::build($coworker, $provider, $options);
+        $requestOptions = $this->requestOptions($coworker, $provider, $options);
 
         $files = $this->collectFiles($coworker, $options);
         $total = count($files);

@@ -118,8 +118,7 @@ class ChatWithToolsProvider implements ISynchronousProvider {
             throw TaskFailure::userFacing('No chat message provided');
         }
 
-        $system = $input['system_prompt'] ?? '';
-        $system = is_string($system) ? $system : '';
+        $system = $this->providers->systemPrompt($userId, $input);
 
         $messages = ChatHistory::toMessages($input['history'] ?? []);
         if ($attachments !== []) {
@@ -147,7 +146,7 @@ class ChatWithToolsProvider implements ISynchronousProvider {
         $result = $resolve()->chatToolsTurn(
             $messages,
             $this->toInternalTools($input['tools'] ?? ''),
-            $system !== '' ? $system : null,
+            $system,
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );

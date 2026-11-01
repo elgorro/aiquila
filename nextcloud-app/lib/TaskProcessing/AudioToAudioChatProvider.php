@@ -103,13 +103,13 @@ class AudioToAudioChatProvider implements ISynchronousProvider {
         $question = $this->audio->transcribeRequired($provider, $file, $userId);
         $reportProgress(0.4);
 
-        $system = $input['system_prompt'] ?? '';
+        $system = $this->providers->systemPrompt($userId, $input);
         $messages = ChatHistory::toMessages($input['history'] ?? []);
         $messages[] = ['role' => 'user', 'content' => $question];
 
         $answered = $provider->chat(
             $messages,
-            is_string($system) && $system !== '' ? $system : null,
+            $system,
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );
