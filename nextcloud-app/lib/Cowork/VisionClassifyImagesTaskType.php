@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Cowork;
 
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\Files\File;
@@ -30,8 +31,9 @@ class VisionClassifyImagesTaskType extends AbstractVisionTaskType {
         LoggerInterface $logger,
         private readonly ISystemTagManager $tagManager,
         private readonly ISystemTagObjectMapper $tagObjectMapper,
+        ?InstructionsService $instructions = null,
     ) {
-        parent::__construct($rootFolder, $imageOptimizer, $providerFactory, $logger);
+        parent::__construct($rootFolder, $imageOptimizer, $providerFactory, $logger, $instructions);
     }
 
     public function getId(): string {

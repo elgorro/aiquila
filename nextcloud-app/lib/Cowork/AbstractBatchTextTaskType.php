@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Cowork;
 
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Db\Coworker;
 use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Service\ClaudeSDKService;
@@ -68,7 +69,20 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
         protected readonly ISystemTagManager $tagManager,
         protected readonly ISystemTagObjectMapper $tagObjectMapper,
         protected readonly LoggerInterface $logger,
+        protected readonly ?InstructionsService $instructions = null,
     ) {
+    }
+
+    /**
+     * Request options for one call of this run, with the admin's instance
+     * instructions as the system prompt when they are enabled for coworkers.
+     *
+     * @param array<string, mixed> $options the coworker's decoded options
+     * @return array<string, mixed>
+     */
+    protected function requestOptions(Coworker $coworker, LLMProviderInterface $provider, array $options): array {
+        $system = $this->instructions?->withInstance(InstructionsService::SCOPE_COWORKERS, $coworker->getUserId(), null);
+        return CoworkerRequestOptions::build($coworker, $provider, $options, $system);
     }
 
     public function getFamily(): string {
@@ -162,7 +176,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
             $requests[] = [
                 'custom_id' => $customId,
                 'messages' => [['role' => 'user', 'content' => $this->buildPrompt($content, $options)]],
-                'options' => CoworkerRequestOptions::build($coworker, $provider, $options),
+                'options' => $this->requestOptions($coworker, $provider, $options),
             ];
             $fileIds[$customId] = $file->getId();
         }
@@ -339,7 +353,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
                     continue;
                 }
 
-                $result = $provider->ask($this->buildPrompt($content, $options), '', $userId, CoworkerRequestOptions::build($coworker, $provider, $options));
+                $result = $provider->ask($this->buildPrompt($content, $options), '', $userId, $this->requestOptions($coworker, $provider, $options));
                 if (isset($result['error'])) {
                     $failures['errored'][] = $file->getName() . ' — ' . $result['error'];
                     continue;

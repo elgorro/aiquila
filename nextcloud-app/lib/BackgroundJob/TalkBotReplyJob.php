@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\BackgroundJob;
 
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Talk\TalkBotService;
@@ -18,6 +19,8 @@ use Psr\Log\LoggerInterface;
  * The buffered conversation up to and including that message becomes the
  * context, the asking user's provider produces the answer (guests get the
  * instance default), and the answer is posted as a reply to the message.
+ * The admin's instance instructions, when enabled for Talk, go in front of the
+ * bot's own prompt rather than replacing it.
  *
  * Argument: {token, messageId, userId: ?string, roomName}.
  */
@@ -27,6 +30,7 @@ class TalkBotReplyJob extends QueuedJob {
         private TalkBotService $bot,
         private LLMProviderFactory $providers,
         private LoggerInterface $logger,
+        private InstructionsService $instructions,
     ) {
         parent::__construct($time);
     }
@@ -45,7 +49,7 @@ class TalkBotReplyJob extends QueuedJob {
             $provider = $this->providers->getProviderForUser($userId, null);
             $result = $provider->chat(
                 $this->buildMessages($token, $messageId),
-                $this->systemPrompt($roomName),
+                $this->instructions->withInstance(InstructionsService::SCOPE_TALK, $userId, $this->systemPrompt($roomName)),
                 $userId,
                 LLMProviderInterface::TASK_OPTIONS,
             );

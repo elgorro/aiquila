@@ -17,7 +17,10 @@
 					:disabled="busy"
 					@click="addFromTemplate(tpl)">
 					<div class="card-icon">🏷️</div>
-					<h4>{{ tpl.title }}</h4>
+					<h4>
+						{{ tpl.title }}
+						<span v-if="tpl.scope === 'instance'" class="badge">{{ t('aiquila', 'Organization') }}</span>
+					</h4>
 					<p>{{ tpl.description }}</p>
 				</button>
 				<button class="template-card custom" :disabled="busy" @click="startCreate">
@@ -57,6 +60,12 @@
 					<button v-if="!cw.paused" :disabled="busy" @click="togglePause(cw, true)">{{ t('aiquila', 'Pause') }}</button>
 					<button v-else :disabled="busy" @click="togglePause(cw, false)">{{ t('aiquila', 'Resume') }}</button>
 					<button :disabled="busy" @click="startEdit(cw)">{{ t('aiquila', 'Edit') }}</button>
+					<button v-if="isAdmin"
+						:disabled="busy"
+						:title="t('aiquila', 'Offer this coworker\'s setup to every user as a template')"
+						@click="publishTemplate(cw)">
+						{{ t('aiquila', 'Publish as template') }}
+					</button>
 					<button :disabled="busy" @click="toggleHistory(cw)">{{ historyFor === cw.id ? t('aiquila', 'Hide') : t('aiquila', 'History') }}</button>
 					<button class="danger" :disabled="busy" @click="remove(cw)">{{ t('aiquila', 'Delete') }}</button>
 				</div>
@@ -70,10 +79,11 @@
 
 <script>
 import { translate as t } from '@nextcloud/l10n'
+import { getCurrentUser } from '@nextcloud/auth'
 import CoworkerForm from './CoworkerForm.vue'
 import CoworkerRunHistory from './CoworkerRunHistory.vue'
 import {
-	listCoworkers, listCoworkerTemplates, createCoworkerFromTemplate,
+	listCoworkers, listCoworkerTemplates, createCoworkerFromTemplate, publishCoworkerTemplate,
 	deleteCoworker, pauseCoworker, resumeCoworker, runCoworker,
 } from '../api.js'
 
@@ -91,6 +101,8 @@ export default {
 			editModel: {},
 			historyFor: null,
 			error: '',
+			// The server enforces this too; it only decides whether to show the button.
+			isAdmin: !!getCurrentUser()?.isAdmin,
 		}
 	},
 	mounted() {
@@ -143,6 +155,9 @@ export default {
 			} finally {
 				this.busy = false
 			}
+		},
+		async publishTemplate(cw) {
+			await this.act(() => publishCoworkerTemplate(cw.id))
 		},
 		async runNow(cw) {
 			await this.act(() => runCoworker(cw.id))

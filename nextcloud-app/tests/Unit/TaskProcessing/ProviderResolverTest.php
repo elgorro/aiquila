@@ -2,6 +2,7 @@
 
 namespace OCA\AIquila\Tests\Unit\TaskProcessing;
 
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
@@ -177,5 +178,22 @@ class ProviderResolverTest extends TestCase {
         $this->factory->method('getProviderForUser')->willReturn($mistral);
 
         $this->assertSame($mistral, $this->resolver->resolveVoiceChatCapable('alice'));
+    }
+
+    public function testSystemPromptPassesTheTaskPromptThroughWithoutInstructions(): void {
+        $this->assertSame('Be terse.', $this->resolver->systemPrompt('alice', ['system_prompt' => 'Be terse.']));
+        $this->assertNull($this->resolver->systemPrompt('alice', ['system_prompt' => '']));
+        $this->assertNull($this->resolver->systemPrompt('alice', ['system_prompt' => ['not a string']]));
+    }
+
+    public function testSystemPromptGoesThroughTheTasksScope(): void {
+        $instructions = $this->createMock(InstructionsService::class);
+        $instructions->expects($this->once())->method('withInstance')
+            ->with(InstructionsService::SCOPE_TASKS, 'alice', 'Be terse.')
+            ->willReturn("Org.\n\nBe terse.");
+
+        $resolver = new ProviderResolver($this->factory, $instructions);
+
+        $this->assertSame("Org.\n\nBe terse.", $resolver->systemPrompt('alice', ['system_prompt' => 'Be terse.']));
     }
 }

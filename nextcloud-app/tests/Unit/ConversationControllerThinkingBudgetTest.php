@@ -13,6 +13,7 @@ use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\ContextChatService;
 use OCA\AIquila\Service\RuntimeContextService;
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
@@ -88,6 +89,7 @@ class ConversationControllerThinkingBudgetTest extends TestCase {
             $this->createStub(IJobList::class),
             $this->createStub(ContextChatService::class),
             $this->createStub(RuntimeContextService::class),
+            $this->createStub(InstructionsService::class),
             'testuser',
             $this->createStub(LoggerInterface::class),
         );

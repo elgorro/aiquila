@@ -182,6 +182,48 @@ export function removeProjectPath(id, pathId) {
 	return axios.delete(url(`/api/projects/${id}/paths/${pathId}`))
 }
 
+// Prompt library: the user's own prompts plus read-only instance prompts.
+export function listPrompts() {
+	return axios.get(url('/api/prompts'))
+}
+
+export function createPrompt(data) {
+	return axios.post(url('/api/prompts'), data)
+}
+
+export function updatePrompt(id, data) {
+	return axios.put(url(`/api/prompts/${id}`), data)
+}
+
+export function deletePrompt(id) {
+	return axios.delete(url(`/api/prompts/${id}`))
+}
+
+// Project templates. A project made from one is a copy, not a link.
+export function listProjectTemplates() {
+	return axios.get(url('/api/project-templates'))
+}
+
+/**
+ * @param {{title?: string, description?: string, systemPrompt?: string, paths?: Array, projectId?: number}} data
+ *   with `projectId`, the template starts as a copy of that project
+ */
+export function createProjectTemplate(data) {
+	return axios.post(url('/api/project-templates'), data)
+}
+
+export function updateProjectTemplate(id, data) {
+	return axios.put(url(`/api/project-templates/${id}`), data)
+}
+
+export function deleteProjectTemplate(id) {
+	return axios.delete(url(`/api/project-templates/${id}`))
+}
+
+export function createProjectFromTemplate(id, title = null) {
+	return axios.post(url(`/api/project-templates/${id}/project`), title ? { title } : {})
+}
+
 // File listing
 export function listDirectory(path) {
 	return axios.get(url('/api/files/list'), { params: { path } })
@@ -246,6 +288,11 @@ export function listCoworkerTemplates() {
 
 export function createCoworkerFromTemplate(templateId, overrides = {}) {
 	return axios.post(url('/api/coworkers/templates'), { templateId, ...overrides })
+}
+
+/** Admin only: publish one of your coworkers as an organization template. */
+export function publishCoworkerTemplate(coworkerId) {
+	return axios.post(url('/api/admin/coworker-templates'), { coworkerId })
 }
 
 /** Nextcloud TaskProcessing task types the current user can run. */

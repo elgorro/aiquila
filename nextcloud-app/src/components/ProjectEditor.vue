@@ -16,7 +16,10 @@
 		</div>
 
 		<div class="form-group">
-			<label>{{ t('aiquila', 'System prompt') }}</label>
+			<div class="label-row">
+				<label>{{ t('aiquila', 'System prompt') }}</label>
+				<PromptPicker @insert="insertPrompt" />
+			</div>
 			<textarea v-model="form.systemPrompt"
 				class="prompt-input"
 				rows="5"
@@ -108,6 +111,7 @@ import {
 	addProjectPath,
 	removeProjectPath,
 } from '../api.js'
+import PromptPicker from './PromptPicker.vue'
 
 export default {
 	name: 'ProjectEditor',
@@ -117,6 +121,7 @@ export default {
 		NcEmptyContent,
 		ChatIcon,
 		PlusIcon,
+		PromptPicker,
 	},
 	props: {
 		project: {
@@ -159,6 +164,11 @@ export default {
 		},
 	},
 	methods: {
+		/** Add a library prompt to the project's system prompt. */
+		insertPrompt(text) {
+			const current = this.form.systemPrompt.replace(/\s+$/, '')
+			this.form.systemPrompt = current ? current + '\n\n' + text : text
+		},
 		t,
 		initForm() {
 			if (!this.project) {
@@ -257,6 +267,12 @@ export default {
 
 .form-group {
 	margin-bottom: 16px;
+}
+
+.label-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
 }
 
 .form-group label {

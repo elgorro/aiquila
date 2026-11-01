@@ -56,6 +56,14 @@ public function adminAction(string $param): JSONResponse {
 }
 ```
 
+The scope only decides which spec file lists the route. Access is enforced by
+Nextcloud's security middleware: a controller method **without**
+`#[NoAdminRequired]` is admin-only. When a resource has a user side and an admin
+side (the prompt library, project templates), give each its own route and
+method (`/api/prompts` and `/api/admin/prompts`) rather than checking the role
+inside one handler. The admin methods then carry no `#[NoAdminRequired]`, and a
+unit test can assert that by reflection.
+
 ### Full annotation example
 
 ```php

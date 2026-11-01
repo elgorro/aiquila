@@ -27,6 +27,32 @@ return [
         ['name' => 'project#addPath',    'url' => '/api/projects/{id}/paths',             'verb' => 'POST'],
         ['name' => 'project#removePath', 'url' => '/api/projects/{id}/paths/{pathId}',    'verb' => 'DELETE'],
 
+        // Project templates: copied into a new project, never linked to it.
+        ['name' => 'project_template#index',         'url' => '/api/project-templates',                 'verb' => 'GET'],
+        ['name' => 'project_template#create',        'url' => '/api/project-templates',                 'verb' => 'POST'],
+        ['name' => 'project_template#update',        'url' => '/api/project-templates/{id}',            'verb' => 'PUT'],
+        ['name' => 'project_template#destroy',       'url' => '/api/project-templates/{id}',            'verb' => 'DELETE'],
+        ['name' => 'project_template#createProject', 'url' => '/api/project-templates/{id}/project',    'verb' => 'POST'],
+        ['name' => 'project_template#adminIndex',    'url' => '/api/admin/project-templates',           'verb' => 'GET'],
+        ['name' => 'project_template#adminCreate',   'url' => '/api/admin/project-templates',           'verb' => 'POST'],
+        ['name' => 'project_template#adminUpdate',   'url' => '/api/admin/project-templates/{id}',      'verb' => 'PUT'],
+        ['name' => 'project_template#adminDestroy',  'url' => '/api/admin/project-templates/{id}',      'verb' => 'DELETE'],
+
+        // Prompt library: the caller's own prompts, plus instance prompts
+        // that only admins write.
+        ['name' => 'prompt#index',        'url' => '/api/prompts',             'verb' => 'GET'],
+        ['name' => 'prompt#create',       'url' => '/api/prompts',             'verb' => 'POST'],
+        ['name' => 'prompt#update',       'url' => '/api/prompts/{id}',        'verb' => 'PUT'],
+        ['name' => 'prompt#destroy',      'url' => '/api/prompts/{id}',        'verb' => 'DELETE'],
+        ['name' => 'prompt#adminIndex',   'url' => '/api/admin/prompts',       'verb' => 'GET'],
+        ['name' => 'prompt#adminCreate',  'url' => '/api/admin/prompts',       'verb' => 'POST'],
+        ['name' => 'prompt#adminUpdate',  'url' => '/api/admin/prompts/{id}',  'verb' => 'PUT'],
+        ['name' => 'prompt#adminDestroy', 'url' => '/api/admin/prompts/{id}',  'verb' => 'DELETE'],
+
+        // Instance instructions, in front of every user's system prompt.
+        ['name' => 'instructions#get',    'url' => '/api/admin/instructions',  'verb' => 'GET'],
+        ['name' => 'instructions#update', 'url' => '/api/admin/instructions',  'verb' => 'PUT'],
+
         ['name' => 'chat#ask', 'url' => '/api/ask', 'verb' => 'POST'],
         ['name' => 'chat#chat', 'url' => '/api/chat', 'verb' => 'POST'],
         ['name' => 'chat#summarize', 'url' => '/api/summarize', 'verb' => 'POST'],
@@ -79,6 +105,9 @@ return [
         ['name' => 'coworker#disable',            'url' => '/api/coworkers/{id}/disable',          'verb' => 'POST'],
         ['name' => 'coworker#run',                'url' => '/api/coworkers/{id}/run',              'verb' => 'POST'],
         ['name' => 'coworker#runs',               'url' => '/api/coworkers/{id}/runs',             'verb' => 'GET'],
+        ['name' => 'coworker#adminTemplates',     'url' => '/api/admin/coworker-templates',        'verb' => 'GET'],
+        ['name' => 'coworker#publishTemplate',    'url' => '/api/admin/coworker-templates',        'verb' => 'POST'],
+        ['name' => 'coworker#deleteTemplate',     'url' => '/api/admin/coworker-templates/{templateId}', 'verb' => 'DELETE'],
         ['name' => 'coworker#getDashboardCoworker', 'url' => '/api/dashboard/coworker-output',     'verb' => 'GET'],
         ['name' => 'coworker#setDashboardCoworker', 'url' => '/api/dashboard/coworker-output',     'verb' => 'PUT'],
 
