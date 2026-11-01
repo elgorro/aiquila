@@ -6,16 +6,23 @@ declare(strict_types=1);
 namespace OCA\AIquila\Http;
 
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\ICallbackResponse;
+use OCP\AppFramework\Http\IOutput;
 use OCP\AppFramework\Http\Response;
 
 /**
  * Server-Sent Events response. Holds an iterable of associative arrays;
- * each one is encoded as a single SSE `data: <json>\n\n` block during
- * render(). Output buffering is drained and `flush()` is called per
- * event so chunks reach the client as they are produced.
+ * each one is encoded as a single SSE `data: <json>\n\n` block. Output
+ * buffering is drained and `flush()` is called per event so chunks reach the
+ * client as they are produced.
  *
- * The headers are emitted by render() rather than left to the framework —
- * see emitHeaders() for why that is not optional here.
+ * It is an ICallbackResponse, the framework's path for streamed bodies:
+ * the dispatcher calls render(), which writes nothing, then App::main() sends
+ * the status line and every header (this response's own plus the CSP and
+ * feature-policy ones) and only then calls callback(), which streams. Writing
+ * the body from render() instead puts output on the wire before App::main()
+ * sends the headers, so the declared Content-Type is lost and every later
+ * header() raises "headers already sent".
  *
  * Reverse-proxy buffering is the typical failure mode in production:
  *   - Nginx: respects the `X-Accel-Buffering: no` header (we set it).
@@ -26,7 +33,7 @@ use OCP\AppFramework\Http\Response;
 /**
  * @template-extends Response<Http::STATUS_OK, array<string, mixed>>
  */
-class SSEResponse extends Response {
+class SSEResponse extends Response implements ICallbackResponse {
     /** @param iterable<array<string, mixed>> $events */
     public function __construct(
         private readonly iterable $events,
@@ -38,11 +45,23 @@ class SSEResponse extends Response {
         $this->addHeader('X-Accel-Buffering', 'no');
     }
 
+    /** The body is written by callback(), after the headers. */
     public function render(): string {
+        return '';
+    }
+
+    public function callback(IOutput $output): void {
         // Long-running response; opt out of the script time limit.
         @set_time_limit(0);
 
-        $this->emitHeaders();
+        // Some proxies and SAPIs decide on compression from the request
+        // environment rather than the content type. Say no there too, before
+        // the first byte.
+        if (function_exists('apache_setenv')) {
+            /** @psalm-suppress UnusedFunctionCall the point is the side effect on the request env */
+            @apache_setenv('no-gzip', '1');
+        }
+        @ini_set('zlib.output_compression', 'Off');
 
         // Release the PHP session lock so other requests for this user can proceed.
         if (function_exists('session_write_close')) {
@@ -68,8 +87,6 @@ class SSEResponse extends Response {
                 break;
             }
         }
-
-        return '';
     }
 
     /**
@@ -86,34 +103,5 @@ class SSEResponse extends Response {
         }
 
         return 'data: ' . $payload . "\n\n";
-    }
-
-    /**
-     * Put this response's headers on the wire before the first event.
-     *
-     * Nextcloud's dispatcher calls render() and only afterwards does
-     * App::main() emit the response headers — but render() writes straight to
-     * the output stream, so PHP has already flushed *its* defaults by then and
-     * every header this response declared is silently dropped. The stream then
-     * goes out as `Content-Type: text/html`, which is not merely wrong: the
-     * stock Apache mod_deflate configuration compresses text/html, and a
-     * compressed response is a buffered response — the whole reply lands in one
-     * piece at the end, which is exactly the symptom SSE has to avoid.
-     */
-    private function emitHeaders(): void {
-        if (headers_sent()) {
-            return;
-        }
-        foreach ($this->getHeaders() as $name => $value) {
-            header($name . ': ' . $value, true);
-        }
-
-        // Some proxies and SAPIs decide on compression from the request
-        // environment rather than the content type. Say no there too.
-        if (function_exists('apache_setenv')) {
-            /** @psalm-suppress UnusedFunctionCall the point is the side effect on the request env */
-            @apache_setenv('no-gzip', '1');
-        }
-        @ini_set('zlib.output_compression', 'Off');
     }
 }

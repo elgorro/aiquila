@@ -28,6 +28,22 @@ class SSEResponseTest extends TestCase {
         $this->assertSame('no', $headers['X-Accel-Buffering']);
     }
 
+    public function testStreamsThroughTheCallbackNotRender(): void {
+        // App::main() sends the headers between render() and callback(). A
+        // render() that wrote, or even started the generator, would put the
+        // body on the wire first and every header() after it would warn.
+        $started = false;
+        $events = (function () use (&$started): \Generator {
+            $started = true;
+            yield ['type' => 'done'];
+        })();
+        $response = new SSEResponse($events);
+
+        $this->assertInstanceOf(\OCP\AppFramework\Http\ICallbackResponse::class, $response);
+        $this->assertSame('', $response->render());
+        $this->assertFalse($started);
+    }
+
     public function testEventIsOneDataBlockTerminatedByABlankLine(): void {
         $this->assertSame(
             "data: {\"type\":\"text_delta\",\"text\":\"Hello\"}\n\n",
