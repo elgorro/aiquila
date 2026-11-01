@@ -62,6 +62,7 @@
 					<PaperclipIcon :size="20" />
 				</template>
 			</NcButton>
+			<PromptPicker :disabled="disabled" @insert="insertPrompt" />
 			<NcButton type="primary"
 				:disabled="disabled || (!prompt.trim() && attachedFiles.length === 0)"
 				@click="onSend">
@@ -82,6 +83,7 @@ import axios from '@nextcloud/axios'
 import { generateRemoteUrl } from '@nextcloud/router'
 
 import { getFileInfo, getFilePreview, isImageMime } from '../api.js'
+import PromptPicker from './PromptPicker.vue'
 
 // Attachments dropped or pasted into the chat land here.
 const UPLOAD_FOLDER = '/AIquila Uploads'
@@ -167,6 +169,7 @@ export default {
 		NcButton,
 		NcProgressBar,
 		PaperclipIcon,
+		PromptPicker,
 	},
 	props: {
 		disabled: {
@@ -189,6 +192,11 @@ export default {
 		}
 	},
 	methods: {
+		/** Add a library prompt to the message being written. */
+		insertPrompt(text) {
+			this.prompt = this.prompt.trim() ? this.prompt.replace(/\s+$/, '') + '\n\n' + text : text
+			this.$nextTick(() => this.$refs.input?.focus())
+		},
 		t,
 		onInput() {
 			const text = this.prompt

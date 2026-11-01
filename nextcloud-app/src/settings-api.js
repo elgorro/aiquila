@@ -137,3 +137,44 @@ export function testMcpServer(id) {
 export function authorizeMcpServer(id) {
 	return axios.post(url(`/api/admin/mcp-servers/${id}/oauth/authorize`))
 }
+
+// ── Prompts and instructions ────────────────────────────────────────────
+
+/** Instance instructions: `{instructions, scopes, maxLength}`. */
+export function getInstructions() {
+	return axios.get(url('/api/admin/instructions'))
+}
+
+/**
+ * @param {{instructions?: string, scopes?: {chat?: boolean, talk?: boolean, coworkers?: boolean, tasks?: boolean}}} data
+ */
+export function saveInstructions(data) {
+	return axios.put(url('/api/admin/instructions'), data)
+}
+
+/**
+ * CRUD for instance prompts (`kind` = 'prompts') or instance project
+ * templates (`kind` = 'project-templates'). Admin only.
+ *
+ * @param {'prompts'|'project-templates'} kind - which collection
+ */
+export function adminLibrary(kind) {
+	const base = `/api/admin/${kind}`
+	return {
+		list: () => axios.get(url(base)),
+		create: (data) => axios.post(url(base), data),
+		update: (id, data) => axios.put(url(`${base}/${id}`), data),
+		remove: (id) => axios.delete(url(`${base}/${id}`)),
+	}
+}
+
+/** The user's own prompts or project templates, for the personal page. */
+export function userLibrary(kind) {
+	const base = `/api/${kind}`
+	return {
+		list: () => axios.get(url(base)),
+		create: (data) => axios.post(url(base), data),
+		update: (id, data) => axios.put(url(`${base}/${id}`), data),
+		remove: (id) => axios.delete(url(`${base}/${id}`)),
+	}
+}

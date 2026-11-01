@@ -3,6 +3,12 @@
 	<div style="display: contents">
 	<NcAppNavigationNew :text="t('aiquila', 'New project')"
 		@click="$emit('new-project')" />
+	<NcAppNavigationItem :name="t('aiquila', 'New from template…')"
+		@click="$emit('new-project-from-template')">
+		<template #icon>
+			<ShapeOutlineIcon :size="20" />
+		</template>
+	</NcAppNavigationItem>
 	<NcAppNavigationItem v-for="project in projects"
 		:key="project.id"
 		:name="project.title"
@@ -15,6 +21,9 @@
 		<template #actions>
 			<NcActionButton @click.stop="$emit('duplicate-project', project.id)">
 				{{ t('aiquila', 'Duplicate') }}
+			</NcActionButton>
+			<NcActionButton @click.stop="onSaveAsTemplate(project.id)">
+				{{ t('aiquila', 'Save as template') }}
 			</NcActionButton>
 			<NcActionButton @click.stop="$emit('delete-project', project.id)">
 				{{ t('aiquila', 'Delete') }}
@@ -29,8 +38,10 @@ import { translate as t } from '@nextcloud/l10n'
 import NcAppNavigationNew from '@nextcloud/vue/components/NcAppNavigationNew'
 import NcAppNavigationItem from '@nextcloud/vue/components/NcAppNavigationItem'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
+import ShapeOutlineIcon from 'vue-material-design-icons/ShapeOutline.vue'
+import { showError, showSuccess } from '@nextcloud/dialogs'
 
-import { updateProject } from '../api.js'
+import { updateProject, createProjectTemplate } from '../api.js'
 
 export default {
 	name: 'ProjectSidebar',
@@ -38,6 +49,7 @@ export default {
 		NcAppNavigationNew,
 		NcAppNavigationItem,
 		NcActionButton,
+		ShapeOutlineIcon,
 	},
 	props: {
 		projects: {
@@ -51,6 +63,7 @@ export default {
 	},
 	emits: [
 		'new-project',
+		'new-project-from-template',
 		'select-project',
 		'delete-project',
 		'duplicate-project',
@@ -58,6 +71,15 @@ export default {
 	],
 	methods: {
 		t,
+		async onSaveAsTemplate(id) {
+			try {
+				await createProjectTemplate({ projectId: id })
+				showSuccess(t('aiquila', 'Saved as a personal template'))
+			} catch (err) {
+				console.error('Save as template failed:', err)
+				showError(t('aiquila', 'Could not save the template'))
+			}
+		},
 		async onSaveRename(id, newName) {
 			const title = newName.trim()
 			if (!title) return

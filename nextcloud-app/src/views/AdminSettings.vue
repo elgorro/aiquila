@@ -57,6 +57,29 @@
 				</NcSettingsSection>
 			</template>
 
+			<template #prompts>
+				<NcSettingsSection :name="t('aiquila', 'Instance instructions')"
+					:description="t('aiquila', 'Placed at the start of the system prompt, before each user\'s own instructions and the project prompt. Use it for what holds for everyone: organization, language, tone, policy.')">
+					<InstanceInstructions />
+				</NcSettingsSection>
+
+				<NcSettingsSection :name="t('aiquila', 'Organization prompts')"
+					:description="t('aiquila', 'Reusable prompts every user can insert from the chat and the project editor. Users can read them but not change them.')">
+					<LibraryEditor kind="prompts"
+						scope="instance"
+						:api="promptsApi"
+						:empty-text="t('aiquila', 'No organization prompts yet.')" />
+				</NcSettingsSection>
+
+				<NcSettingsSection :name="t('aiquila', 'Organization project templates')"
+					:description="t('aiquila', 'Users can start a project from one of these. The project is a copy, so later changes to a template do not touch projects already made from it.')">
+					<LibraryEditor kind="project-templates"
+						scope="instance"
+						:api="templatesApi"
+						:empty-text="t('aiquila', 'No organization templates yet.')" />
+				</NcSettingsSection>
+			</template>
+
 			<template #mcp>
 				<NcSettingsSection :name="t('aiquila', 'MCP servers')"
 					:description="t('aiquila', 'Model Context Protocol servers give the model tools. Tool calls are dispatched by this Nextcloud instance unless the native connector below is enabled.')">
@@ -134,10 +157,13 @@ import NcPasswordField from '@nextcloud/vue/components/NcPasswordField'
 import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 
+import InstanceInstructions from '../components/settings/InstanceInstructions.vue'
+import LibraryEditor from '../components/settings/LibraryEditor.vue'
 import McpServerList from '../components/settings/McpServerList.vue'
 import ProviderCard from '../components/settings/ProviderCard.vue'
 import SettingsTabs from '../components/settings/SettingsTabs.vue'
 import {
+	adminLibrary,
 	getAdminProviders,
 	getNativeMcpStatus,
 	saveAdminProvider,
@@ -147,6 +173,8 @@ import {
 export default {
 	name: 'AdminSettings',
 	components: {
+		InstanceInstructions,
+		LibraryEditor,
 		McpServerList,
 		NcButton,
 		NcCheckboxRadioSwitch,
@@ -161,6 +189,8 @@ export default {
 	data() {
 		return {
 			tab: 'providers',
+			promptsApi: adminLibrary('prompts'),
+			templatesApi: adminLibrary('project-templates'),
 			loading: true,
 			refreshing: false,
 			providers: [],
@@ -185,6 +215,7 @@ export default {
 			return [
 				{ id: 'providers', label: t('aiquila', 'Providers') },
 				{ id: 'defaults', label: t('aiquila', 'Defaults') },
+				{ id: 'prompts', label: t('aiquila', 'Prompts') },
 				{ id: 'mcp', label: t('aiquila', 'MCP servers') },
 				{ id: 'advanced', label: t('aiquila', 'Advanced') },
 			]
