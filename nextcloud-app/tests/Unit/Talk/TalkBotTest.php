@@ -3,6 +3,7 @@
 namespace OCA\AIquila\Tests\Unit\Talk;
 
 use OCA\AIquila\BackgroundJob\TalkBotReplyJob;
+use OCA\AIquila\Service\RuntimeContextService;
 use OCA\AIquila\Db\TalkMessage;
 use OCA\AIquila\Db\TalkMessageMapper;
 use OCA\AIquila\Service\AppSettings;
@@ -224,7 +225,10 @@ class TalkBotTest extends TestCase {
         $llm = $this->createMock(LLMProviderInterface::class);
         $llm->expects($this->once())->method('chat')
             ->with(
-                [['role' => 'user', 'content' => "Alice: The release is on Friday.\nBob: Who writes the notes?\nAlice: @AIquila when is the release?"]],
+                [
+                    ['role' => 'user', 'content' => "Alice: The release is on Friday.\nBob: Who writes the notes?\nAlice: @AIquila when is the release?"],
+                    ['role' => 'system', 'content' => 'note for alice at 1793489400'],
+                ],
                 $this->stringContains('"Team"'),
                 'alice',
             )
@@ -232,8 +236,35 @@ class TalkBotTest extends TestCase {
         $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('getProviderForUser')->willReturn($llm);
 
-        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->createStub(LoggerInterface::class), $this->instructions());
+        $job = $this->replyJob($bot, $factory);
         (new \ReflectionMethod($job, 'run'))->invoke($job, ['token' => 'abc123', 'messageId' => 17, 'userId' => 'alice', 'roomName' => 'Team']);
+    }
+
+    public function testReplyJobGivesGuestsTheServersDate(): void {
+        $bot = $this->createStub(TalkBotService::class);
+        $bot->method('recentMessages')->willReturn([$this->row('Guest', '@AIquila what day is it?', false, 17)]);
+
+        $llm = $this->createMock(LLMProviderInterface::class);
+        $llm->expects($this->once())->method('chat')
+            ->with($this->callback(
+                fn (array $messages): bool => end($messages) === ['role' => 'system', 'content' => 'note for guest at 1793489400']
+            ))
+            ->willReturn(['response' => 'Sunday.']);
+        $factory = $this->createStub(LLMProviderFactory::class);
+        $factory->method('getProviderForUser')->willReturn($llm);
+
+        $job = $this->replyJob($bot, $factory);
+        (new \ReflectionMethod($job, 'run'))->invoke($job, ['token' => 'abc123', 'messageId' => 17, 'userId' => null, 'roomName' => '']);
+    }
+
+    private function replyJob(TalkBotService $bot, LLMProviderFactory $factory, ?InstructionsService $instructions = null): TalkBotReplyJob {
+        $time = $this->createStub(ITimeFactory::class);
+        $time->method('getTime')->willReturn(1793489400);
+        $context = $this->createStub(RuntimeContextService::class);
+        $context->method('note')->willReturnCallback(
+            fn (?string $userId, int $now): string => 'note for ' . ($userId ?? 'guest') . ' at ' . $now
+        );
+        return new TalkBotReplyJob($time, $bot, $factory, $context, $this->createStub(LoggerInterface::class), $instructions ?? $this->instructions());
     }
 
     public function testReplyJobApologisesWhenTheModelFails(): void {
@@ -246,7 +277,7 @@ class TalkBotTest extends TestCase {
         $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('getProviderForUser')->willReturn($llm);
 
-        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->createStub(LoggerInterface::class), $this->instructions());
+        $job = $this->replyJob($bot, $factory);
         (new \ReflectionMethod($job, 'run'))->invoke($job, ['token' => 'abc123', 'messageId' => 17, 'userId' => null, 'roomName' => '']);
     }
 
@@ -265,7 +296,7 @@ class TalkBotTest extends TestCase {
         $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('getProviderForUser')->willReturn($llm);
 
-        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->createStub(LoggerInterface::class), $this->instructions('Answer in German.'));
+        $job = $this->replyJob($bot, $factory, $this->instructions('Answer in German.'));
         (new \ReflectionMethod($job, 'run'))->invoke($job, ['token' => 'abc123', 'messageId' => 17, 'userId' => 'alice', 'roomName' => 'Team']);
     }
 
