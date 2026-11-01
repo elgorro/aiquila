@@ -290,6 +290,11 @@ export function createCoworkerFromTemplate(templateId, overrides = {}) {
 	return axios.post(url('/api/coworkers/templates'), { templateId, ...overrides })
 }
 
+/** Admin only: publish one of your coworkers as an organization template. */
+export function publishCoworkerTemplate(coworkerId) {
+	return axios.post(url('/api/admin/coworker-templates'), { coworkerId })
+}
+
 /** Nextcloud TaskProcessing task types the current user can run. */
 export function listTaskTypes() {
 	return axios.get(generateOcsUrl('taskprocessing/tasktypes'))

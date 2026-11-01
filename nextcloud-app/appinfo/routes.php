@@ -105,6 +105,9 @@ return [
         ['name' => 'coworker#disable',            'url' => '/api/coworkers/{id}/disable',          'verb' => 'POST'],
         ['name' => 'coworker#run',                'url' => '/api/coworkers/{id}/run',              'verb' => 'POST'],
         ['name' => 'coworker#runs',               'url' => '/api/coworkers/{id}/runs',             'verb' => 'GET'],
+        ['name' => 'coworker#adminTemplates',     'url' => '/api/admin/coworker-templates',        'verb' => 'GET'],
+        ['name' => 'coworker#publishTemplate',    'url' => '/api/admin/coworker-templates',        'verb' => 'POST'],
+        ['name' => 'coworker#deleteTemplate',     'url' => '/api/admin/coworker-templates/{templateId}', 'verb' => 'DELETE'],
         ['name' => 'coworker#getDashboardCoworker', 'url' => '/api/dashboard/coworker-output',     'verb' => 'GET'],
         ['name' => 'coworker#setDashboardCoworker', 'url' => '/api/dashboard/coworker-output',     'verb' => 'PUT'],
 

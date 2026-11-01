@@ -178,3 +178,12 @@ export function userLibrary(kind) {
 		remove: (id) => axios.delete(url(`${base}/${id}`)),
 	}
 }
+
+/** Organization coworker templates: list and delete (published from Cowork). */
+export function listCoworkerTemplatesAdmin() {
+	return axios.get(url('/api/admin/coworker-templates'))
+}
+
+export function deleteCoworkerTemplate(templateId) {
+	return axios.delete(url(`/api/admin/coworker-templates/${encodeURIComponent(templateId)}`))
+}

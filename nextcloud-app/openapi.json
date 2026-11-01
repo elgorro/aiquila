@@ -5839,7 +5839,8 @@
         "/index.php/apps/aiquila/api/coworkers/templates": {
             "get": {
                 "operationId": "coworker-templates",
-                "summary": "List built-in coworker templates and available task types",
+                "summary": "List coworker templates and available task types",
+                "description": "Built-in templates first (`scope: builtin`), then the ones an admin published for the instance (`scope: instance`).",
                 "tags": [
                     "coworker"
                 ],
@@ -5921,7 +5922,7 @@
             },
             "post": {
                 "operationId": "coworker-create-from-template",
-                "summary": "Create a coworker from a built-in template",
+                "summary": "Create a coworker from a built-in or instance template",
                 "tags": [
                     "coworker"
                 ],

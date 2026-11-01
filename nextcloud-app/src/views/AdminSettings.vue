@@ -78,6 +78,11 @@
 						:api="templatesApi"
 						:empty-text="t('aiquila', 'No organization templates yet.')" />
 				</NcSettingsSection>
+
+				<NcSettingsSection :name="t('aiquila', 'Organization coworker templates')"
+					:description="t('aiquila', 'Offered to every user next to the built-in templates when they add a coworker. Each coworker made from one is a copy.')">
+					<CoworkerTemplateList />
+				</NcSettingsSection>
 			</template>
 
 			<template #mcp>
@@ -157,6 +162,7 @@ import NcPasswordField from '@nextcloud/vue/components/NcPasswordField'
 import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 
+import CoworkerTemplateList from '../components/settings/CoworkerTemplateList.vue'
 import InstanceInstructions from '../components/settings/InstanceInstructions.vue'
 import LibraryEditor from '../components/settings/LibraryEditor.vue'
 import McpServerList from '../components/settings/McpServerList.vue'
@@ -173,6 +179,7 @@ import {
 export default {
 	name: 'AdminSettings',
 	components: {
+		CoworkerTemplateList,
 		InstanceInstructions,
 		LibraryEditor,
 		McpServerList,

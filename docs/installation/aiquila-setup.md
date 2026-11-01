@@ -492,8 +492,10 @@ is written and the reason is logged.
 
 A **coworker** is an AI job that runs on a schedule, for example "every night at
 03:00, summarize the new documents in `Reports`". Open AIquila and choose **Cowork**
-in the sidebar. Start from a template under **Add a coworker**, or build a
-**Custom coworker**. Each coworker has:
+in the sidebar. Start from a template under **Add a coworker** (built in, or
+published by your administrator, see
+[Prompts, project templates and instructions](#6-prompts-project-templates-and-instructions)),
+or build a **Custom coworker**. Each coworker has:
 
 - a **task**: what it does (see below);
 - a **source folder** it works on, and optionally an output folder;
@@ -623,8 +625,33 @@ never reach it. **Save as template** in a project's menu turns one of your
 projects into a personal template; administrators publish organization
 templates from the admin **Prompts** tab.
 
+**Coworker templates.** An administrator can offer a coworker's setup (task,
+schedule, folders, provider, model and options) to everyone: **Publish as
+template** on the coworker's row in **Cowork**. Users then find it under **Add a
+coworker**, marked *Organization*, next to the built-in templates. Coworkers
+made from it are copies. The admin **Prompts** tab lists these templates and
+deletes them.
+
 Every stored prompt, instruction and template system prompt is limited to
 20,000 characters.
+
+**Moving the library between instances.** `occ aiquila:library` exports and
+imports everything above that belongs to the instance: instructions and where
+they apply, organization prompts, project templates and coworker templates.
+Users' own prompts and templates are not included.
+
+```bash
+occ aiquila:library export library.json
+occ aiquila:library import library.json            # update by title, add the rest
+occ aiquila:library import library.json --replace  # delete the instance entries first
+occ aiquila:library import library.json --author=alice
+```
+
+Without a file name, `export` writes to stdout and `import` reads stdin. Import
+updates prompts and project templates with the same title, coworker templates
+with the same id, and adds the rest. `--author` sets the user recorded as
+author of new entries (default `admin`). A file with an invalid entry is
+rejected before anything is changed.
 
 ### 7. Public API
 

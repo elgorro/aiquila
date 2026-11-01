@@ -5839,7 +5839,8 @@
         "/index.php/apps/aiquila/api/coworkers/templates": {
             "get": {
                 "operationId": "coworker-templates",
-                "summary": "List built-in coworker templates and available task types",
+                "summary": "List coworker templates and available task types",
+                "description": "Built-in templates first (`scope: builtin`), then the ones an admin published for the instance (`scope: instance`).",
                 "tags": [
                     "coworker"
                 ],
@@ -5921,7 +5922,7 @@
             },
             "post": {
                 "operationId": "coworker-create-from-template",
-                "summary": "Create a coworker from a built-in template",
+                "summary": "Create a coworker from a built-in or instance template",
                 "tags": [
                     "coworker"
                 ],
@@ -12377,6 +12378,369 @@
                     },
                     "500": {
                         "description": "Starting the authorization flow failed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/admin/coworker-templates": {
+            "get": {
+                "operationId": "coworker-admin-templates",
+                "summary": "List the coworker templates published for the instance",
+                "description": "This endpoint requires admin access",
+                "tags": [
+                    "coworker"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Instance templates",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "additionalProperties": {
+                                            "type": "object"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "operationId": "coworker-publish-template",
+                "summary": "Publish one of the admin's own coworkers as an instance template",
+                "description": "The template copies the coworker's task, schedule, input, output, provider, model and options. Coworkers later made from it are copies too.\nThis endpoint requires admin access",
+                "tags": [
+                    "coworker"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "coworkerId"
+                                ],
+                                "properties": {
+                                    "coworkerId": {
+                                        "type": "integer",
+                                        "format": "int64",
+                                        "description": "Coworker to publish (one of the caller's own)"
+                                    },
+                                    "title": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Template title (default: the coworker's)"
+                                    },
+                                    "description": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Template description (default: the coworker's)"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The published template",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "object"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "A field is too long",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Coworker not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/admin/coworker-templates/{templateId}": {
+            "delete": {
+                "operationId": "coworker-delete-template",
+                "summary": "Delete an instance coworker template",
+                "description": "Coworkers already made from it are not touched.\nThis endpoint requires admin access",
+                "tags": [
+                    "coworker"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "templateId",
+                        "in": "path",
+                        "description": "Template ID",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deleted",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "deleted"
+                                    ],
+                                    "properties": {
+                                        "deleted": {
+                                            "type": "boolean",
+                                            "enum": [
+                                                true
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Template not found",
                         "content": {
                             "application/json": {
                                 "schema": {
