@@ -71,6 +71,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[Mistral provider](dev/mistral-provider.md)** — the Mistral wire format, connectors and document handling
 - **[Native MCP connector](dev/native-mcp-connector.md)** — letting Anthropic connect to MCP servers directly instead of looping in PHP
 - **[Managed Agents](dev/managed-agents.md)** — why the agentic loop stays in PHP, and what would change that
+- **[Context Agent](dev/context-agent.md)** — why AIquila serves the model behind Nextcloud's Context Agent rather than the agent task types
 - **[Request metadata](dev/request-metadata.md)** — the hashed `metadata.user_id` sent to Anthropic, and how to resolve it
 - **[Streaming responses](dev/streaming.md)** — how chat replies reach the browser as they are written, and what buffers them
 - **[Prompt caching](dev/prompt-caching.md)** — where cache breakpoints are placed, and how to read the cache-hit numbers
@@ -144,6 +145,7 @@ docs/
 │   ├── mistral-provider.md          # Mistral provider
 │   ├── native-mcp-connector.md      # Anthropic-side MCP tool execution
 │   ├── managed-agents.md            # Hosted agent loop: evaluation and position
+│   ├── context-agent.md             # Context Agent task types: position
 │   ├── request-metadata.md          # Hashed metadata.user_id
 │   ├── streaming.md                 # Server-Sent Events path and buffering
 │   ├── prompt-caching.md            # Cache breakpoint placement

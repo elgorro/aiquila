@@ -429,7 +429,7 @@ AIquila does not serve these Nextcloud task types:
 
 | Task type | Why not |
 |---|---|
-| `core:contextagent:interaction`, `core:contextagent:audio-interaction`, `core:contextagent:multimodal-interaction` | The Context Agent runs its own agent loop over Nextcloud tools; install the `context_agent` app, which drives its model through `core:text2text:chatwithtools` — so AIquila can still be the model behind it |
+| `core:contextagent:interaction`, `core:contextagent:audio-interaction`, `core:contextagent:multimodal-interaction` | The Context Agent runs its own agent loop over Nextcloud tools; install the `context_agent` app, which drives its model through `core:text2text:chatwithtools` and `core:text2text:multimodal-chatwithtools` — so AIquila can still be the model behind it ([why](../dev/context-agent.md)) |
 
 Some features in Nextcloud's AI overview are built on top of these task types rather
 than being task types themselves. **Document generation** in Nextcloud Office runs
