@@ -19,7 +19,7 @@ These tools provide instructions for running AIquila OCC (Nextcloud command-line
 Show the current AIquila configuration including API key, model, tokens, and timeout settings.
 
 **Parameters:**
-None
+- `targetProvider` (string, optional): show every setting of this provider by id instead — the ids `aiquila_configure`'s `providerSettings` accepts. Keys and other secrets are reported as `(configured)` or `(not set)`, never shown
 
 **Returns:**
 Instructions for running the show configuration command on your Nextcloud server.
@@ -65,6 +65,11 @@ Configure AIquila settings including API key, Claude model, max tokens, API time
 - `thinking` (string, optional): default thinking — `auto` (follow the model), `on` or `off`
 - `taskEffort` (string, optional): effort for Assistant tasks and coworkers; an empty string uses the default effort
 - `taskThinking` (string, optional): thinking for Assistant tasks and coworkers — `auto`, `on`, `off`, or an empty string to use the default thinking
+- `provider` (string, optional): make this provider the instance default for every user (`anthropic`, `mistral`, `hetzner`, `local`, …). Applied last, only after the provider's settings in the same call were accepted
+- `targetProvider` (string, optional): the provider `providerKey`, `providerModel` and `providerSettings` apply to, **without** changing the instance default. Defaults to `provider`, else `anthropic`
+- `providerKey` (string, optional): API key for the target provider
+- `providerModel` (string, optional): model for the target provider
+- `providerSettings` (object, optional): any other setting of the target provider, keyed by setting id or app config key (`{"local_base_url": "http://llama:8080", "timeout": "600"}`). Values are validated like the admin settings page; checkboxes take `on`/`off`, access lists take comma-separated ids. One bad value rejects the whole call and nothing is stored
 
 **Returns:**
 Instructions for running the configuration command with the specified parameters.
@@ -115,15 +120,33 @@ docker exec -u www-data aiquila-nextcloud php occ aiquila:configure --model "cla
 docker exec -u www-data aiquila-nextcloud php occ aiquila:configure --model "claude-sonnet-4-5-20250929" --max-tokens 8192 --timeout 120
 ```
 
+**Example: set up a second provider without switching anyone to it:**
+```json
+{
+  "targetProvider": "local",
+  "providerModel": "qwen3",
+  "providerSettings": { "local_base_url": "http://llama:8080", "timeout": "900" }
+}
+```
+
+**Command Generated:**
+```bash
+php occ aiquila:configure --target-provider local --provider-model qwen3 \
+  --provider-setting local_base_url=http://llama:8080 --provider-setting timeout=900
+```
+
 ---
 
 ### aiquila_test
 
-Test AIquila's Claude API integration with a test prompt.
+Send a test prompt through the provider that would serve a user — their personal
+choice, else the instance default, within the provider access lists — or through a
+named provider.
 
 **Parameters:**
-- `prompt` (string, optional): Test prompt to send to Claude API. Default: `"Hello, Claude!"`
-- `user` (string, optional): Nextcloud user ID to test with
+- `prompt` (string, optional): Test prompt to send. Default: `"Hello, Claude!"`
+- `provider` (string, optional): provider to test instead of the resolved one (e.g. `local`)
+- `user` (string, optional): Nextcloud user ID to test as; their personal provider, key and model apply
 
 **Returns:**
 Instructions for running the test command.
@@ -171,17 +194,22 @@ docker exec -u www-data aiquila-nextcloud php occ aiquila:test --user john
 
 **Example Output:**
 ```
-Testing AIquila Claude Integration...
+Testing AIquila provider: Local model (local)
+════════════════════════════════════
 
-✓ Configuration loaded
-✓ API key present
-✓ Sending request to Claude API...
+1. Checking configuration...
+✓ API Key: …4567
+✓ Model: qwen3
+✓ Max Tokens: 4096
 
-Response from Claude:
-"Hello! I'm Claude, an AI assistant created by Anthropic. How can I help you today?"
-
-✓ Test successful!
+2. Sending the test prompt...
+✓ Response received in 1.2s
+...
+✓ Provider local answered
 ```
+
+The key is shown as its last four characters only, and not at all when it is
+shorter than 16 characters.
 
 ---
 
@@ -223,6 +251,34 @@ php occ aiquila:configure \
   --timeout 120
 ```
 
+**Configure a provider without making it the default:**
+```bash
+php occ aiquila:configure --target-provider local \
+  --provider-key "<token>" --provider-model qwen3 \
+  --provider-setting local_base_url=http://llama:8080 \
+  --provider-setting local_auth_mode=bearer
+```
+
+**Make a provider the instance default:**
+```bash
+php occ aiquila:configure --provider local
+```
+
+`--provider` on its own also targets that provider, so
+`--provider hetzner --provider-key <token>` configures and activates it in one
+step; the default switches only after every value in the command was accepted.
+
+**List a provider's settings by id:**
+```bash
+php occ aiquila:configure --show --target-provider local
+```
+
+`--provider-setting id=value` is repeatable and takes either the setting id from
+that listing or its app config key (`timeout` or `local_timeout`). Values go
+through the same validation as the admin settings page. Checkboxes take `on` /
+`off`; access lists (`allowed_users`, `allowed_groups`, `blocked_users`,
+`blocked_groups`) take comma-separated ids, and an empty value clears them.
+
 ### Testing Commands
 
 **Basic test:**
@@ -239,6 +295,13 @@ php occ aiquila:test --prompt "Your test prompt here"
 ```bash
 php occ aiquila:test --user username
 ```
+
+**Test a specific provider:**
+```bash
+php occ aiquila:test --provider local
+```
+
+`--stream` is supported for `anthropic` only.
 
 ## Configuration Parameters
 

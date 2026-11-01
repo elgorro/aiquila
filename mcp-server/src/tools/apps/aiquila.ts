@@ -41,11 +41,21 @@ export const showConfigTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: 'Show current AIquila configuration',
-  inputSchema: z.object({}),
-  handler: async () => {
+  description:
+    "Show current AIquila configuration. With targetProvider, list that provider's settings by id (the ids aiquila_configure's providerSettings takes); keys are never shown",
+  inputSchema: z.object({
+    targetProvider: z
+      .string()
+      .optional()
+      .describe("Provider to show settings for (e.g. 'local'); omitted shows the instance default"),
+  }),
+  handler: async (args: { targetProvider?: string } = {}) => {
     try {
-      const output = await runOCC('aiquila:configure', ['--show']);
+      const showArgs = ['--show'];
+      if (args.targetProvider) {
+        showArgs.push('--target-provider', args.targetProvider);
+      }
+      const output = await runOCC('aiquila:configure', showArgs);
       return {
         content: [
           {
@@ -81,7 +91,9 @@ export const configureTool = {
     openWorldHint: false,
   },
   description:
-    'Configure AIquila settings (API key, model, tokens, timeout, effort and thinking for chat and background tasks)',
+    'Configure AIquila settings (API key, model, tokens, timeout, effort and thinking for chat and background tasks), ' +
+    'and set up any LLM provider. Use targetProvider to configure a provider without making it the instance default; ' +
+    'provider makes it the default. Run aiquila_show_config with targetProvider to list the setting ids a provider accepts.',
   inputSchema: z.object({
     apiKey: z.string().optional().describe('Anthropic API key'),
     model: z
@@ -112,6 +124,26 @@ export const configureTool = {
       .describe(
         'Thinking for Assistant tasks and coworkers; empty string uses the default thinking'
       ),
+    provider: z
+      .string()
+      .optional()
+      .describe(
+        "Make this provider the instance default for every user (e.g. 'anthropic', 'mistral', 'hetzner', 'local'). Applied last, after its settings are accepted"
+      ),
+    targetProvider: z
+      .string()
+      .optional()
+      .describe(
+        'Provider that providerKey, providerModel and providerSettings apply to, without changing the instance default. Defaults to provider, else anthropic'
+      ),
+    providerKey: z.string().optional().describe('API key for the target provider'),
+    providerModel: z.string().optional().describe('Model for the target provider'),
+    providerSettings: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe(
+        "Other settings of the target provider by setting id or app config key, e.g. { local_base_url: 'http://llama:8080', timeout: '600' }. Validated like the admin settings page; access lists take comma-separated ids"
+      ),
   }),
   handler: async (args: {
     apiKey?: string;
@@ -122,9 +154,30 @@ export const configureTool = {
     thinking?: string;
     taskEffort?: string;
     taskThinking?: string;
+    provider?: string;
+    targetProvider?: string;
+    providerKey?: string;
+    providerModel?: string;
+    providerSettings?: Record<string, string>;
   }) => {
     try {
       const configArgs: string[] = [];
+
+      if (args.provider) {
+        configArgs.push('--provider', args.provider);
+      }
+      if (args.targetProvider) {
+        configArgs.push('--target-provider', args.targetProvider);
+      }
+      if (args.providerKey) {
+        configArgs.push('--provider-key', args.providerKey);
+      }
+      if (args.providerModel) {
+        configArgs.push('--provider-model', args.providerModel);
+      }
+      for (const [id, value] of Object.entries(args.providerSettings ?? {})) {
+        configArgs.push('--provider-setting', `${id}=${value}`);
+      }
 
       if (args.apiKey) {
         configArgs.push('--api-key', args.apiKey);
@@ -180,20 +233,36 @@ export const configureTool = {
  */
 export const testTool = {
   name: 'aiquila_test',
-  title: 'Test AIquila Claude Integration',
+  title: 'Test AIquila Provider',
   annotations: {
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,
     openWorldHint: true,
   },
-  description: 'Test AIquila Claude API integration with a simple prompt',
+  description:
+    'Send a test prompt through the provider that serves a user (or the instance default), or through a named provider',
   inputSchema: z.object({
-    prompt: z.string().default('Hello, Claude!').describe('Test prompt to send to Claude API'),
+    prompt: z.string().default('Hello, Claude!').describe('Test prompt to send'),
+    provider: z
+      .string()
+      .optional()
+      .describe("Provider to test (e.g. 'local') instead of the one that would serve the user"),
+    user: z
+      .string()
+      .optional()
+      .describe('Nextcloud user to test as; their personal provider, key and model apply'),
   }),
-  handler: async (args: { prompt: string }) => {
+  handler: async (args: { prompt: string; provider?: string; user?: string }) => {
     try {
-      const output = await runOCC('aiquila:test', ['--prompt', args.prompt]);
+      const testArgs = ['--prompt', args.prompt];
+      if (args.provider) {
+        testArgs.push('--provider', args.provider);
+      }
+      if (args.user) {
+        testArgs.push('--user', args.user);
+      }
+      const output = await runOCC('aiquila:test', testArgs);
       return {
         content: [
           {

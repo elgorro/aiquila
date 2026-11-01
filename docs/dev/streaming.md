@@ -134,9 +134,8 @@ OpenAI-compatible server (Ollama, LM Studio, llama.cpp) exercises the whole path
 without an API key — see [local-provider.md](local-provider.md):
 
 ```bash
-occ config:app:set aiquila provider       --value='local'
-occ config:app:set aiquila local_base_url --value='http://<host>:1234'
-occ config:app:set aiquila model_local    --value='<model id>'
+occ aiquila:configure --provider local --provider-model '<model id>' \
+  --provider-setting local_base_url=http://<host>:1234
 ```
 
 A server that drops the connection mid-generation is the case worth rehearsing:

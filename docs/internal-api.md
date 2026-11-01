@@ -261,9 +261,16 @@ php occ aiquila:test
 # Test with custom prompt
 php occ aiquila:test --prompt "Hello, Claude!"
 
-# Test with specific user
+# Test with specific user (runs on the provider that serves them)
 php occ aiquila:test --user john
+
+# Test one provider
+php occ aiquila:test --provider local
 ```
+
+To configure a provider other than the instance default, use
+`--target-provider`; see
+[the OCC reference](mcp/tools/apps/aiquila.md#occ-command-reference).
 
 ### User Configuration
 
