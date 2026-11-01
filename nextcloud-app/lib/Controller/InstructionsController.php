@@ -57,7 +57,7 @@ class InstructionsController extends Controller {
     public function update(?string $instructions = null, ?array $scopes = null): JSONResponse {
         $error = InstructionsService::tooLong($instructions, InstructionsService::MAX_LENGTH, 'Instructions');
         if ($error !== null) {
-            return $this->clientError(Http::STATUS_BAD_REQUEST, $error);
+            return $this->clientError(400, $error);
         }
         if ($instructions !== null) {
             $this->instructions->setInstanceInstructions($instructions);

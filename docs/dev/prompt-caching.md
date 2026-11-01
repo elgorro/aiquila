@@ -144,3 +144,13 @@ requests that should share a prefix, something ahead of the breakpoint is
 changing between requests — a timestamp or per-request id interpolated into the
 system prompt, a tool list whose order is not deterministic, or a switch of
 model, which scopes the cache and invalidates it wholesale.
+
+The chat system prompt is assembled by `InstructionsService` in a fixed order:
+instance instructions, the user's default, the project prompt, the project
+paths. The order runs from most shared to most specific, so the start of the
+text is the same for every user of an instance. It is still one system block
+with a single breakpoint at its end, so the cache hits only when the whole block
+matches. The fixed order matters for a future split into separate blocks.
+`{user}` in the instance instructions makes that layer per user. Nothing else
+in the system prompt varies per request; the date and time zone travel as a
+`system` row in `messages` instead (above).

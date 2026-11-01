@@ -93,7 +93,7 @@ class PromptController extends Controller {
         try {
             $prompt = $this->mapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException) {
-            return $this->clientError(Http::STATUS_NOT_FOUND, 'Prompt not found');
+            return $this->clientError(404, 'Prompt not found');
         }
         return $this->applyUpdate($prompt, $title, $content, $description);
     }
@@ -114,7 +114,7 @@ class PromptController extends Controller {
         try {
             $prompt = $this->mapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException) {
-            return $this->clientError(Http::STATUS_NOT_FOUND, 'Prompt not found');
+            return $this->clientError(404, 'Prompt not found');
         }
         $this->mapper->delete($prompt);
         return new JSONResponse(['deleted' => true]);
@@ -168,7 +168,7 @@ class PromptController extends Controller {
         try {
             $prompt = $this->mapper->findInstanceById($id);
         } catch (DoesNotExistException) {
-            return $this->clientError(Http::STATUS_NOT_FOUND, 'Prompt not found');
+            return $this->clientError(404, 'Prompt not found');
         }
         return $this->applyUpdate($prompt, $title, $content, $description);
     }
@@ -188,7 +188,7 @@ class PromptController extends Controller {
         try {
             $prompt = $this->mapper->findInstanceById($id);
         } catch (DoesNotExistException) {
-            return $this->clientError(Http::STATUS_NOT_FOUND, 'Prompt not found');
+            return $this->clientError(404, 'Prompt not found');
         }
         $this->mapper->delete($prompt);
         return new JSONResponse(['deleted' => true]);
@@ -200,11 +200,11 @@ class PromptController extends Controller {
     private function createInScope(string $scope, string $title, string $content, ?string $description): JSONResponse {
         $title = trim($title);
         if ($title === '' || trim($content) === '') {
-            return $this->clientError(Http::STATUS_BAD_REQUEST, 'Title and content are required');
+            return $this->clientError(400, 'Title and content are required');
         }
         $error = self::validate($title, $content, $description);
         if ($error !== null) {
-            return $this->clientError(Http::STATUS_BAD_REQUEST, $error);
+            return $this->clientError(400, $error);
         }
 
         $now = time();
@@ -226,11 +226,11 @@ class PromptController extends Controller {
      */
     private function applyUpdate(Prompt $prompt, ?string $title, ?string $content, ?string $description): JSONResponse {
         if (($title !== null && trim($title) === '') || ($content !== null && trim($content) === '')) {
-            return $this->clientError(Http::STATUS_BAD_REQUEST, 'Title and content cannot be empty');
+            return $this->clientError(400, 'Title and content cannot be empty');
         }
         $error = self::validate($title, $content, $description);
         if ($error !== null) {
-            return $this->clientError(Http::STATUS_BAD_REQUEST, $error);
+            return $this->clientError(400, $error);
         }
 
         if ($title !== null) {

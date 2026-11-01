@@ -108,11 +108,11 @@ class ProjectTemplateController extends Controller {
         try {
             $template = $this->mapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException) {
-            return $this->clientError(Http::STATUS_NOT_FOUND, 'Template not found');
+            return $this->clientError(404, 'Template not found');
         }
         $error = $this->applyFields($template, $title, $description, $systemPrompt, $paths);
         if ($error !== null) {
-            return $this->clientError(Http::STATUS_BAD_REQUEST, $error);
+            return $this->clientError(400, $error);
         }
         $this->mapper->update($template);
         return new JSONResponse($template->jsonSerialize());
@@ -136,7 +136,7 @@ class ProjectTemplateController extends Controller {
         try {
             $template = $this->mapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException) {
-            return $this->clientError(Http::STATUS_NOT_FOUND, 'Template not found');
+            return $this->clientError(404, 'Template not found');
         }
         $this->mapper->delete($template);
         return new JSONResponse(['deleted' => true]);
@@ -163,12 +163,12 @@ class ProjectTemplateController extends Controller {
     public function createProject(int $id, ?string $title = null): JSONResponse {
         $template = $this->findVisible($id);
         if ($template === null) {
-            return $this->clientError(Http::STATUS_NOT_FOUND, 'Template not found');
+            return $this->clientError(404, 'Template not found');
         }
         $title = $title !== null && trim($title) !== '' ? trim($title) : $template->getTitle();
         $error = InstructionsService::tooLong($title, InstructionsService::MAX_TITLE_LENGTH, 'Title');
         if ($error !== null) {
-            return $this->clientError(Http::STATUS_BAD_REQUEST, $error);
+            return $this->clientError(400, $error);
         }
 
         $now = time();
@@ -251,11 +251,11 @@ class ProjectTemplateController extends Controller {
         try {
             $template = $this->mapper->findInstanceById($id);
         } catch (DoesNotExistException) {
-            return $this->clientError(Http::STATUS_NOT_FOUND, 'Template not found');
+            return $this->clientError(404, 'Template not found');
         }
         $error = $this->applyFields($template, $title, $description, $systemPrompt, $paths);
         if ($error !== null) {
-            return $this->clientError(Http::STATUS_BAD_REQUEST, $error);
+            return $this->clientError(400, $error);
         }
         $this->mapper->update($template);
         return new JSONResponse($template->jsonSerialize());
@@ -276,7 +276,7 @@ class ProjectTemplateController extends Controller {
         try {
             $template = $this->mapper->findInstanceById($id);
         } catch (DoesNotExistException) {
-            return $this->clientError(Http::STATUS_NOT_FOUND, 'Template not found');
+            return $this->clientError(404, 'Template not found');
         }
         $this->mapper->delete($template);
         return new JSONResponse(['deleted' => true]);
@@ -306,7 +306,7 @@ class ProjectTemplateController extends Controller {
             try {
                 $project = $this->projectMapper->findByIdAndUser($projectId, $this->requireUserId());
             } catch (DoesNotExistException) {
-                return $this->clientError(Http::STATUS_NOT_FOUND, 'Project not found');
+                return $this->clientError(404, 'Project not found');
             }
             $template->setTitle($project->getTitle());
             $template->setDescription($project->getDescription());
@@ -318,7 +318,7 @@ class ProjectTemplateController extends Controller {
         }
 
         if (($title === null || trim($title) === '') && $template->getTitle() === '') {
-            return $this->clientError(Http::STATUS_BAD_REQUEST, 'Title is required');
+            return $this->clientError(400, 'Title is required');
         }
 
         $now = time();
@@ -328,7 +328,7 @@ class ProjectTemplateController extends Controller {
 
         $error = $this->applyFields($template, $title !== null && trim($title) !== '' ? $title : null, $description, $systemPrompt, $paths);
         if ($error !== null) {
-            return $this->clientError(Http::STATUS_BAD_REQUEST, $error);
+            return $this->clientError(400, $error);
         }
         $template = $this->mapper->insert($template);
         return new JSONResponse($template->jsonSerialize());
