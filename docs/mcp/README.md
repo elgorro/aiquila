@@ -382,7 +382,7 @@ Nextcloud apps and administration:
 |------|-------------|---------------|
 | `aiquila_show_config` | Show configuration | [AIquila](tools/apps/aiquila.md#aiquila_show_config) |
 | `aiquila_configure` | Configure settings | [AIquila](tools/apps/aiquila.md#aiquila_configure) |
-| `aiquila_test` | Test Claude API | [AIquila](tools/apps/aiquila.md#aiquila_test) |
+| `aiquila_test` | Test a provider | [AIquila](tools/apps/aiquila.md#aiquila_test) |
 #### Talk (10 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|

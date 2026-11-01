@@ -110,7 +110,9 @@ php occ aiquila:configure --show
 ```
 
 `--provider-key` / `--provider-model` apply to the provider named by
-`--provider` (anthropic when omitted).
+`--provider` (anthropic when omitted), and `--provider` also makes it the
+instance default. To configure Hetzner without switching anyone to it, use
+`--target-provider hetzner` instead.
 
 **Provisioning** — `aiquila-hetzner create` can configure it while installing the
 app, for `--stack nextcloud` and `--stack full`:

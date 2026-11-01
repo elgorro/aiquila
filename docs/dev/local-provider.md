@@ -43,6 +43,16 @@ returns `false` — tools are sent, the field is not.
 Admin settings → AIquila → **Local model endpoint**. All of it is admin scope;
 none of it is user-settable (see [Security](#security)).
 
+Headless, every field below is settable through `occ aiquila:configure`, by
+app config key or setting id, with the same validation the settings page applies.
+`--target-provider local` leaves the instance default where it is:
+
+```bash
+occ aiquila:configure --target-provider local --provider-model qwen3 \
+  --provider-setting local_base_url=http://llama:8080 --provider-setting local_timeout=900
+occ aiquila:test --provider local
+```
+
 | Field | App config key | Default | Notes |
 |---|---|---|---|
 | Endpoint base URL | `local_base_url` | *(empty)* | `/v1` appended automatically; must be `http(s)`. Empty means the provider is unconfigured. |

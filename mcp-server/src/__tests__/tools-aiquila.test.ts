@@ -142,6 +142,40 @@ describe('AIquila Internal Tools', () => {
       expect(configureTool.inputSchema.safeParse({ thinking: 'auto' }).success).toBe(true);
     });
 
+    it('configures a provider without activating it', async () => {
+      mockExecuteOCC.mockResolvedValue({ success: true, exitCode: 0, stdout: 'ok', stderr: '' });
+
+      const { configureTool } = await import('../tools/apps/aiquila.js');
+      await configureTool.handler({
+        targetProvider: 'local',
+        providerKey: 'tok',
+        providerModel: 'qwen3',
+        providerSettings: { local_base_url: 'http://llama:8080', timeout: '600' },
+      });
+
+      expect(mockExecuteOCC).toHaveBeenCalledWith('aiquila:configure', [
+        '--target-provider',
+        'local',
+        '--provider-key',
+        'tok',
+        '--provider-model',
+        'qwen3',
+        '--provider-setting',
+        'local_base_url=http://llama:8080',
+        '--provider-setting',
+        'timeout=600',
+      ]);
+    });
+
+    it('activates a provider with provider', async () => {
+      mockExecuteOCC.mockResolvedValue({ success: true, exitCode: 0, stdout: 'ok', stderr: '' });
+
+      const { configureTool } = await import('../tools/apps/aiquila.js');
+      await configureTool.handler({ provider: 'local' });
+
+      expect(mockExecuteOCC).toHaveBeenCalledWith('aiquila:configure', ['--provider', 'local']);
+    });
+
     it('should handle errors', async () => {
       mockExecuteOCC.mockResolvedValue({
         success: false,
@@ -155,6 +189,21 @@ describe('AIquila Internal Tools', () => {
       const result = await configureTool.handler({ apiKey: 'bad-key' });
 
       expect(result.content[0].text).toContain('Error');
+    });
+  });
+
+  describe('aiquila_show_config targetProvider', () => {
+    it('shows one provider by id', async () => {
+      mockExecuteOCC.mockResolvedValue({ success: true, exitCode: 0, stdout: 'ok', stderr: '' });
+
+      const { showConfigTool } = await import('../tools/apps/aiquila.js');
+      await showConfigTool.handler({ targetProvider: 'local' });
+
+      expect(mockExecuteOCC).toHaveBeenCalledWith('aiquila:configure', [
+        '--show',
+        '--target-provider',
+        'local',
+      ]);
     });
   });
 
@@ -172,6 +221,22 @@ describe('AIquila Internal Tools', () => {
 
       expect(result.content[0].text).toContain('Hello');
       expect(mockExecuteOCC).toHaveBeenCalledWith('aiquila:test', ['--prompt', 'Say hello']);
+    });
+
+    it('passes provider and user through', async () => {
+      mockExecuteOCC.mockResolvedValue({ success: true, exitCode: 0, stdout: 'ok', stderr: '' });
+
+      const { testTool } = await import('../tools/apps/aiquila.js');
+      await testTool.handler({ prompt: 'hi', provider: 'local', user: 'alice' });
+
+      expect(mockExecuteOCC).toHaveBeenCalledWith('aiquila:test', [
+        '--prompt',
+        'hi',
+        '--provider',
+        'local',
+        '--user',
+        'alice',
+      ]);
     });
 
     it('should handle errors', async () => {

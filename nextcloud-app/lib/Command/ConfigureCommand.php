@@ -8,6 +8,9 @@ use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
+use OCA\AIquila\Service\Provider\ProviderSettingsService;
 use OCA\AIquila\Service\ThinkingPolicy;
 use OCA\AIquila\Service\AppSettings;
 use Symfony\Component\Console\Input\InputInterface;
@@ -18,13 +21,20 @@ class ConfigureCommand extends Base {
     private AppSettings $config;
     private CredentialService $credentials;
     private LLMProviderFactory $providerFactory;
+    private ProviderSettingsService $providerSettings;
     private const APP_NAME = 'aiquila';
 
-    public function __construct(AppSettings $config, CredentialService $credentials, LLMProviderFactory $providerFactory) {
+    public function __construct(
+        AppSettings $config,
+        CredentialService $credentials,
+        LLMProviderFactory $providerFactory,
+        ProviderSettingsService $providerSettings,
+    ) {
         parent::__construct();
         $this->config = $config;
         $this->credentials = $credentials;
         $this->providerFactory = $providerFactory;
+        $this->providerSettings = $providerSettings;
     }
 
     protected function configure(): void {
@@ -113,19 +123,31 @@ class ConfigureCommand extends Base {
                 'provider',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Set the active LLM provider (anthropic, mistral, deepseek, hetzner, local)'
+                'Make this LLM provider the instance default (anthropic, mistral, deepseek, hetzner, local, ...)'
+            )
+            ->addOption(
+                'target-provider',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Provider that --provider-key, --provider-model, --provider-setting and --show apply to, without making it the default'
             )
             ->addOption(
                 'provider-key',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Set the API key for the provider given by --provider (defaults to anthropic)'
+                'Set the API key for the target provider (--target-provider, else --provider, else anthropic)'
             )
             ->addOption(
                 'provider-model',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Set the model for the provider given by --provider (defaults to anthropic)'
+                'Set the model for the target provider (--target-provider, else --provider, else anthropic)'
+            )
+            ->addOption(
+                'provider-setting',
+                null,
+                InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY,
+                'Set a field of the target provider as id=value (or its app config key), validated like the admin settings page (repeatable; --show --target-provider=<id> lists the ids)'
             )
             ->addOption(
                 'show',
@@ -136,33 +158,38 @@ class ConfigureCommand extends Base {
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int {
+        $providerIds = $this->providerFactory->getProviderIds();
+        $provider = $input->getOption('provider');
+        $targetOption = $input->getOption('target-provider');
+        foreach (['provider' => $provider, 'target-provider' => $targetOption] as $option => $id) {
+            if ($id !== null && !in_array($id, $providerIds, true)) {
+                $output->writeln('<error>Unknown provider "' . $id . '" for --' . $option . '. Available: ' . implode(', ', $providerIds) . '</error>');
+                return 1;
+            }
+        }
+
         // Show current configuration if requested
         if ($input->getOption('show')) {
-            return $this->showConfiguration($output);
+            return $this->showConfiguration($output, $targetOption);
         }
 
         $updated = false;
 
-        // Provider selection + provider-scoped key/model. Used by headless
+        // Provider-scoped key, model and settings. Used by headless
         // provisioning (aiquila-hetzner) to point a fresh install at a
         // non-Anthropic backend without touching the web UI.
-        $providerIds = $this->providerFactory->getProviderIds();
-        $provider = $input->getOption('provider');
+        //
+        // --target-provider names the provider these apply to without touching
+        // the instance default, so a second provider can be set up while every
+        // user stays on the current one. --provider on its own both targets and
+        // activates, which is what a fresh install wants.
+        $targetProvider = $targetOption ?? $provider ?? LLMProviderFactory::DEFAULT_PROVIDER;
         $providerKey = $input->getOption('provider-key');
         $providerModel = $input->getOption('provider-model');
+        /** @var list<string> $settingArgs */
+        $settingArgs = $input->getOption('provider-setting');
 
-        if ($provider !== null) {
-            if (!in_array($provider, $providerIds, true)) {
-                $output->writeln('<error>Unknown provider "' . $provider . '". Available: ' . implode(', ', $providerIds) . '</error>');
-                return 1;
-            }
-            $this->config->setAppValue(self::APP_NAME, 'provider', $provider);
-            $output->writeln('<info>✓ Active provider set to: ' . $provider . '</info>');
-            $updated = true;
-        }
-
-        $targetProvider = $provider ?? LLMProviderFactory::DEFAULT_PROVIDER;
-
+        $values = [];
         if ($providerKey !== null) {
             if ($providerKey === '') {
                 $output->writeln('<error>--provider-key cannot be empty</error>');
@@ -172,21 +199,98 @@ class ConfigureCommand extends Base {
                 $output->writeln('<error>Invalid Anthropic API key format. Must start with sk-ant-</error>');
                 return 1;
             }
-            $this->credentials->setApiKey(null, $providerKey, $targetProvider);
-            $output->writeln('<info>✓ API key updated for provider: ' . $targetProvider . '</info>');
-            $updated = true;
+            $values['api_key'] = $providerKey;
         }
-
         if ($providerModel !== null) {
             if ($providerModel === '') {
                 $output->writeln('<error>--provider-model cannot be empty</error>');
                 return 1;
             }
-            $modelKey = $targetProvider === LLMProviderFactory::DEFAULT_PROVIDER
-                ? 'model'
-                : 'model_' . $targetProvider;
-            $this->config->setAppValue(self::APP_NAME, $modelKey, $providerModel);
-            $output->writeln('<info>✓ Model for ' . $targetProvider . ' updated to: ' . $providerModel . '</info>');
+            $values['model'] = $providerModel;
+        }
+
+        $target = $this->providerFactory->getProviderById($targetProvider);
+        $schema = $this->indexSchema($target);
+        foreach ($settingArgs as $arg) {
+            $eq = strpos($arg, '=');
+            if ($eq === false || $eq === 0) {
+                $output->writeln('<error>--provider-setting expects id=value, got "' . $arg . '"</error>');
+                return 1;
+            }
+            $fieldId = substr($arg, 0, $eq);
+            $field = $schema[$fieldId] ?? null;
+            if ($field === null) {
+                // The app config key works too (local_timeout for timeout), since
+                // that is the name `occ config:app:get` shows.
+                foreach ($schema as $candidate) {
+                    if (($candidate['key'] ?? null) === $fieldId) {
+                        $field = $candidate;
+                        $fieldId = (string)$candidate['id'];
+                        break;
+                    }
+                }
+            }
+            if ($field === null || !$this->isCliWritable($field)) {
+                $output->writeln('<error>Unknown setting "' . $fieldId . '" for provider ' . $targetProvider
+                    . '. Available: ' . implode(', ', array_keys(array_filter($schema, $this->isCliWritable(...)))) . '</error>');
+                return 1;
+            }
+            if (array_key_exists($fieldId, $values)) {
+                $output->writeln('<error>"' . $fieldId . '" is given more than once</error>');
+                return 1;
+            }
+            $value = substr($arg, $eq + 1);
+            if (($field['type'] ?? null) === ProviderSettingsSchema::TYPE_CHECKBOX) {
+                // The schema encoder reads anything it does not know as off, so a
+                // typo would silently disable the feature. Spell it out instead.
+                $bool = match (strtolower($value)) {
+                    'on', 'yes', 'true', '1' => true,
+                    'off', 'no', 'false', '0' => false,
+                    default => null,
+                };
+                if ($bool === null) {
+                    $output->writeln('<error>' . $fieldId . ' takes on or off, got "' . $value . '"</error>');
+                    return 1;
+                }
+                $values[$fieldId] = $bool;
+                continue;
+            }
+            // Access lists take principal ids; a comma-separated string is the
+            // shell-friendly form of the list the settings page sends.
+            $values[$fieldId] = ($field['storage'] ?? null) === ProviderSettingsSchema::STORAGE_ACCESS
+                ? array_values(array_filter(array_map('trim', explode(',', $value)), fn(string $v) => $v !== ''))
+                : $value;
+        }
+
+        if ($values !== []) {
+            // One call: every value is validated before any is stored, so a
+            // bad setting leaves the provider as it was.
+            try {
+                $rejected = $this->providerSettings->writeAdmin($target, $values);
+            } catch (\InvalidArgumentException $e) {
+                $output->writeln('<error>' . $e->getMessage() . '</error>');
+                return 1;
+            }
+            if ($rejected !== []) {
+                // Only reachable for api_key / model on a provider without them.
+                $output->writeln('<error>Provider ' . $targetProvider . ' has no ' . implode(', ', $rejected) . ' setting; nothing was changed</error>');
+                return 1;
+            }
+            foreach (array_keys($values) as $fieldId) {
+                $output->writeln(match ($fieldId) {
+                    'api_key' => '<info>✓ API key updated for provider: ' . $targetProvider . '</info>',
+                    'model' => '<info>✓ Model for ' . $targetProvider . ' updated to: ' . $providerModel . '</info>',
+                    default => '<info>✓ ' . $targetProvider . ' setting ' . $fieldId . ' updated</info>',
+                });
+            }
+            $updated = true;
+        }
+
+        // Activate last, so a provider is only made the default once its
+        // configuration has been accepted.
+        if ($provider !== null) {
+            $this->config->setAppValue(self::APP_NAME, 'provider', $provider);
+            $output->writeln('<info>✓ Active provider set to: ' . $provider . '</info>');
             $updated = true;
         }
 
@@ -360,7 +464,30 @@ class ConfigureCommand extends Base {
         return 0;
     }
 
-    private function showConfiguration(OutputInterface $output): int {
+    /**
+     * Field ids --provider-setting accepts for a provider: admin-writable
+     * fields that store something (not action buttons).
+     */
+    private function isCliWritable(array $field): bool {
+        return ProviderSettingsSchema::isAdminWritable($field)
+            && (isset($field['key']) || !empty($field['sensitive'])
+                || ($field['storage'] ?? null) === ProviderSettingsSchema::STORAGE_ACCESS);
+    }
+
+    /** @return array<string, array<string, mixed>> */
+    private function indexSchema(LLMProviderInterface $provider): array {
+        $indexed = [];
+        foreach (array_merge($provider->getSettingsSchema(), ProviderSettingsSchema::accessLists()) as $field) {
+            $indexed[(string)$field['id']] = $field;
+        }
+        return $indexed;
+    }
+
+    private function showConfiguration(OutputInterface $output, ?string $targetProvider = null): int {
+        if ($targetProvider !== null) {
+            return $this->showProviderSettings($output, $targetProvider);
+        }
+
         // Report the *active* provider's key and model, not the Anthropic ones —
         // otherwise a hetzner/mistral/local instance looks unconfigured here.
         $providerId = $this->providerFactory->getActiveProviderId();
@@ -402,6 +529,42 @@ class ConfigureCommand extends Base {
         $output->writeln('  Auto cache: <comment>' . ($autoCache ? 'on' : 'off') . '</comment>');
         $output->writeln('  Files API:  <comment>' . ($filesApi ? 'on' : 'off') . '</comment>');
         $output->writeln('  Timeout:    <comment>' . $timeout . ' seconds</comment>');
+        $output->writeln('');
+
+        return 0;
+    }
+
+    /**
+     * Every setting of one provider by field id — the ids --provider-setting
+     * takes. Secrets are reported as set or not, never shown.
+     */
+    private function showProviderSettings(OutputInterface $output, string $providerId): int {
+        $provider = $this->providerFactory->getProviderById($providerId);
+        $described = $this->providerSettings->describe($provider, null, true);
+        $active = $this->config->getAppValue(self::APP_NAME, 'provider', LLMProviderFactory::DEFAULT_PROVIDER);
+
+        $output->writeln('');
+        $output->writeln('<info>' . $provider->getLabel() . ' (' . $providerId . ')'
+            . ($active === $providerId ? ' — instance default' : '') . '</info>');
+        $output->writeln('  Configured: <comment>' . ($described['configured'] ? 'yes' : 'no') . '</comment>');
+        $output->writeln('');
+        foreach ($described['fields'] as $field) {
+            if (!$this->isCliWritable($field)) {
+                continue;
+            }
+            if (!empty($field['sensitive'])) {
+                $shown = !empty($field['hasValue']) ? '(configured)' : '(not set)';
+            } else {
+                $value = $field['value'] ?? '';
+                $shown = match (true) {
+                    is_bool($value) => $value ? 'on' : 'off',
+                    is_array($value) => $value === [] ? '(empty)' : implode(',', array_map('strval', $value)),
+                    $value === '' => '(not set)',
+                    default => (string)$value,
+                };
+            }
+            $output->writeln('  ' . str_pad((string)$field['id'], 20) . ' <comment>' . $shown . '</comment>');
+        }
         $output->writeln('');
 
         return 0;
