@@ -236,6 +236,10 @@ Each request takes the first value set, in this order: the conversation
 (`/effort`, `/thinking`) → your personal setting → the instance default → the
 model's default. A value the model does not accept is skipped.
 
+`/thinking:on` and `/thinking:off` need a provider with thinking controls, which is
+Anthropic. On the other providers they are refused with an error rather than stored,
+and switching a conversation to one of those providers clears its thinking override.
+
 Assistant tasks (proofread, headline, summary, …), coworkers and other apps
 using AIquila have their own admin defaults, **Effort for background tasks** and
 **Thinking for background tasks**, which apply before the chat defaults. Routine

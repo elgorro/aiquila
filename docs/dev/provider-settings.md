@@ -122,6 +122,11 @@ optional `ThinkingProfileInterface` (Anthropic does). It answers two questions:
   and the model's rules are applied. The chat header badge reads it through
   `GET /api/conversations/{id}/thinking`.
 
+A conversation's thinking override is only read through this interface. On a provider
+without it, `PUT /api/conversations/{id}` refuses `thinking: on|off` with a 400 (as it
+refuses `speedFast: on`), switching to such a provider clears the override, and
+`/thinking` reports any stored `mode` with `state: "none"`.
+
 `describe()` attaches the profile of the card's current model as
 `modelProfile`, and adds a `warning` to a thinking or effort field whose value
 that model cannot honour — for instance thinking `off` on a model that always

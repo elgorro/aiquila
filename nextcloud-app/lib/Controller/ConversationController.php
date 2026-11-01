@@ -256,6 +256,11 @@ class ConversationController extends Controller {
             if (!$this->resolveProvider($conversation)->getCapabilities()['thinking']) {
                 $conversation->setThinkingBudget(null);
             }
+
+            // And the on/off override, which only a thinking profile reads.
+            if (!($this->resolveProvider($conversation) instanceof ThinkingProfileInterface)) {
+                $conversation->setThinking(null);
+            }
         }
 
         if ($model !== null && $model !== '') {
@@ -305,9 +310,12 @@ class ConversationController extends Controller {
 
         $provider = $this->resolveProvider($conversation);
         if (!($provider instanceof ThinkingProfileInterface)) {
+            // Report what is stored, so the API never claims "auto" over an
+            // override; `state: none` says the provider will not act on it.
+            $stored = $conversation->getThinking();
             return new JSONResponse([
                 'model' => $provider->getModel($this->userId),
-                'mode' => 'auto',
+                'mode' => $stored === null ? 'auto' : ($stored ? 'on' : 'off'),
                 'state' => 'none',
                 'alwaysOn' => false,
                 'effort' => $conversation->getEffort(),
@@ -437,10 +445,19 @@ class ConversationController extends Controller {
             if (!in_array($thinking, ['on', 'off', 'auto', ''], true)) {
                 return $this->clientError(400, 'Thinking must be "on", "off", "auto" or empty');
             }
+            $provider = $this->resolveProvider($conversation);
+            if (in_array($thinking, ['on', 'off'], true) && !($provider instanceof ThinkingProfileInterface)) {
+                // Only a thinking profile reads the override; storing it on any
+                // other provider would be a success that does nothing.
+                return new JSONResponse([
+                    'error' => $provider->getLabel() . ' does not support thinking',
+                    'errorId' => '',
+                    'allowed' => [],
+                ], 400);
+            }
             if ($thinking === 'off') {
                 // Some models cannot stop thinking at all. Saying so beats
                 // storing an "off" that every request would quietly ignore.
-                $provider = $this->resolveProvider($conversation);
                 if ($provider instanceof ThinkingProfileInterface) {
                     $model = $provider->describeThinking($this->userId, $this->conversationOptions($conversation))['model'];
                     if (!$provider->getThinkingProfile($model)['can_disable']) {
