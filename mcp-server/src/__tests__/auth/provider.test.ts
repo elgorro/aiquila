@@ -62,6 +62,9 @@ describe('renderFlowPage', () => {
   });
 
   it('asks for no credentials', () => {
+    // Also what keeps the redirect to the client clear of the CSP's
+    // form-action 'self': the page reaches it by meta refresh, not a form
+    // submission (CSP Level 3 §6.4.1.1). See LOGIN_PAGE_CSP.
     const html = renderFlowPage(waiting);
     expect(html).not.toContain('<form');
     expect(html).not.toContain('type="password"');
