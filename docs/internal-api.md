@@ -339,9 +339,12 @@ endpoint, `GET /ocs/v2.php/cloud/capabilities` (authenticated), under the `aiqui
 | Key | Type | Meaning |
 |---|---|---|
 | `version` | string | Installed app version |
-| `model` | string | Admin default model |
+| `provider` | string \| null | Id of the provider that serves the instance by default (e.g. `anthropic`, `mistral`), as `LLMProviderFactory` resolves it; `null` when every provider is denied |
+| `model` | string \| null | That default provider's model |
+| `user_provider` | string \| null | Id of the provider that serves the signed-in user, which a personal `user_provider` override can make differ from `provider`; `null` without a session or when the user is denied every provider |
+| `user_model` | string \| null | That provider's model for the signed-in user |
 | `providers` | string[] | TaskProcessing task-type ids AIquila registers a provider for, sorted — e.g. `core:text2text:summary`, `core:audio2text` |
-| `api_configured` | bool | Whether an admin-level Anthropic API key is set |
+| `api_configured` | bool | Whether the default provider (`provider`) is configured at instance level |
 | `search_enabled` | bool | Whether AIquila conversations appear in Unified Search — the admin toggle, `true` unless an admin turned it off |
 
 `providers` is derived from the registered provider set
