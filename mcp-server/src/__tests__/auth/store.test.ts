@@ -219,6 +219,29 @@ describe('CodeStore', () => {
     const b = store.store(params);
     expect(a).not.toBe(b);
   });
+
+  it('removes expired codes without them being looked up again', () => {
+    const params = {
+      pkceChallenge: 'ch',
+      clientId: 'c',
+      scopes: [],
+      redirectUri: 'https://r.com',
+      userId: 'u',
+      grantId: 'g1',
+    };
+    const stale = store.store(params);
+    const later = Date.now() + 6 * 60 * 1000;
+    const fresh = store.store(params);
+    // Only the code issued before the cut-off has expired by then.
+    (store as unknown as { codes: Map<string, { expiresAt: number }> }).codes.get(
+      fresh
+    )!.expiresAt = later + 60 * 1000;
+    expect(store.takeExpired(later).map((e) => e.grantId)).toEqual(['g1']);
+    const codes = (store as unknown as { codes: Map<string, unknown> }).codes;
+    expect(codes.has(stale)).toBe(false);
+    expect(codes.has(fresh)).toBe(true);
+    expect(store.takeExpired(later)).toEqual([]);
+  });
 });
 
 // ---- RefreshStore ----

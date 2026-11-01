@@ -897,6 +897,28 @@ describe('NextcloudOAuthProvider', () => {
 
   // ---- a restart before the code is exchanged ----
 
+  describe('the periodic sweep', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('removes an expired code nobody looks up again', async () => {
+      vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+      const swept = new NextcloudOAuthProvider();
+      await swept.issueAuthCode({
+        credential: CRED,
+        pkceChallenge: 'ch',
+        clientId: CLIENT.client_id,
+        scopes: [],
+        redirectUri: 'https://r.com',
+        userId: 'alice',
+      });
+      // No request touches the code; only the timer the constructor started runs.
+      await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
+      await vi.waitFor(() =>
+        expect(flow.deleteAppPassword).toHaveBeenCalledWith('alice', 'app-password-1')
+      );
+    });
+  });
+
   describe('a restart before the code is exchanged', () => {
     afterEach(() => vi.useRealTimers());
 
