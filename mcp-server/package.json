@@ -1,7 +1,7 @@
 {
   "name": "aiquila-mcp",
   "version": "0.5.2",
-  "description": "Nextcloud MCP server — 345 tools: files, calendar, contacts, mail, Talk, Deck, photos, maps, notes",
+  "description": "Nextcloud MCP server — 349 tools: files, calendar, contacts, mail, Talk, Deck, photos, maps, notes",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

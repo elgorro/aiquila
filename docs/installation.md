@@ -159,6 +159,6 @@ Use an MCP-compatible mobile app with voice input to manage Nextcloud hands-free
 ## What's next?
 
 - **[Full Documentation](README.md)** — architecture, configuration, and all guides
-- **[MCP Tools Reference](mcp/README.md#tools-reference)** — 345 tools across 44 categories
+- **[MCP Tools Reference](mcp/README.md#tools-reference)** — 349 tools across 44 categories
 - **[Internal API](internal-api.md)** — integrate AIquila into your own Nextcloud apps
 - **[Connectivity Guide](connectivity.md)** — network and connection troubleshooting
