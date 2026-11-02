@@ -12,7 +12,9 @@ use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Service\CoworkerService;
 use OCA\AIquila\Service\CoworkerTemplates;
 use OCA\AIquila\Service\InstructionsService;
+use OCA\AIquila\Service\McpClientService;
 use OCP\AppFramework\Controller;
+use OCA\AIquila\Service\Exception\NoActiveRunException;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
@@ -45,6 +47,7 @@ class CoworkerController extends Controller {
         private readonly ?string $userId,
         private readonly LoggerInterface $logger,
         private readonly CoworkerTemplates $instanceTemplates,
+        private readonly ?McpClientService $mcpClient = null,
     ) {
         parent::__construct($appName, $request);
     }
@@ -249,6 +252,37 @@ class CoworkerController extends Controller {
     }
 
     /**
+     * Stop a coworker's run in flight
+     *
+     * Cancels the run that is `running` or `pending` (a submitted batch).
+     * The run is closed as `cancelled` and keeps what it processed so far; a
+     * running one stops at its next item. The schedule is unchanged: pause or
+     * disable the coworker to stop future runs.
+     *
+     * @param int $id Coworker ID
+     *
+     * 200: The cancelled run
+     * 404: Coworker not found, or it has no run in flight
+     *
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[UserRateLimit(limit: 20, period: 60)]
+    #[AnonRateLimit(limit: 20, period: 60)]
+    #[OpenAPI]
+    public function stop(int $id): JSONResponse {
+        try {
+            $run = $this->service->stop($id, (string)$this->userId);
+        } catch (NoActiveRunException) {
+            return $this->clientError(404, 'Coworker has no active run');
+        } catch (DoesNotExistException) {
+            return $this->clientError(404, 'Coworker not found');
+        }
+        return new JSONResponse($run->jsonSerialize());
+    }
+
+    /**
      * Get the run history for a coworker
      *
      * @param int $id Coworker ID
@@ -296,6 +330,28 @@ class CoworkerController extends Controller {
             return $this->clientError(404, 'Run not found');
         }
         return new JSONResponse($run->jsonSerializeDetail());
+    }
+
+    /**
+     * List the MCP tools an agent coworker may be allowed to call
+     *
+     * The tools of the instance's enabled MCP servers, which the chat offers
+     * every user too. Only names and descriptions; a server that cannot be
+     * reached is left out.
+     *
+     * 200: Tools, by name
+     *
+     * @return JSONResponse<Http::STATUS_OK, list<array{name: string, description: string}>, array{}>
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[OpenAPI]
+    public function tools(): JSONResponse {
+        $all = $this->mcpClient?->getAllTools() ?? ['tools' => []];
+        return new JSONResponse(array_map(
+            static fn (array $t): array => ['name' => (string)($t['name'] ?? ''), 'description' => (string)($t['description'] ?? '')],
+            array_values($all['tools']),
+        ));
     }
 
     /**
@@ -505,7 +561,7 @@ class CoworkerController extends Controller {
         $allowed = [
             'title', 'description', 'provider', 'model', 'task_type', 'cron_schedule',
             'input_type', 'input_path', 'output_type', 'output_path',
-            'is_active', 'paused', 'options',
+            'is_active', 'paused', 'options', 'custom_prompt', 'prompt_id',
         ];
         $data = [];
         foreach ($allowed as $key) {

@@ -255,6 +255,30 @@ In the chat, the header shows what the next message will actually do — for
 example *Thinking: always on · effort xhigh* — and a reply that involved
 thinking carries a collapsible summary of it.
 
+#### Task budget for tool use
+
+An answer that uses tools (MCP tools in the chat, tool calls from the Assistant)
+can take many requests. **Task budget for tool use** on the Claude card gives
+Claude a token budget for that whole answer: thinking, tool calls, tool results
+and text together. Claude sees the budget count down and wraps up as it runs
+low, instead of being cut off mid-sentence by the output token limit.
+
+It is a target Claude paces itself against, not a hard cap. **Max output
+tokens** still cuts off a single response. The budget must be at least 20,000
+tokens. Too small a budget makes Claude scope the work down or decline it, so
+measure first: leave it blank (the default, off), look at what tool-using answers
+spend in the usage widget or `nextcloud_aiquila_tokens_used_total`, and start
+around the high end of that.
+
+```bash
+occ aiquila:configure --task-budget=64000
+occ aiquila:configure --task-budget=      # off
+```
+
+It applies on Opus 4.7 and later, the Fable models, Sonnet 5.5 and Haiku 5.5,
+not on Sonnet 5. It works through the Claude API, Claude Platform on AWS,
+Vertex AI and Microsoft Foundry. Elsewhere the setting does nothing.
+
 #### Latency and capacity
 
 Two Claude-only settings under **Advanced** trade money for speed. Both are off
@@ -534,13 +558,27 @@ or build a **Custom coworker**. Each coworker has:
 | `vision:classify` | Labels each image and stores the labels as collaborative tags, so they can be searched and filtered in Files | `maxTags` (1–30, default 8), `recursive` |
 | `docs:summarize` | Writes `<name>.summary.md` beside each text document (`text/*` and JSON by default; PDFs are not read) | `recursive`, `force`, `outputFolder`, `mimeTypes`, `maxBytesPerFile` (default 1 MiB) |
 | `docs:translate` | Writes `<name>.<language>.md` beside each document | `targetLanguage`, plus the options of `docs:summarize` |
+| `agent:run` | Runs a prompt, optionally with MCP tools, and keeps the answer as the run summary or writes it to one file | `tools` (allowlist of MCP tool names), `taskBudget` (tokens, at least 20,000) |
+
+An `agent:run` coworker has a **prompt** instead of a source folder: its own text,
+or one of the owner's saved prompts. It runs as the owner, and may call only the MCP
+tools ticked in its allowlist. These are tools of the instance's MCP servers, the same
+ones the chat uses. The executor refuses any other tool, even if the model asks for
+it. With no tools ticked, the prompt runs without tools. Because nobody watches these
+runs, allow only what the job needs, and prefer read-only tools. The run log lists
+each tool call. With **Save the answer to** set, the answer replaces that file on
+every run.
 
 The document tasks only redo a file when it changed since its result was written,
 unless `force` is set, and never process their own output. A run handles up to 200
 documents; the rest wait for the next run. `vision:classify` needs a `vision` provider.
 
 Each coworker can be paused, run immediately with **Run now**, and keeps a run
-history with a summary of what it did. The **Coworkers** and **Coworker output**
+history with a summary of what it did. **Stop** in the run history cancels a run
+that is still going. A running run ends at its next file, and a run waiting for a
+batch has its batch cancelled. The run keeps what it already processed, and the
+schedule is unchanged: pause or disable the coworker to skip future runs. The
+**Coworkers** and **Coworker output**
 Dashboard widgets show the latest results, and the [MCP cowork tools](../mcp/tools/apps/cowork.md)
 manage coworkers from Claude.
 

@@ -36,6 +36,8 @@ use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCA\AIquila\BackgroundJob\IndexConversationJob;
 use OCA\AIquila\Service\ContextChatService;
 use OCA\AIquila\Service\RuntimeContextService;
+use OCA\AIquila\Service\ToolChanges;
+use OCA\AIquila\Service\ToolTrace;
 use OCA\AIquila\Service\UsageStatService;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
@@ -700,6 +702,7 @@ class ConversationController extends Controller {
         $assistantMsg->setConversationId($id);
         $assistantMsg->setRole('assistant');
         $assistantMsg->setContent($result['response']);
+        $assistantMsg->setToolTrace(ToolTrace::encode($result['tool_trace'] ?? []));
         $assistantMsg->setInputTokens($result['usage']['input_tokens'] ?? null);
         $assistantMsg->setOutputTokens($result['usage']['output_tokens'] ?? null);
         $assistantMsg->setCacheCreationTokens($result['usage']['cache_creation_tokens'] ?? null);
@@ -866,10 +869,21 @@ class ConversationController extends Controller {
         $accumulatedText = '';
         $accumulatedThinking = '';
         $finalCitations = [];
+        $finalToolTrace = [];
         $finalUsage = ['input_tokens' => 0, 'output_tokens' => 0, 'cache_creation_tokens' => null, 'cache_read_tokens' => null];
         $errorMessage = null;
         $startMs = (int)(microtime(true) * 1000.0);
         $options = $this->conversationOptions($conversation);
+
+        if (!$useNativeMcp) {
+            ['tools' => $tools, 'messages' => $claudeMessages] = $this->toolsForTurn($conversation, $provider, $tools, $claudeMessages, $options);
+        } else {
+            $claudeMessages = ToolChanges::describeAll($claudeMessages);
+        }
+        // A request without our tools cannot carry tool_use blocks.
+        if ($useNativeMcp || $tools === []) {
+            $claudeMessages = ToolTrace::flatten($claudeMessages);
+        }
 
         $eventStream = $useNativeMcp
             ? $provider->chatWithNativeMcp(
@@ -905,6 +919,9 @@ class ConversationController extends Controller {
                     case 'done':
                         $finalCitations = $event['citations'] ?? [];
                         $finalUsage = $event['usage'] ?? $finalUsage;
+                        // Stored with the answer, not sent to the browser.
+                        $finalToolTrace = $event['tool_trace'] ?? [];
+                        unset($event['tool_trace']);
                         break;
                     case 'error':
                         $errorMessage = $event['error'] ?? 'Stream error';
@@ -958,6 +975,9 @@ class ConversationController extends Controller {
         $assistantMsg->setLatencyMs($latencyMs);
         if ($accumulatedThinking !== '') {
             $assistantMsg->setThinkingSummary($accumulatedThinking);
+        }
+        if ($errorMessage === null) {
+            $assistantMsg->setToolTrace(ToolTrace::encode($finalToolTrace));
         }
         if (!empty($finalCitations)) {
             $assistantMsg->setCitations(json_encode($finalCitations) ?: null);
@@ -1049,6 +1069,7 @@ class ConversationController extends Controller {
             $newMsg->setLatencyMs($msg->getLatencyMs());
             $newMsg->setCitations($msg->getCitations());
             $newMsg->setDocuments($msg->getDocuments());
+            $newMsg->setToolTrace($msg->getToolTrace());
             $newMsg->setCreatedAt($msg->getCreatedAt());
             $newMsg = $this->messageMapper->insert($newMsg);
 
@@ -1131,6 +1152,18 @@ class ConversationController extends Controller {
                         $content = array_merge($built['blocks'], [['type' => 'text', 'text' => $content]]);
                     }
                 }
+            }
+            // A turn's tool changes go back in place, as blocks.
+            if ($msg->getRole() === 'system' && $msg->getToolTrace() !== null) {
+                $content = array_merge(
+                    $content === '' ? [] : [['type' => 'text', 'text' => $content]],
+                    ToolChanges::decodeBlocks($msg->getToolTrace()),
+                );
+            }
+            // The tool calls behind an answer go back in ahead of it, so the
+            // model sees what its tools returned and need not call them again.
+            if ($msg->getRole() === 'assistant') {
+                array_push($messages, ...ToolTrace::decode($msg->getToolTrace()));
             }
             $messages[] = ['role' => $msg->getRole(), 'content' => $content];
         }
@@ -1325,8 +1358,9 @@ class ConversationController extends Controller {
                 ? $this->nativeMcp->buildMistralConnectorTools()
                 : $this->nativeMcp->buildServerDefinitions();
             if (!empty($mcpServers)) {
+                // The connector's tools are Anthropic's, not ours: replay ours as text.
                 return $provider->chatWithNativeMcpCollect(
-                    $messages,
+                    ToolTrace::flatten($messages),
                     $mcpServers,
                     $systemPrompt,
                     $this->userId,
@@ -1344,9 +1378,10 @@ class ConversationController extends Controller {
         if (!empty($allTools['tools'])) {
             $mapping = $allTools['mapping'];
             $mcpClient = $this->mcpClient;
+            ['tools' => $turnTools, 'messages' => $messages] = $this->toolsForTurn($conversation, $provider, $allTools['tools'], $messages, $options);
             return $provider->chatWithTools(
                 $messages,
-                $allTools['tools'],
+                $turnTools,
                 function (string $name, array $input) use ($mcpClient, $mapping): array {
                     return $mcpClient->executeTool($name, $input, $mapping);
                 },
@@ -1356,7 +1391,81 @@ class ConversationController extends Controller {
             );
         }
 
-        return $provider->chat($messages, $systemPrompt, $this->userId, $options);
+        // No tools defined on this request, so earlier tool calls go as text.
+        ['messages' => $messages] = $this->toolsForTurn($conversation, $provider, [], $messages, $options);
+        return $provider->chat(ToolTrace::flatten($messages), $systemPrompt, $this->userId, $options);
+    }
+
+    /**
+     * The tools to send this turn, and $messages ready for them.
+     *
+     * Where the model and platform take mid-conversation tool changes, the
+     * conversation keeps the tools it declared first and appends changes
+     * (see ToolChanges): a change is stored as a system row right after the
+     * user's message and added to $messages, so this and later turns carry
+     * it in place. Elsewhere $tools goes out as is, and any change blocks in
+     * the history are described as text.
+     *
+     * @param list<array<string, mixed>> $tools the tools available now
+     * @return array{tools: list<array<string, mixed>>, messages: array}
+     */
+    private function toolsForTurn(?Conversation $conversation, LLMProviderInterface $provider, array $tools, array $messages, array $options): array {
+        if ($conversation === null) {
+            return ['tools' => $tools, 'messages' => ToolChanges::describeAll($messages)];
+        }
+        $supported = $tools !== []
+            && $provider instanceof ClaudeSDKService
+            && $provider->supportsMidConversationToolChanges($this->userId, $options);
+        $state = ToolChanges::decodeState($conversation->getToolState());
+
+        if (!$supported) {
+            if ($state !== null) {
+                $this->retireToolChanges($conversation);
+            }
+            return ['tools' => $tools, 'messages' => ToolChanges::describeAll($messages)];
+        }
+
+        $plan = ToolChanges::plan($state, $tools);
+        if ($plan['reset']) {
+            // A tool was redefined: the declared list starts over and this
+            // request rebuilds the cache once. Earlier changes become text.
+            $this->logger->info('AIquila: conversation tools redefined, starting their state over', ['conversationId' => $conversation->getId()]);
+            $this->retireToolChanges($conversation);
+            $messages = ToolChanges::describeAll($messages);
+        }
+        $conversation->setToolState(ToolChanges::encodeState($plan['state']));
+        $this->conversationMapper->update($conversation);
+
+        if ($plan['blocks'] !== []) {
+            $row = new MessageEntity();
+            $row->setConversationId($conversation->getId());
+            $row->setRole('system');
+            $row->setContent('');
+            $row->setToolTrace(ToolChanges::encodeBlocks($plan['blocks']));
+            $row->setCreatedAt(time());
+            $this->messageMapper->insert($row);
+            $messages[] = ['role' => 'system', 'content' => $plan['blocks']];
+        }
+        return ['tools' => $plan['tools'], 'messages' => $messages];
+    }
+
+    /**
+     * End a conversation's tool state: its stored change rows become text,
+     * once, so later turns replay what happened without blocks that refer to
+     * a declared list that no longer exists.
+     */
+    private function retireToolChanges(Conversation $conversation): void {
+        foreach ($this->messageMapper->findByConversation($conversation->getId(), true) as $msg) {
+            if ($msg->getRole() !== 'system' || $msg->getToolTrace() === null) {
+                continue;
+            }
+            $texts = array_map(ToolChanges::describe(...), ToolChanges::decodeBlocks($msg->getToolTrace()));
+            $msg->setContent(trim($msg->getContent() . "\n" . implode("\n", $texts)));
+            $msg->setToolTrace(null);
+            $this->messageMapper->update($msg);
+        }
+        $conversation->setToolState(null);
+        $this->conversationMapper->update($conversation);
     }
 
     /**

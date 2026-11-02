@@ -101,6 +101,8 @@ interface CoworkerTaskType {
     public function run(Coworker $coworker, CoworkerRun $run, callable $progress): array;
     // run() returns ['itemsTotal' => int, 'itemsProcessed' => int, 'summary' => string]
     // and should call $progress(int $processed, int $total) as it goes.
+    // $progress throws RunCancelledException once the run is stopped; let it
+    // propagate (don't catch \Throwable around the call).
 }
 ```
 
@@ -117,6 +119,10 @@ Levels are `LOG_INFO`, `LOG_WARN` and `LOG_ERROR`. The item is optional, and is 
 path the user sees in Files (`UserPath::of($node)` builds it). A run keeps its newest
 500 entries, with messages cut at 500 characters. A failed run gets an `error` entry
 with the exception message on its own.
+
+Built-in task types are `vision:classify`, `docs:summarize`, `docs:translate` and
+`agent:run`. The agent type reads `custom_prompt` or `prompt_id` (one of the owner's
+saved prompts) from the config, and `options.tools`, an allowlist of MCP tool names.
 
 ### `register(string $appId, string $userId, array $config): array`
 
@@ -144,6 +150,16 @@ Enable (`true`) or disable (`false`). Returns the updated coworker.
 Run the coworker immediately (synchronous). Returns the completed run record
 (`status`, `itemsTotal`, `itemsProcessed`, `summary`, `error`, `startedAt`,
 `finishedAt`).
+
+### `stop(string $appId, int $id): array`
+
+Cancel the coworker's run in flight (`running`, or `pending` on a batch). Returns
+the run with `status: cancelled`, `finishedAt` set and `itemsProcessed` as far as it
+got. A running run ends at its next item: the engine checks the status each time the
+task type reports progress, so a task type that calls `$progress` per item can be
+stopped. A pending run's batch is cancelled with the provider. The schedule is left
+as it is. Throws `NoActiveRunException`, a `DoesNotExistException`, when nothing is
+in flight.
 
 ### `get(string $appId, int $id): array`
 
