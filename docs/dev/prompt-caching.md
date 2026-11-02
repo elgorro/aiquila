@@ -150,6 +150,11 @@ changing between requests — a timestamp or per-request id interpolated into th
 system prompt, a tool list whose order is not deterministic, or a switch of
 model, which scopes the cache and invalidates it wholesale.
 
+A [task budget](../installation/aiquila-setup.md#task-budget-for-tool-use) is also
+part of the rendered prompt. AIquila sends the same `total` on every request of a
+tool loop and never sends `remaining`, so the budget does not move the prefix.
+Changing the setting starts new cache entries once.
+
 ### Minimum cacheable length
 
 The API caches a prefix only when it reaches the model's minimum. Below that it

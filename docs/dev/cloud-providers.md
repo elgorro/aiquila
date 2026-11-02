@@ -35,6 +35,7 @@ platform lacks, so a request never fails on a missing endpoint:
 | Automatic prompt caching | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
 | Mid-conversation system messages | ✓ | ✓ | — | ✓ | ✓ | ✓ | — |
 | Server-side refusal fallback | ✓ | — | ✓ | — | — | — | — |
+| Task budgets | ✓ | ✓ | — | — | — | ✓ | ✓ |
 
 Where a feature is off:
 
@@ -50,6 +51,8 @@ Where a feature is off:
 - **Server-side refusal fallback** — a request the safety classifiers decline
   comes back as a refusal, with no retry on another model (see
   [Refusals and fallback](refusals.md)).
+- **Task budgets** — tool-using answers carry no budget, and the card does not
+  offer the setting.
 - **Mid-conversation system messages** — the date and time-zone note goes to the
   model as a `<system-reminder>` block in the user's turn instead.
 - **InvokeModel** — explicit cache breakpoints still go out; only the top-level

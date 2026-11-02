@@ -255,6 +255,30 @@ In the chat, the header shows what the next message will actually do — for
 example *Thinking: always on · effort xhigh* — and a reply that involved
 thinking carries a collapsible summary of it.
 
+#### Task budget for tool use
+
+An answer that uses tools (MCP tools in the chat, tool calls from the Assistant)
+can take many requests. **Task budget for tool use** on the Claude card gives
+Claude a token budget for that whole answer: thinking, tool calls, tool results
+and text together. Claude sees the budget count down and wraps up as it runs
+low, instead of being cut off mid-sentence by the output token limit.
+
+It is a target Claude paces itself against, not a hard cap. **Max output
+tokens** still cuts off a single response. The budget must be at least 20,000
+tokens. Too small a budget makes Claude scope the work down or decline it, so
+measure first: leave it blank (the default, off), look at what tool-using answers
+spend in the usage widget or `nextcloud_aiquila_tokens_used_total`, and start
+around the high end of that.
+
+```bash
+occ aiquila:configure --task-budget=64000
+occ aiquila:configure --task-budget=      # off
+```
+
+It applies on Opus 4.7 and later, the Fable models, Sonnet 5.5 and Haiku 5.5,
+not on Sonnet 5. It works through the Claude API, Claude Platform on AWS,
+Vertex AI and Microsoft Foundry. Elsewhere the setting does nothing.
+
 #### Latency and capacity
 
 Two Claude-only settings under **Advanced** trade money for speed. Both are off
