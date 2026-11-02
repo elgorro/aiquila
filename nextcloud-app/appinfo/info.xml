@@ -100,6 +100,7 @@ Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Mode
     </commands>
     <openmetrics>
         <exporter>OCA\AIquila\OpenMetrics\TokensUsedExporter</exporter>
+        <exporter>OCA\AIquila\OpenMetrics\PromptCacheTokensExporter</exporter>
         <exporter>OCA\AIquila\OpenMetrics\TasksExporter</exporter>
         <exporter>OCA\AIquila\OpenMetrics\ConversationsExporter</exporter>
         <exporter>OCA\AIquila\OpenMetrics\McpServerStatusExporter</exporter>

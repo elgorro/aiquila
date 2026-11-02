@@ -83,13 +83,18 @@ class UsageStatMapper extends QBMapper {
      * Aggregate token usage across all users, grouped by model and request type.
      * Used for the server-global OpenMetrics export (no per-user breakdown).
      *
-     * @return list<array{model: string, request_type: string, input_tokens: int, output_tokens: int}>
+     * Cache tokens are summed separately from `input_tokens`: providers that
+     * report them (Anthropic) count cached prefix tokens outside input.
+     *
+     * @return list<array{model: string, request_type: string, input_tokens: int, output_tokens: int, cache_creation_tokens: int, cache_read_tokens: int}>
      */
     public function sumTokensByModelAndType(): array {
         $qb = $this->db->getQueryBuilder();
         $qb->select('model', 'request_type')
             ->selectAlias($qb->func()->sum('input_tokens'), 'total_input')
             ->selectAlias($qb->func()->sum('output_tokens'), 'total_output')
+            ->selectAlias($qb->func()->sum('cache_creation_tokens'), 'total_cache_creation')
+            ->selectAlias($qb->func()->sum('cache_read_tokens'), 'total_cache_read')
             ->from($this->getTableName())
             ->groupBy('model', 'request_type');
 
@@ -101,6 +106,8 @@ class UsageStatMapper extends QBMapper {
                 'request_type' => (string)($row['request_type'] ?? ''),
                 'input_tokens' => (int)($row['total_input'] ?? 0),
                 'output_tokens' => (int)($row['total_output'] ?? 0),
+                'cache_creation_tokens' => (int)($row['total_cache_creation'] ?? 0),
+                'cache_read_tokens' => (int)($row['total_cache_read'] ?? 0),
             ];
         }
         $result->closeCursor();
