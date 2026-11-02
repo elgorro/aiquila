@@ -723,7 +723,7 @@ class ClaudeServiceTest extends TestCase {
 
         $this->testable->ask('Hi', '', 'testuser');
 
-        $this->assertNull($this->testable->lastRequestOptions);
+        $this->assertStringNotContainsString('files-api', $this->testable->lastRequestOptions['extraHeaders']['anthropic-beta'] ?? '');
     }
 
     public function testFileIdReferencesNeedNoBetaHeader(): void {
@@ -741,7 +741,7 @@ class ClaudeServiceTest extends TestCase {
         $this->testable->chat($messages, null, 'testuser');
 
         // The Files API is GA: a file_id needs no beta header.
-        $this->assertNull($this->testable->lastRequestOptions);
+        $this->assertStringNotContainsString('files-api', $this->testable->lastRequestOptions['extraHeaders']['anthropic-beta'] ?? '');
     }
 
     // ── chat() ────────────────────────────────────────────────────────────

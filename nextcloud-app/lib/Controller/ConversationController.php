@@ -911,6 +911,12 @@ class ConversationController extends Controller {
                         if (isset($event['usage']) && is_array($event['usage'])) {
                             $finalUsage = $event['usage'];
                         }
+                        // A refusal's partial output is incomplete and must
+                        // not be kept as if it were an answer.
+                        if (($event['error_type'] ?? null) === 'refused') {
+                            $accumulatedText = '';
+                            $accumulatedThinking = '';
+                        }
                         break;
                 }
                 yield $event;
