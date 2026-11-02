@@ -91,6 +91,14 @@ function escapeHtml(s: string): string {
  * The page has no script and no inline styles (the stylesheet is served
  * separately from LOGIN_STYLESHEET_PATH), so the policy can deny everything by
  * default and allow only same-origin styles.
+ *
+ * `form-action 'self'` does not block the final redirect to the client's
+ * redirect_uri: that 302 answers the meta refresh's reload of /auth/flow/:id,
+ * a navigation of type "other", and the form-action pre-navigation check acts
+ * only on type "form-submission" (CSP Level 3 §6.4.1.1). Browsers that apply
+ * form-action to redirects do so only for redirects of a form submission.
+ * The pages must therefore never complete the sign-in through a <form>; the
+ * renderFlowPage tests assert there is none.
  */
 export const LOGIN_PAGE_CSP =
   "frame-ancestors 'none'; default-src 'none'; style-src 'self'; form-action 'self'; base-uri 'none'";
