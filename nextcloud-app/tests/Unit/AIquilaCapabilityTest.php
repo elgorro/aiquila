@@ -4,11 +4,14 @@ namespace OCA\AIquila\Tests\Unit;
 
 use OCA\AIquila\AppInfo\Application;
 use OCA\AIquila\Capabilities\AIquilaCapability;
-use OCA\AIquila\Service\ClaudeModels;
-use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\Provider\LLMProviderFactory;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use OCA\AIquila\Service\SearchSettings;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\IUser;
+use OCP\IUserSession;
 use OCA\AIquila\Service\AppSettings;
 use OCP\TaskProcessing\ISynchronousProvider;
 use OCP\TaskProcessing\TaskTypes\AudioToText;
@@ -19,14 +22,17 @@ use Psr\Container\ContainerInterface;
 
 class AIquilaCapabilityTest extends TestCase {
     private AppSettings $config;
-    private CredentialService $credentialService;
+    private LLMProviderFactory $factory;
+    private IUserSession $userSession;
     private IAppManager $appManager;
     private AIquilaCapability $capability;
 
     protected function setUp(): void {
         $this->config = $this->createStub(AppSettings::class);
-        $this->credentialService = $this->createStub(CredentialService::class);
+        $this->factory = $this->createStub(LLMProviderFactory::class);
+        $this->userSession = $this->createStub(IUserSession::class);
         $this->appManager = $this->createStub(IAppManager::class);
+        $this->appManager->method('getAppVersion')->willReturn('1.0.0');
 
         $this->buildCapability();
     }
@@ -39,28 +45,36 @@ class AIquilaCapabilityTest extends TestCase {
         );
 
         $this->capability = new AIquilaCapability(
-            $this->config,
-            $this->credentialService,
+            $this->factory,
+            $this->userSession,
             $this->appManager,
             $container,
             new SearchSettings($this->config),
         );
     }
 
-    public function testReturnsCorrectStructure(): void {
-        $this->appManager->method('getAppVersion')->willReturn('1.0.0');
-        $this->config->method('getAppValue')->willReturn('');
-        $this->credentialService->method('getApiKey')->willReturn('');
+    private function provider(string $id, string $model, bool $configured): LLMProviderInterface {
+        $provider = $this->createStub(LLMProviderInterface::class);
+        $provider->method('getId')->willReturn($id);
+        $provider->method('getModel')->willReturn($model);
+        $provider->method('isConfigured')->willReturn($configured);
+        return $provider;
+    }
 
+    private function signIn(string $uid): void {
+        $user = $this->createStub(IUser::class);
+        $user->method('getUID')->willReturn($uid);
+        $this->userSession->method('getUser')->willReturn($user);
+    }
+
+    public function testReturnsCorrectStructure(): void {
         $result = $this->capability->getCapabilities();
 
         $this->assertArrayHasKey('aiquila', $result);
-        $aiquila = $result['aiquila'];
-        $this->assertArrayHasKey('version', $aiquila);
-        $this->assertArrayHasKey('model', $aiquila);
-        $this->assertArrayHasKey('providers', $aiquila);
-        $this->assertArrayHasKey('api_configured', $aiquila);
-        $this->assertArrayHasKey('search_enabled', $aiquila);
+        $this->assertSame(
+            ['version', 'provider', 'model', 'user_provider', 'user_model', 'providers', 'api_configured', 'search_enabled'],
+            array_keys($result['aiquila'])
+        );
     }
 
     public function testVersionFromAppManager(): void {
@@ -70,66 +84,75 @@ class AIquilaCapabilityTest extends TestCase {
         $this->appManager->expects($this->once())->method('getAppVersion')
             ->with('aiquila')
             ->willReturn('2.5.0');
-        $this->config->method('getAppValue')->willReturn('');
-        $this->credentialService->method('getApiKey')->willReturn('');
 
         $result = $this->capability->getCapabilities();
 
         $this->assertEquals('2.5.0', $result['aiquila']['version']);
     }
 
-    public function testModelReflectsConfig(): void {
-        $this->appManager->method('getAppVersion')->willReturn('1.0.0');
-        $this->config->method('getAppValue')
-            ->willReturnMap([
-                ['aiquila', 'model', ClaudeModels::DEFAULT_MODEL, ClaudeModels::OPUS_4_7],
-                ['aiquila', SearchSettings::KEY, SearchSettings::DEFAULT, '1'],
-            ]);
-        $this->credentialService->method('getApiKey')->willReturn('');
+    public function testModelIsTheEffectiveDefaultProviders(): void {
+        // A non-Claude default: the Claude `model` key must not leak through.
+        $this->config->method('getAppValue')->willReturnCallback(
+            fn (string $app, string $key, string $default): string => $key === 'model' ? 'claude-sonnet-5' : $default
+        );
+        $this->factory->method('getProvider')->willReturnMap([
+            [null, $this->provider('mistral', 'mistral-large-latest', true)],
+        ]);
 
-        $result = $this->capability->getCapabilities();
+        $aiquila = $this->capability->getCapabilities()['aiquila'];
 
-        $this->assertEquals(ClaudeModels::OPUS_4_7, $result['aiquila']['model']);
+        $this->assertSame('mistral', $aiquila['provider']);
+        $this->assertSame('mistral-large-latest', $aiquila['model']);
+        $this->assertTrue($aiquila['api_configured']);
     }
 
-    public function testApiConfiguredTrueWhenKeyExists(): void {
-        $this->credentialService = $this->createMock(CredentialService::class);
-        $this->buildCapability();
+    public function testApiConfiguredFollowsTheDefaultProvider(): void {
+        $this->factory->method('getProvider')->willReturn($this->provider('hetzner', 'm', false));
 
-        $this->appManager->method('getAppVersion')->willReturn('1.0.0');
-        $this->config->method('getAppValue')->willReturn('');
-        $this->credentialService->expects($this->once())->method('getApiKey')
-            ->with(null)
-            ->willReturn('sk-ant-test-key');
-
-        $result = $this->capability->getCapabilities();
-
-        $this->assertTrue($result['aiquila']['api_configured']);
+        $this->assertFalse($this->capability->getCapabilities()['aiquila']['api_configured']);
     }
 
-    public function testApiConfiguredFalseWhenKeyEmpty(): void {
-        $this->credentialService = $this->createMock(CredentialService::class);
-        $this->buildCapability();
+    public function testUserFieldsReflectTheSignedInUsersOverride(): void {
+        $this->signIn('alice');
+        $this->factory->method('getProvider')->willReturnMap([
+            [null, $this->provider('anthropic', 'claude-opus-5', true)],
+            ['alice', $this->provider('deepseek', 'deepseek-chat', true)],
+        ]);
 
-        $this->appManager->method('getAppVersion')->willReturn('1.0.0');
-        $this->config->method('getAppValue')->willReturn('');
-        $this->credentialService->expects($this->once())->method('getApiKey')
-            ->with(null)
-            ->willReturn('');
+        $aiquila = $this->capability->getCapabilities()['aiquila'];
 
-        $result = $this->capability->getCapabilities();
+        $this->assertSame('anthropic', $aiquila['provider']);
+        $this->assertSame('claude-opus-5', $aiquila['model']);
+        $this->assertSame('deepseek', $aiquila['user_provider']);
+        $this->assertSame('deepseek-chat', $aiquila['user_model']);
+    }
 
-        $this->assertFalse($result['aiquila']['api_configured']);
+    public function testUserFieldsAreNullWithoutASignedInUser(): void {
+        $this->factory->method('getProvider')->willReturn($this->provider('anthropic', 'claude-opus-5', true));
+
+        $aiquila = $this->capability->getCapabilities()['aiquila'];
+
+        $this->assertNull($aiquila['user_provider']);
+        $this->assertNull($aiquila['user_model']);
+    }
+
+    public function testEveryProviderDeniedReportsNothingConfigured(): void {
+        $this->signIn('bob');
+        $this->factory->method('getProvider')->willThrowException(new NoPermittedProviderException('bob'));
+
+        $aiquila = $this->capability->getCapabilities()['aiquila'];
+
+        $this->assertNull($aiquila['provider']);
+        $this->assertNull($aiquila['model']);
+        $this->assertNull($aiquila['user_provider']);
+        $this->assertFalse($aiquila['api_configured']);
     }
 
     public function testSearchEnabledReflectsConfig(): void {
-        $this->appManager->method('getAppVersion')->willReturn('1.0.0');
         $this->config->method('getAppValue')
             ->willReturnMap([
-                ['aiquila', 'model', ClaudeModels::DEFAULT_MODEL, ClaudeModels::DEFAULT_MODEL],
                 ['aiquila', SearchSettings::KEY, SearchSettings::DEFAULT, '0'],
             ]);
-        $this->credentialService->method('getApiKey')->willReturn('');
 
         $result = $this->capability->getCapabilities();
 
@@ -137,13 +160,10 @@ class AIquilaCapabilityTest extends TestCase {
     }
 
     public function testSearchEnabledWhenStoredOn(): void {
-        $this->appManager->method('getAppVersion')->willReturn('1.0.0');
         $this->config->method('getAppValue')
             ->willReturnMap([
-                ['aiquila', 'model', ClaudeModels::DEFAULT_MODEL, ClaudeModels::DEFAULT_MODEL],
                 ['aiquila', SearchSettings::KEY, SearchSettings::DEFAULT, '1'],
             ]);
-        $this->credentialService->method('getApiKey')->willReturn('');
 
         $result = $this->capability->getCapabilities();
 
@@ -151,11 +171,9 @@ class AIquilaCapabilityTest extends TestCase {
     }
 
     public function testSearchEnabledDefaultsToTrueWhenUnset(): void {
-        $this->appManager->method('getAppVersion')->willReturn('1.0.0');
         // An unset app value hands back whatever default the reader passed.
         $this->config->method('getAppValue')
             ->willReturnCallback(fn (string $app, string $key, string $default): string => $default);
-        $this->credentialService->method('getApiKey')->willReturn('');
 
         $result = $this->capability->getCapabilities();
 
@@ -203,10 +221,6 @@ class AIquilaCapabilityTest extends TestCase {
 
     /** @return list<string> */
     private function providers(): array {
-        $this->appManager->method('getAppVersion')->willReturn('1.0.0');
-        $this->config->method('getAppValue')->willReturn('');
-        $this->credentialService->method('getApiKey')->willReturn('');
-
         return $this->capability->getCapabilities()['aiquila']['providers'];
     }
 }
