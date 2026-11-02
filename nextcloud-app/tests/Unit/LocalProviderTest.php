@@ -255,6 +255,9 @@ class LocalProviderTest extends TestCase {
         $this->assertSame(['list_files', ['path' => '/']], $executorArgs);
         $this->assertSame('Found 2 files.', $result['response']);
         $this->assertSame(7, $result['usage']['input_tokens']);
+        // Canonical block shape, whichever provider ran the loop.
+        $this->assertContains('tool_use', array_column($result['tool_trace'][0]['content'], 'type'));
+        $this->assertSame('tool_result', $result['tool_trace'][1]['content'][0]['type']);
     }
 
     public function testStreamingYieldsTextDeltasAndDone(): void {

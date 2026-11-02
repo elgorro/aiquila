@@ -290,6 +290,8 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
     }
 
     public function chatWithTools(array $messages, array $tools, callable $toolExecutor, ?string $system = null, ?string $userId = null, array $options = [], int $maxIterations = 10): array {
+        // Where this loop's own turns begin: they are returned as tool_trace.
+        $traceStart = count($messages);
         $options['tools'] = $tools;
         $total = $this->newUsage();
         $finalText = '';
@@ -310,7 +312,7 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
             $finalText = $text;
 
             if ($toolCalls === [] || ($choice['finish_reason'] ?? '') === 'stop') {
-                return ['response' => $text, 'usage' => $this->finalizeUsage($total), 'citations' => []];
+                return ['response' => $text, 'usage' => $this->finalizeUsage($total), 'citations' => [], 'tool_trace' => array_slice($messages, $traceStart)];
             }
 
             $messages[] = $this->assistantMessageFromToolCalls($text, $toolCalls);
@@ -318,7 +320,7 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
         }
 
         $this->logger->warning('AIquila ' . $this->getLabel() . ': chatWithTools reached max iterations', ['maxIterations' => $maxIterations]);
-        return ['response' => $finalText ?: 'I was unable to complete the request within the allowed number of tool-use iterations.', 'usage' => $this->finalizeUsage($total), 'citations' => []];
+        return ['response' => $finalText ?: 'I was unable to complete the request within the allowed number of tool-use iterations.', 'usage' => $this->finalizeUsage($total), 'citations' => [], 'tool_trace' => array_slice($messages, $traceStart)];
     }
 
     public function chatToolsTurn(array $messages, array $tools, ?string $system = null, ?string $userId = null, array $options = []): array {
@@ -362,6 +364,8 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
     // ── Streaming agentic loop ──────────────────────────────────────────────
 
     public function chatWithToolsStream(array $messages, array $tools, callable $toolExecutor, ?string $system = null, ?string $userId = null, array $options = [], int $maxIterations = 10): \Generator {
+        // Where this loop's own turns begin: they are returned as tool_trace.
+        $traceStart = count($messages);
         if (!$this->isConfigured($userId)) {
             yield ['type' => 'error', 'error' => $this->notConfiguredMessage(), 'usage' => null];
             return;
@@ -464,7 +468,7 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
             $toolCalls = $this->normalizeAccumulatedToolCalls($toolAcc);
 
             if ($toolCalls === [] || $finishReason === 'stop') {
-                yield ['type' => 'done', 'usage' => $this->finalizeUsage($total), 'citations' => []];
+                yield ['type' => 'done', 'usage' => $this->finalizeUsage($total), 'citations' => [], 'tool_trace' => array_slice($messages, $traceStart)];
                 return;
             }
 

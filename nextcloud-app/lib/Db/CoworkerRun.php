@@ -41,6 +41,8 @@ class CoworkerRun extends Entity implements \JsonSerializable {
     public const STATUS_PENDING = 'pending';
     public const STATUS_SUCCESS = 'success';
     public const STATUS_ERROR   = 'error';
+    /** Stopped by the user before it finished; see CoworkerService::stop(). */
+    public const STATUS_CANCELLED = 'cancelled';
 
     public const LOG_INFO = 'info';
     public const LOG_WARN = 'warn';

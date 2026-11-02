@@ -558,13 +558,27 @@ or build a **Custom coworker**. Each coworker has:
 | `vision:classify` | Labels each image and stores the labels as collaborative tags, so they can be searched and filtered in Files | `maxTags` (1–30, default 8), `recursive` |
 | `docs:summarize` | Writes `<name>.summary.md` beside each text document (`text/*` and JSON by default; PDFs are not read) | `recursive`, `force`, `outputFolder`, `mimeTypes`, `maxBytesPerFile` (default 1 MiB) |
 | `docs:translate` | Writes `<name>.<language>.md` beside each document | `targetLanguage`, plus the options of `docs:summarize` |
+| `agent:run` | Runs a prompt, optionally with MCP tools, and keeps the answer as the run summary or writes it to one file | `tools` (allowlist of MCP tool names), `taskBudget` (tokens, at least 20,000) |
+
+An `agent:run` coworker has a **prompt** instead of a source folder: its own text,
+or one of the owner's saved prompts. It runs as the owner, and may call only the MCP
+tools ticked in its allowlist. These are tools of the instance's MCP servers, the same
+ones the chat uses. The executor refuses any other tool, even if the model asks for
+it. With no tools ticked, the prompt runs without tools. Because nobody watches these
+runs, allow only what the job needs, and prefer read-only tools. The run log lists
+each tool call. With **Save the answer to** set, the answer replaces that file on
+every run.
 
 The document tasks only redo a file when it changed since its result was written,
 unless `force` is set, and never process their own output. A run handles up to 200
 documents; the rest wait for the next run. `vision:classify` needs a `vision` provider.
 
 Each coworker can be paused, run immediately with **Run now**, and keeps a run
-history with a summary of what it did. The **Coworkers** and **Coworker output**
+history with a summary of what it did. **Stop** in the run history cancels a run
+that is still going. A running run ends at its next file, and a run waiting for a
+batch has its batch cancelled. The run keeps what it already processed, and the
+schedule is unchanged: pause or disable the coworker to skip future runs. The
+**Coworkers** and **Coworker output**
 Dashboard widgets show the latest results, and the [MCP cowork tools](../mcp/tools/apps/cowork.md)
 manage coworkers from Claude.
 

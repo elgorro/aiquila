@@ -97,6 +97,13 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * the Claude API, Claude Platform on AWS, Vertex AI and Foundry.
      */
     public const FEATURE_TASK_BUDGET = 'task_budget';
+    /**
+     * Adding and removing tools mid-conversation (`tool_addition` /
+     * `tool_removal` system blocks, `defer_loading` tools; beta
+     * `mid-conversation-tool-changes-2026-07-01`): the Claude API, Amazon
+     * Bedrock and Vertex AI.
+     */
+    public const FEATURE_MID_CONVERSATION_TOOL_CHANGES = 'mid_conversation_tool_changes';
     /** Smallest `task_budget.total` the API accepts; smaller is a 400. */
     public const MIN_TASK_BUDGET = 20000;
 
@@ -160,6 +167,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             self::FEATURE_MID_CONVERSATION_SYSTEM => true,
             self::FEATURE_SERVER_FALLBACK => true,
             self::FEATURE_TASK_BUDGET => true,
+            self::FEATURE_MID_CONVERSATION_TOOL_CHANGES => true,
         ];
     }
 
@@ -178,6 +186,17 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     public function supportsMidConversationSystem(string $model): bool {
         return $this->hasFeature(self::FEATURE_MID_CONVERSATION_SYSTEM)
             && ClaudeModels::supportsMidConversationSystem($model);
+    }
+
+    /**
+     * Whether a conversation answered by this provider can change its tools
+     * between turns without rebuilding the prompt cache (see ToolChanges).
+     * Same models as mid-conversation system messages, which carry the change.
+     */
+    public function supportsMidConversationToolChanges(?string $userId, array $options = []): bool {
+        $model = $this->capabilityModel($this->resolveRequestModel($userId, $options));
+        return $this->hasFeature(self::FEATURE_MID_CONVERSATION_TOOL_CHANGES)
+            && $this->supportsMidConversationSystem($model);
     }
 
     /** Whether the Message Batches API is available, i.e. the batch paths may be used. */
@@ -517,8 +536,18 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $tools = $options['tools'];
             $cacheTools = $options['cache_tools'] ?? true;
             if ($cacheTools && is_array($tools) && $tools !== []) {
-                $lastIdx = array_key_last($tools);
-                $tools[$lastIdx]['cache_control'] = ['type' => 'ephemeral'];
+                // A deferred definition cannot carry cache_control, and is not
+                // part of the prefix until a tool_addition surfaces it: mark the
+                // last tool that is loaded from the start.
+                $lastIdx = null;
+                foreach ($tools as $idx => $tool) {
+                    if (empty($tool['defer_loading'])) {
+                        $lastIdx = $idx;
+                    }
+                }
+                if ($lastIdx !== null) {
+                    $tools[$lastIdx]['cache_control'] = ['type' => 'ephemeral'];
+                }
             }
             $params['tools'] = $tools;
         }
@@ -983,6 +1012,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         if (isset($params['fallbacks'])) {
             $betas[] = AnthropicBeta::SERVER_SIDE_FALLBACK_2026_07_01->value;
             $options['extraBodyParams']['fallbacks'] = $params['fallbacks'];
+        }
+
+        if (ToolChanges::inRequest($params)) {
+            $betas[] = AnthropicBeta::MID_CONVERSATION_TOOL_CHANGES_2026_07_01->value;
         }
 
         // The GA OutputConfig has no task_budget, and extra body params
@@ -1657,7 +1690,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string|null $userId User ID for API key resolution
      * @param array $options Optional: stop_sequences, cache_system, etc.
      * @param int $maxIterations Safety cap on tool-use loop iterations
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
+     * @return array{response: string, usage?: array, citations?: array, tool_trace?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function chatWithTools(
         array    $messages,
@@ -1668,6 +1701,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         array    $options = [],
         int      $maxIterations = 10
     ): array {
+        // Where this loop's own turns begin: they are returned as tool_trace.
+        $traceStart = count($messages);
         try {
             $client = $this->getClient($userId);
         } catch (\Throwable $e) {
@@ -1729,6 +1764,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                             'cache_read_tokens' => $totalCacheReadTokens ?: null,
                         ],
                         'citations' => $allCitations,
+                        'tool_trace' => array_slice($messages, $traceStart),
                     ];
                 }
             }
@@ -1796,6 +1832,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 'cache_read_tokens' => $totalCacheReadTokens ?: null,
             ],
             'citations' => $allCitations,
+            'tool_trace' => array_slice($messages, $traceStart),
         ];
     }
 
@@ -2911,6 +2948,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         array    $options = [],
         int      $maxIterations = 10
     ): \Generator {
+        // Where this loop's own turns begin: they are returned as tool_trace.
+        $traceStart = count($messages);
         try {
             $client = $this->getClient($userId);
         } catch (\Throwable $e) {
@@ -3108,6 +3147,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                         'cache_read_tokens' => $totalCacheRead ?: null,
                     ],
                     'citations' => $allCitations,
+                    'tool_trace' => array_slice($messages, $traceStart),
                 ];
                 return;
             }

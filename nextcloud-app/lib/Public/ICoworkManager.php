@@ -125,6 +125,18 @@ interface ICoworkManager {
     public function getRuns(string $appId, int $id, int $limit = 20): array;
 
     /**
+     * Stop the in-flight run (`running` or `pending`) of a coworker owned by
+     * the calling app. Returns the run, closed as `cancelled` with what it
+     * processed so far; a running one stops at its next item. The schedule
+     * is unchanged.
+     *
+     * @return array<string, mixed>
+     * @throws \OCP\AppFramework\Db\DoesNotExistException if not owned by the app, or
+     *   \OCA\AIquila\Service\Exception\NoActiveRunException (a subclass) if nothing is in flight.
+     */
+    public function stop(string $appId, int $id): array;
+
+    /**
      * One run of a coworker owned by the calling app: the getRuns() shape
      * plus `log`, a list of `{ts, level, message, item}` entries (oldest
      * first, at most the newest 500).

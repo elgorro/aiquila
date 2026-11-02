@@ -127,9 +127,13 @@ interface LLMProviderInterface {
     public function chat(array $messages, ?string $system = null, ?string $userId = null, array $options = []): array;
 
     /**
+     * `tool_trace` is the messages the loop appended before its answer
+     * (assistant tool_use turns and user tool_result turns, Anthropic block
+     * shape), so the caller can keep them for later turns (see ToolTrace).
+     *
      * @param array $tools Anthropic-format tool definitions ({name, description, input_schema})
      * @param callable $toolExecutor fn(string $name, array $input): array
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
+     * @return array{response: string, usage?: array, citations?: array, tool_trace?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function chatWithTools(array $messages, array $tools, callable $toolExecutor, ?string $system = null, ?string $userId = null, array $options = [], int $maxIterations = 10): array;
 
@@ -155,8 +159,10 @@ interface LLMProviderInterface {
      *   ['type' => 'text_delta',  'text' => string]
      *   ['type' => 'tool_use',    'id' => string, 'name' => string, 'input' => array]
      *   ['type' => 'tool_result', 'tool_use_id' => string, 'output' => string, 'is_error' => bool]
-     *   ['type' => 'done',        'usage' => array, 'citations' => array]
+     *   ['type' => 'done',        'usage' => array, 'citations' => array, 'tool_trace' => list<array>]
      *   ['type' => 'error',       'error' => string, 'usage' => ?array]
+     *
+     * `tool_trace` on `done` is as in chatWithTools().
      *
      * @param callable $toolExecutor fn(string $name, array $input): array
      */
