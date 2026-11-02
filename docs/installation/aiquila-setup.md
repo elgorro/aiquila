@@ -564,7 +564,11 @@ unless `force` is set, and never process their own output. A run handles up to 2
 documents; the rest wait for the next run. `vision:classify` needs a `vision` provider.
 
 Each coworker can be paused, run immediately with **Run now**, and keeps a run
-history with a summary of what it did. The **Coworkers** and **Coworker output**
+history with a summary of what it did. **Stop** in the run history cancels a run
+that is still going. A running run ends at its next file, and a run waiting for a
+batch has its batch cancelled. The run keeps what it already processed, and the
+schedule is unchanged: pause or disable the coworker to skip future runs. The
+**Coworkers** and **Coworker output**
 Dashboard widgets show the latest results, and the [MCP cowork tools](../mcp/tools/apps/cowork.md)
 manage coworkers from Claude.
 
