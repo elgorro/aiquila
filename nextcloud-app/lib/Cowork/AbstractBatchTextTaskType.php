@@ -160,7 +160,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
         }
 
         if (!$provider instanceof ClaudeSDKService || !$provider->supportsBatch()) {
-            return $this->runSynchronously($coworker, $provider, $files, $options, $progress);
+            return $this->runSynchronously($coworker, $run, $provider, $files, $options, $progress);
         }
 
         // One batch for the whole folder. custom_id is the file id, which is
@@ -172,6 +172,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
             $content = $this->readContent($file, $options);
             if ($content === null) {
                 $skipped[] = $file->getName();
+                $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: unreadable or too large', UserPath::of($file));
                 continue;
             }
             $customId = 'f' . $file->getId();
@@ -192,6 +193,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
         }
 
         $batchId = $provider->submitBatch($requests, $userId);
+        $run->appendLog(CoworkerRun::LOG_INFO, sprintf('Submitted %d document(s) to batch %s', count($requests), $batchId));
 
         return [
             'itemsTotal' => count($requests),
@@ -247,7 +249,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
             ];
         }
 
-        return $this->collectResults($coworker, $provider, $batchId, $fileIds, $options, $state, $progress);
+        return $this->collectResults($coworker, $run, $provider, $batchId, $fileIds, $options, $state, $progress);
     }
 
     /**
@@ -261,6 +263,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
      */
     private function collectResults(
         Coworker $coworker,
+        CoworkerRun $run,
         ClaudeSDKService $provider,
         string $batchId,
         array $fileIds,
@@ -280,32 +283,39 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
 
         foreach ($fileIds as $customId => $fileId) {
             $name = 'file ' . $fileId;
+            $item = null;
             try {
                 $file = $this->fileById($userId, (int)$fileId);
                 $name = $file?->getName() ?? $name;
+                $item = $file !== null ? UserPath::of($file) : null;
 
                 if (!isset($results[$customId])) {
                     $failures['missing'][] = $name;
+                    $run->appendLog(CoworkerRun::LOG_ERROR, 'No result came back from the batch', $item ?? $name);
                     continue;
                 }
                 $result = $results[$customId];
                 if (isset($result['error'])) {
                     $bucket = (string)($result['error_type'] ?? 'errored');
                     $failures[$bucket][] = $name . ' — ' . $result['error'];
+                    $run->appendLog(self::logLevelFor($bucket), ucfirst($bucket) . ': ' . $result['error'], $item ?? $name);
                     continue;
                 }
                 // Billed whether or not the output can still be written.
                 $this->usageStats->record($userId, $provider, $result, UsageStatService::TYPE_COWORKER);
                 if ($file === null) {
                     $failures['unsaved'][] = $name . ' — source no longer exists';
+                    $run->appendLog(CoworkerRun::LOG_ERROR, 'Source no longer exists', $name);
                     continue;
                 }
 
                 $this->writeOutput($coworker, $file, (string)($result['response'] ?? ''), $options);
                 $this->markDone($file);
                 $written++;
+                $run->appendLog(CoworkerRun::LOG_INFO, $this->summaryVerb(), $item);
             } catch (\Throwable $e) {
                 $failures['unsaved'][] = $name . ' — ' . $e->getMessage();
+                $run->appendLog(CoworkerRun::LOG_ERROR, 'Not saved: ' . $e->getMessage(), $item ?? $name);
                 $this->logger->warning('AIquila Cowork docs: could not save a result', [
                     'coworker' => $coworker->getId(),
                     'custom_id' => $customId,
@@ -335,6 +345,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
      */
     private function runSynchronously(
         Coworker $coworker,
+        CoworkerRun $run,
         LLMProviderInterface $provider,
         array $files,
         array $options,
@@ -354,21 +365,27 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
                 $content = $this->readContent($file, $options);
                 if ($content === null) {
                     $skipped[] = $file->getName();
+                    $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: unreadable or too large', UserPath::of($file));
                     continue;
                 }
 
                 $result = $provider->ask($this->buildPrompt($content, $options), '', $userId, $this->requestOptions($coworker, $provider, $options));
                 $this->usageStats->record($userId, $provider, $result, UsageStatService::TYPE_COWORKER);
                 if (isset($result['error'])) {
-                    $failures['errored'][] = $file->getName() . ' — ' . $result['error'];
+                    // A refusal is reported as such, as on the batch path.
+                    $bucket = ($result['error_type'] ?? null) === 'refused' ? 'refused' : 'errored';
+                    $failures[$bucket][] = $file->getName() . ' — ' . $result['error'];
+                    $run->appendLog(self::logLevelFor($bucket), ucfirst($bucket) . ': ' . $result['error'], UserPath::of($file));
                     continue;
                 }
 
                 $this->writeOutput($coworker, $file, (string)($result['response'] ?? ''), $options);
                 $this->markDone($file);
                 $written++;
+                $run->appendLog(CoworkerRun::LOG_INFO, $this->summaryVerb(), UserPath::of($file));
             } catch (\Throwable $e) {
                 $failures['unsaved'][] = $file->getName() . ' — ' . $e->getMessage();
+                $run->appendLog(CoworkerRun::LOG_ERROR, 'Not saved: ' . $e->getMessage(), UserPath::of($file));
                 $this->logger->warning('AIquila Cowork docs: item failed', [
                     'coworker' => $coworker->getId(),
                     'file' => $file->getPath(),
@@ -386,6 +403,16 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
             'itemsProcessed' => $written,
             'summary' => $this->buildSummary($written, $total, $label . ' (no batch API — full price)', $failures, $skipped),
         ];
+    }
+
+    /**
+     * Log level for a failure bucket: a refusal or an expired/cancelled batch
+     * item is an outcome to note, everything else went wrong.
+     *
+     * @return 'warn'|'error'
+     */
+    private static function logLevelFor(string $bucket): string {
+        return in_array($bucket, ['refused', 'expired', 'canceled'], true) ? CoworkerRun::LOG_WARN : CoworkerRun::LOG_ERROR;
     }
 
     /**

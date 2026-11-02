@@ -415,6 +415,51 @@ class BatchTextTaskTypeTest extends TestCase {
         $this->assertSame(UsageStatService::TYPE_COWORKER, $this->usageRecorded[0][3]);
     }
 
+    /** Each result leaves one log line on the run, at a level that matches its outcome. */
+    public function testResumeLogsEachItem(): void {
+        $files = [
+            11 => $this->file(11, 'ok.txt', 'text/plain', 'body'),
+            12 => $this->file(12, 'refused.txt', 'text/plain', 'body'),
+            13 => $this->file(13, 'errored.txt', 'text/plain', 'body'),
+        ];
+        $this->userFolder->method('getById')->willReturnCallback(
+            fn (int $id): array => [$files[$id]]
+        );
+        $this->provider->method('getBatchStatus')->willReturn(['status' => 'ended', 'ended' => true, 'counts' => []]);
+        $this->provider->method('fetchBatchResults')->willReturn([
+            'f11' => ['response' => 'a summary', 'usage' => [], 'citations' => []],
+            'f12' => ['error' => 'Declined by policy', 'error_type' => 'refused'],
+            'f13' => ['error' => 'too long', 'error_type' => 'errored'],
+        ]);
+
+        $run = $this->newRun();
+        $this->task->resume($this->coworker(), $run, $this->state(['f11' => 11, 'f12' => 12, 'f13' => 13]), $this->progress());
+
+        $log = $run->getDecodedLog();
+        $this->assertSame(['info', 'warn', 'error'], array_column($log, 'level'));
+        $this->assertSame(['/Documents/ok.txt', '/Documents/refused.txt', '/Documents/errored.txt'], array_column($log, 'item'));
+        $this->assertSame('Refused: Declined by policy', $log[1]['message']);
+    }
+
+    /**
+     * Without a batch API the run is synchronous; a refusal from ask() is
+     * still counted as a refusal, not as a generic error.
+     */
+    public function testSynchronousRunReportsRefusalsAsSuch(): void {
+        $this->provider = $this->createStub(ClaudeSDKService::class);
+        $this->provider->method('supportsBatch')->willReturn(false);
+        $this->provider->method('ask')->willReturn([
+            'error' => 'Declined (cyber).', 'error_type' => 'refused', 'refusal_category' => 'cyber', 'usage' => [],
+        ]);
+        $this->inputFolder([$this->file(21, 'exploit.txt', 'text/plain', 'body')]);
+
+        $run = $this->newRun();
+        $result = $this->task->run($this->coworker(), $run, $this->progress());
+
+        $this->assertStringContainsString('1 refused', $result['summary']);
+        $this->assertSame([['ts' => $run->getDecodedLog()[0]['ts'], 'level' => 'warn', 'message' => 'Refused: Declined (cyber).', 'item' => '/Documents/exploit.txt']], $run->getDecodedLog());
+    }
+
     public function testResumeWithoutABatchIdFails(): void {
         $this->expectException(\RuntimeException::class);
         $this->task->resume($this->coworker(), $this->newRun(), [], $this->progress());

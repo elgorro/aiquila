@@ -1457,7 +1457,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string $context Optional context
      * @param string|null $userId User ID for user-specific API key
      * @param array $options Optional: system, stop_sequences, cache_system
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function ask(
         string  $prompt,
@@ -1515,7 +1515,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string|null $system Optional system prompt
      * @param string|null $userId User ID for API key resolution
      * @param array $options Optional: stop_sequences, cache_system
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function chat(
         array   $messages,
@@ -1578,7 +1578,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string|null $userId User ID for API key resolution
      * @param array $options Optional: stop_sequences, cache_system, etc.
      * @param int $maxIterations Safety cap on tool-use loop iterations
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function chatWithTools(
         array    $messages,
@@ -1801,7 +1801,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      *
      * @param string $content Content to summarize
      * @param string|null $userId User ID for user-specific API key
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function summarize(string $content, ?string $userId = null): array {
         return $this->ask("Summarize the following content concisely:\n\n$content", '', $userId);
@@ -2243,7 +2243,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param bool $cacheDoc Add cache_control to the document block (default true — documents are large and benefit from cache reuse)
      * @param bool $citations Enable citations on the document block (default true). Cited text spans are returned alongside the response.
      * @param string|null $fileId Optional Anthropic Files API file_id. When provided, the document source is `{type:'file', file_id}` instead of inline base64/text.
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function askWithDocument(
         string  $prompt,
@@ -2596,7 +2596,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string|null $userId User ID for API key
      * @param string|null $fileId Optional Anthropic Files API file_id. When provided, the image source is `{type:'file', file_id}` instead of inline base64.
      * @param array $options Request options, as for buildRequestParams()
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null, array $options = []): array {
         try {
@@ -2651,7 +2651,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string|null $userId User ID for API key
      * @param array<int, string|null>|null $fileIds Optional per-image Anthropic Files API file_ids, indexed parallel to $images. A non-null entry triggers a `{type:'file', file_id}` source for that image; null entries fall back to inline base64.
      * @param array $options Request options, as for buildRequestParams()
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null, array $options = []): array {
         if (empty($images)) {
