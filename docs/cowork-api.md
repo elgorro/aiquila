@@ -104,6 +104,20 @@ interface CoworkerTaskType {
 }
 ```
 
+To leave a per-item trail, call `$run->appendLog()` for each item. The progress
+callback and the end of the run save it, and `getRun()` and
+`GET /api/coworkers/{id}/runs/{runId}` serve it back:
+
+```php
+$run->appendLog(CoworkerRun::LOG_INFO, 'Tagged: beach, sunset', '/Photos/a.jpg');
+$run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: too large', '/Photos/b.tif');
+```
+
+Levels are `LOG_INFO`, `LOG_WARN` and `LOG_ERROR`. The item is optional, and is the
+path the user sees in Files (`UserPath::of($node)` builds it). A run keeps its newest
+500 entries, with messages cut at 500 characters. A failed run gets an `error` entry
+with the exception message on its own.
+
 ### `register(string $appId, string $userId, array $config): array`
 
 Create a coworker owned by the calling app. `$userId` is the user the job runs as
@@ -141,7 +155,13 @@ List coworkers owned by the app, optionally filtered to a single user.
 
 ### `getRuns(string $appId, int $id, int $limit = 20): array`
 
-Recent run history for an owned coworker, newest first.
+Recent run history for an owned coworker, newest first. Each entry has no log.
+
+### `getRun(string $appId, int $id, int $runId): array`
+
+One run of an owned coworker: the `getRuns()` shape plus `log`, a list of
+`{ts, level, message, item}` entries, oldest first. Throws `DoesNotExistException`
+when the run belongs to another coworker.
 
 ### `verify(string $appId, int $id): array`
 
