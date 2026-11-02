@@ -99,7 +99,7 @@ interface LLMProviderInterface {
      */
     public function probe(?string $userId = null): array;
 
-    /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
+    /** @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array} */
     public function ask(string $prompt, string $context = '', ?string $userId = null, array $options = []): array;
 
     /**
@@ -110,26 +110,30 @@ interface LLMProviderInterface {
      */
     public const TASK_OPTIONS = ['context' => 'task'];
 
-    /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
+    /** @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array} */
     public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null, array $options = []): array;
 
     /**
      * @param array<array{base64: string, mimeType: string, ...}> $images
      * @param array<int, string|null>|null $fileIds
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null, array $options = []): array;
 
-    /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
+    /** @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array} */
     public function askWithDocument(string $prompt, string $documentData, string $mediaType, string $title = '', ?string $userId = null, bool $cacheDoc = true, bool $citations = true, ?string $fileId = null): array;
 
-    /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
+    /** @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array} */
     public function chat(array $messages, ?string $system = null, ?string $userId = null, array $options = []): array;
 
     /**
+     * `tool_trace` is the messages the loop appended before its answer
+     * (assistant tool_use turns and user tool_result turns, Anthropic block
+     * shape), so the caller can keep them for later turns (see ToolTrace).
+     *
      * @param array $tools Anthropic-format tool definitions ({name, description, input_schema})
      * @param callable $toolExecutor fn(string $name, array $input): array
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array, tool_trace?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function chatWithTools(array $messages, array $tools, callable $toolExecutor, ?string $system = null, ?string $userId = null, array $options = [], int $maxIterations = 10): array;
 
@@ -155,8 +159,10 @@ interface LLMProviderInterface {
      *   ['type' => 'text_delta',  'text' => string]
      *   ['type' => 'tool_use',    'id' => string, 'name' => string, 'input' => array]
      *   ['type' => 'tool_result', 'tool_use_id' => string, 'output' => string, 'is_error' => bool]
-     *   ['type' => 'done',        'usage' => array, 'citations' => array]
+     *   ['type' => 'done',        'usage' => array, 'citations' => array, 'tool_trace' => list<array>]
      *   ['type' => 'error',       'error' => string, 'usage' => ?array]
+     *
+     * `tool_trace` on `done` is as in chatWithTools().
      *
      * @param callable $toolExecutor fn(string $name, array $input): array
      */
@@ -177,7 +183,7 @@ interface LLMProviderInterface {
      */
     public function chatWithNativeMcpCollect(array $messages, array $mcpServers, ?string $system = null, ?string $userId = null, array $options = []): array;
 
-    /** @return array{response: string, usage?: array, citations?: array}|array{error: string} */
+    /** @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array} */
     public function summarize(string $content, ?string $userId = null): array;
 
     // ── Non-text modalities ─────────────────────────────────────────────────

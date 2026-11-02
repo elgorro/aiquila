@@ -30,7 +30,7 @@ provider API  ──SSE──▶  LLMProvider::chatWithToolsStream()   (PHP gene
 | `text_delta` | a chunk of assistant text |
 | `thinking_start` / `thinking_delta` / `thinking_stop` | a thinking block opened, a chunk of its readable summary, and its end with `duration_ms` |
 | `tool_use` / `tool_result` | a tool invocation and its output |
-| `done` | terminal: usage totals and citations |
+| `done` | terminal: usage totals and citations. The loop's tool calls are stored with the answer (see [Tool calls in the history](prompt-caching.md#tool-calls-in-the-history)) and not sent |
 | `error` | terminal: the turn failed, partially or entirely |
 | `persisted` | always last: the stored assistant message and conversation |
 
@@ -43,7 +43,10 @@ thinking was dropped.
 
 `error` is always followed by `persisted`, so a failed turn still leaves the
 user whatever text arrived before it went wrong, suffixed with
-`_(stream interrupted: …)_`.
+`_(stream interrupted: …)_`. A refusal is the exception. Its `error` event
+carries `error_type: refused` and `refusal_category`, and the partial text and
+thinking are discarded rather than kept, because output cut off by the safety
+classifiers is not half an answer (see [Refusals and fallback](refusals.md)).
 
 The frontend falls back to the non-streaming
 `POST /api/conversations/{id}/messages` if the stream cannot be opened at all,

@@ -5,6 +5,8 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Service;
 
+use OCA\AIquila\Service\Exception\NoActiveRunException;
+use OCA\AIquila\Service\Exception\RunCancelledException;
 use OCA\AIquila\Service\Exception\ValidationException;
 use OCA\AIquila\Cowork\CoworkerTaskRegistry;
 use OCA\AIquila\Cowork\ResumableCoworkerTaskType;
@@ -13,6 +15,7 @@ use OCA\AIquila\Db\Coworker;
 use OCA\AIquila\Db\CoworkerMapper;
 use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Db\CoworkerRunMapper;
+use OCA\AIquila\Db\PromptMapper;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -32,6 +35,7 @@ class CoworkerService {
         private readonly LLMProviderFactory $providerFactory,
         private readonly ITimeFactory $timeFactory,
         private readonly LoggerInterface $logger,
+        private readonly ?PromptMapper $prompts = null,
     ) {
     }
 
@@ -83,6 +87,21 @@ class CoworkerService {
                 'output_path' => '/Documents/Summaries',
                 'options' => ['style' => 'brief', 'recursive' => true, 'effort' => 'medium'],
             ]),
+            [
+                'id' => 'daily-mail-digest-claude',
+                'title' => 'Daily mail digest — Claude with tools',
+                'description' => 'Every weekday morning, summarise unread mail into a note. Pick the MCP tools it may use.',
+                'task_type' => 'agent:run',
+                'cron_schedule' => '0 7 * * 1-5',
+                'input_type' => 'none',
+                'output_type' => 'file',
+                'output_path' => '/Notes/daily.md',
+                'provider' => 'anthropic',
+                'custom_prompt' => 'Summarise my unread mail from the last day as a short Markdown list: sender, subject and one line on what it needs from me. Put anything urgent first.',
+                // An empty allowlist runs the prompt without tools; the owner
+                // names the mail tools of their own MCP servers.
+                'options' => ['tools' => [], 'effort' => 'medium'],
+            ],
             array_merge($docs, [
                 'id' => 'translate-documents-claude',
                 'title' => 'Translate documents — Claude',
@@ -167,6 +186,96 @@ class CoworkerService {
     }
 
     /**
+     * One run of a coworker, log included.
+     *
+     * @throws DoesNotExistException when the coworker is not the user's, or the run is not this coworker's
+     */
+    public function getRun(int $id, int $runId, string $userId): CoworkerRun {
+        $this->mapper->findByIdAndUser($id, $userId); // authorize
+        $run = $this->runMapper->findByIdAndUser($runId, $userId);
+        if ($run->getCoworkerId() !== $id) {
+            throw new DoesNotExistException('Run ' . $runId . ' does not belong to coworker ' . $id);
+        }
+        return $run;
+    }
+
+    /**
+     * Stop the user's coworker's run in flight. See stopEntity().
+     *
+     * @throws NoActiveRunException when the coworker has nothing running or pending
+     * @throws DoesNotExistException when the coworker is not the user's
+     */
+    public function stop(int $id, string $userId): CoworkerRun {
+        return $this->stopEntity($this->mapper->findByIdAndUser($id, $userId));
+    }
+
+    /**
+     * Cancel the coworker's run in flight and return it, closed as
+     * `cancelled` with what it had processed so far. The schedule is left
+     * alone: pause or disable stop future runs, this stops the current one.
+     *
+     * - A `running` run is marked here; the worker executing it reads the
+     *   status in its progress callback and stops at the next item boundary
+     *   (see progressCallback()). A worker that died left the row `running`;
+     *   marking it is all the closing it gets.
+     * - A `pending` run's batch is cancelled with the provider, best effort.
+     *   The poll job only resumes `pending` runs, so whatever the batch still
+     *   returns is ignored. No worker will close this run, so the coworker's
+     *   schedule moves on here; otherwise the overdue next run would start a
+     *   fresh one on the next tick.
+     *
+     * @throws NoActiveRunException
+     */
+    public function stopEntity(Coworker $coworker): CoworkerRun {
+        $run = $this->runMapper->findActiveForCoworker($coworker->getId());
+        if ($run === null) {
+            throw new NoActiveRunException('Coworker ' . $coworker->getId() . ' has no active run');
+        }
+        $wasPending = $run->getStatus() === CoworkerRun::STATUS_PENDING;
+        $batchId = $run->getPendingBatchId();
+        $now = $this->timeFactory->getTime();
+
+        $run->setStatus(CoworkerRun::STATUS_CANCELLED);
+        $run->setFinishedAt($now);
+        $run->setState(null);
+        $run->appendLog(CoworkerRun::LOG_WARN, sprintf('Cancelled after %d/%d item(s)', $run->getItemsProcessed(), $run->getItemsTotal()));
+        if ($wasPending && $batchId !== null) {
+            [$level, $message] = $this->cancelBatch($coworker, $batchId);
+            $run->appendLog($level, $message);
+        }
+        $this->runMapper->update($run);
+
+        $coworker->setLastStatus(CoworkerRun::STATUS_CANCELLED);
+        $coworker->setLastError(null);
+        if ($wasPending) {
+            $coworker->setLastRunAt($now);
+            $this->refreshNextRun($coworker, $now);
+        }
+        $this->mapper->update($coworker);
+
+        $this->logger->info('AIquila Cowork: run cancelled', ['coworker' => $coworker->getId(), 'run' => $run->getId()]);
+        return $run;
+    }
+
+    /**
+     * Ask the provider to cancel a batch. Requests it already finished are
+     * billed either way.
+     *
+     * @return array{0: 'info'|'warn', 1: string} a log level and message for the run
+     */
+    private function cancelBatch(Coworker $coworker, string $batchId): array {
+        try {
+            $provider = $this->providerFactory->getProviderForUser($coworker->getUserId(), $coworker->getProvider());
+            if ($provider instanceof ClaudeSDKService && $provider->cancelBatch($batchId, $coworker->getUserId())) {
+                return [CoworkerRun::LOG_INFO, 'Batch ' . $batchId . ' cancelled'];
+            }
+        } catch (\Throwable $e) {
+            $this->logger->warning('AIquila Cowork: could not cancel batch', ['batch' => $batchId, 'error' => $e->getMessage()]);
+        }
+        return [CoworkerRun::LOG_WARN, 'Batch ' . $batchId . ' could not be cancelled; its results will be ignored'];
+    }
+
+    /**
      * Run a coworker now (manual trigger). Returns the completed run row.
      *
      * @throws DoesNotExistException
@@ -229,10 +338,17 @@ class CoworkerService {
         $run->setStatus(CoworkerRun::STATUS_RUNNING);
         $run->setStartedAt($now);
         $run = $this->runMapper->insert($run);
+        // QBMapper never clears the updated-field marks, and the insert marked
+        // every field. Left as is, each progress update would write the whole
+        // row again, `status: running` included, over a stop() from another
+        // request. Cleared, the worker writes only what it changes.
+        $run->resetUpdatedFields();
 
         try {
             $taskType = $this->registry->get($coworker->getTaskType());
             $result = $taskType->run($coworker, $run, $this->progressCallback($run));
+        } catch (RunCancelledException) {
+            return $this->finishCancelled($coworker, $run);
         } catch (\Throwable $e) {
             return $this->finishRun($coworker, $run, null, $e);
         }
@@ -274,6 +390,8 @@ class CoworkerService {
                 $run->getDecodedState(),
                 $this->progressCallback($run)
             );
+        } catch (RunCancelledException) {
+            return $this->finishCancelled($coworker, $run);
         } catch (\Throwable $e) {
             return $this->finishRun($coworker, $run, null, $e);
         }
@@ -281,13 +399,45 @@ class CoworkerService {
         return $this->finishRun($coworker, $run, $result, null);
     }
 
-    /** @return callable(int, int): void */
+    /**
+     * Persist progress, and end the run if it was stopped meanwhile.
+     *
+     * The status is read fresh: stop() runs in another request and writes the
+     * row, not this in-memory entity. update() writes only the fields this
+     * process changed, so progress never overwrites a `cancelled` status.
+     *
+     * @return callable(int, int): void
+     * @throws RunCancelledException from the callback, once the run is cancelled
+     */
     private function progressCallback(CoworkerRun $run): callable {
         return function (int $processed, int $total) use ($run): void {
             $run->setItemsProcessed($processed);
             $run->setItemsTotal($total);
             $this->runMapper->update($run);
+            if ($this->runMapper->findStatus($run->getId()) === CoworkerRun::STATUS_CANCELLED) {
+                throw new RunCancelledException('Run ' . $run->getId() . ' was cancelled');
+            }
         };
+    }
+
+    /**
+     * Close a run whose task type stopped because it was cancelled. Keeps
+     * what it processed; the schedule moves on as after any finished run.
+     */
+    private function finishCancelled(Coworker $coworker, CoworkerRun $run): CoworkerRun {
+        $finishedAt = $this->timeFactory->getTime();
+        $run->setStatus(CoworkerRun::STATUS_CANCELLED);
+        $run->setState(null);
+        $run->setFinishedAt($finishedAt);
+        $run->appendLog(CoworkerRun::LOG_WARN, sprintf('Cancelled after %d/%d item(s)', $run->getItemsProcessed(), $run->getItemsTotal()));
+        $this->runMapper->update($run);
+
+        $coworker->setLastStatus(CoworkerRun::STATUS_CANCELLED);
+        $coworker->setLastError(null);
+        $coworker->setLastRunAt($finishedAt);
+        $this->refreshNextRun($coworker, $finishedAt);
+        $this->mapper->update($coworker);
+        return $run;
     }
 
     /**
@@ -309,6 +459,7 @@ class CoworkerService {
             $run->setStatus(CoworkerRun::STATUS_ERROR);
             $run->setError($error->getMessage());
             $run->setState(null);
+            $run->appendLog(CoworkerRun::LOG_ERROR, 'Run failed: ' . $error->getMessage());
             $coworker->setLastStatus(CoworkerRun::STATUS_ERROR);
             $coworker->setLastError($error->getMessage());
             $this->logger->error('AIquila Cowork: run failed', [
@@ -323,6 +474,12 @@ class CoworkerService {
             $run->setDecodedState($result['state'] ?? []);
             $this->runMapper->update($run);
             return $run;
+        } elseif ($this->runMapper->findStatus($run->getId()) === CoworkerRun::STATUS_CANCELLED) {
+            // Stopped after the last progress check: the stop stands.
+            $run->setItemsTotal((int)($result['itemsTotal'] ?? 0));
+            $run->setItemsProcessed((int)($result['itemsProcessed'] ?? 0));
+            $run->setSummary((string)($result['summary'] ?? ''));
+            return $this->finishCancelled($coworker, $run);
         } else {
             $run->setItemsTotal((int)($result['itemsTotal'] ?? 0));
             $run->setItemsProcessed((int)($result['itemsProcessed'] ?? 0));
@@ -398,6 +555,28 @@ class CoworkerService {
                 throw new ValidationException("You are not permitted to use this provider: $provider");
             }
             $coworker->setProvider($provider !== '' ? $provider : null);
+        }
+        if (array_key_exists('custom_prompt', $data)) {
+            $prompt = $data['custom_prompt'] !== null ? trim((string)$data['custom_prompt']) : '';
+            if (($tooLong = InstructionsService::tooLong($prompt, field: 'Prompt')) !== null) {
+                throw new ValidationException($tooLong);
+            }
+            $coworker->setCustomPrompt($prompt !== '' ? $prompt : null);
+        }
+        if (array_key_exists('prompt_id', $data)) {
+            $promptId = $data['prompt_id'];
+            if ($promptId === null || $promptId === '' || $promptId === 0) {
+                $coworker->setPromptId(null);
+            } else {
+                // Only one of the owner's own saved prompts: a scheduled run
+                // must not read another user's prompt.
+                try {
+                    $this->prompts?->findByIdAndUser((int)$promptId, $coworker->getUserId());
+                } catch (DoesNotExistException) {
+                    throw new ValidationException('Prompt not found: ' . (int)$promptId);
+                }
+                $coworker->setPromptId((int)$promptId);
+            }
         }
         if (array_key_exists('task_type', $data)) {
             $taskType = (string)$data['task_type'];

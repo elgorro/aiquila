@@ -191,10 +191,13 @@ Accepted by `create_coworker` and `update_coworker`:
 
 ## Agent coworkers
 
-An agent coworker runs a free-form `prompt` on its schedule and may call MCP tools from
-the owner's configured MCP servers. Because these runs are unattended, the coworker
-only gets the tools named in its `tools` allowlist. An empty list means the prompt runs
-without tools. Name the narrowest set the job needs, and prefer read-only tools.
+An agent coworker (`agent:run`) runs a free-form `prompt`, or a saved prompt by
+`promptId`, on its schedule. It may call tools of the Nextcloud instance's MCP
+servers, the ones the AIquila chat uses. Because these runs are unattended, the
+coworker only gets the tools named in its `tools` allowlist, and any other tool the
+model asks for is refused. An empty list means the prompt runs without tools. Name the
+narrowest set the job needs, and prefer read-only tools. With `outputType: "file"` the
+answer is written to `outputPath`; otherwise it is the run summary.
 
 ```
 "Create an agent coworker that runs weekdays at 7:00, summarises my unread mail into

@@ -640,21 +640,18 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
         $this->assertEquals('rate_limit_error', $capturedCtx['error_type']);
     }
 
-    public function testRefusalStopDetailsLoggedInResponseMetadata(): void {
+    /**
+     * A refusal is an HTTP 200 with stop_reason "refusal". It becomes an
+     * error result carrying the category, and the partial output is dropped.
+     */
+    public function testRefusalBecomesAnErrorResult(): void {
         $this->cache->method('get')->willReturn([
             'max_tokens' => 64000,
             'supports_thinking' => false,
             'supports_effort' => false,
         ]);
 
-        $capturedDebug = [];
         $logger = $this->createStub(LoggerInterface::class);
-        $logger->method('debug')->willReturnCallback(function ($msg, $ctx = []) use (&$capturedDebug) {
-            if (str_contains($msg, 'Response metadata')) {
-                $capturedDebug[] = $ctx;
-            }
-        });
-
         $refusal = RefusalStopDetails::with('cyber', 'I cannot help with that.');
 
         $service = new class($this->config, $logger, $this->credentials, $this->cacheFactory, $this->requestMetadata, $refusal) extends ClaudeSDKService {
@@ -666,8 +663,8 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
                 $ref = new \ReflectionClass($stub);
                 $textObj = new \stdClass();
                 $textObj->type = 'text';
-                $textObj->text = '';
-                foreach (['content' => [$textObj], 'stopReason' => 'refusal', 'stopDetails' => $this->refusal] as $prop => $val) {
+                $textObj->text = 'Partial answer that must not be kept';
+                foreach (['content' => [$textObj], 'model' => 'claude-opus-5', 'stopReason' => 'refusal', 'stopDetails' => $this->refusal] as $prop => $val) {
                     $p = $ref->getProperty($prop);
                     $p->setValue($stub, $val);
                 }
@@ -681,19 +678,14 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             }
         };
 
-        $service->ask('test', '', 'testuser');
+        $result = $service->ask('test', '', 'testuser');
 
-        $found = null;
-        foreach ($capturedDebug as $ctx) {
-            if (isset($ctx['stop_details'])) {
-                $found = $ctx['stop_details'];
-                break;
-            }
-        }
-        $this->assertNotNull($found, 'Response metadata log should include stop_details for refusals');
-        $this->assertEquals('refusal', $found['type']);
-        $this->assertEquals('cyber', $found['category']);
-        $this->assertEquals('I cannot help with that.', $found['explanation']);
+        $this->assertArrayNotHasKey('response', $result);
+        $this->assertSame('I cannot help with that.', $result['error']);
+        $this->assertSame('refused', $result['error_type']);
+        $this->assertSame('cyber', $result['refusal_category']);
+        // Some refusals are billed, so the usage travels with the error.
+        $this->assertSame(10, $result['usage']['input_tokens']);
     }
 
     public function testUsageIncludesCacheTokens(): void {
@@ -777,7 +769,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
     // ── fast mode ─────────────────────────────────────────────────────────
 
     public function testFastModeSetsParamHeaderAndBody(): void {
-        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5);
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5, ['server_fallback' => '0']);
         $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['speed' => true]);
 
         $this->assertSame('fast', $service->lastCreateParams['speed']);
@@ -788,7 +780,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
     }
 
     public function testFastModeOffIsNotSerialisedAsStandard(): void {
-        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5, ['speed_fast' => 'true']);
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5, ['speed_fast' => 'true', 'server_fallback' => '0']);
         $service->chat([['role' => 'user', 'content' => 'Hi']], null, 'testuser', ['speed' => false]);
 
         $this->assertArrayNotHasKey('speed', $service->lastCreateParams);
@@ -822,7 +814,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
 
     /** The Files API is GA, so a file_id beside fast mode adds no second beta flag. */
     public function testFileIdBesideFastModeSendsOnlyTheFastModeBeta(): void {
-        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5);
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5, ['server_fallback' => '0']);
         $service->chat([[
             'role' => 'user',
             'content' => [['type' => 'document', 'source' => ['type' => 'file', 'file_id' => 'file_123']]],
@@ -832,7 +824,7 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
     }
 
     public function testFileIdAloneCarriesNoRequestOptions(): void {
-        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5);
+        $service = $this->makeServiceForModel(ClaudeModels::OPUS_5, ['server_fallback' => '0']);
         $service->chat([[
             'role' => 'user',
             'content' => [['type' => 'document', 'source' => ['type' => 'file', 'file_id' => 'file_123']]],

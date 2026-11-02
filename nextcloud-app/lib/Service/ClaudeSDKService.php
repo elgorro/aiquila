@@ -29,6 +29,7 @@ use Anthropic\Messages\Message;
 use Anthropic\Messages\Metadata;
 use Anthropic\Messages\Usage;
 use Anthropic\Models\ModelInfo;
+use OCA\AIquila\Service\Exception\RefusalException;
 use Anthropic\ServiceContracts\MessagesContract;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\ProviderActionsInterface;
@@ -85,6 +86,26 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     public const FEATURE_AUTO_CACHE = 'auto_cache';
     /** `role: "system"` entries inside `messages` (GA, model-gated). */
     public const FEATURE_MID_CONVERSATION_SYSTEM = 'mid_conversation_system';
+    /**
+     * Server-side refusal fallback (`fallbacks: "default"`, beta
+     * `server-side-fallback-2026-07-01`). The Claude API and Claude Models on
+     * Google Cloud (Anthropic managed) serve it; other platforms do not.
+     */
+    public const FEATURE_SERVER_FALLBACK = 'server_fallback';
+    /**
+     * Task budgets (`output_config.task_budget`, beta `task-budgets-2026-03-13`):
+     * the Claude API, Claude Platform on AWS, Vertex AI and Foundry.
+     */
+    public const FEATURE_TASK_BUDGET = 'task_budget';
+    /**
+     * Adding and removing tools mid-conversation (`tool_addition` /
+     * `tool_removal` system blocks, `defer_loading` tools; beta
+     * `mid-conversation-tool-changes-2026-07-01`): the Claude API, Amazon
+     * Bedrock and Vertex AI.
+     */
+    public const FEATURE_MID_CONVERSATION_TOOL_CHANGES = 'mid_conversation_tool_changes';
+    /** Smallest `task_budget.total` the API accepts; smaller is a 400. */
+    public const MIN_TASK_BUDGET = 20000;
 
     private const CAPABILITY_CACHE_TTL = 3600; // 1 hour
     /** Smallest budget the Messages API accepts for thinking type 'enabled'. */
@@ -144,6 +165,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             self::FEATURE_METADATA => true,
             self::FEATURE_AUTO_CACHE => true,
             self::FEATURE_MID_CONVERSATION_SYSTEM => true,
+            self::FEATURE_SERVER_FALLBACK => true,
+            self::FEATURE_TASK_BUDGET => true,
+            self::FEATURE_MID_CONVERSATION_TOOL_CHANGES => true,
         ];
     }
 
@@ -162,6 +186,17 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     public function supportsMidConversationSystem(string $model): bool {
         return $this->hasFeature(self::FEATURE_MID_CONVERSATION_SYSTEM)
             && ClaudeModels::supportsMidConversationSystem($model);
+    }
+
+    /**
+     * Whether a conversation answered by this provider can change its tools
+     * between turns without rebuilding the prompt cache (see ToolChanges).
+     * Same models as mid-conversation system messages, which carry the change.
+     */
+    public function supportsMidConversationToolChanges(?string $userId, array $options = []): bool {
+        $model = $this->capabilityModel($this->resolveRequestModel($userId, $options));
+        return $this->hasFeature(self::FEATURE_MID_CONVERSATION_TOOL_CHANGES)
+            && $this->supportsMidConversationSystem($model);
     }
 
     /** Whether the Message Batches API is available, i.e. the batch paths may be used. */
@@ -404,6 +439,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      *                             may use purchased priority capacity
      *   speed          (bool)   – per-conversation fast-mode override; true asks
      *                             for `speed: fast` at premium pricing
+     *   agentic_loop   (bool)   – set by the tool loops: the request is one step
+     *                             of an agentic loop, so a task budget applies
+     *   task_budget    (int)    – task budget in tokens for this loop, instead of
+     *                             the admin default (agentic loops only)
      */
     /**
      * Model for a single request.
@@ -497,10 +536,34 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $tools = $options['tools'];
             $cacheTools = $options['cache_tools'] ?? true;
             if ($cacheTools && is_array($tools) && $tools !== []) {
-                $lastIdx = array_key_last($tools);
-                $tools[$lastIdx]['cache_control'] = ['type' => 'ephemeral'];
+                // A deferred definition cannot carry cache_control, and is not
+                // part of the prefix until a tool_addition surfaces it: mark the
+                // last tool that is loaded from the start.
+                $lastIdx = null;
+                foreach ($tools as $idx => $tool) {
+                    if (empty($tool['defer_loading'])) {
+                        $lastIdx = $idx;
+                    }
+                }
+                if ($lastIdx !== null) {
+                    $tools[$lastIdx]['cache_control'] = ['type' => 'ephemeral'];
+                }
             }
             $params['tools'] = $tools;
+        }
+
+        // Server-side refusal fallback. With "default" the API picks the
+        // fallback model per refusal category; on a model without fallback
+        // support the request runs on the requested model alone, so it is safe
+        // to send on every request. Never forwarded to the Batch API, which
+        // rejects it per item (see toBatchParams()).
+        if ($this->hasFeature(self::FEATURE_SERVER_FALLBACK) && $this->serverFallbackEnabled()) {
+            $params['fallbacks'] = 'default';
+        }
+
+        $taskBudget = $this->resolveTaskBudget($model, $options);
+        if ($taskBudget !== null) {
+            $params['task_budget'] = $taskBudget;
         }
 
         // Top-level automatic cache_control: the API places a breakpoint on the
@@ -526,6 +589,57 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     private function autoCacheEnabled(): bool {
         // Checkboxes have persisted as 'true' or '1' over the app's history.
         return in_array($this->appValue('auto_cache', '1'), ['true', '1'], true);
+    }
+
+    /**
+     * Whether server-side refusal fallback is allowed on this instance
+     * (app config `server_fallback`, default on).
+     */
+    private function serverFallbackEnabled(): bool {
+        return in_array($this->appValue('server_fallback', '1'), ['true', '1'], true);
+    }
+
+    /**
+     * Task budget for one request of an agentic loop, or null for none.
+     *
+     * A task budget is an advisory token ceiling for the whole loop that the
+     * model sees counting down, so it paces itself and wraps up instead of
+     * being cut off by max_tokens. It only means anything to a loop, so only
+     * the tool loops ask for it (`agentic_loop`). A per-request `task_budget`
+     * wins over the admin default (`task_budget` on the provider card, blank
+     * = off). The value is part of the rendered prompt: it stays the same for
+     * every request of a loop, so the prompt cache keeps matching, and
+     * `remaining` is never sent because no history is compacted.
+     *
+     * Skipped where the platform or the model does not take it. An explicit
+     * budget below MIN_TASK_BUDGET is an error; an admin default that is
+     * invalid is logged and ignored, so one setting cannot break every loop.
+     *
+     * @throws \InvalidArgumentException
+     */
+    private function resolveTaskBudget(string $model, array $options): ?int {
+        if (($options['agentic_loop'] ?? false) !== true) {
+            return null;
+        }
+        $explicit = $options['task_budget'] ?? null;
+        $raw = $explicit ?? $this->appValue('task_budget');
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        if (!$this->hasFeature(self::FEATURE_TASK_BUDGET) || !ClaudeModels::supportsTaskBudget($this->capabilityModel($model))) {
+            $this->logger->debug('AIquila SDK: task budget not supported here, sending none', ['model' => $model]);
+            return null;
+        }
+        $budget = is_int($raw) ? $raw : (ctype_digit((string)$raw) ? (int)$raw : null);
+        if ($budget !== null && $budget >= self::MIN_TASK_BUDGET) {
+            return $budget;
+        }
+        $message = sprintf('task_budget must be at least %d tokens, got %s.', self::MIN_TASK_BUDGET, (string)$raw);
+        if ($explicit !== null) {
+            throw new \InvalidArgumentException($message);
+        }
+        $this->logger->warning('AIquila SDK: Ignoring invalid task_budget default', ['value' => $raw, 'error' => $message]);
+        return null;
     }
 
     /**
@@ -874,7 +988,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * Build per-request options (extra headers, extra body params). Returns
      * null when none are needed.
      *
-     * What rides through here is fast mode, which the GA `messages->create()` signature has no argument
+     * What rides through here is fast mode and server-side refusal fallback,
+     * neither of which the GA `messages->create()` signature has no argument
      *    for. `speed` is a plain top-level body field, so it goes in as an
      *    extra body param (merged by the SDK in Core\BaseClient) together with
      *    its beta flag. That keeps the GA endpoint — and its `Message` return
@@ -889,7 +1004,26 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
         if (($params['speed'] ?? null) === 'fast') {
             $betas[] = AnthropicBeta::FAST_MODE_2026_02_01->value;
-            $options['extraBodyParams'] = ['speed' => 'fast'];
+            $options['extraBodyParams']['speed'] = 'fast';
+        }
+
+        // Exactly this date: `2026-06-01` accepts only the explicit-list
+        // form, and any other value rejects `fallbacks` with a 400.
+        if (isset($params['fallbacks'])) {
+            $betas[] = AnthropicBeta::SERVER_SIDE_FALLBACK_2026_07_01->value;
+            $options['extraBodyParams']['fallbacks'] = $params['fallbacks'];
+        }
+
+        if (ToolChanges::inRequest($params)) {
+            $betas[] = AnthropicBeta::MID_CONVERSATION_TOOL_CHANGES_2026_07_01->value;
+        }
+
+        // The GA OutputConfig has no task_budget, and extra body params
+        // replace a top-level key whole, so output_config goes out in full
+        // here — effort included — and supersedes the named argument.
+        if (isset($params['task_budget'])) {
+            $betas[] = AnthropicBeta::TASK_BUDGETS_2026_03_13->value;
+            $options['extraBodyParams']['output_config'] = self::outputConfigWithTaskBudget($params);
         }
 
         if ($betas !== []) {
@@ -897,6 +1031,17 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         }
 
         return $options === [] ? null : $options;
+    }
+
+    /**
+     * `output_config` as sent on the wire, with the task budget added.
+     *
+     * @return array<string, mixed>
+     */
+    private static function outputConfigWithTaskBudget(array $params): array {
+        $config = is_array($params['outputConfig'] ?? null) ? $params['outputConfig'] : [];
+        $config['task_budget'] = ['type' => 'tokens', 'total' => (int)$params['task_budget']];
+        return $config;
     }
 
     /**
@@ -940,12 +1085,50 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * create call. Callers receive the same Message shape either way.
      */
     protected function createMessage(BaseClient $client, array $params): Message {
-        return $this->withSystemRoleFallback($params, function (array $params) use ($client): Message {
+        $response = $this->withSystemRoleFallback($params, function (array $params) use ($client): Message {
             if (($params['max_tokens'] ?? 0) > self::STREAMING_THRESHOLD) {
                 return $this->createViaStream($client, $params);
             }
             return $this->callCreate($client, $params);
         });
+        $this->checkRefusal($response, (string)$params['model']);
+        return $response;
+    }
+
+    /**
+     * Raise a refusal as an error and record a fallback-served response.
+     *
+     * A refusal is an HTTP 200 with `stop_reason: "refusal"`; its partial
+     * output is incomplete and is dropped with the response. Branch on
+     * `stop_reason` only — `stop_details.category` can be null on a refusal.
+     * When server-side fallback ran, a refusal here means every model in the
+     * chain declined.
+     *
+     * Both are logged at info as their own signal: neither shows up as an
+     * HTTP error, so error-rate monitoring cannot see them.
+     *
+     * @throws RefusalException
+     */
+    private function checkRefusal(Message $response, string $requestedModel): void {
+        if (FallbackHandoff::servedByFallback($response)) {
+            $this->logger->info('AIquila SDK: response served by a fallback model', [
+                'requested_model' => $requestedModel,
+                'served_by' => $response->model,
+            ]);
+        }
+        if (($response->stopReason ?? null) !== 'refusal') {
+            return;
+        }
+        $category = $response->stopDetails->category ?? null;
+        $this->logger->info('AIquila SDK: request refused', [
+            'model' => $response->model,
+            'category' => $category,
+        ]);
+        throw new RefusalException(
+            is_string($category) ? $category : ($category instanceof \BackedEnum ? (string)$category->value : null),
+            $response->stopDetails->explanation ?? null,
+            $this->extractUsage($response),
+        );
     }
 
     /**
@@ -993,6 +1176,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         $stopSequence = null;
         $stopDetails = null;
         $outputTokens = 0;
+        // After a mid-output handoff `message_start` still names the requested
+        // model; the `fallback` block names the one that continued.
+        $servedBy = null;
 
         foreach ($stream as $event) {
             switch ($event->type ?? null) {
@@ -1018,6 +1204,12 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                         $block->signature = $cb->signature ?? '';
                     } elseif ($block->type === 'redacted_thinking') {
                         $block->data = $cb->data ?? '';
+                    } elseif ($block->type === 'fallback') {
+                        $handoff = FallbackHandoff::toParam($cb);
+                        $block->from = $handoff['from'] ?? null;
+                        $block->to = $handoff['to'] ?? null;
+                        $block->trigger = $handoff['trigger'] ?? null;
+                        $servedBy = FallbackHandoff::servedBy($cb) ?? $servedBy;
                     }
                     $blocks[$idx] = $block;
                     break;
@@ -1062,6 +1254,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         }
 
         ksort($blocks);
+        $blocks = FallbackHandoff::afterHandoff($blocks);
 
         $usage = Usage::with(
             cacheCreation: null,
@@ -1083,9 +1276,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         return Message::with(
             id: $base?->id ?? '',
             container: null,
-            content: array_values($blocks),
+            content: $blocks,
             diagnostics: null,
-            model: $params['model'],
+            model: $servedBy ?? $base?->model ?? $params['model'],
             stopDetails: $stopDetails,
             stopReason: $stopReason,
             stopSequence: $stopSequence,
@@ -1325,6 +1518,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * Returns ['error' => string].
      */
     private function handleException(\Throwable $e, string $context = ''): array {
+        if ($e instanceof RefusalException) {
+            // Already logged by checkRefusal(); not an error on our side.
+            return $e->toResult();
+        }
         $prefix = $context ? "AIquila SDK: $context" : 'AIquila SDK';
         $logCtx = $this->buildErrorLogContext($e);
         if ($e instanceof AuthenticationException) {
@@ -1372,7 +1569,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string $context Optional context
      * @param string|null $userId User ID for user-specific API key
      * @param array $options Optional: system, stop_sequences, cache_system
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function ask(
         string  $prompt,
@@ -1430,7 +1627,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string|null $system Optional system prompt
      * @param string|null $userId User ID for API key resolution
      * @param array $options Optional: stop_sequences, cache_system
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function chat(
         array   $messages,
@@ -1493,7 +1690,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string|null $userId User ID for API key resolution
      * @param array $options Optional: stop_sequences, cache_system, etc.
      * @param int $maxIterations Safety cap on tool-use loop iterations
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array, tool_trace?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function chatWithTools(
         array    $messages,
@@ -1504,6 +1701,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         array    $options = [],
         int      $maxIterations = 10
     ): array {
+        // Where this loop's own turns begin: they are returned as tool_trace.
+        $traceStart = count($messages);
         try {
             $client = $this->getClient($userId);
         } catch (\Throwable $e) {
@@ -1516,6 +1715,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         $options['tools'] = $tools;
         // Multi-turn: let the API keep a breakpoint on the growing tail.
         $options['auto_cache'] = true;
+        $options['agentic_loop'] = true;
 
         $totalInputTokens = 0;
         $totalOutputTokens = 0;
@@ -1539,10 +1739,12 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
             $this->logResponseMetadata($response);
 
-            // Check if response contains tool use blocks
+            // Check if response contains tool use blocks. Blocks the declined
+            // model produced before a fallback handoff are not part of the turn.
+            $content = FallbackHandoff::afterHandoff($response->content);
             $toolUseBlocks = [];
             $textParts = [];
-            foreach ($response->content as $block) {
+            foreach ($content as $block) {
                 if ($block->type === 'tool_use') {
                     $toolUseBlocks[] = $block;
                 } elseif ($block->type === 'text') {
@@ -1562,6 +1764,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                             'cache_read_tokens' => $totalCacheReadTokens ?: null,
                         ],
                         'citations' => $allCitations,
+                        'tool_trace' => array_slice($messages, $traceStart),
                     ];
                 }
             }
@@ -1570,7 +1773,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             // unmodified and in order. Models with preserved thinking reject a
             // tool loop whose earlier turn lost its thinking.
             $assistantContent = [];
-            foreach ($response->content as $block) {
+            foreach ($content as $block) {
                 $replayed = self::replayableBlock($block);
                 if ($replayed !== null) {
                     $assistantContent[] = $replayed;
@@ -1629,6 +1832,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 'cache_read_tokens' => $totalCacheReadTokens ?: null,
             ],
             'citations' => $allCitations,
+            'tool_trace' => array_slice($messages, $traceStart),
         ];
     }
 
@@ -1643,6 +1847,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             'text' => ['type' => 'text', 'text' => $block->text],
             'thinking' => ['type' => 'thinking', 'thinking' => $block->thinking, 'signature' => $block->signature],
             'redacted_thinking' => ['type' => 'redacted_thinking', 'data' => $block->data],
+            // Kept in place: the API validates the thinking around it by position.
+            'fallback' => FallbackHandoff::toParam($block),
             'tool_use' => [
                 'type' => 'tool_use',
                 'id' => $block->id,
@@ -1671,6 +1877,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $options['system'] = $system;
         }
         $options['tools'] = $tools;
+        // One step of a loop the caller runs (ChatWithToolsProvider).
+        $options['agentic_loop'] = true;
 
         try {
             $params = $this->buildRequestParams($messages, $userId, $options);
@@ -1683,7 +1891,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
         $textParts = [];
         $calls = [];
-        foreach ($response->content as $block) {
+        foreach (FallbackHandoff::afterHandoff($response->content) as $block) {
             if ($block->type === 'text') {
                 $textParts[] = $block->text;
             } elseif ($block->type === 'tool_use') {
@@ -1712,7 +1920,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      *
      * @param string $content Content to summarize
      * @param string|null $userId User ID for user-specific API key
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function summarize(string $content, ?string $userId = null): array {
         return $this->ask("Summarize the following content concisely:\n\n$content", '', $userId);
@@ -1951,6 +2159,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         }
         // `speed` is deliberately not forwarded: fast mode is not available on
         // the Batch API, and batch work is not latency-sensitive anyway.
+        // Neither is `fallbacks`: the Batch API turns a request carrying it
+        // into an errored result, so a batch refusal stays a refusal.
         // The SDK model wants a Metadata object here, not our snake_case array.
         $metadata = $this->metadataParam($params);
         if ($metadata !== null) {
@@ -2152,7 +2362,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param bool $cacheDoc Add cache_control to the document block (default true — documents are large and benefit from cache reuse)
      * @param bool $citations Enable citations on the document block (default true). Cited text spans are returned alongside the response.
      * @param string|null $fileId Optional Anthropic Files API file_id. When provided, the document source is `{type:'file', file_id}` instead of inline base64/text.
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function askWithDocument(
         string  $prompt,
@@ -2356,6 +2566,17 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                     . 'conversation with /thinking-budget.',
                 group: ProviderSettingsSchema::GROUP_BASIC,
             ),
+            ProviderSettingsSchema::number(
+                'task_budget',
+                'task_budget',
+                'Task budget for tool use (tokens)',
+                'Blank is off. A number gives Claude a token budget for each tool-using answer (chat with MCP '
+                    . 'tools, Assistant tool calls), counting thinking, tool calls, tool results and text. Claude '
+                    . 'sees it count down and wraps up instead of being cut off. Advisory, not a hard cap: '
+                    . 'max output tokens still is. At least ' . self::MIN_TASK_BUDGET . ' tokens. Too small a '
+                    . 'budget makes Claude scope work down or decline it, so measure typical usage first. Opus 4.7 '
+                    . 'and later, the Fable models, Sonnet 5.5 and Haiku 5.5 only; not Sonnet 5.',
+            ),
             ProviderSettingsSchema::select(
                 'task_effort',
                 'task_effort',
@@ -2505,7 +2726,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string|null $userId User ID for API key
      * @param string|null $fileId Optional Anthropic Files API file_id. When provided, the image source is `{type:'file', file_id}` instead of inline base64.
      * @param array $options Request options, as for buildRequestParams()
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function askWithImage(string $prompt, string $base64Image, string $mimeType, ?string $userId = null, ?string $fileId = null, array $options = []): array {
         try {
@@ -2560,7 +2781,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string|null $userId User ID for API key
      * @param array<int, string|null>|null $fileIds Optional per-image Anthropic Files API file_ids, indexed parallel to $images. A non-null entry triggers a `{type:'file', file_id}` source for that image; null entries fall back to inline base64.
      * @param array $options Request options, as for buildRequestParams()
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string}
+     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function askWithImages(string $prompt, array $images, ?string $userId = null, ?array $fileIds = null, array $options = []): array {
         if (empty($images)) {
@@ -2660,11 +2881,19 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             foreach ($stream as $event) {
                 if ($event->type === 'content_block_delta' && isset($event->delta->text)) {
                     yield $event->delta->text;
+                } elseif ($event->type === 'message_delta' && ($event->delta->stopReason ?? null) === 'refusal') {
+                    // Text already yielded is incomplete; the caller is told
+                    // to discard it by the exception.
+                    $details = $event->delta->stopDetails ?? null;
+                    $this->logger->info('AIquila SDK: stream refused', ['category' => $details->category ?? null]);
+                    throw new RefusalException($details->category ?? null, $details->explanation ?? null);
                 }
             }
 
             $this->logger->info('AIquila SDK: Stream completed successfully');
 
+        } catch (RefusalException $e) {
+            throw $e;
         } catch (AuthenticationException $e) {
             $this->logger->error('AIquila SDK: Stream authentication error', $this->buildErrorLogContext($e));
             throw new \Exception('Invalid API key. Please check your configuration.');
@@ -2719,6 +2948,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         array    $options = [],
         int      $maxIterations = 10
     ): \Generator {
+        // Where this loop's own turns begin: they are returned as tool_trace.
+        $traceStart = count($messages);
         try {
             $client = $this->getClient($userId);
         } catch (\Throwable $e) {
@@ -2732,6 +2963,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         $options['tools'] = $tools;
         // Multi-turn: let the API keep a breakpoint on the growing tail.
         $options['auto_cache'] = true;
+        $options['agentic_loop'] = true;
 
         $totalInput = 0;
         $totalOutput = 0;
@@ -2755,6 +2987,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             /** @var array<int, string> $jsonBuffers */
             $jsonBuffers = [];
             $stopReason = null;
+            $stopDetails = null;
 
             try {
                 foreach ($stream as $event) {
@@ -2787,6 +3020,13 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                                 yield ['type' => 'thinking_start'];
                             } elseif ($cbType === 'redacted_thinking') {
                                 $blocks[$idx] = ['type' => 'redacted_thinking', 'data' => $cb->data ?? ''];
+                            } elseif ($cbType === 'fallback') {
+                                // Mid-output handoff: the text streamed so far
+                                // stays (the fallback model continues from it).
+                                $blocks[$idx] = FallbackHandoff::toParam($cb) ?? ['type' => 'fallback'];
+                                $this->logger->info('AIquila SDK: stream handed over to a fallback model', [
+                                    'served_by' => FallbackHandoff::servedBy($cb),
+                                ]);
                             } else {
                                 // Server tools etc. — preserve type so downstream may handle.
                                 $blocks[$idx] = ['type' => $cbType ?? 'unknown'];
@@ -2845,6 +3085,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
                         case 'message_delta':
                             $stopReason = $event->delta->stopReason ?? null;
+                            if ($stopReason === 'refusal') {
+                                $stopDetails = $event->delta->stopDetails ?? null;
+                            }
                             if (isset($event->usage)) {
                                 $totalOutput += $event->usage->outputTokens ?? 0;
                             }
@@ -2867,6 +3110,24 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 return;
             }
 
+            if ($stopReason === 'refusal') {
+                // Everything streamed in this turn is incomplete; the event
+                // tells the consumer to discard it rather than keep it.
+                $category = $stopDetails->category ?? null;
+                $this->logger->info('AIquila SDK: stream refused', ['category' => $category]);
+                $refusal = new RefusalException($category, $stopDetails->explanation ?? null);
+                yield ['type' => 'error', 'error' => $refusal->getMessage(), 'error_type' => 'refused', 'refusal_category' => $category, 'usage' => [
+                    'input_tokens' => $totalInput,
+                    'output_tokens' => $totalOutput,
+                    'cache_creation_tokens' => $totalCacheCreate ?: null,
+                    'cache_read_tokens' => $totalCacheRead ?: null,
+                ]];
+                return;
+            }
+
+            ksort($blocks);
+            $blocks = FallbackHandoff::afterHandoff($blocks);
+
             // Collect any per-text-block citations seen during this iteration.
             foreach ($blocks as $b) {
                 if (($b['type'] ?? null) === 'text' && !empty($b['citations'])) {
@@ -2886,6 +3147,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                         'cache_read_tokens' => $totalCacheRead ?: null,
                     ],
                     'citations' => $allCitations,
+                    'tool_trace' => array_slice($messages, $traceStart),
                 ];
                 return;
             }
@@ -2900,6 +3162,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                     $assistantContent[] = ['type' => 'thinking', 'thinking' => $b['thinking'], 'signature' => $b['signature']];
                 } elseif (($b['type'] ?? null) === 'redacted_thinking') {
                     $assistantContent[] = ['type' => 'redacted_thinking', 'data' => $b['data']];
+                } elseif (($b['type'] ?? null) === 'fallback') {
+                    $assistantContent[] = $b;
                 } elseif (($b['type'] ?? null) === 'tool_use') {
                     $assistantContent[] = [
                         'type' => 'tool_use',
@@ -2990,14 +3254,28 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         if ($fast) {
             $betas[] = AnthropicBeta::FAST_MODE_2026_02_01;
         }
+        // Fallback has to be configured on every request path, this one too.
+        $fallbacks = $params['fallbacks'] ?? null;
+        if ($fallbacks !== null) {
+            $betas[] = AnthropicBeta::SERVER_SIDE_FALLBACK_2026_07_01;
+        }
+        // The beta OutputConfig takes the task budget as a named field.
+        $outputConfig = $params['outputConfig'] ?? null;
+        if (isset($params['task_budget'])) {
+            $betas[] = AnthropicBeta::TASK_BUDGETS_2026_03_13;
+            $outputConfig = (is_array($outputConfig) ? $outputConfig : []) + [
+                'taskBudget' => ['type' => 'tokens', 'total' => (int)$params['task_budget']],
+            ];
+        }
 
         return $client->beta->messages->createStream(
             maxTokens: $params['max_tokens'],
             messages: $params['messages'],
             model: $params['model'],
             cacheControl: $params['cache_control'] ?? null,
+            fallbacks: $fallbacks,
             mcpServers: $mcpServers,
-            outputConfig: $params['outputConfig'] ?? null,
+            outputConfig: $outputConfig,
             serviceTier: $params['service_tier'] ?? null,
             speed: $fast ? 'fast' : null,
             stopSequences: $params['stop_sequences'] ?? null,
@@ -3057,6 +3335,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         unset($options['tools']);
         // Multi-turn: let the API keep a breakpoint on the growing tail.
         $options['auto_cache'] = true;
+        // Anthropic runs the MCP loop server-side: still one agentic loop.
+        $options['agentic_loop'] = true;
 
         $params = $this->buildRequestParams($messages, $userId, $options);
 
@@ -3076,6 +3356,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         $totalCacheCreate = 0;
         $totalCacheRead = 0;
         $allCitations = [];
+        $refused = false;
+        $refusalDetails = null;
 
         // Per-block accumulators, keyed by content-block index.
         /** @var array<int, array<string, mixed>> $blocks */
@@ -3180,6 +3462,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                         break;
 
                     case 'message_delta':
+                        if (($event->delta->stopReason ?? null) === 'refusal') {
+                            $refusalDetails = $event->delta->stopDetails ?? null;
+                            $refused = true;
+                        }
                         if (isset($event->usage)) {
                             $totalOutput += $event->usage->outputTokens ?? 0;
                         }
@@ -3193,6 +3479,20 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         } catch (\Throwable $e) {
             $this->logger->error('AIquila SDK: chatWithNativeMcp stream failed', $this->buildErrorLogContext($e));
             yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => [
+                'input_tokens' => $totalInput,
+                'output_tokens' => $totalOutput,
+                'cache_creation_tokens' => $totalCacheCreate ?: null,
+                'cache_read_tokens' => $totalCacheRead ?: null,
+            ]];
+            return;
+        }
+
+        if ($refused) {
+            // As in chatWithToolsStream(): the partial turn is incomplete.
+            $category = $refusalDetails->category ?? null;
+            $this->logger->info('AIquila SDK: stream refused', ['category' => $category]);
+            $refusal = new RefusalException($category, $refusalDetails->explanation ?? null);
+            yield ['type' => 'error', 'error' => $refusal->getMessage(), 'error_type' => 'refused', 'refusal_category' => $category, 'usage' => [
                 'input_tokens' => $totalInput,
                 'output_tokens' => $totalOutput,
                 'cache_creation_tokens' => $totalCacheCreate ?: null,
@@ -3269,6 +3569,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         $citations = [];
         $usage = ['input_tokens' => 0, 'output_tokens' => 0];
         $error = null;
+        $refused = false;
+        $refusalCategory = null;
 
         foreach ($this->chatWithNativeMcp($messages, $mcpServers, $system, $userId, $options) as $event) {
             switch ($event['type'] ?? null) {
@@ -3284,10 +3586,18 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                     if (isset($event['usage']) && is_array($event['usage'])) {
                         $usage = $event['usage'];
                     }
+                    if (($event['error_type'] ?? null) === 'refused') {
+                        $refused = true;
+                        $refusalCategory = $event['refusal_category'] ?? null;
+                    }
                     break;
             }
         }
 
+        // A refusal's partial text is incomplete: never returned as an answer.
+        if ($refused) {
+            return ['error' => (string)$error, 'error_type' => 'refused', 'refusal_category' => $refusalCategory, 'model' => $this->resolveRequestModel($userId, $options), 'usage' => $usage];
+        }
         if ($error !== null && $text === '') {
             return ['error' => $error, 'model' => $this->resolveRequestModel($userId, $options), 'usage' => $usage];
         }

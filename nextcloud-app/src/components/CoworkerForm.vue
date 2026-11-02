@@ -54,7 +54,30 @@
 			</label>
 		</template>
 
-		<label class="field">
+		<template v-if="isAgent">
+			<label class="field">
+				<span>{{ t('aiquila', 'Prompt') }}</span>
+				<textarea v-model="form.prompt" rows="5" :placeholder="t('aiquila', 'Summarise my unread mail as a short list, urgent first.')" />
+			</label>
+
+			<fieldset class="field">
+				<legend>{{ t('aiquila', 'Tools it may use') }}</legend>
+				<small>{{ t('aiquila', 'Runs are unattended: allow only what the job needs, read-only where possible. None runs the prompt without tools.') }}</small>
+				<p v-if="toolsLoading" class="muted">{{ t('aiquila', 'Loading…') }}</p>
+				<p v-else-if="availableTools.length === 0 && form.tools.length === 0" class="muted">{{ t('aiquila', 'No MCP tools are configured.') }}</p>
+				<label v-for="tool in toolChoices" :key="tool.name" class="checkbox" :title="tool.description">
+					<input v-model="form.tools" type="checkbox" :value="tool.name">
+					<span>{{ tool.name }}</span>
+				</label>
+			</fieldset>
+
+			<label class="field">
+				<span>{{ t('aiquila', 'Save the answer to') }}</span>
+				<input v-model="form.output_path" type="text" :placeholder="t('aiquila', 'Leave empty to keep it in the run history only')">
+			</label>
+		</template>
+
+		<label v-else class="field">
 			<span>{{ t('aiquila', 'Input folder') }}</span>
 			<input v-model="form.input_path" type="text" :placeholder="defaultInputPath">
 		</label>
@@ -89,7 +112,7 @@
 			</select>
 		</label>
 
-		<label class="field checkbox">
+		<label v-if="!isAgent" class="field checkbox">
 			<input v-model="form.recursive" type="checkbox">
 			<span>{{ t('aiquila', 'Include sub-folders') }}</span>
 		</label>
@@ -110,7 +133,7 @@
 
 <script>
 import { translate as t } from '@nextcloud/l10n'
-import { createCoworker, updateCoworker } from '../api.js'
+import { createCoworker, listCoworkerTools, updateCoworker } from '../api.js'
 
 export default {
 	name: 'CoworkerForm',
@@ -128,7 +151,11 @@ export default {
 		return {
 			saving: false,
 			error: '',
+			availableTools: [],
+			toolsLoading: false,
 			form: {
+				prompt: m.customPrompt || '',
+				tools: Array.isArray(options.tools) ? options.tools : [],
 				title: m.title || '',
 				task_type: m.taskType || (this.taskTypes[0] && this.taskTypes[0].id) || 'vision:classify',
 				provider: m.provider || 'anthropic',
@@ -161,6 +188,15 @@ export default {
 		isTranslate() {
 			return this.form.task_type === 'docs:translate'
 		},
+		isAgent() {
+			return this.form.task_type === 'agent:run'
+		},
+		// Allowed tools a server no longer offers stay listed, so saving
+		// does not drop them silently.
+		toolChoices() {
+			const names = new Set(this.availableTools.map(tool => tool.name))
+			return this.availableTools.concat(this.form.tools.filter(name => !names.has(name)).map(name => ({ name, description: '' })))
+		},
 		isClaude() {
 			return this.form.provider === 'anthropic'
 		},
@@ -171,11 +207,27 @@ export default {
 			return this.isDocs ? '/Documents' : '/Photos'
 		},
 	},
+	watch: {
+		isAgent: { handler: 'loadTools', immediate: true },
+	},
 	methods: { t,
+		async loadTools() {
+			if (!this.isAgent || this.availableTools.length > 0) {
+				return
+			}
+			this.toolsLoading = true
+			try {
+				this.availableTools = (await listCoworkerTools()).data
+			} catch (e) {
+				this.availableTools = []
+			} finally {
+				this.toolsLoading = false
+			}
+		},
 		async save() {
 			this.saving = true
 			this.error = ''
-			const options = { recursive: this.form.recursive }
+			const options = this.isAgent ? { tools: this.form.tools } : { recursive: this.form.recursive }
 			if (this.isVision) {
 				options.maxTags = this.form.maxTags
 			}
@@ -196,18 +248,22 @@ export default {
 				title: this.form.title,
 				task_type: this.form.task_type,
 				provider: this.form.provider,
-				input_type: 'folder',
-				input_path: this.form.input_path || this.defaultInputPath,
-				// Vision tasks write tags; docs tasks write files beside the source.
-				output_type: this.isDocs ? 'files' : 'system_tags',
+				input_type: this.isAgent ? 'none' : 'folder',
+				input_path: this.isAgent ? null : (this.form.input_path || this.defaultInputPath),
+				// Vision tasks write tags; docs tasks write files beside the
+				// source; an agent writes its answer to one file, if asked.
+				output_type: this.isAgent ? (this.form.output_path ? 'file' : 'none') : (this.isDocs ? 'files' : 'system_tags'),
 				cron_schedule: this.form.cron_schedule,
 				is_active: this.form.is_active,
 				// A model id belongs to one provider; drop it when switching away.
 				model: this.isClaude ? this.form.model : '',
 				options,
 			}
-			if (this.isDocs && this.form.output_path) {
+			if ((this.isDocs || this.isAgent) && this.form.output_path) {
 				payload.output_path = this.form.output_path
+			}
+			if (this.isAgent) {
+				payload.custom_prompt = this.form.prompt
 			}
 			try {
 				const res = this.model && this.model.id
@@ -244,6 +300,10 @@ export default {
 }
 .field small { color: var(--color-text-lighter); }
 .field.checkbox { flex-direction: row; align-items: center; gap: 8px; }
+fieldset.field { border: none; padding: 0; margin: 0; }
+fieldset.field legend { padding: 0; }
+fieldset.field .checkbox { display: flex; align-items: center; gap: 8px; }
+.muted { color: var(--color-text-lighter); font-size: 13px; }
 .form-error { color: var(--color-error); font-size: 13px; }
 .actions { display: flex; gap: 8px; margin-top: 8px; }
 </style>

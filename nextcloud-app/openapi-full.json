@@ -6030,6 +6030,69 @@
                 }
             }
         },
+        "/index.php/apps/aiquila/api/coworkers/tools": {
+            "get": {
+                "operationId": "coworker-tools",
+                "summary": "List the MCP tools an agent coworker may be allowed to call",
+                "description": "The tools of the instance's enabled MCP servers, which the chat offers every user too. Only names and descriptions; a server that cannot be reached is left out.",
+                "tags": [
+                    "coworker"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Tools, by name",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "required": [
+                                            "name",
+                                            "description"
+                                        ],
+                                        "properties": {
+                                            "name": {
+                                                "type": "string"
+                                            },
+                                            "description": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/index.php/apps/aiquila/api/coworkers/{id}": {
             "get": {
                 "operationId": "coworker-show",
@@ -6781,6 +6844,280 @@
                     },
                     "404": {
                         "description": "Coworker not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/coworkers/{id}/runs/{runId}": {
+            "get": {
+                "operationId": "coworker-run-detail",
+                "summary": "Get one run of a coworker, with its per-item log",
+                "description": "The run list's shape plus `log`: entries oldest first, at most the newest 500. `item` is the file or object an entry is about, as a path in the user's Files, or null.",
+                "tags": [
+                    "coworker"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Coworker ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "runId",
+                        "in": "path",
+                        "description": "Run ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The run with its log",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "id",
+                                        "coworkerId",
+                                        "userId",
+                                        "status",
+                                        "itemsTotal",
+                                        "itemsProcessed",
+                                        "summary",
+                                        "error",
+                                        "startedAt",
+                                        "finishedAt",
+                                        "pendingBatchId",
+                                        "log"
+                                    ],
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "coworkerId": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "userId": {
+                                            "type": "string"
+                                        },
+                                        "status": {
+                                            "type": "string"
+                                        },
+                                        "itemsTotal": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "itemsProcessed": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "summary": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "error": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "startedAt": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "finishedAt": {
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "format": "int64"
+                                        },
+                                        "pendingBatchId": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "log": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": [
+                                                    "ts",
+                                                    "level",
+                                                    "message",
+                                                    "item"
+                                                ],
+                                                "properties": {
+                                                    "ts": {
+                                                        "type": "integer",
+                                                        "format": "int64"
+                                                    },
+                                                    "level": {
+                                                        "type": "string"
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    },
+                                                    "item": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Coworker or run not found, or the run belongs to another coworker",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/coworkers/{id}/stop": {
+            "post": {
+                "operationId": "coworker-stop",
+                "summary": "Stop a coworker's run in flight",
+                "description": "Cancels the run that is `running` or `pending` (a submitted batch). The run is closed as `cancelled` and keeps what it processed so far; a running one stops at its next item. The schedule is unchanged: pause or disable the coworker to stop future runs.",
+                "tags": [
+                    "coworker"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Coworker ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The cancelled run",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "object"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Coworker not found, or it has no run in flight",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -10130,6 +10467,14 @@
                                         ],
                                         "default": null,
                                         "description": "Upload attachments to the Anthropic Files API ('1' enabled, '0' disabled, null keeps unchanged)"
+                                    },
+                                    "server_fallback": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Retry a request Claude's safety classifiers decline on Anthropic's recommended fallback model ('1' enabled, '0' disabled, null keeps unchanged)"
                                     }
                                 }
                             }

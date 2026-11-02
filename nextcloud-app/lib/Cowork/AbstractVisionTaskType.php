@@ -107,8 +107,10 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
                 if ($fragment !== '') {
                     $fragments[] = $file->getName() . ': ' . $fragment;
                 }
+                $run->appendLog(CoworkerRun::LOG_INFO, $fragment !== '' ? $fragment : 'Done', UserPath::of($file));
             } catch (\Throwable $e) {
                 $errors++;
+                $run->appendLog(CoworkerRun::LOG_ERROR, $e->getMessage(), UserPath::of($file));
                 $this->logger->warning('AIquila Cowork vision: item failed', [
                     'coworker' => $coworker->getId(),
                     'file' => $file->getPath(),

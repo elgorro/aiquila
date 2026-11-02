@@ -28,6 +28,10 @@ use OCP\AppFramework\Db\Entity;
  * @method void setFinishedAt(?int $finishedAt)
  * @method string|null getState()
  * @method void setState(?string $state)
+ * @method string|null getLog()
+ * @method void setLog(?string $log)
+ *
+ * @psalm-type CoworkerRunLogEntry = array{ts: int, level: string, message: string, item: string|null}
  */
 class CoworkerRun extends Entity implements \JsonSerializable {
     use InsertsFullRow;
@@ -37,6 +41,16 @@ class CoworkerRun extends Entity implements \JsonSerializable {
     public const STATUS_PENDING = 'pending';
     public const STATUS_SUCCESS = 'success';
     public const STATUS_ERROR   = 'error';
+    /** Stopped by the user before it finished; see CoworkerService::stop(). */
+    public const STATUS_CANCELLED = 'cancelled';
+
+    public const LOG_INFO = 'info';
+    public const LOG_WARN = 'warn';
+    public const LOG_ERROR = 'error';
+    /** Entries kept per run; older ones are dropped first. */
+    public const LOG_LIMIT = 500;
+    /** Longest message kept, in characters, so a run row stays bounded. */
+    private const LOG_MESSAGE_MAX = 500;
 
     protected int $coworkerId = 0;
     protected string $userId = '';
@@ -53,6 +67,8 @@ class CoworkerRun extends Entity implements \JsonSerializable {
      * that wrote it.
      */
     protected ?string $state = null;
+    /** JSON list of log entries; see appendLog(). Never sent by the run list. */
+    protected ?string $log = null;
 
     public function __construct() {
         $this->addType('coworkerId', 'integer');
@@ -65,6 +81,7 @@ class CoworkerRun extends Entity implements \JsonSerializable {
         $this->addType('startedAt', 'integer');
         $this->addType('finishedAt', 'integer');
         $this->addType('state', 'string');
+        $this->addType('log', 'string');
         $this->markFieldsForInsert();
     }
 
@@ -90,6 +107,63 @@ class CoworkerRun extends Entity implements \JsonSerializable {
         }
         $encoded = json_encode($state);
         $this->setState($encoded === false ? null : $encoded);
+    }
+
+    /**
+     * Add an entry to the run's log. Persisted with the next update of the
+     * run row — the progress callback and the end of the run both write it.
+     * Keeps the newest LOG_LIMIT entries.
+     *
+     * @param 'info'|'warn'|'error' $level one of the LOG_INFO, LOG_WARN, LOG_ERROR constants
+     * @param string|null $item the file or object the entry is about, as the user sees its path
+     */
+    public function appendLog(string $level, string $message, ?string $item = null, ?int $ts = null): void {
+        $log = $this->getDecodedLog();
+        $log[] = [
+            'ts' => $ts ?? time(),
+            'level' => $level,
+            'message' => mb_strlen($message) > self::LOG_MESSAGE_MAX ? mb_substr($message, 0, self::LOG_MESSAGE_MAX - 1) . '…' : $message,
+            'item' => $item,
+        ];
+        if (count($log) > self::LOG_LIMIT) {
+            $log = array_slice($log, -self::LOG_LIMIT);
+        }
+        $encoded = json_encode($log);
+        $this->setLog($encoded === false ? null : $encoded);
+    }
+
+    /** @return list<CoworkerRunLogEntry> */
+    public function getDecodedLog(): array {
+        $raw = $this->getLog();
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+        $entries = [];
+        foreach ($decoded as $entry) {
+            if (!is_array($entry) || !is_string($entry['message'] ?? null)) {
+                continue;
+            }
+            $entries[] = [
+                'ts' => (int)($entry['ts'] ?? 0),
+                'level' => (string)($entry['level'] ?? self::LOG_INFO),
+                'message' => $entry['message'],
+                'item' => is_string($entry['item'] ?? null) ? $entry['item'] : null,
+            ];
+        }
+        return $entries;
+    }
+
+    /**
+     * One run in full, for GET …/runs/{runId}: the list shape plus its log.
+     *
+     * @return array<string, mixed>
+     */
+    public function jsonSerializeDetail(): array {
+        return $this->jsonSerialize() + ['log' => $this->getDecodedLog()];
     }
 
     /** The batch this run is waiting on, if it is waiting on one. */

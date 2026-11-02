@@ -137,6 +137,8 @@ class MistralProviderTest extends TestCase {
         $this->assertSame('Found 2 files.', $result['response']);
         $this->assertSame(7, $result['usage']['input_tokens']);
         $this->assertSame(8, $result['usage']['output_tokens']);
+        $this->assertContains('tool_use', array_column($result['tool_trace'][0]['content'], 'type'));
+        $this->assertSame('tool_result', $result['tool_trace'][1]['content'][0]['type']);
     }
 
     public function testToolsAreTranslatedToFunctionShape(): void {
