@@ -5,6 +5,8 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Service\Provider;
 
+use OCA\AIquila\Service\ToolChanges;
+
 /**
  * Mid-conversation system messages: `{"role": "system", ...}` entries inside
  * the `messages` array.
@@ -50,7 +52,9 @@ final class SystemMessages {
             }
 
             $text = (string)$message['content'];
-            if ($text === '') {
+            /** @var list<array<string, mixed>> $changes */
+            $changes = $message['changes'] ?? [];
+            if ($text === '' && $changes === []) {
                 continue;
             }
 
@@ -59,15 +63,21 @@ final class SystemMessages {
             $placeable = $prev !== null && ($prev['role'] ?? null) === 'user'
                 && ($next === null || ($next['role'] ?? null) === 'assistant');
             if ($native && $placeable) {
-                $out[] = ['role' => 'system', 'content' => $text];
+                // Plain text stays a string, as it always went out: the
+                // bytes of earlier turns must not change under the cache.
+                $out[] = ['role' => 'system', 'content' => $changes === []
+                    ? $text
+                    : array_merge($text === '' ? [] : [['type' => 'text', 'text' => $text]], $changes)];
                 continue;
             }
 
+            // Folded into the user turn, tool changes can only be described.
+            $texts = array_merge($text === '' ? [] : [$text], array_map(ToolChanges::describe(...), $changes));
             $last = $out === [] ? null : array_key_last($out);
             if ($last !== null && ($out[$last]['role'] ?? null) === 'user') {
-                $out[$last]['content'] = self::withReminders($out[$last]['content'] ?? '', [$text], true);
+                $out[$last]['content'] = self::withReminders($out[$last]['content'] ?? '', $texts, true);
             } else {
-                $pending[] = $text;
+                array_push($pending, ...$texts);
             }
         }
 
@@ -75,26 +85,38 @@ final class SystemMessages {
     }
 
     /**
-     * Collapse each run of consecutive system messages into one plain-text
-     * message, so a run is placed (or folded) as a unit.
+     * Collapse each run of consecutive system messages into one message, so a
+     * run is placed (or folded) as a unit: its text joined, and its tool
+     * change blocks (see ToolChanges) kept aside under `changes`.
      *
      * @param list<mixed> $messages
      * @return array<int, array<string, mixed>>
      */
     private static function mergeRuns(array $messages): array {
         $out = [];
+        /** @var array<int, list<array<string, mixed>>> $changes run index => its change blocks */
+        $changes = [];
         foreach ($messages as $message) {
             if (($message['role'] ?? null) !== 'system') {
                 $out[] = $message;
                 continue;
             }
             $text = self::text($message['content'] ?? '');
+            /** @var list<array<string, mixed>> $blocks */
+            $blocks = is_array($message['content'] ?? null)
+                ? array_values(array_filter($message['content'], ToolChanges::isChange(...)))
+                : [];
             $last = $out === [] ? null : array_key_last($out);
             if ($last !== null && ($out[$last]['role'] ?? null) === 'system') {
                 $out[$last]['content'] = trim($out[$last]['content'] . "\n\n" . $text);
+                $changes[$last] = array_merge($changes[$last] ?? [], $blocks);
             } else {
                 $out[] = ['role' => 'system', 'content' => $text];
+                $changes[array_key_last($out)] = $blocks;
             }
+        }
+        foreach ($changes as $i => $blocks) {
+            $out[$i]['changes'] = $blocks;
         }
         return $out;
     }

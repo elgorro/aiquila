@@ -719,6 +719,31 @@ class ClaudeServiceTest extends TestCase {
         $this->assertSame('tool_use', $replayed[1]['type']);
     }
 
+    /**
+     * A deferred tool cannot carry cache_control and is outside the prefix:
+     * the marker goes on the last tool loaded from the start, and the request
+     * carries the mid-conversation tool changes beta.
+     */
+    public function testDeferredToolsAreNotTheCacheBreakpointAndAddTheirBeta(): void {
+        $this->configWithApiKey(null, ['server_fallback' => '0']);
+
+        $this->testable->chatWithTools(
+            [['role' => 'user', 'content' => 'Hi'], ['role' => 'system', 'content' => [['type' => 'tool_addition', 'tool' => ['type' => 'tool_reference', 'name' => 'b']]]]],
+            [
+                ['name' => 'a', 'description' => 'A', 'input_schema' => ['type' => 'object']],
+                ['name' => 'b', 'description' => 'B', 'input_schema' => ['type' => 'object'], 'defer_loading' => true],
+            ],
+            fn() => [],
+            null,
+            'testuser',
+        );
+
+        $tools = $this->testable->lastCreateParams['tools'];
+        $this->assertSame(['type' => 'ephemeral'], $tools[0]['cache_control']);
+        $this->assertArrayNotHasKey('cache_control', $tools[1]);
+        $this->assertStringContainsString('mid-conversation-tool-changes-2026-07-01', $this->testable->lastRequestOptions['extraHeaders']['anthropic-beta']);
+    }
+
     // ── Files API beta header detection ────────────────────────────────────
 
     public function testRequestOptionsOmitFilesBetaWhenNoFileIdSource(): void {
