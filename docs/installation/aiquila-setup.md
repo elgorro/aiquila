@@ -286,6 +286,26 @@ than guess:
 occ aiquila:benchmark-tier --model claude-opus-5 --runs 5
 ```
 
+#### Refused requests
+
+Some Claude models, Opus 5 and Fable 5 among them, have safety classifiers that
+can decline a request. Benign security or life-sciences work trips them now and
+then. AIquila shows a declined request as an error, never as a half-finished
+answer.
+
+On the Claude API and on Claude on Google Cloud (Anthropic managed), AIquila
+asks Anthropic to retry a declined request on the model it recommends for that
+kind of refusal, within the same call. The retry model can be less capable than
+the one you picked, and the declined attempt is billed when it produced output
+or falls in a billed category. To turn it off, use **Defaults** → *Retry refused
+requests on a fallback model*, or:
+
+```bash
+occ aiquila:configure --server-fallback=off
+```
+
+See [Refusals and fallback](../dev/refusals.md) for the details.
+
 #### Attachments and the Files API
 
 On the Claude API, images and PDFs attached in a chat are uploaded once to

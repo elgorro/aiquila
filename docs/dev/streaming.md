@@ -43,7 +43,10 @@ thinking was dropped.
 
 `error` is always followed by `persisted`, so a failed turn still leaves the
 user whatever text arrived before it went wrong, suffixed with
-`_(stream interrupted: …)_`.
+`_(stream interrupted: …)_`. A refusal is the exception. Its `error` event
+carries `error_type: refused` and `refusal_category`, and the partial text and
+thinking are discarded rather than kept, because output cut off by the safety
+classifiers is not half an answer (see [Refusals and fallback](refusals.md)).
 
 The frontend falls back to the non-streaming
 `POST /api/conversations/{id}/messages` if the stream cannot be opened at all,

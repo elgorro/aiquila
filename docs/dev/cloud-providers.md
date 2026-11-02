@@ -34,6 +34,7 @@ platform lacks, so a request never fails on a missing endpoint:
 | Service tier, extended batch output | ✓ | — | — | — | — | — | — |
 | Automatic prompt caching | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
 | Mid-conversation system messages | ✓ | ✓ | — | ✓ | ✓ | ✓ | — |
+| Server-side refusal fallback | ✓ | — | ✓ | — | — | — | — |
 
 Where a feature is off:
 
@@ -46,6 +47,9 @@ Where a feature is off:
 - **Files API** — attachments are sent inline with each request. The Files API is
   only used through the Claude API card's key, which no cloud workspace can read,
   so even the Anthropic-operated platforms inline.
+- **Server-side refusal fallback** — a request the safety classifiers decline
+  comes back as a refusal, with no retry on another model (see
+  [Refusals and fallback](refusals.md)).
 - **Mid-conversation system messages** — the date and time-zone note goes to the
   model as a `<system-reminder>` block in the user's turn instead.
 - **InvokeModel** — explicit cache breakpoints still go out; only the top-level

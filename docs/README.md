@@ -75,6 +75,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[Request metadata](dev/request-metadata.md)** — the hashed `metadata.user_id` sent to Anthropic, and how to resolve it
 - **[Streaming responses](dev/streaming.md)** — how chat replies reach the browser as they are written, and what buffers them
 - **[Prompt caching](dev/prompt-caching.md)** — where cache breakpoints are placed, and how to read the cache-hit numbers
+- **[Refusals and fallback](dev/refusals.md)** — classifier refusals, discarding partial output, and Anthropic's server-side fallback
 - **[Batch processing](dev/batch-processing.md)** — the Message Batches transport, the bulk cowork tasks, and the extended-output switch
 - **[OpenAPI](dev/openapi.md)** — OpenAPI documentation
 - **MCP Development** — [Architecture](mcp/development/architecture.md) | [Adding Tools](mcp/development/adding-tools.md) | [Adding Apps](mcp/development/adding-apps.md)
