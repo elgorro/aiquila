@@ -266,6 +266,9 @@ php occ aiquila:test --user john
 
 # Test one provider
 php occ aiquila:test --provider local
+
+# Check that the chat system prompt is read back from the prompt cache (Anthropic only)
+php occ aiquila:test --cache-check --user john
 ```
 
 To configure a provider other than the instance default, use

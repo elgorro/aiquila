@@ -150,6 +150,37 @@ changing between requests — a timestamp or per-request id interpolated into th
 system prompt, a tool list whose order is not deterministic, or a switch of
 model, which scopes the cache and invalidates it wholesale.
 
+### Minimum cacheable length
+
+The API caches a prefix only when it reaches the model's minimum. Below that it
+skips caching without an error, so the system block is marked on every request.
+The minimum differs between models, and it does not shrink steadily from one
+generation to the next:
+
+| Model | Minimum cacheable prefix |
+|---|---|
+| Opus 5, Fable 5 | 512 tokens |
+| Opus 4.8, Sonnet 5, Sonnet 4.6, Sonnet 4.5 | 1024 tokens |
+| Opus 4.7 | 2048 tokens |
+| Opus 4.6, Opus 4.5, Haiku 4.5 | 4096 tokens |
+
+So a short system prompt that never cached on one model may cache on another.
+Check what the configured model does with `occ aiquila:test --cache-check`. It
+sends the chat system prompt twice and compares the usage:
+
+```bash
+occ aiquila:test --cache-check --user alice
+```
+
+| Result | Meaning | Exit code |
+|---|---|---|
+| Cache hit | The second request read the prefix back | 0 |
+| Not cached | Nothing written or read: the prefix is under the model minimum | 0 |
+| Cache miss | Written but never read: something in the prefix changes between identical requests | 1 |
+
+Across real traffic, `nextcloud_aiquila_prompt_cache_tokens_total` gives the
+same signal per model and request type; see [Monitoring](../monitoring.md).
+
 The chat system prompt is assembled by `InstructionsService` in a fixed order:
 instance instructions, the user's default, the project prompt, the project
 paths. The order runs from most shared to most specific, so the start of the
