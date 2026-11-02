@@ -3120,12 +3120,18 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         if ($fast) {
             $betas[] = AnthropicBeta::FAST_MODE_2026_02_01;
         }
+        // Fallback has to be configured on every request path, this one too.
+        $fallbacks = $params['fallbacks'] ?? null;
+        if ($fallbacks !== null) {
+            $betas[] = AnthropicBeta::SERVER_SIDE_FALLBACK_2026_07_01;
+        }
 
         return $client->beta->messages->createStream(
             maxTokens: $params['max_tokens'],
             messages: $params['messages'],
             model: $params['model'],
             cacheControl: $params['cache_control'] ?? null,
+            fallbacks: $fallbacks,
             mcpServers: $mcpServers,
             outputConfig: $params['outputConfig'] ?? null,
             serviceTier: $params['service_tier'] ?? null,
@@ -3206,6 +3212,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         $totalCacheCreate = 0;
         $totalCacheRead = 0;
         $allCitations = [];
+        $refused = false;
+        $refusalDetails = null;
 
         // Per-block accumulators, keyed by content-block index.
         /** @var array<int, array<string, mixed>> $blocks */
@@ -3310,6 +3318,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                         break;
 
                     case 'message_delta':
+                        if (($event->delta->stopReason ?? null) === 'refusal') {
+                            $refusalDetails = $event->delta->stopDetails ?? null;
+                            $refused = true;
+                        }
                         if (isset($event->usage)) {
                             $totalOutput += $event->usage->outputTokens ?? 0;
                         }
@@ -3323,6 +3335,20 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         } catch (\Throwable $e) {
             $this->logger->error('AIquila SDK: chatWithNativeMcp stream failed', $this->buildErrorLogContext($e));
             yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => [
+                'input_tokens' => $totalInput,
+                'output_tokens' => $totalOutput,
+                'cache_creation_tokens' => $totalCacheCreate ?: null,
+                'cache_read_tokens' => $totalCacheRead ?: null,
+            ]];
+            return;
+        }
+
+        if ($refused) {
+            // As in chatWithToolsStream(): the partial turn is incomplete.
+            $category = $refusalDetails->category ?? null;
+            $this->logger->info('AIquila SDK: stream refused', ['category' => $category]);
+            $refusal = new RefusalException($category, $refusalDetails->explanation ?? null);
+            yield ['type' => 'error', 'error' => $refusal->getMessage(), 'error_type' => 'refused', 'refusal_category' => $category, 'usage' => [
                 'input_tokens' => $totalInput,
                 'output_tokens' => $totalOutput,
                 'cache_creation_tokens' => $totalCacheCreate ?: null,
@@ -3399,6 +3425,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         $citations = [];
         $usage = ['input_tokens' => 0, 'output_tokens' => 0];
         $error = null;
+        $refused = false;
+        $refusalCategory = null;
 
         foreach ($this->chatWithNativeMcp($messages, $mcpServers, $system, $userId, $options) as $event) {
             switch ($event['type'] ?? null) {
@@ -3414,10 +3442,18 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                     if (isset($event['usage']) && is_array($event['usage'])) {
                         $usage = $event['usage'];
                     }
+                    if (($event['error_type'] ?? null) === 'refused') {
+                        $refused = true;
+                        $refusalCategory = $event['refusal_category'] ?? null;
+                    }
                     break;
             }
         }
 
+        // A refusal's partial text is incomplete: never returned as an answer.
+        if ($refused) {
+            return ['error' => (string)$error, 'error_type' => 'refused', 'refusal_category' => $refusalCategory, 'model' => $this->resolveRequestModel($userId, $options), 'usage' => $usage];
+        }
         if ($error !== null && $text === '') {
             return ['error' => $error, 'model' => $this->resolveRequestModel($userId, $options), 'usage' => $usage];
         }

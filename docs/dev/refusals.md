@@ -31,6 +31,9 @@ incomplete, so AIquila discards it:
   `error_type: refused` and `refusal_category`. `ConversationController` drops the
   text and thinking that streamed before it, and persists only the refusal (see
   [Streaming responses](streaming.md)).
+- **`chatWithNativeMcp()`**, the native MCP connector path, does the same, and
+  `chatWithNativeMcpCollect()` returns the refused error result without the
+  partial text.
 - **`askStream()`** throws the `RefusalException` after the text it already yielded.
 
 Each refusal is logged at `info` as `AIquila SDK: request refused`, with its
@@ -49,7 +52,9 @@ just runs the request on its own, so the field is safe to send everywhere.
 
 Both travel through `requestOptionsForMessages()` as an extra body param and a
 beta flag, the same way fast mode does. That keeps the request on the GA
-endpoint. The flags share one comma-separated `anthropic-beta` header.
+endpoint. The flags share one comma-separated `anthropic-beta` header. The
+native MCP connector is already on the beta endpoint, so
+`callBetaCreateStreamWithMcp()` passes `fallbacks` as a named argument instead.
 
 It is sent only when both of these hold:
 

@@ -254,4 +254,46 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
         $this->assertSame(1, $result['usage']['output_tokens']);
         $this->assertArrayNotHasKey('error', $result);
     }
+
+    /** Fallback is configured on every request path, the native-MCP one too. */
+    public function testNativeMcpPathAsksForServerSideFallback(): void {
+        $service = new NativeMcpTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
+        $service->setStubStream($this->streamFromEvents([]));
+        iterator_to_array($service->chatWithNativeMcp(
+            messages: [['role' => 'user', 'content' => 'hi']],
+            mcpServers: [['type' => 'url', 'url' => 'https://mcp.example/mcp', 'name' => 'x']],
+            userId: 'alice',
+        ), false);
+
+        $this->assertSame('default', $service->lastParams['fallbacks']);
+
+        $ref = new \ReflectionMethod(ClaudeSDKService::class, 'callBetaCreateStreamWithMcp');
+        $source = implode('', array_slice(file($ref->getFileName()), $ref->getStartLine() - 1, $ref->getEndLine() - $ref->getStartLine() + 1));
+        $this->assertStringContainsString('fallbacks: $fallbacks', $source);
+        $this->assertStringContainsString('SERVER_SIDE_FALLBACK_2026_07_01', $source);
+    }
+
+    /** A refusal ends the stream as a refused error, and its partial text is not an answer. */
+    public function testRefusalIsReportedAndThePartialTextDropped(): void {
+        $service = new NativeMcpTestableService($this->config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
+        $service->setStubStream($this->streamFromEvents([
+            $this->obj(['type' => 'message_start', 'message' => ['usage' => ['inputTokens' => 12]]]),
+            $this->obj(['type' => 'content_block_start', 'index' => 0, 'contentBlock' => ['type' => 'text', 'text' => '']]),
+            $this->obj(['type' => 'content_block_delta', 'index' => 0, 'delta' => ['type' => 'text_delta', 'text' => 'Step one is']]),
+            $this->obj(['type' => 'content_block_stop', 'index' => 0]),
+            $this->obj(['type' => 'message_delta', 'delta' => ['stopReason' => 'refusal', 'stopDetails' => ['category' => 'cyber', 'explanation' => 'Declined (cyber).']], 'usage' => ['outputTokens' => 4]]),
+        ]));
+
+        $result = $service->chatWithNativeMcpCollect(
+            [['role' => 'user', 'content' => 'hi']],
+            [['type' => 'url', 'url' => 'https://mcp.example/mcp', 'name' => 'x']],
+            null,
+            'alice',
+        );
+
+        $this->assertArrayNotHasKey('response', $result);
+        $this->assertSame('refused', $result['error_type']);
+        $this->assertSame('cyber', $result['refusal_category']);
+        $this->assertSame('Declined (cyber).', $result['error']);
+    }
 }
