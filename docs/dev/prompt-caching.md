@@ -148,6 +148,33 @@ then goes as labelled text: `[Called tool list_files with {"path":"/"}]` and
 `[Tool list_files returned: …]`. The native connector's own tool calls are run by
 Anthropic and are not stored.
 
+## Tools that change between turns
+
+`tools` renders first, so a conversation whose tool list changes (an MCP server
+added, removed or offering a new tool) would rebuild its whole cache on that turn.
+Where the model and platform take mid-conversation tool changes (beta
+`mid-conversation-tool-changes-2026-07-01`; Opus 4.8 and later, the Fable models,
+not Sonnet 5; the Claude API, Bedrock and Vertex AI), `ToolChanges` keeps `tools`
+as the conversation first sent it:
+
+- **A new tool** is appended with `defer_loading: true`, which keeps it out of the
+  prefix, and offered by a `tool_addition` block.
+- **A removed tool** stays declared, because a reference has to resolve. A
+  `tool_removal` block withdraws it, and it can be offered again later.
+- The blocks go in a `role: "system"` message after the user's turn. That message
+  is stored as a system row (`aiquila_messages.tool_trace`), so later turns replay
+  it in place. The declared list and the names on offer are kept in
+  `aiquila_conversations.tool_state`.
+- The cache breakpoint on `tools` sits on the last non-deferred tool. A deferred
+  definition cannot carry one.
+
+This header changes tools by reference only. A tool whose definition changed starts
+the state over. That one request misses the cache, and the stored change rows
+become plain text, so they never point at a declared list that no longer exists.
+The same happens when the conversation moves to a model or provider without the
+feature. There the tools go out as they are, and earlier changes are replayed as
+text.
+
 ## Turning it off
 
 Admin settings → **AIquila** → **Defaults** → *Automatic prompt caching*. On by

@@ -195,7 +195,8 @@ The Claude providers share one implementation, `ClaudeSDKService`, and differ in
 which parts of the Claude API besides the Messages endpoint their platform
 serves. `platformFeatures()` lists them — `files_api`, `batches`, `models_api`,
 `native_mcp`, `fast_mode`, `extended_batch_output`, `service_tier`, `metadata`,
-`auto_cache`, `mid_conversation_system`, `server_fallback`, `task_budget` — and every code path that touches one asks `hasFeature()` first:
+`auto_cache`, `mid_conversation_system`, `server_fallback`, `task_budget`,
+`mid_conversation_tool_changes` — and every code path that touches one asks `hasFeature()` first:
 
 - `supportsBatch()` decides whether summaries and coworkers take the Batch API;
 - `supportsFilesApi()` decides whether attachments are uploaded
