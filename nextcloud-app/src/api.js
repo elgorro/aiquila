@@ -270,6 +270,10 @@ export function runCoworker(id) {
 	return axios.post(url(`/api/coworkers/${id}/run`))
 }
 
+export function stopCoworker(id) {
+	return axios.post(url(`/api/coworkers/${id}/stop`))
+}
+
 export function getCoworkerRuns(id, limit = 20) {
 	return axios.get(url(`/api/coworkers/${id}/runs`), { params: { limit } })
 }

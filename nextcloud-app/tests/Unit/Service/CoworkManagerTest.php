@@ -231,4 +231,16 @@ class CoworkManagerTest extends TestCase {
 
         $this->assertSame([['ts' => 10, 'level' => 'info', 'message' => 'Done', 'item' => '/Photos/a.jpg']], $detail['log']);
     }
+
+    public function testStopResolvesByApp(): void {
+        $this->mapper = $this->createMock(CoworkerMapper::class);
+        $this->mapper->expects($this->once())->method('findByIdAndApp')->with(5, 'myapp')->willReturn($this->coworker());
+        $run = new \OCA\AIquila\Db\CoworkerRun();
+        $run->setStatus('cancelled');
+        $this->service = $this->createMock(CoworkerService::class);
+        $this->service->expects($this->once())->method('stopEntity')->willReturn($run);
+        $this->buildManager();
+
+        $this->assertSame('cancelled', $this->manager->stop('myapp', 5)['status']);
+    }
 }

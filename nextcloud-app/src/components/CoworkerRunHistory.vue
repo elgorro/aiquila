@@ -14,6 +14,12 @@
 				<span class="when">{{ formatTime(run.startedAt) }}</span>
 				<span v-if="run.error" class="err" :title="run.error">{{ run.error }}</span>
 				<span v-else-if="run.summary" class="summary" :title="run.summary">{{ firstLine(run.summary) }}</span>
+				<button v-if="isActive(run)"
+					class="link stop"
+					:disabled="stopping"
+					@click="stop">
+					{{ t('aiquila', 'Stop') }}
+				</button>
 			</li>
 		</ul>
 	</div>
@@ -21,7 +27,7 @@
 
 <script>
 import { translate as t } from '@nextcloud/l10n'
-import { getCoworkerRuns } from '../api.js'
+import { getCoworkerRuns, stopCoworker } from '../api.js'
 
 export default {
 	name: 'CoworkerRunHistory',
@@ -29,7 +35,7 @@ export default {
 		coworkerId: { type: Number, required: true },
 	},
 	data() {
-		return { runs: [], loading: false }
+		return { runs: [], loading: false, stopping: false }
 	},
 	watch: {
 		coworkerId: 'refresh',
@@ -41,7 +47,26 @@ export default {
 		// 'pending' reads as "something is stuck" on its own; the run is
 		// waiting on a batch that Anthropic may take hours to return.
 		statusLabel(status) {
-			return status === 'pending' ? t('aiquila', 'Waiting for batch') : status
+			if (status === 'pending') {
+				return t('aiquila', 'Waiting for batch')
+			}
+			return status === 'cancelled' ? t('aiquila', 'Cancelled') : status
+		},
+		isActive(run) {
+			return run.status === 'running' || run.status === 'pending'
+		},
+		// Stops the coworker's run in flight; a running one ends at its next
+		// item, so the row may still say "running" until the next refresh.
+		async stop() {
+			this.stopping = true
+			try {
+				await stopCoworker(this.coworkerId)
+			} catch (e) {
+				// 404: it finished meanwhile. The refresh shows how.
+			} finally {
+				this.stopping = false
+				await this.refresh()
+			}
 		},
 		async refresh() {
 			this.loading = true
@@ -78,6 +103,8 @@ export default {
 /* Neutral rather than warning: a pending run is healthy, just slow — its
    batch is with Anthropic and may take hours. */
 .status.pending { color: var(--color-text-lighter); }
+.status.cancelled { color: var(--color-text-lighter); }
+.link.stop { margin-left: auto; color: var(--color-error); }
 .when { color: var(--color-text-lighter); }
 .summary, .err { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
 .err { color: var(--color-error); }

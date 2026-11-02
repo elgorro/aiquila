@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\Dashboard;
 
 use OCA\AIquila\Db\Coworker;
+use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Service\CoworkerService;
 use OCP\Dashboard\IAPIWidgetV2;
 use OCP\Dashboard\IButtonWidget;
@@ -81,6 +82,9 @@ class CoworkersWidget extends AbstractAIquilaWidget implements IAPIWidgetV2, IBu
     private function statusSubtitle(Coworker $coworker): string {
         if ($coworker->getPaused() === 1) {
             return $this->l10n->t('Paused');
+        }
+        if ($coworker->getLastStatus() === CoworkerRun::STATUS_CANCELLED) {
+            return $this->l10n->t('Last run cancelled');
         }
         if ($coworker->getLastStatus() === 'error') {
             $error = $coworker->getLastError();

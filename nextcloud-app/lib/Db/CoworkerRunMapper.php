@@ -92,6 +92,44 @@ class CoworkerRunMapper extends QBMapper {
     }
 
     /**
+     * The coworker's run in flight — `running` or `pending` — newest first,
+     * or null when there is none.
+     */
+    public function findActiveForCoworker(int $coworkerId): ?CoworkerRun {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('coworker_id', $qb->createNamedParameter($coworkerId, IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->in('status', $qb->createNamedParameter(
+                [CoworkerRun::STATUS_RUNNING, CoworkerRun::STATUS_PENDING],
+                IQueryBuilder::PARAM_STR_ARRAY,
+            )))
+            ->orderBy('started_at', 'DESC')
+            ->setMaxResults(1);
+
+        try {
+            return $this->findEntity($qb);
+        } catch (DoesNotExistException) {
+            return null;
+        }
+    }
+
+    /**
+     * The status as stored right now, read fresh for a worker that holds the
+     * row in memory: another request may have stopped the run meanwhile.
+     */
+    public function findStatus(int $runId): ?string {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('status')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('id', $qb->createNamedParameter($runId, IQueryBuilder::PARAM_INT)));
+        $result = $qb->executeQuery();
+        $status = $result->fetchOne();
+        $result->closeCursor();
+        return is_string($status) ? $status : null;
+    }
+
+    /**
      * Count all coworker runs grouped by status, across all users.
      * Used for the server-global OpenMetrics export.
      *

@@ -87,6 +87,10 @@ class CoworkManager implements ICoworkManager {
         );
     }
 
+    public function stop(string $appId, int $id): array {
+        return $this->service->stopEntity($this->mapper->findByIdAndApp($id, $appId))->jsonSerialize();
+    }
+
     public function getRun(string $appId, int $id, int $runId): array {
         $coworker = $this->mapper->findByIdAndApp($id, $appId); // authorize
         return $this->service->getRun($coworker->getId(), $runId, $coworker->getUserId())->jsonSerializeDetail();
