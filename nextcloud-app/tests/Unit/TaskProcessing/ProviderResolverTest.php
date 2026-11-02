@@ -9,6 +9,7 @@ use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 use OCA\AIquila\TaskProcessing\ProviderResolver;
 use PHPUnit\Framework\TestCase;
+use OCA\AIquila\Service\UsageStatService;
 
 class ProviderResolverTest extends TestCase {
     private $factory;
@@ -20,7 +21,7 @@ class ProviderResolverTest extends TestCase {
     }
 
     private function buildResolver(): void {
-        $this->resolver = new ProviderResolver($this->factory);
+        $this->resolver = new ProviderResolver($this->factory, $this->createStub(UsageStatService::class));
     }
 
     private function provider(string $id, string $label, bool $vision, bool $configured = true) {
@@ -192,7 +193,7 @@ class ProviderResolverTest extends TestCase {
             ->with(InstructionsService::SCOPE_TASKS, 'alice', 'Be terse.')
             ->willReturn("Org.\n\nBe terse.");
 
-        $resolver = new ProviderResolver($this->factory, $instructions);
+        $resolver = new ProviderResolver($this->factory, $this->createStub(UsageStatService::class), $instructions);
 
         $this->assertSame("Org.\n\nBe terse.", $resolver->systemPrompt('alice', ['system_prompt' => 'Be terse.']));
     }

@@ -15,6 +15,7 @@ use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * Base class for the "vision" task family — coworkers that walk a set of media
@@ -33,6 +34,7 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
         protected readonly ImageOptimizer $imageOptimizer,
         protected readonly LLMProviderFactory $providerFactory,
         protected readonly LoggerInterface $logger,
+        protected readonly UsageStatService $usageStats,
         protected readonly ?InstructionsService $instructions = null,
     ) {
     }
@@ -96,6 +98,7 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
                 $image = $this->imageOptimizer->prepare($file->getContent(), $file->getMimetype());
 
                 $result = $provider->askWithImage($prompt, $image['base64'], $image['mimeType'], $userId, (string)$file->getId(), $requestOptions);
+                $this->usageStats->record($userId, $provider, $result, UsageStatService::TYPE_COWORKER);
                 if (isset($result['error'])) {
                     throw new \RuntimeException($result['error']);
                 }

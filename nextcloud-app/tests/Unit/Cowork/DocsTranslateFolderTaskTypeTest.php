@@ -12,6 +12,7 @@ use OCP\SystemTag\ISystemTagManager;
 use OCP\SystemTag\ISystemTagObjectMapper;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 class DocsTranslateFolderTaskTypeTest extends TestCase {
     private DocsTranslateFolderTaskType $task;
@@ -23,6 +24,7 @@ class DocsTranslateFolderTaskTypeTest extends TestCase {
             $this->createStub(ISystemTagManager::class),
             $this->createStub(ISystemTagObjectMapper::class),
             $this->createStub(LoggerInterface::class),
+            $this->createStub(UsageStatService::class),
         );
     }
 

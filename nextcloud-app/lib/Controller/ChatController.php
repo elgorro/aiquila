@@ -12,6 +12,7 @@ use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCA\AIquila\Service\Exception\ContentTooLargeException;
+use OCA\AIquila\Service\UsageStatService;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
@@ -32,6 +33,7 @@ class ChatController extends Controller {
     private ImageOptimizer $imageOptimizer;
     private McpClientService $mcpClient;
     private NativeMcpService $nativeMcp;
+    private UsageStatService $usageStats;
     private ?string $userId;
     private LoggerInterface $logger;
 
@@ -53,6 +55,7 @@ class ChatController extends Controller {
         ImageOptimizer $imageOptimizer,
         McpClientService $mcpClient,
         NativeMcpService $nativeMcp,
+        UsageStatService $usageStats,
         ?string $userId,
         LoggerInterface $logger
     ) {
@@ -63,8 +66,20 @@ class ChatController extends Controller {
         $this->imageOptimizer = $imageOptimizer;
         $this->mcpClient = $mcpClient;
         $this->nativeMcp = $nativeMcp;
+        $this->usageStats = $usageStats;
         $this->userId = $userId;
         $this->logger = $logger;
+    }
+
+    /**
+     * Records the tokens a provider call spent and hands its result back.
+     *
+     * @param array<array-key, mixed> $result
+     * @return array<array-key, mixed>
+     */
+    private function counted(array $result): array {
+        $this->usageStats->record($this->userId, $this->provider(), $result, UsageStatService::TYPE_API);
+        return $result;
     }
 
     /**
@@ -141,7 +156,7 @@ class ChatController extends Controller {
             return $this->clientError(413, 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB');
         }
 
-        $result = $this->provider()->ask($prompt, $context, $this->userId);
+        $result = $this->counted($this->provider()->ask($prompt, $context, $this->userId));
         return new JSONResponse($result);
     }
 
@@ -202,13 +217,13 @@ class ChatController extends Controller {
                 $fileId = $this->userId !== null && FilesService::acceptsFileIds($this->provider())
                     ? $this->filesService->getOrUploadFileId($rawBytes, $images[0]['name'], $images[0]['mimeType'], $this->userId)
                     : null;
-                $result = $this->provider()->askWithImage(
+                $result = $this->counted($this->provider()->askWithImage(
                     $prompt,
                     $images[0]['base64'],
                     $images[0]['mimeType'],
                     $this->userId,
                     $fileId,
-                );
+                ));
             } else {
                 $fileIds = null;
                 if ($this->userId !== null && FilesService::acceptsFileIds($this->provider())) {
@@ -222,7 +237,7 @@ class ChatController extends Controller {
                         );
                     }
                 }
-                $result = $this->provider()->askWithImages($prompt, $images, $this->userId, $fileIds);
+                $result = $this->counted($this->provider()->askWithImages($prompt, $images, $this->userId, $fileIds));
             }
             return new JSONResponse($result);
         }
@@ -234,7 +249,7 @@ class ChatController extends Controller {
             $fileId = $this->userId !== null && FilesService::acceptsFileIds($this->provider())
                 ? $this->filesService->getOrUploadFileId($rawBytes, $f['name'], 'application/pdf', $this->userId)
                 : null;
-            $result = $this->provider()->askWithDocument(
+            $result = $this->counted($this->provider()->askWithDocument(
                 $prompt,
                 $rawBytes,
                 'application/pdf',
@@ -243,7 +258,7 @@ class ChatController extends Controller {
                 true,
                 true,
                 $fileId,
-            );
+            ));
             return new JSONResponse($result);
         }
 
@@ -285,7 +300,7 @@ class ChatController extends Controller {
             $content[] = ['type' => 'text', 'text' => $promptWithContext];
 
             $messages = [['role' => 'user', 'content' => $content]];
-            $result = $this->provider()->chat($messages, null, $this->userId);
+            $result = $this->counted($this->provider()->chat($messages, null, $this->userId));
             return new JSONResponse($result);
         }
 
@@ -296,7 +311,7 @@ class ChatController extends Controller {
             return $this->clientError(413, 'Content too large. Maximum size is ' . (self::MAX_CONTENT_LENGTH / (1024 * 1024)) . 'MB');
         }
 
-        $result = $this->provider()->ask($prompt, $context, $this->userId);
+        $result = $this->counted($this->provider()->ask($prompt, $context, $this->userId));
         return new JSONResponse($result);
     }
 
@@ -372,7 +387,7 @@ class ChatController extends Controller {
         if (!empty($allTools['tools'])) {
             $mapping = $allTools['mapping'];
             $mcpClient = $this->mcpClient;
-            $result = $this->provider()->chatWithTools(
+            $result = $this->counted($this->provider()->chatWithTools(
                 $messages,
                 $allTools['tools'],
                 function (string $name, array $input) use ($mcpClient, $mapping): array {
@@ -381,9 +396,9 @@ class ChatController extends Controller {
                 $system,
                 $this->userId,
                 $options,
-            );
+            ));
         } else {
-            $result = $this->provider()->chat($messages, $system, $this->userId, $options);
+            $result = $this->counted($this->provider()->chat($messages, $system, $this->userId, $options));
         }
 
         return new JSONResponse($result);
@@ -483,20 +498,20 @@ class ChatController extends Controller {
             $fileId = $this->userId !== null && FilesService::acceptsFileIds($this->provider())
                 ? $this->filesService->getOrUploadFileId($rawBytes, $imageName, $optimized['mimeType'], $this->userId)
                 : null;
-            $result = $this->provider()->askWithImage(
+            $result = $this->counted($this->provider()->askWithImage(
                 $prompt,
                 $optimized['data'],
                 $optimized['mimeType'],
                 $this->userId,
                 $fileId,
-            );
+            ));
         } elseif ($mimeType === 'application/pdf') {
             $rawBytes = base64_decode($fileData['content']);
             $docName = $fileData['name'] ?? basename($filePath);
             $fileId = $this->userId !== null && FilesService::acceptsFileIds($this->provider())
                 ? $this->filesService->getOrUploadFileId($rawBytes, $docName, 'application/pdf', $this->userId)
                 : null;
-            $result = $this->provider()->askWithDocument(
+            $result = $this->counted($this->provider()->askWithDocument(
                 $prompt,
                 $rawBytes,
                 'application/pdf',
@@ -505,11 +520,11 @@ class ChatController extends Controller {
                 true,
                 true,
                 $fileId,
-            );
+            ));
         } else {
             $context = "File: {$fileData['name']} ({$mimeType}, {$fileData['size']} bytes)\n\n"
                      . $fileData['content'];
-            $result = $this->provider()->ask($prompt, $context, $this->userId);
+            $result = $this->counted($this->provider()->ask($prompt, $context, $this->userId));
         }
 
         return new JSONResponse($result);

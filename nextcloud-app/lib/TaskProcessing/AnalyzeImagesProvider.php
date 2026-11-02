@@ -143,6 +143,7 @@ class AnalyzeImagesProvider implements ISynchronousProvider {
                 LLMProviderInterface::TASK_OPTIONS,
             );
         }
+        $this->providers->recordUsage($userId, $provider, $result);
 
         if (isset($result['error'])) {
             $this->logger->error('AIquila AnalyzeImages: Error', ['error' => $result['error'], 'provider' => $provider->getId()]);

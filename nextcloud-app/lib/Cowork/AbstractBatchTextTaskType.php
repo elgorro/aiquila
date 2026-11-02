@@ -20,6 +20,7 @@ use OCP\SystemTag\ISystemTagManager;
 use OCP\SystemTag\ISystemTagObjectMapper;
 use OCP\SystemTag\TagNotFoundException;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * Base class for the "docs" task family — coworkers that walk a folder of text
@@ -69,6 +70,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
         protected readonly ISystemTagManager $tagManager,
         protected readonly ISystemTagObjectMapper $tagObjectMapper,
         protected readonly LoggerInterface $logger,
+        protected readonly UsageStatService $usageStats,
         protected readonly ?InstructionsService $instructions = null,
     ) {
     }
@@ -292,6 +294,8 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
                     $failures[$bucket][] = $name . ' — ' . $result['error'];
                     continue;
                 }
+                // Billed whether or not the output can still be written.
+                $this->usageStats->record($userId, $provider, $result, UsageStatService::TYPE_COWORKER);
                 if ($file === null) {
                     $failures['unsaved'][] = $name . ' — source no longer exists';
                     continue;
@@ -354,6 +358,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
                 }
 
                 $result = $provider->ask($this->buildPrompt($content, $options), '', $userId, $this->requestOptions($coworker, $provider, $options));
+                $this->usageStats->record($userId, $provider, $result, UsageStatService::TYPE_COWORKER);
                 if (isset($result['error'])) {
                     $failures['errored'][] = $file->getName() . ' — ' . $result['error'];
                     continue;

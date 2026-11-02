@@ -25,6 +25,7 @@ use OCP\BackgroundJob\IJobList;
 use OCP\IRequest;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * Covers thinkingBudget validation on ConversationController::update().
@@ -90,6 +91,7 @@ class ConversationControllerThinkingBudgetTest extends TestCase {
             $this->createStub(ContextChatService::class),
             $this->createStub(RuntimeContextService::class),
             $this->createStub(InstructionsService::class),
+            $this->createStub(UsageStatService::class),
             'testuser',
             $this->createStub(LoggerInterface::class),
         );

@@ -12,6 +12,7 @@ use OCP\TaskProcessing\Exception\ProcessingException;
 use OCP\TaskProcessing\Exception\UserFacingProcessingException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use OCA\AIquila\Service\UsageStatService;
 
 class TaskFailureTest extends TestCase {
     private const UNREACHABLE = 'The AI provider could not be reached. Try again later; if this keeps happening, ask your administrator to check the AIquila provider settings.';
@@ -105,7 +106,7 @@ class TaskFailureTest extends TestCase {
         $factory->method('getProviderForUser')->willReturn($local);
 
         try {
-            (new SummaryProvider(new ProviderResolver($factory)))->process('alice', ['input' => 'text'], static fn (float $p) => null);
+            (new SummaryProvider(new ProviderResolver($factory, $this->createStub(UsageStatService::class))))->process('alice', ['input' => 'text'], static fn (float $p) => null);
             $this->fail('Expected the provider error to be thrown');
         } catch (UserFacingProcessingException $e) {
             $this->assertSame(self::UNREACHABLE, $e->getUserFacingMessage());
@@ -117,7 +118,7 @@ class TaskFailureTest extends TestCase {
         $factory->method('getProviderForUser')->willThrowException(new NoPermittedProviderException('alice'));
 
         try {
-            (new ProviderResolver($factory))->resolve('alice');
+            (new ProviderResolver($factory, $this->createStub(UsageStatService::class)))->resolve('alice');
             $this->fail('Expected the resolver to fail');
         } catch (UserFacingProcessingException $e) {
             // The bare message, not the internal one that names the user.

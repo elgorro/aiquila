@@ -9,6 +9,7 @@ use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * Picks the LLM provider that should serve a TaskProcessing run.
@@ -32,6 +33,7 @@ class ProviderResolver {
      */
     public function __construct(
         private LLMProviderFactory $providerFactory,
+        private UsageStatService $usage,
         private ?InstructionsService $instructions = null,
     ) {
     }
@@ -50,6 +52,16 @@ class ProviderResolver {
             return $system;
         }
         return $this->instructions->withInstance(InstructionsService::SCOPE_TASKS, $userId, $system);
+    }
+
+    /**
+     * Records the tokens a task's model call spent. Every provider here
+     * resolves through this class, so this is where task usage is counted.
+     *
+     * @param array<array-key, mixed> $result The provider's result array
+     */
+    public function recordUsage(?string $userId, LLMProviderInterface $provider, array $result): void {
+        $this->usage->record($userId, $provider, $result, UsageStatService::TYPE_TASK);
     }
 
     /**

@@ -14,6 +14,7 @@ use OCP\ICacheFactory;
 use OCP\IRequest;
 use Psr\Log\LoggerInterface;
 use PHPUnit\Framework\TestCase;
+use OCA\AIquila\Service\UsageStatService;
 
 class ChatControllerTest extends TestCase {
     private $cache;
@@ -57,6 +58,17 @@ class ChatControllerTest extends TestCase {
         $this->buildCtrl();
     }
 
+    /** @var list<array<int, mixed>> UsageStatService::record() calls */
+    private array $usageRecorded = [];
+
+    private function usageRecorder(): UsageStatService {
+        $usage = $this->createStub(UsageStatService::class);
+        $usage->method('record')->willReturnCallback(function (mixed ...$args): void {
+            $this->usageRecorded[] = $args;
+        });
+        return $usage;
+    }
+
     private function buildCtrl(): void {
         $this->ctrl        = new ChatController(
             'aiquila',
@@ -67,6 +79,7 @@ class ChatControllerTest extends TestCase {
             $this->imageOptimizer,
             $this->mcpClient,
             $this->nativeMcp,
+            $this->usageRecorder(),
             'testuser',
             $this->logger
         );
@@ -147,6 +160,9 @@ class ChatControllerTest extends TestCase {
         $response = $this->ctrl->ask('Hello Claude', 'some context');
         $this->assertEquals(200, $response->getStatus());
         $this->assertEquals(['response' => 'Hi there!'], $response->getData());
+        $this->assertCount(1, $this->usageRecorded);
+        $this->assertSame('testuser', $this->usageRecorded[0][0]);
+        $this->assertSame(UsageStatService::TYPE_API, $this->usageRecorded[0][3]);
     }
 
     // ── ask() with files tests ──────────────────────────────────────────

@@ -25,6 +25,7 @@ use OCP\BackgroundJob\IJobList;
 use OCP\IRequest;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * A file attached on one turn has to stay in context for every later turn.
@@ -135,6 +136,7 @@ class ConversationControllerFileHistoryTest extends TestCase {
             $this->createStub(ContextChatService::class),
             $this->createStub(RuntimeContextService::class),
             $this->createStub(InstructionsService::class),
+            $this->createStub(UsageStatService::class),
             'testuser',
             $this->createStub(LoggerInterface::class),
         );

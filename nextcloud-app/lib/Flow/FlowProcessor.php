@@ -14,6 +14,7 @@ use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * Runs one AIquila Flow action against one file and stores the answer.
@@ -35,6 +36,7 @@ class FlowProcessor {
         private ImageOptimizer $imageOptimizer,
         private RuntimeContextService $runtimeContext,
         private ITimeFactory $time,
+        private UsageStatService $usageStats,
         private LoggerInterface $logger,
     ) {
     }
@@ -74,6 +76,7 @@ class FlowProcessor {
                 LLMProviderInterface::TASK_OPTIONS,
             ),
         };
+        $this->usageStats->record($userId, $provider, $result, UsageStatService::TYPE_FLOW);
 
         if (isset($result['error'])) {
             $this->logger->warning('AIquila Flow: the model call failed', [

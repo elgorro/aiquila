@@ -14,6 +14,7 @@ use OCP\TaskProcessing\TaskTypes\AnalyzeImages;
 use OCP\TaskProcessing\TaskTypes\ImageToTextOpticalCharacterRecognition;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
+use OCA\AIquila\Service\UsageStatService;
 
 class VisionProvidersTest extends TestCase {
     private const JPEG = "\xFF\xD8\xFF\xE0 raw bytes";
@@ -35,7 +36,7 @@ class VisionProvidersTest extends TestCase {
     }
 
     private function buildResolver(): void {
-        $this->resolver = new ProviderResolver($this->factory);
+        $this->resolver = new ProviderResolver($this->factory, $this->createStub(UsageStatService::class));
     }
 
     /**
