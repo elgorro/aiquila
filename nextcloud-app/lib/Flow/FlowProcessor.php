@@ -8,6 +8,8 @@ namespace OCA\AIquila\Flow;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\RuntimeContextService;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
@@ -31,6 +33,8 @@ class FlowProcessor {
         private IRootFolder $rootFolder,
         private LLMProviderFactory $providers,
         private ImageOptimizer $imageOptimizer,
+        private RuntimeContextService $runtimeContext,
+        private ITimeFactory $time,
         private LoggerInterface $logger,
     ) {
     }
@@ -57,7 +61,9 @@ class FlowProcessor {
         }
 
         $provider = $this->providers->getProviderForUser($userId, null);
-        $prompt = $this->prompt($config, $kind);
+        // The date lets "recently" or "next week" in a file be read against
+        // today. Only the model sees it; the result file quotes $config->prompt.
+        $prompt = $this->prompt($config, $kind) . "\n\n" . $this->runtimeContext->note($userId, $this->time->getTime());
         $result = match ($kind) {
             'image' => $this->askImage($provider, $file, $prompt, $userId),
             'pdf' => $this->askPdf($provider, $file, $prompt, $userId),

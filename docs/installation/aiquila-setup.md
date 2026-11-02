@@ -565,6 +565,9 @@ How it works:
   `occ background-job:worker 'OCA\AIquila\BackgroundJob\TalkBotReplyJob'`.
 - The answer is generated on the asking user's AIquila provider, within the admin's
   access rules. Guests and federated users get the instance default.
+- The model is told today's date in the asking user's time zone, so questions such as
+  "what's due this week?" are answered against the server's clock. Guests and
+  federated users get the server's default time zone.
 - Replies are posted through Talk's bot API on this server, at its `overwrite.cli.url`.
   If the server cannot reach itself there (a reverse proxy only reachable from
   outside, a container port mapping), give the internal address:
