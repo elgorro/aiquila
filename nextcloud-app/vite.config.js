@@ -46,9 +46,10 @@ export default defineConfig({
 					if (id.includes('vue-material-design-icons') || id.includes('@mdi/')) {
 						return 'vendor-icons'
 					}
-					if (id.includes('highlight.js') || id.includes('marked')) {
-						return 'vendor-markdown'
-					}
+					// highlight.js is left out on purpose: src/utils/markdown.js
+					// imports its core and each grammar dynamically, and pinning
+					// it here would merge them back into one eagerly loaded chunk.
+					if (id.includes('/marked/')) return 'vendor-markdown'
 				},
 			},
 		},
