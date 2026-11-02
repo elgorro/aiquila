@@ -8,6 +8,7 @@ namespace OCA\AIquila\BackgroundJob;
 use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\RuntimeContextService;
 use OCA\AIquila\Talk\TalkBotService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\QueuedJob;
@@ -29,6 +30,7 @@ class TalkBotReplyJob extends QueuedJob {
         ITimeFactory $time,
         private TalkBotService $bot,
         private LLMProviderFactory $providers,
+        private RuntimeContextService $runtimeContext,
         private LoggerInterface $logger,
         private InstructionsService $instructions,
     ) {
@@ -48,7 +50,7 @@ class TalkBotReplyJob extends QueuedJob {
         try {
             $provider = $this->providers->getProviderForUser($userId, null);
             $result = $provider->chat(
-                $this->buildMessages($token, $messageId),
+                $this->withRuntimeContext($this->buildMessages($token, $messageId), $userId),
                 $this->instructions->withInstance(InstructionsService::SCOPE_TALK, $userId, $this->systemPrompt($roomName)),
                 $userId,
                 LLMProviderInterface::TASK_OPTIONS,
@@ -103,6 +105,23 @@ class TalkBotReplyJob extends QueuedJob {
                 $messages[] = $turn;
             }
         }
+        return $messages;
+    }
+
+    /**
+     * Today's date and the asker's time zone, as a trailing system message.
+     * It goes after the history rather than into the system prompt so the
+     * cached prefix stays valid across days (see RuntimeContextService). The
+     * bot keeps no conversation row, so the note is sent fresh each reply.
+     *
+     * @param array<int, array{role: string, content: string}> $messages
+     * @return array<int, array{role: string, content: string}>
+     */
+    private function withRuntimeContext(array $messages, ?string $userId): array {
+        if ($messages === []) {
+            return $messages;
+        }
+        $messages[] = ['role' => 'system', 'content' => $this->runtimeContext->note($userId, $this->time->getTime())];
         return $messages;
     }
 

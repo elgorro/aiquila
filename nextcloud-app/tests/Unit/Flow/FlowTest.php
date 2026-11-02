@@ -6,6 +6,8 @@ use OCA\AIquila\BackgroundJob\FlowOperationJob;
 use OCA\AIquila\Flow\AIquilaOperation;
 use OCA\AIquila\Flow\FlowConfig;
 use OCA\AIquila\Flow\FlowProcessor;
+use OCA\AIquila\Service\RuntimeContextService;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
@@ -156,9 +158,13 @@ class FlowTest extends TestCase {
         $llm->method('getLabel')->willReturn('Test');
         $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('getProviderForUser')->willReturn($llm);
+        $time = $this->createStub(ITimeFactory::class);
+        $time->method('getTime')->willReturn(1793489400);
+        $context = $this->createStub(RuntimeContextService::class);
+        $context->method('note')->willReturn('Today is Sunday, 1 November 2026.');
 
         return [
-            new FlowProcessor($root, $factory, new ImageOptimizer($this->createStub(LoggerInterface::class)), $this->createStub(LoggerInterface::class)),
+            new FlowProcessor($root, $factory, new ImageOptimizer($this->createStub(LoggerInterface::class)), $context, $time, $this->createStub(LoggerInterface::class)),
             $llm,
             $parent,
         ];
@@ -176,7 +182,11 @@ class FlowTest extends TestCase {
     public function testTextFileIsSummarizedIntoAResultFile(): void {
         [$processor, $llm, $parent] = $this->processor($this->sourceFile('notes.txt', 'text/plain', 'Meeting on Friday.'));
         $llm->expects($this->once())->method('ask')
-            ->with($this->stringStartsWith('Summarize'), 'Meeting on Friday.', 'alice')
+            ->with(
+                $this->logicalAnd($this->stringStartsWith('Summarize'), $this->stringEndsWith("\n\nToday is Sunday, 1 November 2026.")),
+                'Meeting on Friday.',
+                'alice',
+            )
             ->willReturn(['response' => 'A meeting is planned.']);
 
         $result = $this->createStub(File::class);

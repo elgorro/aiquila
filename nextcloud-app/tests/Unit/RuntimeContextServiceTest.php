@@ -30,6 +30,13 @@ class RuntimeContextServiceTest extends TestCase {
         );
     }
 
+    public function testNoteWithoutAUserNamesTheServersTimeZone(): void {
+        $this->assertSame(
+            'Today is Sunday, 1 November 2026. The server\'s time zone is Europe/Berlin.',
+            $this->service($this->createStub(MessageMapper::class))->note(null, self::NOW),
+        );
+    }
+
     public function testRecordsTheNoteOnTheFirstTurn(): void {
         $mapper = $this->createMock(MessageMapper::class);
         $mapper->method('findLatestSystem')->willReturn(null);

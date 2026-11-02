@@ -86,6 +86,11 @@ date and the user's time zone this way. `RuntimeContextService` stores the note 
 turn, a new day, a new time zone), and the history replays it on every later
 turn. Each request is then a pure extension of the previous one.
 
+Paths without a stored conversation send the same note fresh on each request. The
+Talk bot appends it as a trailing `system` message after the buffered history, so the
+system prompt stays stable. The Flow action appends it to the prompt. Without a user
+(Talk guests, federated actors), the note uses the server's default time zone.
+
 The row reaches the model as a
 [mid-conversation system message](https://platform.claude.com/docs/en/build-with-claude/mid-conversation-system-messages)
 (`role: "system"` inside `messages`) where that is accepted, and as a

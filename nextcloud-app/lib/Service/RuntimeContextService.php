@@ -31,11 +31,15 @@ class RuntimeContextService {
     ) {
     }
 
-    /** The note for $userId at $now. */
-    public function note(string $userId, int $now): string {
+    /**
+     * The note for $userId at $now. Without a user (a Talk guest or federated
+     * actor) it uses the instance's default time zone and says so.
+     */
+    public function note(?string $userId, int $now): string {
         $zone = $this->dateTimeZone->getTimeZone($now, $userId);
         $date = (new \DateTimeImmutable('@' . $now))->setTimezone($zone);
-        return 'Today is ' . $date->format('l, j F Y') . '. The user\'s time zone is ' . $zone->getName() . '.';
+        return 'Today is ' . $date->format('l, j F Y') . '. '
+            . ($userId !== null ? 'The user\'s' : 'The server\'s') . ' time zone is ' . $zone->getName() . '.';
     }
 
     /**
