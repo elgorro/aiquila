@@ -51,7 +51,7 @@ abstract class AbstractCloudClaudeProvider extends ClaudeSDKService {
     public const AUTH_ADC = 'adc';
 
     /** Settings inherited from the Claude API card, re-keyed per provider. */
-    private const INHERITED_FIELDS = ['effort', 'thinking', 'thinking_budget', 'task_effort', 'task_thinking', 'max_tokens'];
+    private const INHERITED_FIELDS = ['effort', 'thinking', 'thinking_budget', 'task_budget', 'task_effort', 'task_thinking', 'max_tokens'];
 
     private ?BaseClient $client = null;
 
@@ -130,6 +130,8 @@ abstract class AbstractCloudClaudeProvider extends ClaudeSDKService {
             self::FEATURE_AUTO_CACHE => true,
             self::FEATURE_MID_CONVERSATION_SYSTEM => false,
             self::FEATURE_SERVER_FALLBACK => false,
+            self::FEATURE_TASK_BUDGET => false,
+            self::FEATURE_MID_CONVERSATION_TOOL_CHANGES => false,
         ];
     }
 
@@ -317,6 +319,10 @@ abstract class AbstractCloudClaudeProvider extends ClaudeSDKService {
         // Claude API card, so they are taken from there and only re-keyed.
         foreach (parent::getSettingsSchema() as $field) {
             if (!in_array($field['id'] ?? null, self::INHERITED_FIELDS, true)) {
+                continue;
+            }
+            // Only where the platform takes it, so no card offers a dead field.
+            if (($field['id'] ?? null) === 'task_budget' && !$this->hasFeature(self::FEATURE_TASK_BUDGET)) {
                 continue;
             }
             if (isset($field['key'])) {

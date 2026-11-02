@@ -203,4 +203,34 @@ class CoworkerServiceBatchTest extends TestCase {
         $this->assertNotNull($run->getFinishedAt());
         $this->assertNull($run->getState());
     }
+
+    public function testGetRunReturnsTheCoworkersRun(): void {
+        $this->mapper->method('findByIdAndUser')->willReturn($this->coworker());
+        $this->runMapper->method('findByIdAndUser')->willReturn($this->pendingRun(42));
+
+        $this->assertSame(42, $this->service->getRun(7, 42, 'alice')->getId());
+    }
+
+    /** A run id of the user's that belongs to another coworker is a 404, not a leak. */
+    public function testGetRunRefusesARunOfAnotherCoworker(): void {
+        $this->mapper->method('findByIdAndUser')->willReturn($this->coworker(8));
+        $this->runMapper->method('findByIdAndUser')->willReturn($this->pendingRun(42)); // coworker 7
+
+        $this->expectException(\OCP\AppFramework\Db\DoesNotExistException::class);
+        $this->service->getRun(8, 42, 'alice');
+    }
+
+    public function testAFailedRunLogsItsError(): void {
+        $task = $this->createStub(CoworkerTaskType::class);
+        $task->method('run')->willThrowException(new \RuntimeException('Folder /Photos not found'));
+        $this->registry->method('get')->willReturn($task);
+        $this->runMapper->method('findPendingForCoworker')->willReturn(null);
+
+        $run = $this->service->execute($this->coworker());
+
+        $this->assertSame(CoworkerRun::STATUS_ERROR, $run->getStatus());
+        $log = $run->getDecodedLog();
+        $this->assertSame('error', $log[0]['level']);
+        $this->assertSame('Run failed: Folder /Photos not found', $log[0]['message']);
+    }
 }
