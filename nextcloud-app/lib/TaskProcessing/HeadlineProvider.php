@@ -75,12 +75,14 @@ class HeadlineProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId)->ask(
+        $provider = $this->providers->resolve($userId);
+        $result = $provider->ask(
             "Generate a concise, descriptive headline for the following text. Return only the headline, nothing else:\n\n" . $text,
             '',
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );
+        $this->providers->recordUsage($userId, $provider, $result);
 
         if (isset($result['error'])) {
             throw TaskFailure::fromProviderError($result['error']);

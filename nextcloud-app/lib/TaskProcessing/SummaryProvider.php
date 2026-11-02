@@ -88,6 +88,7 @@ class SummaryProvider implements ISynchronousProvider {
             $reportProgress(0.1);
             $result = $provider->ask("Summarize the following content concisely:\n\n" . $text, '', $userId, LLMProviderInterface::TASK_OPTIONS);
         }
+        $this->providers->recordUsage($userId, $provider, $result);
 
         if (isset($result['error'])) {
             throw TaskFailure::fromProviderError($result['error']);

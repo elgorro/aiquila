@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\TaskProcessing;
 
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\UsageStatService;
 use OCP\IL10N;
 use OCP\L10N\IFactory;
 use OCP\TaskProcessing\ShapeEnumValue;
@@ -29,6 +30,7 @@ class Translation {
     public function __construct(
         private IFactory $l10nFactory,
         private IL10N $l,
+        private UsageStatService $usage,
     ) {
     }
 
@@ -77,6 +79,7 @@ class Translation {
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );
+        $this->usage->record($userId, $provider, $result, UsageStatService::TYPE_TASK);
 
         if (isset($result['error'])) {
             throw TaskFailure::fromProviderError($result['error']);

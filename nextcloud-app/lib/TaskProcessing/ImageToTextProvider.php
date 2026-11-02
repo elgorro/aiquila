@@ -136,6 +136,7 @@ class ImageToTextProvider implements ISynchronousProvider {
                 (string)$file->getId(),
                 LLMProviderInterface::TASK_OPTIONS,
             );
+            $this->providers->recordUsage($userId, $provider, $result);
 
             if (isset($result['error'])) {
                 $this->logger->error('AIquila ImageToText: Error', [

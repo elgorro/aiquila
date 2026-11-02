@@ -75,12 +75,14 @@ class ReformulationProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId)->ask(
+        $provider = $this->providers->resolve($userId);
+        $result = $provider->ask(
             "Reformulate the following text while keeping the same meaning. Return only the reformulated text, nothing else:\n\n" . $text,
             '',
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );
+        $this->providers->recordUsage($userId, $provider, $result);
 
         if (isset($result['error'])) {
             throw TaskFailure::fromProviderError($result['error']);

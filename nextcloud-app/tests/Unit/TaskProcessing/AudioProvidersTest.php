@@ -24,6 +24,7 @@ use OCP\TaskProcessing\TaskTypes\TextToImage;
 use OCP\TaskProcessing\TaskTypes\TextToSpeech;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
+use OCA\AIquila\Service\UsageStatService;
 
 class AudioProvidersTest extends TestCase {
     private const MP3 = "ID3\x03 raw bytes";
@@ -34,7 +35,7 @@ class AudioProvidersTest extends TestCase {
 
     protected function setUp(): void {
         $this->factory = $this->createStub(LLMProviderFactory::class);
-        $this->resolver = new ProviderResolver($this->factory);
+        $this->resolver = new ProviderResolver($this->factory, $this->createStub(UsageStatService::class));
     }
 
     /**
@@ -102,7 +103,7 @@ class AudioProvidersTest extends TestCase {
         return new AudioToAudioTranslateProvider(
             $this->resolver,
             new AudioService(new NullLogger()),
-            new Translation($l10nFactory, $this->l10n()),
+            new Translation($l10nFactory, $this->l10n(), $this->createStub(UsageStatService::class)),
         );
     }
 

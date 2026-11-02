@@ -75,12 +75,14 @@ class TopicsProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId)->ask(
+        $provider = $this->providers->resolve($userId);
+        $result = $provider->ask(
             "Extract the main topics from the following text. Return a comma-separated list of topics, nothing else:\n\n" . $text,
             '',
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );
+        $this->providers->recordUsage($userId, $provider, $result);
 
         if (isset($result['error'])) {
             throw TaskFailure::fromProviderError($result['error']);

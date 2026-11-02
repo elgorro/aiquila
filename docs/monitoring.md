@@ -24,6 +24,30 @@ bounded and avoids exposing individual usage to anyone scraping the endpoint).
 > The `aiquila_task_duration_seconds` histogram from the original proposal is tracked
 > as a follow-up.
 
+### Token usage
+
+`nextcloud_aiquila_tokens_used_total` and the `aiquila_usage` dashboard widget both read
+`aiquila_usage_stats`. Every model call AIquila makes writes one row there, with the
+input, output and cache tokens the provider reported. `request_type` names the path
+that spent them:
+
+| `request_type` | Source |
+|---|---|
+| `chat` | The AIquila chat, streamed or not |
+| `api` | The `/api/ask`-style HTTP endpoints and the `IAIquila` PHP API for other apps |
+| `task` | Assistant tasks through TaskProcessing (summary, proofread, translate, …), including the Anthropic Batch summary path |
+| `coworker` | Coworker runs, synchronous and batched |
+| `talk` | The Talk bot. Replies to guests are stored without a user id |
+| `flow` | The "Process with AIquila" Flow action |
+
+A call that fails or reports no tokens writes nothing. Recording is best-effort: a
+database error is logged as a warning and never fails the request. Admin diagnostics
+(`occ aiquila:benchmark-*`, `occ aiquila:test`) are not counted.
+
+On upgrade, a migration backfills `chat` rows from the per-message token counts already
+in the chat history, once and only while the table is empty. Other request types were
+never stored before, so their history cannot be recovered.
+
 ## Enabling the endpoint
 
 Nextcloud's `/metrics` endpoint is gated by an **IP allowlist**, not a token. Only the

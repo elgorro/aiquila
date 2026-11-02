@@ -13,6 +13,7 @@ use OCA\AIquila\Talk\TalkBotService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\QueuedJob;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * Answers one message that addressed the AIquila Talk bot.
@@ -31,6 +32,7 @@ class TalkBotReplyJob extends QueuedJob {
         private TalkBotService $bot,
         private LLMProviderFactory $providers,
         private RuntimeContextService $runtimeContext,
+        private UsageStatService $usageStats,
         private LoggerInterface $logger,
         private InstructionsService $instructions,
     ) {
@@ -55,6 +57,7 @@ class TalkBotReplyJob extends QueuedJob {
                 $userId,
                 LLMProviderInterface::TASK_OPTIONS,
             );
+            $this->usageStats->record($userId, $provider, $result, UsageStatService::TYPE_TALK);
             if (isset($result['error'])) {
                 throw new \RuntimeException((string)$result['error']);
             }

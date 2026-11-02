@@ -16,6 +16,7 @@ use OCP\SystemTag\ISystemTagManager;
 use OCP\SystemTag\ISystemTagObjectMapper;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * Coverage for the "docs" task family: which files it picks up, what it
@@ -33,6 +34,17 @@ class BatchTextTaskTypeTest extends TestCase {
 
     /** @var array<string, string> written output path => content */
     private array $written = [];
+
+    /** @var list<array<int, mixed>> UsageStatService::record() calls */
+    private array $usageRecorded = [];
+
+    private function usageRecorder(): UsageStatService {
+        $usage = $this->createStub(UsageStatService::class);
+        $usage->method('record')->willReturnCallback(function (mixed ...$args): void {
+            $this->usageRecorded[] = $args;
+        });
+        return $usage;
+    }
 
     protected function setUp(): void {
         $this->rootFolder = $this->createStub(IRootFolder::class);
@@ -55,6 +67,7 @@ class BatchTextTaskTypeTest extends TestCase {
             $this->tagManager,
             $this->tagObjectMapper,
             $this->logger,
+            $this->usageRecorder(),
         );
     }
 
@@ -394,6 +407,12 @@ class BatchTextTaskTypeTest extends TestCase {
         $this->assertStringContainsString('1 missing', $result['summary']);
         $this->assertStringContainsString('Refused: refused.txt', $result['summary']);
         $this->assertArrayNotHasKey('pending', $result);
+
+        // Only the succeeded request spent tokens worth recording.
+        $this->assertCount(1, $this->usageRecorded);
+        $this->assertSame('alice', $this->usageRecorded[0][0]);
+        $this->assertSame('a summary', $this->usageRecorded[0][2]['response']);
+        $this->assertSame(UsageStatService::TYPE_COWORKER, $this->usageRecorded[0][3]);
     }
 
     public function testResumeWithoutABatchIdFails(): void {

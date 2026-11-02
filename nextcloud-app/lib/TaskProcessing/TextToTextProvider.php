@@ -84,7 +84,9 @@ class TextToTextProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId)->ask($prompt, '', $userId, LLMProviderInterface::TASK_OPTIONS);
+        $provider = $this->providers->resolve($userId);
+        $result = $provider->ask($prompt, '', $userId, LLMProviderInterface::TASK_OPTIONS);
+        $this->providers->recordUsage($userId, $provider, $result);
 
         if (isset($result['error'])) {
             throw TaskFailure::fromProviderError($result['error']);
