@@ -57,7 +57,9 @@ server is not HTTPS-reachable, and carries the same constraints Managed Agents w
 Today every byte of conversation state is in the Nextcloud database:
 `aiquila_conversations` pins the model, provider, effort and thinking settings;
 `aiquila_messages` holds the turns with their per-message token, cache, latency and
-citation columns; `aiquila_message_files` holds attachments. The one thing that
+citation columns, and the tool calls behind each answer (`tool_trace`, see
+[Tool calls in the history](prompt-caching.md#tool-calls-in-the-history));
+`aiquila_message_files` holds attachments. The one thing that
 outlives a request on Anthropic's side is a Files API upload. Each one is made
 with a 30-day expiry, and `aiquila_file_uploads` tracks the ids and expiries so a
 background job can drop stale references and delete older uploads that have no
@@ -69,12 +71,10 @@ anyway — for the dashboard, for search, for export — leaving two stores to r
 and a session lifecycle (`running`, `idle`, `rescheduling`, `terminated`, archive,
 delete) to mirror.
 
-One thing genuinely argues the other way. `tool_use` and `tool_result` blocks exist
-only inside a single `chatWithTools()` call; `aiquila_messages` stores a flat string,
-so conversation history is rebuilt from prose and the model never sees what the tools
-returned on an earlier turn. A session would preserve that history natively. So would
-persisting the blocks, which is the cheaper of the two fixes and does not move any
-state off the instance.
+A session would keep the full event history, tool calls included, natively.
+AIquila keeps the `tool_use` and `tool_result` blocks of each answer itself and
+replays them on later turns, so that is not an argument for moving state off the
+instance.
 
 ## Privacy and residency
 

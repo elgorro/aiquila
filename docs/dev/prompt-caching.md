@@ -119,6 +119,35 @@ or a tool loop start well under five minutes apart, and every read refreshes the
 entry's timer at no cost, so the five-minute cache stays warm on its own — the
 one-hour TTL would only double the write price for nothing.
 
+## Tool calls in the history
+
+An answer that used tools keeps the turns its tool loop added: the assistant's
+`tool_use` blocks and the `tool_result` blocks sent back. They are stored with the
+answer (`aiquila_messages.tool_trace`, built by `ToolTrace`) and go back into the
+history ahead of it on every later turn. The model can then use what a tool
+returned before without calling it again.
+
+Every later request resends the trace, and the cache prefix has to stay
+byte-identical. Both points shape what is stored:
+
+- **Results are cut once, when stored**, at 10,000 characters, with a note saying
+  how much was left out. Nothing is cut or dropped by age or depth at replay time.
+  A rule like "full results for the last few turns only" would rewrite an older
+  turn as the conversation grew, and every request would miss the cache from
+  that turn on.
+- **Only `text`, `tool_use` and `tool_result` are kept.** Thinking from a finished
+  answer may be left out of later requests, and its signatures would not survive a
+  change of model or provider.
+- **Tool ids become nine alphanumerics.** Mistral accepts nothing else, and the
+  other providers accept that form too, so the history replays on whichever
+  provider answers next.
+
+A request that defines no tools (no MCP servers configured, or the native MCP
+connector, whose tools are Anthropic's) cannot carry `tool_use` blocks. The trace
+then goes as labelled text: `[Called tool list_files with {"path":"/"}]` and
+`[Tool list_files returned: …]`. The native connector's own tool calls are run by
+Anthropic and are not stored.
+
 ## Turning it off
 
 Admin settings → **AIquila** → **Defaults** → *Automatic prompt caching*. On by

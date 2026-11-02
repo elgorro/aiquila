@@ -30,7 +30,7 @@ provider API  ──SSE──▶  LLMProvider::chatWithToolsStream()   (PHP gene
 | `text_delta` | a chunk of assistant text |
 | `thinking_start` / `thinking_delta` / `thinking_stop` | a thinking block opened, a chunk of its readable summary, and its end with `duration_ms` |
 | `tool_use` / `tool_result` | a tool invocation and its output |
-| `done` | terminal: usage totals and citations |
+| `done` | terminal: usage totals and citations. The loop's tool calls are stored with the answer (see [Tool calls in the history](prompt-caching.md#tool-calls-in-the-history)) and not sent |
 | `error` | terminal: the turn failed, partially or entirely |
 | `persisted` | always last: the stored assistant message and conversation |
 
