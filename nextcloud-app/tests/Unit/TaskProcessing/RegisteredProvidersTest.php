@@ -12,6 +12,7 @@ use OCP\TaskProcessing\ITaskType;
 use OCP\TaskProcessing\ShapeDescriptor;
 use OCP\TaskProcessing\ShapeEnumValue;
 use PHPUnit\Framework\TestCase;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * Guards the registration itself.
@@ -211,7 +212,7 @@ class RegisteredProvidersTest extends TestCase {
             $args[] = match ($type->getName()) {
                 IL10N::class => $l10n,
                 IFactory::class => $l10nFactory,
-                Translation::class => new Translation($l10nFactory, $l10n),
+                Translation::class => new Translation($l10nFactory, $l10n, $this->createStub(UsageStatService::class)),
                 default => $this->createStub($type->getName()),
             };
         }

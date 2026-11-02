@@ -99,13 +99,15 @@ class ImproveProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId, $this->providers->requestedId($input))->ask(
+        $provider = $this->providers->resolve($userId, $this->providers->requestedId($input));
+        $result = $provider->ask(
             "Improve the following text according to these instructions:\n\n" . trim($instructions)
                 . "\n\nReturn only the improved text, nothing else.\n\nText:\n\n" . $text,
             '',
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );
+        $this->providers->recordUsage($userId, $provider, $result);
 
         if (isset($result['error'])) {
             throw TaskFailure::fromProviderError($result['error']);

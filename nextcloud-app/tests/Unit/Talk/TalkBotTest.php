@@ -25,6 +25,7 @@ use OCP\IUserManager;
 use OCP\Security\ISecureRandom;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * The AIquila bot in Talk: what it reacts to, what it stores, how it answers.
@@ -209,6 +210,17 @@ class TalkBotTest extends TestCase {
         return $row;
     }
 
+    /** @var list<array<int, mixed>> UsageStatService::record() calls */
+    private array $usageRecorded = [];
+
+    private function usageRecorder(): UsageStatService {
+        $usage = $this->createStub(UsageStatService::class);
+        $usage->method('record')->willReturnCallback(function (mixed ...$args): void {
+            $this->usageRecorded[] = $args;
+        });
+        return $usage;
+    }
+
     public function testReplyJobSendsTheConversationAsContextAndPostsTheAnswer(): void {
         $bot = $this->createMock(TalkBotService::class);
         $bot->method('recentMessages')->willReturn([
@@ -232,8 +244,12 @@ class TalkBotTest extends TestCase {
         $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('getProviderForUser')->willReturn($llm);
 
-        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->createStub(LoggerInterface::class), $this->instructions());
+        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->usageRecorder(), $this->createStub(LoggerInterface::class), $this->instructions());
         (new \ReflectionMethod($job, 'run'))->invoke($job, ['token' => 'abc123', 'messageId' => 17, 'userId' => 'alice', 'roomName' => 'Team']);
+
+        $this->assertCount(1, $this->usageRecorded);
+        $this->assertSame('alice', $this->usageRecorded[0][0]);
+        $this->assertSame(UsageStatService::TYPE_TALK, $this->usageRecorded[0][3]);
     }
 
     public function testReplyJobApologisesWhenTheModelFails(): void {
@@ -246,7 +262,7 @@ class TalkBotTest extends TestCase {
         $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('getProviderForUser')->willReturn($llm);
 
-        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->createStub(LoggerInterface::class), $this->instructions());
+        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->usageRecorder(), $this->createStub(LoggerInterface::class), $this->instructions());
         (new \ReflectionMethod($job, 'run'))->invoke($job, ['token' => 'abc123', 'messageId' => 17, 'userId' => null, 'roomName' => '']);
     }
 
@@ -265,7 +281,7 @@ class TalkBotTest extends TestCase {
         $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('getProviderForUser')->willReturn($llm);
 
-        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->createStub(LoggerInterface::class), $this->instructions('Answer in German.'));
+        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->usageRecorder(), $this->createStub(LoggerInterface::class), $this->instructions('Answer in German.'));
         (new \ReflectionMethod($job, 'run'))->invoke($job, ['token' => 'abc123', 'messageId' => 17, 'userId' => 'alice', 'roomName' => 'Team']);
     }
 

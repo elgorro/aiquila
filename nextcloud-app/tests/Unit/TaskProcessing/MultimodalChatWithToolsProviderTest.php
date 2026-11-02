@@ -12,6 +12,7 @@ use OCP\Files\File;
 use OCP\TaskProcessing\TaskTypes\MultimodalChatWithTools;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * core:text2text:multimodal-chatwithtools — chatwithtools plus input attachments.
@@ -26,7 +27,7 @@ class MultimodalChatWithToolsProviderTest extends TestCase {
         $this->factory->method('getProviderForUser')->willReturnCallback(fn () => $this->llm);
         $this->factory->method('getProviderIdsForUser')->willReturn([]);
         $this->provider = new MultimodalChatWithToolsProvider(
-            new ProviderResolver($this->factory),
+            new ProviderResolver($this->factory, $this->createStub(UsageStatService::class)),
             new ImageOptimizer($this->createStub(LoggerInterface::class)),
         );
     }
@@ -103,7 +104,7 @@ class MultimodalChatWithToolsProviderTest extends TestCase {
         $optimizer->method('prepare')->willReturnCallback(
             fn (string $bytes, string $mime) => ['base64' => base64_encode($bytes), 'mimeType' => $mime]
         );
-        $provider = new MultimodalChatWithToolsProvider(new ProviderResolver($this->factory), $optimizer);
+        $provider = new MultimodalChatWithToolsProvider(new ProviderResolver($this->factory, $this->createStub(UsageStatService::class)), $optimizer);
 
         $result = $provider->process('alice', [
             'input_attachments' => [$this->file('cat.png', 'image/png', 'IMAGE-BYTES')],

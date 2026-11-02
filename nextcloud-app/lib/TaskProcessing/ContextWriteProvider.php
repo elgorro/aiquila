@@ -91,13 +91,15 @@ class ContextWriteProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId, $this->providers->requestedId($input))->ask(
+        $provider = $this->providers->resolve($userId, $this->providers->requestedId($input));
+        $result = $provider->ask(
             "Write a text about the subject below, imitating the tone, voice and style of the sample. Return only the text you wrote, nothing else.\n\n"
                 . "Style sample:\n" . $style . "\n\nSubject:\n" . $source,
             '',
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );
+        $this->providers->recordUsage($userId, $provider, $result);
 
         if (isset($result['error'])) {
             throw TaskFailure::fromProviderError($result['error']);

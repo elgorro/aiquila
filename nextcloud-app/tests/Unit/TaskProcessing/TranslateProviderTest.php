@@ -12,6 +12,7 @@ use OCP\IL10N;
 use OCP\L10N\IFactory;
 use OCP\TaskProcessing\ShapeEnumValue;
 use PHPUnit\Framework\TestCase;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * Representative of the nine plain text-to-text providers: they share one
@@ -40,7 +41,7 @@ class TranslateProviderTest extends TestCase {
                 ['code' => 'de', 'name' => 'Deutsch (duplicate)'],
             ],
         ]);
-        $this->provider = new TranslateProvider(new ProviderResolver($this->factory), new Translation($l10nFactory, $l10n));
+        $this->provider = new TranslateProvider(new ProviderResolver($this->factory, $this->createStub(UsageStatService::class)), new Translation($l10nFactory, $l10n, $this->createStub(UsageStatService::class)));
     }
 
     /** @param list<ShapeEnumValue> $values */

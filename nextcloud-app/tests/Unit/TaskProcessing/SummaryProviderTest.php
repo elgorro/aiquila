@@ -8,10 +8,22 @@ use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\TaskProcessing\ProviderResolver;
 use OCA\AIquila\TaskProcessing\SummaryProvider;
 use PHPUnit\Framework\TestCase;
+use OCA\AIquila\Service\UsageStatService;
 
 class SummaryProviderTest extends TestCase {
     private $factory;
     private SummaryProvider $provider;
+
+    /** @var list<array<int, mixed>> UsageStatService::record() calls */
+    private array $usageRecorded = [];
+
+    private function usageRecorder(): UsageStatService {
+        $usage = $this->createStub(UsageStatService::class);
+        $usage->method('record')->willReturnCallback(function (mixed ...$args): void {
+            $this->usageRecorded[] = $args;
+        });
+        return $usage;
+    }
 
     protected function setUp(): void {
         $this->factory = $this->createStub(LLMProviderFactory::class);
@@ -19,7 +31,7 @@ class SummaryProviderTest extends TestCase {
     }
 
     private function buildProvider(): void {
-        $this->provider = new SummaryProvider(new ProviderResolver($this->factory));
+        $this->provider = new SummaryProvider(new ProviderResolver($this->factory, $this->usageRecorder()));
     }
 
     public function testIdAndTaskTypeAreUnchangedByTheRename(): void {
@@ -34,13 +46,16 @@ class SummaryProviderTest extends TestCase {
         $anthropic->expects($this->once())
             ->method('summarizeViaBatch')
             ->with('Some long text', 'alice')
-            ->willReturn(['response' => 'A summary']);
+            ->willReturn(['response' => 'A summary', 'usage' => ['input_tokens' => 50, 'output_tokens' => 8]]);
         $anthropic->expects($this->never())->method('ask');
         $this->factory->method('getProviderForUser')->willReturn($anthropic);
 
         $result = $this->provider->process('alice', ['input' => 'Some long text'], static fn (float $p) => null);
 
         $this->assertSame(['output' => 'A summary'], $result);
+        $this->assertCount(1, $this->usageRecorded);
+        $this->assertSame(['input_tokens' => 50, 'output_tokens' => 8], $this->usageRecorded[0][2]['usage']);
+        $this->assertSame(UsageStatService::TYPE_TASK, $this->usageRecorded[0][3]);
     }
 
     public function testOtherProvidersFallBackToAsk(): void {

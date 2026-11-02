@@ -88,12 +88,14 @@ class ReformatParagraphsProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId, $this->providers->requestedId($input))->ask(
+        $provider = $this->providers->resolve($userId, $this->providers->requestedId($input));
+        $result = $provider->ask(
             "Reformat the following text into multiple paragraphs, each covering one topic. Keep the wording and meaning unchanged — only change where the paragraph breaks fall. Return only the reformatted text, nothing else:\n\n" . $text,
             '',
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );
+        $this->providers->recordUsage($userId, $provider, $result);
 
         if (isset($result['error'])) {
             throw TaskFailure::fromProviderError($result['error']);

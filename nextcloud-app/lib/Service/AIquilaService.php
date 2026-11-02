@@ -19,6 +19,7 @@ class AIquilaService implements IAIquila {
     private ClaudeSDKService $claudeSDKService;
     private FileService $fileService;
     private ImageOptimizer $imageOptimizer;
+    private UsageStatService $usageStats;
     private INotificationManager $notificationManager;
     private LoggerInterface $logger;
     private string $appName = 'aiquila';
@@ -27,14 +28,27 @@ class AIquilaService implements IAIquila {
         ClaudeSDKService $claudeSDKService,
         FileService $fileService,
         ImageOptimizer $imageOptimizer,
+        UsageStatService $usageStats,
         INotificationManager $notificationManager,
         LoggerInterface $logger
     ) {
         $this->claudeSDKService = $claudeSDKService;
         $this->fileService = $fileService;
         $this->imageOptimizer = $imageOptimizer;
+        $this->usageStats = $usageStats;
         $this->notificationManager = $notificationManager;
         $this->logger = $logger;
+    }
+
+    /**
+     * Records the tokens a call spent and hands its result back.
+     *
+     * @param array<array-key, mixed> $result
+     * @return array<array-key, mixed>
+     */
+    private function counted(array $result, ?string $userId): array {
+        $this->usageStats->record($userId, $this->claudeSDKService, $result, UsageStatService::TYPE_API);
+        return $result;
     }
 
     /**
@@ -53,7 +67,7 @@ class AIquilaService implements IAIquila {
         ]);
 
         try {
-            $result = $this->claudeSDKService->ask($prompt, $context, $userId, LLMProviderInterface::TASK_OPTIONS);
+            $result = $this->counted($this->claudeSDKService->ask($prompt, $context, $userId, LLMProviderInterface::TASK_OPTIONS), $userId);
 
             if (isset($result['error'])) {
                 $this->logger->error('AIquila: Claude API error', ['error' => $result['error']]);
@@ -116,20 +130,20 @@ class AIquilaService implements IAIquila {
                     base64_decode($fileData['content']),
                     $mimeType
                 );
-                return $this->claudeSDKService->askWithImage(
+                return $this->counted($this->claudeSDKService->askWithImage(
                     $prompt,
                     $optimized['data'],
                     $optimized['mimeType'],
                     $userId,
                     null,
                     LLMProviderInterface::TASK_OPTIONS,
-                );
+                ), $userId);
             }
 
             // Text and other files: pass content as context
             $context = "File: {$fileData['name']} ({$mimeType}, {$fileData['size']} bytes)\n\n"
                      . $fileData['content'];
-            return $this->claudeSDKService->ask($prompt, $context, $userId, LLMProviderInterface::TASK_OPTIONS);
+            return $this->counted($this->claudeSDKService->ask($prompt, $context, $userId, LLMProviderInterface::TASK_OPTIONS), $userId);
 
         } catch (NotFoundException $e) {
             return ['error' => 'File not found: ' . $filePath];
@@ -183,9 +197,9 @@ class AIquilaService implements IAIquila {
             // Images only
             if (!empty($images) && empty($textParts)) {
                 if (count($images) === 1) {
-                    return $this->claudeSDKService->askWithImage($prompt, $images[0]['base64'], $images[0]['mimeType'], $userId, null, LLMProviderInterface::TASK_OPTIONS);
+                    return $this->counted($this->claudeSDKService->askWithImage($prompt, $images[0]['base64'], $images[0]['mimeType'], $userId, null, LLMProviderInterface::TASK_OPTIONS), $userId);
                 }
-                return $this->claudeSDKService->askWithImages($prompt, $images, $userId, null, LLMProviderInterface::TASK_OPTIONS);
+                return $this->counted($this->claudeSDKService->askWithImages($prompt, $images, $userId, null, LLMProviderInterface::TASK_OPTIONS), $userId);
             }
 
             // Text only or mixed — use text context
@@ -193,10 +207,10 @@ class AIquilaService implements IAIquila {
             if (!empty($images)) {
                 // Mixed: use askWithImages and prepend text context to prompt
                 $promptWithContext = $context . "\n\n" . $prompt;
-                return $this->claudeSDKService->askWithImages($promptWithContext, $images, $userId, null, LLMProviderInterface::TASK_OPTIONS);
+                return $this->counted($this->claudeSDKService->askWithImages($promptWithContext, $images, $userId, null, LLMProviderInterface::TASK_OPTIONS), $userId);
             }
 
-            return $this->claudeSDKService->ask($prompt, $context, $userId, LLMProviderInterface::TASK_OPTIONS);
+            return $this->counted($this->claudeSDKService->ask($prompt, $context, $userId, LLMProviderInterface::TASK_OPTIONS), $userId);
 
         } catch (NotFoundException $e) {
             return ['error' => 'File not found: ' . $e->getMessage()];
