@@ -96,6 +96,7 @@ return [
         ['name' => 'coworker#create',             'url' => '/api/coworkers',                       'verb' => 'POST'],
         ['name' => 'coworker#templates',          'url' => '/api/coworkers/templates',             'verb' => 'GET'],
         ['name' => 'coworker#createFromTemplate', 'url' => '/api/coworkers/templates',             'verb' => 'POST'],
+        ['name' => 'coworker#tools',              'url' => '/api/coworkers/tools',                 'verb' => 'GET'],
         ['name' => 'coworker#show',               'url' => '/api/coworkers/{id}',                  'verb' => 'GET'],
         ['name' => 'coworker#update',             'url' => '/api/coworkers/{id}',                  'verb' => 'PUT'],
         ['name' => 'coworker#destroy',            'url' => '/api/coworkers/{id}',                  'verb' => 'DELETE'],

@@ -52,7 +52,11 @@ class Message extends Entity implements \JsonSerializable {
     protected ?string $documents = null;
     /** Readable summary of the model's thinking for an assistant message; null when it did not think. */
     protected ?string $thinkingSummary = null;
-    /** Tool calls behind an assistant answer; see Service\ToolTrace. Server-side only. */
+    /**
+     * Tool blocks kept with the message, server-side only: on an assistant
+     * answer the tool calls behind it (Service\ToolTrace), on a system row the
+     * tool_addition / tool_removal blocks of that turn (Service\ToolChanges).
+     */
     protected ?string $toolTrace = null;
 
     public function __construct() {

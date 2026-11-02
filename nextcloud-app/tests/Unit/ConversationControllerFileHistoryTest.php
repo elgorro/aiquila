@@ -18,6 +18,7 @@ use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\McpClientService;
+use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
@@ -44,13 +45,17 @@ class ConversationControllerFileHistoryTest extends TestCase {
     private int $nextId = 1;
     /** What the next chatWithTools() call reports as its tool_trace. */
     private array $nextTrace = [];
+    /** The tools the MCP servers list right now, and the tools last sent. */
+    private ?array $currentTools = null;
+    private array $sentTools = [];
 
     /**
      * @param array<string, array{name: string, mimeType: string, size: int, content: string}> $nextcloudFiles
      *        files readable in Nextcloud, by path; any other path throws
      */
-    private function makeController(array $nextcloudFiles, bool $citeFirstDocument = false, array $tools = []): ConversationController {
+    private function makeController(array $nextcloudFiles, bool $citeFirstDocument = false, array $tools = [], bool $claude = false): ConversationController {
         $conversation = new Conversation();
+        $conversation->setId(1);
         $conversation->setUserId('testuser');
         $conversation->setTitle('existing');
 
@@ -90,7 +95,10 @@ class ConversationControllerFileHistoryTest extends TestCase {
         );
 
         $citations = $citeFirstDocument ? [['type' => 'page_location', 'document_index' => 0, 'cited_text' => 'x']] : [];
-        $provider = $this->createStub(LLMProviderInterface::class);
+        $provider = $claude ? $this->createStub(ClaudeSDKService::class) : $this->createStub(LLMProviderInterface::class);
+        if ($claude) {
+            $provider->method('supportsMidConversationToolChanges')->willReturn(true);
+        }
         $provider->method('supportsNativeMcp')->willReturn(false);
         $provider->method('getId')->willReturn('claude');
         $provider->method('chat')->willReturnCallback(
@@ -100,8 +108,9 @@ class ConversationControllerFileHistoryTest extends TestCase {
             }
         );
         $provider->method('chatWithTools')->willReturnCallback(
-            function (array $messages): array {
+            function (array $messages, array $tools): array {
                 $this->sent = $messages;
+                $this->sentTools = $tools;
                 return ['response' => 'There are two files.', 'usage' => [], 'citations' => [], 'tool_trace' => $this->nextTrace];
             }
         );
@@ -118,7 +127,7 @@ class ConversationControllerFileHistoryTest extends TestCase {
         $factory->method('getProviderForUser')->willReturn($provider);
 
         $mcpClient = $this->createStub(McpClientService::class);
-        $mcpClient->method('getAllTools')->willReturn(['tools' => $tools, 'mapping' => []]);
+        $mcpClient->method('getAllTools')->willReturnCallback(fn(): array => ['tools' => $this->currentTools ?? $tools, 'mapping' => []]);
 
         $nativeMcp = $this->createStub(NativeMcpService::class);
         $nativeMcp->method('isEnabledForUser')->willReturn(false);
@@ -295,5 +304,49 @@ class ConversationControllerFileHistoryTest extends TestCase {
         $done = array_values(array_filter($events, static fn(array $e): bool => $e['type'] === 'done'))[0];
         $this->assertArrayNotHasKey('tool_trace', $done);
         $this->assertNotNull($this->messages[1]->getToolTrace());
+    }
+
+    private static function namedTool(string $name): array {
+        return ['name' => $name, 'description' => $name, 'input_schema' => ['type' => 'object']];
+    }
+
+    /**
+     * An MCP server's new tool does not change `tools` at the front: it is
+     * appended deferred and offered from this turn by a stored system row,
+     * which later turns replay in place.
+     */
+    public function testANewToolIsAddedMidConversationWithoutChangingTheToolsPrefix(): void {
+        $controller = $this->makeController([], claude: true);
+        $this->currentTools = [self::namedTool('a')];
+        $controller->message(1, 'First');
+        $firstTools = $this->sentTools;
+
+        $this->currentTools = [self::namedTool('a'), self::namedTool('b')];
+        $controller->message(1, 'Second');
+
+        $this->assertSame($firstTools[0], $this->sentTools[0], 'the declared start is byte-identical');
+        $this->assertTrue($this->sentTools[1]['defer_loading']);
+        $last = end($this->sent);
+        $this->assertSame('system', $last['role']);
+        $this->assertSame('tool_addition', $last['content'][0]['type']);
+
+        $controller->message(1, 'Third');
+
+        $system = array_values(array_filter($this->sent, static fn(array $m): bool => $m['role'] === 'system'));
+        $this->assertCount(1, $system, 'the stored change replays once, in place');
+        $this->assertSame('tool_addition', $system[0]['content'][0]['type']);
+        $this->assertSame('assistant', $this->sent[array_search($system[0], $this->sent, true) + 1]['role']);
+    }
+
+    /** A provider without the feature gets today's tools as they are, and no change rows. */
+    public function testWithoutTheFeatureToolsAreSentAsTheyAre(): void {
+        $controller = $this->makeController([]);
+        $this->currentTools = [self::namedTool('a')];
+        $controller->message(1, 'First');
+        $this->currentTools = [self::namedTool('b')];
+        $controller->message(1, 'Second');
+
+        $this->assertSame([self::namedTool('b')], $this->sentTools);
+        $this->assertSame([], array_filter($this->messages, static fn($m): bool => $m->getRole() === 'system'));
     }
 }
