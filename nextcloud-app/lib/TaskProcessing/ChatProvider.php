@@ -93,12 +93,14 @@ class ChatProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId, $this->providers->requestedId($input))->chat(
+        $provider = $this->providers->resolve($userId, $this->providers->requestedId($input));
+        $result = $provider->chat(
             $messages,
             $system,
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );
+        $this->providers->recordUsage($userId, $provider, $result);
 
         if (isset($result['error'])) {
             throw TaskFailure::fromProviderError($result['error']);

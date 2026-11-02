@@ -9,6 +9,7 @@ use OCA\AIquila\TaskProcessing\ProviderResolver;
 use OCP\IL10N;
 use OCP\TaskProcessing\ShapeEnumValue;
 use PHPUnit\Framework\TestCase;
+use OCA\AIquila\Service\UsageStatService;
 
 class ChangeToneProviderTest extends TestCase {
     private $factory;
@@ -18,7 +19,7 @@ class ChangeToneProviderTest extends TestCase {
         $this->factory = $this->createStub(LLMProviderFactory::class);
         $l10n = $this->createStub(IL10N::class);
         $l10n->method('t')->willReturnArgument(0);
-        $this->provider = new ChangeToneProvider(new ProviderResolver($this->factory), $l10n);
+        $this->provider = new ChangeToneProvider(new ProviderResolver($this->factory, $this->createStub(UsageStatService::class)), $l10n);
     }
 
     public function testToneIsAnEnumWithFormalAsDefault(): void {

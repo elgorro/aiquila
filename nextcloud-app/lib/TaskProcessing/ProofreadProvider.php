@@ -75,12 +75,14 @@ class ProofreadProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
-        $result = $this->providers->resolve($userId)->ask(
+        $provider = $this->providers->resolve($userId);
+        $result = $provider->ask(
             "Proofread the following text for grammar and spelling mistakes. Return the corrected text only, nothing else:\n\n" . $text,
             '',
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );
+        $this->providers->recordUsage($userId, $provider, $result);
 
         if (isset($result['error'])) {
             throw TaskFailure::fromProviderError($result['error']);

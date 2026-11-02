@@ -113,6 +113,7 @@ class AudioToAudioChatProvider implements ISynchronousProvider {
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );
+        $this->providers->recordUsage($userId, $provider, $answered);
         if (isset($answered['error'])) {
             throw TaskFailure::fromProviderError($answered['error']);
         }

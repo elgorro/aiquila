@@ -21,6 +21,7 @@ use OCP\IUser;
 use OCP\WorkflowEngine\IRuleMatcher;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * "Process with AIquila" in Settings → Flow: rule settings, event handling,
@@ -158,7 +159,7 @@ class FlowTest extends TestCase {
         $factory->method('getProviderForUser')->willReturn($llm);
 
         return [
-            new FlowProcessor($root, $factory, new ImageOptimizer($this->createStub(LoggerInterface::class)), $this->createStub(LoggerInterface::class)),
+            new FlowProcessor($root, $factory, new ImageOptimizer($this->createStub(LoggerInterface::class)), $this->usageRecorder(), $this->createStub(LoggerInterface::class)),
             $llm,
             $parent,
         ];
@@ -171,6 +172,17 @@ class FlowTest extends TestCase {
         $file->method('getContent')->willReturn($content);
         $file->method('getId')->willReturn(42);
         return $file;
+    }
+
+    /** @var list<array<int, mixed>> UsageStatService::record() calls */
+    private array $usageRecorded = [];
+
+    private function usageRecorder(): UsageStatService {
+        $usage = $this->createStub(UsageStatService::class);
+        $usage->method('record')->willReturnCallback(function (mixed ...$args): void {
+            $this->usageRecorded[] = $args;
+        });
+        return $usage;
     }
 
     public function testTextFileIsSummarizedIntoAResultFile(): void {
@@ -186,6 +198,8 @@ class FlowTest extends TestCase {
             ->willReturn($result);
 
         $this->assertSame('/alice/files/notes.txt.aiquila.md', $processor->process(42, 'alice', FlowConfig::parse('')));
+        $this->assertCount(1, $this->usageRecorded);
+        $this->assertSame(UsageStatService::TYPE_FLOW, $this->usageRecorded[0][3]);
     }
 
     public function testAskQuotesThePromptAboveTheAnswer(): void {

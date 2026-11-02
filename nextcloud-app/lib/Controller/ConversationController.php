@@ -36,6 +36,7 @@ use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCA\AIquila\BackgroundJob\IndexConversationJob;
 use OCA\AIquila\Service\ContextChatService;
 use OCA\AIquila\Service\RuntimeContextService;
+use OCA\AIquila\Service\UsageStatService;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\BackgroundJob\IJobList;
@@ -61,6 +62,7 @@ class ConversationController extends Controller {
     private ContextChatService $contextChat;
     private RuntimeContextService $runtimeContext;
     private InstructionsService $instructions;
+    private UsageStatService $usageStats;
     private ?string $userId;
     private LoggerInterface $logger;
 
@@ -82,6 +84,7 @@ class ConversationController extends Controller {
         ContextChatService $contextChat,
         RuntimeContextService $runtimeContext,
         InstructionsService $instructions,
+        UsageStatService $usageStats,
         ?string $userId,
         LoggerInterface $logger
     ) {
@@ -102,6 +105,7 @@ class ConversationController extends Controller {
         $this->contextChat = $contextChat;
         $this->runtimeContext = $runtimeContext;
         $this->instructions = $instructions;
+        $this->usageStats = $usageStats;
         $this->userId = $userId;
     }
 
@@ -646,6 +650,13 @@ class ConversationController extends Controller {
             $result = $this->callClaude($claudeMessages, $systemPrompt, $options, $conversation);
         }
         $latencyMs = (int)(microtime(true) * 1000.0) - $startMs;
+        $this->usageStats->record(
+            $this->userId,
+            $this->resolveProvider($conversation),
+            $result + (isset($options['model']) ? ['model' => $options['model']] : []),
+            UsageStatService::TYPE_CHAT,
+            $id,
+        );
 
         if (isset($result['error'])) {
             // Persist error as assistant message so user sees it in history
@@ -910,6 +921,13 @@ class ConversationController extends Controller {
         $assistantMsg->setConversationId($id);
         $assistantMsg->setRole('assistant');
         $assistantMsg->setContent($assistantContent);
+        $this->usageStats->record(
+            $this->userId,
+            $provider,
+            ['usage' => $finalUsage] + (isset($options['model']) ? ['model' => $options['model']] : []),
+            UsageStatService::TYPE_CHAT,
+            $id,
+        );
         $assistantMsg->setInputTokens($finalUsage['input_tokens'] ?? null);
         $assistantMsg->setOutputTokens($finalUsage['output_tokens'] ?? null);
         $assistantMsg->setCacheCreationTokens($finalUsage['cache_creation_tokens'] ?? null);

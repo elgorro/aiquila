@@ -26,6 +26,7 @@ use OCP\IRequest;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * Covers the model-aware side of /thinking: refusing "off" on models that
@@ -104,6 +105,7 @@ class ConversationControllerThinkingTest extends TestCase {
             $this->createStub(ContextChatService::class),
             $this->createStub(RuntimeContextService::class),
             $this->createStub(InstructionsService::class),
+            $this->createStub(UsageStatService::class),
             'testuser',
             $this->createStub(LoggerInterface::class),
         );

@@ -8,6 +8,7 @@ use OCA\AIquila\TaskProcessing\ChatWithToolsProvider;
 use OCA\AIquila\TaskProcessing\ProviderResolver;
 use OCP\TaskProcessing\TaskTypes\TextToTextChatWithTools;
 use PHPUnit\Framework\TestCase;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * core:text2text:chatwithtools — the one task type where Nextcloud runs the
@@ -23,7 +24,7 @@ class ChatWithToolsProviderTest extends TestCase {
         $this->factory = $this->createStub(LLMProviderFactory::class);
         $this->llm = $this->createStub(LLMProviderInterface::class);
         $this->factory->method('getProviderForUser')->willReturnCallback(fn () => $this->llm);
-        $this->resolver = new ProviderResolver($this->factory);
+        $this->resolver = new ProviderResolver($this->factory, $this->createStub(UsageStatService::class));
         $this->provider = new ChatWithToolsProvider($this->resolver);
     }
 

@@ -15,6 +15,7 @@ use OCP\TaskProcessing\TaskTypes\GenerateEmoji;
 use OCP\TaskProcessing\TaskTypes\TextToTextChat;
 use OCP\TaskProcessing\TaskTypes\TextToTextImprove;
 use PHPUnit\Framework\TestCase;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * The task types added on top of the original text-to-text set.
@@ -28,7 +29,7 @@ class TextProvidersTest extends TestCase {
         $this->factory = $this->createStub(LLMProviderFactory::class);
         $this->llm = $this->createStub(LLMProviderInterface::class);
         $this->factory->method('getProviderForUser')->willReturnCallback(fn () => $this->llm);
-        $this->resolver = new ProviderResolver($this->factory);
+        $this->resolver = new ProviderResolver($this->factory, $this->createStub(UsageStatService::class));
     }
 
     public function testTaskTypeIdsMatchNextcloud(): void {
@@ -205,7 +206,7 @@ class TextProvidersTest extends TestCase {
             ->willReturn($this->llm);
         $this->llm->method('ask')->willReturn(['response' => 'ok']);
 
-        (new ReformatParagraphsProvider(new ProviderResolver($factory)))->process('alice', [
+        (new ReformatParagraphsProvider(new ProviderResolver($factory, $this->createStub(UsageStatService::class))))->process('alice', [
             'input' => 'text',
             'provider' => 'mistral',
         ], static fn (float $p) => null);

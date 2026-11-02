@@ -15,6 +15,7 @@ use OCP\SystemTag\ISystemTagManager;
 use OCP\SystemTag\ISystemTagObjectMapper;
 use OCP\SystemTag\TagNotFoundException;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * Vision task: classify images into a short set of labels and persist them as
@@ -31,9 +32,10 @@ class VisionClassifyImagesTaskType extends AbstractVisionTaskType {
         LoggerInterface $logger,
         private readonly ISystemTagManager $tagManager,
         private readonly ISystemTagObjectMapper $tagObjectMapper,
+        UsageStatService $usageStats,
         ?InstructionsService $instructions = null,
     ) {
-        parent::__construct($rootFolder, $imageOptimizer, $providerFactory, $logger, $instructions);
+        parent::__construct($rootFolder, $imageOptimizer, $providerFactory, $logger, $usageStats, $instructions);
     }
 
     public function getId(): string {

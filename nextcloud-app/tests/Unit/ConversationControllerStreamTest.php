@@ -24,6 +24,7 @@ use OCP\BackgroundJob\IJobList;
 use OCP\IRequest;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use OCA\AIquila\Service\UsageStatService;
 
 /**
  * Covers the generator behind ConversationController::messageStream().
@@ -39,12 +40,15 @@ class ConversationControllerStreamTest extends TestCase {
     private Conversation $conversation;
     /** @var list<MessageEntity> */
     private array $inserted = [];
+    /** @var list<array<int, mixed>> UsageStatService::record() calls */
+    private array $usageRecorded = [];
 
     /**
      * @param iterable<array<string, mixed>>|callable $events what the provider streams
      */
     private function makeController($events): ConversationController {
         $this->inserted = [];
+        $this->usageRecorded = [];
         $this->conversation = new Conversation();
         $this->conversation->setUserId('testuser');
         $this->conversation->setTitle(null);
@@ -109,6 +113,7 @@ class ConversationControllerStreamTest extends TestCase {
             $this->createStub(ContextChatService::class),
             $this->createStub(RuntimeContextService::class),
             $this->createStub(InstructionsService::class),
+            $this->usageRecorder(),
             'testuser',
             $this->createStub(LoggerInterface::class),
         );
@@ -118,6 +123,14 @@ class ConversationControllerStreamTest extends TestCase {
      * @param iterable<array<string, mixed>>|callable $events
      * @return list<array<string, mixed>>
      */
+    private function usageRecorder(): UsageStatService {
+        $usage = $this->createStub(UsageStatService::class);
+        $usage->method('record')->willReturnCallback(function (mixed ...$args): void {
+            $this->usageRecorded[] = $args;
+        });
+        return $usage;
+    }
+
     private function drain($events, string $prompt = 'hello'): array {
         $controller = $this->makeController($events);
         $method = new \ReflectionMethod(ConversationController::class, 'streamConversationReply');
@@ -151,6 +164,14 @@ class ConversationControllerStreamTest extends TestCase {
             $this->types($events)
         );
         $this->assertSame('Hello world', $this->assistantContent());
+
+        // The tokens reach aiquila_usage_stats, not only the message row.
+        $this->assertCount(1, $this->usageRecorded);
+        [$userId, , $result, $type, $conversationId] = $this->usageRecorded[0];
+        $this->assertSame('testuser', $userId);
+        $this->assertSame(['input_tokens' => 3, 'output_tokens' => 2], $result['usage']);
+        $this->assertSame(UsageStatService::TYPE_CHAT, $type);
+        $this->assertSame(1, $conversationId);
     }
 
     public function testThinkingIsForwardedAndItsSummaryPersisted(): void {
