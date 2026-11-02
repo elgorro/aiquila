@@ -203,4 +203,17 @@ class CoworkerServiceStopTest extends TestCase {
         $this->assertNotContains('status', $written[0], 'the first progress update must not rewrite the status');
         $this->assertContains('itemsProcessed', $written[0]);
     }
+
+    /** A coworker may only run one of its owner's saved prompts. */
+    public function testAnotherUsersPromptIsRefused(): void {
+        $prompts = $this->createStub(\OCA\AIquila\Db\PromptMapper::class);
+        $prompts->method('findByIdAndUser')->willThrowException(new \OCP\AppFramework\Db\DoesNotExistException(''));
+        $time = $this->createStub(ITimeFactory::class);
+        $service = new CoworkerService($this->mapper, $this->runMapper, $this->registry, $this->providerFactory, $time, $this->createStub(LoggerInterface::class), $prompts);
+        $this->mapper->method('findByIdAndUser')->willReturn($this->coworker());
+
+        $this->expectException(\OCA\AIquila\Service\Exception\ValidationException::class);
+        $this->expectExceptionMessage('Prompt not found: 9');
+        $service->update(7, 'alice', ['prompt_id' => 9]);
+    }
 }

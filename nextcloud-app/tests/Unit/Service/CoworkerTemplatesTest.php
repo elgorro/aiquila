@@ -60,6 +60,19 @@ class CoworkerTemplatesTest extends TestCase {
         $this->assertSame([$template], $store->list());
     }
 
+    /** An agent coworker's own prompt is part of what it does; a saved prompt id is the publisher's. */
+    public function testPublishCarriesTheOwnPromptButNotASavedOne(): void {
+        $coworker = $this->coworker();
+        $coworker->setTaskType('agent:run');
+        $coworker->setCustomPrompt('Summarise my unread mail.');
+        $coworker->setPromptId(12);
+
+        $template = $this->templates()->publish($coworker);
+
+        $this->assertSame('Summarise my unread mail.', $template['custom_prompt']);
+        $this->assertArrayNotHasKey('prompt_id', $template);
+    }
+
     public function testDeleteAndMalformedStorage(): void {
         $store = $this->templates();
         $store->publish($this->coworker());
