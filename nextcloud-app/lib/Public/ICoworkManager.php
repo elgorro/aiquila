@@ -125,6 +125,16 @@ interface ICoworkManager {
     public function getRuns(string $appId, int $id, int $limit = 20): array;
 
     /**
+     * One run of a coworker owned by the calling app: the getRuns() shape
+     * plus `log`, a list of `{ts, level, message, item}` entries (oldest
+     * first, at most the newest 500).
+     *
+     * @return array<string, mixed>
+     * @throws \OCP\AppFramework\Db\DoesNotExistException if the coworker is not owned by the app, or the run is not this coworker's.
+     */
+    public function getRun(string $appId, int $id, int $runId): array;
+
+    /**
      * Verify a coworker owned by the calling app: confirm ownership and last
      * status, and validate (without executing) that it will not break the engine
      * — task type registered, cron schedule valid, options valid, input path

@@ -216,4 +216,19 @@ class CoworkManagerTest extends TestCase {
         $this->assertFalse($result['valid']);
         $this->assertStringContainsString('input path not found', implode(' ', $result['issues']));
     }
+
+    public function testGetRunResolvesByAppAndCarriesTheLog(): void {
+        $this->mapper = $this->createMock(CoworkerMapper::class);
+        $this->mapper->expects($this->once())->method('findByIdAndApp')->with(5, 'myapp')->willReturn($this->coworker());
+        $run = new \OCA\AIquila\Db\CoworkerRun();
+        $run->setCoworkerId(5);
+        $run->appendLog('info', 'Done', '/Photos/a.jpg', 10);
+        $this->service = $this->createMock(CoworkerService::class);
+        $this->service->expects($this->once())->method('getRun')->with(5, 42, 'alice')->willReturn($run);
+        $this->buildManager();
+
+        $detail = $this->manager->getRun('myapp', 5, 42);
+
+        $this->assertSame([['ts' => 10, 'level' => 'info', 'message' => 'Done', 'item' => '/Photos/a.jpg']], $detail['log']);
+    }
 }

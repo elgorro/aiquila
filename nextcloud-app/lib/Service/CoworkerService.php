@@ -167,6 +167,20 @@ class CoworkerService {
     }
 
     /**
+     * One run of a coworker, log included.
+     *
+     * @throws DoesNotExistException when the coworker is not the user's, or the run is not this coworker's
+     */
+    public function getRun(int $id, int $runId, string $userId): CoworkerRun {
+        $this->mapper->findByIdAndUser($id, $userId); // authorize
+        $run = $this->runMapper->findByIdAndUser($runId, $userId);
+        if ($run->getCoworkerId() !== $id) {
+            throw new DoesNotExistException('Run ' . $runId . ' does not belong to coworker ' . $id);
+        }
+        return $run;
+    }
+
+    /**
      * Run a coworker now (manual trigger). Returns the completed run row.
      *
      * @throws DoesNotExistException
@@ -309,6 +323,7 @@ class CoworkerService {
             $run->setStatus(CoworkerRun::STATUS_ERROR);
             $run->setError($error->getMessage());
             $run->setState(null);
+            $run->appendLog(CoworkerRun::LOG_ERROR, 'Run failed: ' . $error->getMessage());
             $coworker->setLastStatus(CoworkerRun::STATUS_ERROR);
             $coworker->setLastError($error->getMessage());
             $this->logger->error('AIquila Cowork: run failed', [

@@ -272,6 +272,33 @@ class CoworkerController extends Controller {
     }
 
     /**
+     * Get one run of a coworker, with its per-item log
+     *
+     * The run list's shape plus `log`: entries oldest first, at most the
+     * newest 500. `item` is the file or object an entry is about, as a path
+     * in the user's Files, or null.
+     *
+     * @param int $id Coworker ID
+     * @param int $runId Run ID
+     *
+     * 200: The run with its log
+     * 404: Coworker or run not found, or the run belongs to another coworker
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, coworkerId: int, userId: string, status: string, itemsTotal: int, itemsProcessed: int, summary: ?string, error: ?string, startedAt: int, finishedAt: ?int, pendingBatchId: ?string, log: list<array{ts: int, level: string, message: string, item: ?string}>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[OpenAPI]
+    public function runDetail(int $id, int $runId): JSONResponse {
+        try {
+            $run = $this->service->getRun($id, $runId, (string)$this->userId);
+        } catch (DoesNotExistException) {
+            return $this->clientError(404, 'Run not found');
+        }
+        return new JSONResponse($run->jsonSerializeDetail());
+    }
+
+    /**
      * List coworker templates and available task types
      *
      * Built-in templates first (`scope: builtin`), then the ones an admin

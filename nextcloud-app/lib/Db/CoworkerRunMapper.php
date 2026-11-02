@@ -38,7 +38,9 @@ class CoworkerRunMapper extends QBMapper {
      */
     public function findByCoworker(int $coworkerId, string $userId, int $limit = 20): array {
         $qb = $this->db->getQueryBuilder();
-        $qb->select('*')
+        // Everything but `log`: the list never shows it, and a full log is
+        // the largest thing a run row carries.
+        $qb->select('id', 'coworker_id', 'user_id', 'status', 'items_total', 'items_processed', 'summary', 'error', 'started_at', 'finished_at', 'state')
             ->from($this->getTableName())
             ->where($qb->expr()->eq('coworker_id', $qb->createNamedParameter($coworkerId, IQueryBuilder::PARAM_INT)))
             ->andWhere($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
