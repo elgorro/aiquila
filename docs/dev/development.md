@@ -165,6 +165,25 @@ with the app bundle. Keep its static imports to `@nextcloud/files` and
 `@nextcloud/l10n`, and `import()` anything heavier, such as Vue components, from
 `exec`.
 
+### Code highlighting in rendered Markdown
+
+Chat replies and Coworker summaries are rendered by `renderMarkdown()` in
+`src/utils/markdown.js` (`marked` plus highlight.js). highlight.js is not part of the
+eager bundle. Its core loads with the first fenced code block, and each grammar
+loads with the first fence that names it. Until then the block shows as escaped
+plain text. A Vue `ref` read inside `renderMarkdown()` then makes the calling
+computed property re-render highlighted, so components need no extra code.
+
+- **Adding a language**: add an entry to `LOADERS`, written out as
+  `() => import('highlight.js/lib/languages/<name>')`. Vite cannot expand a
+  template-literal `import()` of a bare package path. Put alternative fence
+  names in `ALIASES`.
+- **Unlabelled fences** are auto-detected only among `AUTO_DETECT`. Keep that
+  list short: the first unlabelled block loads all of those grammars.
+- **Do not pin highlight.js in `manualChunks`** (`vite.config.js`). That merges
+  the dynamic chunks back into one chunk that loads up front. Only `marked`
+  belongs in `vendor-markdown`.
+
 ### Running tests
 
 ```bash
