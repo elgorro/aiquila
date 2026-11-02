@@ -55,6 +55,10 @@ class VertexProvider extends AbstractGoogleClaudeProvider {
 
     /** Mid-conversation system messages are GA on Claude models on Google Cloud (Google managed). */
     protected function platformFeatures(): array {
-        return [self::FEATURE_MID_CONVERSATION_SYSTEM => true] + parent::platformFeatures();
+        return [
+            self::FEATURE_MID_CONVERSATION_SYSTEM => true,
+            // Claude Models on Google Cloud (Google managed) takes task budgets.
+            self::FEATURE_TASK_BUDGET => true,
+        ] + parent::platformFeatures();
     }
 }

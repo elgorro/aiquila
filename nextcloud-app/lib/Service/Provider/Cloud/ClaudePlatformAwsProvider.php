@@ -46,6 +46,7 @@ class ClaudePlatformAwsProvider extends AbstractAwsClaudeProvider {
             self::FEATURE_MODELS_API => true,
             self::FEATURE_NATIVE_MCP => true,
             self::FEATURE_METADATA => true,
+            self::FEATURE_TASK_BUDGET => true,
         ] + parent::platformFeatures();
     }
 

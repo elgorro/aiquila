@@ -296,4 +296,32 @@ class ClaudeSDKServiceNativeMcpTest extends TestCase {
         $this->assertSame('cyber', $result['refusal_category']);
         $this->assertSame('Declined (cyber).', $result['error']);
     }
+
+    /** Anthropic runs the MCP loop server-side; it is still one agentic loop. */
+    public function testNativeMcpPathCarriesTheTaskBudget(): void {
+        $config = $this->createStub(AppSettings::class);
+        $config->method('getUserValue')->willReturn('');
+        $config->method('getAppValue')->willReturnCallback(
+            fn($app, $key, $default) => match ($key) {
+                'model' => ClaudeModels::OPUS_5,
+                'max_tokens' => '4096',
+                'task_budget' => '50000',
+                default => $default,
+            }
+        );
+        $service = new NativeMcpTestableService($config, $this->logger, $this->credentials, $this->cacheFactory, $this->requestMetadata);
+        $service->setStubStream($this->streamFromEvents([]));
+        iterator_to_array($service->chatWithNativeMcp(
+            messages: [['role' => 'user', 'content' => 'hi']],
+            mcpServers: [['type' => 'url', 'url' => 'https://mcp.example/mcp', 'name' => 'x']],
+            userId: 'alice',
+        ), false);
+
+        $this->assertSame(50000, $service->lastParams['task_budget']);
+
+        $ref = new \ReflectionMethod(ClaudeSDKService::class, 'callBetaCreateStreamWithMcp');
+        $source = implode('', array_slice(file($ref->getFileName()), $ref->getStartLine() - 1, $ref->getEndLine() - $ref->getStartLine() + 1));
+        $this->assertStringContainsString('TASK_BUDGETS_2026_03_13', $source);
+        $this->assertStringContainsString("'taskBudget'", $source);
+    }
 }

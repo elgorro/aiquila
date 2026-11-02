@@ -90,6 +90,12 @@ class ConfigureCommand extends Base {
                 'Pin the thinking budget in tokens (>= ' . ClaudeSDKService::MIN_THINKING_BUDGET . ', empty string for adaptive)'
             )
             ->addOption(
+                'task-budget',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Token budget for each tool-using answer (>= ' . ClaudeSDKService::MIN_TASK_BUDGET . ', empty string for off)'
+            )
+            ->addOption(
                 'service-tier',
                 null,
                 InputOption::VALUE_REQUIRED,
@@ -393,6 +399,18 @@ class ConfigureCommand extends Base {
             $updated = true;
         }
 
+        // Set the task budget for agentic loops
+        $taskBudget = $input->getOption('task-budget');
+        if ($taskBudget !== null) {
+            if ($taskBudget !== '' && (!ctype_digit($taskBudget) || (int)$taskBudget < ClaudeSDKService::MIN_TASK_BUDGET)) {
+                $output->writeln('<error>Task budget must be at least ' . ClaudeSDKService::MIN_TASK_BUDGET . ' tokens (or empty to turn it off)</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'task_budget', $taskBudget);
+            $output->writeln('<info>✓ Task budget ' . ($taskBudget === '' ? 'turned off' : 'updated to: ' . $taskBudget . ' tokens') . '</info>');
+            $updated = true;
+        }
+
         // Set the service tier
         $serviceTier = $input->getOption('service-tier');
         if ($serviceTier !== null) {
@@ -518,6 +536,7 @@ class ConfigureCommand extends Base {
         $taskEffort = $this->config->getAppValue(self::APP_NAME, 'task_effort', '');
         $taskThinking = $this->config->getAppValue(self::APP_NAME, 'task_thinking', '');
         $thinkingBudget = $this->config->getAppValue(self::APP_NAME, 'thinking_budget', '');
+        $taskBudget = $this->config->getAppValue(self::APP_NAME, 'task_budget', '');
         $serviceTier = $this->config->getAppValue(self::APP_NAME, 'service_tier', '');
         $fast = in_array($this->config->getAppValue(self::APP_NAME, 'speed_fast', 'false'), ['true', '1'], true);
         $autoCache = in_array($this->config->getAppValue(self::APP_NAME, 'auto_cache', '1'), ['true', '1'], true);
@@ -543,6 +562,7 @@ class ConfigureCommand extends Base {
         $output->writeln('  Task effort:   <comment>' . ($taskEffort !== '' ? $taskEffort : '(default effort)') . '</comment>');
         $output->writeln('  Task thinking: <comment>' . ($taskThinking !== '' ? ThinkingPolicy::normalizeMode($taskThinking) : '(default thinking)') . '</comment>');
         $output->writeln('  Budget:     <comment>' . ($thinkingBudget !== '' ? $thinkingBudget . ' tokens' : '(adaptive)') . '</comment>');
+        $output->writeln('  Task budget: <comment>' . ($taskBudget !== '' ? $taskBudget . ' tokens' : 'off') . '</comment>');
         $output->writeln('  Tier:       <comment>' . ($serviceTier !== '' ? $serviceTier : '(account default)') . '</comment>');
         $output->writeln('  Fast mode:  <comment>' . ($fast ? 'on' : 'off') . '</comment>');
         $output->writeln('  Auto cache: <comment>' . ($autoCache ? 'on' : 'off') . '</comment>');
