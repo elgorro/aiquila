@@ -10,6 +10,8 @@ use OCA\AIquila\Cowork\CoworkerTaskRegistry;
 use OCA\AIquila\Db\Coworker;
 use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Service\CoworkerService;
+use OCA\AIquila\Service\CoworkerTemplates;
+use OCA\AIquila\Service\InstructionsService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -42,6 +44,7 @@ class CoworkerController extends Controller {
         private readonly AppSettings $config,
         private readonly ?string $userId,
         private readonly LoggerInterface $logger,
+        private readonly CoworkerTemplates $instanceTemplates,
     ) {
         parent::__construct($appName, $request);
     }
@@ -269,7 +272,10 @@ class CoworkerController extends Controller {
     }
 
     /**
-     * List built-in coworker templates and available task types
+     * List coworker templates and available task types
+     *
+     * Built-in templates first (`scope: builtin`), then the ones an admin
+     * published for the instance (`scope: instance`).
      *
      * 200: Templates and task types
      *
@@ -280,13 +286,13 @@ class CoworkerController extends Controller {
     #[OpenAPI]
     public function templates(): JSONResponse {
         return new JSONResponse([
-            'templates' => $this->service->getTemplates(),
+            'templates' => $this->allTemplates(),
             'taskTypes' => $this->registry->describe(),
         ]);
     }
 
     /**
-     * Create a coworker from a built-in template
+     * Create a coworker from a built-in or instance template
      *
      * @param string $templateId Template identifier
      *
@@ -301,7 +307,7 @@ class CoworkerController extends Controller {
     #[OpenAPI]
     public function createFromTemplate(string $templateId = ''): JSONResponse {
         $template = null;
-        foreach ($this->service->getTemplates() as $candidate) {
+        foreach ($this->allTemplates() as $candidate) {
             if (($candidate['id'] ?? null) === $templateId) {
                 $template = $candidate;
                 break;
@@ -313,7 +319,7 @@ class CoworkerController extends Controller {
 
         // Allow the caller to override fields (e.g. input_path) at creation time.
         $data = array_merge($template, $this->bodyData());
-        unset($data['id']);
+        unset($data['id'], $data['scope']);
         try {
             $coworker = $this->service->create((string)$this->userId, $data);
         } catch (ValidationException $e) {
@@ -394,6 +400,79 @@ class CoworkerController extends Controller {
      *
      * @return array<string, mixed>
      */
+    /**
+     * List the coworker templates published for the instance
+     *
+     * 200: Instance templates
+     *
+     * @return JSONResponse<Http::STATUS_OK, list<array<string, mixed>>, array{}>
+     */
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function adminTemplates(): JSONResponse {
+        return new JSONResponse($this->instanceTemplates->list());
+    }
+
+    /**
+     * Publish one of the admin's own coworkers as an instance template
+     *
+     * The template copies the coworker's task, schedule, input, output,
+     * provider, model and options. Coworkers later made from it are copies too.
+     *
+     * @param int $coworkerId Coworker to publish (one of the caller's own)
+     * @param string|null $title Template title (default: the coworker's)
+     * @param string|null $description Template description (default: the coworker's)
+     *
+     * 200: The published template
+     * 400: A field is too long
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST|Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     */
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function publishTemplate(int $coworkerId, ?string $title = null, ?string $description = null): JSONResponse {
+        $error = InstructionsService::tooLong($title, InstructionsService::MAX_TITLE_LENGTH, 'Title')
+            ?? InstructionsService::tooLong($description, InstructionsService::MAX_DESCRIPTION_LENGTH, 'Description');
+        if ($error !== null) {
+            return $this->clientError(400, $error);
+        }
+        try {
+            $coworker = $this->service->findForUser($coworkerId, (string)$this->userId);
+        } catch (DoesNotExistException $e) {
+            return $this->clientError(404, 'Coworker not found');
+        }
+        return new JSONResponse($this->instanceTemplates->publish($coworker, $title, $description));
+    }
+
+    /**
+     * Delete an instance coworker template
+     *
+     * Coworkers already made from it are not touched.
+     *
+     * @param string $templateId Template ID
+     *
+     * 200: Deleted
+     * 404: Template not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{deleted: true}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     */
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function deleteTemplate(string $templateId): JSONResponse {
+        if (!$this->instanceTemplates->delete($templateId)) {
+            return $this->clientError(404, 'Template not found');
+        }
+        return new JSONResponse(['deleted' => true]);
+    }
+
+    /**
+     * Built-in templates, then the instance ones.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function allTemplates(): array {
+        $builtin = array_map(static fn (array $t): array => ['scope' => 'builtin'] + $t, $this->service->getTemplates());
+        return array_merge($builtin, $this->instanceTemplates->list());
+    }
+
     private function bodyData(): array {
         $params = $this->request->getParams();
         $allowed = [

@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
@@ -24,9 +25,31 @@ use OCA\AIquila\Service\Provider\NoPermittedProviderException;
  */
 class ProviderResolver {
 
+    /**
+     * @param InstructionsService|null $instructions null only where a test
+     *        does not care about instance instructions; the container always
+     *        injects it
+     */
     public function __construct(
         private LLMProviderFactory $providerFactory,
+        private ?InstructionsService $instructions = null,
     ) {
+    }
+
+    /**
+     * The system prompt for a chat-shaped task: the task's own `system_prompt`
+     * (from the Assistant or the Context Agent), with the admin's instance
+     * instructions in front when they are enabled for TaskProcessing.
+     *
+     * @param array<string, mixed> $input
+     */
+    public function systemPrompt(?string $userId, array $input): ?string {
+        $system = $input['system_prompt'] ?? '';
+        $system = is_string($system) && $system !== '' ? $system : null;
+        if ($this->instructions === null) {
+            return $system;
+        }
+        return $this->instructions->withInstance(InstructionsService::SCOPE_TASKS, $userId, $system);
     }
 
     /**

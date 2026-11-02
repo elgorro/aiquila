@@ -8,7 +8,14 @@ namespace OCA\AIquila\Db;
 use OCP\AppFramework\Db\Entity;
 
 /**
+ * A reusable prompt from the prompt library.
+ *
+ * `scope` is `user` (only the owner sees it) or `instance` (published by an
+ * admin, read-only for everyone). `userId` is the author either way.
+ *
  * @method int getId()
+ * @method string getScope()
+ * @method void setScope(string $scope)
  * @method string getUserId()
  * @method void setUserId(string $userId)
  * @method string getTitle()
@@ -24,9 +31,13 @@ use OCP\AppFramework\Db\Entity;
  * @method int getUpdatedAt()
  * @method void setUpdatedAt(int $updatedAt)
  */
-class Prompt extends Entity {
+class Prompt extends Entity implements \JsonSerializable {
     use InsertsFullRow;
 
+    public const SCOPE_USER = 'user';
+    public const SCOPE_INSTANCE = 'instance';
+
+    protected string $scope = self::SCOPE_USER;
     protected string $userId = '';
     protected string $title = '';
     protected ?string $description = null;
@@ -36,6 +47,7 @@ class Prompt extends Entity {
     protected int $updatedAt = 0;
 
     public function __construct() {
+        $this->addType('scope', 'string');
         $this->addType('userId', 'string');
         $this->addType('title', 'string');
         $this->addType('description', 'string');
@@ -44,5 +56,20 @@ class Prompt extends Entity {
         $this->addType('createdAt', 'integer');
         $this->addType('updatedAt', 'integer');
         $this->markFieldsForInsert();
+    }
+
+    /**
+     * @return array{id: int, scope: string, title: string, description: ?string, content: string, createdAt: int, updatedAt: int}
+     */
+    public function jsonSerialize(): array {
+        return [
+            'id' => $this->getId(),
+            'scope' => $this->getScope(),
+            'title' => $this->getTitle(),
+            'description' => $this->getDescription(),
+            'content' => $this->getContent(),
+            'createdAt' => $this->getCreatedAt(),
+            'updatedAt' => $this->getUpdatedAt(),
+        ];
     }
 }

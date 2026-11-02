@@ -19,7 +19,7 @@ Nextcloud apps that register coworkers programmatically use the
 | Tool | Description |
 |------|-------------|
 | `list_coworkers` | List your coworkers with state, schedule and last run |
-| `list_coworker_templates` | List built-in templates and task types |
+| `list_coworker_templates` | List built-in and organization templates, and task types |
 | `get_coworker` | Show one coworker, including its full options and prompt |
 | `create_coworker` | Create a coworker, from a template or from scratch |
 | `update_coworker` | Change any part of a coworker's configuration |
@@ -55,9 +55,11 @@ and tool allowlist.
 
 ### list_coworker_templates
 
-List the built-in templates (`templateId` values) and the task types the installed app
+List the templates (`templateId` values) and the task types the installed app
 supports (`taskType` values, e.g. `vision:classify`, `docs:summarize`,
-`docs:translate`).
+`docs:translate`). Templates are the built-in ones plus any an administrator
+published for the organization; those are marked as such and their ids start
+with `org-`.
 
 **Parameters:** none
 

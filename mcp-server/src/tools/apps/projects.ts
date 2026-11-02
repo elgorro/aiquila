@@ -338,6 +338,177 @@ export const removeProjectPathTool = {
   },
 };
 
+interface LibraryPrompt {
+  id: number;
+  scope: 'user' | 'instance';
+  title: string;
+  description: string | null;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface ProjectTemplate {
+  id: number;
+  scope: 'user' | 'instance';
+  title: string;
+  description: string | null;
+  systemPrompt: string | null;
+  paths: { path: string; pathType: string }[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** "organization" for admin-published entries, "personal" for the user's own. */
+function scopeLabel(scope: string): string {
+  return scope === 'instance' ? 'organization' : 'personal';
+}
+
+function errorResult(action: string, error: unknown) {
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: `Error ${action}: ${error instanceof Error ? error.message : String(error)}`,
+      },
+    ],
+    isError: true,
+  };
+}
+
+export const listPromptsTool = {
+  name: 'list_prompts',
+  title: 'List Prompts',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    "List the AIquila prompt library: reusable prompts published by the organization and the user's own. Returns titles and descriptions; use get_prompt for the full text.",
+  inputSchema: z.object({}),
+  handler: async () => {
+    try {
+      const prompts = await fetchAiquilaAPI<LibraryPrompt[]>('/prompts');
+      if (prompts.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No prompts found.' }] };
+      }
+      const text = prompts
+        .map(
+          (p) =>
+            `Prompt #${p.id}: ${p.title} (${scopeLabel(p.scope)})` +
+            (p.description ? `\n  ${p.description}` : '')
+        )
+        .join('\n');
+      return {
+        content: [{ type: 'text' as const, text: `Prompts (${prompts.length}):\n\n${text}` }],
+      };
+    } catch (error) {
+      return errorResult('listing prompts', error);
+    }
+  },
+};
+
+export const getPromptTool = {
+  name: 'get_prompt',
+  title: 'Get Prompt',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description: 'Get the full text of a prompt from the AIquila prompt library.',
+  inputSchema: z.object({
+    id: z.number().describe('Prompt ID from list_prompts'),
+  }),
+  handler: async (args: { id: number }) => {
+    try {
+      const prompts = await fetchAiquilaAPI<LibraryPrompt[]>('/prompts');
+      const prompt = prompts.find((p) => p.id === args.id);
+      if (!prompt) {
+        return errorResult('getting prompt', `Prompt #${args.id} not found`);
+      }
+      const header = [`Prompt #${prompt.id}: ${prompt.title} (${scopeLabel(prompt.scope)})`];
+      if (prompt.description) header.push(`Description: ${prompt.description}`);
+      return {
+        content: [{ type: 'text' as const, text: `${header.join('\n')}\n\n${prompt.content}` }],
+      };
+    } catch (error) {
+      return errorResult('getting prompt', error);
+    }
+  },
+};
+
+export const listProjectTemplatesTool = {
+  name: 'list_project_templates',
+  title: 'List Project Templates',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    "List AIquila project templates: the organization's and the user's own. A template holds a title, description, system prompt and suggested paths.",
+  inputSchema: z.object({}),
+  handler: async () => {
+    try {
+      const templates = await fetchAiquilaAPI<ProjectTemplate[]>('/project-templates');
+      if (templates.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'No project templates found.' }] };
+      }
+      const text = templates
+        .map((t) => {
+          const lines = [`Template #${t.id}: ${t.title} (${scopeLabel(t.scope)})`];
+          if (t.description) lines.push(`  Description: ${t.description}`);
+          if (t.systemPrompt) lines.push(`  System prompt: ${t.systemPrompt}`);
+          for (const path of t.paths) lines.push(`  - [${path.pathType}] ${path.path}`);
+          return lines.join('\n');
+        })
+        .join('\n\n');
+      return {
+        content: [
+          { type: 'text' as const, text: `Project templates (${templates.length}):\n\n${text}` },
+        ],
+      };
+    } catch (error) {
+      return errorResult('listing project templates', error);
+    }
+  },
+};
+
+export const createProjectFromTemplateTool = {
+  name: 'create_project_from_template',
+  title: 'Create Project from Template',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+  description:
+    'Create an AIquila project as a copy of a project template (title, description, system prompt and paths). Later changes to the template do not affect the project.',
+  inputSchema: z.object({
+    templateId: z.number().describe('Template ID from list_project_templates'),
+    title: z.string().optional().describe("Title for the new project (default: the template's)"),
+  }),
+  handler: async (args: { templateId: number; title?: string }) => {
+    try {
+      const project = await fetchAiquilaAPI<Project>(
+        `/project-templates/${args.templateId}/project`,
+        { method: 'POST', body: args.title ? { title: args.title } : {} }
+      );
+      return {
+        content: [{ type: 'text' as const, text: `Project created:\n\n${formatProject(project)}` }],
+      };
+    } catch (error) {
+      return errorResult('creating project from template', error);
+    }
+  },
+};
+
 export const projectsTools = [
   listProjectsTool,
   createProjectTool,
@@ -346,4 +517,8 @@ export const projectsTools = [
   deleteProjectTool,
   addProjectPathTool,
   removeProjectPathTool,
+  listPromptsTool,
+  getPromptTool,
+  listProjectTemplatesTool,
+  createProjectFromTemplateTool,
 ];

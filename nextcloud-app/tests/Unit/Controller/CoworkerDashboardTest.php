@@ -28,7 +28,8 @@ class CoworkerDashboardTest extends TestCase {
         $request = $this->createStub(IRequest::class);
         $this->ctrl = new CoworkerController(
             'aiquila', $request, $this->service, $registry, $this->config, 'alice',
-            $this->createStub(\Psr\Log\LoggerInterface::class)
+            $this->createStub(\Psr\Log\LoggerInterface::class),
+            $this->createStub(\OCA\AIquila\Service\CoworkerTemplates::class),
         );
     }
 

@@ -43,18 +43,6 @@
 			<template #defaults>
 				<NcSettingsSection :name="t('aiquila', 'New conversations')"
 					:description="t('aiquila', 'Applied when you start a conversation. Existing conversations keep whatever they were created with.')">
-					<div class="aiquila-personal__field">
-						<label class="aiquila-personal__label" for="aiquila-system-prompt">
-							{{ t('aiquila', 'Default system prompt') }}
-						</label>
-						<textarea id="aiquila-system-prompt"
-							v-model="defaultSystemPrompt"
-							class="aiquila-personal__textarea"
-							rows="4"
-							:placeholder="t('aiquila', 'Custom instructions for the model…')"
-							@input="dirty = true" />
-					</div>
-
 					<NcCheckboxRadioSwitch :model-value="defaultVerbose"
 						@update:model-value="v => { defaultVerbose = v; dirty = true }">
 						{{ t('aiquila', 'Show verbose mode by default') }}
@@ -82,6 +70,54 @@
 					<NcNoteCard v-if="message" :type="messageType">
 						{{ message }}
 					</NcNoteCard>
+				</NcSettingsSection>
+			</template>
+
+			<template #prompts>
+				<NcSettingsSection :name="t('aiquila', 'Your instructions')"
+					:description="t('aiquila', 'Added to every AIquila chat, in every conversation, after your organization\'s instructions and before the project prompt. Leave it empty for none.')">
+					<div v-if="instanceInstructions" class="aiquila-personal__field">
+						<p class="aiquila-personal__label">
+							{{ t('aiquila', 'From your organization (always applied)') }}
+						</p>
+						<pre class="aiquila-personal__readonly">{{ instanceInstructions }}</pre>
+					</div>
+					<div class="aiquila-personal__field">
+						<label class="aiquila-personal__label" for="aiquila-system-prompt">
+							{{ t('aiquila', 'Your default instructions') }}
+						</label>
+						<textarea id="aiquila-system-prompt"
+							v-model="defaultSystemPrompt"
+							class="aiquila-personal__textarea"
+							rows="4"
+							:maxlength="maxPromptLength"
+							:placeholder="t('aiquila', 'For example: answer in German, keep it short.')"
+							@input="instructionsDirty = true" />
+					</div>
+					<div class="aiquila-personal__actions">
+						<NcButton type="primary" :disabled="saving || !instructionsDirty" @click="saveInstructions">
+							{{ saving ? t('aiquila', 'Saving…') : t('aiquila', 'Save') }}
+						</NcButton>
+					</div>
+					<NcNoteCard v-if="instructionsMessage" :type="instructionsMessageType">
+						{{ instructionsMessage }}
+					</NcNoteCard>
+				</NcSettingsSection>
+
+				<NcSettingsSection :name="t('aiquila', 'My prompts')"
+					:description="t('aiquila', 'Reusable prompts you can insert from the chat and the project editor. Prompts your organization publishes appear there too.')">
+					<LibraryEditor kind="prompts"
+						:api="promptsApi"
+						:max-length="maxPromptLength"
+						:empty-text="t('aiquila', 'No prompts yet.')" />
+				</NcSettingsSection>
+
+				<NcSettingsSection :name="t('aiquila', 'My project templates')"
+					:description="t('aiquila', 'Start a new project from a template under Projects → New from template. You can also save an existing project as a template from its menu.')">
+					<LibraryEditor kind="project-templates"
+						:api="templatesApi"
+						:max-length="maxPromptLength"
+						:empty-text="t('aiquila', 'No templates yet.')" />
 				</NcSettingsSection>
 			</template>
 
@@ -115,6 +151,7 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 
+import LibraryEditor from '../components/settings/LibraryEditor.vue'
 import ProviderCard from '../components/settings/ProviderCard.vue'
 import SettingsTabs from '../components/settings/SettingsTabs.vue'
 import {
@@ -122,6 +159,7 @@ import {
 	getUserProviders,
 	saveSettings,
 	saveUserProvider,
+	userLibrary,
 } from '../settings-api.js'
 
 export default {
@@ -132,6 +170,7 @@ export default {
 		NcLoadingIcon,
 		NcNoteCard,
 		NcSettingsSection,
+		LibraryEditor,
 		ProviderCard,
 		SettingsTabs,
 	},
@@ -151,6 +190,13 @@ export default {
 			userProvider: '',
 			adminProvider: '',
 			defaultSystemPrompt: '',
+			instanceInstructions: '',
+			maxPromptLength: 20000,
+			instructionsDirty: false,
+			instructionsMessage: '',
+			instructionsMessageType: 'success',
+			promptsApi: userLibrary('prompts'),
+			templatesApi: userLibrary('project-templates'),
 			defaultVerbose: false,
 			taskSuccessNotifications: false,
 			taskFailureNotifications: true,
@@ -164,6 +210,7 @@ export default {
 			return [
 				{ id: 'providers', label: t('aiquila', 'Providers') },
 				{ id: 'defaults', label: t('aiquila', 'Defaults') },
+				{ id: 'prompts', label: t('aiquila', 'Prompts') },
 				{ id: 'connectors', label: t('aiquila', 'Connectors') },
 			]
 		},
@@ -207,6 +254,9 @@ export default {
 				this.adminProvider = providerData.adminProvider
 
 				this.defaultSystemPrompt = settings.defaultSystemPrompt || ''
+				this.instanceInstructions = settings.instanceInstructions || ''
+				this.maxPromptLength = settings.maxPromptLength || this.maxPromptLength
+				this.instructionsDirty = false
 				this.defaultVerbose = !!settings.defaultVerbose
 				this.taskSuccessNotifications = !!settings.taskSuccessNotifications
 				this.taskFailureNotifications = !!settings.taskFailureNotifications
@@ -242,7 +292,6 @@ export default {
 			this.message = ''
 			try {
 				await saveSettings({
-					default_system_prompt: this.defaultSystemPrompt,
 					default_verbose: this.defaultVerbose ? '1' : '0',
 					task_success_notifications: this.taskSuccessNotifications ? '1' : '0',
 					task_failure_notifications: this.taskFailureNotifications ? '1' : '0',
@@ -253,6 +302,21 @@ export default {
 			} catch (err) {
 				this.messageType = 'error'
 				this.message = err.response?.data?.error || err.message
+			} finally {
+				this.saving = false
+			}
+		},
+		async saveInstructions() {
+			this.saving = true
+			this.instructionsMessage = ''
+			try {
+				await saveSettings({ default_system_prompt: this.defaultSystemPrompt })
+				this.instructionsDirty = false
+				this.instructionsMessageType = 'success'
+				this.instructionsMessage = t('aiquila', 'Saved.')
+			} catch (err) {
+				this.instructionsMessageType = 'error'
+				this.instructionsMessage = err.response?.data?.error || err.message
 			} finally {
 				this.saving = false
 			}
@@ -299,6 +363,14 @@ export default {
 .aiquila-personal__textarea {
 	width: 100%;
 	resize: vertical;
+}
+
+.aiquila-personal__readonly {
+	white-space: pre-wrap;
+	padding: 8px;
+	border-radius: var(--border-radius);
+	background: var(--color-background-dark);
+	font-family: inherit;
 }
 
 .aiquila-personal__actions {

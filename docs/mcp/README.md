@@ -39,7 +39,7 @@ Nextcloud apps and administration:
 - **Deck** — Boards, stacks, cards, labels, and assignments
 - **Photos** — Albums, collaborators, favourites, and photo metadata
 - **Circles** — Team circles and their membership
-- **Projects** — Group related files and entities into Nextcloud projects
+- **Projects** — AIquila projects (paths plus a system prompt), project templates and the prompt library
 - **Coworkers** — Create, run, pause and inspect the AIquila Coworkers (saved AI jobs) and their run history
 - **Text** — Read, write and delete a folder's Text workspace (`Readme.md`), or get a direct-edit URL
 - **Notifications** — Read, mark and dismiss Nextcloud notifications
@@ -63,7 +63,7 @@ Nextcloud apps and administration:
 - **Recommendations** — The files Nextcloud suggests for the current user
 - **AIquila** — Configure and test the AI provider integration
 
-**Total: 345 tools across 44 categories**
+**Total: 349 tools across 44 categories**
 
 ## Tools Reference
 
@@ -440,7 +440,7 @@ Nextcloud apps and administration:
 | `circles_remove_member` | Remove a member from a circle/team | — |
 | `circles_search` | Search for circles/teams by name | — |
 
-#### Projects (7 tools)
+#### Projects (11 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_projects` | List all AIquila projects for the current user | — |
@@ -450,6 +450,10 @@ Nextcloud apps and administration:
 | `delete_project` | Delete an AIquila project | — |
 | `add_project_path` | Add a file or directory path to an AIquila project | — |
 | `remove_project_path` | Remove a file or directory path from an AIquila project | — |
+| `list_prompts` | List the AIquila prompt library: organization prompts and your own | — |
+| `get_prompt` | Get the full text of a prompt from the library | — |
+| `list_project_templates` | List organization and personal project templates | — |
+| `create_project_from_template` | Create a project as a copy of a template | — |
 
 #### Coworkers (15 tools)
 | Tool | Description | Documentation |

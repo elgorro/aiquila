@@ -18,6 +18,7 @@
 						@conversation-renamed="onConversationUpdated"
 						@update-project-filter="activeProjectFilter = $event"
 						@new-project="onNewProject"
+						@new-project-from-template="templatePickerOpen = true"
 						@select-project="onSelectProject"
 						@delete-project="confirmDeleteProject"
 						@duplicate-project="onDuplicateProject"
@@ -70,6 +71,11 @@
 			</div>
 		</NcAppContent>
 
+		<TemplatePickerDialog v-if="templatePickerOpen"
+			:busy="creatingFromTemplate"
+			@pick="onPickTemplate"
+			@close="templatePickerOpen = false" />
+
 		<!-- Delete confirmation (shared for conversations and projects) -->
 		<NcDialog v-if="deleteConfirm.id !== null"
 			:name="deleteConfirm.type === 'project'
@@ -109,6 +115,7 @@ import NcDialog from '@nextcloud/vue/components/NcDialog'
 import CogIcon from 'vue-material-design-icons/Cog.vue'
 
 import SectionNav from './components/SectionNav.vue'
+import TemplatePickerDialog from './components/TemplatePickerDialog.vue'
 import {
 	createConversation,
 	getConversation,
@@ -118,6 +125,7 @@ import {
 	listProjects,
 	getProject,
 	createProject,
+	createProjectFromTemplate,
 	deleteProject,
 } from './api.js'
 
@@ -133,6 +141,7 @@ export default {
 		CogIcon,
 		NcDialog,
 		SectionNav,
+		TemplatePickerDialog,
 	},
 	data() {
 		return {
@@ -144,6 +153,8 @@ export default {
 			activeProjectFilter: null,
 			activeProject: null,
 			deleteConfirm: { id: null, type: null },
+			templatePickerOpen: false,
+			creatingFromTemplate: false,
 		}
 	},
 	computed: {
@@ -228,6 +239,19 @@ export default {
 				this.$router.push({ name: 'projects', params: { projectId: String(data.id) } })
 			} catch (err) {
 				console.error('Failed to create project:', err)
+			}
+		},
+		async onPickTemplate(template) {
+			this.creatingFromTemplate = true
+			try {
+				const { data } = await createProjectFromTemplate(template.id)
+				this.projects.unshift(data)
+				this.templatePickerOpen = false
+				this.$router.push({ name: 'projects', params: { projectId: String(data.id) } })
+			} catch (err) {
+				console.error('Failed to create project from template:', err)
+			} finally {
+				this.creatingFromTemplate = false
 			}
 		},
 		async onDuplicateProject(id) {

@@ -17,6 +17,8 @@ use OCA\AIquila\Service\Provider\LLMProviderInterface;
  *   current provider, and a model id from the old one would be meaningless.
  * - `effort` and `thinking` live in the coworker's options JSON. Values the
  *   model does not accept fall through to the task defaults at request time.
+ * - `system` carries the admin's instance instructions, when they are enabled
+ *   for coworkers.
  */
 final class CoworkerRequestOptions {
     public const THINKING_VALUES = ['on', 'off', 'auto'];
@@ -25,8 +27,12 @@ final class CoworkerRequestOptions {
      * @param array<string, mixed> $options the coworker's decoded options
      * @return array<string, mixed>
      */
-    public static function build(Coworker $coworker, LLMProviderInterface $provider, array $options): array {
+    public static function build(Coworker $coworker, LLMProviderInterface $provider, array $options, ?string $system = null): array {
         $request = LLMProviderInterface::TASK_OPTIONS;
+
+        if ($system !== null && $system !== '') {
+            $request['system'] = $system;
+        }
 
         $model = $coworker->getModel();
         if ($model !== null && $model !== '' && $coworker->getProvider() === $provider->getId()) {

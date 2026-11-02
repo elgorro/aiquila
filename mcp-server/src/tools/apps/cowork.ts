@@ -70,7 +70,13 @@ interface CoworkerRunDetail extends CoworkerRun {
 }
 
 interface TemplatesResponse {
-  templates: Array<{ id: string; title: string; description?: string; provider?: string }>;
+  templates: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    provider?: string;
+    scope?: 'builtin' | 'instance';
+  }>;
   taskTypes: Array<{ id: string; label: string; family: string }>;
 }
 
@@ -184,13 +190,16 @@ export const listCoworkerTemplatesTool = {
     openWorldHint: false,
   },
   description:
-    'List built-in coworker templates (e.g. image classification via Claude vision or Mistral Pixtral) and available task types.',
+    'List coworker templates — built-in ones (e.g. image classification via Claude vision or Mistral Pixtral) and any your administrator published for the organization — and the available task types.',
   inputSchema: z.object({}),
   handler: async () => {
     try {
       const data = await fetchAiquilaAPI<TemplatesResponse>('/coworkers/templates');
       const tpls = data.templates
-        .map((t) => `- **${t.title}** (id: ${t.id})${t.description ? ` — ${t.description}` : ''}`)
+        .map(
+          (t) =>
+            `- **${t.title}** (id: ${t.id}${t.scope === 'instance' ? ', organization' : ''})${t.description ? ` — ${t.description}` : ''}`
+        )
         .join('\n');
       const types = data.taskTypes.map((t) => `- ${t.id} (${t.family}) — ${t.label}`).join('\n');
       return text(`Templates:\n${tpls}\n\nTask types:\n${types}`);
@@ -343,12 +352,9 @@ export const createCoworkerTool = {
     openWorldHint: false,
   },
   description:
-    'Create a coworker. Provide templateId to start from a built-in template (e.g. "classify-images-claude" or "classify-images-mistral"), and/or explicit fields to configure a custom one. Fields override template defaults.',
+    'Create a coworker. Provide templateId to start from a template (built-in, e.g. "classify-images-claude", or an organization one), and/or explicit fields to configure a custom one. Fields override template defaults.',
   inputSchema: z.object({
-    templateId: z
-      .string()
-      .optional()
-      .describe('Built-in template id (see list_coworker_templates)'),
+    templateId: z.string().optional().describe('Template id (see list_coworker_templates)'),
     taskType: z.string().optional().describe('Task type id, e.g. "vision:classify"'),
     ...coworkerFields,
   }),

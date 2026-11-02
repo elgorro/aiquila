@@ -7,6 +7,7 @@ use OCA\AIquila\Db\TalkMessage;
 use OCA\AIquila\Db\TalkMessageMapper;
 use OCA\AIquila\Service\AppSettings;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Talk\TalkBotService;
@@ -20,6 +21,7 @@ use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
 use OCP\IURLGenerator;
+use OCP\IUserManager;
 use OCP\Security\ISecureRandom;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -230,7 +232,7 @@ class TalkBotTest extends TestCase {
         $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('getProviderForUser')->willReturn($llm);
 
-        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->createStub(LoggerInterface::class));
+        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->createStub(LoggerInterface::class), $this->instructions());
         (new \ReflectionMethod($job, 'run'))->invoke($job, ['token' => 'abc123', 'messageId' => 17, 'userId' => 'alice', 'roomName' => 'Team']);
     }
 
@@ -244,7 +246,38 @@ class TalkBotTest extends TestCase {
         $factory = $this->createStub(LLMProviderFactory::class);
         $factory->method('getProviderForUser')->willReturn($llm);
 
-        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->createStub(LoggerInterface::class));
+        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->createStub(LoggerInterface::class), $this->instructions());
         (new \ReflectionMethod($job, 'run'))->invoke($job, ['token' => 'abc123', 'messageId' => 17, 'userId' => null, 'roomName' => '']);
+    }
+
+    public function testReplyJobPutsInstanceInstructionsBeforeTheBotPrompt(): void {
+        $bot = $this->createStub(TalkBotService::class);
+        $bot->method('recentMessages')->willReturn([$this->row('Alice', '@AIquila hi', false, 17)]);
+
+        $llm = $this->createMock(LLMProviderInterface::class);
+        $llm->expects($this->once())->method('chat')
+            ->with(
+                $this->anything(),
+                $this->callback(static fn (string $system): bool => str_starts_with($system, "Answer in German.\n\nYou are AIquila")),
+                'alice',
+            )
+            ->willReturn(['response' => 'Hallo.']);
+        $factory = $this->createStub(LLMProviderFactory::class);
+        $factory->method('getProviderForUser')->willReturn($llm);
+
+        $job = new TalkBotReplyJob($this->createStub(ITimeFactory::class), $bot, $factory, $this->createStub(LoggerInterface::class), $this->instructions('Answer in German.'));
+        (new \ReflectionMethod($job, 'run'))->invoke($job, ['token' => 'abc123', 'messageId' => 17, 'userId' => 'alice', 'roomName' => 'Team']);
+    }
+
+    /** Instance instructions with the default scopes (Talk on). */
+    private function instructions(string $text = ''): InstructionsService {
+        $config = $this->createStub(AppSettings::class);
+        $config->method('getAppValue')->willReturnCallback(
+            static fn (string $app, string $key, string $default = ''): string => $key === 'instance_instructions' ? $text : $default,
+        );
+        $config->method('getUserValue')->willReturnCallback(
+            static fn (string $uid, string $app, string $key, string $default = ''): string => $default,
+        );
+        return new InstructionsService($config, $this->createStub(IUserManager::class));
     }
 }

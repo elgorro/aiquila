@@ -4,6 +4,7 @@
 namespace OCA\AIquila\Controller;
 
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\SearchSettings;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
@@ -30,6 +31,7 @@ class SettingsController extends Controller {
     private ProviderSettingsService $providerSettings;
     private LoggerInterface $logger;
     private SearchSettings $searchSettings;
+    private InstructionsService $instructions;
 
     public function __construct(
         string $appName,
@@ -41,7 +43,8 @@ class SettingsController extends Controller {
         NativeMcpService $nativeMcp,
         ProviderSettingsService $providerSettings,
         LoggerInterface $logger,
-        SearchSettings $searchSettings
+        SearchSettings $searchSettings,
+        InstructionsService $instructions
     ) {
         parent::__construct($appName, $request);
         $this->config = $config;
@@ -52,6 +55,7 @@ class SettingsController extends Controller {
         $this->nativeMcp = $nativeMcp;
         $this->providerSettings = $providerSettings;
         $this->searchSettings = $searchSettings;
+        $this->instructions = $instructions;
     }
 
     /** Config key holding a user's preferred model for a provider. */
@@ -80,7 +84,7 @@ class SettingsController extends Controller {
      * 200: User settings and available models
      * 403: No provider is permitted for this user
      *
-     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_OK, array{provider: string, userProvider: string, providers: list<array{id: string, label: string, configured: bool, hasUserKey: bool, userModel: string, availableModels: list<string>}>, hasUserKey: bool, userModel: string, availableModels: list<string>, defaultSystemPrompt: string, defaultVerbose: bool, taskSuccessNotifications: bool, taskFailureNotifications: bool, nativeMcpUserOverride: string, nativeMcpAdminDefault: bool, nativeMcpEffective: bool}, array{}>
+     * @return JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_OK, array{provider: string, userProvider: string, providers: list<array{id: string, label: string, configured: bool, hasUserKey: bool, userModel: string, availableModels: list<string>}>, hasUserKey: bool, userModel: string, availableModels: list<string>, defaultSystemPrompt: string, instanceInstructions: string, maxPromptLength: int, defaultVerbose: bool, taskSuccessNotifications: bool, taskFailureNotifications: bool, nativeMcpUserOverride: string, nativeMcpAdminDefault: bool, nativeMcpEffective: bool}, array{}>
      *
      * @NoAdminRequired
      */
@@ -144,6 +148,10 @@ class SettingsController extends Controller {
             'userModel'           => $userModel,
             'availableModels'     => $availableModels,
             'defaultSystemPrompt' => $defaultSystemPrompt,
+            // Shown read-only above the user's own instructions, so they know
+            // what is already in front of every chat.
+            'instanceInstructions' => $this->instructions->instanceLayer(InstructionsService::SCOPE_CHAT) ?? '',
+            'maxPromptLength'     => InstructionsService::MAX_LENGTH,
             'defaultVerbose'      => $defaultVerbose,
             'taskSuccessNotifications' => $taskSuccessNotifications,
             'taskFailureNotifications' => $taskFailureNotifications,
@@ -159,14 +167,14 @@ class SettingsController extends Controller {
      * @param string $api_key Personal API key for the scoped provider (leave empty to clear)
      * @param string|null $model Preferred model ID for the scoped provider ('' clears the override, null keeps it unchanged)
      * @param string|null $provider Active provider override ('' clears, e.g. 'anthropic'/'mistral', null keeps unchanged). Also scopes api_key/model in this call.
-     * @param string|null $default_system_prompt Default system prompt (null to keep unchanged)
+     * @param string|null $default_system_prompt Default instructions added to every chat after the instance instructions ('' clears, null keeps unchanged)
      * @param string|null $default_verbose Enable verbose mode by default ('1' or null to keep unchanged)
      * @param string|null $task_success_notifications Notify when an AI task completes ('1'/'0', null to keep unchanged)
      * @param string|null $task_failure_notifications Notify when an AI task fails ('1'/'0', null to keep unchanged)
      * @param string|null $native_mcp_enabled User override for native-MCP ('1' opt in, '0' opt out, '' clears override, null keeps unchanged)
      *
      * 200: Settings saved successfully
-     * 400: Unknown provider
+     * 400: Unknown provider, or the default instructions are too long
      * 403: The provider is not permitted for this user
      *
      * @return JSONResponse<Http::STATUS_OK, array{status: string}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN, array{error: string, errorId: string}, array{}>
@@ -185,6 +193,12 @@ class SettingsController extends Controller {
         ?string $task_failure_notifications = null,
         ?string $native_mcp_enabled = null
     ): JSONResponse {
+        // Validate before anything is written, so a rejected call changes nothing.
+        $tooLong = InstructionsService::tooLong($default_system_prompt, InstructionsService::MAX_LENGTH, 'Default instructions');
+        if ($tooLong !== null) {
+            return $this->clientError(Http::STATUS_BAD_REQUEST, $tooLong);
+        }
+
         // Provider override: '' clears (inherit admin default), non-empty sets it.
         // A named provider must be one the user is actually permitted to use —
         // this endpoint also scopes the API key and model below, so an
@@ -242,7 +256,7 @@ class SettingsController extends Controller {
         }
 
         if ($default_system_prompt !== null) {
-            if ($default_system_prompt !== '') {
+            if (trim($default_system_prompt) !== '') {
                 $this->config->setUserValue($this->requireUserId(), $this->appName, 'default_system_prompt', $default_system_prompt);
             } else {
                 $this->config->deleteUserValue($this->requireUserId(), $this->appName, 'default_system_prompt');

@@ -229,4 +229,107 @@ describe('Project Tools', () => {
       expect(result.isError).toBe(true);
     });
   });
+
+  describe('prompt library', () => {
+    const prompts = [
+      {
+        id: 1,
+        scope: 'instance',
+        title: 'Policy',
+        description: 'Org rules',
+        content: 'Never share secrets.',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        id: 2,
+        scope: 'user',
+        title: 'Summary',
+        description: null,
+        content: 'Summarise in 3 bullets.',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ];
+
+    it('list_prompts labels the scope and leaves out the text', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue(prompts);
+
+      const { listPromptsTool } = await import('../tools/apps/projects.js');
+      const text = (await listPromptsTool.handler()).content[0].text;
+
+      expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/prompts');
+      expect(text).toContain('Prompt #1: Policy (organization)');
+      expect(text).toContain('Prompt #2: Summary (personal)');
+      expect(text).not.toContain('Never share secrets.');
+    });
+
+    it('get_prompt returns the full text', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue(prompts);
+
+      const { getPromptTool } = await import('../tools/apps/projects.js');
+      const result = await getPromptTool.handler({ id: 2 });
+
+      expect(result.content[0].text).toContain('Summarise in 3 bullets.');
+      expect(result).not.toHaveProperty('isError');
+    });
+
+    it('get_prompt reports an unknown id as an error', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue(prompts);
+
+      const { getPromptTool } = await import('../tools/apps/projects.js');
+      const result = await getPromptTool.handler({ id: 99 });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('#99 not found');
+    });
+  });
+
+  describe('project templates', () => {
+    it('list_project_templates shows prompt and paths', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue([
+        {
+          id: 4,
+          scope: 'instance',
+          title: 'Tax return',
+          description: null,
+          systemPrompt: 'Cite the law.',
+          paths: [{ path: '/Taxes', pathType: 'directory' }],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]);
+
+      const { listProjectTemplatesTool } = await import('../tools/apps/projects.js');
+      const text = (await listProjectTemplatesTool.handler()).content[0].text;
+
+      expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/project-templates');
+      expect(text).toContain('Template #4: Tax return (organization)');
+      expect(text).toContain('Cite the law.');
+      expect(text).toContain('[directory] /Taxes');
+    });
+
+    it('create_project_from_template posts to the template', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue(sampleProject);
+
+      const { createProjectFromTemplateTool } = await import('../tools/apps/projects.js');
+      const result = await createProjectFromTemplateTool.handler({ templateId: 4, title: 'Mine' });
+
+      expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/project-templates/4/project', {
+        method: 'POST',
+        body: { title: 'Mine' },
+      });
+      expect(result.content[0].text).toContain('Project created');
+    });
+
+    it('create_project_from_template surfaces errors', async () => {
+      mockFetchAiquilaAPI.mockRejectedValue(new Error('404 Template not found'));
+
+      const { createProjectFromTemplateTool } = await import('../tools/apps/projects.js');
+      const result = await createProjectFromTemplateTool.handler({ templateId: 9 });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Template not found');
+    });
+  });
 });

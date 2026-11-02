@@ -8,6 +8,7 @@ use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\ProviderSettingsService;
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\SearchSettings;
 use OCA\AIquila\Service\AppSettings;
 use OCP\IRequest;
@@ -71,7 +72,8 @@ class SettingsControllerTest extends TestCase {
             $this->nativeMcp,
             $this->providerSettings,
             $this->createStub(\Psr\Log\LoggerInterface::class),
-            new SearchSettings($this->config)
+            new SearchSettings($this->config),
+            new InstructionsService($this->config, $this->createStub(\OCP\IUserManager::class))
         );
     }
 

@@ -70,7 +70,7 @@ this repository ([OpenAPI](../dev/openapi.md)) rather than an external reference
 | `aiquila` | `apps/aiquila.ts` | `aiquila` | OCC | [OpenAPI](../dev/openapi.md) | 0.1.2 · `a3fccfc` · 2026-02-01 | aiquila 0.5.2 · NC 35.0.2 · 2026-11-01 |
 | `security` | `system/security.ts` | `aiquila` | OCC | [OpenAPI](../dev/openapi.md) | 0.1.5 · `8f5df8b` · 2026-02-07 | aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
 | `occ` | `system/occ.ts` | `aiquila` | OCC | [OpenAPI](../dev/openapi.md) | 0.1.8 · `1962222` · 2026-02-08 | aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
-| `projects` | `apps/projects.ts` | `aiquila` | App REST | [OpenAPI](../dev/openapi.md) | 0.2.11 · `6f8e108` · 2026-04-02 | aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
+| `projects` | `apps/projects.ts` | `aiquila` | App REST | [OpenAPI](../dev/openapi.md) | 0.2.11 · `6f8e108` · 2026-04-02 | aiquila 0.5.2 · NC 35.0.2 · 2026-11-01 |
 | `cowork` | `apps/cowork.ts` | `aiquila` | App REST | [OpenAPI](../dev/openapi.md) | 0.3.20 · `d80fd73` · 2026-06-13 | aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
 
 ### Nextcloud apps

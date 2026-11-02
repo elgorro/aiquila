@@ -86,8 +86,7 @@ class ChatProvider implements ISynchronousProvider {
             throw TaskFailure::userFacing('No chat message provided');
         }
 
-        $system = $input['system_prompt'] ?? '';
-        $system = is_string($system) ? $system : '';
+        $system = $this->providers->systemPrompt($userId, $input);
 
         $messages = ChatHistory::toMessages($input['history'] ?? []);
         $messages[] = ['role' => 'user', 'content' => $message];
@@ -96,7 +95,7 @@ class ChatProvider implements ISynchronousProvider {
 
         $result = $this->providers->resolve($userId, $this->providers->requestedId($input))->chat(
             $messages,
-            $system !== '' ? $system : null,
+            $system,
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
         );

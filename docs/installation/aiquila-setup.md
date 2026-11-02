@@ -184,7 +184,10 @@ sudo -u www-data php occ app:enable aiquila
 
 The other tabs cover instance defaults (unified search, which lists users'
 AIquila conversations in the Nextcloud search bar and is on by default,
-[automatic prompt caching](../dev/prompt-caching.md)), **MCP servers**, and
+[automatic prompt caching](../dev/prompt-caching.md)), **Prompts** (instance
+instructions, organization prompts and project templates, see
+[Prompts, project templates and instructions](#6-prompts-project-templates-and-instructions)),
+**MCP servers**, and
 **Advanced** (the native MCP connector). Each tab is linkable by its anchor,
 e.g. `Settings → Administration → AIquila#mcp`.
 
@@ -196,9 +199,12 @@ e.g. `Settings → Administration → AIquila#mcp`.
    your default. Cloud platform credentials are instance-only. On the Claude card you can also set your own default effort
    and thinking. Leave a field blank to inherit the instance setting.
    Endpoint URLs are administrator-only.
-3. **Defaults** sets the system prompt and verbose mode new conversations start
-   with, and holds the two notification toggles: completed AI tasks are silent
-   unless you switch them on, failed ones are reported by default.
+3. **Defaults** sets verbose mode for new conversations and holds the two
+   notification toggles: completed AI tasks are silent unless you switch them
+   on, failed ones are reported by default.
+   **Prompts** holds your default instructions, your prompt library and your
+   project templates; see
+   [Prompts, project templates and instructions](#6-prompts-project-templates-and-instructions).
    **Connectors** overrides the native MCP connector for your account.
 
 Endpoint URLs stay admin-only deliberately: Nextcloud makes outbound requests to
@@ -486,8 +492,10 @@ is written and the reason is logged.
 
 A **coworker** is an AI job that runs on a schedule, for example "every night at
 03:00, summarize the new documents in `Reports`". Open AIquila and choose **Cowork**
-in the sidebar. Start from a template under **Add a coworker**, or build a
-**Custom coworker**. Each coworker has:
+in the sidebar. Start from a template under **Add a coworker** (built in, or
+published by your administrator, see
+[Prompts, project templates and instructions](#6-prompts-project-templates-and-instructions)),
+or build a **Custom coworker**. Each coworker has:
 
 - a **task**: what it does (see below);
 - a **source folder** it works on, and optionally an output folder;
@@ -565,7 +573,87 @@ How it works:
 
 Requires Talk on Nextcloud 33 or later.
 
-### 6. Public API
+### 6. Prompts, project templates and instructions
+
+**How the system prompt is built.** Every AIquila chat turn sends a system prompt
+assembled from up to four layers, in this order:
+
+1. **Instance instructions**: set by an administrator for everyone
+2. **Your default instructions**: from your personal settings
+3. **The project's system prompt**: when the conversation belongs to a project
+4. **The project's paths**: the files and folders attached to the project
+
+Empty layers are left out. The order runs from the text shared by the most
+requests to the most specific, so the shared start of the prompt can be served
+from the provider's prompt cache (see [Prompt caching](../dev/prompt-caching.md)).
+Layers are read on every turn, so a change applies to existing conversations
+from their next message on.
+
+**Instance instructions** (Settings → Administration → AIquila → Prompts) hold
+what is true for everyone: organization, language, tone, policy. Users see them
+read-only on their personal **Prompts** tab and cannot switch them off. The
+administrator chooses where they apply:
+
+| Surface | Default | What gets the instructions |
+|---|---|---|
+| AIquila chat | on | Every chat turn, as layer 1 |
+| Talk bot | on | Put in front of the bot's own prompt, which stays |
+| Coworkers | off | Sent as the system prompt of every coworker request |
+| Assistant chat and Context Agent | off | Put in front of the `system_prompt` of the chat task types (`core:text2text:chat`, chat with tools, multimodal chat, audio chat) |
+
+Coworkers and the Assistant expect a fixed output format, which is why they
+start off. The one-shot Assistant tasks (proofread, summary, headline,
+translate, …) never get the instructions.
+
+Two placeholders are replaced in instance instructions, your default
+instructions and project prompts: `{user}` with the user's display name and
+`{locale}` with their locale (or language). For a Talk guest both are empty.
+Today's date and time zone are already sent with every chat, so there is no
+placeholder for them. Text that another app passes in, such as the Assistant's
+own system prompt, is left as it is.
+
+**Prompt library.** Reusable prompts are inserted with the **Insert a prompt**
+button, next to the attachment button in the chat and next to **System prompt**
+in the project editor. You manage your own under **Prompts**
+in your personal settings. Administrators publish **organization prompts**
+under the admin **Prompts** tab, which every user can insert but not change.
+
+**Project templates.** Under **Projects**, **New from template…** creates a
+project from a template: its title, description, system prompt and suggested
+paths are copied. The new project is a copy, so later changes to the template
+never reach it. **Save as template** in a project's menu turns one of your
+projects into a personal template; administrators publish organization
+templates from the admin **Prompts** tab.
+
+**Coworker templates.** An administrator can offer a coworker's setup (task,
+schedule, folders, provider, model and options) to everyone: **Publish as
+template** on the coworker's row in **Cowork**. Users then find it under **Add a
+coworker**, marked *Organization*, next to the built-in templates. Coworkers
+made from it are copies. The admin **Prompts** tab lists these templates and
+deletes them.
+
+Every stored prompt, instruction and template system prompt is limited to
+20,000 characters.
+
+**Moving the library between instances.** `occ aiquila:library` exports and
+imports everything above that belongs to the instance: instructions and where
+they apply, organization prompts, project templates and coworker templates.
+Users' own prompts and templates are not included.
+
+```bash
+occ aiquila:library export library.json
+occ aiquila:library import library.json            # update by title, add the rest
+occ aiquila:library import library.json --replace  # delete the instance entries first
+occ aiquila:library import library.json --author=alice
+```
+
+Without a file name, `export` writes to stdout and `import` reads stdin. Import
+updates prompts and project templates with the same title, coworker templates
+with the same id, and adds the rest. `--author` sets the user recorded as
+author of new entries (default `admin`). A file with an invalid entry is
+rejected before anything is changed.
+
+### 7. Public API
 
 Other Nextcloud apps can programmatically use AIquila:
 

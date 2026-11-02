@@ -10,6 +10,7 @@ use OCA\AIquila\Db\ProjectMapper;
 use OCA\AIquila\Db\ProjectPath;
 use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Db\ConversationMapper;
+use OCA\AIquila\Service\InstructionsService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -77,7 +78,7 @@ class ProjectController extends Controller {
      * @param string $systemPrompt System prompt for the project
      *
      * 200: The created project
-     * 400: Title is missing
+     * 400: Title is missing, or a field is too long
      *
      * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>
      */
@@ -86,6 +87,10 @@ class ProjectController extends Controller {
     public function create(string $title, string $description = '', string $systemPrompt = ''): JSONResponse {
         if (trim($title) === '') {
             return $this->clientError(400, 'Title is required');
+        }
+        $error = self::validate($title, $description, $systemPrompt);
+        if ($error !== null) {
+            return $this->clientError(400, $error);
         }
 
         $now = time();
@@ -134,30 +139,46 @@ class ProjectController extends Controller {
     /**
      * Update a project
      *
+     * Omitted fields stay as they are, so renaming a project does not clear its
+     * description or system prompt.
+     *
      * @param int $id Project ID
-     * @param string $title New title
-     * @param string $description New description
-     * @param string $systemPrompt New system prompt
+     * @param string|null $title New title (null keeps it)
+     * @param string|null $description New description ('' clears, null keeps it)
+     * @param string|null $systemPrompt New system prompt ('' clears, null keeps it)
      *
      * 200: Updated project
+     * 400: Empty title, or a field is too long
      * 404: Project not found
      *
-     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST|Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
-    public function update(int $id, string $title = '', string $description = '', string $systemPrompt = ''): JSONResponse {
+    public function update(int $id, ?string $title = null, ?string $description = null, ?string $systemPrompt = null): JSONResponse {
         try {
             $project = $this->projectMapper->findByIdAndUser($id, $this->requireUserId());
         } catch (DoesNotExistException $e) {
             return $this->clientError(404, 'Project not found');
         }
 
-        if ($title !== '') {
+        if ($title !== null && trim($title) === '') {
+            return $this->clientError(400, 'Title cannot be empty');
+        }
+        $error = self::validate($title, $description, $systemPrompt);
+        if ($error !== null) {
+            return $this->clientError(400, $error);
+        }
+
+        if ($title !== null) {
             $project->setTitle(trim($title));
         }
-        $project->setDescription($description ?: null);
-        $project->setSystemPrompt($systemPrompt ?: null);
+        if ($description !== null) {
+            $project->setDescription($description !== '' ? $description : null);
+        }
+        if ($systemPrompt !== null) {
+            $project->setSystemPrompt($systemPrompt !== '' ? $systemPrompt : null);
+        }
         $project->setUpdatedAt(time());
 
         $this->projectMapper->update($project);
@@ -279,5 +300,11 @@ class ProjectController extends Controller {
 
         $this->pathMapper->delete($target);
         return new JSONResponse(['deleted' => true]);
+    }
+
+    private static function validate(?string $title, ?string $description, ?string $systemPrompt): ?string {
+        return InstructionsService::tooLong($title, InstructionsService::MAX_TITLE_LENGTH, 'Title')
+            ?? InstructionsService::tooLong($description, InstructionsService::MAX_DESCRIPTION_LENGTH, 'Description')
+            ?? InstructionsService::tooLong($systemPrompt, InstructionsService::MAX_LENGTH, 'System prompt');
     }
 }

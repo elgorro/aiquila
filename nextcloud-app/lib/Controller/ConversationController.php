@@ -19,6 +19,7 @@ use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\FileService;
 use OCA\AIquila\Service\FilesService;
 use OCA\AIquila\Service\ImageOptimizer;
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\McpClientService;
 use OCA\AIquila\Service\NativeMcpService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
@@ -59,6 +60,7 @@ class ConversationController extends Controller {
     private IJobList $jobList;
     private ContextChatService $contextChat;
     private RuntimeContextService $runtimeContext;
+    private InstructionsService $instructions;
     private ?string $userId;
     private LoggerInterface $logger;
 
@@ -79,6 +81,7 @@ class ConversationController extends Controller {
         IJobList $jobList,
         ContextChatService $contextChat,
         RuntimeContextService $runtimeContext,
+        InstructionsService $instructions,
         ?string $userId,
         LoggerInterface $logger
     ) {
@@ -98,7 +101,29 @@ class ConversationController extends Controller {
         $this->jobList = $jobList;
         $this->contextChat = $contextChat;
         $this->runtimeContext = $runtimeContext;
+        $this->instructions = $instructions;
         $this->userId = $userId;
+    }
+
+    /**
+     * The system prompt for a turn in $conversation, layered by
+     * InstructionsService: instance instructions, the user's default, then the
+     * project's prompt and paths. A deleted project just drops its layers.
+     */
+    private function buildSystemPrompt(Conversation $conversation): ?string {
+        $userId = $this->requireUserId();
+        $project = null;
+        $paths = [];
+        $projectId = $conversation->getProjectId();
+        if ($projectId !== null) {
+            try {
+                $project = $this->projectMapper->findByIdAndUser($projectId, $userId);
+                $paths = $this->projectPathMapper->findByProject($project->getId());
+            } catch (DoesNotExistException $e) {
+                $project = null;
+            }
+        }
+        return $this->instructions->forChat($userId, $project, $paths);
     }
 
     /**
@@ -601,28 +626,8 @@ class ConversationController extends Controller {
         //      sent in this conversation so follow-ups keep their context.
         ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id, $this->usesFilesApi($conversation));
 
-        // 5. Load project system prompt if conversation has a project
-        $systemPrompt = null;
-        $projectId = $conversation->getProjectId();
-        if ($projectId !== null) {
-            try {
-                $project = $this->projectMapper->findByIdAndUser($projectId, $this->requireUserId());
-                $systemPrompt = $project->getSystemPrompt();
-
-                // Build project context from paths
-                $paths = $this->projectPathMapper->findByProject($project->getId());
-                if (!empty($paths)) {
-                    $contextLines = ['Project: ' . $project->getTitle()];
-                    foreach ($paths as $projectPath) {
-                        $contextLines[] = '- [' . $projectPath->getPathType() . '] ' . $projectPath->getPath();
-                    }
-                    $pathContext = implode("\n", $contextLines);
-                    $systemPrompt = ($systemPrompt ? $systemPrompt . "\n\n" : '') . $pathContext;
-                }
-            } catch (DoesNotExistException $e) {
-                // Project was deleted, ignore
-            }
-        }
+        // 5. System prompt: instance, user and project layers.
+        $systemPrompt = $this->buildSystemPrompt($conversation);
 
         // 6. Call Claude (with MCP tools if available). If the call fails because
         //    a cached Anthropic file_id was evicted server-side, drop the row,
@@ -792,24 +797,7 @@ class ConversationController extends Controller {
         // 2. Build messages + system prompt (mirrors message()).
         ['messages' => $claudeMessages, 'documents' => $documentsIndex] = $this->buildHistory($id, $this->usesFilesApi($conversation));
 
-        $systemPrompt = null;
-        $projectId = $conversation->getProjectId();
-        if ($projectId !== null) {
-            try {
-                $project = $this->projectMapper->findByIdAndUser($projectId, $this->requireUserId());
-                $systemPrompt = $project->getSystemPrompt();
-                $paths = $this->projectPathMapper->findByProject($project->getId());
-                if (!empty($paths)) {
-                    $contextLines = ['Project: ' . $project->getTitle()];
-                    foreach ($paths as $projectPath) {
-                        $contextLines[] = '- [' . $projectPath->getPathType() . '] ' . $projectPath->getPath();
-                    }
-                    $systemPrompt = ($systemPrompt ? $systemPrompt . "\n\n" : '') . implode("\n", $contextLines);
-                }
-            } catch (DoesNotExistException $e) {
-                // Project deleted — proceed without project context.
-            }
-        }
+        $systemPrompt = $this->buildSystemPrompt($conversation);
 
         // 3. Pick the path: native MCP connector (Anthropic calls servers directly)
         //    or local agentic loop (PHP dispatches tools per turn). Native is
