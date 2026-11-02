@@ -12,7 +12,7 @@ provider API  ──SSE──▶  LLMProvider::chatWithToolsStream()   (PHP gene
               ConversationController::streamConversationReply()
                           │  accumulates text, usage, citations
                           ▼
-              SSEResponse::render()  ──SSE──▶  web server ──▶ reverse proxy
+             SSEResponse::callback() ──SSE──▶  web server ──▶ reverse proxy
                           │                                        │
                           ▼                                        ▼
               persists the assistant message          api.js sendMessageStream()
@@ -84,12 +84,13 @@ Anything reading an SSE response through `IClientService` needs all three.
 ### The downstream leg — PHP to the browser
 
 - **Content type.** The response must reach the client as `text/event-stream`.
-  This is not automatic: Nextcloud's dispatcher calls `render()` and only
-  afterwards emits the response headers, but `render()` writes straight to the
-  output stream, so PHP has already sent its own defaults by then and the
-  declared headers are dropped. `SSEResponse::render()` therefore emits them
-  itself before the first event. A stream that goes out as `text/html` is
-  compressed by a stock Apache, and compression buffers.
+  `SSEResponse` is an `ICallbackResponse`: the dispatcher calls `render()`, which
+  writes nothing, then `App::main()` sends the status line and every header and
+  only then calls `callback()`, which streams the events. A body written from
+  `render()` would go out before the headers, so the declared `Content-Type` would
+  be lost and every later `header()` call would log "headers already sent". A
+  stream that goes out as `text/html` is compressed by a stock Apache, and
+  compression buffers.
 - **No compression.** `Content-Encoding` on an SSE response means buffering.
   `SSEResponse` sets `no-gzip` in the request environment and turns off
   `zlib.output_compression`; `docker/installation/Dockerfile` also tells
@@ -100,7 +101,7 @@ Anything reading an SSE response through `IClientService` needs all three.
   and none is in the Hetzner stacks (the `bufferingSize` in `traefik.yml` is
   access-log buffering, unrelated).
 - **PHP output buffering.** `output_buffering` off and `implicit_flush` on are
-  the defaults in the Nextcloud images; `render()` drains any remaining buffer
+  the defaults in the Nextcloud images; `callback()` drains any remaining buffer
   regardless.
 
 ## Checking an instance
