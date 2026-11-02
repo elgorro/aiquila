@@ -142,6 +142,24 @@ behaviour changed.** A PR that alters a command, flag, env var, endpoint, workfl
 default and leaves `docs/` describing the old behaviour is incomplete. Do the doc edit
 in the same PR — not a follow-up.
 
+- **Docs exist for the area you touched:** check them against the code as it is now,
+  not only the lines your change affects. Fix stale statements in the same PR.
+- **No docs exist for it:** say so and offer to write them. Don't skip it silently.
+
+### Findings go to GitHub issues
+
+Work turns up things outside the task: bugs, stale docs, missing tests, upstream
+drift, follow-up ideas. Don't leave them in the chat transcript. For each one, offer to:
+
+- **create** an issue, labelled per **Issue labels** below, with a milestone;
+- **update** an existing issue that already covers it, with a comment that adds the
+  new evidence;
+- **link** related issues and PRs (`Related to #N`, or a closing keyword when the PR
+  resolves the issue).
+
+Search first (`gh issue list --state all --search "<terms>"`) so you don't open a
+duplicate. Offer — don't file without the user's go-ahead.
+
 Where things live:
 
 | Changed | Update |
