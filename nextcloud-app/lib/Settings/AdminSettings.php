@@ -30,6 +30,7 @@ class AdminSettings implements ISettings {
             'search_enabled' => $this->searchSettings->isEnabled(),
             'auto_cache' => in_array($this->config->getAppValue('aiquila', 'auto_cache', '1'), ['true', '1'], true),
             'files_api' => in_array($this->config->getAppValue('aiquila', 'files_api', '1'), ['true', '1'], true),
+            'server_fallback' => in_array($this->config->getAppValue('aiquila', 'server_fallback', '1'), ['true', '1'], true),
         ], '');
     }
 

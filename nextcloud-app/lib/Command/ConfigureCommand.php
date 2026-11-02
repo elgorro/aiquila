@@ -108,6 +108,12 @@ class ConfigureCommand extends Base {
                 'Let the API place a cache breakpoint on the growing end of a conversation (on|off, default: on)'
             )
             ->addOption(
+                'server-fallback',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Retry a request the safety classifiers decline on Anthropic\'s recommended fallback model (on|off, default: on)'
+            )
+            ->addOption(
                 'files-api',
                 null,
                 InputOption::VALUE_REQUIRED,
@@ -426,6 +432,18 @@ class ConfigureCommand extends Base {
             $updated = true;
         }
 
+        // Set server-side refusal fallback
+        $serverFallback = $input->getOption('server-fallback');
+        if ($serverFallback !== null) {
+            if (!in_array($serverFallback, ['on', 'off'], true)) {
+                $output->writeln('<error>Server fallback must be "on" or "off"</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'server_fallback', $serverFallback === 'on' ? '1' : '0');
+            $output->writeln('<info>✓ Refusal fallback updated to: ' . $serverFallback . '</info>');
+            $updated = true;
+        }
+
         // Set Files API uploads
         $filesApi = $input->getOption('files-api');
         if ($filesApi !== null) {
@@ -504,6 +522,7 @@ class ConfigureCommand extends Base {
         $fast = in_array($this->config->getAppValue(self::APP_NAME, 'speed_fast', 'false'), ['true', '1'], true);
         $autoCache = in_array($this->config->getAppValue(self::APP_NAME, 'auto_cache', '1'), ['true', '1'], true);
         $filesApi = in_array($this->config->getAppValue(self::APP_NAME, 'files_api', '1'), ['true', '1'], true);
+        $serverFallbackOn = in_array($this->config->getAppValue(self::APP_NAME, 'server_fallback', '1'), ['true', '1'], true);
         $timeout = $this->config->getAppValue(self::APP_NAME, 'api_timeout', '30');
 
         $output->writeln('');
@@ -528,6 +547,7 @@ class ConfigureCommand extends Base {
         $output->writeln('  Fast mode:  <comment>' . ($fast ? 'on' : 'off') . '</comment>');
         $output->writeln('  Auto cache: <comment>' . ($autoCache ? 'on' : 'off') . '</comment>');
         $output->writeln('  Files API:  <comment>' . ($filesApi ? 'on' : 'off') . '</comment>');
+        $output->writeln('  Fallback:   <comment>' . ($serverFallbackOn ? 'on' : 'off') . '</comment>');
         $output->writeln('  Timeout:    <comment>' . $timeout . ' seconds</comment>');
         $output->writeln('');
 
