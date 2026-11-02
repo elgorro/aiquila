@@ -1657,7 +1657,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @param string|null $userId User ID for API key resolution
      * @param array $options Optional: stop_sequences, cache_system, etc.
      * @param int $maxIterations Safety cap on tool-use loop iterations
-     * @return array{response: string, usage?: array, citations?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
+     * @return array{response: string, usage?: array, citations?: array, tool_trace?: array}|array{error: string, error_type?: string, refusal_category?: string|null, usage?: array}
      */
     public function chatWithTools(
         array    $messages,
@@ -1668,6 +1668,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         array    $options = [],
         int      $maxIterations = 10
     ): array {
+        // Where this loop's own turns begin: they are returned as tool_trace.
+        $traceStart = count($messages);
         try {
             $client = $this->getClient($userId);
         } catch (\Throwable $e) {
@@ -1729,6 +1731,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                             'cache_read_tokens' => $totalCacheReadTokens ?: null,
                         ],
                         'citations' => $allCitations,
+                        'tool_trace' => array_slice($messages, $traceStart),
                     ];
                 }
             }
@@ -1796,6 +1799,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 'cache_read_tokens' => $totalCacheReadTokens ?: null,
             ],
             'citations' => $allCitations,
+            'tool_trace' => array_slice($messages, $traceStart),
         ];
     }
 
@@ -2911,6 +2915,8 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         array    $options = [],
         int      $maxIterations = 10
     ): \Generator {
+        // Where this loop's own turns begin: they are returned as tool_trace.
+        $traceStart = count($messages);
         try {
             $client = $this->getClient($userId);
         } catch (\Throwable $e) {
@@ -3108,6 +3114,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                         'cache_read_tokens' => $totalCacheRead ?: null,
                     ],
                     'citations' => $allCitations,
+                    'tool_trace' => array_slice($messages, $traceStart),
                 ];
                 return;
             }

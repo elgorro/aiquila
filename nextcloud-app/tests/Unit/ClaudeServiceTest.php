@@ -659,6 +659,9 @@ class ClaudeServiceTest extends TestCase {
         );
 
         $this->assertSame('Done.', $result['response']);
+        // The loop's own turns come back for the caller to keep.
+        $this->assertSame(['assistant', 'user'], array_column($result['tool_trace'], 'role'));
+        $this->assertSame('tool_result', $result['tool_trace'][1]['content'][0]['type']);
         $replayed = $this->testable->createCalls[1]['messages'][1];
         $this->assertSame('assistant', $replayed['role']);
         $this->assertSame([

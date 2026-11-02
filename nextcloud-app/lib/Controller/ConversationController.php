@@ -36,6 +36,7 @@ use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCA\AIquila\BackgroundJob\IndexConversationJob;
 use OCA\AIquila\Service\ContextChatService;
 use OCA\AIquila\Service\RuntimeContextService;
+use OCA\AIquila\Service\ToolTrace;
 use OCA\AIquila\Service\UsageStatService;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
@@ -700,6 +701,7 @@ class ConversationController extends Controller {
         $assistantMsg->setConversationId($id);
         $assistantMsg->setRole('assistant');
         $assistantMsg->setContent($result['response']);
+        $assistantMsg->setToolTrace(ToolTrace::encode($result['tool_trace'] ?? []));
         $assistantMsg->setInputTokens($result['usage']['input_tokens'] ?? null);
         $assistantMsg->setOutputTokens($result['usage']['output_tokens'] ?? null);
         $assistantMsg->setCacheCreationTokens($result['usage']['cache_creation_tokens'] ?? null);
@@ -866,10 +868,16 @@ class ConversationController extends Controller {
         $accumulatedText = '';
         $accumulatedThinking = '';
         $finalCitations = [];
+        $finalToolTrace = [];
         $finalUsage = ['input_tokens' => 0, 'output_tokens' => 0, 'cache_creation_tokens' => null, 'cache_read_tokens' => null];
         $errorMessage = null;
         $startMs = (int)(microtime(true) * 1000.0);
         $options = $this->conversationOptions($conversation);
+
+        // A request without our tools cannot carry tool_use blocks.
+        if ($useNativeMcp || $tools === []) {
+            $claudeMessages = ToolTrace::flatten($claudeMessages);
+        }
 
         $eventStream = $useNativeMcp
             ? $provider->chatWithNativeMcp(
@@ -905,6 +913,9 @@ class ConversationController extends Controller {
                     case 'done':
                         $finalCitations = $event['citations'] ?? [];
                         $finalUsage = $event['usage'] ?? $finalUsage;
+                        // Stored with the answer, not sent to the browser.
+                        $finalToolTrace = $event['tool_trace'] ?? [];
+                        unset($event['tool_trace']);
                         break;
                     case 'error':
                         $errorMessage = $event['error'] ?? 'Stream error';
@@ -958,6 +969,9 @@ class ConversationController extends Controller {
         $assistantMsg->setLatencyMs($latencyMs);
         if ($accumulatedThinking !== '') {
             $assistantMsg->setThinkingSummary($accumulatedThinking);
+        }
+        if ($errorMessage === null) {
+            $assistantMsg->setToolTrace(ToolTrace::encode($finalToolTrace));
         }
         if (!empty($finalCitations)) {
             $assistantMsg->setCitations(json_encode($finalCitations) ?: null);
@@ -1049,6 +1063,7 @@ class ConversationController extends Controller {
             $newMsg->setLatencyMs($msg->getLatencyMs());
             $newMsg->setCitations($msg->getCitations());
             $newMsg->setDocuments($msg->getDocuments());
+            $newMsg->setToolTrace($msg->getToolTrace());
             $newMsg->setCreatedAt($msg->getCreatedAt());
             $newMsg = $this->messageMapper->insert($newMsg);
 
@@ -1131,6 +1146,11 @@ class ConversationController extends Controller {
                         $content = array_merge($built['blocks'], [['type' => 'text', 'text' => $content]]);
                     }
                 }
+            }
+            // The tool calls behind an answer go back in ahead of it, so the
+            // model sees what its tools returned and need not call them again.
+            if ($msg->getRole() === 'assistant') {
+                array_push($messages, ...ToolTrace::decode($msg->getToolTrace()));
             }
             $messages[] = ['role' => $msg->getRole(), 'content' => $content];
         }
@@ -1325,8 +1345,9 @@ class ConversationController extends Controller {
                 ? $this->nativeMcp->buildMistralConnectorTools()
                 : $this->nativeMcp->buildServerDefinitions();
             if (!empty($mcpServers)) {
+                // The connector's tools are Anthropic's, not ours: replay ours as text.
                 return $provider->chatWithNativeMcpCollect(
-                    $messages,
+                    ToolTrace::flatten($messages),
                     $mcpServers,
                     $systemPrompt,
                     $this->userId,
@@ -1356,7 +1377,8 @@ class ConversationController extends Controller {
             );
         }
 
-        return $provider->chat($messages, $systemPrompt, $this->userId, $options);
+        // No tools defined on this request, so earlier tool calls go as text.
+        return $provider->chat(ToolTrace::flatten($messages), $systemPrompt, $this->userId, $options);
     }
 
     /**

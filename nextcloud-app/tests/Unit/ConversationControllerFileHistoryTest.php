@@ -42,12 +42,14 @@ class ConversationControllerFileHistoryTest extends TestCase {
     /** @var list<array<string, mixed>> the messages the provider last received */
     private array $sent = [];
     private int $nextId = 1;
+    /** What the next chatWithTools() call reports as its tool_trace. */
+    private array $nextTrace = [];
 
     /**
      * @param array<string, array{name: string, mimeType: string, size: int, content: string}> $nextcloudFiles
      *        files readable in Nextcloud, by path; any other path throws
      */
-    private function makeController(array $nextcloudFiles, bool $citeFirstDocument = false): ConversationController {
+    private function makeController(array $nextcloudFiles, bool $citeFirstDocument = false, array $tools = []): ConversationController {
         $conversation = new Conversation();
         $conversation->setUserId('testuser');
         $conversation->setTitle('existing');
@@ -97,11 +99,17 @@ class ConversationControllerFileHistoryTest extends TestCase {
                 return ['response' => 'ok', 'usage' => [], 'citations' => $citations];
             }
         );
+        $provider->method('chatWithTools')->willReturnCallback(
+            function (array $messages): array {
+                $this->sent = $messages;
+                return ['response' => 'There are two files.', 'usage' => [], 'citations' => [], 'tool_trace' => $this->nextTrace];
+            }
+        );
         $provider->method('chatWithToolsStream')->willReturnCallback(
             function (array $messages): \Generator {
                 $this->sent = $messages;
                 yield ['type' => 'text_delta', 'text' => 'ok'];
-                yield ['type' => 'done', 'usage' => [], 'citations' => []];
+                yield ['type' => 'done', 'usage' => [], 'citations' => [], 'tool_trace' => $this->nextTrace];
             }
         );
 
@@ -110,7 +118,7 @@ class ConversationControllerFileHistoryTest extends TestCase {
         $factory->method('getProviderForUser')->willReturn($provider);
 
         $mcpClient = $this->createStub(McpClientService::class);
-        $mcpClient->method('getAllTools')->willReturn(['tools' => [], 'mapping' => []]);
+        $mcpClient->method('getAllTools')->willReturn(['tools' => $tools, 'mapping' => []]);
 
         $nativeMcp = $this->createStub(NativeMcpService::class);
         $nativeMcp->method('isEnabledForUser')->willReturn(false);
@@ -219,5 +227,73 @@ class ConversationControllerFileHistoryTest extends TestCase {
 
         $this->assertCount(3, $this->sent);
         $this->assertStringContainsString('The code word is heron.', self::flatten($this->sent[0]));
+    }
+
+    private const TOOLS = [['name' => 'list_files', 'description' => 'List', 'input_schema' => ['type' => 'object']]];
+
+    /** The turns a tool loop appended before answering. */
+    private static function listFilesTrace(): array {
+        return [
+            ['role' => 'assistant', 'content' => [
+                ['type' => 'thinking', 'thinking' => 'List them.', 'signature' => 'sig'],
+                ['type' => 'tool_use', 'id' => 'toolu_01', 'name' => 'list_files', 'input' => ['path' => '/']],
+            ]],
+            ['role' => 'user', 'content' => [['type' => 'tool_result', 'tool_use_id' => 'toolu_01', 'content' => 'heron.txt, egret.txt']]],
+        ];
+    }
+
+    /**
+     * The next turn sees what the tool returned, as blocks, ahead of the
+     * answer built on it — so the model need not call the tool again.
+     */
+    public function testTheNextTurnSeesWhatTheToolReturned(): void {
+        $controller = $this->makeController([], tools: self::TOOLS);
+        $this->nextTrace = self::listFilesTrace();
+        $controller->message(1, 'What is in my files?');
+        $this->nextTrace = [];
+        $controller->message(1, 'Which of them is about egrets?');
+
+        $this->assertSame(['user', 'assistant', 'user', 'assistant', 'user'], array_column($this->sent, 'role'));
+        $this->assertSame(['tool_use'], array_column($this->sent[1]['content'], 'type'), 'thinking is not kept');
+        $this->assertSame('heron.txt, egret.txt', $this->sent[2]['content'][0]['content']);
+        $this->assertSame($this->sent[1]['content'][0]['id'], $this->sent[2]['content'][0]['tool_use_id']);
+        $this->assertSame('There are two files.', $this->sent[3]['content']);
+    }
+
+    /** A request without tools cannot carry tool_use blocks: they go as text. */
+    public function testWithoutToolsTheCallsAreReplayedAsText(): void {
+        $controller = $this->makeController([], tools: self::TOOLS);
+        $this->nextTrace = self::listFilesTrace();
+        $controller->message(1, 'What is in my files?');
+
+        $controller = $this->makeController([]);
+        $controller->message(1, 'Which of them is about egrets?');
+
+        $flat = json_encode($this->sent);
+        $this->assertStringNotContainsString('"tool_use"', $flat);
+        $this->assertStringContainsString('[Tool list_files returned: heron.txt, egret.txt]', self::flatten($this->sent[2]));
+    }
+
+    public function testTheTraceIsStoredButNotServed(): void {
+        $controller = $this->makeController([], tools: self::TOOLS);
+        $this->nextTrace = self::listFilesTrace();
+        $controller->message(1, 'What is in my files?');
+
+        $assistant = $this->messages[1];
+        $this->assertNotNull($assistant->getToolTrace());
+        $this->assertArrayNotHasKey('toolTrace', $assistant->jsonSerialize(), 'the trace stays server-side');
+    }
+
+    /** Streaming keeps the trace with the answer and does not send it to the browser. */
+    public function testStreamingStoresTheTraceButDoesNotSendIt(): void {
+        $controller = $this->makeController([], tools: self::TOOLS);
+        $this->nextTrace = self::listFilesTrace();
+
+        $method = new \ReflectionMethod(ConversationController::class, 'streamConversationReply');
+        $events = iterator_to_array($method->invoke($controller, 1, 'What is in my files?', []), false);
+
+        $done = array_values(array_filter($events, static fn(array $e): bool => $e['type'] === 'done'))[0];
+        $this->assertArrayNotHasKey('tool_trace', $done);
+        $this->assertNotNull($this->messages[1]->getToolTrace());
     }
 }
