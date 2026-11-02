@@ -6030,6 +6030,69 @@
                 }
             }
         },
+        "/index.php/apps/aiquila/api/coworkers/tools": {
+            "get": {
+                "operationId": "coworker-tools",
+                "summary": "List the MCP tools an agent coworker may be allowed to call",
+                "description": "The tools of the instance's enabled MCP servers, which the chat offers every user too. Only names and descriptions; a server that cannot be reached is left out.",
+                "tags": [
+                    "coworker"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Tools, by name",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "required": [
+                                            "name",
+                                            "description"
+                                        ],
+                                        "properties": {
+                                            "name": {
+                                                "type": "string"
+                                            },
+                                            "description": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/index.php/apps/aiquila/api/coworkers/{id}": {
             "get": {
                 "operationId": "coworker-show",

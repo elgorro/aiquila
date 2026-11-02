@@ -15,6 +15,7 @@ use OCA\AIquila\Db\Coworker;
 use OCA\AIquila\Db\CoworkerMapper;
 use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Db\CoworkerRunMapper;
+use OCA\AIquila\Db\PromptMapper;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -34,6 +35,7 @@ class CoworkerService {
         private readonly LLMProviderFactory $providerFactory,
         private readonly ITimeFactory $timeFactory,
         private readonly LoggerInterface $logger,
+        private readonly ?PromptMapper $prompts = null,
     ) {
     }
 
@@ -85,6 +87,21 @@ class CoworkerService {
                 'output_path' => '/Documents/Summaries',
                 'options' => ['style' => 'brief', 'recursive' => true, 'effort' => 'medium'],
             ]),
+            [
+                'id' => 'daily-mail-digest-claude',
+                'title' => 'Daily mail digest — Claude with tools',
+                'description' => 'Every weekday morning, summarise unread mail into a note. Pick the MCP tools it may use.',
+                'task_type' => 'agent:run',
+                'cron_schedule' => '0 7 * * 1-5',
+                'input_type' => 'none',
+                'output_type' => 'file',
+                'output_path' => '/Notes/daily.md',
+                'provider' => 'anthropic',
+                'custom_prompt' => 'Summarise my unread mail from the last day as a short Markdown list: sender, subject and one line on what it needs from me. Put anything urgent first.',
+                // An empty allowlist runs the prompt without tools; the owner
+                // names the mail tools of their own MCP servers.
+                'options' => ['tools' => [], 'effort' => 'medium'],
+            ],
             array_merge($docs, [
                 'id' => 'translate-documents-claude',
                 'title' => 'Translate documents — Claude',
@@ -538,6 +555,28 @@ class CoworkerService {
                 throw new ValidationException("You are not permitted to use this provider: $provider");
             }
             $coworker->setProvider($provider !== '' ? $provider : null);
+        }
+        if (array_key_exists('custom_prompt', $data)) {
+            $prompt = $data['custom_prompt'] !== null ? trim((string)$data['custom_prompt']) : '';
+            if (($tooLong = InstructionsService::tooLong($prompt, field: 'Prompt')) !== null) {
+                throw new ValidationException($tooLong);
+            }
+            $coworker->setCustomPrompt($prompt !== '' ? $prompt : null);
+        }
+        if (array_key_exists('prompt_id', $data)) {
+            $promptId = $data['prompt_id'];
+            if ($promptId === null || $promptId === '' || $promptId === 0) {
+                $coworker->setPromptId(null);
+            } else {
+                // Only one of the owner's own saved prompts: a scheduled run
+                // must not read another user's prompt.
+                try {
+                    $this->prompts?->findByIdAndUser((int)$promptId, $coworker->getUserId());
+                } catch (DoesNotExistException) {
+                    throw new ValidationException('Prompt not found: ' . (int)$promptId);
+                }
+                $coworker->setPromptId((int)$promptId);
+            }
         }
         if (array_key_exists('task_type', $data)) {
             $taskType = (string)$data['task_type'];
