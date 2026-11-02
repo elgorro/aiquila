@@ -5,7 +5,9 @@ namespace OCA\AIquila\Command;
 
 use OC\Core\Command\Base;
 use OCA\AIquila\Service\ClaudeSDKService;
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
+use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -14,11 +16,13 @@ use Symfony\Component\Console\Output\OutputInterface;
 class TestSDKCommand extends Base {
     private ClaudeSDKService $claudeService;
     private LLMProviderFactory $providerFactory;
+    private InstructionsService $instructions;
 
-    public function __construct(ClaudeSDKService $claudeService, LLMProviderFactory $providerFactory) {
+    public function __construct(ClaudeSDKService $claudeService, LLMProviderFactory $providerFactory, InstructionsService $instructions) {
         parent::__construct();
         $this->claudeService = $claudeService;
         $this->providerFactory = $providerFactory;
+        $this->instructions = $instructions;
     }
 
     /**
@@ -57,6 +61,12 @@ class TestSDKCommand extends Base {
                 's',
                 InputOption::VALUE_NONE,
                 'Enable streaming mode (anthropic only)'
+            )
+            ->addOption(
+                'cache-check',
+                null,
+                InputOption::VALUE_NONE,
+                'Send the chat system prompt twice and report whether the second request reads it from the prompt cache (anthropic only)'
             );
     }
 
@@ -93,6 +103,11 @@ class TestSDKCommand extends Base {
             $output->writeln('<error>--stream is only supported for the anthropic provider</error>');
             return 1;
         }
+        $cacheCheck = (bool)$input->getOption('cache-check');
+        if ($cacheCheck && !$isAnthropic) {
+            $output->writeln('<error>--cache-check is only supported for the anthropic provider</error>');
+            return 1;
+        }
 
         $output->writeln('');
         $output->writeln('<info>Testing AIquila provider: ' . $provider->getLabel() . ' (' . $providerId . ')</info>');
@@ -119,6 +134,10 @@ class TestSDKCommand extends Base {
             $output->writeln('<info>✓ SDK Version: Anthropic PHP SDK ' . \Anthropic\VERSION . '</info>');
         }
         $output->writeln('');
+
+        if ($cacheCheck) {
+            return $this->checkCache($provider, $prompt, $userId, $output);
+        }
 
         // Test 2: API Connection Test
         $output->writeln('<comment>2. Sending the test prompt...</comment>');
@@ -184,5 +203,69 @@ class TestSDKCommand extends Base {
         $output->writeln('');
 
         return 0;
+    }
+
+    /**
+     * Send the same request twice with the chat system prompt (instance and
+     * user layers) and compare the usage the API reports. The system block is
+     * marked `cache_control: ephemeral`; the API skips caching silently when
+     * the prefix is under the model's minimum, so all three outcomes are
+     * possible and only one of them is a fault:
+     *
+     *  - read on the second request: the prefix caches.
+     *  - nothing written or read: the prefix is below the model's minimum.
+     *    Expected for short prompts, and the minimum varies by model.
+     *  - written but not read back: something in the prefix changes between
+     *    identical requests. That is the silent invalidator to chase.
+     */
+    private function checkCache(LLMProviderInterface $provider, string $prompt, ?string $userId, OutputInterface $output): int {
+        $system = $userId !== null
+            ? $this->instructions->forChat($userId)
+            : $this->instructions->compose(null, [$this->instructions->instanceLayer(InstructionsService::SCOPE_CHAT)]);
+        if ($system === null || $system === '') {
+            $output->writeln('<comment>No chat system prompt is configured' . ($userId !== null ? ' for ' . $userId : '') . ', so there is nothing to cache.</comment>');
+            $output->writeln('  Set instance instructions or a user default, or pass --user.');
+            return 0;
+        }
+
+        $output->writeln('<comment>2. Prompt-cache check</comment>');
+        $output->writeln('   System prompt: <info>' . mb_strlen($system) . ' characters</info>');
+        $output->writeln('');
+
+        $usages = [];
+        foreach ([1, 2] as $attempt) {
+            $result = $provider->ask($prompt, '', $userId, ['system' => $system]);
+            if (isset($result['error'])) {
+                $output->writeln('<error>✗ Request ' . $attempt . ' failed: ' . $result['error'] . '</error>');
+                return 1;
+            }
+            $usage = $result['usage'] ?? [];
+            $usages[$attempt] = [
+                'input' => (int)($usage['input_tokens'] ?? 0),
+                'creation' => (int)($usage['cache_creation_tokens'] ?? 0),
+                'read' => (int)($usage['cache_read_tokens'] ?? 0),
+            ];
+            $output->writeln(sprintf(
+                '   Request %d: input %d, cache write %d, cache read %d',
+                $attempt,
+                $usages[$attempt]['input'],
+                $usages[$attempt]['creation'],
+                $usages[$attempt]['read'],
+            ));
+        }
+        $output->writeln('');
+
+        $written = $usages[1]['creation'] + $usages[1]['read'];
+        if ($usages[2]['read'] > 0) {
+            $output->writeln('<info>✓ Cache hit: the second request read ' . $usages[2]['read'] . ' tokens from the prompt cache</info>');
+            return 0;
+        }
+        if ($written === 0 && $usages[2]['creation'] === 0) {
+            $output->writeln('<comment>– Not cached: the prefix is below the minimum cacheable length for ' . $provider->getModel($userId) . '.</comment>');
+            $output->writeln('  Expected for a short system prompt. The minimum depends on the model.');
+            return 0;
+        }
+        $output->writeln('<error>✗ Cache miss: the prefix was written but not read back. Something in it changes between identical requests.</error>');
+        return 1;
     }
 }
