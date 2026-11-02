@@ -38,6 +38,11 @@ class BedrockProvider extends AbstractAwsClaudeProvider {
         return 'A Bedrock API key. Short-term keys expire within 12 hours, so use a long-term key scoped to bedrock:CallWithBearerToken, or the credential chain with a role. Stored encrypted in Nextcloud\'s credential manager.';
     }
 
+    protected function platformFeatures(): array {
+        // Bedrock takes reference-only mid-conversation tool changes.
+        return [self::FEATURE_MID_CONVERSATION_TOOL_CHANGES => true] + parent::platformFeatures();
+    }
+
     protected function buildClient(string $authMode): BaseClient {
         $region = $this->region();
         $baseUrl = CloudEndpoints::bedrockMantleUrl($region);

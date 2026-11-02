@@ -31,6 +31,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setThinkingBudget(?int $thinkingBudget)
  * @method bool|null getSpeedFast()
  * @method void setSpeedFast(?bool $speedFast)
+ * @method string|null getToolState()
+ * @method void setToolState(?string $toolState)
  */
 class Conversation extends Entity implements \JsonSerializable {
     use InsertsFullRow;
@@ -49,6 +51,8 @@ class Conversation extends Entity implements \JsonSerializable {
     protected ?int $thinkingBudget = null;
     /** Fast-mode pin; null follows the instance default, false opts out of it. */
     protected ?bool $speedFast = null;
+    /** Declared and offered tools, see Service\ToolChanges. Server-side only. */
+    protected ?string $toolState = null;
 
     public function __construct() {
         $this->addType('userId', 'string');
@@ -62,6 +66,7 @@ class Conversation extends Entity implements \JsonSerializable {
         $this->addType('thinking', 'boolean');
         $this->addType('thinkingBudget', 'integer');
         $this->addType('speedFast', 'boolean');
+        $this->addType('toolState', 'string');
         $this->markFieldsForInsert();
     }
 

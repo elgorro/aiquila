@@ -33,6 +33,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setDocuments(?string $documents)
  * @method string|null getThinkingSummary()
  * @method void setThinkingSummary(?string $thinkingSummary)
+ * @method string|null getToolTrace()
+ * @method void setToolTrace(?string $toolTrace)
  */
 class Message extends Entity implements \JsonSerializable {
     use InsertsFullRow;
@@ -50,6 +52,12 @@ class Message extends Entity implements \JsonSerializable {
     protected ?string $documents = null;
     /** Readable summary of the model's thinking for an assistant message; null when it did not think. */
     protected ?string $thinkingSummary = null;
+    /**
+     * Tool blocks kept with the message, server-side only: on an assistant
+     * answer the tool calls behind it (Service\ToolTrace), on a system row the
+     * tool_addition / tool_removal blocks of that turn (Service\ToolChanges).
+     */
+    protected ?string $toolTrace = null;
 
     public function __construct() {
         $this->addType('conversationId', 'integer');
@@ -64,6 +72,7 @@ class Message extends Entity implements \JsonSerializable {
         $this->addType('citations', 'string');
         $this->addType('documents', 'string');
         $this->addType('thinkingSummary', 'string');
+        $this->addType('toolTrace', 'string');
         $this->markFieldsForInsert();
     }
 

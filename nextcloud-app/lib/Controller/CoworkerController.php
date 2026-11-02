@@ -12,6 +12,7 @@ use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Service\CoworkerService;
 use OCA\AIquila\Service\CoworkerTemplates;
 use OCA\AIquila\Service\InstructionsService;
+use OCA\AIquila\Service\McpClientService;
 use OCP\AppFramework\Controller;
 use OCA\AIquila\Service\Exception\NoActiveRunException;
 use OCP\AppFramework\Db\DoesNotExistException;
@@ -46,6 +47,7 @@ class CoworkerController extends Controller {
         private readonly ?string $userId,
         private readonly LoggerInterface $logger,
         private readonly CoworkerTemplates $instanceTemplates,
+        private readonly ?McpClientService $mcpClient = null,
     ) {
         parent::__construct($appName, $request);
     }
@@ -331,6 +333,28 @@ class CoworkerController extends Controller {
     }
 
     /**
+     * List the MCP tools an agent coworker may be allowed to call
+     *
+     * The tools of the instance's enabled MCP servers, which the chat offers
+     * every user too. Only names and descriptions; a server that cannot be
+     * reached is left out.
+     *
+     * 200: Tools, by name
+     *
+     * @return JSONResponse<Http::STATUS_OK, list<array{name: string, description: string}>, array{}>
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[OpenAPI]
+    public function tools(): JSONResponse {
+        $all = $this->mcpClient?->getAllTools() ?? ['tools' => []];
+        return new JSONResponse(array_map(
+            static fn (array $t): array => ['name' => (string)($t['name'] ?? ''), 'description' => (string)($t['description'] ?? '')],
+            array_values($all['tools']),
+        ));
+    }
+
+    /**
      * List coworker templates and available task types
      *
      * Built-in templates first (`scope: builtin`), then the ones an admin
@@ -537,7 +561,7 @@ class CoworkerController extends Controller {
         $allowed = [
             'title', 'description', 'provider', 'model', 'task_type', 'cron_schedule',
             'input_type', 'input_path', 'output_type', 'output_path',
-            'is_active', 'paused', 'options',
+            'is_active', 'paused', 'options', 'custom_prompt', 'prompt_id',
         ];
         $data = [];
         foreach ($allowed as $key) {

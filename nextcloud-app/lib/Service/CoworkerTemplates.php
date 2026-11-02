@@ -66,6 +66,9 @@ class CoworkerTemplates {
             'provider' => $data['provider'],
             'model' => $data['model'],
             'options' => $data['options'],
+            // An agent coworker's own prompt travels with it; a saved prompt
+            // (prompt_id) is the publisher's and does not.
+            'custom_prompt' => $data['customPrompt'],
         ];
         $this->import([$template]);
         return ['scope' => 'instance'] + $template;

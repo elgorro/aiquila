@@ -120,6 +120,10 @@ path the user sees in Files (`UserPath::of($node)` builds it). A run keeps its n
 500 entries, with messages cut at 500 characters. A failed run gets an `error` entry
 with the exception message on its own.
 
+Built-in task types are `vision:classify`, `docs:summarize`, `docs:translate` and
+`agent:run`. The agent type reads `custom_prompt` or `prompt_id` (one of the owner's
+saved prompts) from the config, and `options.tools`, an allowlist of MCP tool names.
+
 ### `register(string $appId, string $userId, array $config): array`
 
 Create a coworker owned by the calling app. `$userId` is the user the job runs as
