@@ -12,6 +12,7 @@ use OCA\AIquila\Db\McpServerMapper;
 use OCA\AIquila\Db\UsageStatMapper;
 use OCA\AIquila\OpenMetrics\ConversationsExporter;
 use OCA\AIquila\OpenMetrics\McpServerStatusExporter;
+use OCA\AIquila\OpenMetrics\PromptCacheTokensExporter;
 use OCA\AIquila\OpenMetrics\TasksExporter;
 use OCA\AIquila\OpenMetrics\TokensUsedExporter;
 use OCP\OpenMetrics\Metric;
@@ -31,7 +32,7 @@ class ExportersTest extends TestCase {
     public function testTokensUsedExporter(): void {
         $mapper = $this->createStub(UsageStatMapper::class);
         $mapper->method('sumTokensByModelAndType')->willReturn([
-            ['model' => 'claude-opus-4-8', 'request_type' => 'chat', 'input_tokens' => 1000, 'output_tokens' => 500],
+            ['model' => 'claude-opus-4-8', 'request_type' => 'chat', 'input_tokens' => 1000, 'output_tokens' => 500, 'cache_creation_tokens' => 0, 'cache_read_tokens' => 0],
         ]);
 
         $exporter = new TokensUsedExporter($mapper);
@@ -45,6 +46,28 @@ class ExportersTest extends TestCase {
         $this->assertSame('claude-opus-4-8', $metrics[0]->label('model'));
         $this->assertSame(500, $metrics[1]->value);
         $this->assertSame('output', $metrics[1]->label('direction'));
+    }
+
+    public function testPromptCacheTokensExporter(): void {
+        $mapper = $this->createStub(UsageStatMapper::class);
+        $mapper->method('sumTokensByModelAndType')->willReturn([
+            ['model' => 'claude-opus-5', 'request_type' => 'chat', 'input_tokens' => 40, 'output_tokens' => 300, 'cache_creation_tokens' => 900, 'cache_read_tokens' => 2700],
+            // A provider that reports no cache tokens: no series at all.
+            ['model' => 'qwen3', 'request_type' => 'chat', 'input_tokens' => 800, 'output_tokens' => 200, 'cache_creation_tokens' => 0, 'cache_read_tokens' => 0],
+        ]);
+
+        $exporter = new PromptCacheTokensExporter($mapper);
+        $this->assertSame('aiquila_prompt_cache_tokens_total', $exporter->name());
+        $this->assertSame(MetricType::counter, $exporter->type());
+
+        $metrics = $this->collect($exporter->metrics());
+        $this->assertCount(2, $metrics);
+        $this->assertSame(900, $metrics[0]->value);
+        $this->assertSame('creation', $metrics[0]->label('kind'));
+        $this->assertSame('claude-opus-5', $metrics[0]->label('model'));
+        $this->assertSame('chat', $metrics[0]->label('request_type'));
+        $this->assertSame(2700, $metrics[1]->value);
+        $this->assertSame('read', $metrics[1]->label('kind'));
     }
 
     public function testTasksExporter(): void {

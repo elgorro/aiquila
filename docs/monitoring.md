@@ -17,6 +17,7 @@ bounded and avoids exposing individual usage to anyone scraping the endpoint).
 | Series | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `nextcloud_aiquila_tokens_used_total` | counter | `model`, `request_type`, `direction` (`input`/`output`) | Total tokens consumed |
+| `nextcloud_aiquila_prompt_cache_tokens_total` | counter | `model`, `request_type`, `kind` (`creation`/`read`) | Prompt-cache tokens written and read. Only providers that report them (Anthropic) contribute |
 | `nextcloud_aiquila_tasks_total` | counter | `status` | Coworker task runs processed |
 | `nextcloud_aiquila_conversations_total` | counter | — | Conversations created |
 | `nextcloud_aiquila_mcp_server_status` | gauge | `server_id`, `server` | Per MCP server: `1` = enabled and last connection healthy, `0` = disabled or failing |
@@ -26,7 +27,7 @@ bounded and avoids exposing individual usage to anyone scraping the endpoint).
 
 ### Token usage
 
-`nextcloud_aiquila_tokens_used_total` and the `aiquila_usage` dashboard widget both read
+`nextcloud_aiquila_tokens_used_total`, `nextcloud_aiquila_prompt_cache_tokens_total` and the `aiquila_usage` dashboard widget both read
 `aiquila_usage_stats`. Every model call AIquila makes writes one row there, with the
 input, output and cache tokens the provider reported. `request_type` names the path
 that spent them:
@@ -97,6 +98,11 @@ Point Grafana at the Prometheus data source and build panels from the series abo
 Useful starting queries:
 
 - **Token spend rate** — `sum by (model) (rate(nextcloud_aiquila_tokens_used_total[1h]))`
+- **Prompt-cache hit ratio** — share of the prompt served from cache. `input` excludes
+  cached tokens, so the denominator adds all three:
+  `sum by (model) (rate(nextcloud_aiquila_prompt_cache_tokens_total{kind="read"}[1h])) / (sum by (model) (rate(nextcloud_aiquila_prompt_cache_tokens_total[1h])) + sum by (model) (rate(nextcloud_aiquila_tokens_used_total{direction="input"}[1h])))`.
+  A model that keeps writing (`kind="creation"`) without reading has something
+  changing in its prefix; see [Prompt caching](dev/prompt-caching.md#reading-the-result)
 - **Task success ratio** —
   `sum(nextcloud_aiquila_tasks_total{status="success"}) / sum(nextcloud_aiquila_tasks_total)`
 - **MCP server health** — `nextcloud_aiquila_mcp_server_status` (stat panel, mapped 1→up / 0→down)

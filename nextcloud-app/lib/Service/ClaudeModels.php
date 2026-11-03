@@ -457,6 +457,27 @@ class ClaudeModels {
         self::SONNET_4_6 => true,
     ];
 
+    /**
+     * Models that accept a task budget (`output_config.task_budget`, beta
+     * task-budgets-2026-03-13). Not Sonnet 5, and nothing before Opus 4.7;
+     * hand-maintained, as the Models API reports no flag for it. Sonnet 5.5
+     * and Haiku 5.5 are listed by id until the registry carries them.
+     */
+    private const SUPPORTS_TASK_BUDGET = [
+        self::FABLE_5_1    => true,
+        self::FABLE_5      => true,
+        self::OPUS_5_5     => true,
+        self::OPUS_5       => true,
+        'claude-sonnet-5-5' => true,
+        'claude-haiku-5-5'  => true,
+        self::OPUS_4_8     => true,
+        self::OPUS_4_7     => true,
+    ];
+
+    public static function supportsTaskBudget(string $model): bool {
+        return self::SUPPORTS_TASK_BUDGET[self::canonicalId($model)] ?? false;
+    }
+
     public static function supportsExtendedOutput(string $model): bool {
         return self::SUPPORTS_EXTENDED_OUTPUT[self::canonicalId($model)] ?? false;
     }

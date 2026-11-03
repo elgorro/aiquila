@@ -42,6 +42,13 @@
 					</NcCheckboxRadioSwitch>
 				</NcSettingsSection>
 
+				<NcSettingsSection :name="t('aiquila', 'Refusal fallback')"
+					:description="t('aiquila', 'When Claude\'s safety classifiers decline a request, retry it within the same call on the model Anthropic recommends for that kind of refusal. Benign security or life-sciences work can trip the classifiers. The fallback model may be less capable, and some declined attempts are billed. Only affects the Claude API and Claude on Google Cloud (Anthropic managed).')">
+					<NcCheckboxRadioSwitch :model-value="serverFallback" @update:model-value="saveServerFallback">
+						{{ t('aiquila', 'Retry refused requests on a fallback model') }}
+					</NcCheckboxRadioSwitch>
+				</NcSettingsSection>
+
 				<NcSettingsSection :name="t('aiquila', 'Anthropic Files API')"
 					:description="t('aiquila', 'Uploads images and PDFs attached in a chat once and refers to them by ID afterwards, instead of sending the file again on every turn. Anthropic keeps an uploaded file for 30 days; it is not covered by zero data retention. When switched off, attachments are sent inline and the daily cleanup deletes what was uploaded before. Only affects the Claude API.')">
 					<NcCheckboxRadioSwitch :model-value="filesApi" @update:model-value="saveFilesApi">
@@ -205,6 +212,7 @@ export default {
 			searchEnabled: false,
 			autoCache: true,
 			filesApi: true,
+			serverFallback: true,
 			savingNativeMcp: false,
 			nativeMcpMessage: '',
 			nativeMcpMessageType: 'success',
@@ -233,6 +241,7 @@ export default {
 		this.searchEnabled = dataset?.searchEnabled === '1'
 		this.autoCache = dataset?.autoCache !== '0'
 		this.filesApi = dataset?.filesApi !== '0'
+		this.serverFallback = dataset?.serverFallback !== '0'
 		await Promise.all([this.load(), this.loadNativeMcp()])
 	},
 	methods: {
@@ -272,6 +281,10 @@ export default {
 		async saveAutoCache(enabled) {
 			this.autoCache = enabled
 			await saveAdminSettings({ auto_cache: enabled ? '1' : '0' })
+		},
+		async saveServerFallback(enabled) {
+			this.serverFallback = enabled
+			await saveAdminSettings({ server_fallback: enabled ? '1' : '0' })
 		},
 		async saveFilesApi(enabled) {
 			this.filesApi = enabled

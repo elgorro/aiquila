@@ -7,6 +7,7 @@ namespace OCA\AIquila\Tests\Unit\Command;
 
 use OCA\AIquila\Command\TestSDKCommand;
 use OCA\AIquila\Service\ClaudeSDKService;
+use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use PHPUnit\Framework\TestCase;
@@ -28,10 +29,75 @@ class TestSDKCommandTest extends TestCase {
         return $provider;
     }
 
-    private function tester(LLMProviderFactory $factory): CommandTester {
+    private function tester(LLMProviderFactory $factory, ?InstructionsService $instructions = null): CommandTester {
         $claude = $this->createMock(ClaudeSDKService::class);
         $claude->expects($this->never())->method('ask');
-        return new CommandTester(new TestSDKCommand($claude, $factory));
+        return new CommandTester(new TestSDKCommand($claude, $factory, $instructions ?? $this->createStub(InstructionsService::class)));
+    }
+
+    /**
+     * An Anthropic provider whose two `ask()` calls report $first then $second
+     * as [cache_creation_tokens, cache_read_tokens].
+     *
+     * @param array{int, int} $first
+     * @param array{int, int} $second
+     */
+    private function anthropicCaching(array $first, array $second): LLMProviderInterface {
+        $provider = $this->createMock(LLMProviderInterface::class);
+        $provider->method('getId')->willReturn(LLMProviderFactory::DEFAULT_PROVIDER);
+        $provider->method('getLabel')->willReturn('Claude');
+        $provider->method('isConfigured')->willReturn(true);
+        $provider->method('getApiKey')->willReturn('sk-ant-0123456789abcdef');
+        $provider->method('getModel')->willReturn('claude-opus-5');
+        $provider->method('getMaxTokens')->willReturn(4096);
+        $usage = static fn(array $u): array => ['response' => 'ok', 'usage' => [
+            'input_tokens' => 12, 'output_tokens' => 3, 'cache_creation_tokens' => $u[0], 'cache_read_tokens' => $u[1],
+        ]];
+        $provider->expects($this->exactly(2))->method('ask')
+            ->with($this->anything(), '', 'alice', ['system' => 'Be terse.'])
+            ->willReturnOnConsecutiveCalls($usage($first), $usage($second));
+        return $provider;
+    }
+
+    /**
+     * @param array{int, int} $first
+     * @param array{int, int} $second
+     */
+    private function runCacheCheck(array $first, array $second): CommandTester {
+        $factory = $this->createStub(LLMProviderFactory::class);
+        $factory->method('getProvider')->willReturn($this->anthropicCaching($first, $second));
+        $instructions = $this->createStub(InstructionsService::class);
+        $instructions->method('forChat')->willReturn('Be terse.');
+        $tester = $this->tester($factory, $instructions);
+        $tester->execute(['--cache-check' => true, '--user' => 'alice']);
+        return $tester;
+    }
+
+    public function testCacheCheckReportsAHit(): void {
+        $tester = $this->runCacheCheck([900, 0], [0, 900]);
+        $this->assertSame(0, $tester->getStatusCode(), $tester->getDisplay());
+        $this->assertStringContainsString('Cache hit', $tester->getDisplay());
+    }
+
+    public function testCacheCheckTreatsAShortPrefixAsExpected(): void {
+        $tester = $this->runCacheCheck([0, 0], [0, 0]);
+        $this->assertSame(0, $tester->getStatusCode(), $tester->getDisplay());
+        $this->assertStringContainsString('below the minimum cacheable length for claude-opus-5', $tester->getDisplay());
+    }
+
+    public function testCacheCheckFailsWhenTheWriteIsNeverReadBack(): void {
+        $tester = $this->runCacheCheck([900, 0], [900, 0]);
+        $this->assertSame(1, $tester->getStatusCode(), $tester->getDisplay());
+        $this->assertStringContainsString('Cache miss', $tester->getDisplay());
+    }
+
+    public function testCacheCheckIsAnthropicOnly(): void {
+        $factory = $this->createStub(LLMProviderFactory::class);
+        $factory->method('getProvider')->willReturn($this->local());
+
+        $tester = $this->tester($factory);
+        $this->assertSame(1, $tester->execute(['--cache-check' => true]));
+        $this->assertStringContainsString('--cache-check is only supported', $tester->getDisplay());
     }
 
     public function testUsesTheProviderResolvedForTheUser(): void {

@@ -85,6 +85,10 @@ class FoundryProvider extends AbstractCloudClaudeProvider {
         return $base !== '' && in_array($base, ClaudeModels::getAllModels(), true) ? $base : $model;
     }
 
+    protected function platformFeatures(): array {
+        return [self::FEATURE_TASK_BUDGET => true] + parent::platformFeatures();
+    }
+
     protected function buildClient(string $authMode): BaseClient {
         $baseUrl = CloudEndpoints::foundryUrl($this->endpointValue('resource', CloudEndpoints::requireAzureResource(...)));
 

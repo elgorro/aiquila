@@ -47,6 +47,8 @@ class ClaudePlatformGoogleCloudProvider extends AbstractGoogleClaudeProvider {
             self::FEATURE_NATIVE_MCP => true,
             self::FEATURE_FAST_MODE => true,
             self::FEATURE_METADATA => true,
+            // Server-side refusal fallback is in beta here as on the Claude API.
+            self::FEATURE_SERVER_FALLBACK => true,
         ] + parent::platformFeatures();
     }
 

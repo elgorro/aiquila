@@ -303,6 +303,7 @@ class SettingsController extends Controller {
      * @param string|null $search_enabled Expose AIquila conversations to unified search ('1' enabled, '0' disabled, null keeps unchanged)
      * @param string|null $auto_cache Top-level automatic prompt caching ('1' enabled, '0' disabled, null keeps unchanged)
      * @param string|null $files_api Upload attachments to the Anthropic Files API ('1' enabled, '0' disabled, null keeps unchanged)
+     * @param string|null $server_fallback Retry a request Claude's safety classifiers decline on Anthropic's recommended fallback model ('1' enabled, '0' disabled, null keeps unchanged)
      *
      * 200: Admin settings saved successfully
      *
@@ -318,7 +319,8 @@ class SettingsController extends Controller {
         ?string $mistral_connector_ids = null,
         ?string $search_enabled = null,
         ?string $auto_cache = null,
-        ?string $files_api = null
+        ?string $files_api = null,
+        ?string $server_fallback = null
     ): JSONResponse {
         if ($provider !== null && $provider !== '') {
             $this->config->setAppValue($this->appName, 'provider', $provider);
@@ -354,6 +356,9 @@ class SettingsController extends Controller {
         }
         if ($files_api !== null) {
             $this->config->setAppValue($this->appName, 'files_api', $files_api === '1' ? '1' : '0');
+        }
+        if ($server_fallback !== null) {
+            $this->config->setAppValue($this->appName, 'server_fallback', $server_fallback === '1' ? '1' : '0');
         }
 
         return new JSONResponse(['status' => 'ok']);

@@ -1776,6 +1776,14 @@
                                         ],
                                         "default": null,
                                         "description": "Upload attachments to the Anthropic Files API ('1' enabled, '0' disabled, null keeps unchanged)"
+                                    },
+                                    "server_fallback": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Retry a request Claude's safety classifiers decline on Anthropic's recommended fallback model ('1' enabled, '0' disabled, null keeps unchanged)"
                                     }
                                 }
                             }

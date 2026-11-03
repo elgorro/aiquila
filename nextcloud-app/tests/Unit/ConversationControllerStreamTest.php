@@ -241,4 +241,22 @@ class ConversationControllerStreamTest extends TestCase {
 
         $this->assertSame('Error: no route to host', $this->assistantContent());
     }
+
+    /**
+     * A refusal's partial output is incomplete and must be discarded, not
+     * kept with an "interrupted" suffix as if it were half an answer.
+     */
+    public function testRefusalDiscardsThePartialAnswer(): void {
+        $events = $this->drain([
+            ['type' => 'thinking_delta', 'text' => 'Considering.'],
+            ['type' => 'text_delta', 'text' => 'Here is how to'],
+            ['type' => 'error', 'error' => 'Declined: cyber', 'error_type' => 'refused', 'refusal_category' => 'cyber', 'usage' => ['input_tokens' => 9, 'output_tokens' => 4]],
+        ]);
+
+        $this->assertSame('Error: Declined: cyber', $this->assistantContent());
+        $persisted = end($events)['assistantMessage'];
+        $this->assertNull($persisted['thinkingSummary']);
+        // A mid-stream refusal is billed, so its tokens are still recorded.
+        $this->assertSame(['input_tokens' => 9, 'output_tokens' => 4], $this->usageRecorded[0][2]['usage']);
+    }
 }

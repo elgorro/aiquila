@@ -90,6 +90,12 @@ class ConfigureCommand extends Base {
                 'Pin the thinking budget in tokens (>= ' . ClaudeSDKService::MIN_THINKING_BUDGET . ', empty string for adaptive)'
             )
             ->addOption(
+                'task-budget',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Token budget for each tool-using answer (>= ' . ClaudeSDKService::MIN_TASK_BUDGET . ', empty string for off)'
+            )
+            ->addOption(
                 'service-tier',
                 null,
                 InputOption::VALUE_REQUIRED,
@@ -106,6 +112,12 @@ class ConfigureCommand extends Base {
                 null,
                 InputOption::VALUE_REQUIRED,
                 'Let the API place a cache breakpoint on the growing end of a conversation (on|off, default: on)'
+            )
+            ->addOption(
+                'server-fallback',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Retry a request the safety classifiers decline on Anthropic\'s recommended fallback model (on|off, default: on)'
             )
             ->addOption(
                 'files-api',
@@ -387,6 +399,18 @@ class ConfigureCommand extends Base {
             $updated = true;
         }
 
+        // Set the task budget for agentic loops
+        $taskBudget = $input->getOption('task-budget');
+        if ($taskBudget !== null) {
+            if ($taskBudget !== '' && (!ctype_digit($taskBudget) || (int)$taskBudget < ClaudeSDKService::MIN_TASK_BUDGET)) {
+                $output->writeln('<error>Task budget must be at least ' . ClaudeSDKService::MIN_TASK_BUDGET . ' tokens (or empty to turn it off)</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'task_budget', $taskBudget);
+            $output->writeln('<info>✓ Task budget ' . ($taskBudget === '' ? 'turned off' : 'updated to: ' . $taskBudget . ' tokens') . '</info>');
+            $updated = true;
+        }
+
         // Set the service tier
         $serviceTier = $input->getOption('service-tier');
         if ($serviceTier !== null) {
@@ -423,6 +447,18 @@ class ConfigureCommand extends Base {
             }
             $this->config->setAppValue(self::APP_NAME, 'auto_cache', $autoCache === 'on' ? '1' : '0');
             $output->writeln('<info>✓ Automatic prompt caching updated to: ' . $autoCache . '</info>');
+            $updated = true;
+        }
+
+        // Set server-side refusal fallback
+        $serverFallback = $input->getOption('server-fallback');
+        if ($serverFallback !== null) {
+            if (!in_array($serverFallback, ['on', 'off'], true)) {
+                $output->writeln('<error>Server fallback must be "on" or "off"</error>');
+                return 1;
+            }
+            $this->config->setAppValue(self::APP_NAME, 'server_fallback', $serverFallback === 'on' ? '1' : '0');
+            $output->writeln('<info>✓ Refusal fallback updated to: ' . $serverFallback . '</info>');
             $updated = true;
         }
 
@@ -500,10 +536,12 @@ class ConfigureCommand extends Base {
         $taskEffort = $this->config->getAppValue(self::APP_NAME, 'task_effort', '');
         $taskThinking = $this->config->getAppValue(self::APP_NAME, 'task_thinking', '');
         $thinkingBudget = $this->config->getAppValue(self::APP_NAME, 'thinking_budget', '');
+        $taskBudget = $this->config->getAppValue(self::APP_NAME, 'task_budget', '');
         $serviceTier = $this->config->getAppValue(self::APP_NAME, 'service_tier', '');
         $fast = in_array($this->config->getAppValue(self::APP_NAME, 'speed_fast', 'false'), ['true', '1'], true);
         $autoCache = in_array($this->config->getAppValue(self::APP_NAME, 'auto_cache', '1'), ['true', '1'], true);
         $filesApi = in_array($this->config->getAppValue(self::APP_NAME, 'files_api', '1'), ['true', '1'], true);
+        $serverFallbackOn = in_array($this->config->getAppValue(self::APP_NAME, 'server_fallback', '1'), ['true', '1'], true);
         $timeout = $this->config->getAppValue(self::APP_NAME, 'api_timeout', '30');
 
         $output->writeln('');
@@ -524,10 +562,12 @@ class ConfigureCommand extends Base {
         $output->writeln('  Task effort:   <comment>' . ($taskEffort !== '' ? $taskEffort : '(default effort)') . '</comment>');
         $output->writeln('  Task thinking: <comment>' . ($taskThinking !== '' ? ThinkingPolicy::normalizeMode($taskThinking) : '(default thinking)') . '</comment>');
         $output->writeln('  Budget:     <comment>' . ($thinkingBudget !== '' ? $thinkingBudget . ' tokens' : '(adaptive)') . '</comment>');
+        $output->writeln('  Task budget: <comment>' . ($taskBudget !== '' ? $taskBudget . ' tokens' : 'off') . '</comment>');
         $output->writeln('  Tier:       <comment>' . ($serviceTier !== '' ? $serviceTier : '(account default)') . '</comment>');
         $output->writeln('  Fast mode:  <comment>' . ($fast ? 'on' : 'off') . '</comment>');
         $output->writeln('  Auto cache: <comment>' . ($autoCache ? 'on' : 'off') . '</comment>');
         $output->writeln('  Files API:  <comment>' . ($filesApi ? 'on' : 'off') . '</comment>');
+        $output->writeln('  Fallback:   <comment>' . ($serverFallbackOn ? 'on' : 'off') . '</comment>');
         $output->writeln('  Timeout:    <comment>' . $timeout . ' seconds</comment>');
         $output->writeln('');
 

@@ -103,8 +103,9 @@ class UsageStatMapperTest extends MapperTestCase {
     public function testSumTokensByModelAndTypeAggregatesRows(): void {
         $this->qb->method('executeQuery')->willReturn($this->result);
         $this->result->method('fetch')->willReturnOnConsecutiveCalls(
-            ['model' => 'claude-opus-4-8', 'request_type' => 'chat', 'total_input' => '1000', 'total_output' => '500'],
-            ['model' => 'claude-haiku-4-5', 'request_type' => 'summary', 'total_input' => '20', 'total_output' => '10'],
+            ['model' => 'claude-opus-4-8', 'request_type' => 'chat', 'total_input' => '1000', 'total_output' => '500', 'total_cache_creation' => '900', 'total_cache_read' => '2700'],
+            // SUM over only-NULL cache columns comes back NULL.
+            ['model' => 'claude-haiku-4-5', 'request_type' => 'summary', 'total_input' => '20', 'total_output' => '10', 'total_cache_creation' => null, 'total_cache_read' => null],
             false,
         );
         $this->result->method('closeCursor')->willReturn(true);
@@ -113,8 +114,8 @@ class UsageStatMapperTest extends MapperTestCase {
         $rows = $mapper->sumTokensByModelAndType();
 
         $this->assertSame([
-            ['model' => 'claude-opus-4-8', 'request_type' => 'chat', 'input_tokens' => 1000, 'output_tokens' => 500],
-            ['model' => 'claude-haiku-4-5', 'request_type' => 'summary', 'input_tokens' => 20, 'output_tokens' => 10],
+            ['model' => 'claude-opus-4-8', 'request_type' => 'chat', 'input_tokens' => 1000, 'output_tokens' => 500, 'cache_creation_tokens' => 900, 'cache_read_tokens' => 2700],
+            ['model' => 'claude-haiku-4-5', 'request_type' => 'summary', 'input_tokens' => 20, 'output_tokens' => 10, 'cache_creation_tokens' => 0, 'cache_read_tokens' => 0],
         ], $rows);
     }
 
