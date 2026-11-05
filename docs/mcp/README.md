@@ -35,7 +35,7 @@ Nextcloud apps and administration:
 - **Tasks** — Full CRUD for tasks with subtasks, priorities, and categories (CalDAV)
 - **Contacts** — Full CRUD for contacts with structured fields (CardDAV)
 - **Mail** — Email accounts, mailboxes, messages, send, flags, and attachments
-- **Talk** — Conversations, messages, participants, polls, and reactions
+- **Talk** — Conversations (including classified, channel and announcement presets), messages, participants, polls, and reactions
 - **Deck** — Boards, stacks, cards, labels, and assignments
 - **Photos** — Albums, collaborators, favourites, and photo metadata
 - **Circles** — Team circles and their membership
@@ -383,19 +383,20 @@ Nextcloud apps and administration:
 | `aiquila_show_config` | Show configuration | [AIquila](tools/apps/aiquila.md#aiquila_show_config) |
 | `aiquila_configure` | Configure settings | [AIquila](tools/apps/aiquila.md#aiquila_configure) |
 | `aiquila_test` | Test a provider | [AIquila](tools/apps/aiquila.md#aiquila_test) |
-#### Talk (10 tools)
+#### Talk (11 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `talk_list_conversations` | List all Talk conversations the user has access to | — |
-| `talk_list_messages` | List recent messages in a Talk conversation | — |
-| `talk_send_message` | Send a message to a Talk conversation | — |
-| `talk_create_conversation` | Create a new Talk conversation | — |
-| `talk_list_participants` | List all participants in a Talk conversation with their roles | — |
-| `talk_add_participant` | Add a user, group, or email participant to a Talk conversation | — |
-| `talk_remove_participant` | Remove a participant from a Talk conversation by their attendee ID (from… | — |
-| `talk_delete_message` | Delete a message from a Talk conversation | — |
-| `talk_create_poll` | Create a poll in a Talk conversation | — |
-| `talk_react_to_message` | Add an emoji reaction to a message in a Talk conversation | — |
+| `talk_list_conversations` | List all Talk conversations the user has access to | [Talk](tools/apps/talk.md#talk_list_conversations) |
+| `talk_list_messages` | List recent messages in a Talk conversation | [Talk](tools/apps/talk.md#talk_list_messages) |
+| `talk_send_message` | Send a message to a Talk conversation | [Talk](tools/apps/talk.md#talk_send_message) |
+| `talk_create_conversation` | Create a new Talk conversation, optionally from a preset | [Talk](tools/apps/talk.md#talk_create_conversation) |
+| `talk_update_conversation` | Change the settings of an existing Talk conversation | [Talk](tools/apps/talk.md#talk_update_conversation) |
+| `talk_list_participants` | List all participants in a Talk conversation with their roles | [Talk](tools/apps/talk.md#talk_list_participants) |
+| `talk_add_participant` | Add a user, group, team, or email participant to a Talk conversation | [Talk](tools/apps/talk.md#talk_add_participant) |
+| `talk_remove_participant` | Remove a participant from a Talk conversation by their attendee ID (from… | [Talk](tools/apps/talk.md#talk_remove_participant) |
+| `talk_delete_message` | Delete a message from a Talk conversation | [Talk](tools/apps/talk.md#talk_delete_message) |
+| `talk_create_poll` | Create a poll in a Talk conversation | [Talk](tools/apps/talk.md#talk_create_poll) |
+| `talk_react_to_message` | Add an emoji reaction to a message in a Talk conversation | [Talk](tools/apps/talk.md#talk_react_to_message) |
 
 #### Deck (12 tools)
 | Tool | Description | Documentation |
