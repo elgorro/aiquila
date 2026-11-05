@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { fetchOCS } from '../../client/ocs.js';
+import { checkGatedParams, talkFeature, type CapabilityGate } from '../../client/capabilities.js';
 
 /**
  * Nextcloud Talk (Spreed) Tools
@@ -23,6 +24,7 @@ const CONVERSATION_TYPE_LABELS: Record<number, string> = {
   3: 'public',
   4: 'changelog',
   5: 'former one-on-one',
+  6: 'note to self',
 };
 
 const PARTICIPANT_TYPE_LABELS: Record<number, string> = {
@@ -40,6 +42,42 @@ const ROOM_TYPE_MAP: Record<string, number> = {
   public: 3,
 };
 
+// Room::LISTABLE_*
+const LISTABLE_MAP: Record<string, number> = { none: 0, users: 1, everyone: 2 };
+
+// RoomAttributes. An announcement also carries the channel bit, so it is
+// checked first and the first match names the conversation.
+const ROOM_ATTRIBUTE_LABELS: [number, string][] = [
+  [4, 'classified'],
+  [16, 'announcement'],
+  [8, 'channel'],
+  [1, 'voice room'],
+];
+
+const TALK_25 = 'Talk 25 (Nextcloud 35)';
+
+// Each preset value has its own capability, so the gate depends on the value.
+const PRESET_GATES: Record<string, CapabilityGate> = {
+  classified: talkFeature('classified-conversations', TALK_25),
+  channel: talkFeature('announcement-preset', TALK_25),
+  announcement: talkFeature('announcement-preset', TALK_25),
+};
+
+// Talk leaves this feature out unless Nextcloud background jobs run from cron,
+// because expired messages are removed by a background job.
+const MESSAGE_EXPIRATION_GATE = talkFeature(
+  'message-expiration',
+  'Nextcloud background jobs in cron mode'
+);
+
+// Keys of the `participants` argument of POST /room, which replaced the
+// deprecated `invite` + `source` pair.
+const INVITE_SOURCE_KEYS: Record<string, string> = {
+  users: 'users',
+  groups: 'groups',
+  circles: 'teams',
+};
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -53,7 +91,16 @@ interface Conversation {
   lastActivity: number;
   status?: string;
   statusMessage?: string;
+  messageExpiration?: number;
+  attributes?: number;
 }
+
+interface RoomPreset {
+  identifier: string;
+  parameters: Record<string, number>;
+}
+
+type PresetName = 'classified' | 'channel' | 'announcement';
 
 interface ChatMessage {
   id: number;
@@ -92,6 +139,28 @@ function formatTimestamp(ts: number): string {
   const d = new Date(ts * 1000);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function conversationKind(room: Conversation): string {
+  const type = CONVERSATION_TYPE_LABELS[room.type] ?? `type-${room.type}`;
+  const attribute = ROOM_ATTRIBUTE_LABELS.find(([bit]) => ((room.attributes ?? 0) & bit) !== 0);
+  return attribute ? `${type}, ${attribute[1]}` : type;
+}
+
+/**
+ * The parameters a preset stands for. Talk does not expand them: `preset` only
+ * sets the conversation's attributes, and clients send the rest themselves.
+ * Talk's documented order is default preset, selected preset, user selection,
+ * forced preset; the server applies the last one. Returns null when the server
+ * does not offer the preset to this account.
+ */
+async function presetParameters(name: PresetName): Promise<Record<string, number> | null> {
+  const data = await fetchOCS<RoomPreset[]>(`${API_V1}/presets/room`);
+  const presets = data.ocs.data ?? [];
+  const selected = presets.find((p) => p.identifier === name);
+  if (!selected) return null;
+  const defaults = presets.find((p) => p.identifier === 'default');
+  return { ...defaults?.parameters, ...selected.parameters };
 }
 
 function text(t: string) {
@@ -138,7 +207,7 @@ export const listConversationsTool = {
       if (rooms.length === 0) return text('No conversations found.');
 
       const lines = rooms.map((r) => {
-        const type = CONVERSATION_TYPE_LABELS[r.type] ?? `type-${r.type}`;
+        const type = conversationKind(r);
         const last = r.lastActivity ? formatTimestamp(r.lastActivity) : 'never';
         let line = `[${r.token}] ${r.displayName || r.name} (${type}, unread: ${r.unreadMessages}) — last: ${last}`;
         if (args.includeStatus && r.status) {
@@ -282,46 +351,242 @@ export const createConversationTool = {
     openWorldHint: false,
   },
   description:
-    'Create a new Talk conversation. One-on-one requires an invite user, group/public require a name.',
+    'Create a new Talk conversation. One-on-one requires an invite user, group/public require a name. ' +
+    'A preset creates a classified conversation (locked down: no public link, guests, SIP or recording, messages expire after 7 days), ' +
+    'a channel (only moderators post, no calls, anyone can find and join it) or an announcement (a channel with a fixed audience, administrators only).',
   inputSchema: z.object({
     roomType: z.enum(['one-on-one', 'group', 'public']).describe('Type of conversation to create'),
     roomName: z
       .string()
       .optional()
       .describe('Name for the conversation (required for group and public)'),
-    invite: z.string().optional().describe('User ID to invite (required for one-on-one)'),
+    invite: z
+      .string()
+      .optional()
+      .describe('User, group or team to invite, see source (required for one-on-one)'),
+    source: z
+      .enum(['users', 'groups', 'circles'])
+      .optional()
+      .describe(
+        "What invite is: 'users', 'groups' or 'circles' (a Team). Default 'groups', except one-on-one, which is always a user"
+      ),
+    preset: z
+      .enum(['classified', 'channel', 'announcement'])
+      .optional()
+      .describe('Conversation preset (Talk 25). Other parameters override its settings'),
+    description: z.string().optional().describe('Conversation description'),
+    readOnly: z.boolean().optional().describe('Only moderators can post or call (default false)'),
+    listable: z
+      .enum(['none', 'users', 'everyone'])
+      .optional()
+      .describe(
+        "Who can find and join the conversation: 'users' for regular users, 'everyone' also includes guest accounts (default 'none')"
+      ),
+    lobby: z
+      .boolean()
+      .optional()
+      .describe('Keep non-moderators in the lobby until it is opened (default false)'),
+    messageExpiration: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe('Seconds after which messages disappear, 0 to keep them (default 0)'),
   }),
   handler: async (args: {
     roomType: 'one-on-one' | 'group' | 'public';
     roomName?: string;
     invite?: string;
+    source?: 'users' | 'groups' | 'circles';
+    preset?: PresetName;
+    description?: string;
+    readOnly?: boolean;
+    listable?: 'none' | 'users' | 'everyone';
+    lobby?: boolean;
+    messageExpiration?: number;
   }) => {
-    if (args.roomType === 'one-on-one' && !args.invite) {
-      return error('invite is required for one-on-one conversations.');
-    }
-    if ((args.roomType === 'group' || args.roomType === 'public') && !args.roomName) {
+    const { roomType, roomName, invite, source, preset, ...settings } = args;
+
+    if (roomType === 'one-on-one') {
+      if (!invite) return error('invite is required for one-on-one conversations.');
+      // Talk ignores everything but the invite here; refused so nothing asked
+      // for is dropped. talk_update_conversation covers an existing one.
+      const unsupported = Object.entries({ source, preset, ...settings })
+        .filter(([, value]) => value !== undefined)
+        .map(([name]) => name);
+      if (unsupported.length > 0) {
+        return error(
+          `Not available when creating a one-on-one conversation: ${unsupported.join(', ')}.`
+        );
+      }
+    } else if (!roomName) {
       return error('roomName is required for group and public conversations.');
     }
 
+    // Talk would quietly make it a group conversation instead.
+    if (preset === 'classified' && roomType === 'public') {
+      return error('A classified conversation cannot be public. Use roomType group.');
+    }
+
     try {
-      const body: Record<string, string> = {
-        roomType: String(ROOM_TYPE_MAP[args.roomType]),
+      const gates: Record<string, CapabilityGate> = {
+        messageExpiration: MESSAGE_EXPIRATION_GATE,
       };
-      if (args.roomName) body.roomName = args.roomName;
-      if (args.invite) body.invite = args.invite;
+      if (preset) gates.preset = PRESET_GATES[preset];
+      const refused = await checkGatedParams(args, gates);
+      if (refused) return error(refused);
+
+      const body: Record<string, unknown> = {};
+      if (preset) {
+        const parameters = await presetParameters(preset);
+        if (!parameters) {
+          return error(
+            `This account cannot use the ${preset} preset` +
+              (preset === 'announcement' ? ': it is for administrators.' : '.')
+          );
+        }
+        Object.assign(body, parameters, { preset });
+      }
+      body.roomType = ROOM_TYPE_MAP[roomType];
+      if (roomName) body.roomName = roomName;
+      if (invite) {
+        if (roomType === 'one-on-one') body.invite = invite;
+        else body.participants = { [INVITE_SOURCE_KEYS[source ?? 'groups']]: [invite] };
+      }
+      if (settings.description !== undefined) body.description = settings.description;
+      if (settings.readOnly !== undefined) body.readOnly = settings.readOnly ? 1 : 0;
+      if (settings.listable !== undefined) body.listable = LISTABLE_MAP[settings.listable];
+      if (settings.lobby !== undefined) body.lobbyState = settings.lobby ? 1 : 0;
+      if (settings.messageExpiration !== undefined) {
+        body.messageExpiration = settings.messageExpiration;
+      }
 
       const data = await fetchOCS<Conversation>(`${API_V4}/room`, {
         method: 'POST',
-        body,
+        jsonBody: body,
       });
       const room = data.ocs.data;
-      const type = CONVERSATION_TYPE_LABELS[room.type] ?? `type-${room.type}`;
+      const expiry = room.messageExpiration
+        ? ` — messages expire after ${room.messageExpiration} seconds`
+        : '';
       return text(
-        `Conversation created: [${room.token}] ${room.displayName || room.name} (${type})`
+        `Conversation created: [${room.token}] ${room.displayName || room.name} (${conversationKind(room)})${expiry}`
       );
     } catch (err) {
       return wrapError('creating conversation', err);
     }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// update_conversation
+// ---------------------------------------------------------------------------
+
+export const updateConversationTool = {
+  name: 'talk_update_conversation',
+  title: 'Update Talk Conversation',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    'Change the settings of an existing Talk conversation: description, read-only state, who can find it, lobby and message expiration. Requires moderator rights. Only the settings passed are changed.',
+  inputSchema: z.object({
+    token: z.string().describe('Conversation token'),
+    description: z.string().optional().describe('New description, empty to clear it'),
+    readOnly: z.boolean().optional().describe('Only moderators can post or call'),
+    listable: z
+      .enum(['none', 'users', 'everyone'])
+      .optional()
+      .describe(
+        "Who can find and join the conversation: 'users' for regular users, 'everyone' also includes guest accounts"
+      ),
+    lobby: z.boolean().optional().describe('Keep non-moderators in the lobby until it is opened'),
+    messageExpiration: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe('Seconds after which messages disappear, 0 to keep them'),
+  }),
+  handler: async (args: {
+    token: string;
+    description?: string;
+    readOnly?: boolean;
+    listable?: 'none' | 'users' | 'everyone';
+    lobby?: boolean;
+    messageExpiration?: number;
+  }) => {
+    const room = `${API_V4}/room/${args.token}`;
+    // Talk has one endpoint per setting, so a call can partly succeed.
+    const changes: { name: string; path: string; method: string; body: Record<string, string> }[] =
+      [];
+    if (args.description !== undefined) {
+      changes.push({
+        name: 'description',
+        path: `${room}/description`,
+        method: 'PUT',
+        body: { description: args.description },
+      });
+    }
+    if (args.readOnly !== undefined) {
+      changes.push({
+        name: 'readOnly',
+        path: `${room}/read-only`,
+        method: 'PUT',
+        body: { state: args.readOnly ? '1' : '0' },
+      });
+    }
+    if (args.listable !== undefined) {
+      changes.push({
+        name: 'listable',
+        path: `${room}/listable`,
+        method: 'PUT',
+        body: { scope: String(LISTABLE_MAP[args.listable]) },
+      });
+    }
+    if (args.lobby !== undefined) {
+      changes.push({
+        name: 'lobby',
+        path: `${room}/webinar/lobby`,
+        method: 'PUT',
+        body: { state: args.lobby ? '1' : '0' },
+      });
+    }
+    if (args.messageExpiration !== undefined) {
+      changes.push({
+        name: 'messageExpiration',
+        path: `${room}/message-expiration`,
+        method: 'POST',
+        body: { seconds: String(args.messageExpiration) },
+      });
+    }
+    if (changes.length === 0) return error('Pass at least one setting to change.');
+
+    try {
+      const refused = await checkGatedParams(args, { messageExpiration: MESSAGE_EXPIRATION_GATE });
+      if (refused) return error(refused);
+    } catch (err) {
+      return wrapError('updating conversation', err);
+    }
+
+    const applied: string[] = [];
+    const failed: string[] = [];
+    for (const { name, path, method, body } of changes) {
+      try {
+        await fetchOCS(path, { method, body });
+        applied.push(name);
+      } catch (err) {
+        failed.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    if (failed.length === 0) {
+      return text(`Conversation ${args.token} updated: ${applied.join(', ')}.`);
+    }
+    const done = applied.length > 0 ? `\nApplied: ${applied.join(', ')}.` : '';
+    return error(`Error updating conversation ${args.token}: ${failed.join('; ')}${done}`);
   },
 };
 
@@ -373,14 +638,14 @@ export const addParticipantTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: 'Add a user, group, or email participant to a Talk conversation.',
+  description: 'Add a user, group, team, or email participant to a Talk conversation.',
   inputSchema: z.object({
     token: z.string().describe('Conversation token'),
-    newParticipant: z.string().describe('User ID, group ID, or email address to add'),
+    newParticipant: z.string().describe('User ID, group ID, team ID, or email address to add'),
     source: z
-      .enum(['users', 'groups', 'emails'])
+      .enum(['users', 'groups', 'circles', 'emails'])
       .optional()
-      .describe("Participant source type (default 'users')"),
+      .describe("Participant source type, 'circles' for a Team (default 'users')"),
   }),
   handler: async (args: { token: string; newParticipant: string; source?: string }) => {
     try {
@@ -566,6 +831,7 @@ export const talkTools = [
   listMessagesTool,
   sendMessageTool,
   createConversationTool,
+  updateConversationTool,
   listParticipantsTool,
   addParticipantTool,
   removeParticipantTool,
