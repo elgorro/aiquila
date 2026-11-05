@@ -119,6 +119,9 @@ class CoworkerMapper extends QBMapper {
     }
 
     /**
+     * Like findAllByUser(), plus what the user's teams own. App-owned
+     * coworkers stay out of this list too.
+     *
      * @param list<string> $teamIds
      * @return list<Coworker>
      */
@@ -127,7 +130,8 @@ class CoworkerMapper extends QBMapper {
         $qb->select('*')
             ->from($this->getTableName())
             ->where($this->ownedBy($qb, $userId, $teamIds))
-            ->orderBy('updated_at', 'DESC');
+            ->andWhere($qb->expr()->isNull('owner_app'))
+            ->orderBy('title', 'ASC');
 
         return $this->findEntities($qb);
     }
