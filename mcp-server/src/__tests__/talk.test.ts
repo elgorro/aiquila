@@ -285,6 +285,106 @@ describe('Talk Tools', () => {
     });
   });
 
+  // ── search_messages ─────────────────────────────────────────────────
+
+  describe('search_messages', () => {
+    const entry = (id: number) => ({
+      title: 'Alice in Launch',
+      subline: 'we decided on zebrafish',
+      resourceUrl: `https://cloud.example.com/call/abc#message_${id}`,
+      attributes: {
+        conversation: 'abc',
+        messageId: String(id),
+        actorId: 'alice',
+        timestamp: '1700000000',
+      },
+    });
+
+    it('returns token, message ID, author, time and link', async () => {
+      mockOCS({ entries: [entry(84)] });
+
+      const { searchMessagesTool } = await import('../tools/apps/talk.js');
+      const result = await searchMessagesTool.handler({ query: 'zebrafish' });
+
+      const output = result.content[0].text;
+      expect(output).toContain('Alice in Launch: we decided on zebrafish');
+      expect(output).toContain('conversation: abc, messageId: 84, author: alice');
+      expect(output).toContain('call/abc#message_84');
+      expect(output).toMatch(/\[2023-11-1\d/);
+      expect(output).not.toContain('Next cursor');
+    });
+
+    it('maps arguments to the search provider filters', async () => {
+      mockOCS({ entries: [] });
+
+      const { searchMessagesTool } = await import('../tools/apps/talk.js');
+      await searchMessagesTool.handler({
+        query: 'x',
+        token: 'abc',
+        author: 'alice',
+        since: '2026-01-01',
+        until: '2026-02-01',
+        limit: 3,
+        cursor: 6,
+      });
+
+      const url = new URL((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      expect(url.pathname).toBe('/ocs/v2.php/search/providers/talk-message/search');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        term: 'x',
+        conversation: 'abc',
+        person: 'alice',
+        since: '2026-01-01',
+        until: '2026-02-01',
+        limit: '3',
+        cursor: '6',
+      });
+    });
+
+    it('offers the next cursor on a full page', async () => {
+      mockOCS({ entries: [entry(1), entry(2)] });
+
+      const { searchMessagesTool } = await import('../tools/apps/talk.js');
+      const result = await searchMessagesTool.handler({ query: 'x', limit: 2, cursor: 2 });
+
+      expect(result.content[0].text).toContain('Next cursor: 4');
+    });
+
+    it('says when nothing matches', async () => {
+      mockOCS({ entries: [] });
+
+      const { searchMessagesTool } = await import('../tools/apps/talk.js');
+      const result = await searchMessagesTool.handler({ query: 'x' });
+
+      expect(result.content[0].text).toBe('No messages found.');
+    });
+
+    it('explains an absent search provider', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        text: () => Promise.resolve('Provider talk-message is unknown'),
+      });
+
+      const { searchMessagesTool } = await import('../tools/apps/talk.js');
+      const result = await searchMessagesTool.handler({ query: 'x' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not available on this Nextcloud server');
+    });
+
+    it('reports other errors', async () => {
+      mockAPIError();
+
+      const { searchMessagesTool } = await import('../tools/apps/talk.js');
+      const result = await searchMessagesTool.handler({ query: 'x' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error searching messages');
+    });
+  });
+
   // ── send_message ────────────────────────────────────────────────────
 
   describe('send_message', () => {
