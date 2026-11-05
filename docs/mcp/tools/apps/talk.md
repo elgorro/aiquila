@@ -65,6 +65,21 @@ List recent messages in a conversation. Reading does not mark the conversation a
 - `lastKnownMessageId` (number, optional) — return messages before this ID.
 - `includeSystemMessages` (boolean, optional) — include join and leave notices.
 
+#### `talk_search_messages`
+Search messages across all of the user's conversations, or within one. Federated conversations, and conversations whose lobby the user is waiting in, are not searched.
+
+**Parameters:**
+- `query` (string, required)
+- `token` (string, optional) — search only this conversation.
+- `author` (string, optional) — only messages by this user ID.
+- `since`, `until` (string, optional) — ISO 8601 date or time.
+- `limit` (number, optional) — results per page, default 10. The server caps it, at 25 by default.
+- `cursor` (number, optional) — the `Next cursor` from the previous page.
+
+**Returns:** for each hit the time, author and conversation name, a snippet of the message, and the conversation token, message ID, author ID and a link. To read around a hit, pass the token to `talk_list_messages` with the message ID as `lastKnownMessageId`.
+
+**Example:** "What did we decide about the launch date in Talk?"
+
 #### `talk_send_message`
 Send a message.
 
