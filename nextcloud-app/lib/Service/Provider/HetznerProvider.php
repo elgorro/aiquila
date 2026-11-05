@@ -8,19 +8,19 @@ namespace OCA\AIquila\Service\Provider;
 use OCA\AIquila\Service\HetznerModels;
 
 /**
- * Hetzner Inference provider (https://inference.hetzner.com/api/v1).
+ * Hetzner Inference provider (https://inference.hetzner.com/v1).
  *
  * Hetzner's Experiments platform serves open-weight models over an
  * OpenAI-compatible REST API from datacenters in Germany and Finland, so all
  * wire-format handling comes from AbstractOpenAiCompatibleProvider. Specifics:
- *   - Bearer token from https://experiments.hetzner.com/inference (required).
+ *   - Bearer token from the Hetzner experiment (required). No new tokens are
+ *     issued and existing ones end with the experiment; see EXPERIMENT_NOTICE.
  *   - The model line-up changes; the live /models listing is authoritative and
  *     HetznerModels is only the fallback.
  *   - Some of the served models are multimodal and some are text-only, so image
  *     input is decided per model via HetznerModels::supportsVision().
- *   - Per-key quotas surface as HTTP 429: 4M in / 100k out tokens per 60s,
- *     500M / 5M per day, and — the one that bites the settings pages — a limit
- *     of 10 requests per 60s.
+ *   - Per-key quotas surface as HTTP 429: 4M in / 100k out tokens per 60s and
+ *     — the one that bites the settings pages — a limit of 10 requests per 60s.
  *
  * The base URL is overridable through the app config key `hetzner_base_url`
  * because the service is experimental and may move. It is admin-scope only and
@@ -31,7 +31,10 @@ class HetznerProvider extends AbstractOpenAiCompatibleProvider {
     private const PROVIDER_ID = 'hetzner';
 
     /** Default endpoint; overridable via the `hetzner_base_url` app config key. */
-    public const DEFAULT_API_BASE = 'https://inference.hetzner.com/api/v1';
+    public const DEFAULT_API_BASE = 'https://inference.hetzner.com/v1';
+
+    /** Shown wherever an admin or user can act on the end of the experiment. */
+    public const EXPERIMENT_NOTICE = 'Hetzner is replacing the Inference experiment with an official product. Experiment tokens stop working on 8 December 2026 and no new ones are issued; Hetzner will announce the migration details at launch.';
 
     public function getId(): string {
         return self::PROVIDER_ID;
@@ -50,7 +53,7 @@ class HetznerProvider extends AbstractOpenAiCompatibleProvider {
      * Normalize an admin-entered endpoint: trim, drop the trailing slash and
      * require an http(s) URL with a host. Non-http(s) input yields '' so the
      * default endpoint is used. Unlike the local provider no `/v1` segment is
-     * appended — Hetzner's version segment is `/api/v1`.
+     * appended: an override names the full base URL, version segment included.
      */
     public static function normalizeBaseUrl(string $raw): string {
         $url = rtrim(trim($raw), '/');
@@ -96,7 +99,16 @@ class HetznerProvider extends AbstractOpenAiCompatibleProvider {
      * vector — see the class docblock.
      */
     public function getSettingsSchema(): array {
-        return array_merge(parent::getSettingsSchema(), [
+        $fields = array_map(
+            static function (array $field): array {
+                if ($field['id'] === 'api_key') {
+                    $field['description'] .= ' ' . self::EXPERIMENT_NOTICE;
+                }
+                return $field;
+            },
+            parent::getSettingsSchema(),
+        );
+        return array_merge($fields, [
             ProviderSettingsSchema::baseUrl(
                 'hetzner_base_url',
                 'API endpoint',
@@ -114,19 +126,22 @@ class HetznerProvider extends AbstractOpenAiCompatibleProvider {
     // ── Errors ──────────────────────────────────────────────────────────────
 
     protected function notConfiguredMessage(): string {
-        return 'No Hetzner Inference token configured. Create one at https://experiments.hetzner.com/inference.';
+        return 'No Hetzner Inference token configured. ' . self::EXPERIMENT_NOTICE;
     }
 
     protected function errorMessage(\Throwable $e): string {
         $msg = $e->getMessage();
-        if (stripos($msg, '401') !== false || stripos($msg, 'unauthorized') !== false) {
-            return 'Hetzner Inference rejected the token. Check it in the AIquila settings — tokens are created at https://experiments.hetzner.com/inference.';
+        if (preg_match('/\b40[13]\b|unauthorized|forbidden/i', $msg) === 1) {
+            return 'Hetzner Inference rejected the token. Check it in the AIquila settings. ' . self::EXPERIMENT_NOTICE;
+        }
+        if (preg_match('/\b(?:404|410)\b/', $msg) === 1) {
+            return 'Hetzner Inference: model or endpoint not found. Check the model in the AIquila settings; the experiment is moving to an official product with different models.';
         }
         if (stripos($msg, '429') !== false) {
             return 'Hetzner Inference rate limit reached (per-token quota). Please try again shortly.';
         }
         if (stripos($msg, '503') !== false || stripos($msg, '502') !== false) {
-            return 'Hetzner Inference is currently unavailable. The service is experimental and offered without an availability guarantee.';
+            return 'Hetzner Inference is currently unavailable. The experiment is moving to an official product and has no availability guarantee.';
         }
         return 'Hetzner Inference error: ' . $msg;
     }

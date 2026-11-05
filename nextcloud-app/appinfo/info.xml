@@ -85,6 +85,7 @@ Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Mode
         <post-migration>
             <step>OCA\AIquila\Migration\RepairEncryptMcpTokens</step>
             <step>OCA\AIquila\Migration\RepairMovePlaintextApiKeys</step>
+            <step>OCA\AIquila\Migration\RepairHetznerBaseUrl</step>
         </post-migration>
     </repair-steps>
     <commands>
