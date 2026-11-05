@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { _resetCapabilitiesCache } from '../client/capabilities.js';
 
 // Mock fetch for OCS
 global.fetch = vi.fn();
@@ -11,7 +12,50 @@ describe('Talk Tools', () => {
     process.env.NEXTCLOUD_URL = 'https://cloud.example.com';
     process.env.NEXTCLOUD_USER = 'testuser';
     process.env.NEXTCLOUD_PASSWORD = 'testpass';
+    _resetCapabilitiesCache();
   });
+
+  function okResponse(data: unknown) {
+    const body = { ocs: { meta: { status: 'ok', statuscode: 200, message: 'OK' }, data } };
+    return {
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(body),
+      text: () => Promise.resolve(JSON.stringify(body)),
+    };
+  }
+
+  const TALK_25_FEATURES = [
+    'classified-conversations',
+    'announcement-preset',
+    'message-expiration',
+  ];
+  const PRESETS = [
+    { identifier: 'default', parameters: { readOnly: 0, listable: 0, permissions: 0 } },
+    { identifier: 'forced', parameters: [] },
+    {
+      identifier: 'classified',
+      parameters: { roomType: 2, listable: 0, sipEnabled: 0, messageExpiration: 604800 },
+    },
+    { identifier: 'channel', parameters: { listable: 1, permissions: 257 } },
+  ];
+
+  /** Answers capabilities and presets, and records writes to the room API. */
+  function mockTalkServer(features: string[] | null, createdRoom: unknown = {}) {
+    const writes: { url: string; method: string; body: string }[] = [];
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+      async (url: string, init: { method: string; body: string }) => {
+        if (url.includes('/cloud/capabilities')) {
+          if (features === null) throw new Error('unreachable');
+          return okResponse({ capabilities: { spreed: { features } } });
+        }
+        if (url.includes('/presets/room')) return okResponse(PRESETS);
+        writes.push({ url, method: init.method, body: init.body });
+        return okResponse(createdRoom);
+      }
+    );
+    return writes;
+  }
 
   function mockOCS<T>(data: T) {
     const ocsResponse = {
@@ -40,6 +84,24 @@ describe('Talk Tools', () => {
   // ── list_conversations ──────────────────────────────────────────────
 
   describe('list_conversations', () => {
+    it('names classified, channel and announcement conversations', async () => {
+      const room = { name: 'r', displayName: 'r', type: 2, unreadMessages: 0, lastActivity: 0 };
+      mockOCS([
+        { ...room, token: 'a', attributes: 4 },
+        { ...room, token: 'b', attributes: 8 },
+        { ...room, token: 'c', attributes: 24 },
+        { ...room, token: 'd', attributes: 2 },
+      ]);
+
+      const { listConversationsTool } = await import('../tools/apps/talk.js');
+      const lines = (await listConversationsTool.handler({})).content[0].text.split('\n');
+
+      expect(lines[0]).toContain('(group, classified,');
+      expect(lines[1]).toContain('(group, channel,');
+      expect(lines[2]).toContain('(group, announcement,');
+      expect(lines[3]).toContain('(group, unread');
+    });
+
     it('should list conversations', async () => {
       mockOCS([
         {
@@ -313,6 +375,202 @@ describe('Talk Tools', () => {
       expect(result.content[0].text).toContain('roomName is required');
     });
 
+    it('sends group and team invites as participants', async () => {
+      const writes = mockTalkServer([], { token: 'x', name: 'n', type: 2 });
+      const { createConversationTool } = await import('../tools/apps/talk.js');
+
+      await createConversationTool.handler({ roomType: 'group', roomName: 'n', invite: 'staff' });
+      await createConversationTool.handler({
+        roomType: 'group',
+        roomName: 'n',
+        invite: 'team1',
+        source: 'circles',
+      });
+
+      expect(JSON.parse(writes[0].body).participants).toEqual({ groups: ['staff'] });
+      expect(JSON.parse(writes[1].body).participants).toEqual({ teams: ['team1'] });
+    });
+
+    it('keeps invite for one-on-one', async () => {
+      const writes = mockTalkServer([], { token: 'x', name: 'n', type: 1 });
+      const { createConversationTool } = await import('../tools/apps/talk.js');
+
+      await createConversationTool.handler({ roomType: 'one-on-one', invite: 'alice' });
+
+      expect(JSON.parse(writes[0].body)).toEqual({ roomType: 1, invite: 'alice' });
+    });
+
+    it('refuses settings Talk would ignore on one-on-one', async () => {
+      const writes = mockTalkServer(TALK_25_FEATURES);
+      const { createConversationTool } = await import('../tools/apps/talk.js');
+
+      const result = await createConversationTool.handler({
+        roomType: 'one-on-one',
+        invite: 'alice',
+        preset: 'classified',
+        messageExpiration: 60,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('preset, messageExpiration');
+      expect(writes).toEqual([]);
+    });
+
+    it('maps settings to the Talk parameters', async () => {
+      const writes = mockTalkServer(TALK_25_FEATURES, { token: 'x', name: 'n', type: 2 });
+      const { createConversationTool } = await import('../tools/apps/talk.js');
+
+      await createConversationTool.handler({
+        roomType: 'group',
+        roomName: 'n',
+        description: 'About',
+        readOnly: true,
+        listable: 'everyone',
+        lobby: true,
+        messageExpiration: 3600,
+      });
+
+      expect(JSON.parse(writes[0].body)).toEqual({
+        roomType: 2,
+        roomName: 'n',
+        description: 'About',
+        readOnly: 1,
+        listable: 2,
+        lobbyState: 1,
+        messageExpiration: 3600,
+      });
+    });
+
+    it('applies default and preset parameters, and sends the identifier', async () => {
+      const writes = mockTalkServer(TALK_25_FEATURES, {
+        token: 'x',
+        name: 'Secret',
+        type: 2,
+        attributes: 4,
+        messageExpiration: 604800,
+      });
+      const { createConversationTool } = await import('../tools/apps/talk.js');
+
+      const result = await createConversationTool.handler({
+        roomType: 'group',
+        roomName: 'Secret',
+        preset: 'classified',
+      });
+
+      expect(JSON.parse(writes[0].body)).toEqual({
+        preset: 'classified',
+        roomType: 2,
+        roomName: 'Secret',
+        readOnly: 0,
+        listable: 0,
+        permissions: 0,
+        sipEnabled: 0,
+        messageExpiration: 604800,
+      });
+      expect(result.content[0].text).toContain('(group, classified)');
+      expect(result.content[0].text).toContain('expire after 604800 seconds');
+    });
+
+    it('lets an explicit setting override the preset', async () => {
+      const writes = mockTalkServer(TALK_25_FEATURES, { token: 'x', name: 'n', type: 2 });
+      const { createConversationTool } = await import('../tools/apps/talk.js');
+
+      await createConversationTool.handler({
+        roomType: 'group',
+        roomName: 'n',
+        preset: 'channel',
+        listable: 'none',
+      });
+
+      const body = JSON.parse(writes[0].body);
+      expect(body.listable).toBe(0);
+      expect(body.permissions).toBe(257);
+    });
+
+    it('refuses a public classified conversation', async () => {
+      const writes = mockTalkServer(TALK_25_FEATURES);
+      const { createConversationTool } = await import('../tools/apps/talk.js');
+
+      const result = await createConversationTool.handler({
+        roomType: 'public',
+        roomName: 'n',
+        preset: 'classified',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(writes).toEqual([]);
+    });
+
+    it('refuses a preset the server has no capability for', async () => {
+      const writes = mockTalkServer(['conversation-presets']);
+      const { createConversationTool } = await import('../tools/apps/talk.js');
+
+      const result = await createConversationTool.handler({
+        roomType: 'group',
+        roomName: 'n',
+        preset: 'channel',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('preset requires Talk 25');
+      expect(writes).toEqual([]);
+    });
+
+    it('refuses a preset when capabilities cannot be read', async () => {
+      const writes = mockTalkServer(null);
+      const { createConversationTool } = await import('../tools/apps/talk.js');
+
+      const result = await createConversationTool.handler({
+        roomType: 'group',
+        roomName: 'n',
+        preset: 'classified',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('nothing was sent');
+      expect(writes).toEqual([]);
+    });
+
+    it('needs no capabilities without a gated parameter', async () => {
+      const writes = mockTalkServer(null, { token: 'x', name: 'n', type: 2 });
+      const { createConversationTool } = await import('../tools/apps/talk.js');
+
+      const result = await createConversationTool.handler({ roomType: 'group', roomName: 'n' });
+
+      expect(result.isError).toBeUndefined();
+      expect(writes).toHaveLength(1);
+    });
+
+    it('refuses messageExpiration without cron background jobs', async () => {
+      const writes = mockTalkServer(['classified-conversations']);
+      const { createConversationTool } = await import('../tools/apps/talk.js');
+
+      const result = await createConversationTool.handler({
+        roomType: 'group',
+        roomName: 'n',
+        messageExpiration: 60,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('messageExpiration requires');
+      expect(writes).toEqual([]);
+    });
+
+    it('explains that announcements are for administrators', async () => {
+      const writes = mockTalkServer(TALK_25_FEATURES);
+      const { createConversationTool } = await import('../tools/apps/talk.js');
+
+      const result = await createConversationTool.handler({
+        roomType: 'group',
+        roomName: 'n',
+        preset: 'announcement',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('administrators');
+      expect(writes).toEqual([]);
+    });
+
     it('should handle API errors', async () => {
       mockAPIError();
 
@@ -324,6 +582,75 @@ describe('Talk Tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Error creating conversation');
+    });
+  });
+
+  // ── update_conversation ─────────────────────────────────────────────
+
+  describe('update_conversation', () => {
+    it('calls one endpoint per setting', async () => {
+      const writes = mockTalkServer(TALK_25_FEATURES);
+      const { updateConversationTool } = await import('../tools/apps/talk.js');
+
+      const result = await updateConversationTool.handler({
+        token: 'abc',
+        description: 'New',
+        readOnly: true,
+        listable: 'users',
+        lobby: false,
+        messageExpiration: 0,
+      });
+
+      expect(result.isError).toBeUndefined();
+      const room = 'https://cloud.example.com/ocs/v2.php/apps/spreed/api/v4/room/abc';
+      expect(writes).toEqual([
+        { url: `${room}/description`, method: 'PUT', body: 'description=New' },
+        { url: `${room}/read-only`, method: 'PUT', body: 'state=1' },
+        { url: `${room}/listable`, method: 'PUT', body: 'scope=1' },
+        { url: `${room}/webinar/lobby`, method: 'PUT', body: 'state=0' },
+        { url: `${room}/message-expiration`, method: 'POST', body: 'seconds=0' },
+      ]);
+    });
+
+    it('needs at least one setting', async () => {
+      const { updateConversationTool } = await import('../tools/apps/talk.js');
+      const result = await updateConversationTool.handler({ token: 'abc' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('at least one setting');
+    });
+
+    it('refuses messageExpiration without changing anything', async () => {
+      const writes = mockTalkServer([]);
+      const { updateConversationTool } = await import('../tools/apps/talk.js');
+
+      const result = await updateConversationTool.handler({
+        token: 'abc',
+        description: 'New',
+        messageExpiration: 60,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(writes).toEqual([]);
+    });
+
+    it('reports what was applied when a setting fails', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) =>
+        url.endsWith('/read-only')
+          ? { ok: false, status: 400, statusText: 'Bad Request', text: async () => 'denied' }
+          : okResponse({})
+      );
+      const { updateConversationTool } = await import('../tools/apps/talk.js');
+
+      const result = await updateConversationTool.handler({
+        token: 'abc',
+        readOnly: true,
+        lobby: true,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('readOnly: OCS API error: 400');
+      expect(result.content[0].text).toContain('Applied: lobby.');
     });
   });
 
