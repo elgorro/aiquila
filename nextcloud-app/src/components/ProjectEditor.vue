@@ -3,6 +3,14 @@
 	<div v-if="project" class="project-editor">
 		<h2 class="editor-title">{{ project.title }}</h2>
 
+		<div v-if="teams.length > 0" class="form-group">
+			<label>{{ t('aiquila', 'Owner') }}</label>
+			<select v-model="form.teamId">
+				<option value="">{{ t('aiquila', 'Just me') }}</option>
+				<option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
+			</select>
+		</div>
+
 		<div class="form-group">
 			<label>{{ t('aiquila', 'Title') }}</label>
 			<NcTextField v-model="form.title"
@@ -106,11 +114,7 @@ import ChatIcon from 'vue-material-design-icons/Chat.vue'
 import PlusIcon from 'vue-material-design-icons/Plus.vue'
 import { getFilePickerBuilder, FilePickerClosed } from '@nextcloud/dialogs'
 
-import {
-	updateProject,
-	addProjectPath,
-	removeProjectPath,
-} from '../api.js'
+import { addProjectPath, getTeams, removeProjectPath, updateProject } from '../api.js'
 import PromptPicker from './PromptPicker.vue'
 
 export default {
@@ -140,6 +144,15 @@ export default {
 			saving: false,
 			status: '',
 			statusType: '',
+			teams: [],
+		}
+	},
+	async mounted() {
+		try {
+			this.teams = await getTeams()
+		} catch (e) {
+			// Without the Teams app a project is simply personal.
+			this.teams = []
 		}
 	},
 	computed: {
@@ -148,6 +161,7 @@ export default {
 			return this.form.title !== this.project.title
 				|| this.form.description !== (this.project.description || '')
 				|| this.form.systemPrompt !== (this.project.systemPrompt || '')
+				|| this.form.teamId !== (this.project.teamId || '')
 		},
 		relatedChats() {
 			if (!this.project) return []
@@ -172,11 +186,12 @@ export default {
 		t,
 		initForm() {
 			if (!this.project) {
-				return { title: '', description: '', systemPrompt: '', paths: [] }
+				return { title: '', description: '', systemPrompt: '', teamId: '', paths: [] }
 			}
 			return {
 				title: this.project.title,
 				description: this.project.description || '',
+				teamId: this.project.teamId || '',
 				systemPrompt: this.project.systemPrompt || '',
 				paths: [...(this.project.paths || [])],
 			}
@@ -189,6 +204,7 @@ export default {
 					title: this.form.title,
 					description: this.form.description,
 					systemPrompt: this.form.systemPrompt,
+					teamId: this.form.teamId,
 				})
 				this.status = t('aiquila', 'Saved!')
 				this.statusType = 'success'

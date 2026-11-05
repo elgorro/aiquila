@@ -32,6 +32,19 @@ Nextcloud apps that register coworkers programmatically use the
 | `get_coworker_runs` | Recent run history |
 | `get_coworker_run` | One run in full, with its per-item log |
 
+### Team coworkers
+
+Pass `teamId` to `create_coworker` to give a coworker to a team you belong to. Any member can then see, change, run, stop and delete it, and see all of its runs. The team is set once, when the coworker is created.
+
+A coworker always runs as one account, which `list_coworkers` shows as `runs as`:
+
+- It starts as the member who created it.
+- When that person leaves the team, or their account is deleted or disabled, its next run moves to the team owner, and otherwise a team admin. The change is stored, and each run keeps the account it ran as.
+- With nobody left to run as, it pauses and says why in its last error.
+- When the team is deleted, its coworkers are stopped straight away and deleted with their run history.
+
+Providers, models and files are those of the account it runs as. Paths have to exist for that account, so use paths every member has, such as the [team's workspace](circles.md#workspaces). A pinned provider the account may not use falls back to that account's own, as on any coworker.
+
 ### Stop, pause or disable?
 
 | Want to… | Use |

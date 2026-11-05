@@ -322,3 +322,14 @@ export function scheduleTask(task) {
 export function getTask(id) {
 	return axios.get(generateOcsUrl('taskprocessing/task/{id}', { id }))
 }
+
+// Teams the user belongs to, which can own coworkers and projects.
+export async function getTeams() {
+	const { data } = await axios.get(generateOcsUrl('apps/circles/circles'), {
+		params: { limit: 200 },
+		headers: { 'OCS-APIRequest': 'true' },
+	})
+	return (data.ocs.data ?? [])
+		.filter((circle) => circle.initiator)
+		.map((circle) => ({ id: circle.id, name: circle.displayName || circle.name }))
+}

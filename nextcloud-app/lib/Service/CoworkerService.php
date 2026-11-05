@@ -36,6 +36,7 @@ class CoworkerService {
         private readonly ITimeFactory $timeFactory,
         private readonly LoggerInterface $logger,
         private readonly ?PromptMapper $prompts = null,
+        private readonly ?TeamService $teams = null,
     ) {
     }
 
@@ -116,14 +117,20 @@ class CoworkerService {
      * @throws DoesNotExistException
      */
     public function findForUser(int $id, string $userId): Coworker {
-        return $this->mapper->findByIdAndUser($id, $userId);
+        $teamIds = $this->teams?->teamIdsFor($userId) ?? [];
+        return $teamIds === []
+            ? $this->mapper->findByIdAndUser($id, $userId)
+            : $this->mapper->findAccessible($id, $userId, $teamIds);
     }
 
     /**
      * @return list<Coworker>
      */
     public function listForUser(string $userId): array {
-        return $this->mapper->findAllByUser($userId);
+        $teamIds = $this->teams?->teamIdsFor($userId) ?? [];
+        return $teamIds === []
+            ? $this->mapper->findAllByUser($userId)
+            : $this->mapper->findAllAccessible($userId, $teamIds);
     }
 
     /**
@@ -137,6 +144,9 @@ class CoworkerService {
         $coworker->setUserId($userId);
         $coworker->setOwnerApp($ownerApp);
         $coworker->setCreatedAt($now);
+        if ($ownerApp === null) {
+            $coworker->setTeamId($this->teamForNewCoworker($userId, $data));
+        }
         $this->applyData($coworker, $data);
         $coworker->setUpdatedAt($now);
         $this->refreshNextRun($coworker);
@@ -148,21 +158,21 @@ class CoworkerService {
      * @throws DoesNotExistException
      */
     public function update(int $id, string $userId, array $data): Coworker {
-        return $this->applyUpdate($this->mapper->findByIdAndUser($id, $userId), $data);
+        return $this->applyUpdate($this->findForUser($id, $userId), $data);
     }
 
     /**
      * @throws DoesNotExistException
      */
     public function delete(int $id, string $userId): void {
-        $this->deleteEntity($this->mapper->findByIdAndUser($id, $userId));
+        $this->deleteEntity($this->findForUser($id, $userId));
     }
 
     /**
      * @throws DoesNotExistException
      */
     public function setPaused(int $id, string $userId, bool $paused): Coworker {
-        $coworker = $this->mapper->findByIdAndUser($id, $userId);
+        $coworker = $this->findForUser($id, $userId);
         $coworker->setPaused($paused ? 1 : 0);
         return $this->persistScheduled($coworker);
     }
@@ -171,7 +181,7 @@ class CoworkerService {
      * @throws DoesNotExistException
      */
     public function setActive(int $id, string $userId, bool $active): Coworker {
-        $coworker = $this->mapper->findByIdAndUser($id, $userId);
+        $coworker = $this->findForUser($id, $userId);
         $coworker->setIsActive($active ? 1 : 0);
         return $this->persistScheduled($coworker);
     }
@@ -181,8 +191,8 @@ class CoworkerService {
      * @throws DoesNotExistException
      */
     public function listRuns(int $id, string $userId, int $limit = 20): array {
-        $this->mapper->findByIdAndUser($id, $userId); // authorize
-        return $this->runMapper->findByCoworker($id, $userId, $limit);
+        $coworker = $this->findForUser($id, $userId);
+        return $this->runMapper->findByCoworker($id, $coworker->getTeamId() === null ? $userId : null, $limit);
     }
 
     /**
@@ -191,8 +201,10 @@ class CoworkerService {
      * @throws DoesNotExistException when the coworker is not the user's, or the run is not this coworker's
      */
     public function getRun(int $id, int $runId, string $userId): CoworkerRun {
-        $this->mapper->findByIdAndUser($id, $userId); // authorize
-        $run = $this->runMapper->findByIdAndUser($runId, $userId);
+        $coworker = $this->findForUser($id, $userId);
+        $run = $coworker->getTeamId() === null
+            ? $this->runMapper->findByIdAndUser($runId, $userId)
+            : $this->runMapper->findById($runId);
         if ($run->getCoworkerId() !== $id) {
             throw new DoesNotExistException('Run ' . $runId . ' does not belong to coworker ' . $id);
         }
@@ -206,7 +218,7 @@ class CoworkerService {
      * @throws DoesNotExistException when the coworker is not the user's
      */
     public function stop(int $id, string $userId): CoworkerRun {
-        return $this->stopEntity($this->mapper->findByIdAndUser($id, $userId));
+        return $this->stopEntity($this->findForUser($id, $userId));
     }
 
     /**
@@ -281,8 +293,109 @@ class CoworkerService {
      * @throws DoesNotExistException
      */
     public function runNow(int $id, string $userId): CoworkerRun {
-        $coworker = $this->mapper->findByIdAndUser($id, $userId);
+        $coworker = $this->findForUser($id, $userId);
+        if (!$this->prepareTeamRun($coworker)) {
+            throw new DoesNotExistException('Coworker ' . $id . ' cannot run: ' . ($coworker->getLastError() ?? 'its team is gone'));
+        }
         return $this->execute($coworker);
+    }
+
+    /**
+     * Settle who a team coworker runs as before it starts.
+     *
+     * It keeps its account for as long as that person can act for the team,
+     * and otherwise moves to the team's owner, then its admins. The change is
+     * stored, so `user_id` always shows who it runs as, and each run keeps
+     * the account it ran under.
+     *
+     * @return bool whether the coworker may run now. False leaves it paused or
+     *              removed, or, when the team could not be checked, unchanged
+     *              for the next tick.
+     */
+    public function prepareTeamRun(Coworker $coworker): bool {
+        $teamId = $coworker->getTeamId();
+        if ($teamId === null || $this->teams === null) {
+            return true;
+        }
+
+        try {
+            if ($this->teams->canActFor($teamId, $coworker->getUserId())) {
+                return true;
+            }
+            $administrators = $this->teams->administrators($teamId);
+        } catch (\Throwable $e) {
+            // Circles disabled or failing says nothing about the team.
+            $this->logger->warning('AIquila Cowork: could not check the team', [
+                'coworker' => $coworker->getId(),
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
+
+        if ($administrators === null) {
+            // The listener was missed, e.g. the app was disabled at the time.
+            $this->removeEntity($coworker);
+            return false;
+        }
+
+        if ($administrators === []) {
+            $coworker->setPaused(1);
+            $coworker->setLastStatus(CoworkerRun::STATUS_ERROR);
+            $coworker->setLastError('Paused: nobody in the team can run this coworker');
+            $this->mapper->update($coworker);
+            return false;
+        }
+
+        $this->logger->info('AIquila Cowork: team coworker changed account', [
+            'coworker' => $coworker->getId(),
+            'from' => $coworker->getUserId(),
+            'to' => $administrators[0],
+        ]);
+        $coworker->setUserId($administrators[0]);
+        $this->mapper->update($coworker);
+        return true;
+    }
+
+    /**
+     * Stop and delete everything a deleted team owned. One that fails does not
+     * keep the others running.
+     */
+    public function removeForTeam(string $teamId): void {
+        foreach ($this->mapper->findAllByTeam($teamId) as $coworker) {
+            try {
+                $this->removeEntity($coworker);
+            } catch (\Throwable $e) {
+                $this->logger->error('AIquila Cowork: could not remove a deleted team\'s coworker', [
+                    'coworker' => $coworker->getId(),
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    private function removeEntity(Coworker $coworker): void {
+        try {
+            $this->stopEntity($coworker);
+        } catch (NoActiveRunException) {
+            // Nothing in flight.
+        }
+        $this->deleteEntity($coworker);
+    }
+
+    /**
+     * The team a new coworker belongs to, which has to be one of the user's.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function teamForNewCoworker(string $userId, array $data): ?string {
+        $teamId = $data['teamId'] ?? null;
+        if ($teamId === null || $teamId === '') {
+            return null;
+        }
+        if ($this->teams === null || !in_array((string)$teamId, $this->teams->teamIdsFor($userId), true)) {
+            throw new ValidationException('You are not a member of that team');
+        }
+        return (string)$teamId;
     }
 
     /**
@@ -364,7 +477,8 @@ class CoworkerService {
      */
     public function resumePending(CoworkerRun $run): CoworkerRun {
         try {
-            $coworker = $this->mapper->findByIdAndUser($run->getCoworkerId(), $run->getUserId());
+            // By ID: a team coworker can have moved to another account since.
+            $coworker = $this->mapper->findById($run->getCoworkerId());
         } catch (\Throwable $e) {
             // The coworker was deleted while its batch was in flight. Nothing
             // can finish the run, so close it rather than leaving it pending
@@ -414,7 +528,9 @@ class CoworkerService {
             $run->setItemsProcessed($processed);
             $run->setItemsTotal($total);
             $this->runMapper->update($run);
-            if ($this->runMapper->findStatus($run->getId()) === CoworkerRun::STATUS_CANCELLED) {
+            // No status means the run is gone: its coworker was deleted.
+            $status = $this->runMapper->findStatus($run->getId());
+            if ($status === CoworkerRun::STATUS_CANCELLED || $status === null) {
                 throw new RunCancelledException('Run ' . $run->getId() . ' was cancelled');
             }
         };

@@ -136,7 +136,7 @@ class CoworkerServiceBatchTest extends TestCase {
                 'summary' => 'Summarized 5 document(s).',
             ]);
         $this->registry->method('get')->willReturn($task);
-        $this->mapper->method('findByIdAndUser')->willReturn($this->coworker());
+        $this->mapper->method('findById')->willReturn($this->coworker());
 
         $run = $this->service->resumePending($this->pendingRun(1, ['batch_id' => 'batch_01ABC']));
 
@@ -156,7 +156,7 @@ class CoworkerServiceBatchTest extends TestCase {
             'state' => ['batch_id' => 'batch_01ABC', 'polls' => 2],
         ]);
         $this->registry->method('get')->willReturn($task);
-        $this->mapper->method('findByIdAndUser')->willReturn($this->coworker());
+        $this->mapper->method('findById')->willReturn($this->coworker());
 
         $run = $this->service->resumePending($this->pendingRun(1, ['batch_id' => 'batch_01ABC']));
 
@@ -170,7 +170,7 @@ class CoworkerServiceBatchTest extends TestCase {
         $task = $this->createStub(ResumableCoworkerTaskType::class);
         $task->method('resume')->willThrowException(new \RuntimeException('batch expired'));
         $this->registry->method('get')->willReturn($task);
-        $this->mapper->method('findByIdAndUser')->willReturn($this->coworker());
+        $this->mapper->method('findById')->willReturn($this->coworker());
 
         $run = $this->service->resumePending($this->pendingRun(1, ['batch_id' => 'batch_01ABC']));
 
@@ -185,7 +185,7 @@ class CoworkerServiceBatchTest extends TestCase {
      */
     public function testResumeFailsForANonResumableTaskType(): void {
         $this->registry->method('get')->willReturn($this->createStub(CoworkerTaskType::class));
-        $this->mapper->method('findByIdAndUser')->willReturn($this->coworker());
+        $this->mapper->method('findById')->willReturn($this->coworker());
 
         $run = $this->service->resumePending($this->pendingRun(1, ['batch_id' => 'batch_01ABC']));
 
@@ -194,7 +194,7 @@ class CoworkerServiceBatchTest extends TestCase {
     }
 
     public function testResumeClosesARunWhoseCoworkerIsGone(): void {
-        $this->mapper->method('findByIdAndUser')
+        $this->mapper->method('findById')
             ->willThrowException(new \OCP\AppFramework\Db\DoesNotExistException('gone'));
 
         $run = $this->service->resumePending($this->pendingRun(1, ['batch_id' => 'batch_01ABC']));
@@ -205,7 +205,7 @@ class CoworkerServiceBatchTest extends TestCase {
     }
 
     public function testGetRunReturnsTheCoworkersRun(): void {
-        $this->mapper->method('findByIdAndUser')->willReturn($this->coworker());
+        $this->mapper->method('findById')->willReturn($this->coworker());
         $this->runMapper->method('findByIdAndUser')->willReturn($this->pendingRun(42));
 
         $this->assertSame(42, $this->service->getRun(7, 42, 'alice')->getId());
@@ -213,7 +213,7 @@ class CoworkerServiceBatchTest extends TestCase {
 
     /** A run id of the user's that belongs to another coworker is a 404, not a leak. */
     public function testGetRunRefusesARunOfAnotherCoworker(): void {
-        $this->mapper->method('findByIdAndUser')->willReturn($this->coworker(8));
+        $this->mapper->method('findById')->willReturn($this->coworker(8));
         $this->runMapper->method('findByIdAndUser')->willReturn($this->pendingRun(42)); // coworker 7
 
         $this->expectException(\OCP\AppFramework\Db\DoesNotExistException::class);

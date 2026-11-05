@@ -19,6 +19,7 @@ interface ProjectPath {
 interface Project {
   id: number;
   userId: string;
+  teamId?: string | null;
   title: string;
   description: string | null;
   systemPrompt: string | null;
@@ -30,6 +31,7 @@ interface Project {
 
 function formatProject(p: Project): string {
   const lines = [`Project #${p.id}: ${p.title}`];
+  if (p.teamId) lines.push(`  Team: ${p.teamId}`);
   if (p.description) lines.push(`  Description: ${p.description}`);
   if (p.systemPrompt) lines.push(`  System prompt: ${p.systemPrompt}`);
   lines.push(`  Active: ${p.isActive}`);
@@ -100,8 +102,14 @@ export const createProjectTool = {
       .string()
       .optional()
       .describe('System prompt to inject into conversations using this project'),
+    teamId: z.string().optional().describe('Team (circle) that owns the project, for its members'),
   }),
-  handler: async (args: { title: string; description?: string; systemPrompt?: string }) => {
+  handler: async (args: {
+    title: string;
+    description?: string;
+    systemPrompt?: string;
+    teamId?: string;
+  }) => {
     try {
       const project = await fetchAiquilaAPI<Project>('/projects', {
         method: 'POST',
@@ -109,6 +117,7 @@ export const createProjectTool = {
           title: args.title,
           description: args.description,
           systemPrompt: args.systemPrompt,
+          teamId: args.teamId,
         },
       });
 

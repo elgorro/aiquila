@@ -2002,6 +2002,14 @@
                                         "type": "string",
                                         "default": "",
                                         "description": "System prompt for the project"
+                                    },
+                                    "teamId": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Team that owns the project, which the user must belong to"
                                     }
                                 }
                             }
@@ -2215,6 +2223,14 @@
                                         ],
                                         "default": null,
                                         "description": "New system prompt ('' clears, null keeps it)"
+                                    },
+                                    "teamId": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Team that owns the project ('' makes it personal, null keeps it). Only its creator can change this"
                                     }
                                 }
                             }
@@ -2258,7 +2274,7 @@
                         }
                     },
                     "400": {
-                        "description": "Empty title, or a field is too long",
+                        "description": "Empty title, a field is too long, or a team the user cannot assign",
                         "content": {
                             "application/json": {
                                 "schema": {

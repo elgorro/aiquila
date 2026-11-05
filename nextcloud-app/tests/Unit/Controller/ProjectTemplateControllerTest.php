@@ -140,6 +140,7 @@ class ProjectTemplateControllerTest extends TestCase {
         $project->setSystemPrompt('Keep me too');
         $projects = $this->createStub(ProjectMapper::class);
         $projects->method('findByIdAndUser')->willReturn($project);
+        $projects->method('findAccessible')->willReturn($project);
 
         $ctrl = new ProjectController(
             'aiquila',

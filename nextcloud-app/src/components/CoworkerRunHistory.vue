@@ -12,6 +12,7 @@
 				<span class="status" :class="run.status">{{ statusLabel(run.status) }}</span>
 				<span class="progress">{{ run.itemsProcessed }}/{{ run.itemsTotal }}</span>
 				<span class="when">{{ formatTime(run.startedAt) }}</span>
+				<span class="who">{{ t('aiquila', 'as {user}', { user: run.userId }) }}</span>
 				<span v-if="run.error" class="err" :title="run.error">{{ run.error }}</span>
 				<span v-else-if="run.summary" class="summary" :title="run.summary">{{ firstLine(run.summary) }}</span>
 				<button v-if="isActive(run)"
@@ -96,6 +97,7 @@ export default {
 .muted { color: var(--color-text-lighter); font-size: 13px; }
 .runs { list-style: none; margin: 0; padding: 0; }
 .run { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--color-border); font-size: 12px; }
+.who { color: var(--color-text-lighter); }
 .status { text-transform: capitalize; font-weight: 600; }
 .status.success { color: var(--color-success); }
 .status.error { color: var(--color-error); }

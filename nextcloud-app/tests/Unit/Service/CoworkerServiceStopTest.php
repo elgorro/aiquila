@@ -31,7 +31,7 @@ class CoworkerServiceStopTest extends TestCase {
     private $registry;
     private $providerFactory;
     /** Status the database holds for the run, as the worker reads it fresh. */
-    private ?string $storedStatus = null;
+    private ?string $storedStatus = CoworkerRun::STATUS_RUNNING;
 
     protected function setUp(): void {
         $this->mapper = $this->createStub(CoworkerMapper::class);
@@ -135,6 +135,24 @@ class CoworkerServiceStopTest extends TestCase {
 
         $this->assertSame(CoworkerRun::STATUS_CANCELLED, $run->getStatus());
         $this->assertSame('warn', $run->getDecodedLog()[1]['level']);
+    }
+
+    /** A deleted coworker takes its run with it, and the worker must not carry on. */
+    public function testTheWorkerStopsWhenItsRunIsGone(): void {
+        $task = $this->createStub(CoworkerTaskType::class);
+        $task->method('run')->willReturnCallback(function (Coworker $c, CoworkerRun $r, callable $progress): array {
+            $progress(1, 3);
+            $this->storedStatus = null;
+            $progress(2, 3);
+            $progress(3, 3);
+            return ['itemsTotal' => 3, 'itemsProcessed' => 3, 'summary' => 'all done'];
+        });
+        $this->registry->method('get')->willReturn($task);
+
+        $run = $this->service()->execute($this->coworker());
+
+        $this->assertSame(CoworkerRun::STATUS_CANCELLED, $run->getStatus());
+        $this->assertSame(2, $run->getItemsProcessed());
     }
 
     /** The worker sees the stop at its next progress report and ends there. */

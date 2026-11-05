@@ -11,6 +11,8 @@ use OCP\AppFramework\Db\Entity;
  * @method int getId()
  * @method string getUserId()
  * @method void setUserId(string $userId)
+ * @method string|null getTeamId()
+ * @method void setTeamId(?string $teamId)
  * @method string getTitle()
  * @method void setTitle(string $title)
  * @method string|null getDescription()
@@ -28,6 +30,7 @@ class Project extends Entity implements \JsonSerializable {
     use InsertsFullRow;
 
     protected string $userId = '';
+    protected ?string $teamId = null;
     protected string $title = '';
     protected ?string $description = null;
     protected ?string $systemPrompt = null;
@@ -37,6 +40,7 @@ class Project extends Entity implements \JsonSerializable {
 
     public function __construct() {
         $this->addType('userId', 'string');
+        $this->addType('teamId', 'string');
         $this->addType('title', 'string');
         $this->addType('description', 'string');
         $this->addType('systemPrompt', 'string');
@@ -50,6 +54,7 @@ class Project extends Entity implements \JsonSerializable {
         return [
             'id' => $this->getId(),
             'userId' => $this->getUserId(),
+            'teamId' => $this->getTeamId(),
             'title' => $this->getTitle(),
             'description' => $this->getDescription(),
             'systemPrompt' => $this->getSystemPrompt(),

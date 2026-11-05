@@ -8,6 +8,16 @@
 			<input v-model="form.title" type="text" :placeholder="t('aiquila', 'Classify my photos')">
 		</label>
 
+		<label v-if="teams.length > 0 && !model.id" class="field">
+			<span>{{ t('aiquila', 'Owner') }}</span>
+			<select v-model="form.teamId">
+				<option value="">{{ t('aiquila', 'Just me') }}</option>
+				<option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
+			</select>
+			<small v-if="form.teamId">{{ t('aiquila', 'All members can see and run it. It runs as you, or as the team owner or an admin if you leave the team, and is deleted with the team. Use paths everyone has, such as the team folder.') }}</small>
+		</label>
+		<p v-else-if="model.teamId" class="muted">{{ t('aiquila', 'Owned by a team. Runs as {user}.', { user: model.userId }) }}</p>
+
 		<label class="field">
 			<span>{{ t('aiquila', 'Task') }}</span>
 			<select v-model="form.task_type">
@@ -133,7 +143,7 @@
 
 <script>
 import { translate as t } from '@nextcloud/l10n'
-import { createCoworker, listCoworkerTools, updateCoworker } from '../api.js'
+import { createCoworker, getTeams, listCoworkerTools, updateCoworker } from '../api.js'
 
 export default {
 	name: 'CoworkerForm',
@@ -170,7 +180,9 @@ export default {
 				effort: options.effort || '',
 				thinking: options.thinking || '',
 				is_active: m.isActive !== undefined ? !!m.isActive : true,
+				teamId: m.teamId || '',
 			},
+			teams: [],
 		}
 	},
 	computed: {
@@ -209,6 +221,14 @@ export default {
 	},
 	watch: {
 		isAgent: { handler: 'loadTools', immediate: true },
+	},
+	async mounted() {
+		try {
+			this.teams = await getTeams()
+		} catch (e) {
+			// Without the Teams app a coworker is simply personal.
+			this.teams = []
+		}
 	},
 	methods: { t,
 		async loadTools() {
@@ -264,6 +284,10 @@ export default {
 			}
 			if (this.isAgent) {
 				payload.custom_prompt = this.form.prompt
+			}
+			// A coworker's team is set once, when it is created.
+			if (!(this.model && this.model.id) && this.form.teamId) {
+				payload.teamId = this.form.teamId
 			}
 			try {
 				const res = this.model && this.model.id
