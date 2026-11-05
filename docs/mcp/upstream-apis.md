@@ -90,6 +90,7 @@ this repository ([OpenAPI](../dev/openapi.md)) rather than an external reference
 | `photos` | `apps/photos.ts` | `photos` | WebDAV | [nextcloud/photos](https://github.com/nextcloud/photos) | 0.2.10 · `500fc1c` · 2026-03-28 | photos 8.0.0 · NC 35.0.2 · 2026-10-31 |
 | `talk` | `apps/talk.ts` | `spreed` | OCS | [Talk API](https://nextcloud-talk.readthedocs.io/en/latest/) | 0.2.7 · `f6ca299` · 2026-03-21 | spreed 25.0.7 · NC 35.0.2 · 2026-11-05 |
 | `circles` | `apps/circles.ts` | `circles` | OCS | [routes](https://github.com/nextcloud/circles/blob/master/appinfo/routes.php) | 0.2.10 · `3741789` · 2026-03-28 | circles 35.0.0 · NC 35.0.2 · 2026-10-31 |
+| `office` | `apps/office.ts` | `richdocuments` | OCS | [nextcloud/richdocuments](https://github.com/nextcloud/richdocuments) | 0.5.4 · 2026-11-06 | richdocuments 12.0.1 · NC 35.0.2 · 2026-11-06 |
 | `bookmarks` | `apps/bookmarks.ts` | `bookmarks` | App REST v2 | [Bookmarks API](https://nextcloud-bookmarks.readthedocs.io/en/latest/) | 0.1.13 · `1915054` · 2026-02-12 | bookmarks 17.0.1 · NC 35.0.2 · 2026-10-31 |
 | `polls` | `apps/polls.ts` | `polls` | OCS v1.0 | [Polls API v1.0](https://github.com/nextcloud/polls/blob/main/docs/API_v1.0.md) (OpenAPI) | 0.3.4 · `fbf3f55` · 2026-04-22 | polls 9.3.0 · NC 35.0.2 · 2026-10-31 |
 | `forms` | `apps/forms.ts` | `forms` | OCS v3 | [Forms API v3](https://github.com/nextcloud/forms/blob/main/docs/API_v3.md) | 0.3.5 · `54d1470` · 2026-04-22 | forms 5.4.1 · NC 35.0.2 · 2026-10-31 |
