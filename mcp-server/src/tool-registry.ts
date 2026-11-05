@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import { _resetCapabilitiesCache, getCapabilities } from './client/capabilities.js';
 import { fetchOCS } from './client/ocs.js';
 import { logger } from './logger.js';
 import { currentIdentity } from './nc-context.js';
@@ -211,11 +212,12 @@ async function detectEnabledApps(): Promise<Set<string> | null> {
   }
   try {
     const [caps, nav] = await Promise.all([
-      fetchOCS<{ capabilities: Record<string, unknown> }>('/ocs/v2.php/cloud/capabilities'),
+      getCapabilities(),
       fetchOCS<{ id: string }[]>('/ocs/v2.php/core/navigation/apps'),
     ]);
+    if (!caps) throw new Error('capabilities unavailable');
     const apps = new Set([
-      ...Object.keys(caps.ocs.data.capabilities ?? {}),
+      ...Object.keys(caps.capabilities),
       ...nav.ocs.data.map((a) => a.id),
       ...UNDETECTABLE_FOR_USERS,
     ]);
@@ -356,4 +358,5 @@ export async function getFilteredToolSets(): Promise<ToolArray[]> {
 /** Reset cached state — for testing only. */
 export function _resetCache(): void {
   cachedToolSets.clear();
+  _resetCapabilitiesCache();
 }

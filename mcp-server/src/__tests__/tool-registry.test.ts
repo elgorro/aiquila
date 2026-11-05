@@ -30,6 +30,7 @@ vi.mock('../logger.js', () => ({
 }));
 
 import { logger } from '../logger.js';
+import { getCapabilities } from '../client/capabilities.js';
 import { runAs } from '../nc-context.js';
 import {
   getFilteredToolSets,
@@ -292,6 +293,25 @@ describe('tool-registry', () => {
       const allToolCount = TOOL_REGISTRY.reduce((sum, e) => sum + e.tools.length, 0);
       expect(flatToolNames(result).length).toBe(allToolCount);
       expect(mockFetchOCS).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('capabilities', () => {
+    it('shares the read of a non-admin account with the tools that gate on it', async () => {
+      mockFetchOCS.mockImplementation(async (path: string) => {
+        if (path === '/ocs/v2.php/cloud/apps') throw new Error('OCS 403');
+        if (path === '/ocs/v2.php/core/navigation/apps') return { ocs: { data: [] } };
+        return { ocs: { data: { capabilities: { spreed: { features: [] } } } } };
+      });
+
+      await getFilteredToolSets();
+      const caps = await getCapabilities();
+
+      expect(caps?.capabilities).toHaveProperty('spreed');
+      const reads = mockFetchOCS.mock.calls.filter(
+        ([path]) => path === '/ocs/v2.php/cloud/capabilities'
+      );
+      expect(reads).toHaveLength(1);
     });
   });
 
