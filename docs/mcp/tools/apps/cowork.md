@@ -92,6 +92,7 @@ overrides the template default.
 **Parameters:**
 - `templateId` (string, optional): built-in template ID
 - `taskType` (string, optional): task type ID; required without a template
+- `teamId` (string, optional): team that owns the coworker, see [Team coworkers](#team-coworkers)
 - plus any of the [configuration fields](#configuration-fields)
 
 **Example:**
