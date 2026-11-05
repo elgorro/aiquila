@@ -81,7 +81,7 @@ class HetznerProviderTest extends TestCase {
 
         $this->provider->chat([['role' => 'user', 'content' => 'hi']], null, 'u');
 
-        $this->assertSame('https://inference.hetzner.com/api/v1/chat/completions', $capturedUrl);
+        $this->assertSame('https://inference.hetzner.com/v1/chat/completions', $capturedUrl);
         $this->assertSame('Bearer test-token', $capturedOpts['headers']['Authorization']);
     }
 
@@ -104,8 +104,8 @@ class HetznerProviderTest extends TestCase {
         $this->assertSame('', HetznerProvider::normalizeBaseUrl('file:///etc/passwd'));
         $this->assertSame('', HetznerProvider::normalizeBaseUrl('not a url'));
         $this->assertSame(
-            'https://inference.hetzner.com/api/v1',
-            HetznerProvider::normalizeBaseUrl(' https://inference.hetzner.com/api/v1/ ')
+            'https://inference.hetzner.com/v1',
+            HetznerProvider::normalizeBaseUrl(' https://inference.hetzner.com/v1/ ')
         );
     }
 
@@ -260,7 +260,7 @@ class HetznerProviderTest extends TestCase {
 
         $models = $this->provider->listModels('u');
 
-        $this->assertSame('https://inference.hetzner.com/api/v1/models', $capturedUrl);
+        $this->assertSame('https://inference.hetzner.com/v1/models', $capturedUrl);
         $this->assertContains('Qwen/Qwen3.6-35B-A3B-FP8', $models);
         $this->assertContains('Qwen3.8-27B', $models);
     }
@@ -322,6 +322,40 @@ class HetznerProviderTest extends TestCase {
 
         $result = $this->provider->chat([['role' => 'user', 'content' => 'hi']], null, 'u');
 
-        $this->assertStringContainsString('experiments.hetzner.com', $result['error']);
+        $this->assertStringContainsString('rejected the token', $result['error']);
+        $this->assertStringContainsString(HetznerProvider::EXPERIMENT_NOTICE, $result['error']);
+    }
+
+    public function testForbiddenIsTreatedAsARejectedToken(): void {
+        $this->client->method('post')->willThrowException(new \RuntimeException('resulted in a `403 Forbidden` response'));
+
+        $result = $this->provider->chat([['role' => 'user', 'content' => 'hi']], null, 'u');
+
+        $this->assertStringContainsString('rejected the token', $result['error']);
+    }
+
+    public function testRetiredModelOrEndpointIsMapped(): void {
+        $this->client->method('post')->willThrowException(new \RuntimeException('resulted in a `410 Gone` response'));
+
+        $result = $this->provider->chat([['role' => 'user', 'content' => 'hi']], null, 'u');
+
+        $this->assertStringContainsString('not found', $result['error']);
+    }
+
+    public function testMissingTokenMessageDoesNotPromiseANewToken(): void {
+        $credentials = $this->createStub(CredentialService::class);
+        $credentials->method('getApiKey')->willReturn('');
+        $provider = new HetznerProvider($this->clientService, $this->config, $credentials, $this->logger);
+
+        $result = $provider->chat([['role' => 'user', 'content' => 'hi']], null, 'u');
+
+        $this->assertStringContainsString(HetznerProvider::EXPERIMENT_NOTICE, $result['error']);
+        $this->assertStringNotContainsString('Create one', $result['error']);
+    }
+
+    public function testApiKeyFieldCarriesTheExperimentNotice(): void {
+        $fields = array_column($this->provider->getSettingsSchema(), null, 'id');
+
+        $this->assertStringContainsString(HetznerProvider::EXPERIMENT_NOTICE, $fields['api_key']['description']);
     }
 }

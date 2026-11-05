@@ -9,15 +9,19 @@ GPU of your own.
 
 > **Experimental.** Hetzner offers the service "as is", with no availability or
 > performance guarantee and no backups. Do not build a production dependency on it.
+> Hetzner is replacing the experiment with an official product. **Experiment tokens stop
+> working on 8 December 2026** and no new ones are issued; Hetzner will announce the
+> migration details at launch. While a token is configured, the **Hetzner Inference
+> experiment** setup check warns admins about this.
 
 ## Endpoint
 
 | | |
 |---|---|
-| Base URL | `https://inference.hetzner.com/api/v1` |
-| Auth | `Authorization: Bearer <token>` — create tokens at [experiments.hetzner.com/inference](https://experiments.hetzner.com/inference) |
+| Base URL | `https://inference.hetzner.com/v1` |
+| Auth | `Authorization: Bearer <token>`, an experiment token |
 | Endpoints used | `POST /chat/completions` (incl. SSE streaming and `tools` / `tool_calls`), `GET /models` |
-| Token limits (per token) | 4M input / 100k output tokens per 60s; 500M input / 5M output per 24h |
+| Token limits (per token) | 4M input / 100k output tokens per 60s |
 | Request limit (per token) | **10 requests per 60s** |
 
 Exceeding either limit returns HTTP 429. The request limit is the tight one for
@@ -36,8 +40,9 @@ On 2026-08-19 Hetzner withdrew the large models — `Kimi-K2.7-Code`,
 `DeepSeek-V4-Flash-0731` and `GLM-5.2-NVFP4` — from public Experiments while it
 works on capacity ([Hetzner
 blog](https://www.hetzner.com/de/blog/inference-experiment/)); only the two small
-Qwen models above remain. Note that `Qwen3.8-27B` is served without a vendor
-prefix, unlike `Qwen/Qwen3.6-35B-A3B-FP8`.
+Qwen models above remain. `GET /models` also lists each one under a second id
+(`Qwen/Qwen3.6-35B-A3B` and `Qwen/Qwen3.8-27B`). Those aliases are not in
+`HetznerModels`, so they get the 8192 default ceiling.
 
 The line-up changes as the experiment evolves, so the settings UI lists whatever
 `GET /models` currently returns and falls back to `HetznerModels` only when that
@@ -58,7 +63,8 @@ and `LocalProvider` use, so all wire-format handling is shared. It only supplies
   empty. An id the registry does not know is assumed vision-capable, so a model added to
   the service after this release is not crippled by a stale list — the API
   rejects an unsupported modality on its own,
-- error mapping for 401 (bad token), 429 (quota) and 502/503 (experiment down),
+- error mapping for 401/403 (rejected token), 404/410 (model or endpoint gone), 429
+  (quota) and 502/503 (experiment down),
 - model / max-token resolution from the config keys below.
 
 Native MCP is not supported (no connector API); tools are executed client-side by
@@ -77,7 +83,7 @@ App config (`oc_appconfig`, app `aiquila`):
 |---|---|---|
 | `model_hetzner` | `Qwen/Qwen3.6-35B-A3B-FP8` | Admin default model |
 | `max_tokens_hetzner` | `8192` | Output token limit, clamped to the per-model ceiling below |
-| `hetzner_base_url` | *(unset → default endpoint)* | Endpoint override; admin-scope only (SSRF), validated by `HetznerProvider::normalizeBaseUrl()` |
+| `hetzner_base_url` | *(unset → default endpoint)* | Endpoint override; admin-scope only (SSRF), validated by `HetznerProvider::normalizeBaseUrl()`. The `RepairHetznerBaseUrl` repair step removes a value still set to the retired `/api/v1` endpoint on upgrade |
 
 Per-model output ceilings applied by `HetznerModels::getMaxTokenCeiling()`
 (an unknown id falls back to the 8192 default):
@@ -145,14 +151,14 @@ The `error` field distinguishes the causes:
 
 | Error | Cause |
 |---|---|
-| `401 Unauthorized` | No token configured, or a revoked/mistyped one |
+| `401 Unauthorized` | No token configured, or a revoked, mistyped or ended one |
 | `429 Too Many Requests` | The 10 requests / 60s budget is exhausted |
 | `cURL error 28` / timeout | The experiment is unreachable |
 
 Check the token against the API directly:
 
 ```bash
-curl -si https://inference.hetzner.com/api/v1/models \
+curl -si https://inference.hetzner.com/v1/models \
   -H "Authorization: Bearer $HETZNER_INFERENCE_TOKEN" | head -30
 ```
 
