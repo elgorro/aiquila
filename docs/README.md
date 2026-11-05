@@ -37,6 +37,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 | NC AI tasks & image gen | 4 | [Assistant](mcp/tools/apps/assistant.md) |
 | File shares | 4 | [Shares](mcp/tools/apps/shares.md) |
 | Talk conversations & messages | 12 | [Talk](mcp/tools/apps/talk.md) |
+| Tables (structured data) | 13 | [Tables](mcp/tools/apps/tables.md) |
 | Users & groups | 8 | [Users](mcp/tools/apps/users.md) / [Groups](mcp/tools/apps/groups.md) |
 | Coworkers (scheduled AI jobs) | 15 | [Coworkers](mcp/tools/apps/cowork.md) |
 | AIquila config | 3 | [AIquila](mcp/tools/apps/aiquila.md) |
@@ -115,6 +116,7 @@ docs/
 │   │       ├── maps.md              # Maps, GPS, tracks, photos
 │   │       ├── notes.md             # Markdown notes
 │   │       ├── shares.md            # File sharing
+│   │       ├── tables.md            # Tables, rows, relations
 │   │       ├── talk.md              # Talk conversations & messages
 │   │       ├── tasks.md             # Tasks via CalDAV
 │   │       └── users.md             # User management
