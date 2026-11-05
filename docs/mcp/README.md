@@ -383,11 +383,12 @@ Nextcloud apps and administration:
 | `aiquila_show_config` | Show configuration | [AIquila](tools/apps/aiquila.md#aiquila_show_config) |
 | `aiquila_configure` | Configure settings | [AIquila](tools/apps/aiquila.md#aiquila_configure) |
 | `aiquila_test` | Test a provider | [AIquila](tools/apps/aiquila.md#aiquila_test) |
-#### Talk (11 tools)
+#### Talk (12 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `talk_list_conversations` | List all Talk conversations the user has access to | [Talk](tools/apps/talk.md#talk_list_conversations) |
 | `talk_list_messages` | List recent messages in a Talk conversation | [Talk](tools/apps/talk.md#talk_list_messages) |
+| `talk_search_messages` | Search Talk messages across conversations | [Talk](tools/apps/talk.md#talk_search_messages) |
 | `talk_send_message` | Send a message to a Talk conversation | [Talk](tools/apps/talk.md#talk_send_message) |
 | `talk_create_conversation` | Create a new Talk conversation, optionally from a preset | [Talk](tools/apps/talk.md#talk_create_conversation) |
 | `talk_update_conversation` | Change the settings of an existing Talk conversation | [Talk](tools/apps/talk.md#talk_update_conversation) |

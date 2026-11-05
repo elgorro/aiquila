@@ -95,6 +95,20 @@ interface Conversation {
   attributes?: number;
 }
 
+interface MessageSearchResult {
+  entries: {
+    title: string;
+    subline: string;
+    resourceUrl: string;
+    attributes: {
+      conversation?: string;
+      messageId?: string;
+      actorId?: string;
+      timestamp?: string;
+    };
+  }[];
+}
+
 interface RoomPreset {
   identifier: string;
   parameters: Record<string, number>;
@@ -289,6 +303,77 @@ export const listMessagesTool = {
       return text(lines.join('\n'));
     } catch (err) {
       return wrapError('listing messages', err);
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// search_messages
+// ---------------------------------------------------------------------------
+
+export const searchMessagesTool = {
+  name: 'talk_search_messages',
+  title: 'Search Talk Messages',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    'Search Talk messages across all conversations, or within one. Each result has the conversation token, message ID, author, time and a link, so talk_list_messages can read around a hit.',
+  inputSchema: z.object({
+    query: z.string().describe('Text to search for'),
+    token: z.string().optional().describe('Search only this conversation'),
+    author: z.string().optional().describe('Only messages by this user ID'),
+    since: z.string().optional().describe('Only messages at or after this ISO 8601 date or time'),
+    until: z.string().optional().describe('Only messages at or before this ISO 8601 date or time'),
+    limit: z.number().optional().describe('Results per page (default 10, server maximum 25)'),
+    cursor: z.number().optional().describe('Next cursor from a previous search'),
+  }),
+  handler: async (args: {
+    query: string;
+    token?: string;
+    author?: string;
+    since?: string;
+    until?: string;
+    limit?: number;
+    cursor?: number;
+  }) => {
+    const limit = args.limit ?? 10;
+    const queryParams: Record<string, string> = { term: args.query, limit: String(limit) };
+    if (args.token) queryParams.conversation = args.token;
+    if (args.author) queryParams.person = args.author;
+    if (args.since) queryParams.since = args.since;
+    if (args.until) queryParams.until = args.until;
+    if (args.cursor !== undefined) queryParams.cursor = String(args.cursor);
+
+    try {
+      const data = await fetchOCS<MessageSearchResult>(
+        `/ocs/v2.php/search/providers/talk-message/search`,
+        { queryParams }
+      );
+      const entries = data.ocs.data.entries ?? [];
+      if (entries.length === 0) return text('No messages found.');
+
+      const lines = entries.map((e) => {
+        const { conversation, messageId, actorId, timestamp } = e.attributes;
+        const when = timestamp ? `[${formatTimestamp(Number(timestamp))}] ` : '';
+        return (
+          `${when}${e.title}: ${e.subline}\n` +
+          `  conversation: ${conversation}, messageId: ${messageId}, author: ${actorId}, link: ${e.resourceUrl}`
+        );
+      });
+      if (entries.length >= limit) {
+        lines.push(`Next cursor: ${(args.cursor ?? 0) + limit}`);
+      }
+      return text(lines.join('\n'));
+    } catch (err) {
+      // Nextcloud answers 500 for a provider it does not know.
+      if (err instanceof Error && /talk-message is unknown/.test(err.message)) {
+        return error('Talk message search is not available on this Nextcloud server.');
+      }
+      return wrapError('searching messages', err);
     }
   },
 };
@@ -829,6 +914,7 @@ export const reactToMessageTool = {
 export const talkTools = [
   listConversationsTool,
   listMessagesTool,
+  searchMessagesTool,
   sendMessageTool,
   createConversationTool,
   updateConversationTool,
