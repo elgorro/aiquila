@@ -192,7 +192,9 @@ instead of falling back to the environment account. stdio, and HTTP with auth of
 a context and use `NEXTCLOUD_USER`. A test (`nc-context.test.ts`) fails if any module other
 than `tools/types.ts` reads `NEXTCLOUD_USER` or `NEXTCLOUD_PASSWORD`.
 
-Tool detection (`tool-registry.ts`) runs as the same identity and is cached per user.
+Tool detection (`tool-registry.ts`) runs as the same identity and is cached per user. So does
+the capabilities read in `client/capabilities.ts`, which detection shares with tools that
+[gate a version-dependent parameter](../mcp/development/adding-tools.md#gating-version-dependent-parameters).
 
 ### Token Details
 

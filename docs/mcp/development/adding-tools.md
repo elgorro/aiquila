@@ -340,6 +340,47 @@ describe('myNewTool', () => {
 
 ## Common Patterns
 
+### Gating Version-Dependent Parameters
+
+AIquila's declared window spans several Nextcloud majors, so a parameter can exist on some
+of them and not on others. Gate it rather than sending it blind:
+
+```typescript
+import { checkGatedParams, talkFeature } from '../../client/capabilities.js';
+
+handler: async (args: { roomName: string; preset?: string }) => {
+  const refused = await checkGatedParams(args, {
+    preset: talkFeature('conversation-presets', 'Talk 24 (Nextcloud 34)'),
+  });
+  if (refused) return { content: [{ type: 'text', text: refused }], isError: true };
+  // ...
+};
+```
+
+`getCapabilities()` reads `/ocs/v2.php/cloud/capabilities` once per account and caches it,
+so a tool never makes its own request. App detection uses the same read. The payload holds
+every app's capabilities, Talk's among them under `spreed`. Use `talkFeature()`,
+`nextcloudMajor()`, or write a `CapabilityGate` for any other value in the payload.
+
+The rules are the same for every tool:
+
+- **Gate parameters, not tools.** A tool's schema does not vary between servers; only the
+  arguments that need a newer server are checked, and only when the caller passes them. A
+  tool that needs a capability as a whole gates its required parameter the same way.
+- **Refuse, never drop.** A gated parameter the server lacks fails the call with a message
+  naming what it requires, and nothing is sent. Removing it silently would do something
+  other than what was asked: a conversation that is not classified, a share without its
+  protection.
+- **Unknown is not yes.** If the capabilities cannot be read, a gated parameter is refused
+  and calls without one proceed. A failure is retried after a minute, and a successful read
+  is kept for ten.
+- **App detection degrades the other way, on purpose.** When detection fails, every tool is
+  registered: an extra tool costs little, and its call reports its own error. A parameter
+  sent blind can do the wrong thing instead.
+
+Check the capability against the upstream reference and a server that has it. Don't assume
+a feature is new because the release announcement mentions it.
+
 ### Using WebDAV Client
 
 ```typescript
