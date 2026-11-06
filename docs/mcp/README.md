@@ -342,15 +342,15 @@ Nextcloud apps and administration:
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_shares` | List file shares in Nextcloud (for diagnostics and security auditing) | [Shares](tools/apps/shares.md#list_shares) |
-| `create_share` | Create a file or folder share in Nextcloud | [Shares](tools/apps/shares.md) |
-| `update_share` | Update an existing share in Nextcloud | [Shares](tools/apps/shares.md) |
-| `delete_share` | Delete a share in Nextcloud | [Shares](tools/apps/shares.md) |
-| `get_share` | Get detailed information about a specific share by its ID | [Shares](tools/apps/shares.md) |
-| `list_shares_with_me` | List all files and folders shared with the current user | [Shares](tools/apps/shares.md) |
-| `search_sharees` | Search for valid share recipients (users, groups, emails, federated users, circles… | [Shares](tools/apps/shares.md) |
-| `list_pending_shares` | List pending federated/remote shares waiting to be accepted or declined | [Shares](tools/apps/shares.md) |
-| `accept_pending_share` | Accept a pending federated/remote share | [Shares](tools/apps/shares.md) |
-| `decline_pending_share` | Decline a pending federated/remote share | [Shares](tools/apps/shares.md) |
+| `create_share` | Create a file or folder share in Nextcloud | [Shares](tools/apps/shares.md#create_share) |
+| `update_share` | Update an existing share in Nextcloud | [Shares](tools/apps/shares.md#update_share) |
+| `delete_share` | Delete a share in Nextcloud | [Shares](tools/apps/shares.md#delete_share) |
+| `get_share` | Get detailed information about a specific share by its ID | [Shares](tools/apps/shares.md#get_share) |
+| `list_shares_with_me` | List all files and folders shared with the current user | [Shares](tools/apps/shares.md#list_shares_with_me) |
+| `search_sharees` | Search for valid share recipients (users, groups, emails, federated users, circles… | [Shares](tools/apps/shares.md#search_sharees) |
+| `list_pending_shares` | List pending federated/remote shares waiting to be accepted or declined | [Shares](tools/apps/shares.md#list_pending_shares) |
+| `accept_pending_share` | Accept a pending federated/remote share | [Shares](tools/apps/shares.md#accept_pending_share) |
+| `decline_pending_share` | Decline a pending federated/remote share | [Shares](tools/apps/shares.md#decline_pending_share) |
 
 #### Users (4 tools)
 | Tool | Description | Documentation |

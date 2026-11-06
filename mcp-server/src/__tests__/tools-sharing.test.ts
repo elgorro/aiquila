@@ -109,6 +109,94 @@ describe('Share Tools', () => {
       expect(result.content[0].text).toContain('User');
     });
 
+    function mockShare(data: Record<string, unknown>) {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: { id: 7, share_type: 3, path: '/a.txt', ...data },
+        },
+      });
+    }
+
+    it('sends attributes as the JSON string the API expects, and reports them', async () => {
+      const attributes = [{ scope: 'permissions', key: 'download', value: false }];
+      const json = JSON.stringify(attributes);
+      mockShare({ share_type: 0, attributes: json });
+
+      const { createShareTool } = await import('../tools/apps/shares.js');
+      const result = await createShareTool.handler({
+        path: '/a.txt',
+        shareType: 0,
+        shareWith: 'bob',
+        attributes,
+      });
+
+      expect(mockFetchOCS.mock.calls[0][1].body.attributes).toBe(json);
+      expect(result.content[0].text).toContain(`Attributes: ${json}`);
+    });
+
+    it('sends sendPasswordByTalk and reports it with the password expiry', async () => {
+      mockShare({
+        share_type: 4,
+        send_password_by_talk: true,
+        password_expiration_time: '2026-11-06T01:00:00+00:00',
+      });
+
+      const { createShareTool } = await import('../tools/apps/shares.js');
+      const result = await createShareTool.handler({
+        path: '/a.txt',
+        shareType: 4,
+        shareWith: 'a@example.com',
+        password: 'secret',
+        sendPasswordByTalk: true,
+      });
+
+      expect(mockFetchOCS.mock.calls[0][1].body.sendPasswordByTalk).toBe('true');
+      expect(result.content[0].text).toContain('Password by Talk: on');
+      expect(result.content[0].text).toContain('Password expires: 2026-11-06T01:00:00+00:00');
+    });
+
+    it('leaves password handling alone without the new parameters', async () => {
+      mockShare({});
+
+      const { createShareTool } = await import('../tools/apps/shares.js');
+      await createShareTool.handler({ path: '/a.txt', shareType: 3, password: 'secret' });
+
+      expect(mockFetchOCS.mock.calls[0][1].body).toEqual({
+        path: '/a.txt',
+        shareType: '3',
+        password: 'secret',
+      });
+    });
+
+    it('refuses sendPasswordByTalk on a share type that ignores it', async () => {
+      const { createShareTool } = await import('../tools/apps/shares.js');
+      const result = await createShareTool.handler({
+        path: '/a.txt',
+        shareType: 0,
+        shareWith: 'bob',
+        password: 'secret',
+        sendPasswordByTalk: true,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('link and email shares only');
+      expect(mockFetchOCS).not.toHaveBeenCalled();
+    });
+
+    it('refuses sendPasswordByTalk without a password', async () => {
+      const { createShareTool } = await import('../tools/apps/shares.js');
+      const result = await createShareTool.handler({
+        path: '/a.txt',
+        shareType: 3,
+        sendPasswordByTalk: true,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('needs a password');
+      expect(mockFetchOCS).not.toHaveBeenCalled();
+    });
+
     it('should create a public link share and return token/url', async () => {
       mockFetchOCS.mockResolvedValue({
         ocs: {
@@ -201,6 +289,57 @@ describe('Share Tools', () => {
         body: { permissions: '1' },
       });
       expect(result.content[0].text).toContain('Share 42 updated');
+    });
+
+    it('sends attributes and sendPasswordByTalk', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: { id: 42, share_type: 3, path: '/a.txt', send_password_by_talk: true },
+        },
+      });
+
+      const { updateShareTool } = await import('../tools/apps/shares.js');
+      const result = await updateShareTool.handler({
+        shareId: 42,
+        sendPasswordByTalk: true,
+        attributes: [{ scope: 'permissions', key: 'download', value: true }],
+      });
+
+      expect(mockFetchOCS.mock.calls[0][1].body).toEqual({
+        sendPasswordByTalk: 'true',
+        attributes: '[{"scope":"permissions","key":"download","value":true}]',
+      });
+      expect(result.content[0].text).not.toContain('Not applied');
+    });
+
+    it('turns sendPasswordByTalk off', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: { id: 42, share_type: 3, path: '/a.txt', send_password_by_talk: false },
+        },
+      });
+
+      const { updateShareTool } = await import('../tools/apps/shares.js');
+      const result = await updateShareTool.handler({ shareId: 42, sendPasswordByTalk: false });
+
+      expect(mockFetchOCS.mock.calls[0][1].body).toEqual({ sendPasswordByTalk: 'false' });
+      expect(result.content[0].text).not.toContain('Not applied');
+    });
+
+    it('says when the server ignored sendPasswordByTalk', async () => {
+      mockFetchOCS.mockResolvedValue({
+        ocs: {
+          meta: { status: 'ok', statuscode: 200, message: 'OK' },
+          data: { id: 42, share_type: 0, path: '/a.txt' },
+        },
+      });
+
+      const { updateShareTool } = await import('../tools/apps/shares.js');
+      const result = await updateShareTool.handler({ shareId: 42, sendPasswordByTalk: true });
+
+      expect(result.content[0].text).toContain('Not applied: sendPasswordByTalk');
     });
 
     it('should handle nonexistent share', async () => {
