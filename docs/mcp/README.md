@@ -38,7 +38,7 @@ Nextcloud apps and administration:
 - **Talk** — Conversations (including classified, channel and announcement presets), messages, participants, polls, and reactions
 - **Deck** — Boards, stacks, cards, labels, and assignments
 - **Photos** — Albums, collaborators, favourites, and photo metadata
-- **Circles** — Team circles and their membership
+- **Circles** — Teams, their membership, and their workspace folders
 - **Tables** — Structured data: tables, views, rows, columns, relations, and structure import/export
 - **Projects** — AIquila projects (paths plus a system prompt), project templates and the prompt library
 - **Coworkers** — Create, run, pause and inspect the AIquila Coworkers (saved AI jobs) and their run history
@@ -405,7 +405,7 @@ Nextcloud apps and administration:
 |------|-------------|---------------|
 | `deck_list_boards` | List all Deck boards | — |
 | `deck_get_board` | Get details of a Deck board including its labels and access control list (ACL) | — |
-| `deck_create_board` | Create a new Deck board | — |
+| `deck_create_board` | Create a new Deck board, optionally owned by a team | — |
 | `deck_list_stacks` | List all stacks (columns) of a Deck board, including the cards in each stack | — |
 | `deck_create_stack` | Create a new stack (column) on a Deck board | — |
 | `deck_get_card` | Get full details of a Deck card including description, labels, and assigned users | — |
@@ -448,17 +448,22 @@ Nextcloud apps and administration:
 | `export_table_structure` | Export the structure of a table | [Tables](tools/apps/tables.md#export_table_structure) |
 | `import_table_structure` | Create or update a table from a structure | [Tables](tools/apps/tables.md#import_table_structure) |
 
-#### Circles (8 tools)
+#### Circles (13 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `circles_list` | List all circles/teams accessible to the current user | — |
-| `circles_get` | Get detailed information about a specific circle/team, including its description… | — |
-| `circles_create` | Create a new circle/team | — |
-| `circles_delete` | Delete a circle/team | — |
-| `circles_list_members` | List all members of a circle/team | — |
-| `circles_add_member` | Add a member to a circle/team | — |
-| `circles_remove_member` | Remove a member from a circle/team | — |
-| `circles_search` | Search for circles/teams by name | — |
+| `circles_list` | List all circles/teams accessible to the current user | [Teams](tools/apps/circles.md#circles_list) |
+| `circles_get` | Get detailed information about a specific circle/team, including its description… | [Teams](tools/apps/circles.md#circles_get) |
+| `circles_create` | Create a new circle/team | [Teams](tools/apps/circles.md#circles_create) |
+| `circles_delete` | Delete a circle/team | [Teams](tools/apps/circles.md#circles_delete) |
+| `circles_list_members` | List all members of a circle/team | [Teams](tools/apps/circles.md#circles_list_members) |
+| `circles_add_member` | Add a member to a circle/team | [Teams](tools/apps/circles.md#circles_add_member) |
+| `circles_remove_member` | Remove a member from a circle/team | [Teams](tools/apps/circles.md#circles_remove_member) |
+| `circles_search` | Search for circles/teams by name | [Teams](tools/apps/circles.md#circles_search) |
+| `circles_get_workspace` | Show a team's workspace folder and resources | [Teams](tools/apps/circles.md#circles_get_workspace) |
+| `circles_list_linkable_folders` | List existing team folders a team can link | [Teams](tools/apps/circles.md#circles_list_linkable_folders) |
+| `circles_create_workspace` | Give a team a new workspace folder, or link an existing one | [Teams](tools/apps/circles.md#circles_create_workspace) |
+| `circles_set_workspace_quota` | Set the storage quota of a team's workspace | [Teams](tools/apps/circles.md#circles_set_workspace_quota) |
+| `circles_remove_workspace` | Unlink or delete a team's workspace folder | [Teams](tools/apps/circles.md#circles_remove_workspace) |
 
 #### Projects (11 tools)
 | Tool | Description | Documentation |

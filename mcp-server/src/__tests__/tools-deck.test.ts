@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { _resetCapabilitiesCache } from '../client/capabilities.js';
 
 const mockFetchDeckAPI = vi.fn();
+const mockFetchOCS = vi.fn();
+vi.mock('../client/ocs.js', () => ({
+  fetchOCS: (...args: unknown[]) => mockFetchOCS(...args),
+}));
+
 vi.mock('../client/deck.js', () => ({
   fetchDeckAPI: (...args: unknown[]) => mockFetchDeckAPI(...args),
 }));
@@ -488,6 +494,54 @@ describe('Deck Tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Permission denied');
+    });
+  });
+
+  describe('deck_create_board for a team', () => {
+    const board = {
+      id: 5,
+      title: 'Roadmap',
+      owner: { displayname: 'Alice' },
+      teamId: 'c1',
+      labels: [],
+    };
+    const serve = (major: number) =>
+      mockFetchOCS.mockImplementation(async (path: string) => ({
+        ocs: {
+          data: path.includes('/cloud/capabilities')
+            ? { version: { major }, capabilities: {} }
+            : board,
+        },
+      }));
+
+    beforeEach(() => {
+      _resetCapabilitiesCache();
+      mockFetchOCS.mockReset();
+    });
+
+    it('uses the team route and names the team', async () => {
+      serve(35);
+
+      const { createBoardTool } = await import('../tools/apps/deck.js');
+      const result = await createBoardTool.handler({ title: 'Roadmap', teamId: 'c1' });
+
+      expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/apps/deck/api/v1.0/boards/team', {
+        method: 'POST',
+        jsonBody: { title: 'Roadmap', teamId: 'c1', color: '0800fd' },
+      });
+      expect(result.content[0].text).toContain('team: c1');
+      expect(mockFetchDeckAPI).not.toHaveBeenCalled();
+    });
+
+    it('refuses before Nextcloud 35, instead of creating a personal board', async () => {
+      serve(34);
+
+      const { createBoardTool } = await import('../tools/apps/deck.js');
+      const result = await createBoardTool.handler({ title: 'Roadmap', teamId: 'c1' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Nextcloud 35');
+      expect(mockFetchDeckAPI).not.toHaveBeenCalled();
     });
   });
 });

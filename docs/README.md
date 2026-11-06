@@ -36,6 +36,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 | Recipes | 6 | [Cookbook](mcp/tools/apps/cookbook.md) |
 | NC AI tasks & image gen | 4 | [Assistant](mcp/tools/apps/assistant.md) |
 | File shares | 10 | [Shares](mcp/tools/apps/shares.md) |
+| Teams and their workspaces | 13 | [Teams](mcp/tools/apps/circles.md) |
 | Talk conversations & messages | 12 | [Talk](mcp/tools/apps/talk.md) |
 | Tables (structured data) | 13 | [Tables](mcp/tools/apps/tables.md) |
 | Users & groups | 8 | [Users](mcp/tools/apps/users.md) / [Groups](mcp/tools/apps/groups.md) |
@@ -109,6 +110,7 @@ docs/
 │   │       ├── assistant.md         # NC AI task processing
 │   │       ├── bookmarks.md         # Bookmarks, folders, tags
 │   │       ├── calendar.md          # Calendar events
+│   │       ├── circles.md           # Teams and workspaces
 │   │       ├── contacts.md          # Contacts via CardDAV
 │   │       ├── cookbook.md           # Recipes (schema.org)
 │   │       ├── groups.md            # Group management
