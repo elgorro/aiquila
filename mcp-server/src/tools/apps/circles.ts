@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { fetchOCS } from '../../client/ocs.js';
+import { checkGatedParams, nextcloudMajor } from '../../client/capabilities.js';
 
 /**
  * Nextcloud Circles (Teams) Tools
@@ -14,6 +15,9 @@ import { fetchOCS } from '../../client/ocs.js';
 // ---------------------------------------------------------------------------
 
 const API_BASE = '/ocs/v2.php/apps/circles';
+
+// Team folders exist from Nextcloud 35. circleId is what every call passes.
+const WORKSPACE_GATES = { circleId: nextcloudMajor(35) };
 
 const MEMBER_TYPE_LABELS: Record<number, string> = {
   1: 'user',
@@ -251,7 +255,8 @@ export const circlesDeleteTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: 'Delete a circle/team. Requires owner privileges.',
+  description:
+    'Delete a circle/team, along with its workspace folder and everything in it, which cannot be undone. Requires owner privileges.',
   inputSchema: z.object({
     circleId: z.string().describe('The circle ID to delete'),
   }),
@@ -405,6 +410,216 @@ export const circlesSearchTool = {
 // Export
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// workspaces
+// ---------------------------------------------------------------------------
+
+interface TeamFolder {
+  id: number;
+  mountPoint: string;
+}
+
+interface TeamResource {
+  id: string;
+  label: string;
+  url: string;
+  provider: { id: string; name: string };
+}
+
+function workspacePath(circleId: string): string {
+  return `${API_BASE}/teams/${encodeURIComponent(circleId)}/folder`;
+}
+
+// The API reports quota as null even when one is set, so it cannot be shown.
+function describeFolder(folder: TeamFolder): string {
+  return `/${folder.mountPoint} (folder ${folder.id})`;
+}
+
+export const circlesGetWorkspaceTool = {
+  name: 'circles_get_workspace',
+  title: 'Get Team Workspace',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    'Show what a team owns: its workspace folder, whose path works with the file tools, and the resources attached to it, such as Deck boards and Talk conversations.',
+  inputSchema: z.object({
+    circleId: z.string().describe('The circle/team ID'),
+  }),
+  handler: async (args: { circleId: string }) => {
+    try {
+      // A missing folder, or a server without team folders, still has resources.
+      const folder = await fetchOCS<TeamFolder>(workspacePath(args.circleId)).then(
+        (r) => r.ocs.data,
+        (err: unknown) => {
+          const reason = err instanceof Error ? err.message : String(err);
+          if (reason.includes('404')) return null;
+          throw err;
+        }
+      );
+      const resources = await fetchOCS<{ resources: TeamResource[] }>(
+        `/ocs/v2.php/teams/${encodeURIComponent(args.circleId)}/resources`
+      );
+
+      const lines = [`Workspace: ${folder ? describeFolder(folder) : 'none'}`];
+      const owned = (resources.ocs.data.resources ?? []).filter(
+        (r) => r.provider.id !== 'groupfolders'
+      );
+      lines.push(owned.length > 0 ? 'Resources:' : 'Resources: none');
+      for (const r of owned) {
+        lines.push(`- [${r.provider.name}] ${r.label} (id: ${r.id}) ${r.url}`);
+      }
+      return text(lines.join('\n'));
+    } catch (err) {
+      return wrapError(`getting workspace of "${args.circleId}"`, err);
+    }
+  },
+};
+
+export const circlesListLinkableFoldersTool = {
+  name: 'circles_list_linkable_folders',
+  title: 'List Linkable Team Folders',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    'List the existing team folders that circles_create_workspace can link to a team: those assigned to this team alone. Needs Nextcloud 35 and the team owner or a server admin.',
+  inputSchema: z.object({
+    circleId: z.string().describe('The circle/team ID'),
+  }),
+  handler: async (args: { circleId: string }) => {
+    try {
+      const refused = await checkGatedParams(args, WORKSPACE_GATES);
+      if (refused) return error(refused);
+
+      const data = await fetchOCS<TeamFolder[]>(`${workspacePath(args.circleId)}/linkable`);
+      if (data.ocs.data.length === 0) return text('No team folders can be linked to this team.');
+      return text(data.ocs.data.map((folder) => `- ${describeFolder(folder)}`).join('\n'));
+    } catch (err) {
+      return wrapError(`listing linkable folders of "${args.circleId}"`, err);
+    }
+  },
+};
+
+export const circlesCreateWorkspaceTool = {
+  name: 'circles_create_workspace',
+  title: 'Create Team Workspace',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    'Give a team its workspace folder, shared by all members: a new one by default, or with folderId an existing team folder from circles_list_linkable_folders. Needs Nextcloud 35, a team folder provider such as Team folders (groupfolders), and the team owner or a server admin.',
+  inputSchema: z.object({
+    circleId: z.string().describe('The circle/team ID'),
+    name: z.string().optional().describe('New folder name (default: the team name)'),
+    folderId: z
+      .number()
+      .int()
+      .optional()
+      .describe('Link this existing team folder instead of creating one'),
+  }),
+  handler: async (args: { circleId: string; name?: string; folderId?: number }) => {
+    try {
+      const refused = await checkGatedParams(args, WORKSPACE_GATES);
+      if (refused) return error(refused);
+      if (args.name !== undefined && args.folderId !== undefined) {
+        return error('name is for a new folder, so it cannot be combined with folderId.');
+      }
+
+      const data = await fetchOCS<{ folder: TeamFolder }>(
+        args.folderId !== undefined
+          ? `${workspacePath(args.circleId)}/link`
+          : workspacePath(args.circleId),
+        {
+          method: 'POST',
+          jsonBody:
+            args.folderId !== undefined
+              ? { folderId: args.folderId }
+              : args.name !== undefined
+                ? { name: args.name }
+                : {},
+        }
+      );
+      return text(`Workspace ready: ${describeFolder(data.ocs.data.folder)}`);
+    } catch (err) {
+      return wrapError(`creating workspace of "${args.circleId}"`, err);
+    }
+  },
+};
+
+export const circlesSetWorkspaceQuotaTool = {
+  name: 'circles_set_workspace_quota',
+  title: 'Set Team Workspace Quota',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    "Set the storage quota of a team's workspace. Requires the team owner or a server admin.",
+  inputSchema: z.object({
+    circleId: z.string().describe('The circle/team ID'),
+    quota: z.number().int().min(0).describe('Quota in bytes'),
+  }),
+  handler: async (args: { circleId: string; quota: number }) => {
+    try {
+      const refused = await checkGatedParams(args, WORKSPACE_GATES);
+      if (refused) return error(refused);
+
+      await fetchOCS(`${workspacePath(args.circleId)}/quota`, {
+        method: 'PUT',
+        jsonBody: { quota: args.quota },
+      });
+      return text(`Workspace quota of "${args.circleId}" set to ${args.quota} bytes.`);
+    } catch (err) {
+      return wrapError(`setting workspace quota of "${args.circleId}"`, err);
+    }
+  },
+};
+
+export const circlesRemoveWorkspaceTool = {
+  name: 'circles_remove_workspace',
+  title: 'Remove Team Workspace',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    "Unlink a team's workspace folder. With deleteFolder, also delete the folder and everything in it, which cannot be undone. Requires the team owner or a server admin.",
+  inputSchema: z.object({
+    circleId: z.string().describe('The circle/team ID'),
+    deleteFolder: z.boolean().optional().describe('Also delete the folder (default false)'),
+  }),
+  handler: async (args: { circleId: string; deleteFolder?: boolean }) => {
+    try {
+      const refused = await checkGatedParams(args, WORKSPACE_GATES);
+      if (refused) return error(refused);
+
+      await fetchOCS(workspacePath(args.circleId), {
+        method: 'DELETE',
+        jsonBody: { deleteFolder: args.deleteFolder ?? false },
+      });
+      return text(
+        `Workspace of "${args.circleId}" ${args.deleteFolder ? 'deleted' : 'unlinked, the folder was kept'}.`
+      );
+    } catch (err) {
+      return wrapError(`removing workspace of "${args.circleId}"`, err);
+    }
+  },
+};
+
 export const circlesTools = [
   circlesListTool,
   circlesGetTool,
@@ -414,4 +629,9 @@ export const circlesTools = [
   circlesAddMemberTool,
   circlesRemoveMemberTool,
   circlesSearchTool,
+  circlesGetWorkspaceTool,
+  circlesListLinkableFoldersTool,
+  circlesCreateWorkspaceTool,
+  circlesSetWorkspaceQuotaTool,
+  circlesRemoveWorkspaceTool,
 ];
