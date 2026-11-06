@@ -65,7 +65,7 @@ Nextcloud apps and administration:
 - **Recommendations** — The files Nextcloud suggests for the current user
 - **AIquila** — Configure and test the AI provider integration
 
-**Total: 349 tools across 44 categories**
+**Total: 372 tools across 46 categories**
 
 ## Tools Reference
 
