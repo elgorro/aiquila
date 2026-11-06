@@ -380,6 +380,28 @@ class McpClientServiceTest extends TestCase {
         $this->assertEquals('list_files', $result['tools'][0]['name']);
     }
 
+    public function testGetAllToolsKeepsEmptySchemaObjectsAsObjects(): void {
+        $server = $this->makeServer(1, 'Browser');
+
+        $this->mapper->method('findAllEnabled')->willReturn([$server]);
+        $this->mapper->method('update')->willReturnArgument(0);
+
+        // What json_decode(..., true) makes of an MCP tools/list reply with empty objects
+        $decoded = json_decode('{"tools":[{"name":"browser_close","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},{"name":"scrape","inputSchema":{"type":"object","properties":{"url":{"type":"string"},"headers":{"type":"object","additionalProperties":{}}},"required":["url"]}},{"name":"bare","inputSchema":{}}]}', true);
+        $this->service->queueResponse([]);
+        $this->service->queueResponse($decoded);
+
+        $result = $this->service->getAllTools();
+        $json = json_encode(array_column($result['tools'], 'input_schema'));
+
+        $this->assertSame(
+            '[{"type":"object","properties":{},"additionalProperties":false},'
+            . '{"type":"object","properties":{"url":{"type":"string"},"headers":{"type":"object","additionalProperties":{}}},"required":["url"]},'
+            . '{"type":"object","properties":{}}]',
+            $json
+        );
+    }
+
     public function testExecuteToolResolvesMapping(): void {
         $this->mapper = $this->createMock(McpServerMapper::class);
         $this->buildService();

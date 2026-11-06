@@ -276,6 +276,49 @@ class McpClientService {
      *   'tools' => Anthropic-format tool definitions
      *   'mapping' => ['toolName' => ['serverId' => int, 'originalName' => string]]
      */
+    private const SCHEMA_MAPS = ['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas'];
+    private const SCHEMA_LISTS = ['anyOf', 'oneOf', 'allOf', 'prefixItems'];
+    private const SCHEMA_ONE = ['items', 'additionalProperties', 'unevaluatedProperties', 'not', 'if', 'then', 'else', 'contains', 'propertyNames'];
+
+    /**
+     * json_decode(..., true) turns an empty JSON object into an empty PHP array, which
+     * json_encode writes back as a list. Restore objects where JSON Schema requires one,
+     * so OpenAI-compatible gateways accept the tool definitions.
+     */
+    public static function normalizeSchema(mixed $schema): mixed {
+        if (!is_array($schema)) {
+            return $schema;
+        }
+        if ($schema === []) {
+            return ['type' => 'object', 'properties' => new \stdClass()];
+        }
+        return self::normalizeSubschema($schema);
+    }
+
+    private static function normalizeSubschema(mixed $schema): mixed {
+        if (!is_array($schema)) {
+            return $schema;
+        }
+        if ($schema === []) {
+            return new \stdClass();
+        }
+        foreach ($schema as $key => $value) {
+            if (!is_array($value)) {
+                continue;
+            }
+            if (in_array($key, self::SCHEMA_MAPS, true)) {
+                $schema[$key] = $value === []
+                    ? new \stdClass()
+                    : array_map([self::class, 'normalizeSubschema'], $value);
+            } elseif (in_array($key, self::SCHEMA_LISTS, true)) {
+                $schema[$key] = array_map([self::class, 'normalizeSubschema'], $value);
+            } elseif (in_array($key, self::SCHEMA_ONE, true)) {
+                $schema[$key] = self::normalizeSubschema($value);
+            }
+        }
+        return $schema;
+    }
+
     public function getAllTools(): array {
         $servers = $this->mapper->findAllEnabled();
         $tools = [];
@@ -310,7 +353,7 @@ class McpClientService {
                 $tools[] = [
                     'name' => $toolName,
                     'description' => $tool['description'] ?? '',
-                    'input_schema' => $tool['inputSchema'] ?? ['type' => 'object'],
+                    'input_schema' => self::normalizeSchema($tool['inputSchema'] ?? ['type' => 'object']),
                 ];
                 $mapping[$toolName] = [
                     'serverId' => $server->getId(),
