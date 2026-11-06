@@ -38,6 +38,7 @@ Nextcloud apps and administration:
 - **Talk** — Conversations (including classified, channel and announcement presets), messages, participants, polls, and reactions
 - **Deck** — Boards, stacks, cards, labels, and assignments
 - **Photos** — Albums, collaborators, favourites, and photo metadata
+- **Office** — Convert documents and create them from templates
 - **Circles** — Teams, their membership, and their workspace folders
 - **Tables** — Structured data: tables, views, rows, columns, relations, and structure import/export
 - **Projects** — AIquila projects (paths plus a system prompt), project templates and the prompt library
@@ -430,6 +431,13 @@ Nextcloud apps and administration:
 | `photos_set_favorite` | Mark or unmark a file as favorite | — |
 | `photos_set_album_location` | Set or update the location metadata on a photo album | — |
 | `photos_add_collaborators` | Add collaborators (users or groups) to a photo album | — |
+
+#### Office (3 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_document_templates` | List Nextcloud Office templates | [Office](tools/apps/office.md#list_document_templates) |
+| `create_document_from_template` | Create a document from a template | [Office](tools/apps/office.md#create_document_from_template) |
+| `convert_document` | Convert a file to another format | [Office](tools/apps/office.md#convert_document) |
 
 #### Tables (13 tools)
 | Tool | Description | Documentation |
