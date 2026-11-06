@@ -448,7 +448,7 @@ Nextcloud apps and administration:
 | `export_table_structure` | Export the structure of a table | [Tables](tools/apps/tables.md#export_table_structure) |
 | `import_table_structure` | Create or update a table from a structure | [Tables](tools/apps/tables.md#import_table_structure) |
 
-#### Circles (12 tools)
+#### Circles (13 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `circles_list` | List all circles/teams accessible to the current user | [Teams](tools/apps/circles.md#circles_list) |
