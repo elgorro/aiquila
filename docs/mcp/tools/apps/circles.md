@@ -25,7 +25,7 @@ Get a team's details, including its description and settings.
 Create a team.
 
 #### `circles_delete`
-Delete a team. Requires owner rights.
+Delete a team, along with its workspace folder and everything in it. Requires owner rights.
 
 #### `circles_search`
 Search teams by name.
@@ -45,6 +45,8 @@ Remove a member by the member ID from `circles_list_members`, not the user ID.
 
 A workspace is a shared folder that belongs to the team. It appears in every member's files at its mount point, so `list_files`, `read_file` and `write_file` work on the path `circles_get_workspace` reports.
 
+Nextcloud gives a new team a workspace automatically unless an administrator turned that off, so a team usually has one already.
+
 #### `circles_get_workspace`
 Show what a team owns.
 
@@ -55,22 +57,29 @@ Show what a team owns.
 
 **Example:** "What does the Marketing team have, and where are its files?"
 
-#### `circles_create_workspace`
-Give a team its workspace folder. Calling it again for a team that has one changes nothing. Requires owner or admin rights.
+#### `circles_list_linkable_folders`
+List the existing team folders that can become this team's workspace, which are those assigned to this team and no other. Requires the team owner or a server admin.
 
 **Parameters:**
 - `circleId` (string, required)
-- `name` (string, optional) — folder name. Default: the team name.
+
+#### `circles_create_workspace`
+Give a team its workspace folder. By default this creates a new one, and calling it again for a team that has one changes nothing. Requires the team owner or a server admin.
+
+**Parameters:**
+- `circleId` (string, required)
+- `name` (string, optional) — name of the new folder. Default: the team name.
+- `folderId` (integer, optional) — link this folder from `circles_list_linkable_folders` instead of creating one. Cannot be combined with `name`.
 
 #### `circles_set_workspace_quota`
-Set the workspace's storage quota. Requires owner or admin rights. The API does not report a quota back, so `circles_get_workspace` does not show it. Administrators can see it in `occ groupfolders:list`.
+Set the workspace's storage quota. Requires the team owner or a server admin. The API does not report a quota back, so `circles_get_workspace` does not show it. Administrators can see it in `occ groupfolders:list`.
 
 **Parameters:**
 - `circleId` (string, required)
 - `quota` (integer, required) — bytes.
 
 #### `circles_remove_workspace`
-Unlink a team's workspace. Requires owner or admin rights.
+Unlink a team's workspace. Requires the team owner or a server admin.
 
 **Parameters:**
 - `circleId` (string, required)

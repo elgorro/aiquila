@@ -442,7 +442,8 @@ Nextcloud apps and administration:
 | `circles_remove_member` | Remove a member from a circle/team | [Teams](tools/apps/circles.md#circles_remove_member) |
 | `circles_search` | Search for circles/teams by name | [Teams](tools/apps/circles.md#circles_search) |
 | `circles_get_workspace` | Show a team's workspace folder and resources | [Teams](tools/apps/circles.md#circles_get_workspace) |
-| `circles_create_workspace` | Give a team its workspace folder | [Teams](tools/apps/circles.md#circles_create_workspace) |
+| `circles_list_linkable_folders` | List existing team folders a team can link | [Teams](tools/apps/circles.md#circles_list_linkable_folders) |
+| `circles_create_workspace` | Give a team a new workspace folder, or link an existing one | [Teams](tools/apps/circles.md#circles_create_workspace) |
 | `circles_set_workspace_quota` | Set the storage quota of a team's workspace | [Teams](tools/apps/circles.md#circles_set_workspace_quota) |
 | `circles_remove_workspace` | Unlink or delete a team's workspace folder | [Teams](tools/apps/circles.md#circles_remove_workspace) |
 

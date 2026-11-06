@@ -572,6 +572,42 @@ describe('Circles (Teams) Tools', () => {
       expect(gone.content[0].text).toContain('deleted');
     });
 
+    it('links an existing folder instead of creating one', async () => {
+      serve(NC35, { folder: { id: 4, mountPoint: 'Old' } });
+
+      const { circlesCreateWorkspaceTool } = await import('../tools/apps/circles.js');
+      const result = await circlesCreateWorkspaceTool.handler({ circleId: 'c1', folderId: 4 });
+
+      expect(writes()[0]).toEqual([
+        '/ocs/v2.php/apps/circles/teams/c1/folder/link',
+        { method: 'POST', jsonBody: { folderId: 4 } },
+      ]);
+      expect(result.content[0].text).toContain('/Old (folder 4)');
+    });
+
+    it('refuses a name for a folder that already exists', async () => {
+      serve(NC35);
+
+      const { circlesCreateWorkspaceTool } = await import('../tools/apps/circles.js');
+      const result = await circlesCreateWorkspaceTool.handler({
+        circleId: 'c1',
+        name: 'New',
+        folderId: 4,
+      });
+
+      expect(result.isError).toBe(true);
+    });
+
+    it('lists folders a team can link', async () => {
+      serve(NC35, [{ id: 4, mountPoint: 'Old' }]);
+
+      const { circlesListLinkableFoldersTool } = await import('../tools/apps/circles.js');
+      const result = await circlesListLinkableFoldersTool.handler({ circleId: 'c1' });
+
+      expect(writes()[0]).toEqual(['/ocs/v2.php/apps/circles/teams/c1/folder/linkable']);
+      expect(result.content[0].text).toContain('/Old (folder 4)');
+    });
+
     it('refuses to change workspaces before Nextcloud 35', async () => {
       serve(NC34);
 

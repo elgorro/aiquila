@@ -255,7 +255,8 @@ export const circlesDeleteTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: 'Delete a circle/team. Requires owner privileges.',
+  description:
+    'Delete a circle/team, along with its workspace folder and everything in it, which cannot be undone. Requires owner privileges.',
   inputSchema: z.object({
     circleId: z.string().describe('The circle ID to delete'),
   }),
@@ -478,6 +479,34 @@ export const circlesGetWorkspaceTool = {
   },
 };
 
+export const circlesListLinkableFoldersTool = {
+  name: 'circles_list_linkable_folders',
+  title: 'List Linkable Team Folders',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    'List the existing team folders that circles_create_workspace can link to a team: those assigned to this team alone. Needs Nextcloud 35 and the team owner or a server admin.',
+  inputSchema: z.object({
+    circleId: z.string().describe('The circle/team ID'),
+  }),
+  handler: async (args: { circleId: string }) => {
+    try {
+      const refused = await checkGatedParams(args, WORKSPACE_GATES);
+      if (refused) return error(refused);
+
+      const data = await fetchOCS<TeamFolder[]>(`${workspacePath(args.circleId)}/linkable`);
+      if (data.ocs.data.length === 0) return text('No team folders can be linked to this team.');
+      return text(data.ocs.data.map((folder) => `- ${describeFolder(folder)}`).join('\n'));
+    } catch (err) {
+      return wrapError(`listing linkable folders of "${args.circleId}"`, err);
+    }
+  },
+};
+
 export const circlesCreateWorkspaceTool = {
   name: 'circles_create_workspace',
   title: 'Create Team Workspace',
@@ -488,20 +517,38 @@ export const circlesCreateWorkspaceTool = {
     openWorldHint: false,
   },
   description:
-    'Give a team its workspace folder, shared by all members. Needs Nextcloud 35, a team folder provider such as Team folders (groupfolders), and owner or admin rights.',
+    'Give a team its workspace folder, shared by all members: a new one by default, or with folderId an existing team folder from circles_list_linkable_folders. Needs Nextcloud 35, a team folder provider such as Team folders (groupfolders), and the team owner or a server admin.',
   inputSchema: z.object({
     circleId: z.string().describe('The circle/team ID'),
-    name: z.string().optional().describe('Folder name (default: the team name)'),
+    name: z.string().optional().describe('New folder name (default: the team name)'),
+    folderId: z
+      .number()
+      .int()
+      .optional()
+      .describe('Link this existing team folder instead of creating one'),
   }),
-  handler: async (args: { circleId: string; name?: string }) => {
+  handler: async (args: { circleId: string; name?: string; folderId?: number }) => {
     try {
       const refused = await checkGatedParams(args, WORKSPACE_GATES);
       if (refused) return error(refused);
+      if (args.name !== undefined && args.folderId !== undefined) {
+        return error('name is for a new folder, so it cannot be combined with folderId.');
+      }
 
-      const data = await fetchOCS<{ folder: TeamFolder }>(workspacePath(args.circleId), {
-        method: 'POST',
-        jsonBody: args.name !== undefined ? { name: args.name } : {},
-      });
+      const data = await fetchOCS<{ folder: TeamFolder }>(
+        args.folderId !== undefined
+          ? `${workspacePath(args.circleId)}/link`
+          : workspacePath(args.circleId),
+        {
+          method: 'POST',
+          jsonBody:
+            args.folderId !== undefined
+              ? { folderId: args.folderId }
+              : args.name !== undefined
+                ? { name: args.name }
+                : {},
+        }
+      );
       return text(`Workspace ready: ${describeFolder(data.ocs.data.folder)}`);
     } catch (err) {
       return wrapError(`creating workspace of "${args.circleId}"`, err);
@@ -518,7 +565,8 @@ export const circlesSetWorkspaceQuotaTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: "Set the storage quota of a team's workspace. Requires owner or admin rights.",
+  description:
+    "Set the storage quota of a team's workspace. Requires the team owner or a server admin.",
   inputSchema: z.object({
     circleId: z.string().describe('The circle/team ID'),
     quota: z.number().int().min(0).describe('Quota in bytes'),
@@ -549,7 +597,7 @@ export const circlesRemoveWorkspaceTool = {
     openWorldHint: false,
   },
   description:
-    "Unlink a team's workspace folder. With deleteFolder, also delete the folder and everything in it, which cannot be undone. Requires owner or admin rights.",
+    "Unlink a team's workspace folder. With deleteFolder, also delete the folder and everything in it, which cannot be undone. Requires the team owner or a server admin.",
   inputSchema: z.object({
     circleId: z.string().describe('The circle/team ID'),
     deleteFolder: z.boolean().optional().describe('Also delete the folder (default false)'),
@@ -582,6 +630,7 @@ export const circlesTools = [
   circlesRemoveMemberTool,
   circlesSearchTool,
   circlesGetWorkspaceTool,
+  circlesListLinkableFoldersTool,
   circlesCreateWorkspaceTool,
   circlesSetWorkspaceQuotaTool,
   circlesRemoveWorkspaceTool,
