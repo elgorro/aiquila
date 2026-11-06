@@ -68,7 +68,7 @@ the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/in
 | AIquila      |     3 |
 | Security     |     2 |
 | OCC          |     1 |
-| **Subtotal** | **25** |
+| **Subtotal** | **32** |
 
 ### Optional Nextcloud apps
 
@@ -80,11 +80,12 @@ the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/in
 | Polls            |    21 |
 | News             |    17 |
 | Bookmarks        |    13 |
+| Circles          |    13 |
+| Tables           |    13 |
 | Deck             |    12 |
+| Talk             |    12 |
 | Photos           |    11 |
 | Mail             |    10 |
-| Talk             |    10 |
-| Circles          |     8 |
 | Calendar         |     6 |
 | Tasks            |     6 |
 | Contacts         |     6 |
@@ -94,12 +95,13 @@ the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/in
 | Terms of Service |     5 |
 | Assistant        |     4 |
 | Announcements    |     3 |
+| Office           |     3 |
 | Passman          |     3 |
 | Registration     |     3 |
 | Translate        |     1 |
 | Social Sharing   |     1 |
 | Recommendations  |     1 |
-| **Subtotal**     | **248** |
+| **Subtotal**     | **271** |
 
 **Total: 372 tools.**
 
