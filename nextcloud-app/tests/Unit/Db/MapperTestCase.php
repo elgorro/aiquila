@@ -73,8 +73,8 @@ abstract class MapperTestCase extends TestCase {
 
         $qb->method('expr')->willReturnCallback(fn () => $this->expr);
         $qb->method('func')->willReturnCallback(fn () => $this->func);
-        // Return the first argument cast to string as a stand-in for the placeholder
-        $qb->method('createNamedParameter')->willReturnCallback(fn($v) => (string) $v);
+        // Return the first argument as a string, as a stand-in for the placeholder
+        $qb->method('createNamedParameter')->willReturnCallback(fn($v) => is_array($v) ? implode(',', $v) : (string) $v);
 
         return $qb;
     }

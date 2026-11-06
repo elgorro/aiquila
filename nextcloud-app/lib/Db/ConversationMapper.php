@@ -94,4 +94,15 @@ class ConversationMapper extends QBMapper {
 
         return (int)($row['conversation_count'] ?? 0);
     }
+
+    /**
+     * Detach all conversations from a project that is going away.
+     */
+    public function clearProject(int $projectId): void {
+        $qb = $this->db->getQueryBuilder();
+        $qb->update($this->getTableName())
+            ->set('project_id', $qb->createNamedParameter(null, IQueryBuilder::PARAM_NULL))
+            ->where($qb->expr()->eq('project_id', $qb->createNamedParameter($projectId, IQueryBuilder::PARAM_INT)));
+        $qb->executeStatement();
+    }
 }

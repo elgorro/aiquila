@@ -561,7 +561,7 @@ class CoworkerController extends Controller {
         $allowed = [
             'title', 'description', 'provider', 'model', 'task_type', 'cron_schedule',
             'input_type', 'input_path', 'output_type', 'output_path',
-            'is_active', 'paused', 'options', 'custom_prompt', 'prompt_id',
+            'is_active', 'paused', 'options', 'custom_prompt', 'prompt_id', 'teamId',
         ];
         $data = [];
         foreach ($allowed as $key) {

@@ -12,6 +12,7 @@ use OCA\AIquila\Db\MessageFile;
 use OCA\AIquila\Db\MessageFileMapper;
 use OCA\AIquila\Db\MessageMapper;
 use OCA\AIquila\Db\ProjectMapper;
+use OCA\AIquila\Service\TeamService;
 use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Http\SSEResponse;
 use OCA\AIquila\Service\ClaudeModels;
@@ -88,7 +89,8 @@ class ConversationController extends Controller {
         InstructionsService $instructions,
         UsageStatService $usageStats,
         ?string $userId,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        private ?TeamService $teams = null,
     ) {
         parent::__construct($appName, $request);
         $this->logger = $logger;
@@ -123,7 +125,7 @@ class ConversationController extends Controller {
         $projectId = $conversation->getProjectId();
         if ($projectId !== null) {
             try {
-                $project = $this->projectMapper->findByIdAndUser($projectId, $userId);
+                $project = $this->projectMapper->findAccessible($projectId, $userId, $this->teams?->teamIdsFor($userId) ?? []);
                 $paths = $this->projectPathMapper->findByProject($project->getId());
             } catch (DoesNotExistException $e) {
                 $project = null;

@@ -68,7 +68,7 @@ Passed in the `$config` / `$changes` array of `register()` and `update()`:
 | `paused` | bool | Paused jobs are not scheduled but stay configured. |
 | `options` | array | Task-type-specific options (validated by the task type). Two keys apply to every task type on the Claude provider: `effort` (`low`…`max`) and `thinking` (`auto`, `on`, `off`). Unset, the instance's background-task defaults apply; a value the model rejects falls back to them. |
 
-Returned coworker arrays additionally include `id`, `userId`, `ownerApp`,
+Returned coworker arrays additionally include `id`, `userId`, `teamId` (always null for a coworker an app owns), `ownerApp`,
 `lastRunAt`, `nextRunAt`, `lastStatus`, `lastError`, `createdAt`, `updatedAt`.
 
 ## API Reference

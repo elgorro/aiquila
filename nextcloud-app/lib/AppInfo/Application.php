@@ -86,6 +86,12 @@ class Application extends App implements IBootstrap {
             \OCA\AIquila\Listener\TaskFailedListener::class
         );
 
+        // By name: the class is only there while the Circles app is enabled.
+        $context->registerEventListener(
+            'OCA\\Circles\\Events\\CircleDestroyedEvent',
+            \OCA\AIquila\Listener\TeamDeletedListener::class
+        );
+
         // Register setup checks for admin overview (Settings → Overview)
         $context->registerSetupCheck(\OCA\AIquila\SetupCheck\ApiKeyConfigured::class);
         $context->registerSetupCheck(\OCA\AIquila\SetupCheck\AnthropicApiReachable::class);

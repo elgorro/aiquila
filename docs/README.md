@@ -13,7 +13,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 
 ## MCP Server
 
-- **[MCP Overview & Tools Reference](mcp/README.md)** — 349 tools across 44 categories
+- **[MCP Overview & Tools Reference](mcp/README.md)** — 372 tools across 46 categories
 - **[Setup Guide](mcp/setup.md)** — installation and MCP client configuration
 - **[OAuth 2.0](mcp/oauth.md)** — OAuth authentication for remote MCP clients
 - **[Standalone Docker](mcp/standalone-docker.md)** — run MCP server in Docker (external Nextcloud)
@@ -35,8 +35,11 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 | Fediverse (Social) | 26 | [Social](mcp/tools/apps/social.md) |
 | Recipes | 6 | [Cookbook](mcp/tools/apps/cookbook.md) |
 | NC AI tasks & image gen | 4 | [Assistant](mcp/tools/apps/assistant.md) |
-| File shares | 4 | [Shares](mcp/tools/apps/shares.md) |
+| File shares | 10 | [Shares](mcp/tools/apps/shares.md) |
+| Teams and their workspaces | 13 | [Teams](mcp/tools/apps/circles.md) |
+| Office documents | 3 | [Office](mcp/tools/apps/office.md) |
 | Talk conversations & messages | 12 | [Talk](mcp/tools/apps/talk.md) |
+| Tables (structured data) | 13 | [Tables](mcp/tools/apps/tables.md) |
 | Users & groups | 8 | [Users](mcp/tools/apps/users.md) / [Groups](mcp/tools/apps/groups.md) |
 | Coworkers (scheduled AI jobs) | 15 | [Coworkers](mcp/tools/apps/cowork.md) |
 | AIquila config | 3 | [AIquila](mcp/tools/apps/aiquila.md) |
@@ -108,13 +111,16 @@ docs/
 │   │       ├── assistant.md         # NC AI task processing
 │   │       ├── bookmarks.md         # Bookmarks, folders, tags
 │   │       ├── calendar.md          # Calendar events
+│   │       ├── circles.md           # Teams and workspaces
 │   │       ├── contacts.md          # Contacts via CardDAV
 │   │       ├── cookbook.md           # Recipes (schema.org)
 │   │       ├── groups.md            # Group management
 │   │       ├── mail.md              # Email accounts & messages
 │   │       ├── maps.md              # Maps, GPS, tracks, photos
 │   │       ├── notes.md             # Markdown notes
+│   │       ├── office.md            # Document conversion and templates
 │   │       ├── shares.md            # File sharing
+│   │       ├── tables.md            # Tables, rows, relations
 │   │       ├── talk.md              # Talk conversations & messages
 │   │       ├── tasks.md             # Tasks via CalDAV
 │   │       └── users.md             # User management

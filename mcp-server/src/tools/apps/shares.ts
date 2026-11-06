@@ -24,6 +24,9 @@ interface ShareEntry {
   label?: string;
   file_target?: string;
   item_type?: string;
+  attributes?: string | null;
+  send_password_by_talk?: boolean;
+  password_expiration_time?: string | null;
 }
 
 const SHARE_TYPE_LABELS: Record<number, string> = {
@@ -33,6 +36,41 @@ const SHARE_TYPE_LABELS: Record<number, string> = {
   4: 'Email',
   6: 'Federated',
 };
+
+const SHARE_TYPE_LINK = 3;
+const SHARE_TYPE_EMAIL = 4;
+
+const TALK_PASSWORD_SCOPE = 'sendPasswordByTalk applies to link and email shares only';
+
+const sendPasswordByTalkSchema = z
+  .boolean()
+  .optional()
+  .describe(
+    'Video verification: the recipient gets the password in a Talk call, not by mail. Link and email shares with a password'
+  );
+
+const attributesSchema = z
+  .array(
+    z.object({
+      scope: z.string().describe("Attribute scope, e.g. 'permissions'"),
+      key: z.string().describe("Attribute key, e.g. 'download'"),
+      value: z.union([z.boolean(), z.string(), z.number()]).describe('Attribute value'),
+    })
+  )
+  .optional();
+
+type ShareAttribute = { scope: string; key: string; value: boolean | string | number };
+
+/** What the server reports about a share's password and attributes. */
+function shareDetails(share: ShareEntry): string[] {
+  const details: string[] = [];
+  if (share.send_password_by_talk) details.push('Password by Talk: on');
+  if (share.password_expiration_time) {
+    details.push(`Password expires: ${share.password_expiration_time}`);
+  }
+  if (share.attributes) details.push(`Attributes: ${share.attributes}`);
+  return details;
+}
 
 /**
  * List all file shares (for diagnostics and auditing)
@@ -135,10 +173,14 @@ export const createShareTool = {
       .optional()
       .describe('Permission bitmask: 1=read, 2=update, 4=create, 8=delete, 16=share'),
     password: z.string().optional().describe('Password-protect the share'),
+    sendPasswordByTalk: sendPasswordByTalkSchema,
     expireDate: z.string().optional().describe('Expiration date (YYYY-MM-DD)'),
     label: z.string().optional().describe('Label for public link shares'),
     note: z.string().optional().describe('Note to the share recipient'),
     hideDownload: z.boolean().optional().describe('Hide download button for public link shares'),
+    attributes: attributesSchema.describe(
+      "Share attributes, e.g. [{scope: 'permissions', key: 'download', value: false}] to forbid downloads"
+    ),
   }),
   handler: async (args: {
     path: string;
@@ -146,11 +188,35 @@ export const createShareTool = {
     shareWith?: string;
     permissions?: number;
     password?: string;
+    sendPasswordByTalk?: boolean;
     expireDate?: string;
     label?: string;
     note?: string;
     hideDownload?: boolean;
+    attributes?: ShareAttribute[];
   }) => {
+    // The server stores the flag without a password, and ignores it on other
+    // share types, without saying so.
+    if (args.sendPasswordByTalk) {
+      if (args.shareType !== SHARE_TYPE_LINK && args.shareType !== SHARE_TYPE_EMAIL) {
+        return {
+          content: [{ type: 'text' as const, text: `Share not created: ${TALK_PASSWORD_SCOPE}.` }],
+          isError: true,
+        };
+      }
+      if (!args.password) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Share not created: sendPasswordByTalk needs a password.',
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
     try {
       const body: Record<string, string> = {
         path: args.path,
@@ -162,6 +228,10 @@ export const createShareTool = {
       if (args.expireDate !== undefined) body.expireDate = args.expireDate;
       if (args.label !== undefined) body.label = args.label;
       if (args.note !== undefined) body.note = args.note;
+      if (args.sendPasswordByTalk !== undefined) {
+        body.sendPasswordByTalk = String(args.sendPasswordByTalk);
+      }
+      if (args.attributes !== undefined) body.attributes = JSON.stringify(args.attributes);
 
       const result = await fetchOCS<ShareEntry>('/ocs/v2.php/apps/files_sharing/api/v1/shares', {
         method: 'POST',
@@ -182,6 +252,7 @@ export const createShareTool = {
       const parts = [`Share created (ID: ${share.id}, type: ${typeLabel})`];
       if (share.token) parts.push(`Token: ${share.token}`);
       if (share.url) parts.push(`URL: ${share.url}`);
+      parts.push(...shareDetails(share));
 
       return {
         content: [{ type: 'text' as const, text: parts.join('\n') }],
@@ -220,19 +291,25 @@ export const updateShareTool = {
       .optional()
       .describe('Permission bitmask: 1=read, 2=update, 4=create, 8=delete, 16=share'),
     password: z.string().optional().describe('Password-protect the share'),
+    sendPasswordByTalk: sendPasswordByTalkSchema,
     expireDate: z.string().optional().describe('Expiration date (YYYY-MM-DD)'),
     label: z.string().optional().describe('Label for public link shares'),
     note: z.string().optional().describe('Note to the share recipient'),
     hideDownload: z.boolean().optional().describe('Hide download button for public link shares'),
+    attributes: attributesSchema.describe(
+      'Share attributes. Replaces all existing attributes, so include those to keep'
+    ),
   }),
   handler: async (args: {
     shareId: number;
     permissions?: number;
     password?: string;
+    sendPasswordByTalk?: boolean;
     expireDate?: string;
     label?: string;
     note?: string;
     hideDownload?: boolean;
+    attributes?: ShareAttribute[];
   }) => {
     try {
       const body: Record<string, string> = {};
@@ -242,6 +319,10 @@ export const updateShareTool = {
       if (args.label !== undefined) body.label = args.label;
       if (args.note !== undefined) body.note = args.note;
       if (args.hideDownload !== undefined) body.hideDownload = args.hideDownload ? 'true' : 'false';
+      if (args.sendPasswordByTalk !== undefined) {
+        body.sendPasswordByTalk = String(args.sendPasswordByTalk);
+      }
+      if (args.attributes !== undefined) body.attributes = JSON.stringify(args.attributes);
 
       const result = await fetchOCS<ShareEntry>(
         `/ocs/v2.php/apps/files_sharing/api/v1/shares/${args.shareId}`,
@@ -250,13 +331,17 @@ export const updateShareTool = {
 
       const share = result.ocs.data;
       const typeLabel = SHARE_TYPE_LABELS[share.share_type] ?? `Type ${share.share_type}`;
+      const lines = [
+        `Share ${share.id} updated (type: ${typeLabel}, path: ${share.path})`,
+        ...shareDetails(share),
+      ];
+      // The type is only known from the answer, and the server ignores the
+      // flag on other share types without saying so.
+      if (args.sendPasswordByTalk && !share.send_password_by_talk) {
+        lines.push(`Not applied: ${TALK_PASSWORD_SCOPE}.`);
+      }
       return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `Share ${share.id} updated (type: ${typeLabel}, path: ${share.path})`,
-          },
-        ],
+        content: [{ type: 'text' as const, text: lines.join('\n') }],
       };
     } catch (error) {
       return {

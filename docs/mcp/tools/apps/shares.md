@@ -1,312 +1,111 @@
-# Nextcloud Share Management Tools
+# Nextcloud Share Tools
 
-List and audit file shares in Nextcloud for diagnostics and security purposes.
+Create, change, audit and accept file and folder shares.
 
 ## Prerequisites
 
-- SSH or Docker exec access to Nextcloud server
-- Administrator privileges to execute OCC commands
+- The Files sharing app (app ID: `files_sharing`), which Nextcloud enables by default
+- The `sharebymail` app for email shares, and Talk for `sendPasswordByTalk`
 
-## Overview
+## API
 
-These tools provide read-only access to view file shares across your Nextcloud instance. Use them for security auditing, troubleshooting access issues, and reviewing sharing permissions.
+Uses the [OCS Share API](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-share-api.html) at `/ocs/v2.php/apps/files_sharing/api/v1/`.
 
 ## Available Tools
 
-### list_shares
+### Shares
 
-List all file shares in Nextcloud.
+#### `list_shares`
+List the shares of the current user.
 
 **Parameters:**
-- `userId` (string, optional): Filter shares by specific user
+- `path` (string, optional) — only shares of this file or folder.
+- `reshares` (boolean, optional) — include reshares.
+- `subfiles` (boolean, optional) — shares of all files in the folder at `path`.
 
-**Returns:**
-OCC command instructions to list all shares with details about share types, permissions, and ownership.
+**Example:** "Which of my files are shared by public link?"
 
-**Example Usage:**
-```
-Ask Claude: "List all file shares"
-Ask Claude: "Show me shares for user alice"
-Ask Claude: "What files are being shared?"
-Ask Claude: "Audit all public link shares"
-```
+#### `get_share`
+Get everything the server knows about one share.
 
-**Example Command:**
-```bash
-docker exec -u www-data aiquila-nextcloud php occ sharing:list
-```
+**Parameters:**
+- `shareId` (number, required)
 
-**With User Filter:**
-```bash
-docker exec -u www-data aiquila-nextcloud php occ sharing:list --user=alice
-```
+#### `create_share`
+Share a file or folder.
 
-**Example Output:**
+**Parameters:**
+- `path` (string, required)
+- `shareType` (number, required) — `0` user, `1` group, `3` public link, `4` email, `6` federated.
+- `shareWith` (string) — the recipient. Required except for public links.
+- `permissions` (number, optional) — bitmask: `1` read, `2` update, `4` create, `8` delete, `16` share.
+- `password` (string, optional)
+- `sendPasswordByTalk` (boolean, optional) — see [Passwords](#passwords).
+- `expireDate` (string, optional) — `YYYY-MM-DD`.
+- `label` (string, optional) — label for a public link.
+- `note` (string, optional) — note to the recipient.
+- `hideDownload` (boolean, optional) — hide the download button on a public link.
+- `attributes` (array, optional) — see [Attributes](#attributes).
+
+**Returns:** the share ID and type, the token and URL for links, and any password and attribute details.
+
+**Example:** "Share the report with Bob, read-only, and don't let him download it."
+
+#### `update_share`
+Change an existing share. Only the parameters passed are changed.
+
+**Parameters:**
+- `shareId` (number, required)
+- `permissions`, `password`, `sendPasswordByTalk`, `expireDate`, `label`, `note`, `hideDownload`, `attributes` — as in `create_share`.
+
+#### `delete_share`
+Delete a share.
+
+**Parameters:**
+- `shareId` (number, required)
+
+#### `list_shares_with_me`
+List what other people share with the current user.
+
+#### `search_sharees`
+Find valid recipients for a share.
+
+**Parameters:**
+- `search` (string, required) — name or email to look for.
+- `itemType` (enum, optional) — `file` (default) or `folder`.
+- `shareTypes` (array of numbers, optional) — `0` user, `1` group, `3` public link, `4` email, `6` federated, `7` Team, `10` Talk conversation. Default `0`, `1`, `3`, `4`, `6`.
+
+### Pending federated shares
+
+#### `list_pending_shares`
+List federated shares waiting to be accepted or declined.
+
+#### `accept_pending_share`
+Accept a pending share.
+
+**Parameters:**
+- `shareId` (number, required)
+
+#### `decline_pending_share`
+Decline a pending share.
+
+**Parameters:**
+- `shareId` (number, required)
+
+## Passwords
+
+`sendPasswordByTalk` turns on video verification for a link or email share: the recipient gets the password in a Talk call rather than by mail. It needs Talk and a password.
+
+`create_share` refuses it on other share types and without a password. `update_share` only learns the share type from the server's answer, so there the change is made and the output says `Not applied`.
+
+The password expiry time is reported, not set. An administrator enables it for email shares with the `sharing.enable_mail_link_password_expiration` and `sharing.mail_link_password_expiration_interval` system settings. The server then sets it when the password of an existing email share changes, not for a password given at creation.
+
+## Attributes
+
+Attributes are `scope`, `key` and `value` entries. The one in general use controls downloading:
+
 ```json
-{
-  "shares": [
-    {
-      "id": "123",
-      "share_type": 0,
-      "share_with": "bob",
-      "share_with_displayname": "Bob Jones",
-      "path": "/Documents/project.pdf",
-      "permissions": 19,
-      "stime": 1707312000,
-      "uid_owner": "alice",
-      "displayname_owner": "Alice Smith"
-    },
-    {
-      "id": "124",
-      "share_type": 3,
-      "share_with": "https://cloud.example.com/s/AbCd123",
-      "path": "/Photos/vacation.jpg",
-      "permissions": 1,
-      "stime": 1707312100,
-      "uid_owner": "alice",
-      "token": "AbCd123",
-      "expiration": "2024-03-01"
-    }
-  ]
-}
+[{ "scope": "permissions", "key": "download", "value": false }]
 ```
 
----
-
-## Understanding Share Data
-
-### Share Types
-
-| Type | Description | Use Case |
-|------|-------------|----------|
-| `0` | User share | Shared with specific Nextcloud user |
-| `1` | Group share | Shared with a group |
-| `3` | Public link | Shareable URL (anyone with link) |
-| `4` | Email share | Sent via email |
-| `6` | Federated | Shared with remote Nextcloud server |
-
-### Permissions (Bitwise)
-
-| Value | Permission | Description |
-|-------|------------|-------------|
-| `1` | Read | Can view/download |
-| `2` | Update | Can modify existing files |
-| `4` | Create | Can create new files |
-| `8` | Delete | Can delete files |
-| `16` | Share | Can re-share with others |
-| `19` | Read+Update+Share | Common for collaboration |
-| `31` | All permissions | Full access |
-
-**Calculating Permissions:**
-Permissions are bitwise OR combinations:
-- Read only: `1`
-- Read + Share: `1 + 16 = 17`
-- Read + Update + Share: `1 + 2 + 16 = 19`
-- Full permissions: `1 + 2 + 4 + 8 + 16 = 31`
-
----
-
-## Common Use Cases
-
-### Security Audit
-
-**Find all public links:**
-```bash
-php occ sharing:list | jq '.shares[] | select(.share_type == 3)'
-```
-
-**Check for shares without expiration:**
-```bash
-php occ sharing:list | jq '.shares[] | select(.share_type == 3 and .expiration == null)'
-```
-
-**Review high-permission shares:**
-```bash
-php occ sharing:list | jq '.shares[] | select(.permissions >= 19)'
-```
-
-### Troubleshooting
-
-**User can't access file:**
-1. List shares for that user: `--user=username`
-2. Check `permissions` value
-3. Verify `share_type` is correct
-4. Check if share has expired
-
-**Public link not working:**
-1. Find link by path or token
-2. Check `expiration` date
-3. Verify `token` matches URL
-4. Check if owner account is active
-
-### Access Review
-
-**Monthly audit checklist:**
-- [ ] Review all public links (`share_type: 3`)
-- [ ] Check for expiration dates
-- [ ] Verify permission levels are appropriate
-- [ ] Remove unnecessary shares
-- [ ] Document business-critical shares
-
----
-
-## Share Information Fields
-
-### Core Fields
-
-- **id**: Unique share identifier
-- **share_type**: Type of share (see table above)
-- **path**: File/folder path being shared
-- **permissions**: Access level (see table above)
-- **stime**: Share creation timestamp
-- **uid_owner**: User ID who created the share
-- **displayname_owner**: Owner's display name
-
-### Type-Specific Fields
-
-**User Shares (`type: 0`):**
-- `share_with`: Recipient user ID
-- `share_with_displayname`: Recipient's name
-
-**Group Shares (`type: 1`):**
-- `share_with`: Group name
-- `share_with_displayname`: Group display name
-
-**Public Links (`type: 3`):**
-- `token`: URL token (e.g., `AbCd123`)
-- `url`: Full share URL
-- `expiration`: Expiration date (if set)
-- `password`: Whether password protected (boolean)
-
-**Federated Shares (`type: 6`):**
-- `share_with`: Remote user address
-- `remote`: Remote server URL
-
----
-
-## Limitations
-
-### Current Capabilities
-- ✅ View all shares
-- ✅ Filter by user
-- ✅ See share types and permissions
-- ✅ Identify public links
-- ✅ Check expiration dates
-
-### Not Supported
-- ❌ Create new shares (use web UI or WebDAV)
-- ❌ Modify share permissions (use web UI)
-- ❌ Delete shares (use `php occ sharing:delete <id>`)
-- ❌ Change share passwords (use web UI)
-- ❌ Set expiration dates (use web UI)
-
-For these operations, use the Nextcloud web interface or direct OCC commands.
-
----
-
-## Security Considerations
-
-### Privacy
-- Share list may contain sensitive file paths
-- Limit access to share information
-- Only run as administrator
-
-### Best Practices
-1. **Regular Audits**: Review shares monthly
-2. **Expiration Dates**: Set expirations on public links
-3. **Least Privilege**: Use minimum required permissions
-4. **Password Protection**: Enable for sensitive public links
-5. **Documentation**: Document business-critical shares
-
-### Warning Signs
-- ⚠️  Public links without expiration
-- ⚠️  Full permissions (31) on public links
-- ⚠️  Shares to disabled accounts
-- ⚠️  Very old shares (check `stime`)
-- ⚠️  Unexpected federated shares
-
----
-
-## Related Commands
-
-### Managing Shares
-
-**Delete a share:**
-```bash
-docker exec -u www-data aiquila-nextcloud php occ sharing:delete <share-id>
-```
-
-**Clean up expired shares:**
-```bash
-docker exec -u www-data aiquila-nextcloud php occ sharing:cleanup-remote-storages
-```
-
-**List external storages:**
-```bash
-docker exec -u www-data aiquila-nextcloud php occ files_external:list
-```
-
-### Creating Shares
-
-Shares are typically created through:
-- **Web UI**: Files → Share icon
-- **WebDAV**: With sharing headers
-- **API**: Nextcloud sharing API
-
----
-
-## Troubleshooting
-
-### No shares returned
-**Problem**: Empty share list
-
-**Solution**:
-- Verify shares exist (check web UI)
-- Confirm running as correct user
-- Try without user filter
-- Check sharing is enabled
-
-### Permission denied
-**Problem**: Cannot run command
-
-**Solution**:
-- Ensure running as www-data user
-- Verify administrator privileges
-- Check OCC is accessible
-
-### Large output
-**Problem**: Too many shares to review
-
-**Solution**:
-- Use `--user` filter for specific users
-- Pipe to `jq` for filtering
-- Export to file for analysis
-- Focus on specific share types
-
----
-
-## Integration with Other Tools
-
-### With User Management
-```
-User: "List all shares for user alice"
-Claude: Uses list_shares with userId filter
-```
-
-### With Security Tools
-```
-User: "Audit system security including file shares"
-Claude: Combines check_core_integrity and list_shares
-```
-
-## Development
-
-To extend share management tools:
-- See [Adding Tools Guide](../../development/adding-tools.md)
-- Source code: [mcp-server/src/tools/apps/shares.ts](../../../../mcp-server/src/tools/apps/shares.ts)
-
-## References
-
-- [Nextcloud Sharing Documentation](https://docs.nextcloud.com/server/latest/user_manual/en/files/sharing.html)
-- [OCC Sharing Commands](https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/occ_command.html#sharing-commands)
-- [Sharing API](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-share-api.html)
+`update_share` replaces all attributes of a share, so pass the ones to keep along with the change. A share whose parent forbids downloading always keeps `download` off.

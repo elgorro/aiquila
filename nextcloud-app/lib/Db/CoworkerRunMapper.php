@@ -36,18 +36,33 @@ class CoworkerRunMapper extends QBMapper {
      *
      * @return list<CoworkerRun>
      */
-    public function findByCoworker(int $coworkerId, string $userId, int $limit = 20): array {
+    public function findByCoworker(int $coworkerId, ?string $userId, int $limit = 20): array {
         $qb = $this->db->getQueryBuilder();
         // Everything but `log`: the list never shows it, and a full log is
         // the largest thing a run row carries.
         $qb->select('id', 'coworker_id', 'user_id', 'status', 'items_total', 'items_processed', 'summary', 'error', 'started_at', 'finished_at', 'state')
             ->from($this->getTableName())
-            ->where($qb->expr()->eq('coworker_id', $qb->createNamedParameter($coworkerId, IQueryBuilder::PARAM_INT)))
-            ->andWhere($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
-            ->orderBy('started_at', 'DESC')
+            ->where($qb->expr()->eq('coworker_id', $qb->createNamedParameter($coworkerId, IQueryBuilder::PARAM_INT)));
+        // A team coworker's runs are the team's, whoever each one ran as.
+        if ($userId !== null) {
+            $qb->andWhere($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)));
+        }
+        $qb->orderBy('started_at', 'DESC')
             ->setMaxResults($limit);
 
         return $this->findEntities($qb);
+    }
+
+    /**
+     * @throws DoesNotExistException
+     */
+    public function findById(int $id): CoworkerRun {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
+
+        return $this->findEntity($qb);
     }
 
     /**

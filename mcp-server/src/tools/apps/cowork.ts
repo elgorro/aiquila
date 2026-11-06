@@ -18,6 +18,9 @@ import type { ToolAnnotations } from '../types.js';
 
 interface Coworker {
   id: number;
+  /** The account it runs as. */
+  userId?: string;
+  teamId?: string | null;
   title: string;
   description?: string | null;
   /** Pinned provider id; null follows the owner's setting. */
@@ -107,6 +110,7 @@ function formatCoworker(c: Coworker): string {
   const opts = c.options ?? {};
   const lines = [`- **${c.title}** (ID: ${c.id}) — ${state}`];
   if (c.description) lines.push(`  ${c.description}`);
+  if (c.teamId) lines.push(`  team: ${c.teamId} | runs as: ${c.userId}`);
   lines.push(
     `  task: ${c.taskType} | provider: ${c.provider ?? 'default'}${c.model ? ` (${c.model})` : ''} | input: ${c.inputPath ?? '/'}`,
     `  output: ${c.outputType}${c.outputPath ? ` → ${c.outputPath}` : ''}`,
@@ -356,12 +360,21 @@ export const createCoworkerTool = {
   inputSchema: z.object({
     templateId: z.string().optional().describe('Template id (see list_coworker_templates)'),
     taskType: z.string().optional().describe('Task type id, e.g. "vision:classify"'),
+    teamId: z
+      .string()
+      .optional()
+      .describe(
+        'Team (circle) that owns the coworker. All members can use it. It runs as the creator, then the team owner or an admin, and is deleted with the team. Its paths must be inside the team workspace'
+      ),
     ...coworkerFields,
   }),
-  handler: async (args: CoworkerFieldArgs & { templateId?: string; taskType?: string }) => {
+  handler: async (
+    args: CoworkerFieldArgs & { templateId?: string; taskType?: string; teamId?: string }
+  ) => {
     try {
       const body = buildBody(args);
       if (args.taskType !== undefined) body.task_type = args.taskType;
+      if (args.teamId !== undefined) body.teamId = args.teamId;
       const options = optionChanges(args);
       if (Object.keys(options).length > 0) body.options = options;
 
