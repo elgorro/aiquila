@@ -39,6 +39,7 @@ Nextcloud apps and administration:
 - **Deck** — Boards, stacks, cards, labels, and assignments
 - **Photos** — Albums, collaborators, favourites, and photo metadata
 - **Circles** — Teams, their membership, and their workspace folders
+- **Tables** — Structured data: tables, views, rows, columns, relations, and structure import/export
 - **Projects** — AIquila projects (paths plus a system prompt), project templates and the prompt library
 - **Coworkers** — Create, run, pause and inspect the AIquila Coworkers (saved AI jobs) and their run history
 - **Text** — Read, write and delete a folder's Text workspace (`Readme.md`), or get a direct-edit URL
@@ -341,15 +342,15 @@ Nextcloud apps and administration:
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_shares` | List file shares in Nextcloud (for diagnostics and security auditing) | [Shares](tools/apps/shares.md#list_shares) |
-| `create_share` | Create a file or folder share in Nextcloud | [Shares](tools/apps/shares.md) |
-| `update_share` | Update an existing share in Nextcloud | [Shares](tools/apps/shares.md) |
-| `delete_share` | Delete a share in Nextcloud | [Shares](tools/apps/shares.md) |
-| `get_share` | Get detailed information about a specific share by its ID | [Shares](tools/apps/shares.md) |
-| `list_shares_with_me` | List all files and folders shared with the current user | [Shares](tools/apps/shares.md) |
-| `search_sharees` | Search for valid share recipients (users, groups, emails, federated users, circles… | [Shares](tools/apps/shares.md) |
-| `list_pending_shares` | List pending federated/remote shares waiting to be accepted or declined | [Shares](tools/apps/shares.md) |
-| `accept_pending_share` | Accept a pending federated/remote share | [Shares](tools/apps/shares.md) |
-| `decline_pending_share` | Decline a pending federated/remote share | [Shares](tools/apps/shares.md) |
+| `create_share` | Create a file or folder share in Nextcloud | [Shares](tools/apps/shares.md#create_share) |
+| `update_share` | Update an existing share in Nextcloud | [Shares](tools/apps/shares.md#update_share) |
+| `delete_share` | Delete a share in Nextcloud | [Shares](tools/apps/shares.md#delete_share) |
+| `get_share` | Get detailed information about a specific share by its ID | [Shares](tools/apps/shares.md#get_share) |
+| `list_shares_with_me` | List all files and folders shared with the current user | [Shares](tools/apps/shares.md#list_shares_with_me) |
+| `search_sharees` | Search for valid share recipients (users, groups, emails, federated users, circles… | [Shares](tools/apps/shares.md#search_sharees) |
+| `list_pending_shares` | List pending federated/remote shares waiting to be accepted or declined | [Shares](tools/apps/shares.md#list_pending_shares) |
+| `accept_pending_share` | Accept a pending federated/remote share | [Shares](tools/apps/shares.md#accept_pending_share) |
+| `decline_pending_share` | Decline a pending federated/remote share | [Shares](tools/apps/shares.md#decline_pending_share) |
 
 #### Users (4 tools)
 | Tool | Description | Documentation |
@@ -429,6 +430,23 @@ Nextcloud apps and administration:
 | `photos_set_favorite` | Mark or unmark a file as favorite | — |
 | `photos_set_album_location` | Set or update the location metadata on a photo album | — |
 | `photos_add_collaborators` | Add collaborators (users or groups) to a photo album | — |
+
+#### Tables (13 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_tables` | List the tables the user can access | [Tables](tools/apps/tables.md#list_tables) |
+| `get_table` | Get the columns and views of a table or view | [Tables](tools/apps/tables.md#get_table) |
+| `save_table` | Create or change a table | [Tables](tools/apps/tables.md#save_table) |
+| `delete_table` | Delete a table | [Tables](tools/apps/tables.md#delete_table) |
+| `list_table_rows` | List rows of a table or view | [Tables](tools/apps/tables.md#list_table_rows) |
+| `save_table_row` | Add or change a row | [Tables](tools/apps/tables.md#save_table_row) |
+| `delete_table_row` | Delete a row | [Tables](tools/apps/tables.md#delete_table_row) |
+| `save_table_column` | Add or change a column, including relations | [Tables](tools/apps/tables.md#save_table_column) |
+| `delete_table_column` | Delete a column | [Tables](tools/apps/tables.md#delete_table_column) |
+| `save_table_view` | Create or change a view | [Tables](tools/apps/tables.md#save_table_view) |
+| `delete_table_view` | Delete a view | [Tables](tools/apps/tables.md#delete_table_view) |
+| `export_table_structure` | Export the structure of a table | [Tables](tools/apps/tables.md#export_table_structure) |
+| `import_table_structure` | Create or update a table from a structure | [Tables](tools/apps/tables.md#import_table_structure) |
 
 #### Circles (12 tools)
 | Tool | Description | Documentation |
