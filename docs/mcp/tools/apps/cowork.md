@@ -43,7 +43,7 @@ A coworker always runs as one account, which `list_coworkers` shows as `runs as`
 - With nobody left to run as, it pauses and says why in its last error.
 - When the team is deleted, its coworkers are stopped straight away and deleted with their run history.
 
-Providers, models and files are those of the account it runs as. Paths have to exist for that account, so use paths every member has, such as the [team's workspace](circles.md#workspaces). A pinned provider the account may not use falls back to that account's own, as on any coworker.
+Providers and models are those of the account it runs as. Its input and output paths must be inside the [team's workspace](circles.md#workspaces), the one place every account it can move to shares, so a team coworker that uses paths needs a team with a workspace. An input folder is required unless `input_type` is `none`. A pinned provider the account may not use falls back to that account's own, as on any coworker.
 
 ### Stop, pause or disable?
 

@@ -323,6 +323,21 @@ export function getTask(id) {
 	return axios.get(generateOcsUrl('taskprocessing/task/{id}', { id }))
 }
 
+// Where a team's workspace appears in its members' files, or null without one.
+export async function getTeamWorkspace(teamId) {
+	try {
+		const { data } = await axios.get(generateOcsUrl('apps/circles/teams/{teamId}/folder', { teamId }), {
+			headers: { 'OCS-APIRequest': 'true' },
+		})
+		return '/' + data.ocs.data.mountPoint.replace(/^\/+|\/+$/g, '')
+	} catch (e) {
+		if (e?.response?.status === 404) {
+			return null
+		}
+		throw e
+	}
+}
+
 // Teams the user belongs to, which can own coworkers and projects.
 export async function getTeams() {
 	const { data } = await axios.get(generateOcsUrl('apps/circles/circles'), {

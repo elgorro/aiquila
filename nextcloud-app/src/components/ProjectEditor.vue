@@ -9,6 +9,7 @@
 				<option value="">{{ t('aiquila', 'Just me') }}</option>
 				<option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
 			</select>
+			<small v-if="form.teamId">{{ t('aiquila', 'All members can use it, and it is deleted with the team. Each member\'s conversations stay their own.') }}</small>
 		</div>
 
 		<div class="form-group">

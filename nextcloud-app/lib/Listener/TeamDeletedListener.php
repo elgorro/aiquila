@@ -5,15 +5,17 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Listener;
 
+use OCA\AIquila\Db\ConversationMapper;
 use OCA\AIquila\Db\ProjectMapper;
+use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Service\CoworkerService;
 use OCA\Circles\Events\CircleDestroyedEvent;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 
 /**
- * Stops and deletes a deleted team's coworkers. Its projects stay with the
- * people who created them.
+ * Stops and deletes a deleted team's coworkers and deletes its projects.
+ * Members keep their conversations, as when a project is deleted by hand.
  *
  * @template-implements IEventListener<Event>
  */
@@ -21,6 +23,8 @@ class TeamDeletedListener implements IEventListener {
     public function __construct(
         private readonly CoworkerService $coworkers,
         private readonly ProjectMapper $projects,
+        private readonly ProjectPathMapper $paths,
+        private readonly ConversationMapper $conversations,
     ) {
     }
 
@@ -30,6 +34,10 @@ class TeamDeletedListener implements IEventListener {
         }
         $teamId = $event->getCircle()->getSingleId();
         $this->coworkers->removeForTeam($teamId);
-        $this->projects->releaseFromTeam($teamId);
+        foreach ($this->projects->findAllByTeam($teamId) as $project) {
+            $this->conversations->clearProject($project->getId());
+            $this->paths->deleteByProject($project->getId());
+            $this->projects->delete($project);
+        }
     }
 }

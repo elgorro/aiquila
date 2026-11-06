@@ -81,14 +81,15 @@ class ProjectMapper extends QBMapper {
     }
 
     /**
-     * Give a deleted team's projects back to the people who created them.
+     * @return list<Project>
      */
-    public function releaseFromTeam(string $teamId): void {
+    public function findAllByTeam(string $teamId): array {
         $qb = $this->db->getQueryBuilder();
-        $qb->update($this->getTableName())
-            ->set('team_id', $qb->createNamedParameter(null, IQueryBuilder::PARAM_NULL))
+        $qb->select('*')
+            ->from($this->getTableName())
             ->where($qb->expr()->eq('team_id', $qb->createNamedParameter($teamId, IQueryBuilder::PARAM_STR)));
-        $qb->executeStatement();
+
+        return $this->findEntities($qb);
     }
 
     /**

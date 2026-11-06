@@ -102,7 +102,10 @@ export const createProjectTool = {
       .string()
       .optional()
       .describe('System prompt to inject into conversations using this project'),
-    teamId: z.string().optional().describe('Team (circle) that owns the project, for its members'),
+    teamId: z
+      .string()
+      .optional()
+      .describe('Team (circle) that owns the project, for its members. Deleted with the team'),
   }),
   handler: async (args: {
     title: string;

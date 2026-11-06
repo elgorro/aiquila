@@ -14,8 +14,10 @@ use OCA\Circles\Model\Circle;
 use OCA\Circles\Model\Member;
 use OCP\IUser;
 use OCP\IUserManager;
+use OCP\Teams\ITeamFolderProvider;
 use OCP\Teams\ITeamManager;
 use OCP\Teams\Team;
+use OCP\Teams\TeamFolder;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 
@@ -121,5 +123,30 @@ class TeamServiceTest extends TestCase {
 
     public function testNoTeamSupportMeansNoTeams(): void {
         $this->assertSame([], $this->service(null, ['bob'], false)->teamIdsFor('bob'));
+    }
+
+    public function testTheWorkspaceIsWhereMembersSeeIt(): void {
+        $provider = $this->createStub(ITeamFolderProvider::class);
+        $provider->method('getTeamFolder')->willReturn(new TeamFolder(3, 'Team A/'));
+        $teams = $this->createStub(ITeamManager::class);
+        $teams->method('getTeamFolderProvider')->willReturn($provider);
+
+        $service = new TeamService($teams, $this->createStub(IUserManager::class), $this->createStub(ContainerInterface::class));
+
+        $this->assertSame('/Team A', $service->workspacePath('team1'));
+    }
+
+    public function testATeamWithoutAFolderOrProviderHasNoWorkspace(): void {
+        $provider = $this->createStub(ITeamFolderProvider::class);
+        $provider->method('getTeamFolder')->willReturn(null);
+        $withProvider = $this->createStub(ITeamManager::class);
+        $withProvider->method('getTeamFolderProvider')->willReturn($provider);
+        $without = $this->createStub(ITeamManager::class);
+        $without->method('getTeamFolderProvider')->willReturn(null);
+
+        foreach ([$withProvider, $without] as $teams) {
+            $service = new TeamService($teams, $this->createStub(IUserManager::class), $this->createStub(ContainerInterface::class));
+            $this->assertNull($service->workspacePath('team1'));
+        }
     }
 }

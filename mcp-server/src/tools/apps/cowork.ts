@@ -364,7 +364,7 @@ export const createCoworkerTool = {
       .string()
       .optional()
       .describe(
-        'Team (circle) that owns the coworker. All members can use it. It runs as the creator, then the team owner or an admin, and is deleted with the team'
+        'Team (circle) that owns the coworker. All members can use it. It runs as the creator, then the team owner or an admin, and is deleted with the team. Its paths must be inside the team workspace'
       ),
     ...coworkerFields,
   }),

@@ -148,6 +148,7 @@ class CoworkerService {
             $coworker->setTeamId($this->teamForNewCoworker($userId, $data));
         }
         $this->applyData($coworker, $data);
+        $this->assertTeamPaths($coworker);
         $coworker->setUpdatedAt($now);
         $this->refreshNextRun($coworker);
         return $this->mapper->insert($coworker);
@@ -399,6 +400,42 @@ class CoworkerService {
     }
 
     /**
+     * A team coworker reads and writes only in the team's workspace, the one
+     * place every account it can move to shares.
+     */
+    private function assertTeamPaths(Coworker $coworker): void {
+        $teamId = $coworker->getTeamId();
+        if ($teamId === null) {
+            return;
+        }
+        $paths = [(string)$coworker->getOutputPath(), (string)($coworker->jsonSerialize()['options']['outputFolder'] ?? '')];
+        if ($coworker->getInputType() !== 'none') {
+            // A coworker without an input folder reads the whole account.
+            $paths[] = $coworker->getInputPath() ?: '/';
+        }
+        $paths = array_values(array_filter($paths, static fn (string $path): bool => $path !== ''));
+        if ($paths === []) {
+            return;
+        }
+
+        $workspace = $this->teams?->workspacePath($teamId);
+        if ($workspace === null) {
+            throw new ValidationException('This team has no workspace, and a team coworker can only use paths inside it');
+        }
+        foreach ($paths as $path) {
+            if (!self::isInside($path, $workspace)) {
+                throw new ValidationException("A team coworker can only use paths inside the team's workspace, $workspace: $path");
+            }
+        }
+    }
+
+    private static function isInside(string $path, string $folder): bool {
+        $path = '/' . trim((string)preg_replace('#/+#', '/', $path), '/');
+        return !in_array('..', explode('/', $path), true)
+            && ($path === $folder || str_starts_with($path, $folder . '/'));
+    }
+
+    /**
      * Apply a partial update to a resolved coworker, refresh its schedule and
      * persist. Shared by user- and app-scoped callers.
      *
@@ -406,6 +443,9 @@ class CoworkerService {
      */
     public function applyUpdate(Coworker $coworker, array $data): Coworker {
         $this->applyData($coworker, $data);
+        if (array_intersect_key($data, array_flip(['input_type', 'input_path', 'output_path', 'options'])) !== []) {
+            $this->assertTeamPaths($coworker);
+        }
         return $this->persistScheduled($coworker);
     }
 

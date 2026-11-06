@@ -17,6 +17,7 @@ use OCA\AIquila\Service\TeamService;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -170,10 +171,96 @@ class CoworkerTeamTest extends TestCase {
         $this->teams->method('teamIdsFor')->willReturn(['team1']);
         $this->mapper->method('insert')->willReturnArgument(0);
 
-        $coworker = $this->service()->create('bob', ['teamId' => 'team1', 'cronSchedule' => '0 3 * * *']);
+        $this->teams->method('workspacePath')->willReturn('/Team');
+
+        $coworker = $this->service()->create('bob', ['teamId' => 'team1', 'input_path' => '/Team/Docs']);
 
         $this->assertSame('team1', $coworker->getTeamId());
         $this->assertSame('bob', $coworker->getUserId());
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>}>
+     */
+    public static function pathsOutsideTheWorkspace(): array {
+        return [
+            'no input folder reads the whole account' => [[]],
+            'a personal folder' => [['input_path' => '/Documents']],
+            'a sibling with the same prefix' => [['input_path' => '/Team2']],
+            'climbing out' => [['input_path' => '/Team/../Documents']],
+            'output elsewhere' => [['input_path' => '/Team', 'output_path' => '/Documents']],
+            'output folder option' => [['input_path' => '/Team', 'options' => ['outputFolder' => '/Documents']]],
+            'agent output elsewhere' => [['input_type' => 'none', 'output_path' => 'Notes/daily.md']],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    #[DataProvider('pathsOutsideTheWorkspace')]
+    public function testItOnlyUsesPathsInsideTheWorkspace(array $data): void {
+        $this->teams->method('teamIdsFor')->willReturn(['team1']);
+        $this->teams->method('workspacePath')->willReturn('/Team');
+        $this->mapper->expects($this->never())->method('insert');
+
+        $this->expectException(ValidationException::class);
+        $this->service()->create('bob', ['teamId' => 'team1'] + $data);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>}>
+     */
+    public static function pathsInsideTheWorkspace(): array {
+        return [
+            'the workspace' => [['input_path' => '/Team']],
+            'a folder in it' => [['input_path' => 'Team//Docs/', 'output_path' => '/Team/Out']],
+            'an agent answer in it' => [['input_type' => 'none', 'output_path' => '/Team/daily.md']],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    #[DataProvider('pathsInsideTheWorkspace')]
+    public function testPathsInsideTheWorkspaceAreKept(array $data): void {
+        $this->teams->method('teamIdsFor')->willReturn(['team1']);
+        $this->teams->method('workspacePath')->willReturn('/Team');
+        $this->mapper->method('insert')->willReturnArgument(0);
+
+        $this->assertSame('team1', $this->service()->create('bob', ['teamId' => 'team1'] + $data)->getTeamId());
+    }
+
+    public function testATeamWithoutAWorkspaceCanOnlyHaveAPathlessCoworker(): void {
+        $this->teams->method('teamIdsFor')->willReturn(['team1']);
+        $this->teams->method('workspacePath')->willReturn(null);
+        $this->mapper->method('insert')->willReturnArgument(0);
+
+        $coworker = $this->service()->create('bob', ['teamId' => 'team1', 'input_type' => 'none']);
+        $this->assertSame('none', $coworker->getInputType());
+
+        $this->expectExceptionMessage('This team has no workspace');
+        $this->service()->create('bob', ['teamId' => 'team1', 'input_path' => '/Docs']);
+    }
+
+    public function testAnUpdateCannotMoveItsPathsOut(): void {
+        $coworker = $this->coworker();
+        $coworker->setInputType('folder');
+        $coworker->setInputPath('/Team');
+        $this->teams->method('workspacePath')->willReturn('/Team');
+
+        $this->expectException(ValidationException::class);
+        $this->service()->applyUpdate($coworker, ['input_path' => '/Documents']);
+    }
+
+    public function testAnUpdateWithoutPathsWorksWithoutAWorkspace(): void {
+        $coworker = $this->coworker();
+        $coworker->setInputType('folder');
+        $coworker->setInputPath('/Team');
+        $coworker->setCronSchedule('0 3 * * *');
+        $this->teams->expects($this->never())->method('workspacePath');
+        $this->mapper->method('update')->willReturnArgument(0);
+
+        $this->assertSame('New', $this->service()->applyUpdate($coworker, ['title' => 'New'])->getTitle());
     }
 
     public function testNobodyCanCreateOneForAnotherTeam(): void {

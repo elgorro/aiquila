@@ -48,6 +48,18 @@ class TeamService {
     }
 
     /**
+     * Where the team's workspace appears in every member's files, or null
+     * without one. Team folders need Nextcloud 35.
+     */
+    public function workspacePath(string $teamId): ?string {
+        if (!method_exists($this->teams, 'getTeamFolderProvider')) {
+            return null;
+        }
+        $folder = $this->teams->getTeamFolderProvider()?->getTeamFolder($teamId);
+        return $folder === null ? null : '/' . trim($folder->getMountPoint(), '/');
+    }
+
+    /**
      * The team's owner and then its admins, as local accounts that can run
      * something for it.
      *
