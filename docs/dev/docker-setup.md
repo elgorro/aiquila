@@ -13,8 +13,9 @@ The Docker environment provides a complete, isolated development setup with:
 - **MCP Server** - Development container with hot reload (HTTP transport on port 3339)
 - **MailHog** - Email testing and debugging
 - **Adminer** - Database management UI (opt-in, `make up-tools`)
+- **Collabora Online** - Document conversion and templates for the Office tools (opt-in, `make up-office`)
 
-The AIquila app is installed automatically on first start from a pre-built tarball. No manual setup wizard or app installation is needed.
+The AIquila app is installed automatically on first start from a pre-built tarball, along with Talk, Notes, Tasks, Tables and Team folders. No manual setup wizard or app installation is needed.
 
 > **Standalone mode?** If you already have a Nextcloud instance and only need the MCP server, see [Standalone Docker Setup](../mcp/standalone-docker.md).
 
@@ -76,6 +77,8 @@ from another machine, go through Caddy.
 
 **Adminer:** System `PostgreSQL` · Server `db` · User `nextcloud` · Password from `.env` · Database `nextcloud`
 
+**Collabora** listens only inside the stack, so Nextcloud can convert documents and fill templates through it, but a browser cannot open a document for editing. `make up-office` installs Nextcloud Office and points it at the container.
+
 ## Development Workflow
 
 ### Updating the Nextcloud App
@@ -101,6 +104,7 @@ make logs-mcp   # watch MCP server output
 ```bash
 make up            # start all services
 make up-tools      # start all services plus Adminer
+make up-office     # start all services plus Collabora, and connect Nextcloud to it
 make down          # stop all services
 make restart       # restart all services
 make status        # show service status

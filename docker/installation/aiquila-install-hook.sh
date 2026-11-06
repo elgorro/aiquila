@@ -35,11 +35,13 @@ occ app:enable aiquila
 echo "[OK] AIquila enabled"
 
 # --- Install optional apps for full test coverage ---
-echo "[OCC] Installing Talk, Notes, and Tasks apps..."
-occ app:install spreed 2>/dev/null || occ app:enable spreed
-occ app:install notes
-occ app:install tasks
-echo "[OK] Talk, Notes, and Tasks installed"
+# Installing an app that is already there fails, and this hook also runs on an
+# existing stack.
+echo "[OCC] Installing Talk, Notes, Tasks, Tables and Team folders..."
+for app in spreed notes tasks tables groupfolders; do
+    occ app:install "$app" 2>/dev/null || occ app:enable "$app"
+done
+echo "[OK] Talk, Notes, Tasks, Tables and Team folders installed"
 
 # --- Background jobs via the nextcloud-cron service ---
 occ background:cron
