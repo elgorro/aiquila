@@ -9,6 +9,8 @@ import {
   type DeckLabel,
 } from '../../client/deck.js';
 import { ApiError } from '../../client/aiquila.js';
+import { checkGatedParams, nextcloudMajor } from '../../client/capabilities.js';
+import { fetchOCS } from '../../client/ocs.js';
 import { handleAppError } from '../error-utils.js';
 
 /**
@@ -26,7 +28,8 @@ function formatBoard(board: DeckBoard): string {
   const flags = [
     board.archived ? 'archived' : null,
     board.shared ? 'shared' : null,
-    `${board.labels.length} labels`,
+    board.teamId ? `team: ${board.teamId}` : null,
+    `${board.labels?.length ?? 0} labels`,
   ]
     .filter(Boolean)
     .join(', ');
@@ -138,6 +141,7 @@ export const getBoardTool = {
         '',
         `ID: ${board.id}`,
         `Owner: ${board.owner.displayname}`,
+        ...(board.teamId ? [`Team: ${board.teamId}`] : []),
         `Color: #${board.color}`,
         `Archived: ${board.archived}`,
         `Modified: ${new Date(board.lastModified * 1000).toISOString()}`,
@@ -180,20 +184,37 @@ export const createBoardTool = {
     idempotentHint: false,
     openWorldHint: false,
   },
-  description: 'Create a new Deck board.',
+  description:
+    'Create a new Deck board. With teamId the board belongs to that team, and all its members can edit it.',
   inputSchema: z.object({
     title: z.string().describe('Board title'),
     color: z
       .string()
       .optional()
       .describe('Hex color without # (e.g. "0800fd"). Defaults to "0800fd"'),
+    teamId: z
+      .string()
+      .optional()
+      .describe('Team (circle) to attach the board to. The user must be a member. Nextcloud 35'),
   }),
-  handler: async (args: { title: string; color?: string }) => {
+  handler: async (args: { title: string; color?: string; teamId?: string }) => {
     try {
-      const board = await fetchDeckAPI<DeckBoard>('/boards', {
-        method: 'POST',
-        body: { title: args.title, color: args.color ?? '0800fd' },
-      });
+      const refused = await checkGatedParams(args, { teamId: nextcloudMajor(35) });
+      if (refused) return { content: [{ type: 'text' as const, text: refused }], isError: true };
+
+      const color = args.color ?? '0800fd';
+      // Team boards have an OCS route only.
+      const board = args.teamId
+        ? (
+            await fetchOCS<DeckBoard>('/ocs/v2.php/apps/deck/api/v1.0/boards/team', {
+              method: 'POST',
+              jsonBody: { title: args.title, teamId: args.teamId, color },
+            })
+          ).ocs.data
+        : await fetchDeckAPI<DeckBoard>('/boards', {
+            method: 'POST',
+            body: { title: args.title, color },
+          });
 
       return {
         content: [{ type: 'text' as const, text: `Board created: ${formatBoard(board)}` }],

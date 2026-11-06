@@ -39,7 +39,8 @@ Nextcloud apps and administration:
 - **Deck** — Boards, stacks, cards, labels, and assignments
 - **Photos** — Albums, collaborators, favourites, and photo metadata
 - **Office** — Convert documents and create them from templates
-- **Circles** — Team circles and their membership
+- **Circles** — Teams, their membership, and their workspace folders
+- **Tables** — Structured data: tables, views, rows, columns, relations, and structure import/export
 - **Projects** — AIquila projects (paths plus a system prompt), project templates and the prompt library
 - **Coworkers** — Create, run, pause and inspect the AIquila Coworkers (saved AI jobs) and their run history
 - **Text** — Read, write and delete a folder's Text workspace (`Readme.md`), or get a direct-edit URL
@@ -342,15 +343,15 @@ Nextcloud apps and administration:
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_shares` | List file shares in Nextcloud (for diagnostics and security auditing) | [Shares](tools/apps/shares.md#list_shares) |
-| `create_share` | Create a file or folder share in Nextcloud | [Shares](tools/apps/shares.md) |
-| `update_share` | Update an existing share in Nextcloud | [Shares](tools/apps/shares.md) |
-| `delete_share` | Delete a share in Nextcloud | [Shares](tools/apps/shares.md) |
-| `get_share` | Get detailed information about a specific share by its ID | [Shares](tools/apps/shares.md) |
-| `list_shares_with_me` | List all files and folders shared with the current user | [Shares](tools/apps/shares.md) |
-| `search_sharees` | Search for valid share recipients (users, groups, emails, federated users, circles… | [Shares](tools/apps/shares.md) |
-| `list_pending_shares` | List pending federated/remote shares waiting to be accepted or declined | [Shares](tools/apps/shares.md) |
-| `accept_pending_share` | Accept a pending federated/remote share | [Shares](tools/apps/shares.md) |
-| `decline_pending_share` | Decline a pending federated/remote share | [Shares](tools/apps/shares.md) |
+| `create_share` | Create a file or folder share in Nextcloud | [Shares](tools/apps/shares.md#create_share) |
+| `update_share` | Update an existing share in Nextcloud | [Shares](tools/apps/shares.md#update_share) |
+| `delete_share` | Delete a share in Nextcloud | [Shares](tools/apps/shares.md#delete_share) |
+| `get_share` | Get detailed information about a specific share by its ID | [Shares](tools/apps/shares.md#get_share) |
+| `list_shares_with_me` | List all files and folders shared with the current user | [Shares](tools/apps/shares.md#list_shares_with_me) |
+| `search_sharees` | Search for valid share recipients (users, groups, emails, federated users, circles… | [Shares](tools/apps/shares.md#search_sharees) |
+| `list_pending_shares` | List pending federated/remote shares waiting to be accepted or declined | [Shares](tools/apps/shares.md#list_pending_shares) |
+| `accept_pending_share` | Accept a pending federated/remote share | [Shares](tools/apps/shares.md#accept_pending_share) |
+| `decline_pending_share` | Decline a pending federated/remote share | [Shares](tools/apps/shares.md#decline_pending_share) |
 
 #### Users (4 tools)
 | Tool | Description | Documentation |
@@ -405,7 +406,7 @@ Nextcloud apps and administration:
 |------|-------------|---------------|
 | `deck_list_boards` | List all Deck boards | — |
 | `deck_get_board` | Get details of a Deck board including its labels and access control list (ACL) | — |
-| `deck_create_board` | Create a new Deck board | — |
+| `deck_create_board` | Create a new Deck board, optionally owned by a team | — |
 | `deck_list_stacks` | List all stacks (columns) of a Deck board, including the cards in each stack | — |
 | `deck_create_stack` | Create a new stack (column) on a Deck board | — |
 | `deck_get_card` | Get full details of a Deck card including description, labels, and assigned users | — |
@@ -438,17 +439,39 @@ Nextcloud apps and administration:
 | `create_document_from_template` | Create a document from a template | [Office](tools/apps/office.md#create_document_from_template) |
 | `convert_document` | Convert a file to another format | [Office](tools/apps/office.md#convert_document) |
 
-#### Circles (8 tools)
+#### Tables (13 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `circles_list` | List all circles/teams accessible to the current user | — |
-| `circles_get` | Get detailed information about a specific circle/team, including its description… | — |
-| `circles_create` | Create a new circle/team | — |
-| `circles_delete` | Delete a circle/team | — |
-| `circles_list_members` | List all members of a circle/team | — |
-| `circles_add_member` | Add a member to a circle/team | — |
-| `circles_remove_member` | Remove a member from a circle/team | — |
-| `circles_search` | Search for circles/teams by name | — |
+| `list_tables` | List the tables the user can access | [Tables](tools/apps/tables.md#list_tables) |
+| `get_table` | Get the columns and views of a table or view | [Tables](tools/apps/tables.md#get_table) |
+| `save_table` | Create or change a table | [Tables](tools/apps/tables.md#save_table) |
+| `delete_table` | Delete a table | [Tables](tools/apps/tables.md#delete_table) |
+| `list_table_rows` | List rows of a table or view | [Tables](tools/apps/tables.md#list_table_rows) |
+| `save_table_row` | Add or change a row | [Tables](tools/apps/tables.md#save_table_row) |
+| `delete_table_row` | Delete a row | [Tables](tools/apps/tables.md#delete_table_row) |
+| `save_table_column` | Add or change a column, including relations | [Tables](tools/apps/tables.md#save_table_column) |
+| `delete_table_column` | Delete a column | [Tables](tools/apps/tables.md#delete_table_column) |
+| `save_table_view` | Create or change a view | [Tables](tools/apps/tables.md#save_table_view) |
+| `delete_table_view` | Delete a view | [Tables](tools/apps/tables.md#delete_table_view) |
+| `export_table_structure` | Export the structure of a table | [Tables](tools/apps/tables.md#export_table_structure) |
+| `import_table_structure` | Create or update a table from a structure | [Tables](tools/apps/tables.md#import_table_structure) |
+
+#### Circles (13 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `circles_list` | List all circles/teams accessible to the current user | [Teams](tools/apps/circles.md#circles_list) |
+| `circles_get` | Get detailed information about a specific circle/team, including its description… | [Teams](tools/apps/circles.md#circles_get) |
+| `circles_create` | Create a new circle/team | [Teams](tools/apps/circles.md#circles_create) |
+| `circles_delete` | Delete a circle/team | [Teams](tools/apps/circles.md#circles_delete) |
+| `circles_list_members` | List all members of a circle/team | [Teams](tools/apps/circles.md#circles_list_members) |
+| `circles_add_member` | Add a member to a circle/team | [Teams](tools/apps/circles.md#circles_add_member) |
+| `circles_remove_member` | Remove a member from a circle/team | [Teams](tools/apps/circles.md#circles_remove_member) |
+| `circles_search` | Search for circles/teams by name | [Teams](tools/apps/circles.md#circles_search) |
+| `circles_get_workspace` | Show a team's workspace folder and resources | [Teams](tools/apps/circles.md#circles_get_workspace) |
+| `circles_list_linkable_folders` | List existing team folders a team can link | [Teams](tools/apps/circles.md#circles_list_linkable_folders) |
+| `circles_create_workspace` | Give a team a new workspace folder, or link an existing one | [Teams](tools/apps/circles.md#circles_create_workspace) |
+| `circles_set_workspace_quota` | Set the storage quota of a team's workspace | [Teams](tools/apps/circles.md#circles_set_workspace_quota) |
+| `circles_remove_workspace` | Unlink or delete a team's workspace folder | [Teams](tools/apps/circles.md#circles_remove_workspace) |
 
 #### Projects (11 tools)
 | Tool | Description | Documentation |

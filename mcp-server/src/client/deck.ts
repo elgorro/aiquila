@@ -33,6 +33,7 @@ export interface DeckBoard {
   owner: DeckOwner;
   color: string;
   archived: boolean;
+  teamId?: string | null;
   labels: DeckLabel[];
   acl: DeckAcl[];
   shared: number;

@@ -28,6 +28,7 @@ import { usersTools } from './tools/apps/users.js';
 import { groupsTools } from './tools/apps/groups.js';
 import { circlesTools } from './tools/apps/circles.js';
 import { officeTools } from './tools/apps/office.js';
+import { tablesTools } from './tools/apps/tables.js';
 import { photosTools } from './tools/apps/photos.js';
 import { sharesTools } from './tools/apps/shares.js';
 import { contactsTools } from './tools/apps/contacts.js';
@@ -109,6 +110,7 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
   { category: 'talk', appIds: ['spreed'], tools: talkTools },
   { category: 'circles', appIds: ['circles'], tools: circlesTools },
   { category: 'office', appIds: ['richdocuments'], tools: officeTools },
+  { category: 'tables', appIds: ['tables'], tools: tablesTools },
   { category: 'bookmarks', appIds: ['bookmarks'], tools: bookmarksTools },
   { category: 'polls', appIds: ['polls'], tools: pollsTools },
   { category: 'forms', appIds: ['forms'], tools: formsTools },
