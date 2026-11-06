@@ -1,4 +1,4 @@
-.PHONY: help check-buildx build-tarball build up up-tools down restart logs logs-nc logs-mcp logs-follow status shell shell-mcp shell-db nc-log test test-mcp clean reset standalone-up standalone-down standalone-logs standalone-test
+.PHONY: help check-buildx build-tarball build up up-tools up-office down restart logs logs-nc logs-mcp logs-follow status shell shell-mcp shell-db nc-log test test-mcp clean reset standalone-up standalone-down standalone-logs standalone-test
 
 SCRIPTS_DIR := ../scripts
 COMPOSE := docker compose
@@ -12,6 +12,7 @@ help:
 	@echo "  make build          - Build Docker image (embeds tarball)"
 	@echo "  make up             - Start all services (pulls base image, builds tarball + image if needed)"
 	@echo "  make up-tools       - Start all services plus Adminer (tools profile)"
+	@echo "  make up-office      - Start all services plus Collabora, and connect Nextcloud to it"
 	@echo "  make down           - Stop all services"
 	@echo "  make restart        - Restart all services"
 	@echo "  make clean          - Stop services, remove volumes, delete tarball"
@@ -98,9 +99,15 @@ up-tools: check-buildx aiquila.tar.gz
 	$(COMPOSE) --profile tools up -d --build
 	@echo "Adminer:      http://localhost:8081"
 
-# Stop all services (including opt-in tools)
+# Start everything plus Collabora, and connect Nextcloud to it
+up-office: check-buildx aiquila.tar.gz
+	$(COMPOSE) build --pull nextcloud
+	$(COMPOSE) --profile office up -d --build
+	./scripts/connect-collabora.sh
+
+# Stop all services (including opt-in ones)
 down:
-	$(COMPOSE) --profile tools down
+	$(COMPOSE) --profile tools --profile office down
 
 # Restart all services
 restart:
@@ -152,7 +159,7 @@ test-mcp:
 
 # Clean up (stop + remove volumes + delete tarball)
 clean:
-	$(COMPOSE) --profile tools down -v --remove-orphans
+	$(COMPOSE) --profile tools --profile office down -v --remove-orphans
 	rm -f aiquila.tar.gz
 	@echo "Cleaned up."
 

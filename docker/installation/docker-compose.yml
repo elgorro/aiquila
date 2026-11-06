@@ -238,6 +238,30 @@ services:
           cpus: '0.5'
           pids: 100
 
+  # Collabora Online, for the Office tools — opt-in: `make up-office`, which also
+  # connects Nextcloud to it. Only reachable inside the stack, so it serves
+  # conversion and templates, not editing in a browser.
+  collabora:
+    image: collabora/code:26.04.5.2.1
+    container_name: aiquila-collabora
+    profiles: ["office"]
+    restart: unless-stopped
+    depends_on:
+      - nextcloud
+    environment:
+      aliasgroup1: http://nextcloud:80
+      extra_params: --o:ssl.enable=false --o:ssl.termination=false
+      username: admin
+      password: ${COLLABORA_PASSWORD:-collabora_dev_password}
+    networks:
+      - aiquila-network
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2.0'
+          pids: 500
+
 volumes:
   postgres_data:
     name: aiquila_postgres_data
