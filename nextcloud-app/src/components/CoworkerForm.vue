@@ -17,7 +17,7 @@
 			<small v-if="form.teamId">{{ t('aiquila', 'All members can see and run it. It runs as you, or as the team owner or an admin if you leave the team, and is deleted with the team. It only uses folders in the team workspace.') }}</small>
 		</label>
 		<p v-else-if="model.teamId" class="muted">{{ t('aiquila', 'Owned by a team. Runs as {user}.', { user: model.userId }) }}</p>
-		<p v-if="missingWorkspace" class="muted">{{ t('aiquila', 'This team has no workspace yet. A team owner or an admin can create one in Teams.') }}</p>
+		<p v-if="missingWorkspace" class="muted">{{ t('aiquila', 'This team has no workspace yet. The team owner or a server admin can add one.') }}</p>
 
 		<label class="field">
 			<span>{{ t('aiquila', 'Task') }}</span>
