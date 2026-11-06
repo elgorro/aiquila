@@ -7,6 +7,7 @@ namespace OCA\AIquila\Db;
 
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Db\QBMapper;
+use OCP\DB\QueryBuilder\ICompositeExpression;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
@@ -99,5 +100,74 @@ class CoworkerMapper extends QBMapper {
             ->andWhere($qb->expr()->lte('next_run_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT)));
 
         return $this->findEntities($qb);
+    }
+
+    /**
+     * A row the user owns, or that one of their teams does.
+     *
+     * @param list<string> $teamIds
+     * @throws DoesNotExistException
+     */
+    public function findAccessible(int $id, string $userId, array $teamIds): Coworker {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+            ->andWhere($this->ownedBy($qb, $userId, $teamIds));
+
+        return $this->findEntity($qb);
+    }
+
+    /**
+     * Like findAllByUser(), plus what the user's teams own. App-owned
+     * coworkers stay out of this list too.
+     *
+     * @param list<string> $teamIds
+     * @return list<Coworker>
+     */
+    public function findAllAccessible(string $userId, array $teamIds): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($this->ownedBy($qb, $userId, $teamIds))
+            ->andWhere($qb->expr()->isNull('owner_app'))
+            ->orderBy('title', 'ASC');
+
+        return $this->findEntities($qb);
+    }
+
+    /**
+     * @throws DoesNotExistException
+     */
+    public function findById(int $id): Coworker {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
+
+        return $this->findEntity($qb);
+    }
+
+    /**
+     * @return list<Coworker>
+     */
+    public function findAllByTeam(string $teamId): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('team_id', $qb->createNamedParameter($teamId, IQueryBuilder::PARAM_STR)));
+
+        return $this->findEntities($qb);
+    }
+
+    /**
+     * @param list<string> $teamIds
+     */
+    private function ownedBy(IQueryBuilder $qb, string $userId, array $teamIds): ICompositeExpression|string {
+        $isUser = $qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR));
+        // IN () is not valid SQL.
+        return $teamIds === []
+            ? $isUser
+            : $qb->expr()->orX($isUser, $qb->expr()->in('team_id', $qb->createNamedParameter($teamIds, IQueryBuilder::PARAM_STR_ARRAY)));
     }
 }

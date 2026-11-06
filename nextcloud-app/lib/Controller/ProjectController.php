@@ -7,6 +7,7 @@ namespace OCA\AIquila\Controller;
 
 use OCA\AIquila\Db\Project;
 use OCA\AIquila\Db\ProjectMapper;
+use OCA\AIquila\Service\TeamService;
 use OCA\AIquila\Db\ProjectPath;
 use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Db\ConversationMapper;
@@ -37,7 +38,8 @@ class ProjectController extends Controller {
         ProjectPathMapper $pathMapper,
         ConversationMapper $conversationMapper,
         ?string $userId,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        private ?TeamService $teams = null,
     ) {
         parent::__construct($appName, $request);
         $this->projectMapper = $projectMapper;
@@ -57,7 +59,7 @@ class ProjectController extends Controller {
     #[NoAdminRequired]
     #[OpenAPI]
     public function index(): JSONResponse {
-        $projects = $this->projectMapper->findAllByUser($this->requireUserId());
+        $projects = $this->projectMapper->findAllAccessible($this->requireUserId(), $this->teamIds());
         $result = [];
         foreach ($projects as $project) {
             $data = $project->jsonSerialize();
@@ -76,6 +78,7 @@ class ProjectController extends Controller {
      * @param string $title Project title
      * @param string $description Project description
      * @param string $systemPrompt System prompt for the project
+     * @param string|null $teamId Team that owns the project, which the user must belong to
      *
      * 200: The created project
      * 400: Title is missing, or a field is too long
@@ -84,7 +87,7 @@ class ProjectController extends Controller {
      */
     #[NoAdminRequired]
     #[OpenAPI]
-    public function create(string $title, string $description = '', string $systemPrompt = ''): JSONResponse {
+    public function create(string $title, string $description = '', string $systemPrompt = '', ?string $teamId = null): JSONResponse {
         if (trim($title) === '') {
             return $this->clientError(400, 'Title is required');
         }
@@ -93,9 +96,17 @@ class ProjectController extends Controller {
             return $this->clientError(400, $error);
         }
 
+        if ($teamId === '') {
+            $teamId = null;
+        }
+        if ($teamId !== null && !in_array($teamId, $this->teamIds(), true)) {
+            return $this->clientError(400, 'You are not a member of that team');
+        }
+
         $now = time();
         $project = new Project();
         $project->setUserId($this->requireUserId());
+        $project->setTeamId($teamId);
         $project->setTitle(trim($title));
         $project->setDescription($description ?: null);
         $project->setSystemPrompt($systemPrompt ?: null);
@@ -123,7 +134,7 @@ class ProjectController extends Controller {
     #[OpenAPI]
     public function show(int $id): JSONResponse {
         try {
-            $project = $this->projectMapper->findByIdAndUser($id, $this->requireUserId());
+            $project = $this->findProject($id);
         } catch (DoesNotExistException $e) {
             return $this->clientError(404, 'Project not found');
         }
@@ -146,18 +157,19 @@ class ProjectController extends Controller {
      * @param string|null $title New title (null keeps it)
      * @param string|null $description New description ('' clears, null keeps it)
      * @param string|null $systemPrompt New system prompt ('' clears, null keeps it)
+     * @param string|null $teamId Team that owns the project ('' makes it personal, null keeps it). Only its creator can change this
      *
      * 200: Updated project
-     * 400: Empty title, or a field is too long
+     * 400: Empty title, a field is too long, or a team the user cannot assign
      * 404: Project not found
      *
      * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST|Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[OpenAPI]
-    public function update(int $id, ?string $title = null, ?string $description = null, ?string $systemPrompt = null): JSONResponse {
+    public function update(int $id, ?string $title = null, ?string $description = null, ?string $systemPrompt = null, ?string $teamId = null): JSONResponse {
         try {
-            $project = $this->projectMapper->findByIdAndUser($id, $this->requireUserId());
+            $project = $this->findProject($id);
         } catch (DoesNotExistException $e) {
             return $this->clientError(404, 'Project not found');
         }
@@ -168,6 +180,16 @@ class ProjectController extends Controller {
         $error = self::validate($title, $description, $systemPrompt);
         if ($error !== null) {
             return $this->clientError(400, $error);
+        }
+
+        if ($teamId !== null && $teamId !== ($project->getTeamId() ?? '')) {
+            if ($project->getUserId() !== $this->requireUserId()) {
+                return $this->clientError(400, 'Only the creator can change who owns a project');
+            }
+            if ($teamId !== '' && !in_array($teamId, $this->teamIds(), true)) {
+                return $this->clientError(400, 'You are not a member of that team');
+            }
+            $project->setTeamId($teamId === '' ? null : $teamId);
         }
 
         if ($title !== null) {
@@ -205,19 +227,14 @@ class ProjectController extends Controller {
     #[OpenAPI]
     public function destroy(int $id): JSONResponse {
         try {
-            $project = $this->projectMapper->findByIdAndUser($id, $this->requireUserId());
+            $project = $this->findProject($id);
         } catch (DoesNotExistException $e) {
             return $this->clientError(404, 'Project not found');
         }
 
         // Null out project_id on any conversations referencing this project
-        $conversations = $this->conversationMapper->findAllByUser($this->requireUserId());
-        foreach ($conversations as $conv) {
-            if ($conv->getProjectId() === $id) {
-                $conv->setProjectId(null);
-                $this->conversationMapper->update($conv);
-            }
-        }
+        // Every member's, on a team project.
+        $this->conversationMapper->clearProject($id);
 
         $this->pathMapper->deleteByProject($id);
         $this->projectMapper->delete($project);
@@ -250,7 +267,7 @@ class ProjectController extends Controller {
         }
 
         try {
-            $this->projectMapper->findByIdAndUser($id, $this->requireUserId());
+            $this->findProject($id);
         } catch (DoesNotExistException $e) {
             return $this->clientError(404, 'Project not found');
         }
@@ -280,7 +297,7 @@ class ProjectController extends Controller {
     #[OpenAPI]
     public function removePath(int $id, int $pathId): JSONResponse {
         try {
-            $this->projectMapper->findByIdAndUser($id, $this->requireUserId());
+            $this->findProject($id);
         } catch (DoesNotExistException $e) {
             return $this->clientError(404, 'Project not found');
         }
@@ -306,5 +323,20 @@ class ProjectController extends Controller {
         return InstructionsService::tooLong($title, InstructionsService::MAX_TITLE_LENGTH, 'Title')
             ?? InstructionsService::tooLong($description, InstructionsService::MAX_DESCRIPTION_LENGTH, 'Description')
             ?? InstructionsService::tooLong($systemPrompt, InstructionsService::MAX_LENGTH, 'System prompt');
+    }
+
+    /**
+     * @throws DoesNotExistException
+     */
+    private function findProject(int $id): Project {
+        $userId = $this->requireUserId();
+        return $this->projectMapper->findAccessible($id, $userId, $this->teamIds());
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function teamIds(): array {
+        return $this->teams?->teamIdsFor($this->requireUserId()) ?? [];
     }
 }

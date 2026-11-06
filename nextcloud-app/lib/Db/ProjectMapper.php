@@ -7,6 +7,7 @@ namespace OCA\AIquila\Db;
 
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Db\QBMapper;
+use OCP\DB\QueryBuilder\ICompositeExpression;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
@@ -47,5 +48,58 @@ class ProjectMapper extends QBMapper {
         $qb->orderBy('updated_at', 'DESC');
 
         return $this->findEntities($qb);
+    }
+
+    /**
+     * A row the user owns, or that one of their teams does.
+     *
+     * @param list<string> $teamIds
+     * @throws DoesNotExistException
+     */
+    public function findAccessible(int $id, string $userId, array $teamIds): Project {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+            ->andWhere($this->ownedBy($qb, $userId, $teamIds));
+
+        return $this->findEntity($qb);
+    }
+
+    /**
+     * @param list<string> $teamIds
+     * @return list<Project>
+     */
+    public function findAllAccessible(string $userId, array $teamIds): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($this->ownedBy($qb, $userId, $teamIds))
+            ->orderBy('updated_at', 'DESC');
+
+        return $this->findEntities($qb);
+    }
+
+    /**
+     * @return list<Project>
+     */
+    public function findAllByTeam(string $teamId): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('team_id', $qb->createNamedParameter($teamId, IQueryBuilder::PARAM_STR)));
+
+        return $this->findEntities($qb);
+    }
+
+    /**
+     * @param list<string> $teamIds
+     */
+    private function ownedBy(IQueryBuilder $qb, string $userId, array $teamIds): ICompositeExpression|string {
+        $isUser = $qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR));
+        // IN () is not valid SQL.
+        return $teamIds === []
+            ? $isUser
+            : $qb->expr()->orX($isUser, $qb->expr()->in('team_id', $qb->createNamedParameter($teamIds, IQueryBuilder::PARAM_STR_ARRAY)));
     }
 }

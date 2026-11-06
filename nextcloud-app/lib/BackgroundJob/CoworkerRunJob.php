@@ -43,7 +43,9 @@ class CoworkerRunJob extends TimedJob {
 
         foreach ($due as $coworker) {
             try {
-                $this->service->execute($coworker);
+                if ($this->service->prepareTeamRun($coworker)) {
+                    $this->service->execute($coworker);
+                }
             } catch (\Throwable $e) {
                 // execute() captures its own failures; this guards mapper issues.
                 $this->logger->error('AIquila Cowork: scheduled execution errored', [

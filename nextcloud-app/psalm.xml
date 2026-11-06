@@ -29,6 +29,7 @@
         <file name="tests/stubs/guzzle.php"/>
         <file name="tests/stubs/cloud-sdks.php"/>
         <file name="tests/stubs/talk.php"/>
+        <file name="tests/stubs/circles.php"/>
     </stubs>
     <issueHandlers>
         <LessSpecificReturnStatement errorLevel="error"/>

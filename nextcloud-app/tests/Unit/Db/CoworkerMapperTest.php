@@ -91,6 +91,33 @@ class CoworkerMapperTest extends MapperTestCase {
         $mapper->findAllByApp('myapp', 'frank');
     }
 
+    public function testFindAllAccessibleLeavesOutAppOwnedCoworkers(): void {
+        $this->mockExpressionBuilder();
+        $this->expr->expects($this->once())->method('isNull')->with('owner_app')->willReturn('owner_app IS NULL');
+
+        $mapper = $this->makeMapper();
+        $mapper->method('findEntities')->willReturn([]);
+        $mapper->findAllAccessible('frank', ['team1']);
+    }
+
+    public function testFindAllAccessibleOrdersLikeTheUsersOwnList(): void {
+        $this->mockQueryBuilder();
+        $this->qb->expects($this->once())->method('orderBy')->with('title', 'ASC')->willReturnSelf();
+
+        $mapper = $this->makeMapper();
+        $mapper->method('findEntities')->willReturn([]);
+        $mapper->findAllAccessible('frank', ['team1']);
+    }
+
+    public function testFindAllAccessibleWithoutTeamsDoesNotBuildAnEmptyIn(): void {
+        $this->mockExpressionBuilder();
+        $this->expr->expects($this->never())->method('in');
+
+        $mapper = $this->makeMapper();
+        $mapper->method('findEntities')->willReturn([]);
+        $mapper->findAllAccessible('frank', []);
+    }
+
     public function testFindByIdAndUserCallsFindEntity(): void {
         $cw = new Coworker();
 

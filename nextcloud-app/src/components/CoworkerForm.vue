@@ -8,6 +8,17 @@
 			<input v-model="form.title" type="text" :placeholder="t('aiquila', 'Classify my photos')">
 		</label>
 
+		<label v-if="teams.length > 0 && !model.id" class="field">
+			<span>{{ t('aiquila', 'Owner') }}</span>
+			<select v-model="form.teamId">
+				<option value="">{{ t('aiquila', 'Just me') }}</option>
+				<option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
+			</select>
+			<small v-if="form.teamId">{{ t('aiquila', 'All members can see and run it. It runs as you, or as the team owner or an admin if you leave the team, and is deleted with the team. It only uses folders in the team workspace.') }}</small>
+		</label>
+		<p v-else-if="model.teamId" class="muted">{{ t('aiquila', 'Owned by a team. Runs as {user}.', { user: model.userId }) }}</p>
+		<p v-if="missingWorkspace" class="muted">{{ t('aiquila', 'This team has no workspace yet. The team owner or a server admin can add one.') }}</p>
+
 		<label class="field">
 			<span>{{ t('aiquila', 'Task') }}</span>
 			<select v-model="form.task_type">
@@ -71,15 +82,21 @@
 				</label>
 			</fieldset>
 
-			<label class="field">
+			<label v-if="!missingWorkspace" class="field">
 				<span>{{ t('aiquila', 'Save the answer to') }}</span>
-				<input v-model="form.output_path" type="text" :placeholder="t('aiquila', 'Leave empty to keep it in the run history only')">
+				<div class="path">
+					<code v-if="workspace">{{ workspace }}/</code>
+					<input v-model="form.output_path" type="text" :placeholder="t('aiquila', 'Leave empty to keep it in the run history only')">
+				</div>
 			</label>
 		</template>
 
-		<label v-else class="field">
+		<label v-else-if="!missingWorkspace" class="field">
 			<span>{{ t('aiquila', 'Input folder') }}</span>
-			<input v-model="form.input_path" type="text" :placeholder="defaultInputPath">
+			<div class="path">
+				<code v-if="workspace">{{ workspace }}/</code>
+				<input v-model="form.input_path" type="text" :placeholder="workspace ? t('aiquila', 'Leave empty for the whole workspace') : defaultInputPath">
+			</div>
 		</label>
 
 		<label class="field">
@@ -93,9 +110,12 @@
 			<input v-model.number="form.maxTags" type="number" min="1" max="30">
 		</label>
 
-		<label v-if="isDocs" class="field">
+		<label v-if="isDocs && !missingWorkspace" class="field">
 			<span>{{ t('aiquila', 'Output folder') }}</span>
-			<input v-model="form.output_path" type="text" :placeholder="t('aiquila', 'Leave empty to write beside each document')">
+			<div class="path">
+				<code v-if="workspace">{{ workspace }}/</code>
+				<input v-model="form.output_path" type="text" :placeholder="t('aiquila', 'Leave empty to write beside each document')">
+			</div>
 		</label>
 
 		<label v-if="isTranslate" class="field">
@@ -125,7 +145,7 @@
 		<p v-if="error" class="form-error">{{ error }}</p>
 
 		<div class="actions">
-			<button class="primary" :disabled="saving" @click="save">{{ t('aiquila', 'Save') }}</button>
+			<button class="primary" :disabled="saving || (missingWorkspace && !isAgent)" @click="save">{{ t('aiquila', 'Save') }}</button>
 			<button :disabled="saving" @click="$emit('cancel')">{{ t('aiquila', 'Cancel') }}</button>
 		</div>
 	</div>
@@ -133,7 +153,7 @@
 
 <script>
 import { translate as t } from '@nextcloud/l10n'
-import { createCoworker, listCoworkerTools, updateCoworker } from '../api.js'
+import { createCoworker, getTeams, getTeamWorkspace, listCoworkerTools, updateCoworker } from '../api.js'
 
 export default {
 	name: 'CoworkerForm',
@@ -170,7 +190,11 @@ export default {
 				effort: options.effort || '',
 				thinking: options.thinking || '',
 				is_active: m.isActive !== undefined ? !!m.isActive : true,
+				teamId: m.teamId || '',
 			},
+			teams: [],
+			workspace: null,
+			workspaceLoading: false,
 		}
 	},
 	computed: {
@@ -200,6 +224,9 @@ export default {
 		isClaude() {
 			return this.form.provider === 'anthropic'
 		},
+		missingWorkspace() {
+			return !!this.form.teamId && !this.workspace && !this.workspaceLoading
+		},
 		efforts() {
 			return ['low', 'medium', 'high', 'xhigh', 'max']
 		},
@@ -209,8 +236,55 @@ export default {
 	},
 	watch: {
 		isAgent: { handler: 'loadTools', immediate: true },
+		'form.teamId': { handler: 'loadWorkspace', immediate: true },
+	},
+	async mounted() {
+		try {
+			this.teams = await getTeams()
+		} catch (e) {
+			// Without the Teams app a coworker is simply personal.
+			this.teams = []
+		}
 	},
 	methods: { t,
+		// Team paths are edited relative to the workspace, so nothing outside
+		// it can be entered.
+		async loadWorkspace(teamId, previous) {
+			this.workspace = null
+			if (previous !== undefined) {
+				this.form.input_path = ''
+				this.form.output_path = ''
+			}
+			if (!teamId) {
+				return
+			}
+			this.workspaceLoading = true
+			let workspace = null
+			try {
+				workspace = await getTeamWorkspace(teamId)
+			} catch (e) {
+				// Shown as a team without a workspace.
+			}
+			if (this.form.teamId !== teamId) {
+				return
+			}
+			this.workspace = workspace
+			this.workspaceLoading = false
+			if (previous === undefined && workspace) {
+				this.form.input_path = this.relativePath(this.form.input_path)
+				this.form.output_path = this.relativePath(this.form.output_path)
+			}
+		},
+		relativePath(path) {
+			return path.startsWith(this.workspace + '/') ? path.slice(this.workspace.length + 1) : (path === this.workspace ? '' : path)
+		},
+		fullPath(path) {
+			if (!this.workspace) {
+				return path
+			}
+			const relative = path.replace(/^\/+|\/+$/g, '')
+			return relative ? this.workspace + '/' + relative : this.workspace
+		},
 		async loadTools() {
 			if (!this.isAgent || this.availableTools.length > 0) {
 				return
@@ -249,7 +323,7 @@ export default {
 				task_type: this.form.task_type,
 				provider: this.form.provider,
 				input_type: this.isAgent ? 'none' : 'folder',
-				input_path: this.isAgent ? null : (this.form.input_path || this.defaultInputPath),
+				input_path: this.isAgent ? null : (this.workspace ? this.fullPath(this.form.input_path) : (this.form.input_path || this.defaultInputPath)),
 				// Vision tasks write tags; docs tasks write files beside the
 				// source; an agent writes its answer to one file, if asked.
 				output_type: this.isAgent ? (this.form.output_path ? 'file' : 'none') : (this.isDocs ? 'files' : 'system_tags'),
@@ -260,10 +334,14 @@ export default {
 				options,
 			}
 			if ((this.isDocs || this.isAgent) && this.form.output_path) {
-				payload.output_path = this.form.output_path
+				payload.output_path = this.fullPath(this.form.output_path)
 			}
 			if (this.isAgent) {
 				payload.custom_prompt = this.form.prompt
+			}
+			// A coworker's team is set once, when it is created.
+			if (!(this.model && this.model.id) && this.form.teamId) {
+				payload.teamId = this.form.teamId
 			}
 			try {
 				const res = this.model && this.model.id
@@ -299,6 +377,8 @@ export default {
 	color: var(--color-main-text);
 }
 .field small { color: var(--color-text-lighter); }
+.path { display: flex; align-items: center; gap: 4px; }
+.path input { flex: 1; min-width: 0; }
 .field.checkbox { flex-direction: row; align-items: center; gap: 8px; }
 fieldset.field { border: none; padding: 0; margin: 0; }
 fieldset.field legend { padding: 0; }

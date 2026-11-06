@@ -65,7 +65,7 @@ Nextcloud apps and administration:
 - **Recommendations** — The files Nextcloud suggests for the current user
 - **AIquila** — Configure and test the AI provider integration
 
-**Total: 349 tools across 44 categories**
+**Total: 372 tools across 46 categories**
 
 ## Tools Reference
 
@@ -477,7 +477,7 @@ Nextcloud apps and administration:
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_projects` | List all AIquila projects for the current user | — |
-| `create_project` | Create a new AIquila project | — |
+| `create_project` | Create a new AIquila project, optionally owned by a team | — |
 | `get_project` | Get details of an AIquila project including its file/directory paths | — |
 | `update_project` | Update an AIquila project | — |
 | `delete_project` | Delete an AIquila project | — |
