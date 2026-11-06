@@ -39,6 +39,7 @@ Nextcloud apps and administration:
 - **Deck** — Boards, stacks, cards, labels, and assignments
 - **Photos** — Albums, collaborators, favourites, and photo metadata
 - **Circles** — Team circles and their membership
+- **Tables** — Structured data: tables, views, rows, columns, relations, and structure import/export
 - **Projects** — AIquila projects (paths plus a system prompt), project templates and the prompt library
 - **Coworkers** — Create, run, pause and inspect the AIquila Coworkers (saved AI jobs) and their run history
 - **Text** — Read, write and delete a folder's Text workspace (`Readme.md`), or get a direct-edit URL
@@ -429,6 +430,23 @@ Nextcloud apps and administration:
 | `photos_set_favorite` | Mark or unmark a file as favorite | — |
 | `photos_set_album_location` | Set or update the location metadata on a photo album | — |
 | `photos_add_collaborators` | Add collaborators (users or groups) to a photo album | — |
+
+#### Tables (13 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_tables` | List the tables the user can access | [Tables](tools/apps/tables.md#list_tables) |
+| `get_table` | Get the columns and views of a table or view | [Tables](tools/apps/tables.md#get_table) |
+| `save_table` | Create or change a table | [Tables](tools/apps/tables.md#save_table) |
+| `delete_table` | Delete a table | [Tables](tools/apps/tables.md#delete_table) |
+| `list_table_rows` | List rows of a table or view | [Tables](tools/apps/tables.md#list_table_rows) |
+| `save_table_row` | Add or change a row | [Tables](tools/apps/tables.md#save_table_row) |
+| `delete_table_row` | Delete a row | [Tables](tools/apps/tables.md#delete_table_row) |
+| `save_table_column` | Add or change a column, including relations | [Tables](tools/apps/tables.md#save_table_column) |
+| `delete_table_column` | Delete a column | [Tables](tools/apps/tables.md#delete_table_column) |
+| `save_table_view` | Create or change a view | [Tables](tools/apps/tables.md#save_table_view) |
+| `delete_table_view` | Delete a view | [Tables](tools/apps/tables.md#delete_table_view) |
+| `export_table_structure` | Export the structure of a table | [Tables](tools/apps/tables.md#export_table_structure) |
+| `import_table_structure` | Create or update a table from a structure | [Tables](tools/apps/tables.md#import_table_structure) |
 
 #### Circles (8 tools)
 | Tool | Description | Documentation |
