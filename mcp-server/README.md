@@ -101,7 +101,7 @@ the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/in
 | Recommendations  |     1 |
 | **Subtotal**     | **248** |
 
-**Total: 349 tools.**
+**Total: 372 tools.**
 
 ## Configuration
 
