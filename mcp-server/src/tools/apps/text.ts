@@ -10,6 +10,7 @@ import {
 import { ApiError } from '../../client/aiquila.js';
 import { getWebDAVClient } from '../../client/webdav.js';
 import { handleAppError } from '../error-utils.js';
+import { textCommentTools } from './text-comments.js';
 
 /**
  * Nextcloud Text App Tools — workspaces (per-folder Readme.md) and direct-edit URLs.
@@ -229,4 +230,5 @@ export const textTools = [
   writeTextWorkspaceTool,
   deleteTextWorkspaceTool,
   getTextWorkspaceEditUrlTool,
+  ...textCommentTools,
 ];
