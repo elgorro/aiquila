@@ -5,7 +5,9 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Service\Provider;
 
+use OCA\AIquila\Http\SseDecoder;
 use OCA\AIquila\Http\SseStreaming;
+use OCA\AIquila\Http\StreamTap;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\MistralModels;
 use OCP\Http\Client\IClientService;
@@ -34,8 +36,18 @@ class MistralProvider implements LLMProviderInterface {
     private const APP_NAME = 'aiquila';
     private const STREAM_TIMEOUT = 300;
 
-    /** Audio work routinely outlasts the shared 30s chat timeout. */
+    /**
+     * Audio work routinely outlasts the shared 30s chat timeout. For speech
+     * this caps the whole call; for a streamed transcription it is how long
+     * the connection may go without a byte.
+     */
     private const AUDIO_TIMEOUT = 300;
+
+    /**
+     * Backstop on a whole transcription. The idle limit above is what catches
+     * a stalled one; this only ends a stream that keeps trickling forever.
+     */
+    private const AUDIO_TRANSCRIBE_CEILING = 3 * 3600;
 
     public const DEFAULT_TRANSCRIBE_MODEL = 'voxtral-mini-latest';
     public const DEFAULT_TTS_MODEL = 'voxtral-mini-tts-2603';
@@ -1254,18 +1266,32 @@ class MistralProvider implements LLMProviderInterface {
      *
      * The request is multipart rather than JSON: the audio travels as a file
      * part, and the endpoint reads the container format from the filename, so
-     * the caller's name is passed through rather than a generic one.
+     * the caller's name is passed through rather than a generic one. Given a
+     * stream, cURL reads the part from it while sending, so the recording is
+     * never held in memory.
+     *
+     * The answer is requested as Server-Sent Events (`stream=true`), which
+     * changes two things for a long recording. First, a stalled connection is
+     * caught by an idle limit (AUDIO_TIMEOUT without a byte) rather than a
+     * fixed cap on the whole call, and an hour of audio does not have to
+     * finish inside one. Second, the transcript arriving piece by piece feeds
+     * the task's progress. cURL hands the response to a sink rather than
+     * returning it, so StreamTap decodes the events as they are written.
+     * The `transcription.done` event carries the same fields as an
+     * unstreamed answer, and an endpoint that ignores `stream` and answers
+     * with JSON is still read.
      *
      * Mistral refuses `timestamp_granularities` alongside `language`, so a
      * request for timestamps drops the language and lets Voxtral detect it.
      */
-    public function transcribeAudio(string $audioData, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array {
-        if ($audioData === '') {
+    public function transcribeAudio(mixed $audio, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array {
+        if ($audio === '') {
             return ['error' => 'No audio to transcribe.'];
         }
         $parts = [
             ['name' => 'model', 'contents' => $this->config->getAppValue(self::APP_NAME, 'mistral_transcribe_model', self::DEFAULT_TRANSCRIBE_MODEL)],
-            ['name' => 'file', 'contents' => $audioData, 'filename' => $filename],
+            ['name' => 'file', 'contents' => $audio, 'filename' => $filename],
+            ['name' => 'stream', 'contents' => 'true'],
         ];
         $language = $options['language'] ?? '';
         $timestamps = ($options['timestamps'] ?? false) === true;
@@ -1275,31 +1301,82 @@ class MistralProvider implements LLMProviderInterface {
             $parts[] = ['name' => 'language', 'contents' => $language];
         }
 
+        $progress = TranscriptionProgress::from($options);
+        $decoder = new SseDecoder();
+        $text = '';
+        /** @var list<mixed> $segments */
+        $segments = [];
+        /** @var array<array-key, mixed>|null $done */
+        $done = null;
+        $onChunk = function (string $chunk) use ($decoder, $progress, &$text, &$segments, &$done): void {
+            foreach ($decoder->feed($chunk) as $event) {
+                $payload = json_decode($event['data'], true);
+                if (!is_array($payload)) {
+                    continue;
+                }
+                $type = $payload['type'] ?? $event['event'];
+                if ($type === 'transcription.text.delta' && is_string($payload['text'] ?? null)) {
+                    $text .= $payload['text'];
+                    $progress->answered(strlen($text));
+                } elseif ($type === 'transcription.segment' || $type === 'transcription.segment.delta') {
+                    // The SDK and the guide disagree on the name; both are segments.
+                    $segments[] = $payload;
+                } elseif ($type === 'transcription.done') {
+                    $done = $payload;
+                }
+            }
+        };
+
+        $sink = fopen('php://temp', 'w+b');
+        if ($sink === false) {
+            return ['error' => 'Could not buffer the Mistral response.'];
+        }
         try {
-            $client = $this->clientService->newClient();
+            StreamTap::attach($sink, $onChunk);
             $headers = $this->headers($this->requireApiKey($userId));
             // Guzzle writes Content-Type itself, boundary included.
             unset($headers['Content-Type']);
-            $response = $client->post(self::API_BASE . '/audio/transcriptions', [
+            $this->clientService->newClient()->post(self::API_BASE . '/audio/transcriptions', [
                 'headers' => $headers,
                 'multipart' => $parts,
-                'timeout' => self::AUDIO_TIMEOUT,
-            ]);
-            $decoded = json_decode((string)$response->getBody(), true);
-            if (!is_array($decoded) || !isset($decoded['text']) || !is_string($decoded['text'])) {
+                'sink' => $sink,
+                'timeout' => self::AUDIO_TRANSCRIBE_CEILING,
+                'curl' => [
+                    CURLOPT_LOW_SPEED_LIMIT => 1,
+                    CURLOPT_LOW_SPEED_TIME => self::AUDIO_TIMEOUT,
+                ],
+            ] + $progress->requestOptions());
+
+            if ($done === null) {
+                // Not an event stream: an endpoint that answered in one piece.
+                rewind($sink);
+                $done = json_decode((string)stream_get_contents($sink), true);
+            }
+            if (!is_array($done)) {
                 return ['error' => 'Mistral returned no transcript.'];
             }
-            $usage = $decoded['usage'] ?? null;
+            $final = $done['text'] ?? ($text !== '' ? $text : null);
+            if (!is_string($final)) {
+                return ['error' => 'Mistral returned no transcript.'];
+            }
+            $usage = $done['usage'] ?? null;
             $result = [
-                'response' => $decoded['text'],
+                'response' => $final,
                 'usage' => $this->extractUsage(is_array($usage) ? $usage : []),
             ];
             if ($timestamps) {
-                $result['segments'] = TranscriptSegments::parse($decoded['segments'] ?? null);
+                $doneSegments = $done['segments'] ?? null;
+                $result['segments'] = TranscriptSegments::parse(is_array($doneSegments) && $doneSegments !== [] ? $doneSegments : $segments);
             }
             return $result;
         } catch (\Throwable $e) {
             return $this->handleException($e, 'transcribeAudio');
+        } finally {
+            // Guzzle wraps the sink in a stream of its own, which may close it first.
+            /** @psalm-suppress RedundantCondition */
+            if (is_resource($sink)) {
+                fclose($sink);
+            }
         }
     }
 

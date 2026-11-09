@@ -205,10 +205,19 @@ interface LLMProviderInterface {
      * segments as well — what subtitles are built from. A provider whose
      * backend has no timings leaves `segments` out rather than failing.
      *
-     * @param array{language?: string, timestamps?: bool} $options
+     * $audio is the recording itself or a stream of it. A stream is sent as
+     * it is read, so a long recording never has to fit in memory; it must
+     * report its size, which Guzzle needs for the part's length.
+     *
+     * `onProgress` is called with the share of the transcription done so far
+     * (0–1, rising), so far as the provider can tell; see
+     * TranscriptionProgress.
+     *
+     * @param string|resource|\Psr\Http\Message\StreamInterface $audio
+     * @param array{language?: string, timestamps?: bool, onProgress?: callable(float): mixed} $options
      * @return array{response: string, segments?: list<array{start: float, end: float, text: string}>, usage?: array}|array{error: string}
      */
-    public function transcribeAudio(string $audioData, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array;
+    public function transcribeAudio(mixed $audio, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array;
 
     /**
      * Synthesize speech from text, returning the raw audio bytes and the MIME

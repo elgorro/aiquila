@@ -565,6 +565,31 @@ class LocalProviderTest extends TestCase {
         ], $options['multipart']);
     }
 
+    public function testTranscriptionStreamsTheRecordingAndReportsTheUpload(): void {
+        $provider = $this->provider(['local_audio_in' => 'yes']);
+        $options = null;
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$options): IResponse {
+                $options = $o;
+                $o['progress'](0, 0, 200, 100);
+                return $this->jsonResponse(['text' => 'Hello there.']);
+            }
+        );
+        $recording = fopen('php://memory', 'w+b');
+        $reported = [];
+
+        $provider->transcribeAudio($recording, 'audio/mpeg', 'memo.mp3', null, [
+            'onProgress' => function (float $p) use (&$reported): void {
+                $reported[] = $p;
+            },
+        ]);
+
+        $this->assertSame($recording, $options['multipart'][1]['contents']);
+        // The upload is half the job; the backend's answer arrives in one piece.
+        $this->assertSame([0.25], $reported);
+        fclose($recording);
+    }
+
     public function testTranscriptionWithTimestampsRequestsVerboseJsonSegments(): void {
         $provider = $this->provider(['local_audio_in' => 'yes']);
         $options = null;

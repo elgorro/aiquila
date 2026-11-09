@@ -338,13 +338,13 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
         return $this->config->getAppValue(self::APP_NAME, 'local_audio_out', 'no') === 'yes';
     }
 
-    public function transcribeAudio(string $audioData, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array {
+    public function transcribeAudio(mixed $audio, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array {
         if (!$this->supportsAudioInput($userId)) {
             return ['error' => $this->getLabel() . ' is not configured to transcribe audio. Enable it in the AIquila admin settings.'];
         }
         $parts = [
             ['name' => 'model', 'contents' => $this->config->getAppValue(self::APP_NAME, 'local_stt_model', self::DEFAULT_STT_MODEL)],
-            ['name' => 'file', 'contents' => $audioData, 'filename' => $filename],
+            ['name' => 'file', 'contents' => $audio, 'filename' => $filename],
         ];
         $language = $options['language'] ?? '';
         if (is_string($language) && $language !== '') {
@@ -358,7 +358,7 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
         }
 
         try {
-            $response = $this->postMultipart('/audio/transcriptions', $parts, $userId);
+            $response = $this->postMultipart('/audio/transcriptions', $parts, $userId, TranscriptionProgress::from($options)->requestOptions());
             $decoded = json_decode((string)$response->getBody(), true);
             if (!is_array($decoded) || !isset($decoded['text']) || !is_string($decoded['text'])) {
                 return ['error' => $this->getLabel() . ' returned no transcript.'];

@@ -14,7 +14,12 @@ class AudioServiceTest extends TestCase {
     private function file() {
         $file = $this->createStub(File::class);
         $file->method('getName')->willReturn('memo.mp3');
-        $file->method('getContent')->willReturn('ID3 bytes');
+        $file->method('fopen')->willReturnCallback(static function (): mixed {
+            $handle = fopen('php://memory', 'w+b');
+            fwrite($handle, 'ID3 bytes');
+            rewind($handle);
+            return $handle;
+        });
         $file->method('getMimetype')->willReturn('audio/mpeg');
         $file->method('getSize')->willReturn(1024);
         return $file;
@@ -89,5 +94,58 @@ class AudioServiceTest extends TestCase {
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessageIsOrContains('Mistral returned no timestamps');
         (new AudioService(new NullLogger()))->segments($provider, $this->file(), 'alice');
+    }
+
+    public function testTheRecordingIsHandedOverAsAStreamAndClosedAfterwards(): void {
+        $handle = fopen('php://memory', 'w+b');
+        fwrite($handle, 'ID3 bytes');
+        rewind($handle);
+        $file = $this->createStub(File::class);
+        $file->method('getName')->willReturn('memo.mp3');
+        $file->method('fopen')->willReturn($handle);
+        $file->method('getMimetype')->willReturn('audio/mpeg');
+        $file->method('getSize')->willReturn(9);
+        $received = null;
+        $provider = $this->provider();
+        $provider->method('transcribeAudio')->willReturnCallback(
+            function (mixed $audio) use (&$received): array {
+                $received = is_resource($audio) ? stream_get_contents($audio) : $audio;
+                return ['response' => 'Hello'];
+            }
+        );
+
+        $result = (new AudioService(new NullLogger()))->transcribe($provider, $file, 'alice');
+
+        $this->assertSame('ID3 bytes', $received);
+        $this->assertSame('Hello', $result['text']);
+        $this->assertFalse(is_resource($handle), 'the file handle is closed once the provider is done');
+    }
+
+    public function testAnUnreadableRecordingFailsBeforeTheProvider(): void {
+        $file = $this->createStub(File::class);
+        $file->method('getName')->willReturn('memo.mp3');
+        $file->method('fopen')->willThrowException(new \RuntimeException('locked'));
+        $file->method('getMimetype')->willReturn('audio/mpeg');
+        $file->method('getSize')->willReturn(9);
+        $provider = $this->createMock(LLMProviderInterface::class);
+        $provider->expects($this->never())->method('transcribeAudio');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageIsOrContains('The audio file could not be read.');
+        (new AudioService(new NullLogger()))->transcribe($provider, $file, 'alice');
+    }
+
+    public function testProgressIsMappedOntoTheTasksOwnStretch(): void {
+        $reported = [];
+        $onProgress = AudioService::progressBetween(function (float $p) use (&$reported): bool {
+            $reported[] = $p;
+            return true;
+        }, 0.1, 0.4);
+
+        foreach ([0.0, 0.5, 1.0, 1.5] as $fraction) {
+            $onProgress($fraction);
+        }
+
+        $this->assertEqualsWithDelta([0.1, 0.25, 0.4, 0.4], $reported, 1e-9);
     }
 }

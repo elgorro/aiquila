@@ -100,7 +100,7 @@ class AudioToAudioChatProvider implements ISynchronousProvider {
         $provider = $this->providers->resolveVoiceChatCapable($userId, $this->providers->requestedId($input));
         $reportProgress(0.1);
 
-        $question = $this->audio->transcribeRequired($provider, $file, $userId);
+        $question = $this->audio->transcribeRequired($provider, $file, $userId, ['onProgress' => AudioService::progressBetween($reportProgress, 0.1, 0.4)]);
         $reportProgress(0.4);
 
         $system = $this->providers->systemPrompt($userId, $input);

@@ -100,12 +100,11 @@ class AudioToTextProvider implements ISynchronousProvider {
         $reportProgress(0.1);
 
         $language = $input['language'] ?? '';
-        $transcript = $this->audio->transcribe(
-            $provider,
-            $file,
-            $userId,
-            is_string($language) && $language !== '' ? ['language' => $language] : [],
-        );
+        $options = ['onProgress' => AudioService::progressBetween($reportProgress, 0.1, 1.0)];
+        if (is_string($language) && $language !== '') {
+            $options['language'] = $language;
+        }
+        $transcript = $this->audio->transcribe($provider, $file, $userId, $options);
 
         $reportProgress(1.0);
         return ['output' => $transcript['text']];
