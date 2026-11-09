@@ -43,7 +43,8 @@ Nextcloud apps and administration:
 - **Tables** — Structured data: tables, views, rows, columns, relations, and structure import/export
 - **Projects** — AIquila projects (paths plus a system prompt), project templates and the prompt library
 - **Coworkers** — Create, run, pause and inspect the AIquila Coworkers (saved AI jobs) and their run history
-- **Text** — Read, write and delete a folder's Text workspace (`Readme.md`), or get a direct-edit URL
+- **Text** — Read, write and delete a folder's Text workspace (`Readme.md`), get a direct-edit URL, and work with the inline comments in Markdown documents
+- **File Comments** — Read, write and mark read the comments on files and folders
 - **Notifications** — Read, mark and dismiss Nextcloud notifications
 - **User Status & Out of Office** — Set status, status message, and absence periods
 - **Bookmarks** — Bookmark CRUD, folder hierarchy, and tag management
@@ -65,7 +66,7 @@ Nextcloud apps and administration:
 - **Recommendations** — The files Nextcloud suggests for the current user
 - **AIquila** — Configure and test the AI provider integration
 
-**Total: 372 tools across 46 categories**
+**Total: 381 tools across 47 categories**
 
 ## Tools Reference
 
@@ -507,7 +508,7 @@ Nextcloud apps and administration:
 | `get_coworker_runs` | Get recent run history (progress, status, summary) | [Coworkers](tools/apps/cowork.md#get_coworker_runs) |
 | `get_coworker_run` | Get one run in full: summary, error and per-item log | [Coworkers](tools/apps/cowork.md#get_coworker_run) |
 
-#### Text (5 tools)
+#### Text (9 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `get_text_workspace` | Get metadata of the Text workspace file (Readme.md) for a folder | [Text](tools/apps/text.md#get_text_workspace) |
@@ -515,6 +516,19 @@ Nextcloud apps and administration:
 | `write_text_workspace` | Create or overwrite a folder's Text workspace file | [Text](tools/apps/text.md#write_text_workspace) |
 | `delete_text_workspace` | Delete the Text workspace file (Readme.md) for a folder | [Text](tools/apps/text.md#delete_text_workspace) |
 | `get_text_workspace_edit_url` | Get a one-shot direct-edit URL for a folder's Text workspace | [Text](tools/apps/text.md#get_text_workspace_edit_url) |
+| `list_text_comments` | List the inline comment threads in a Markdown document | [Text](tools/apps/text.md#list_text_comments) |
+| `add_text_comment` | Start an inline comment thread after a piece of text | [Text](tools/apps/text.md#add_text_comment) |
+| `reply_text_comment` | Reply to an inline comment thread | [Text](tools/apps/text.md#reply_text_comment) |
+| `delete_text_comment` | Delete an inline comment thread, or one comment in it | [Text](tools/apps/text.md#delete_text_comment) |
+
+#### File Comments (5 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_file_comments` | List the comments on a file or folder | [File Comments](tools/apps/comments.md#list_file_comments) |
+| `add_file_comment` | Comment on a file or folder | [File Comments](tools/apps/comments.md#add_file_comment) |
+| `update_file_comment` | Change one of your own comments | [File Comments](tools/apps/comments.md#update_file_comment) |
+| `delete_file_comment` | Delete one of your own comments | [File Comments](tools/apps/comments.md#delete_file_comment) |
+| `mark_file_comments_read` | Mark a file's comments as read | [File Comments](tools/apps/comments.md#mark_file_comments_read) |
 
 #### Trash (3 tools)
 | Tool | Description | Documentation |
