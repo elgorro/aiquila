@@ -552,16 +552,20 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
      * from headers() has to come off — leaving it on produces a body the far
      * end cannot parse.
      *
-     * @param list<array{name: string, contents: string, filename?: string}> $parts
+     * A part whose contents is a stream is read while sending rather than
+     * first loaded into memory.
+     *
+     * @param list<array{name: string, contents: mixed, filename?: string}> $parts
+     * @param array<string, mixed> $extra further Guzzle options, e.g. `progress`
      */
-    protected function postMultipart(string $path, array $parts, ?string $userId): IResponse {
+    protected function postMultipart(string $path, array $parts, ?string $userId, array $extra = []): IResponse {
         if (!$this->isConfigured($userId)) {
             throw new \RuntimeException($this->notConfiguredMessage());
         }
         $options = $this->requestOptions($userId, [
             'multipart' => $parts,
             'timeout' => $this->audioTimeout(),
-        ]);
+        ] + $extra);
         unset($options['headers']['Content-Type']);
         return $this->clientService->newClient()->post($this->apiBase() . $path, $options);
     }

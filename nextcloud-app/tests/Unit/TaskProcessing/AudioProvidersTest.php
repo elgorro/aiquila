@@ -22,6 +22,7 @@ use OCP\TaskProcessing\TaskTypes\AudioToAudioChat;
 use OCP\TaskProcessing\TaskTypes\AudioToText;
 use OCP\TaskProcessing\TaskTypes\TextToImage;
 use OCP\TaskProcessing\TaskTypes\TextToSpeech;
+use PHPUnit\Framework\Constraint\Callback;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use OCA\AIquila\Service\UsageStatService;
@@ -46,10 +47,45 @@ class AudioProvidersTest extends TestCase {
         $file = $this->createStub(File::class);
         $file->method('getId')->willReturn(7);
         $file->method('getName')->willReturn($name);
-        $file->method('getContent')->willReturn(self::MP3);
+        $file->method('fopen')->willReturnCallback(static function (): mixed {
+            $handle = fopen('php://memory', 'w+b');
+            fwrite($handle, self::MP3);
+            rewind($handle);
+            return $handle;
+        });
         $file->method('getMimetype')->willReturn($mime);
         $file->method('getSize')->willReturn($size);
         return $file;
+    }
+
+    /**
+     * The recording reaches the provider as a stream of the file, never as
+     * its bytes in a string.
+     */
+    private function theRecording(): Callback {
+        return $this->callback(static function (mixed $audio): bool {
+            if (!is_resource($audio)) {
+                return false;
+            }
+            rewind($audio);
+            return stream_get_contents($audio) === self::MP3;
+        });
+    }
+
+    /**
+     * The given options, plus the progress callback every transcription
+     * carries.
+     *
+     * @param array<string, mixed> $expected
+     */
+    private function optionsWith(array $expected): Callback {
+        return $this->callback(static function (mixed $options) use ($expected): bool {
+            if (!is_array($options) || !is_callable($options['onProgress'] ?? null)) {
+                return false;
+            }
+            unset($options['onProgress']);
+            return $options === $expected;
+        });
     }
 
     /** @param array<string, bool> $capabilities */
@@ -152,7 +188,7 @@ class AudioProvidersTest extends TestCase {
         $provider = $this->provider(['audio_in' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
-            ->with(self::MP3, 'audio/mpeg', 'memo.mp3', 'alice', ['language' => 'de'])
+            ->with($this->theRecording(), 'audio/mpeg', 'memo.mp3', 'alice', $this->optionsWith(['language' => 'de']))
             ->willReturn(['response' => 'Guten Morgen.']);
         $this->serve($provider);
 
@@ -169,7 +205,7 @@ class AudioProvidersTest extends TestCase {
         $provider = $this->provider(['audio_in' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
-            ->with(self::MP3, 'audio/mpeg', 'memo.mp3', 'alice', [])
+            ->with($this->theRecording(), 'audio/mpeg', 'memo.mp3', 'alice', $this->optionsWith([]))
             ->willReturn(['response' => 'Hello.']);
         $this->serve($provider);
 
@@ -184,7 +220,7 @@ class AudioProvidersTest extends TestCase {
         $provider = $this->provider(['audio_in' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
-            ->with(self::MP3, 'audio/ogg', 'voice-message.ogg', null, [])
+            ->with($this->theRecording(), 'audio/ogg', 'voice-message.ogg', null, $this->optionsWith([]))
             ->willReturn(['response' => 'Hi.']);
         $this->serve($provider);
 
@@ -209,7 +245,7 @@ class AudioProvidersTest extends TestCase {
         $this->serve($this->provider(['audio_in' => true]));
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessageIsOrContains('The audio file is too large. Maximum is 100 MB.');
+        $this->expectExceptionMessageIsOrContains('The audio file is too large. Maximum is 512 MB.');
         $this->audioToText()->process(
             'alice',
             ['input' => $this->audioFile('memo.mp3', 'audio/mpeg', AudioLimits::MAX_BYTES + 1)],
@@ -382,7 +418,7 @@ class AudioProvidersTest extends TestCase {
         $provider = $this->provider(['audio_in' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
-            ->with(self::MP3, 'video/mp4', 'talk.mp4', 'alice', ['timestamps' => true])
+            ->with($this->theRecording(), 'video/mp4', 'talk.mp4', 'alice', $this->optionsWith(['timestamps' => true]))
             ->willReturn(['response' => 'Hello there.', 'segments' => [
                 ['start' => 0.0, 'end' => 1.5, 'text' => ' Hello'],
                 ['start' => 1.5, 'end' => 2.25, 'text' => ' there.'],
@@ -444,7 +480,7 @@ class AudioProvidersTest extends TestCase {
         $provider = $this->provider(['audio_in' => true, 'audio_out' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
-            ->with(self::MP3, 'audio/mpeg', 'memo.mp3', 'alice', ['language' => 'en'])
+            ->with($this->theRecording(), 'audio/mpeg', 'memo.mp3', 'alice', $this->optionsWith(['language' => 'en']))
             ->willReturn(['response' => 'Good morning.']);
         $provider->expects($this->once())
             ->method('ask')
@@ -472,7 +508,7 @@ class AudioProvidersTest extends TestCase {
         $provider = $this->provider(['audio_in' => true, 'audio_out' => true], mock: true);
         $provider->expects($this->once())
             ->method('transcribeAudio')
-            ->with($this->anything(), $this->anything(), $this->anything(), 'alice', [])
+            ->with($this->anything(), $this->anything(), $this->anything(), 'alice', $this->optionsWith([]))
             ->willReturn(['response' => 'Bonjour.']);
         $provider->expects($this->once())
             ->method('ask')

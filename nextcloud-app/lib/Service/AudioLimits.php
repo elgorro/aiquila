@@ -10,8 +10,7 @@ namespace OCA\AIquila\Service;
  *
  * Transcription endpoints reject oversized or unrecognised containers with a
  * bare 4xx that says nothing useful to the person who picked the file, and the
- * whole recording has been read into memory and pushed over the wire by the
- * time that arrives. Checking here turns both into an immediate, specific
+ * whole recording has been pushed over the wire by the time that arrives. Checking here turns both into an immediate, specific
  * message — the audio analogue of ImageOptimizer's MAX_IMAGES guard.
  *
  * There is no optimizing counterpart: transcoding audio would need ffmpeg,
@@ -20,11 +19,18 @@ namespace OCA\AIquila\Service;
  */
 final class AudioLimits {
     /**
-     * Ceiling on a single recording. Mistral accepts recordings of up to three
-     * hours, which comfortably fits inside this; the limit exists to stop a
-     * mistaken multi-gigabyte upload from being read into PHP's memory at all.
+     * Ceiling on a single recording.
+     *
+     * Memory is not what sets it: the recording is streamed from storage to
+     * the provider, never loaded whole. What sets it is the far end. Mistral
+     * names three hours as the longest recording it transcribes, but no size
+     * for an inline upload, so this is sized from that duration. Three hours
+     * is about 430 MB as 320 kbit/s MP3 and about 350 MB as 16 kHz mono WAV,
+     * the usual rate for speech. A file above this is either longer than any
+     * provider in use will take or uncompressed studio audio. Refusing it
+     * here saves an upload of several minutes that ends in a rejection.
      */
-    public const MAX_BYTES = 100 * 1024 * 1024;
+    public const MAX_BYTES = 512 * 1024 * 1024;
 
     /** Containers the transcription endpoints in use accept. */
     private const SUPPORTED_MIMES = [

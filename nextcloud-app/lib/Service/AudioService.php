@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Service;
 
+use GuzzleHttp\Psr7\Utils;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\TaskProcessing\TaskFailure;
 use OCP\Files\File;
@@ -33,24 +34,45 @@ class AudioService {
     }
 
     /**
-     * @param array{language?: string, timestamps?: bool} $options
+     * Transcribe a recording without loading it into memory: the provider is
+     * handed a stream of the file, which cURL reads from while uploading.
+     *
+     * @param array{language?: string, timestamps?: bool, onProgress?: callable(float): mixed} $options
      * @return array{text: string, segments: list<array{start: float, end: float, text: string}>}
      * @throws \RuntimeException when the recording is refused or the provider fails
      */
     public function transcribe(LLMProviderInterface $provider, File $file, ?string $userId, array $options = []): array {
+        $size = (int)$file->getSize();
+        $mimeType = $file->getMimetype();
         try {
-            AudioLimits::assertAcceptable((int)$file->getSize(), $file->getMimetype());
+            AudioLimits::assertAcceptable($size, $mimeType);
         } catch (\RuntimeException $e) {
             throw TaskFailure::userFacing($e->getMessage(), $e);
         }
 
-        $result = $provider->transcribeAudio(
-            $file->getContent(),
-            $file->getMimetype(),
-            AudioLimits::filenameFor($file->getName(), $file->getMimetype()),
-            $userId,
-            $options,
-        );
+        try {
+            $handle = $file->fopen('r');
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila audio: could not open the recording', ['error' => $e->getMessage(), 'fileId' => $file->getId()]);
+            throw TaskFailure::userFacing('The audio file could not be read.', $e);
+        }
+        if (!is_resource($handle)) {
+            throw TaskFailure::userFacing('The audio file could not be read.');
+        }
+
+        try {
+            $result = $provider->transcribeAudio(
+                self::uploadBody($handle, $size),
+                $mimeType,
+                AudioLimits::filenameFor($file->getName(), $mimeType),
+                $userId,
+                $options,
+            );
+        } finally {
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+        }
         if (isset($result['error'])) {
             $this->logger->error('AIquila audio: transcription failed', ['error' => $result['error'], 'provider' => $provider->getId()]);
             throw TaskFailure::fromProviderError($result['error']);
@@ -63,11 +85,45 @@ class AudioService {
     }
 
     /**
+     * An `onProgress` callback that maps the transcription's 0–1 onto the
+     * $from–$to stretch of a task's own progress.
+     *
+     * @param callable(float): mixed $reportProgress TaskProcessing's reporter
+     * @return \Closure(float): void
+     */
+    public static function progressBetween(callable $reportProgress, float $from, float $to): \Closure {
+        return static function (float $fraction) use ($reportProgress, $from, $to): void {
+            $reportProgress($from + ($to - $from) * max(0.0, min(1.0, $fraction)));
+        };
+    }
+
+    /**
+     * The file stream as an upload part, carrying the size Nextcloud has on
+     * record.
+     *
+     * Guzzle would otherwise take the length from fstat(), and Nextcloud's
+     * storage wrappers do not all report the plain size there: server-side
+     * encryption stats the encrypted file, which is larger, so the request
+     * would announce more bytes than it sends. Guzzle ships with Nextcloud
+     * rather than with this app, so without it the raw stream is passed and
+     * fstat() decides.
+     *
+     * @param resource $handle
+     * @return resource|\Psr\Http\Message\StreamInterface
+     */
+    private static function uploadBody($handle, int $size): mixed {
+        if (class_exists(Utils::class)) {
+            return Utils::streamFor($handle, ['size' => $size]);
+        }
+        return $handle;
+    }
+
+    /**
      * A transcript that has to say something, for chains that go on to act on
      * it — answering or translating silence would only produce a confused
      * reply to nothing.
      *
-     * @param array{language?: string} $options
+     * @param array{language?: string, onProgress?: callable(float): mixed} $options
      * @throws \RuntimeException
      */
     public function transcribeRequired(LLMProviderInterface $provider, File $file, ?string $userId, array $options = []): string {
@@ -81,11 +137,12 @@ class AudioService {
     /**
      * The recording's timed segments, for subtitles.
      *
+     * @param array{onProgress?: callable(float): mixed} $options
      * @return list<array{start: float, end: float, text: string}>
      * @throws \RuntimeException when the provider fails or returns no timings
      */
-    public function segments(LLMProviderInterface $provider, File $file, ?string $userId): array {
-        $segments = $this->transcribe($provider, $file, $userId, ['timestamps' => true])['segments'];
+    public function segments(LLMProviderInterface $provider, File $file, ?string $userId, array $options = []): array {
+        $segments = $this->transcribe($provider, $file, $userId, ['timestamps' => true] + $options)['segments'];
         if ($segments === []) {
             throw TaskFailure::userFacing($provider->getLabel() . ' returned no timestamps for this recording, so no subtitles can be made from it.');
         }

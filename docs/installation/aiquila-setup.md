@@ -473,6 +473,9 @@ matching capability, shown as a chip on the provider's card in the AIquila setti
 | Generated images | `image generation` | Mistral |
 | PDFs attached to a tool chat | `documents` | Claude |
 
+Recordings for transcription, subtitles, voice chat and audio translation can be MP3,
+M4A, WAV, WebM, OGG or FLAC, or MP4 and WebM video, up to 512 MB.
+
 Picking a provider without the capability an action needs is an error rather than a
 silent hand-off to a different one — the point of choosing a provider is that the data
 goes where you chose. The action fails with a message naming the providers you could

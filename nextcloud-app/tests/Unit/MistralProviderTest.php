@@ -391,21 +391,49 @@ class MistralProviderTest extends TestCase {
         $this->assertTrue($capabilities['image_out']);
     }
 
-    public function testTranscribeAudioPostsMultipartWithoutAJsonContentType(): void {
+    /**
+     * What cURL does with the `sink` option: write the response body into it
+     * as it arrives, piece by piece.
+     *
+     * @param list<string> $pieces
+     */
+    private function writeToSink(array $options, array $pieces): IResponse {
+        $this->assertIsResource($options['sink']);
+        foreach ($pieces as $piece) {
+            fwrite($options['sink'], $piece);
+        }
+        return $this->createStub(IResponse::class);
+    }
+
+    private static function event(array $payload): string {
+        return 'event: ' . $payload['type'] . "\n" . 'data: ' . json_encode($payload) . "\n\n";
+    }
+
+    /** @return resource */
+    private static function recording(string $bytes = 'raw-bytes') {
+        $handle = fopen('php://memory', 'w+b');
+        fwrite($handle, $bytes);
+        rewind($handle);
+        return $handle;
+    }
+
+    public function testTranscribeAudioStreamsTheRecordingAndAsksForAnEventStream(): void {
         $url = null;
         $options = null;
+        $recording = self::recording();
         $this->client->method('post')->willReturnCallback(
             function (string $u, array $o) use (&$url, &$options): IResponse {
                 $url = $u;
                 $options = $o;
-                return $this->jsonResponse([
+                return $this->writeToSink($o, [self::event([
+                    'type' => 'transcription.done',
                     'text' => 'Guten Morgen.',
-                    'usage' => ['prompt_tokens' => 40, 'completion_tokens' => 8],
-                ]);
+                    'usage' => ['prompt_tokens' => 40, 'completion_tokens' => 8, 'prompt_audio_seconds' => 3],
+                ])]);
             }
         );
 
-        $result = $this->provider->transcribeAudio('raw-bytes', 'audio/mpeg', 'memo.mp3', 'u', ['language' => 'de']);
+        $result = $this->provider->transcribeAudio($recording, 'audio/mpeg', 'memo.mp3', 'u', ['language' => 'de']);
 
         $this->assertSame('Guten Morgen.', $result['response']);
         $this->assertSame(40, $result['usage']['input_tokens']);
@@ -413,35 +441,102 @@ class MistralProviderTest extends TestCase {
         // Guzzle writes Content-Type itself, boundary included.
         $this->assertArrayNotHasKey('Content-Type', $options['headers']);
         $this->assertSame('Bearer test-key', $options['headers']['Authorization']);
+        // The stream itself goes into the part; Guzzle reads it while sending.
         $this->assertSame([
             ['name' => 'model', 'contents' => MistralProvider::DEFAULT_TRANSCRIBE_MODEL],
-            ['name' => 'file', 'contents' => 'raw-bytes', 'filename' => 'memo.mp3'],
+            ['name' => 'file', 'contents' => $recording, 'filename' => 'memo.mp3'],
+            ['name' => 'stream', 'contents' => 'true'],
             ['name' => 'language', 'contents' => 'de'],
         ], $options['multipart']);
+        // An idle limit, not a cap on the whole transcription.
+        $this->assertSame(1, $options['curl'][CURLOPT_LOW_SPEED_LIMIT]);
+        $this->assertSame(300, $options['curl'][CURLOPT_LOW_SPEED_TIME]);
+        $this->assertGreaterThanOrEqual(3 * 3600, $options['timeout']);
+        // Nobody asked for progress, so cURL is not asked to report it.
+        $this->assertArrayNotHasKey('progress', $options);
+    }
+
+    public function testTranscribeAudioAssemblesTheEventsWhateverTheyAreCutInto(): void {
+        $stream = ": keep-alive\n\n"
+            . self::event(['type' => 'transcription.language', 'audio_language' => 'de'])
+            . self::event(['type' => 'transcription.text.delta', 'text' => 'Hallo'])
+            . self::event(['type' => 'transcription.text.delta', 'text' => ' Welt'])
+            . self::event(['type' => 'transcription.done', 'text' => 'Hallo Welt', 'usage' => ['prompt_tokens' => 5, 'completion_tokens' => 2]]);
+        // CRLF line endings, delivered in three-byte pieces: events, lines and
+        // even a CR and its LF arrive split.
+        $pieces = str_split(str_replace("\n", "\r\n", $stream), 3);
+        $this->client->method('post')->willReturnCallback(fn (string $u, array $o): IResponse => $this->writeToSink($o, $pieces));
+
+        $result = $this->provider->transcribeAudio(self::recording(), 'audio/mpeg', 'memo.mp3', 'u');
+
+        $this->assertSame(['response' => 'Hallo Welt', 'usage' => ['input_tokens' => 5, 'output_tokens' => 2]], $result);
+    }
+
+    public function testTranscribeAudioReportsUploadAndThenTheArrivingTranscript(): void {
+        $reported = [];
+        $seenDuringTheAnswer = [];
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$reported, &$seenDuringTheAnswer): IResponse {
+                // cURL's progress hook: download total/done, upload total/done.
+                $o['progress'](0, 0, 1000, 0);
+                $o['progress'](0, 0, 1000, 500);
+                $o['progress'](0, 0, 1000, 1000);
+                $response = $this->writeToSink($o, [
+                    self::event(['type' => 'transcription.text.delta', 'text' => str_repeat('a', 1000)]),
+                ]);
+                $seenDuringTheAnswer = $reported;
+                $this->writeToSink($o, [
+                    self::event(['type' => 'transcription.text.delta', 'text' => str_repeat('b', 3000)]),
+                    self::event(['type' => 'transcription.done', 'text' => 'done', 'usage' => []]),
+                ]);
+                return $response;
+            }
+        );
+
+        $this->provider->transcribeAudio(self::recording(), 'audio/mpeg', 'memo.mp3', 'u', [
+            'onProgress' => function (float $fraction) use (&$reported): void {
+                $reported[] = $fraction;
+            },
+        ]);
+
+        // The upload's half is exact; nothing is reported before a byte is sent.
+        $this->assertSame([0.25, 0.5], array_slice($seenDuringTheAnswer, 0, 2));
+        // The transcript moves the bar while it is still arriving.
+        $this->assertGreaterThan(0.5, end($seenDuringTheAnswer));
+        $this->assertGreaterThan(end($seenDuringTheAnswer), end($reported));
+        // Rising, and never claiming completion: only the task reports 1.0.
+        $sorted = $reported;
+        sort($sorted);
+        $this->assertSame($sorted, $reported);
+        $this->assertLessThan(1.0, end($reported));
     }
 
     public function testTranscribeAudioWithTimestampsAsksForSegmentsInsteadOfTheLanguage(): void {
         $options = null;
+        $recording = self::recording();
         $this->client->method('post')->willReturnCallback(
             function (string $u, array $o) use (&$options): IResponse {
                 $options = $o;
-                return $this->jsonResponse([
+                return $this->writeToSink($o, [self::event([
+                    'type' => 'transcription.done',
                     'text' => 'Hallo Welt',
                     'segments' => [
                         ['text' => 'Hallo', 'start' => 0.0, 'end' => 0.8, 'type' => 'transcription_segment'],
                         ['text' => 'untimed', 'start' => null, 'end' => null, 'type' => 'transcription_segment'],
                         ['text' => ' Welt', 'start' => 0.8, 'end' => 1.4, 'type' => 'transcription_segment'],
                     ],
-                ]);
+                    'usage' => [],
+                ])]);
             }
         );
 
-        $result = $this->provider->transcribeAudio('raw-bytes', 'audio/mpeg', 'memo.mp3', 'u', ['language' => 'de', 'timestamps' => true]);
+        $result = $this->provider->transcribeAudio($recording, 'audio/mpeg', 'memo.mp3', 'u', ['language' => 'de', 'timestamps' => true]);
 
         // Mistral refuses timestamp_granularities together with language.
         $this->assertSame([
             ['name' => 'model', 'contents' => MistralProvider::DEFAULT_TRANSCRIBE_MODEL],
-            ['name' => 'file', 'contents' => 'raw-bytes', 'filename' => 'memo.mp3'],
+            ['name' => 'file', 'contents' => $recording, 'filename' => 'memo.mp3'],
+            ['name' => 'stream', 'contents' => 'true'],
             ['name' => 'timestamp_granularities', 'contents' => 'segment'],
         ], $options['multipart']);
         $this->assertSame([
@@ -450,8 +545,47 @@ class MistralProviderTest extends TestCase {
         ], $result['segments']);
     }
 
+    /**
+     * Should the final event leave its segments empty, the segment events
+     * streamed before it are what there is.
+     */
+    public function testTranscribeAudioFallsBackToTheStreamedSegments(): void {
+        $this->client->method('post')->willReturnCallback(fn (string $u, array $o): IResponse => $this->writeToSink($o, [
+            self::event(['type' => 'transcription.segment', 'text' => 'Hallo', 'start' => 0.0, 'end' => 0.8]),
+            self::event(['type' => 'transcription.segment.delta', 'text' => ' Welt', 'start' => 0.8, 'end' => 1.4]),
+            self::event(['type' => 'transcription.done', 'text' => 'Hallo Welt', 'segments' => [], 'usage' => []]),
+        ]));
+
+        $result = $this->provider->transcribeAudio(self::recording(), 'audio/mpeg', 'memo.mp3', 'u', ['timestamps' => true]);
+
+        $this->assertSame([
+            ['start' => 0.0, 'end' => 0.8, 'text' => 'Hallo'],
+            ['start' => 0.8, 'end' => 1.4, 'text' => ' Welt'],
+        ], $result['segments']);
+    }
+
+    public function testTranscribeAudioStillReadsAnAnswerThatIsNotAnEventStream(): void {
+        $this->client->method('post')->willReturnCallback(fn (string $u, array $o): IResponse => $this->writeToSink($o, [
+            json_encode(['text' => 'Guten Morgen.', 'usage' => ['prompt_tokens' => 40, 'completion_tokens' => 8]]),
+        ]));
+
+        $result = $this->provider->transcribeAudio('raw-bytes', 'audio/mpeg', 'memo.mp3', 'u');
+
+        $this->assertSame(['response' => 'Guten Morgen.', 'usage' => ['input_tokens' => 40, 'output_tokens' => 8]], $result);
+    }
+
     public function testTranscribeAudioReportsAMissingTranscript(): void {
-        $this->client->method('post')->willReturn($this->jsonResponse(['model' => 'voxtral-mini-latest']));
+        $this->client->method('post')->willReturnCallback(fn (string $u, array $o): IResponse => $this->writeToSink($o, [
+            json_encode(['model' => 'voxtral-mini-latest']),
+        ]));
+
+        $this->assertSame(['error' => 'Mistral returned no transcript.'], $this->provider->transcribeAudio('raw', 'audio/mpeg', 'a.mp3', 'u'));
+    }
+
+    public function testTranscribeAudioReportsAStreamThatNeverFinished(): void {
+        $this->client->method('post')->willReturnCallback(fn (string $u, array $o): IResponse => $this->writeToSink($o, [
+            self::event(['type' => 'transcription.text.delta', 'text' => 'Hallo']),
+        ]));
 
         $this->assertSame(['error' => 'Mistral returned no transcript.'], $this->provider->transcribeAudio('raw', 'audio/mpeg', 'a.mp3', 'u'));
     }

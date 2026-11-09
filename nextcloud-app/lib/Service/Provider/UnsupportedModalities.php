@@ -26,7 +26,7 @@ trait UnsupportedModalities {
     /**
      * @return array{response: string, segments?: list<array{start: float, end: float, text: string}>, usage?: array}|array{error: string}
      */
-    public function transcribeAudio(string $audioData, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array {
+    public function transcribeAudio(mixed $audio, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array {
         return ['error' => $this->getLabel() . ' cannot transcribe audio.'];
     }
 

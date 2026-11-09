@@ -109,7 +109,7 @@ class SubtitlesProvider implements ISynchronousProvider {
         $provider = $this->providers->resolveAudioCapable($userId, $this->providers->requestedId($input));
         $reportProgress(0.1);
 
-        $segments = $this->audio->segments($provider, $file, $userId);
+        $segments = $this->audio->segments($provider, $file, $userId, ['onProgress' => AudioService::progressBetween($reportProgress, 0.1, 1.0)]);
         $format = ($input['format'] ?? '') === AudioService::SUBTITLES_VTT ? AudioService::SUBTITLES_VTT : AudioService::SUBTITLES_SRT;
 
         $reportProgress(1.0);

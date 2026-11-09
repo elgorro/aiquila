@@ -104,7 +104,11 @@ class AudioToAudioTranslateProvider implements ISynchronousProvider {
         $reportProgress(0.1);
 
         // The origin language, when known, doubles as a transcription hint.
-        $transcript = $this->audio->transcribeRequired($provider, $file, $userId, $origin !== '' ? ['language' => $origin] : []);
+        $options = ['onProgress' => AudioService::progressBetween($reportProgress, 0.1, 0.4)];
+        if ($origin !== '') {
+            $options['language'] = $origin;
+        }
+        $transcript = $this->audio->transcribeRequired($provider, $file, $userId, $options);
         $reportProgress(0.4);
 
         $translated = $this->translation->translate($provider, $transcript, $origin, $target, $userId);
