@@ -161,8 +161,9 @@ the chat model:
 | `mistral_tts_voice` | — | Preset voice id; blank lets Mistral choose |
 | `mistral_image_model` | `mistral-medium-latest` | The conversation model that drives image generation |
 
-All four are admin-scope. Audio calls get a 300s timeout rather than the shared
-`api_timeout`: transcribing an hour of speech routinely outlasts 30 seconds.
+All four are admin-scope. Audio calls do not use the shared `api_timeout`, because
+transcribing an hour of speech routinely outlasts 30 seconds. Speech gets 300s for the
+whole call. Transcription has no fixed cap and is ended only by a stall instead. See below.
 
 ### Transcription
 
@@ -171,8 +172,42 @@ travels as a file part, and the endpoint reads the container format from the
 part's **filename** rather than from a declared MIME type — so
 `AudioLimits::filenameFor()` gives a recording stored without a usable extension
 one derived from its type before upload. `AudioLimits` also refuses an
-unsupported container or an oversized file before anything is read into memory,
-so the failure names the problem instead of arriving as a bare 4xx.
+unsupported container or an oversized file before the upload starts, so the
+failure names the problem instead of arriving as a bare 4xx.
+
+The recording is never held in memory. `AudioService` opens the file and hands
+the provider a stream sized from Nextcloud's file cache, because a storage
+wrapper such as server-side encryption reports a different size through
+`fstat()`. cURL reads the part from that stream while it sends. Mistral also
+accepts `file_url` and a `file_id` from `/v1/files`, but neither is used: a
+streamed inline part already keeps memory flat, and an uploaded file would
+need its own upload, a purpose and a cleanup.
+
+The answer is requested with `stream=true` and arrives as Server-Sent Events:
+`transcription.text.delta` while the model writes, segment events when
+timestamps were asked for, and a final `transcription.done` with the same fields
+as an unstreamed response (`text`, `segments`, `usage`). The stream changes two
+things.
+
+- **Timeout.** The request has a three-hour backstop, and what actually ends it
+  is cURL's low-speed limit: less than one byte in 300s. A long recording is not
+  cut off for taking long, only for going quiet.
+- **Progress.** The upload counts for the first half of the task's progress,
+  measured in bytes sent. The second half moves with the transcript as it
+  arrives. No event says how long the recording is, so that half approaches its
+  end without reaching it; the task reports completion itself.
+
+Guzzle's usual way of streaming a response (`stream => true`, see
+`SseStreaming`) goes through its StreamHandler. That handler reads the whole
+request body into a string, so it is not used here. The request stays on
+Nextcloud's cURL handler, which writes the response into a `sink`. A PHP stream
+filter on that sink (`StreamTap`) passes each piece to `SseDecoder` as cURL
+writes it. A response that is plain JSON, from an endpoint that ignores
+`stream`, is still read from the sink.
+
+`AudioLimits::MAX_BYTES` is 512 MB. It is sized from the longest recording
+Mistral names, three hours: about 430 MB as 320 kbit/s MP3 and about 350 MB as
+16 kHz mono WAV. Mistral documents no size limit for an inline part.
 
 Subtitles ask for `timestamp_granularities=segment` and read the timed
 `segments[]` back. Mistral refuses that parameter together with `language`, so a

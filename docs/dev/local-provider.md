@@ -92,7 +92,13 @@ admin flag rather than a guess:
   server expose `/v1/audio/transcriptions`; plain Ollama and LM Studio do not.
   Subtitles additionally need segment timings: they request
   `response_format=verbose_json`, and a backend that answers without `segments`
-  gets a clear refusal rather than an empty file.
+  gets a clear refusal rather than an empty file. The recording is streamed from
+  storage, as it is for Mistral, so its size does not
+  touch PHP's memory. The answer is not streamed, because the backends do not agree on
+  an event format. `local_timeout` therefore caps the whole transcription,
+  and the task's progress covers only the upload. On CPU, a long recording can take
+  longer to transcribe than it takes to play. Raise `local_timeout` to match the
+  longest recording you expect.
 - **Generated speech** needs `local_audio_out`, and a backend serving
   `/v1/audio/speech`.
 - **Generated images** are not offered locally at all: there is no route the
