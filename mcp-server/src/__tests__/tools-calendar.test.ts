@@ -378,6 +378,19 @@ END:VCALENDAR</c:calendar-data>
       expect(result.content[0].text).toContain('UID: event-1');
     });
 
+    it('should not return an event whose UID only contains the one given', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(eventResponse),
+      });
+
+      const { getEventTool } = await import('../tools/apps/calendar.js');
+      const result = await getEventTool.handler({ uid: 'event', calendarName: 'personal' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not found');
+    });
+
     it('should handle event not found', async () => {
       const emptyResponse = `<d:multistatus xmlns:d="DAV:"></d:multistatus>`;
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -425,6 +438,16 @@ END:VCALENDAR</c:calendar-data>
   </d:response>
 </d:multistatus>`;
 
+    // The verification REPORT must answer with the UID create_event just PUT,
+    // since the lookup only accepts an exact UID
+    const verifyText = () => {
+      const put = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => c[1]?.method === 'PUT'
+      );
+      const uid = /UID:([^\r\n]+)/.exec(put?.[1].body ?? '')?.[1] ?? 'test-uid';
+      return Promise.resolve(verifyResponse.replace('UID:test-uid', `UID:${uid}`));
+    };
+
     it('should create a timed event', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce(propfindVeventOk)
@@ -432,7 +455,7 @@ END:VCALENDAR</c:calendar-data>
         .mockResolvedValueOnce({
           ok: true,
           status: 207,
-          text: () => Promise.resolve(verifyResponse),
+          text: verifyText,
         });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
@@ -466,7 +489,7 @@ END:VCALENDAR</c:calendar-data>
         .mockResolvedValueOnce({
           ok: true,
           status: 207,
-          text: () => Promise.resolve(verifyResponse),
+          text: verifyText,
         });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
@@ -493,7 +516,7 @@ END:VCALENDAR</c:calendar-data>
         .mockResolvedValueOnce({
           ok: true,
           status: 207,
-          text: () => Promise.resolve(verifyResponse),
+          text: verifyText,
         });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
@@ -525,7 +548,7 @@ END:VCALENDAR</c:calendar-data>
         .mockResolvedValueOnce({
           ok: true,
           status: 207,
-          text: () => Promise.resolve(verifyResponse),
+          text: verifyText,
         });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
@@ -552,7 +575,7 @@ END:VCALENDAR</c:calendar-data>
         .mockResolvedValueOnce({
           ok: true,
           status: 207,
-          text: () => Promise.resolve(verifyResponse),
+          text: verifyText,
         });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
@@ -574,7 +597,7 @@ END:VCALENDAR</c:calendar-data>
         .mockResolvedValueOnce({
           ok: true,
           status: 207,
-          text: () => Promise.resolve(verifyResponse),
+          text: verifyText,
         });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
@@ -610,7 +633,7 @@ END:VCALENDAR</c:calendar-data>
         .mockResolvedValueOnce({
           ok: true,
           status: 207,
-          text: () => Promise.resolve(verifyResponse),
+          text: verifyText,
         });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
@@ -639,7 +662,7 @@ END:VCALENDAR</c:calendar-data>
         .mockResolvedValueOnce({
           ok: true,
           status: 207,
-          text: () => Promise.resolve(verifyResponse),
+          text: verifyText,
         });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
@@ -717,7 +740,7 @@ END:VCALENDAR</c:calendar-data>
         .mockResolvedValueOnce({
           ok: true,
           status: 207,
-          text: () => Promise.resolve(verifyResponse),
+          text: verifyText,
         });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
@@ -1304,6 +1327,65 @@ END:VCALENDAR</c:calendar-data>
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('ETag mismatch');
     });
+
+    // CALDAV:text-match is a substring match: the server also returns events
+    // whose UID only contains the one asked for
+    const substringResponse = `<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/other.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"etag-other"</d:getetag>
+      <c:calendar-data>BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:event-1-other
+SUMMARY:Unrelated event
+DTSTART:20240316T090000Z
+END:VEVENT
+END:VCALENDAR</c:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/event-1.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"etag-exact"</d:getetag>
+      <c:calendar-data>BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:event-1
+SUMMARY:Event to delete
+DTSTART:20240315T090000Z
+END:VEVENT
+END:VCALENDAR</c:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+    it('should delete the event whose UID matches exactly, not the first substring match', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(substringResponse) })
+        .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+
+      const { deleteEventTool } = await import('../tools/apps/calendar.js');
+      await deleteEventTool.handler({ uid: 'event-1', calendarName: 'personal' });
+
+      const deleteCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
+      expect(deleteCall[0]).toContain('/event-1.ics');
+      expect(deleteCall[1].headers['If-Match']).toBe('"etag-exact"');
+    });
+
+    it('should delete nothing when only a longer UID contains the one given', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(substringResponse),
+      });
+
+      const { deleteEventTool } = await import('../tools/apps/calendar.js');
+      const result = await deleteEventTool.handler({ uid: 'event', calendarName: 'personal' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not found');
+      // Only the lookup REPORT went out: no DELETE
+      expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    });
   });
 
   describe('calendar display-name resolution (issue #339)', () => {
@@ -1467,8 +1549,16 @@ END:VCALENDAR</c:calendar-data>
         .mockResolvedValueOnce(propfindVeventOk)
         // 4th: PUT
         .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
-        // 5th: verification REPORT
-        .mockResolvedValueOnce({ ok: true, status: 207, text: () => Promise.resolve(verifyXml) });
+        // 5th: verification REPORT, answering with the UID that was PUT
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => {
+            const put = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[3];
+            const uid = /UID:([^\r\n]+)/.exec(put[1].body)?.[1] ?? 'any';
+            return Promise.resolve(verifyXml.replace('UID:any', `UID:${uid}`));
+          },
+        });
 
       const { createEventTool } = await import('../tools/apps/calendar.js');
       const result = await createEventTool.handler({

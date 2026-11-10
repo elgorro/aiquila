@@ -37,6 +37,40 @@ export function decodeXmlEntities(text: string): string {
 }
 
 /**
+ * Pick, from a calendar-query or addressbook-query multistatus, the resource
+ * whose UID equals `uid` exactly. A UID prop-filter with text-match is a
+ * substring match (RFC 4791 §9.7.5; RFC 6352 §10.5.4 by default), so the
+ * server may also return resources whose UID merely contains `uid`.
+ *
+ * @param dataTag `calendar-data` or `address-data`
+ * @returns href, ETag (quoted) and the XML-decoded payload, or undefined
+ */
+export function findResourceByUid(
+  responseXml: string,
+  uid: string,
+  dataTag: 'calendar-data' | 'address-data'
+): { href: string; etag: string; data: string } | undefined {
+  const blocks = responseXml.match(new RegExp(nsTagContent('response').source, 'g')) ?? [];
+  for (const block of blocks) {
+    const hrefMatch = block.match(nsTagContent('href'));
+    const etagMatch = block.match(nsTagContent('getetag'));
+    const dataMatch = block.match(nsTagContent(dataTag));
+    if (!hrefMatch || !etagMatch || !dataMatch) continue;
+
+    const data = decodeXmlEntities(dataMatch[1]);
+    // Unfold (RFC 5545 §3.1, RFC 6350 §3.2) before reading the UID lines
+    const unfolded = data.replace(/\r?\n[ \t]/g, '');
+    const uids = [...unfolded.matchAll(/^UID(?:;[^:\r\n]*)?:(.*?)\r?$/gm)].map((m) => m[1]);
+    if (!uids.includes(uid)) continue;
+
+    const rawEtag = decodeXmlEntities(etagMatch[1].trim());
+    const etag = rawEtag.startsWith('"') ? rawEtag : `"${rawEtag}"`;
+    return { href: hrefMatch[1].trim(), etag, data };
+  }
+  return undefined;
+}
+
+/**
  * Encode text for interpolation into an XML request body.
  * Counterpart to decodeXmlEntities — used when building CalDAV/CardDAV REPORT
  * filters from user-supplied values (GH #402).

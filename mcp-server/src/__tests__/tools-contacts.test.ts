@@ -605,5 +605,41 @@ END:VCARD`)}</cr:address-data>
       expect(deleteCall[1].method).toBe('DELETE');
       expect(deleteCall[1].headers['If-Match']).toBe('"etag-1"');
     });
+
+    it('should ask for an exact UID and delete only that contact', async () => {
+      // A server ignoring match-type would answer with any UID containing "contact"
+      const resolveResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cr="urn:ietf:params:xml:ns:carddav">
+  <d:response>
+    <d:href>/remote.php/dav/addressbooks/users/testuser/contacts/contact-1.vcf</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:getetag>&quot;etag-1&quot;</d:getetag>
+        <cr:address-data>${sabreEncode(`BEGIN:VCARD
+VERSION:3.0
+UID:contact-1
+FN:John Doe
+END:VCARD`)}</cr:address-data>
+      </d:prop>
+    </d:propstat>
+  </d:response>
+</d:multistatus>`;
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(resolveResponse),
+      });
+
+      const { deleteContactTool } = await import('../tools/apps/contacts.js');
+      const result = await deleteContactTool.handler({
+        uid: 'contact',
+        addressBookName: 'contacts',
+      });
+
+      const reportCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(reportCall[1].body).toContain('match-type="equals"');
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not found');
+      expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    });
   });
 });
