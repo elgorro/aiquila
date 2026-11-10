@@ -220,10 +220,24 @@ Check your MCP client's documentation for its callback URL. Example:
 
 All three options work side by side.
 
+#### Connecting the Nextcloud app
+
+The AIquila Nextcloud app picks its client the way any MCP client should; see
+[OAuth client registration](../installation/aiquila-setup.md#oauth-client-registration).
+Against this server that means:
+
+- Nextcloud on a public HTTPS address: the app uses its
+  [Client ID Metadata Document](#client-id-metadata-documents) and needs no registration.
+  This requires `MCP_CIMD_ENABLED` (on unless `MCP_REGISTRATION_TOKEN` is set), and the
+  Nextcloud host must not resolve to a private address.
+- Otherwise it registers dynamically, as below.
+- With Option C, set `MCP_CLIENT_REDIRECT_URIS` to the redirect URI the app's form shows and
+  enter `MCP_CLIENT_ID` in its **Client ID** field.
+
 #### Connecting the Nextcloud app to a gated server
 
-The AIquila Nextcloud app registers itself dynamically when you click **Authenticate** on an
-MCP server entry. If the server gates registration, paste the same value you set in
+When dynamic registration is the path, the app registers itself on **Authenticate**.
+If the server gates registration, paste the same value you set in
 `MCP_REGISTRATION_TOKEN` into the **Registration token** field:
 
 **Settings → Administration → AIquila → MCP servers** → edit the server → set

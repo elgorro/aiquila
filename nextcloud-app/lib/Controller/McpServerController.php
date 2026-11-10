@@ -15,10 +15,10 @@ use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
+use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\IRequest;
-use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 
 class McpServerController extends Controller {
@@ -26,7 +26,6 @@ class McpServerController extends Controller {
     private McpServerMapper $mapper;
     private McpClientService $mcpClient;
     private CredentialService $credentials;
-    private IURLGenerator $urlGenerator;
     private LoggerInterface $logger;
 
     public function __construct(
@@ -35,14 +34,12 @@ class McpServerController extends Controller {
         McpServerMapper $mapper,
         McpClientService $mcpClient,
         CredentialService $credentials,
-        IURLGenerator $urlGenerator,
         LoggerInterface $logger
     ) {
         parent::__construct($appName, $request);
         $this->mapper = $mapper;
         $this->mcpClient = $mcpClient;
         $this->credentials = $credentials;
-        $this->urlGenerator = $urlGenerator;
         $this->logger = $logger;
     }
 
@@ -68,6 +65,8 @@ class McpServerController extends Controller {
      * @param string $authType Authentication type (none or bearer)
      * @param string $authToken Bearer token for authentication
      * @param string $registrationToken RFC 7591 initial access token for gated OAuth client registration
+     * @param string $staticClientId Client ID registered with the authorization server beforehand; used instead of dynamic registration
+     * @param string $staticClientSecret Secret of that client, for a confidential client
      *
      * 200: Created MCP server
      * 400: Validation error
@@ -80,7 +79,9 @@ class McpServerController extends Controller {
         string $url = '',
         string $authType = 'none',
         string $authToken = '',
-        string $registrationToken = ''
+        string $registrationToken = '',
+        string $staticClientId = '',
+        string $staticClientSecret = ''
     ): JSONResponse {
         if (empty($displayName) || empty($url)) {
             return $this->clientError(400, 'Display name and URL are required');
@@ -101,6 +102,13 @@ class McpServerController extends Controller {
                 ? $this->credentials->encryptToken($registrationToken)
                 : null
         );
+        $staticClientId = trim($staticClientId);
+        if ($authType === 'oauth2' && $staticClientId !== '') {
+            $server->setOauthStaticClientId($staticClientId);
+            $server->setOauthStaticClientSecret(
+                $staticClientSecret !== '' ? $this->credentials->encryptToken($staticClientSecret) : null
+            );
+        }
         $server->setIsEnabled(true);
         $server->setCreatedAt($now);
         $server->setUpdatedAt($now);
@@ -118,6 +126,8 @@ class McpServerController extends Controller {
      * @param string $authType Updated auth type
      * @param string $authToken Updated bearer token
      * @param string|null $registrationToken Updated registration token; null leaves it unchanged, an empty string clears it
+     * @param string|null $staticClientId Updated pre-registered client ID; null leaves it unchanged, an empty string clears it
+     * @param string|null $staticClientSecret Updated secret of the pre-registered client; null leaves it unchanged, an empty string clears it
      * @param bool $isEnabled Whether the server is enabled
      *
      * 200: Updated MCP server
@@ -133,6 +143,8 @@ class McpServerController extends Controller {
         string $authType = '',
         string $authToken = '',
         ?string $registrationToken = null,
+        ?string $staticClientId = null,
+        ?string $staticClientSecret = null,
         ?bool $isEnabled = null
     ): JSONResponse {
         try {
@@ -144,8 +156,11 @@ class McpServerController extends Controller {
         if (!empty($displayName)) {
             $server->setDisplayName($displayName);
         }
-        if (!empty($url)) {
+        if (!empty($url) && $url !== $server->getUrl()) {
             $server->setUrl($url);
+            // Rediscover the authorization server on the next flow. A client
+            // bound to a different issuer is then not reused.
+            $server->setOauthMetadata(null);
         }
         if (!empty($authType) && in_array($authType, ['none', 'bearer', 'oauth2'], true)) {
             $oldAuthType = $server->getAuthType();
@@ -181,6 +196,9 @@ class McpServerController extends Controller {
                 $server->setOauthRefreshToken(null);
                 $server->setOauthTokenExpiresAt(null);
             }
+        }
+        if ($server->getAuthType() === 'oauth2') {
+            $this->applyStaticClient($server, $staticClientId, $staticClientSecret);
         }
         if ($isEnabled !== null) {
             $server->setIsEnabled($isEnabled);
@@ -282,11 +300,7 @@ class McpServerController extends Controller {
         }
 
         try {
-            $callbackUrl = $this->urlGenerator->linkToRouteAbsolute(
-                'aiquila.mcp_server.oauthCallback',
-                ['id' => $id]
-            );
-            $authorizeUrl = $this->mcpClient->initiateOAuth($server, $callbackUrl);
+            $authorizeUrl = $this->mcpClient->initiateOAuth($server);
             return new JSONResponse(['authorize_url' => $authorizeUrl]);
         } catch (\Throwable $e) {
             return $this->errorResponse($e, 500, 'Could not start the OAuth flow', 'McpServerController::initiateOAuth');
@@ -295,6 +309,8 @@ class McpServerController extends Controller {
 
     /**
      * OAuth callback endpoint — receives the authorization code from the popup
+     *
+     * The redirect URI registered by dynamic client registration.
      *
      * @param int $id Server ID
      * @param string $code Authorization code from the OAuth provider
@@ -307,16 +323,65 @@ class McpServerController extends Controller {
     #[BruteForceProtection(action: 'aiquilaMcpOauthCallback')]
     #[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]
     public function oauthCallback(int $id, string $code = '', string $state = ''): DataDisplayResponse {
+        return $this->finishOAuth(fn() => $this->mapper->findById($id), $code, $state);
+    }
 
+    /**
+     * OAuth callback endpoint shared by all servers
+     *
+     * The redirect URI of a pre-registered client and of the client metadata
+     * document. The server is the one whose flow is waiting for `state`.
+     *
+     * @param string $code Authorization code from the OAuth provider
+     * @param string $state CSRF state parameter
+     */
+    #[NoCSRFRequired]
+    #[AnonRateLimit(limit: 10, period: 60)]
+    #[BruteForceProtection(action: 'aiquilaMcpOauthCallback')]
+    #[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]
+    public function oauthCallbackShared(string $code = '', string $state = ''): DataDisplayResponse {
+        return $this->finishOAuth(function () use ($state) {
+            if ($state === '') {
+                throw new \RuntimeException('OAuth callback without state');
+            }
+            return $this->mapper->findByOauthState($state);
+        }, $code, $state);
+    }
+
+    /**
+     * Client ID Metadata Document of this instance's MCP client
+     *
+     * Its URL is the client_id AIquila presents to authorization servers that
+     * support Client ID Metadata Documents; they fetch it to learn the client's
+     * name and redirect URI.
+     *
+     * 200: Client metadata (draft-ietf-oauth-client-id-metadata-document)
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{client_id: string, client_name: string, client_uri: string, redirect_uris: list<string>, grant_types: list<string>, response_types: list<string>, token_endpoint_auth_method: string, token_endpoint_auth_methods_supported: list<string>}, array{}>
+     */
+    #[PublicPage]
+    #[NoCSRFRequired]
+    #[AnonRateLimit(limit: 60, period: 60)]
+    #[OpenAPI]
+    public function clientMetadata(): JSONResponse {
+        /** @var array{client_id: string, client_name: string, client_uri: string, redirect_uris: list<string>, grant_types: list<string>, response_types: list<string>, token_endpoint_auth_method: string, token_endpoint_auth_methods_supported: list<string>} $document */
+        $document = $this->mcpClient->getClientMetadataDocument();
+        $response = new JSONResponse($document);
+        // Authorization servers cache it per HTTP caching (draft §6.2).
+        $response->addHeader('Cache-Control', 'public, max-age=3600');
+        return $response;
+    }
+
+    /**
+     * @param callable(): McpServer $findServer
+     */
+    private function finishOAuth(callable $findServer, string $code, string $state): DataDisplayResponse {
         $failed = false;
 
         try {
-            $server = $this->mapper->findById($id);
-            $callbackUrl = $this->urlGenerator->linkToRouteAbsolute(
-                'aiquila.mcp_server.oauthCallback',
-                ['id' => $id]
-            );
-            $this->mcpClient->completeOAuth($server, $code, $state, $callbackUrl);
+            $server = $findServer();
+            $this->mcpClient->completeOAuth($server, $code, $state);
+            $id = $server->getId();
 
             $html = '<!DOCTYPE html><html><body><script>'
                 . 'window.opener.postMessage({type:"aiquila-oauth-complete",serverId:' . $id . '}, window.location.origin);'
@@ -353,6 +418,39 @@ class McpServerController extends Controller {
     }
 
     /**
+     * Apply a change to the pre-registered client. null leaves a value
+     * unchanged, '' clears it. A different client invalidates the active
+     * client and the tokens issued to it.
+     */
+    private function applyStaticClient(McpServer $server, ?string $clientId, ?string $secret): void {
+        $changed = false;
+        if ($clientId !== null) {
+            $clientId = trim($clientId);
+            if (($server->getOauthStaticClientId() ?? '') !== $clientId) {
+                $server->setOauthStaticClientId($clientId === '' ? null : $clientId);
+                $changed = true;
+            }
+            if ($clientId === '' && $server->getOauthStaticClientSecret() !== null) {
+                $server->setOauthStaticClientSecret(null);
+            }
+        }
+        if ($secret !== null && $server->getOauthStaticClientId() !== null) {
+            $stored = $this->credentials->decryptToken($server->getOauthStaticClientSecret()) ?? '';
+            if ($stored !== $secret) {
+                $server->setOauthStaticClientSecret($secret === '' ? null : $this->credentials->encryptToken($secret));
+                $changed = true;
+            }
+        }
+        if ($changed) {
+            $server->setOauthClientId(null);
+            $server->setOauthClientIssuer(null);
+            $server->setOauthAccessToken(null);
+            $server->setOauthRefreshToken(null);
+            $server->setOauthTokenExpiresAt(null);
+        }
+    }
+
+    /**
      * Serialize an McpServer entity for API response, masking the auth token.
      */
     private function serializeServer(McpServer $server): array {
@@ -376,6 +474,11 @@ class McpServerController extends Controller {
             'auth_type' => $server->getAuthType(),
             'auth_token_masked' => $maskedToken,
             'registration_token_masked' => $server->getOauthRegistrationToken() ? '****' : null,
+            'static_client_id' => $server->getOauthStaticClientId(),
+            'static_client_secret_masked' => $server->getOauthStaticClientSecret() ? '****' : null,
+            'oauth_client_type' => $this->oauthClientType($server),
+            // The redirect URI to register for a pre-registered client.
+            'oauth_redirect_uri' => $server->getAuthType() === 'oauth2' ? $this->mcpClient->getSharedCallbackUrl() : null,
             'is_enabled' => $server->getIsEnabled(),
             'last_status' => $server->getLastStatus(),
             'last_error' => $server->getLastError(),
@@ -385,5 +488,20 @@ class McpServerController extends Controller {
             'updated_at' => $server->getUpdatedAt(),
             'oauth_status' => $oauthStatus,
         ];
+    }
+
+    /**
+     * How the active OAuth client was obtained: `static` (pre-registered),
+     * `cimd` (client metadata document) or `dcr` (dynamic registration).
+     */
+    private function oauthClientType(McpServer $server): ?string {
+        $clientId = $server->getOauthClientId();
+        if ($server->getAuthType() !== 'oauth2' || $clientId === null || $clientId === '') {
+            return null;
+        }
+        if ($clientId === $server->getOauthStaticClientId()) {
+            return 'static';
+        }
+        return $clientId === $this->mcpClient->getClientMetadataUrl() ? 'cimd' : 'dcr';
     }
 }

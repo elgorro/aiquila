@@ -90,6 +90,11 @@ return [
         ['name' => 'mcp_server#tools',         'url' => '/api/admin/mcp-servers/{id}/tools',          'verb' => 'GET'],
         ['name' => 'mcp_server#authorize',     'url' => '/api/admin/mcp-servers/{id}/oauth/authorize', 'verb' => 'POST'],
         ['name' => 'mcp_server#oauthCallback', 'url' => '/api/admin/mcp-servers/{id}/oauth/callback',  'verb' => 'GET'],
+        // Fixed callback for pre-registered clients and the client metadata document;
+        // the server is found by `state`. The document itself is public: the
+        // authorization server fetches it.
+        ['name' => 'mcp_server#oauthCallbackShared', 'url' => '/api/admin/mcp-servers/oauth/callback', 'verb' => 'GET'],
+        ['name' => 'mcp_server#clientMetadata',      'url' => '/oauth/mcp-client',                    'verb' => 'GET'],
 
         // Cowork API (persistent scheduled AI tasks)
         ['name' => 'coworker#index',              'url' => '/api/coworkers',                       'verb' => 'GET'],

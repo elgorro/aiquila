@@ -365,6 +365,52 @@ The picker in the chat header changes both for the open conversation only. It
 lists just the providers you have credentials for. Choosing **Follow my
 default** unpins the conversation so it tracks your personal setting again.
 
+### 7. Connect MCP servers
+
+**Settings → Administration → AIquila → MCP servers** lists the remote MCP servers
+(streamable HTTP) whose tools the model may use. They are configured for the whole
+instance, so connect a server only with credentials every user may act under.
+
+Each entry takes one of three authentication types:
+
+| Type | Use it for |
+|---|---|
+| None | A server that needs no credentials |
+| Bearer token | A server that takes a static token. It is stored encrypted |
+| OAuth 2.0 | A server protected by OAuth. Save the entry, then click **Authenticate** to sign in in a popup |
+
+#### OAuth client registration
+
+Before signing in, AIquila needs a client ID at the server's authorization server. It
+uses the first of these that works, in the order the
+[MCP authorization spec](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)
+recommends:
+
+1. **Pre-registered client.** If the entry has a **Client ID**, AIquila uses it. Register
+   the client at the authorization server yourself, with the **Redirect URI** the form
+   shows (`https://<nextcloud>/apps/aiquila/api/admin/mcp-servers/oauth/callback`; the
+   same for every entry). Add the **Client secret** only for a confidential client.
+   AIquila then authenticates with HTTP Basic, or with `client_secret_post` when the
+   server's metadata lists only that (RFC 6749 §2.3.1).
+2. **Client ID Metadata Document.** If the authorization server advertises
+   `client_id_metadata_document_supported`, AIquila's client ID is the URL of a document
+   it publishes, `https://<nextcloud>/apps/aiquila/oauth/mcp-client`. The authorization
+   server fetches it, so it must be able to reach Nextcloud over HTTPS. Nothing needs
+   configuring. Nextcloud served over plain `http` skips this step.
+3. **Dynamic client registration** (RFC 7591), when the server has a
+   `registration_endpoint`. A server that gates registration needs its token in the
+   **Registration token** field; see
+   [Connecting the Nextcloud app to a gated server](../mcp/oauth.md#connecting-the-nextcloud-app-to-a-gated-server).
+
+If none applies, **Authenticate** fails with a message asking for a client ID. The server
+list shows which kind of client an entry uses.
+
+A pre-registered or dynamically registered client belongs to the authorization server
+that issued it (its `issuer`). Changing an entry's URL makes AIquila discover the
+authorization server again. A registration from a different issuer is then not reused,
+and a pre-registered client is refused until you enter one registered there. Changing the
+client ID or secret discards the access tokens, so sign in again with **Authenticate**.
+
 ## Features
 
 ### 1. Chat Interface

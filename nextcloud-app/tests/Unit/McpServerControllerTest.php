@@ -9,14 +9,12 @@ use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\McpClientService;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\IRequest;
-use OCP\IURLGenerator;
 use PHPUnit\Framework\TestCase;
 
 class McpServerControllerTest extends TestCase {
     private McpServerMapper $mapper;
     private McpClientService $mcpClient;
     private CredentialService $credentials;
-    private IURLGenerator $urlGenerator;
     private McpServerController $controller;
     private IRequest $request;
 
@@ -25,7 +23,6 @@ class McpServerControllerTest extends TestCase {
         $this->mapper = $this->createStub(McpServerMapper::class);
         $this->mcpClient = $this->createStub(McpClientService::class);
         $this->credentials = $this->createStub(CredentialService::class);
-        $this->urlGenerator = $this->createStub(IURLGenerator::class);
 
         // Default: encryptToken returns a fixed encrypted value
         $this->credentials->method('encryptToken')
@@ -43,7 +40,6 @@ class McpServerControllerTest extends TestCase {
             $this->mapper,
             $this->mcpClient,
             $this->credentials,
-            $this->urlGenerator,
             $this->createStub(\Psr\Log\LoggerInterface::class)
         );
     }
@@ -301,7 +297,6 @@ class McpServerControllerTest extends TestCase {
         $server->setAuthType('oauth2');
         $this->mapper->method('findById')->willReturn($server);
 
-        $this->urlGenerator->method('linkToRouteAbsolute')->willReturn('http://nc.local/callback');
         $this->mcpClient->method('initiateOAuth')->willReturn('http://mcp.local/authorize?state=abc');
 
         $response = $this->controller->authorize(1);
@@ -328,11 +323,119 @@ class McpServerControllerTest extends TestCase {
             ['code', '', 'auth-code-123'],
             ['state', '', 'state-abc'],
         ]);
-        $this->urlGenerator->method('linkToRouteAbsolute')->willReturn('http://nc.local/callback');
 
         $response = $this->controller->oauthCallback(1);
 
         $this->assertEquals(200, $response->getStatus());
         $this->assertStringContainsString('aiquila-oauth-complete', $response->getData());
+    }
+
+    public function testCreateStoresPreRegisteredClient(): void {
+        $this->mapper->method('insert')->willReturnArgument(0);
+
+        $data = $this->controller->create('Cloud', 'https://cloud.example/mcp', 'oauth2', '', '', ' cid ', 'secret')->getData();
+
+        $this->assertSame('cid', $data['static_client_id']);
+        $this->assertSame('****', $data['static_client_secret_masked']);
+    }
+
+    public function testCreateBearerIgnoresPreRegisteredClient(): void {
+        $this->mapper->method('insert')->willReturnArgument(0);
+
+        $data = $this->controller->create('Cloud', 'https://cloud.example/mcp', 'bearer', 'tok', '', 'cid', 'secret')->getData();
+
+        $this->assertNull($data['static_client_id']);
+        $this->assertNull($data['static_client_secret_masked']);
+    }
+
+    public function testUpdateChangedPreRegisteredClientDropsActiveClientAndTokens(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthStaticClientId('old');
+        $server->setOauthClientId('old');
+        $server->setOauthClientIssuer('https://as.example');
+        $server->setOauthAccessToken('at');
+        $server->setOauthRefreshToken('rt');
+        $this->mapper->method('findById')->willReturn($server);
+
+        $this->controller->update(1, staticClientId: 'new');
+
+        $this->assertSame('new', $server->getOauthStaticClientId());
+        $this->assertNull($server->getOauthClientId());
+        $this->assertNull($server->getOauthClientIssuer());
+        $this->assertNull($server->getOauthAccessToken());
+        $this->assertNull($server->getOauthRefreshToken());
+    }
+
+    public function testUpdateUnchangedPreRegisteredClientKeepsTokens(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthStaticClientId('cid');
+        $server->setOauthStaticClientSecret('encrypted:secret');
+        $server->setOauthClientId('cid');
+        $server->setOauthAccessToken('at');
+        $this->mapper->method('findById')->willReturn($server);
+
+        $this->controller->update(1, staticClientId: 'cid', staticClientSecret: 'secret');
+
+        $this->assertSame('cid', $server->getOauthClientId());
+        $this->assertSame('at', $server->getOauthAccessToken());
+    }
+
+    public function testUpdateClearingPreRegisteredClientClearsSecret(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthStaticClientId('cid');
+        $server->setOauthStaticClientSecret('encrypted:secret');
+        $this->mapper->method('findById')->willReturn($server);
+
+        $this->controller->update(1, staticClientId: '');
+
+        $this->assertNull($server->getOauthStaticClientId());
+        $this->assertNull($server->getOauthStaticClientSecret());
+    }
+
+    public function testUpdateUrlDropsCachedAuthorizationServerMetadata(): void {
+        $server = $this->makeServer();
+        $server->setAuthType('oauth2');
+        $server->setOauthMetadata('{"issuer":"https://old.example"}');
+        $this->mapper->method('findById')->willReturn($server);
+
+        $this->controller->update(1, url: 'https://new.example/mcp');
+
+        $this->assertNull($server->getOauthMetadata());
+    }
+
+    public function testSharedOauthCallbackFindsServerByState(): void {
+        $server = $this->makeServer(5);
+        $server->setAuthType('oauth2');
+        $this->mapper = $this->createMock(McpServerMapper::class);
+        $this->mapper->expects($this->once())->method('findByOauthState')->with('state-abc')->willReturn($server);
+        $client = $this->createMock(McpClientService::class);
+        $client->expects($this->once())->method('completeOAuth')->with($server, 'code-1', 'state-abc');
+        $controller = new McpServerController('aiquila', $this->request, $this->mapper, $client, $this->credentials, $this->createStub(\Psr\Log\LoggerInterface::class));
+
+        $response = $controller->oauthCallbackShared('code-1', 'state-abc');
+
+        $this->assertStringContainsString('serverId:5', $response->getData());
+        $this->assertSame([], $response->getThrottleMetadata());
+    }
+
+    public function testSharedOauthCallbackWithUnknownStateIsThrottled(): void {
+        $this->mapper->method('findByOauthState')->willThrowException(new DoesNotExistException(''));
+
+        $response = $this->controller->oauthCallbackShared('code', 'guess');
+
+        $this->assertStringContainsString('Authentication Failed', $response->getData());
+        $this->assertTrue($response->isThrottled());
+    }
+
+    public function testClientMetadataServesTheDocument(): void {
+        $this->mcpClient->method('getClientMetadataDocument')->willReturn(['client_id' => 'https://nc.example/apps/aiquila/oauth/mcp-client']);
+
+        $response = $this->controller->clientMetadata();
+
+        $this->assertSame(200, $response->getStatus());
+        $this->assertSame('https://nc.example/apps/aiquila/oauth/mcp-client', $response->getData()['client_id']);
     }
 }

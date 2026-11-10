@@ -5729,6 +5729,85 @@
                 }
             }
         },
+        "/index.php/apps/aiquila/oauth/mcp-client": {
+            "get": {
+                "operationId": "mcp_server-client-metadata",
+                "summary": "Client ID Metadata Document of this instance's MCP client",
+                "description": "Its URL is the client_id AIquila presents to authorization servers that support Client ID Metadata Documents; they fetch it to learn the client's name and redirect URI.",
+                "tags": [
+                    "mcp_server"
+                ],
+                "security": [
+                    {},
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Client metadata (draft-ietf-oauth-client-id-metadata-document)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "client_id",
+                                        "client_name",
+                                        "client_uri",
+                                        "redirect_uris",
+                                        "grant_types",
+                                        "response_types",
+                                        "token_endpoint_auth_method",
+                                        "token_endpoint_auth_methods_supported"
+                                    ],
+                                    "properties": {
+                                        "client_id": {
+                                            "type": "string"
+                                        },
+                                        "client_name": {
+                                            "type": "string"
+                                        },
+                                        "client_uri": {
+                                            "type": "string"
+                                        },
+                                        "redirect_uris": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "grant_types": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "response_types": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "token_endpoint_auth_method": {
+                                            "type": "string"
+                                        },
+                                        "token_endpoint_auth_methods_supported": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/index.php/apps/aiquila/api/coworkers": {
             "get": {
                 "operationId": "coworker-index",

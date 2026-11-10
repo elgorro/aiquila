@@ -44,6 +44,12 @@ use OCP\AppFramework\Db\Entity;
  * @method void setOauthMetadata(?string $oauthMetadata)
  * @method string|null getOauthRegistrationToken()
  * @method void setOauthRegistrationToken(?string $oauthRegistrationToken)
+ * @method string|null getOauthStaticClientId()
+ * @method void setOauthStaticClientId(?string $oauthStaticClientId)
+ * @method string|null getOauthStaticClientSecret()
+ * @method void setOauthStaticClientSecret(?string $oauthStaticClientSecret)
+ * @method string|null getOauthClientIssuer()
+ * @method void setOauthClientIssuer(?string $oauthClientIssuer)
  */
 class McpServer extends Entity {
     use InsertsFullRow;
@@ -67,6 +73,9 @@ class McpServer extends Entity {
     protected ?string $oauthState = null;
     protected ?string $oauthMetadata = null;
     protected ?string $oauthRegistrationToken = null;
+    protected ?string $oauthStaticClientId = null;
+    protected ?string $oauthStaticClientSecret = null;
+    protected ?string $oauthClientIssuer = null;
 
     public function __construct() {
         $this->addType('displayName', 'string');
@@ -88,6 +97,9 @@ class McpServer extends Entity {
         $this->addType('oauthState', 'string');
         $this->addType('oauthMetadata', 'string');
         $this->addType('oauthRegistrationToken', 'string');
+        $this->addType('oauthStaticClientId', 'string');
+        $this->addType('oauthStaticClientSecret', 'string');
+        $this->addType('oauthClientIssuer', 'string');
         $this->markFieldsForInsert();
     }
 
