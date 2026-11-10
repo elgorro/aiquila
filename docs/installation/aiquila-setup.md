@@ -379,6 +379,28 @@ Each entry takes one of three authentication types:
 | Bearer token | A server that takes a static token. It is stored encrypted |
 | OAuth 2.0 | A server protected by OAuth. Save the entry, then click **Authenticate** to sign in in a popup |
 
+#### Finding the authorization server
+
+When you click **Authenticate**, AIquila looks up the server's authorization server the way
+the [MCP authorization spec](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery)
+describes. The authorization server need not be the MCP host. It can, for example, be a
+Nextcloud app on another domain.
+
+1. It sends an unauthenticated request to the MCP URL. If the `401` answer's
+   `WWW-Authenticate` header has a `resource_metadata` URL, AIquila reads the server's
+   Protected Resource Metadata (RFC 9728) from there. Otherwise it tries
+   `/.well-known/oauth-protected-resource/<path of the MCP URL>`, then
+   `/.well-known/oauth-protected-resource` at the root. A document whose `resource` is a
+   different server is ignored.
+2. It takes the first entry of `authorization_servers` whose metadata it can fetch. It
+   tries the RFC 8414 and OpenID Connect well-known URIs in the order the spec gives. It
+   uses a document only if the document's `issuer` is exactly that entry.
+3. It asks for the `scope` from the `401` challenge. Without one, it asks for every scope
+   in the metadata's `scopes_supported`. With neither, it sends no `scope`.
+
+A server that publishes no Protected Resource Metadata is treated as its own
+authorization server, at the origin of its URL.
+
 #### OAuth client registration
 
 Before signing in, AIquila needs a client ID at the server's authorization server. It
@@ -406,9 +428,10 @@ If none applies, **Authenticate** fails with a message asking for a client ID. T
 list shows which kind of client an entry uses.
 
 A pre-registered or dynamically registered client belongs to the authorization server
-that issued it (its `issuer`). Changing an entry's URL makes AIquila discover the
-authorization server again. A registration from a different issuer is then not reused,
-and a pre-registered client is refused until you enter one registered there. Changing the
+that issued it (its `issuer`). AIquila discovers the authorization server again on every
+**Authenticate**. If the issuer has changed, it drops the old access tokens and does not
+reuse a registration from the old issuer. A pre-registered client is refused until you
+enter one registered there. Changing the
 client ID or secret discards the access tokens, so sign in again with **Authenticate**.
 
 ## Features
