@@ -60,6 +60,7 @@ class AudioToAudioChatProvider implements ISynchronousProvider {
                 'Optional LLM provider id override (e.g. mistral, local)',
                 EShapeType::Text
             ),
+            'memories' => ProviderResolver::memoriesShape(),
         ];
     }
 

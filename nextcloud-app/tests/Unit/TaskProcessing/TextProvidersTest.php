@@ -91,6 +91,32 @@ class TextProvidersTest extends TestCase {
         $this->assertSame(['output' => 'Hello'], $result);
     }
 
+    public function testChatDeclaresMemoriesSoTheAssistantSendsThem(): void {
+        $shape = (new ChatProvider($this->resolver))->getOptionalInputShape();
+        $this->assertArrayHasKey('memories', $shape);
+        $this->assertSame(\OCP\TaskProcessing\EShapeType::ListOfTexts, $shape['memories']->getShapeType());
+    }
+
+    public function testChatPutsMemoriesAfterTheSystemPrompt(): void {
+        $this->llm = $this->createMock(LLMProviderInterface::class);
+        $this->llm->expects($this->once())
+            ->method('chat')
+            ->with(
+                [['role' => 'user', 'content' => 'Lunch?']],
+                $this->callback(fn (string $system) => str_starts_with($system, "Be terse.\n\nThe user asked you to remember")
+                    && str_contains($system, "\n- Vegetarian.")
+                    && str_contains($system, "\n- Works in Berlin.")),
+                'alice',
+            )
+            ->willReturn(['response' => 'Falafel.']);
+
+        (new ChatProvider($this->resolver))->process('alice', [
+            'system_prompt' => 'Be terse.',
+            'input' => 'Lunch?',
+            'memories' => ['Vegetarian.', '  ', 'Works in Berlin.'],
+        ], static fn (float $p) => null);
+    }
+
     public function testChatRejectsAnEmptyMessage(): void {
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessageIsOrContains('No chat message provided');
