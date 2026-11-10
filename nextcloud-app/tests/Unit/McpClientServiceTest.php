@@ -1254,4 +1254,75 @@ class McpClientServiceTest extends TestCase {
         $server->setUrl('http://example.com');
         $this->assertEquals('http://example.com', $this->service->getOAuthBaseUrl($server));
     }
+
+    // --- Resource indicators (RFC 8707; MCP 2026-07-28 "Resource Parameter Implementation") ---
+
+    /** MUST be included in authorization requests. */
+    public function testAuthorizationRequestSendsResource(): void {
+        $server = $this->oauthServer([]);
+        $server->setOauthStaticClientId('cid');
+
+        $query = $this->authorizeQuery($this->service->initiateOAuth($server));
+
+        $this->assertSame('https://cloud.example/apps/mcp/mcp', $query['resource']);
+    }
+
+    /** MUST be included in token requests; RFC 8707 §2.2. */
+    public function testCodeExchangeSendsResource(): void {
+        $server = $this->oauthServer([]);
+        $server->setOauthClientId('dcr-client');
+        $server->setOauthState('st');
+        $server->setOauthCodeVerifier('verifier');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['access_token' => 'at']);
+
+        $this->service->completeOAuth($server, 'the-code', 'st');
+
+        $this->assertSame('authorization_code', $captured[0]['body']['grant_type']);
+        $this->assertSame('https://cloud.example/apps/mcp/mcp', $captured[0]['body']['resource']);
+    }
+
+    /** RFC 8707 §2.2: a refresh request may name the resource too, and MCP asks for it on every token request. */
+    public function testRefreshSendsResource(): void {
+        $server = $this->oauthServer([]);
+        $server->setOauthClientId('dcr-client');
+        $server->setOauthRefreshToken('rt');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['access_token' => 'at2']);
+
+        $this->service->refreshOAuthToken($server);
+
+        $this->assertSame('refresh_token', $captured[0]['body']['grant_type']);
+        $this->assertSame('https://cloud.example/apps/mcp/mcp', $captured[0]['body']['resource']);
+    }
+
+    /**
+     * "Canonical Server URI": lowercase scheme and host, no fragment (RFC 8707
+     * §2), no trailing slash; path, port and query kept.
+     */
+    public function testResourceUriIsCanonical(): void {
+        $cases = [
+            'HTTPS://MCP.Example.COM/mcp/' => 'https://mcp.example.com/mcp',
+            'https://mcp.example.com:8443/Tenant/MCP#frag' => 'https://mcp.example.com:8443/Tenant/MCP',
+            'https://mcp.example.com/' => 'https://mcp.example.com',
+            'https://mcp.example.com/mcp/?tenant=a#x' => 'https://mcp.example.com/mcp?tenant=a',
+        ];
+        foreach ($cases as $url => $expected) {
+            $server = $this->makeServer(1, 'Test', $url);
+            $this->assertSame($expected, $this->service->getResourceUri($server), $url);
+        }
+    }
+
+    /** With Protected Resource Metadata, its `resource` (RFC 9728 §3.3) is the identifier. */
+    public function testResourceUriPrefersResourceMetadata(): void {
+        $server = $this->makeServer(1, 'Test', 'https://mcp.example.com/mcp');
+        $server->setOauthResourceMetadata((string)json_encode([
+            'resource' => 'https://mcp.example.com',
+            'authorization_servers' => ['https://auth.example'],
+        ]));
+
+        $this->assertSame('https://mcp.example.com', $this->service->getResourceUri($server));
+    }
 }

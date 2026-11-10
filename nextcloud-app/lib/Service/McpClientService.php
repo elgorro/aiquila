@@ -1067,6 +1067,7 @@ class McpClientService {
             'code_challenge' => $challenge,
             'code_challenge_method' => 'S256',
             'state' => $state,
+            'resource' => $this->getResourceUri($server),
         ];
         // MCP 2026-07-28 "Scope Selection Strategy"; omitted when discovery found none.
         $scope = $server->getOauthScope();
@@ -1100,6 +1101,7 @@ class McpClientService {
             'code' => $code,
             'code_verifier' => (string)$server->getOauthCodeVerifier(),
             'redirect_uri' => $this->getRedirectUri($server),
+            'resource' => $this->getResourceUri($server),
         ]);
         $response = $this->httpClient->request('POST', $tokenEndpoint, $request);
 
@@ -1135,6 +1137,7 @@ class McpClientService {
             $request = $this->withClientAuth($server, $metadata, [
                 'grant_type' => 'refresh_token',
                 'refresh_token' => (string)$this->credentials->decryptToken($server->getOauthRefreshToken()),
+                'resource' => $this->getResourceUri($server),
             ]);
             $response = $this->httpClient->request('POST', $tokenEndpoint, $request);
 
@@ -1164,6 +1167,53 @@ class McpClientService {
         }
         // Refresh when less than 60 seconds remaining
         return time() >= ($expiresAt - 60);
+    }
+
+    /**
+     * The resource indicator (RFC 8707) the server's tokens are requested for.
+     *
+     * MCP 2026-07-28 "Resource Parameter Implementation": clients MUST send it
+     * on authorization and token requests, whether or not the authorization
+     * server supports it, and it MUST be the MCP server's canonical URI. When
+     * Protected Resource Metadata is available its `resource` (RFC 9728 §3.3,
+     * already checked against the server URL by fetchResourceMetadata()) is
+     * the identifier to use. Otherwise the configured URL in canonical form:
+     * RFC 8707 §2 requires an absolute URI without a fragment, and the MCP
+     * "Canonical Server URI" section a lowercase scheme and host and no
+     * trailing slash. Path and query are kept: the most specific URI
+     * identifies the server.
+     */
+    public function getResourceUri(McpServer $server): string {
+        $prm = $server->getOauthResourceMetadata();
+        $resource = $prm ? (json_decode($prm, true)['resource'] ?? null) : null;
+        if (!is_string($resource) || $resource === '') {
+            $resource = $server->getUrl();
+        }
+        return self::canonicalUri($resource);
+    }
+
+    /**
+     * Lower-case scheme and authority, drop the fragment and the path's
+     * trailing slash; keep the query.
+     */
+    private static function canonicalUri(string $url): string {
+        $url = trim($url);
+        $hash = strpos($url, '#');
+        if ($hash !== false) {
+            $url = substr($url, 0, $hash);
+        }
+        $query = '';
+        $q = strpos($url, '?');
+        if ($q !== false) {
+            $query = substr($url, $q);
+            $url = substr($url, 0, $q);
+        }
+        if (preg_match('#^([A-Za-z][A-Za-z0-9+.-]*://)([^/]*)(.*)$#s', $url, $m)) {
+            $url = strtolower($m[1]) . strtolower($m[2]) . rtrim($m[3], '/');
+        } else {
+            $url = rtrim($url, '/');
+        }
+        return $query === '?' ? $url : $url . $query;
     }
 
     public function getOAuthBaseUrl(McpServer $server): string {
