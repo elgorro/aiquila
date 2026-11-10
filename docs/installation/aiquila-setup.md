@@ -401,6 +401,13 @@ Nextcloud app on another domain.
 A server that publishes no Protected Resource Metadata is treated as its own
 authorization server, at the origin of its URL.
 
+Every authorization and token request, refreshes included, names the MCP server in a
+`resource` parameter (RFC 8707), so tokens are issued for that server only. The value is
+the `resource` from the Protected Resource Metadata. Without metadata it is the MCP URL
+with the scheme and host in lowercase, the fragment removed and no trailing slash. An
+authorization server that serves several resources may reject a value it does not know
+with `invalid_target`. Enter the MCP URL exactly as the server publishes it.
+
 #### OAuth client registration
 
 Before signing in, AIquila needs a client ID at the server's authorization server. It
