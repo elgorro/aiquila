@@ -77,7 +77,7 @@ this repository ([OpenAPI](../dev/openapi.md)) rather than an external reference
 
 | Category | Source | Upstream | API | Reference | Introduced | Last verified |
 |---|---|---|---|---|---|---|
-| `calendar` | `apps/calendar.ts` | `calendar` | CalDAV | [RFC 4791](https://www.rfc-editor.org/rfc/rfc4791), [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545) | 0.1.7 · `b98bd51` · 2026-02-08 | calendar 6.6.4, dav 2.0.0 · NC 35.0.2 · 2026-10-31 |
+| `calendar` | `apps/calendar.ts` | `calendar` | CalDAV, CalDAV scheduling (rooms, free-busy) | [RFC 4791](https://www.rfc-editor.org/rfc/rfc4791), [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545), [RFC 6638](https://www.rfc-editor.org/rfc/rfc6638) | 0.1.7 · `b98bd51` · 2026-02-08 | calendar 6.6.5, dav 2.0.0, calendar_resource_management 1.0.0 · NC 35.0.2 · 2026-11-10 |
 | `tasks` | `apps/tasks.ts` | `tasks` | CalDAV | [RFC 4791](https://www.rfc-editor.org/rfc/rfc4791), [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545) | 0.1.2 · `33a6ce8` · 2025-11-21 | tasks 0.18.1, dav 2.0.0 · NC 35.0.2 · 2026-10-31 |
 | `contacts` | `apps/contacts.ts` | `contacts` | CardDAV | [RFC 6352](https://www.rfc-editor.org/rfc/rfc6352), [RFC 6350](https://www.rfc-editor.org/rfc/rfc6350) | 0.1.7 · `b98bd51` · 2026-02-08 | contacts 8.9.3, dav 2.0.0 · NC 35.0.2 · 2026-10-31 |
 | `notes` | `apps/notes.ts` | `notes` | App REST v1 | [Notes API v1](https://github.com/nextcloud/notes/blob/main/docs/api/v1.md) | 0.1.2 · `33a6ce8` · 2025-11-21 | notes 6.1.0 · NC 35.0.2 · 2026-10-31 |

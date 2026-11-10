@@ -31,7 +31,7 @@ Core system operations via WebDAV and OCC:
 
 ### App Integrations
 Nextcloud apps and administration:
-- **Calendar** — Full CRUD for events with recurrence, attendees, and alarms (CalDAV)
+- **Calendar** — Full CRUD for events with recurrence, attendees, and alarms (CalDAV), plus a room finder and room booking
 - **Tasks** — Full CRUD for tasks with subtasks, priorities, and categories (CalDAV)
 - **Contacts** — Full CRUD for contacts with structured fields (CardDAV)
 - **Mail** — Email accounts, mailboxes, messages, send, flags, and attachments
@@ -66,7 +66,7 @@ Nextcloud apps and administration:
 - **Recommendations** — The files Nextcloud suggests for the current user
 - **AIquila** — Configure and test the AI provider integration
 
-**Total: 381 tools across 47 categories**
+**Total: 384 tools across 47 categories**
 
 ## Tools Reference
 
@@ -127,7 +127,7 @@ Nextcloud apps and administration:
 
 ### App Tools
 
-#### Calendar (6 tools)
+#### Calendar (9 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_calendars` | List all calendars | [Calendar](tools/apps/calendar.md#list_calendars) |
@@ -136,6 +136,9 @@ Nextcloud apps and administration:
 | `create_event` | Create an event | [Calendar](tools/apps/calendar.md#create_event) |
 | `update_event` | Update an event | [Calendar](tools/apps/calendar.md#update_event) |
 | `delete_event` | Delete an event | [Calendar](tools/apps/calendar.md#delete_event) |
+| `list_calendar_rooms` | List bookable rooms and resources | [Calendar](tools/apps/calendar.md#list_calendar_rooms) |
+| `get_free_busy` | Show when rooms, resources or people are busy | [Calendar](tools/apps/calendar.md#get_free_busy) |
+| `find_free_rooms` | Find the rooms free for a time range | [Calendar](tools/apps/calendar.md#find_free_rooms) |
 
 #### Tasks (6 tools)
 | Tool | Description | Documentation |

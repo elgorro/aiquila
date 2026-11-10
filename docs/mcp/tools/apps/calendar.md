@@ -1,12 +1,13 @@
 # Nextcloud Calendar Tools
 
-Integration with Nextcloud Calendar app via CalDAV protocol. Create, list, update, and delete calendar events with full support for recurrence, attendees, and alarms.
+Integration with Nextcloud Calendar app via CalDAV protocol. Create, list, update, and delete calendar events with full support for recurrence, attendees, and alarms, and find and book meeting rooms.
 
 ## Prerequisites
 
 - Nextcloud Calendar app must be installed and enabled
 - At least one calendar must exist
 - CalDAV access must be enabled (default in Nextcloud)
+- For rooms and resources: a backend app that provides them, such as [Calendar Resource Management](https://apps.nextcloud.com/apps/calendar_resource_management) (`calendar_resource_management`), and an email address in the organizer's profile
 
 ## Available Tools
 
@@ -18,6 +19,9 @@ Integration with Nextcloud Calendar app via CalDAV protocol. Create, list, updat
 | `create_event` | Create a new event |
 | `update_event` | Update an existing event |
 | `delete_event` | Delete an event |
+| `list_calendar_rooms` | List bookable rooms and resources |
+| `get_free_busy` | Show when rooms, resources or people are busy |
+| `find_free_rooms` | Find the rooms free for a time range |
 
 ---
 
@@ -93,14 +97,14 @@ Create a new calendar event with date/time, location, description, attendees, an
 - `status` (enum, optional): `TENTATIVE`, `CONFIRMED`, `CANCELLED`
 - `transp` (enum, optional): `OPAQUE` (busy) or `TRANSPARENT` (free)
 - `categories` (string[], optional): Tags/categories
-- `attendees` (object[], optional): Attendees with email, display name, role, RSVP. The signed-in user becomes the `ORGANIZER`, addressed by the email set in their Nextcloud profile; without one the property is left out and Nextcloud's scheduling fills it in
+- `attendees` (object[], optional): Attendees, each with `email`, and optionally `cn` (display name), `role`, `rsvp` (default `true`) and `cutype` (`INDIVIDUAL`, `GROUP`, `RESOURCE`, `ROOM` or `UNKNOWN`; RFC 5545 §3.2.3). `ROOM` or `RESOURCE` books a room or resource, see [Rooms and resources](#rooms-and-resources). The signed-in user becomes the `ORGANIZER`, addressed by the email set in their Nextcloud profile. Without one the property is left out, and Nextcloud sends no invitations and books no rooms
 - `rrule` (string, optional): Recurrence rule (e.g. `FREQ=WEEKLY;BYDAY=MO,WE,FR`)
 - `accessClass` (enum, optional): `PUBLIC`, `PRIVATE`, `CONFIDENTIAL`
 - `alarm` (number, optional): Single reminder in minutes before the event
 - `alarms` (number[], optional): Multiple reminders in minutes before the event (e.g. `[1440, 60]` for 1 day and 1 hour before). Combined with `alarm` if both are set.
 
 **Returns:**
-Confirmation with event UID.
+Confirmation with event UID, and for each room or resource whether it was booked.
 
 **Example Usage:**
 ```
@@ -119,7 +123,7 @@ Ask Claude: "Schedule a birthday party on 20260401 in my personal calendar"
   "location": "Conference Room B",
   "rrule": "FREQ=WEEKLY;BYDAY=TU",
   "attendees": [
-    { "email": "alice@example.com", "displayName": "Alice", "rsvp": true }
+    { "email": "alice@example.com", "cn": "Alice", "rsvp": true }
   ],
   "alarm": 15
 }
@@ -146,7 +150,7 @@ Update an existing calendar event's fields by UID. Uses CalDAV ETag-based optimi
 - `rrule` (string|null, optional): New recurrence rule, or `null` to remove
 - `alarm` (number|null, optional): Single reminder in minutes before the event, or `null` to remove all existing alarms
 - `alarms` (number[], optional): Multiple reminders in minutes before the event (e.g. `[1440, 60]`). Replaces existing alarms; combined with `alarm` if both are set.
-- `attendees` (object[]|null, optional): Replace all attendees, or `null` to remove them and the organizer. An existing `ORGANIZER` with an email address is kept; otherwise it is set as for `create_event`
+- `attendees` (object[]|null, optional): Replace all attendees, as in `create_event`, or `null` to remove them and the organizer. An existing `ORGANIZER` with an email address is kept; otherwise it is set as for `create_event`. When the event has rooms or resources, the result says whether each accepted
 
 **Returns:**
 Confirmation message.
@@ -178,6 +182,48 @@ Ask Claude: "Cancel the meeting uid-456"
 ```
 
 ---
+
+## Rooms and resources
+
+Nextcloud keeps bookable rooms and resources as CalDAV principals under `principals/calendar-rooms` and `principals/calendar-resources`. A backend app fills them, such as Calendar Resource Management, where an administrator sets them up. Without one, the room tools report that none exist.
+
+### list_calendar_rooms
+
+List the rooms and resources with their email address, type, building, floor, room number, capacity, features and contact person.
+
+**Parameters:**
+- `kind` (enum, optional): `rooms`, `resources` or `all` (default)
+- `minCapacity` (integer, optional): only rooms for at least this many people
+- `features` (string[], optional): features a room must have: `PHONE`, `VIDEO-CONFERENCING`, `TV`, `PROJECTOR`, `WHITEBOARD`, `WHEELCHAIR-ACCESSIBLE`
+
+### get_free_busy
+
+Show when rooms, resources or people are busy in a time range. It sends a free-busy request through the signed-in user's scheduling outbox (RFC 6638 §5), so it shows the times other calendars are busy without their event details.
+
+**Parameters:**
+- `start`, `end` (string, required): UTC, as `YYYYMMDDTHHmmssZ` or ISO 8601 with `Z` or an offset
+- `addresses` (string[], required): email addresses of rooms, resources or Nextcloud users, up to 50
+
+An address that belongs to no one on this Nextcloud is reported as unknown.
+
+### find_free_rooms
+
+Find the rooms that are free for the whole range, with the busy times of the others.
+
+**Parameters:**
+- `start`, `end` (string, required): as for `get_free_busy`
+- `minCapacity` (integer, optional), `features` (string[], optional): as for `list_calendar_rooms`
+
+**Example:** "Find a room for eight people with video conferencing tomorrow from 2 to 3 pm, and book it for the planning meeting."
+
+### Booking
+
+Book a room by inviting it: pass its email address in `attendees` of `create_event` or `update_event`, with `cutype` `ROOM` (or `RESOURCE` for a resource). Nextcloud answers for the room while the event is saved: it accepts if the room is free and declines if it is already booked. The tool reads the event back and reports which:
+
+- **booked**: the room accepted.
+- **DECLINED**: the room was already booked at that time. Remove it from the attendees, or the declined booking stays in the room's calendar and keeps it shown as busy.
+- **not answered**: Nextcloud does not answer for recurring events, so a recurring booking stays unconfirmed.
+- **not booked**: the event has no organizer, because the signed-in user has no email address in their profile, so the room was never asked.
 
 ## Recurrence Rules
 
@@ -234,3 +280,4 @@ To extend calendar tools:
 - [CalDAV RFC 4791](https://tools.ietf.org/html/rfc4791)
 - [iCalendar RFC 5545](https://tools.ietf.org/html/rfc5545)
 - [Nextcloud CalDAV Docs](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/CalDAV/)
+- [CalDAV Scheduling RFC 6638](https://www.rfc-editor.org/rfc/rfc6638)
