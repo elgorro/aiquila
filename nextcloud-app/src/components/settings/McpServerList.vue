@@ -73,15 +73,37 @@
 					v-model="form.authToken"
 					:label="t('aiquila', 'Bearer token')" />
 
-				<div v-if="form.authType === 'oauth2'">
-					<NcPasswordField v-model="form.registrationToken"
-						:label="t('aiquila', 'Registration token (optional)')"
-						@input="form.registrationTokenDirty = true" />
-					<p class="mcp-form__hint">
-						{{ form.hasRegistrationToken
-							? t('aiquila', 'A registration token is stored. Leave empty to keep it, or type a new one to replace it.')
-							: t('aiquila', 'Only needed if the MCP server gates dynamic client registration (MCP_REGISTRATION_TOKEN). Leave empty for open registration.') }}
-					</p>
+				<div v-if="form.authType === 'oauth2'" class="mcp-form">
+					<div>
+						<NcTextField v-model="form.staticClientId"
+							:label="t('aiquila', 'Client ID (optional)')" />
+						<p class="mcp-form__hint">
+							{{ t('aiquila', 'For an authorization server without automatic registration: register an OAuth client there with the redirect URI below, then enter its client ID. Leave empty to register automatically.') }}
+						</p>
+						<p class="mcp-form__hint">
+							{{ t('aiquila', 'Redirect URI:') }} <code>{{ redirectUri }}</code>
+						</p>
+					</div>
+					<div v-if="form.staticClientId">
+						<NcPasswordField v-model="form.staticClientSecret"
+							:label="t('aiquila', 'Client secret (optional)')"
+							@input="form.staticClientSecretDirty = true" />
+						<p class="mcp-form__hint">
+							{{ form.hasStaticClientSecret
+								? t('aiquila', 'A client secret is stored. Leave empty to keep it, or type a new one to replace it.')
+								: t('aiquila', 'Only for a confidential client. Leave empty for a public client.') }}
+						</p>
+					</div>
+					<div v-else>
+						<NcPasswordField v-model="form.registrationToken"
+							:label="t('aiquila', 'Registration token (optional)')"
+							@input="form.registrationTokenDirty = true" />
+						<p class="mcp-form__hint">
+							{{ form.hasRegistrationToken
+								? t('aiquila', 'A registration token is stored. Leave empty to keep it, or type a new one to replace it.')
+								: t('aiquila', 'Only needed if the MCP server gates dynamic client registration (MCP_REGISTRATION_TOKEN). Leave empty for open registration.') }}
+						</p>
+					</div>
 					<NcButton type="secondary" @click="authorize">
 						{{ t('aiquila', 'Authenticate') }}
 					</NcButton>
@@ -107,6 +129,7 @@
 
 <script>
 import { translate as t } from '@nextcloud/l10n'
+import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
@@ -155,6 +178,11 @@ export default {
 				{ id: 'oauth2', label: t('aiquila', 'OAuth 2.0') },
 			]
 		},
+		// The fixed callback a pre-registered client redirects to. Known before
+		// the server is saved, so the admin can register the client first.
+		redirectUri() {
+			return window.location.origin + generateUrl('/apps/aiquila/api/admin/mcp-servers/oauth/callback')
+		},
 	},
 	mounted() {
 		this.load()
@@ -186,7 +214,17 @@ export default {
 			if (server.auth_type === 'oauth2' && server.oauth_status) {
 				parts.push(this.oauthLabel(server.oauth_status))
 			}
+			if (server.oauth_client_type) {
+				parts.push(this.clientTypeLabel(server.oauth_client_type))
+			}
 			return parts.join(' · ')
+		},
+		clientTypeLabel(type) {
+			return {
+				static: t('aiquila', 'pre-registered client'),
+				cimd: t('aiquila', 'client metadata document'),
+				dcr: t('aiquila', 'registered automatically'),
+			}[type] || type
 		},
 		oauthLabel(status) {
 			if (status === 'authenticated') {
@@ -206,6 +244,10 @@ export default {
 				registrationToken: '',
 				registrationTokenDirty: false,
 				hasRegistrationToken: false,
+				staticClientId: '',
+				staticClientSecret: '',
+				staticClientSecretDirty: false,
+				hasStaticClientSecret: false,
 			}
 			this.formError = ''
 			this.oauthStatus = ''
@@ -220,6 +262,10 @@ export default {
 				registrationToken: '',
 				registrationTokenDirty: false,
 				hasRegistrationToken: !!server.registration_token_masked,
+				staticClientId: server.static_client_id || '',
+				staticClientSecret: '',
+				staticClientSecretDirty: false,
+				hasStaticClientSecret: !!server.static_client_secret_masked,
 			}
 			this.formError = ''
 			this.oauthStatus = server.auth_type === 'oauth2' && server.oauth_status
@@ -239,6 +285,13 @@ export default {
 			// the API reads a submitted empty string as "clear the stored one".
 			if (this.form.authType === 'oauth2' && this.form.registrationTokenDirty) {
 				payload.registrationToken = this.form.registrationToken
+			}
+			if (this.form.authType === 'oauth2') {
+				// An empty string clears a stored client, like the registration token.
+				payload.staticClientId = this.form.staticClientId.trim()
+				if (this.form.staticClientSecretDirty) {
+					payload.staticClientSecret = this.form.staticClientSecret
+				}
 			}
 			try {
 				if (this.form.id) {
