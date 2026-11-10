@@ -417,6 +417,19 @@ A response that fails the check is rejected before the code goes to a token endp
 and any error it carries is ignored. The sign-in also fails if the MCP server moved to
 another authorization server while the popup was open. Click **Authenticate** again.
 
+#### Staying signed in
+
+One sign-in serves every user and background job. AIquila renews the access token with
+the refresh token shortly before it expires. It also renews it when the MCP server answers
+`401`, then sends the request once more. Refreshes for one server run one at a time, and
+the others wait for the result. Refresh tokens are single-use, so a second refresh would
+make the authorization server end the grant.
+
+The entry shows `auth_expired` only when the grant is gone: the token endpoint answers
+`invalid_grant`, `invalid_client` or `unauthorized_client` (RFC 6749 §5.2), or the server
+also rejects the renewed token. Click **Authenticate** to sign in again. A timeout or a
+server error during a refresh fails only that request and keeps the stored tokens.
+
 #### OAuth client registration
 
 Before signing in, AIquila needs a client ID at the server's authorization server. It

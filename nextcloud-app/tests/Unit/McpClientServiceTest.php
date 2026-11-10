@@ -7,6 +7,8 @@ use OCA\AIquila\Db\McpServerMapper;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\McpClientService;
 use OCP\IURLGenerator;
+use OCP\Lock\ILockingProvider;
+use OCP\Lock\LockedException;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
@@ -23,8 +25,8 @@ class TestableMcpClientService extends McpClientService {
     /** Captured calls: [['method' => ..., 'params' => ...], ...] */
     public array $capturedCalls = [];
 
-    public function __construct(McpServerMapper $mapper, LoggerInterface $logger, CredentialService $credentials, IURLGenerator $urlGenerator) {
-        parent::__construct($mapper, $logger, $credentials, $urlGenerator);
+    public function __construct(McpServerMapper $mapper, LoggerInterface $logger, CredentialService $credentials, IURLGenerator $urlGenerator, ILockingProvider $locking) {
+        parent::__construct($mapper, $logger, $credentials, $urlGenerator, $locking);
     }
 
     /** Expose the protected JSON-RPC body builder for assertions. */
@@ -100,6 +102,7 @@ class McpClientServiceTest extends TestCase {
     private LoggerInterface $logger;
     private CredentialService $credentials;
     private IURLGenerator $urlGenerator;
+    private ILockingProvider $locking;
     private TestableMcpClientService $service;
 
     /**
@@ -119,6 +122,7 @@ class McpClientServiceTest extends TestCase {
         $this->mapper = $this->createStub(McpServerMapper::class);
         $this->logger = $this->createStub(LoggerInterface::class);
         $this->credentials = $this->createStub(CredentialService::class);
+        $this->locking = $this->createStub(ILockingProvider::class);
 
         // Default: encrypt/decrypt pass through for test simplicity
         $this->credentials->method('encryptToken')
@@ -142,7 +146,7 @@ class McpClientServiceTest extends TestCase {
     }
 
     private function buildService(): void {
-        $this->service = new TestableMcpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator);
+        $this->service = new TestableMcpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking);
     }
 
     private function makeServer(int $id = 1, string $name = 'Test Server', string $url = 'http://localhost:3339/mcp'): McpServer {
@@ -192,7 +196,7 @@ class McpClientServiceTest extends TestCase {
      */
     public function testListToolsCompletesInitializationHandshakeBeforeListingTools(): void {
         $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
-        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator);
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking);
 
         $captured = [];
         $responses = [
@@ -267,7 +271,7 @@ class McpClientServiceTest extends TestCase {
      */
     public function testSessionIdFromSseInitializeResponseIsReused(): void {
         $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
-        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator);
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking);
 
         $captured = [];
         $responses = [
@@ -1516,5 +1520,195 @@ class McpClientServiceTest extends TestCase {
         } finally {
             $this->assertSame([], $captured);
         }
+    }
+
+    // --- Token refresh: transient vs terminal errors, concurrency, 401 (RFC 6749 §5.2, RFC 6750 §3.1) ---
+
+    /**
+     * An OAuth server with a refresh token, a real service and a scripted
+     * HTTP client. $handler gets (method, url, Authorization) and returns a
+     * MockResponse or throws.
+     */
+    private function refreshableServer(callable $handler, ?McpServerMapper $mapper = null, ?ILockingProvider $locking = null): array {
+        $mapper ??= $this->mapper;
+        $server = $this->makeServer(7, 'Cloud', 'https://cloud.example/apps/mcp/mcp');
+        $server->setAuthType('oauth2');
+        $server->setOauthMetadata((string)json_encode($this->asMetadata('https://cloud.example')));
+        $server->setOauthClientId('cid');
+        $server->setOauthAccessToken('old-at');
+        $server->setOauthRefreshToken('old-rt');
+        $server->setOauthTokenExpiresAt(time() + 3600);
+
+        $service = new McpClientService($mapper, $this->logger, $this->credentials, $this->urlGenerator, $locking ?? $this->locking);
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use ($handler) {
+            return $handler($method, $url, $this->headerValue($options, 'Authorization'));
+        });
+        (new \ReflectionProperty(McpClientService::class, 'httpClient'))->setValue($service, $client);
+        return [$service, $server];
+    }
+
+    private function json(int $status, array $body): MockResponse {
+        return new MockResponse((string)json_encode($body), [
+            'http_code' => $status,
+            'response_headers' => ['content-type' => 'application/json'],
+        ]);
+    }
+
+    /** RFC 6749 §5.2: only an error that invalidates the grant ends it; a 503 is transient. */
+    public function testTransientRefreshFailureKeepsTokens(): void {
+        [$service, $server] = $this->refreshableServer(fn() => $this->json(503, ['error' => 'temporarily_unavailable']));
+
+        try {
+            $service->refreshOAuthToken($server);
+            $this->fail('expected an exception');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('503', $e->getMessage());
+        }
+
+        $this->assertSame('old-rt', $server->getOauthRefreshToken());
+        $this->assertSame('old-at', $server->getOauthAccessToken());
+        $this->assertNotSame('auth_expired', $server->getLastStatus());
+    }
+
+    public function testTransportFailureDuringRefreshKeepsTokens(): void {
+        [$service, $server] = $this->refreshableServer(fn() => new MockResponse('', ['error' => 'Connection timed out']));
+
+        $this->expectException(\RuntimeException::class);
+        try {
+            $service->refreshOAuthToken($server);
+        } finally {
+            $this->assertSame('old-rt', $server->getOauthRefreshToken());
+            $this->assertNotSame('auth_expired', $server->getLastStatus());
+        }
+    }
+
+    public function testInvalidGrantEndsTheGrant(): void {
+        [$service, $server] = $this->refreshableServer(fn() => $this->json(400, ['error' => 'invalid_grant']));
+
+        $this->expectException(\RuntimeException::class);
+        try {
+            $service->refreshOAuthToken($server);
+        } finally {
+            $this->assertNull($server->getOauthRefreshToken());
+            $this->assertNull($server->getOauthAccessToken());
+            $this->assertSame('auth_expired', $server->getLastStatus());
+        }
+    }
+
+    /**
+     * Refresh tokens are single-use (OAuth 2.1 §4.3.1, RFC 9700 §4.14.2). A
+     * process that waited for the lock uses the token the winner stored
+     * rather than spending the old refresh token again.
+     */
+    public function testWaitingProcessAdoptsTokenStoredByAnotherRefresh(): void {
+        $stored = $this->makeServer(7, 'Cloud', 'https://cloud.example/apps/mcp/mcp');
+        $stored->setOauthAccessToken('winner-at');
+        $stored->setOauthRefreshToken('winner-rt');
+        $stored->setOauthTokenExpiresAt(time() + 3600);
+        $mapper = $this->createStub(McpServerMapper::class);
+        $mapper->method('findById')->willReturn($stored);
+
+        $locking = $this->createMock(ILockingProvider::class);
+        $attempts = 0;
+        $locking->method('acquireLock')->willReturnCallback(function () use (&$attempts) {
+            if ($attempts++ === 0) {
+                throw new LockedException('aiquila/mcp-oauth-refresh/7');
+            }
+        });
+        $locking->expects($this->once())->method('releaseLock')->with('aiquila/mcp-oauth-refresh/7', ILockingProvider::LOCK_EXCLUSIVE);
+
+        $requests = 0;
+        [$service, $server] = $this->refreshableServer(function () use (&$requests) {
+            $requests++;
+            return $this->json(200, ['access_token' => 'unexpected']);
+        }, $mapper, $locking);
+        $server->setOauthTokenExpiresAt(time() - 10);
+
+        $service->refreshOAuthToken($server);
+
+        $this->assertSame(0, $requests);
+        $this->assertSame(2, $attempts);
+        $this->assertSame('winner-at', $server->getOauthAccessToken());
+        $this->assertSame('winner-rt', $server->getOauthRefreshToken());
+    }
+
+    public function testLockIsReleasedWhenRefreshFails(): void {
+        $locking = $this->createMock(ILockingProvider::class);
+        $locking->expects($this->once())->method('acquireLock');
+        $locking->expects($this->once())->method('releaseLock');
+        [$service, $server] = $this->refreshableServer(fn() => $this->json(400, ['error' => 'invalid_grant']), null, $locking);
+
+        $this->expectException(\RuntimeException::class);
+        $service->refreshOAuthToken($server);
+    }
+
+    /** RFC 6750 §3.1: a 401 means the token is no longer valid, whatever its stored expiry. */
+    public function testUnauthorizedResponseRefreshesAndRetriesOnce(): void {
+        $this->mapper->method('update')->willReturnArgument(0);
+        $seen = [];
+        [$service, $server] = $this->refreshableServer(function (string $method, string $url, ?string $auth) use (&$seen) {
+            $seen[] = $url . ' ' . $auth;
+            if ($url === 'https://cloud.example/token') {
+                return $this->json(200, ['access_token' => 'new-at', 'refresh_token' => 'new-rt', 'expires_in' => 3600]);
+            }
+            if ($auth === 'Bearer old-at') {
+                return new MockResponse('', ['http_code' => 401, 'response_headers' => ['www-authenticate' => 'Bearer error="invalid_token"']]);
+            }
+            return $this->json(200, ['jsonrpc' => '2.0', 'id' => 1, 'result' => ['tools' => [['name' => 't']]]]);
+        });
+        $this->markInitialized($service, $server);
+
+        $tools = $service->listTools($server);
+
+        $this->assertCount(1, $tools);
+        $this->assertSame([
+            'https://cloud.example/apps/mcp/mcp Bearer old-at',
+            'https://cloud.example/token ',
+            'https://cloud.example/apps/mcp/mcp Bearer new-at',
+        ], array_map(fn(string $s) => preg_replace('/ Basic .*$/', ' ', $s), $seen));
+        $this->assertSame('new-rt', $server->getOauthRefreshToken());
+    }
+
+    public function testSecondUnauthorizedResponseEndsTheGrant(): void {
+        $this->mapper->method('update')->willReturnArgument(0);
+        [$service, $server] = $this->refreshableServer(function (string $method, string $url) {
+            if ($url === 'https://cloud.example/token') {
+                return $this->json(200, ['access_token' => 'new-at', 'expires_in' => 3600]);
+            }
+            return new MockResponse('', ['http_code' => 401]);
+        });
+        $this->markInitialized($service, $server);
+
+        try {
+            $service->listTools($server);
+            $this->fail('expected an exception');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('Sign in again', $e->getMessage());
+        }
+        $this->assertSame('auth_expired', $server->getLastStatus());
+        $this->assertNull($server->getOauthAccessToken());
+    }
+
+    /** A 403 (insufficient_scope) is not an invalid token: no refresh, tokens kept. */
+    public function testForbiddenResponseDoesNotRefresh(): void {
+        $requests = [];
+        [$service, $server] = $this->refreshableServer(function (string $method, string $url) use (&$requests) {
+            $requests[] = $url;
+            return $this->json(403, ['error' => 'insufficient_scope']);
+        });
+        $this->markInitialized($service, $server);
+
+        $this->expectException(\RuntimeException::class);
+        try {
+            $service->listTools($server);
+        } finally {
+            $this->assertSame(['https://cloud.example/apps/mcp/mcp'], $requests);
+            $this->assertSame('old-at', $server->getOauthAccessToken());
+            $this->assertSame('old-rt', $server->getOauthRefreshToken());
+        }
+    }
+
+    private function markInitialized(McpClientService $service, McpServer $server): void {
+        (new \ReflectionProperty(McpClientService::class, 'initialized'))->setValue($service, [$server->getId() => true]);
     }
 }
