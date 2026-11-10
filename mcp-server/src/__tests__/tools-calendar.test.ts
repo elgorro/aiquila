@@ -224,6 +224,67 @@ END:VCALENDAR</c:calendar-data>
       expect(result.content[0].text).toContain('UID: event-2');
     });
 
+    it('should show the zone each event time is expressed in', async () => {
+      // A train ticket imported in UTC, one stored with a TZID, one floating
+      const zonedResponse = `<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/train.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"etag-train"</d:getetag>
+      <c:calendar-data>BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:train
+SUMMARY:Train Royan Paris
+DTSTART:20261112T074500Z
+DTEND:20261112T113000Z
+END:VEVENT
+END:VCALENDAR</c:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/zoned.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"etag-zoned"</d:getetag>
+      <c:calendar-data>BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:zoned
+SUMMARY:Dentist
+DTSTART;TZID=Europe/Paris:20261112T084500
+DTEND;TZID="Europe/Paris":20261112T093000
+END:VEVENT
+END:VCALENDAR</c:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/remote.php/dav/calendars/admin/personal/floating.ics</d:href>
+    <d:propstat><d:prop>
+      <d:getetag>"etag-floating"</d:getetag>
+      <c:calendar-data>BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:floating
+SUMMARY:Lunch
+DTSTART:20261112T120000
+END:VEVENT
+END:VCALENDAR</c:calendar-data>
+    </d:prop></d:propstat>
+  </d:response>
+</d:multistatus>`;
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(zonedResponse),
+      });
+
+      const { listEventsTool } = await import('../tools/apps/calendar.js');
+      const text = (await listEventsTool.handler({ calendarName: 'personal' })).content[0].text;
+
+      expect(text).toContain('When: 2026-11-12 07:45 UTC - 2026-11-12 11:30 UTC');
+      expect(text).toContain(
+        'When: 2026-11-12 08:45 (Europe/Paris) - 2026-11-12 09:30 (Europe/Paris)'
+      );
+      expect(text).toMatch(/When: 2026-11-12 12:00\n/);
+    });
+
     it('should parse events when server uses cal: namespace prefix', async () => {
       const calPrefixResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
@@ -311,7 +372,7 @@ END:VCALENDAR</c:calendar-data>
       const result = await getEventTool.handler({ uid: 'event-1', calendarName: 'personal' });
 
       expect(result.content[0].text).toContain('Project review');
-      expect(result.content[0].text).toContain('2024-03-20 14:00');
+      expect(result.content[0].text).toContain('2024-03-20 14:00 UTC');
       expect(result.content[0].text).toContain('Board room');
       expect(result.content[0].text).toContain('Quarterly project review');
       expect(result.content[0].text).toContain('UID: event-1');
