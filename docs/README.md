@@ -13,7 +13,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 
 ## MCP Server
 
-- **[MCP Overview & Tools Reference](mcp/README.md)** — 372 tools across 46 categories
+- **[MCP Overview & Tools Reference](mcp/README.md)** — 381 tools across 47 categories
 - **[Setup Guide](mcp/setup.md)** — installation and MCP client configuration
 - **[OAuth 2.0](mcp/oauth.md)** — OAuth authentication for remote MCP clients
 - **[Standalone Docker](mcp/standalone-docker.md)** — run MCP server in Docker (external Nextcloud)
@@ -36,7 +36,8 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 | Tables (structured data) | 13 | [Tables](mcp/tools/apps/tables.md) |
 | Projects, templates & prompt library | 11 | [Projects](mcp/tools/apps/projects.md) |
 | Coworkers (scheduled AI jobs) | 15 | [Coworkers](mcp/tools/apps/cowork.md) |
-| Folder workspaces (Text) | 5 | [Text](mcp/tools/apps/text.md) |
+| Folder workspaces and inline comments (Text) | 9 | [Text](mcp/tools/apps/text.md) |
+| File comments | 5 | [File Comments](mcp/tools/apps/comments.md) |
 | Trash | 3 | [Trash](mcp/tools/apps/trash.md) |
 | File versions | 2 | [Versions](mcp/tools/apps/versions.md) |
 | Notifications | 4 | [Notifications](mcp/tools/apps/notifications.md) |

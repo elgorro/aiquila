@@ -51,6 +51,7 @@ import { projectsTools } from './tools/apps/projects.js';
 import { pollsTools } from './tools/apps/polls.js';
 import { formsTools } from './tools/apps/forms.js';
 import { textTools } from './tools/apps/text.js';
+import { commentsTools } from './tools/apps/comments.js';
 import { recommendationsTools } from './tools/apps/recommendations.js';
 import { socialSharingTools } from './tools/apps/social-sharing.js';
 import { socialTools } from './tools/apps/social.js';
@@ -115,6 +116,7 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
   { category: 'polls', appIds: ['polls'], tools: pollsTools },
   { category: 'forms', appIds: ['forms'], tools: formsTools },
   { category: 'text', appIds: ['text'], tools: textTools },
+  { category: 'comments', appIds: ['comments'], tools: commentsTools },
   { category: 'assistant', appIds: ['assistant'], tools: assistantTools },
   {
     category: 'translate',
@@ -198,6 +200,15 @@ const UNDETECTABLE_FOR_USERS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Apps that publish their capability inside another app's key rather than
+ * under their own id: the comments app sets `files.comments`.
+ */
+function appsFromNestedCapabilities(capabilities: Record<string, unknown>): string[] {
+  const files = capabilities.files as { comments?: unknown } | undefined;
+  return files?.comments === true ? ['comments'] : [];
+}
+
+/**
  * The apps enabled for the account of the request being served. The app list
  * (/cloud/apps) needs admin rights; for anyone else, the apps that publish a
  * capability or a navigation entry to them, plus UNDETECTABLE_FOR_USERS.
@@ -222,6 +233,7 @@ async function detectEnabledApps(): Promise<Set<string> | null> {
     if (!caps) throw new Error('capabilities unavailable');
     const apps = new Set([
       ...Object.keys(caps.capabilities),
+      ...appsFromNestedCapabilities(caps.capabilities),
       ...nav.ocs.data.map((a) => a.id),
       ...UNDETECTABLE_FOR_USERS,
     ]);

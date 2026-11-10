@@ -1,6 +1,6 @@
 # AIquila MCP Server
 
-MCP (Model Context Protocol) server that gives any MCP client full access to your Nextcloud instance — files, calendar, tasks, contacts, mail, talk, maps, bookmarks, notes, polls, forms, and more. 372 tools across 46 categories.
+MCP (Model Context Protocol) server that gives any MCP client full access to your Nextcloud instance — files, calendar, tasks, contacts, mail, talk, maps, bookmarks, notes, polls, forms, and more. 381 tools across 47 categories.
 
 ## Quick Start
 
@@ -45,6 +45,7 @@ the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/in
 | ------------- | ----: |
 | Files         |    15 |
 | Shares        |    10 |
+| Comments      |     5 |
 | Apps          |     6 |
 | Tags          |     6 |
 | User Status   |     5 |
@@ -57,7 +58,7 @@ the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/in
 | Search        |     2 |
 | Versions      |     2 |
 | Activity      |     2 |
-| **Subtotal**  | **69** |
+| **Subtotal**  | **74** |
 
 ### AIquila app
 
@@ -91,7 +92,7 @@ the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/in
 | Contacts         |     6 |
 | Cookbook         |     6 |
 | Notes            |     5 |
-| Text             |     5 |
+| Text             |     9 |
 | Terms of Service |     5 |
 | Assistant        |     4 |
 | Announcements    |     3 |
@@ -101,9 +102,9 @@ the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/in
 | Translate        |     1 |
 | Social Sharing   |     1 |
 | Recommendations  |     1 |
-| **Subtotal**     | **271** |
+| **Subtotal**     | **275** |
 
-**Total: 372 tools.**
+**Total: 381 tools.**
 
 ## Configuration
 
