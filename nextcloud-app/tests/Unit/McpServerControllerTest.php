@@ -412,13 +412,31 @@ class McpServerControllerTest extends TestCase {
         $this->mapper = $this->createMock(McpServerMapper::class);
         $this->mapper->expects($this->once())->method('findByOauthState')->with('state-abc')->willReturn($server);
         $client = $this->createMock(McpClientService::class);
-        $client->expects($this->once())->method('completeOAuth')->with($server, 'code-1', 'state-abc');
+        $client->expects($this->once())->method('completeOAuth')->with($server, 'code-1', 'state-abc', null, '');
         $controller = new McpServerController('aiquila', $this->request, $this->mapper, $client, $this->credentials, $this->createStub(\Psr\Log\LoggerInterface::class));
 
         $response = $controller->oauthCallbackShared('code-1', 'state-abc');
 
         $this->assertStringContainsString('serverId:5', $response->getData());
         $this->assertSame([], $response->getThrottleMetadata());
+    }
+
+    /** RFC 9207 §2.4: iss and error reach the validation; a rejected response is throttled. */
+    public function testOauthCallbackPassesIssAndError(): void {
+        $server = $this->makeServer(5);
+        $server->setAuthType('oauth2');
+        $this->mapper->method('findById')->willReturn($server);
+        $client = $this->createMock(McpClientService::class);
+        $client->expects($this->once())->method('completeOAuth')
+            ->with($server, '', 'state-abc', 'https://attacker.example', 'access_denied')
+            ->willThrowException(new \RuntimeException('Authorization response issuer mismatch'));
+        $controller = new McpServerController('aiquila', $this->request, $this->mapper, $client, $this->credentials, $this->createStub(\Psr\Log\LoggerInterface::class));
+
+        $response = $controller->oauthCallback(5, '', 'state-abc', 'https://attacker.example', 'access_denied');
+
+        $this->assertStringContainsString('Authentication Failed', $response->getData());
+        $this->assertStringNotContainsString('access_denied', $response->getData());
+        $this->assertTrue($response->isThrottled());
     }
 
     public function testSharedOauthCallbackWithUnknownStateIsThrottled(): void {

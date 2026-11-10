@@ -317,6 +317,8 @@ class McpServerController extends Controller {
      * @param int $id Server ID
      * @param string $code Authorization code from the OAuth provider
      * @param string $state CSRF state parameter
+     * @param string|null $iss Issuer of the authorization response (RFC 9207), null when absent
+     * @param string $error Error code of an error response (RFC 6749 §4.1.2.1)
      */
     #[NoCSRFRequired]
     // Browser-redirect target carrying attacker-influenced code/state, so it is
@@ -324,8 +326,8 @@ class McpServerController extends Controller {
     #[AnonRateLimit(limit: 10, period: 60)]
     #[BruteForceProtection(action: 'aiquilaMcpOauthCallback')]
     #[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]
-    public function oauthCallback(int $id, string $code = '', string $state = ''): DataDisplayResponse {
-        return $this->finishOAuth(fn() => $this->mapper->findById($id), $code, $state);
+    public function oauthCallback(int $id, string $code = '', string $state = '', ?string $iss = null, string $error = ''): DataDisplayResponse {
+        return $this->finishOAuth(fn() => $this->mapper->findById($id), $code, $state, $iss, $error);
     }
 
     /**
@@ -336,18 +338,20 @@ class McpServerController extends Controller {
      *
      * @param string $code Authorization code from the OAuth provider
      * @param string $state CSRF state parameter
+     * @param string|null $iss Issuer of the authorization response (RFC 9207), null when absent
+     * @param string $error Error code of an error response (RFC 6749 §4.1.2.1)
      */
     #[NoCSRFRequired]
     #[AnonRateLimit(limit: 10, period: 60)]
     #[BruteForceProtection(action: 'aiquilaMcpOauthCallback')]
     #[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]
-    public function oauthCallbackShared(string $code = '', string $state = ''): DataDisplayResponse {
+    public function oauthCallbackShared(string $code = '', string $state = '', ?string $iss = null, string $error = ''): DataDisplayResponse {
         return $this->finishOAuth(function () use ($state) {
             if ($state === '') {
                 throw new \RuntimeException('OAuth callback without state');
             }
             return $this->mapper->findByOauthState($state);
-        }, $code, $state);
+        }, $code, $state, $iss, $error);
     }
 
     /**
@@ -377,12 +381,12 @@ class McpServerController extends Controller {
     /**
      * @param callable(): McpServer $findServer
      */
-    private function finishOAuth(callable $findServer, string $code, string $state): DataDisplayResponse {
+    private function finishOAuth(callable $findServer, string $code, string $state, ?string $iss, string $error): DataDisplayResponse {
         $failed = false;
 
         try {
             $server = $findServer();
-            $this->mcpClient->completeOAuth($server, $code, $state);
+            $this->mcpClient->completeOAuth($server, $code, $state, $iss, $error);
             $id = $server->getId();
 
             $html = '<!DOCTYPE html><html><body><script>'

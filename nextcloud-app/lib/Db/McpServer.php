@@ -54,6 +54,10 @@ use OCP\AppFramework\Db\Entity;
  * @method void setOauthResourceMetadata(?string $oauthResourceMetadata)
  * @method string|null getOauthScope()
  * @method void setOauthScope(?string $oauthScope)
+ * @method string|null getOauthFlowIssuer()
+ * @method void setOauthFlowIssuer(?string $oauthFlowIssuer)
+ * @method bool|null getOauthFlowIssRequired()
+ * @method void setOauthFlowIssRequired(?bool $oauthFlowIssRequired)
  */
 class McpServer extends Entity {
     use InsertsFullRow;
@@ -82,6 +86,8 @@ class McpServer extends Entity {
     protected ?string $oauthClientIssuer = null;
     protected ?string $oauthResourceMetadata = null;
     protected ?string $oauthScope = null;
+    protected ?string $oauthFlowIssuer = null;
+    protected ?bool $oauthFlowIssRequired = null;
 
     public function __construct() {
         $this->addType('displayName', 'string');
@@ -108,6 +114,8 @@ class McpServer extends Entity {
         $this->addType('oauthClientIssuer', 'string');
         $this->addType('oauthResourceMetadata', 'string');
         $this->addType('oauthScope', 'string');
+        $this->addType('oauthFlowIssuer', 'string');
+        $this->addType('oauthFlowIssRequired', 'boolean');
         $this->markFieldsForInsert();
     }
 

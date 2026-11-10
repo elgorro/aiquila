@@ -1053,9 +1053,14 @@ class McpClientService {
         // CSRF state
         $state = bin2hex(random_bytes(16));
 
-        // Store verifier + state for the callback
+        // Store verifier + state for the callback, with the issuer the
+        // request goes to and whether it promised `iss` in its response
+        // (MCP 2026-07-28 "Authorization Response Validation"; RFC 9207 §2.4).
+        // discoverOAuth() only keeps metadata whose `issuer` it validated.
         $server->setOauthCodeVerifier($verifier);
         $server->setOauthState($state);
+        $server->setOauthFlowIssuer($this->issuerOf($server, $metadata));
+        $server->setOauthFlowIssRequired(($metadata['authorization_response_iss_parameter_supported'] ?? false) === true);
         $server->setUpdatedAt(time());
         $this->mapper->update($server);
 
@@ -1081,15 +1086,37 @@ class McpClientService {
 
     /**
      * Complete the OAuth flow by exchanging the authorization code for tokens.
+     *
+     * @param string|null $iss The response's `iss` parameter, null when absent (RFC 9207 §2)
+     * @param string $error The response's `error` parameter (RFC 6749 §4.1.2.1), '' when absent
      */
-    public function completeOAuth(McpServer $server, string $code, string $state): void {
+    public function completeOAuth(McpServer $server, string $code, string $state, ?string $iss = null, string $error = ''): void {
         // Verify CSRF state
         $expected = $server->getOauthState();
         if ($expected === null || $expected === '' || !hash_equals($expected, $state)) {
             throw new \RuntimeException('OAuth state mismatch — possible CSRF attack');
         }
 
+        // Before anything in the response is acted on, error included.
+        $issuer = $this->validateResponseIssuer($server, $iss);
+
+        if ($error !== '') {
+            // The response is from the expected server, so it ends this flow.
+            $this->clearPendingFlow($server);
+            $this->mapper->update($server);
+            throw new \RuntimeException('The authorization server returned an error: ' . $error);
+        }
+        if ($code === '') {
+            throw new \RuntimeException('OAuth callback without an authorization code');
+        }
+
         $metadata = $this->getOAuthMetadata($server);
+        if ($this->issuerOf($server, $metadata) !== $issuer) {
+            // The cached metadata was rediscovered for another authorization
+            // server since the request was sent: its token endpoint must not
+            // receive this code.
+            throw new \RuntimeException('The authorization server changed during sign-in. Sign in again.');
+        }
         $tokenEndpoint = $metadata['token_endpoint'] ?? null;
 
         if (!$tokenEndpoint) {
@@ -1114,11 +1141,57 @@ class McpClientService {
         $server->setOauthAccessToken($this->credentials->encryptToken($result['access_token']));
         $server->setOauthRefreshToken($this->credentials->encryptToken($result['refresh_token'] ?? null));
         $server->setOauthTokenExpiresAt(time() + ($result['expires_in'] ?? 3600));
-        $server->setOauthCodeVerifier(null);
-        $server->setOauthState(null);
+        $this->clearPendingFlow($server);
         $server->setLastStatus('ok');
         $server->setUpdatedAt(time());
         $this->mapper->update($server);
+    }
+
+    /**
+     * RFC 9207 §2.4 as profiled by MCP 2026-07-28 "Authorization Response
+     * Validation". A present `iss` must equal the issuer recorded when the
+     * request was sent, by simple string comparison (RFC 3986 §6.2.1: no
+     * case folding, port, slash or percent-encoding normalization). It may
+     * be absent only when the server did not advertise
+     * `authorization_response_iss_parameter_supported`. A mismatched
+     * response is rejected without acting on its `error`, and leaves the
+     * pending flow intact so a forged callback cannot cancel it.
+     *
+     * @return string The recorded issuer
+     */
+    private function validateResponseIssuer(McpServer $server, ?string $iss): string {
+        $recorded = $server->getOauthFlowIssuer();
+        if ($recorded === null || $recorded === '') {
+            // A flow started before the issuer was recorded.
+            throw new \RuntimeException('No issuer recorded for this sign-in. Sign in again.');
+        }
+
+        if ($iss === null) {
+            if ($server->getOauthFlowIssRequired() === true) {
+                throw new \RuntimeException(
+                    'Authorization response without iss from an authorization server that advertises it (RFC 9207 §2.4)'
+                );
+            }
+            return $recorded;
+        }
+
+        if ($iss !== $recorded) {
+            $this->logger->warning('MCP: rejected an authorization response from an unexpected issuer', [
+                'server' => $server->getDisplayName(),
+                'expected' => $recorded,
+                'iss' => $iss,
+            ]);
+            throw new \RuntimeException('Authorization response issuer mismatch (RFC 9207 §2.4)');
+        }
+        return $recorded;
+    }
+
+    private function clearPendingFlow(McpServer $server): void {
+        $server->setOauthCodeVerifier(null);
+        $server->setOauthState(null);
+        $server->setOauthFlowIssuer(null);
+        $server->setOauthFlowIssRequired(null);
+        $server->setUpdatedAt(time());
     }
 
     /**
@@ -1262,6 +1335,8 @@ class McpClientService {
         $server->setOauthTokenExpiresAt(null);
         $server->setOauthCodeVerifier(null);
         $server->setOauthState(null);
+        $server->setOauthFlowIssuer(null);
+        $server->setOauthFlowIssRequired(null);
         $server->setOauthMetadata(null);
         $server->setOauthResourceMetadata(null);
         $server->setOauthScope(null);
