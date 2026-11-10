@@ -6,6 +6,7 @@ use OCA\AIquila\Db\McpServer;
 use OCA\AIquila\Db\McpServerMapper;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\McpClientService;
+use OCP\IURLGenerator;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
@@ -22,8 +23,8 @@ class TestableMcpClientService extends McpClientService {
     /** Captured calls: [['method' => ..., 'params' => ...], ...] */
     public array $capturedCalls = [];
 
-    public function __construct(McpServerMapper $mapper, LoggerInterface $logger, CredentialService $credentials) {
-        parent::__construct($mapper, $logger, $credentials);
+    public function __construct(McpServerMapper $mapper, LoggerInterface $logger, CredentialService $credentials, IURLGenerator $urlGenerator) {
+        parent::__construct($mapper, $logger, $credentials, $urlGenerator);
     }
 
     /** Expose the protected JSON-RPC body builder for assertions. */
@@ -98,7 +99,11 @@ class McpClientServiceTest extends TestCase {
     private McpServerMapper $mapper;
     private LoggerInterface $logger;
     private CredentialService $credentials;
+    private IURLGenerator $urlGenerator;
     private TestableMcpClientService $service;
+
+    /** Base URL the stub URL generator builds Nextcloud links on. */
+    private string $ncBase = 'https://nc.example/apps/aiquila';
 
     protected function setUp(): void {
         $this->mapper = $this->createStub(McpServerMapper::class);
@@ -111,11 +116,23 @@ class McpClientServiceTest extends TestCase {
         $this->credentials->method('decryptToken')
             ->willReturnCallback(fn(?string $v) => $v);
 
+        $this->urlGenerator = $this->createStub(IURLGenerator::class);
+        $this->urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
+            fn(string $route, array $params = []) => match ($route) {
+                McpClientService::CALLBACK_ROUTE => $this->ncBase . '/api/admin/mcp-servers/' . $params['id'] . '/oauth/callback',
+                McpClientService::SHARED_CALLBACK_ROUTE => $this->ncBase . '/api/admin/mcp-servers/oauth/callback',
+                McpClientService::CLIENT_METADATA_ROUTE => $this->ncBase . '/oauth/mcp-client',
+            }
+        );
+        $this->urlGenerator->method('getAbsoluteURL')->willReturnCallback(
+            fn(string $url) => 'https://nc.example' . $url
+        );
+
         $this->buildService();
     }
 
     private function buildService(): void {
-        $this->service = new TestableMcpClientService($this->mapper, $this->logger, $this->credentials);
+        $this->service = new TestableMcpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator);
     }
 
     private function makeServer(int $id = 1, string $name = 'Test Server', string $url = 'http://localhost:3339/mcp'): McpServer {
@@ -165,7 +182,7 @@ class McpClientServiceTest extends TestCase {
      */
     public function testListToolsCompletesInitializationHandshakeBeforeListingTools(): void {
         $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
-        $service = new McpClientService($this->mapper, $this->logger, $this->credentials);
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator);
 
         $captured = [];
         $responses = [
@@ -240,7 +257,7 @@ class McpClientServiceTest extends TestCase {
      */
     public function testSessionIdFromSseInitializeResponseIsReused(): void {
         $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
-        $service = new McpClientService($this->mapper, $this->logger, $this->credentials);
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator);
 
         $captured = [];
         $responses = [
@@ -429,7 +446,7 @@ class McpClientServiceTest extends TestCase {
 
         $this->mapper->method('update')->willReturnArgument(0);
 
-        $url = $this->service->initiateOAuth($server, 'http://nc.local/callback');
+        $url = $this->service->initiateOAuth($server);
 
         $this->assertStringStartsWith('http://localhost:3339/authorize?', $url);
         $this->assertStringContainsString('client_id=existing-client-id', $url);
@@ -454,7 +471,7 @@ class McpClientServiceTest extends TestCase {
         // Verify state mismatch throws
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessageIsOrContains('state mismatch');
-        $this->service->completeOAuth($server, 'auth-code', 'wrong-state', 'http://nc.local/callback');
+        $this->service->completeOAuth($server, 'auth-code', 'wrong-state');
     }
 
     public function testCompleteOAuthRejectsInvalidState(): void {
@@ -464,7 +481,7 @@ class McpClientServiceTest extends TestCase {
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessageIsOrContains('state mismatch');
-        $this->service->completeOAuth($server, 'code', 'wrong-state', 'http://nc.local/callback');
+        $this->service->completeOAuth($server, 'code', 'wrong-state');
     }
 
     public function testIsTokenExpired(): void {
@@ -613,6 +630,306 @@ class McpClientServiceTest extends TestCase {
             }
         }
         return [];
+    }
+
+    // --- Client registration without DCR (MCP 2026-07-28 "Client Registration") ---
+
+    /**
+     * Route every request through $handler and record method, URL, form/JSON
+     * body and Authorization header.
+     *
+     * @param array<int, array<string, mixed>> $captured
+     * @param callable(string, string): array<string, mixed> $handler (method, url) → JSON body
+     */
+    private function injectResponder(array &$captured, callable $handler): void {
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$captured, $handler) {
+            $body = $options['body'] ?? '';
+            $parsed = [];
+            if (is_string($body) && $body !== '') {
+                $json = json_decode($body, true);
+                if (is_array($json)) {
+                    $parsed = $json;
+                } else {
+                    parse_str($body, $parsed);
+                }
+            }
+            $captured[] = [
+                'method' => $method,
+                'url' => $url,
+                'body' => $parsed,
+                'authorization' => $this->headerValue($options, 'Authorization'),
+            ];
+            return new MockResponse(
+                (string)json_encode($handler($method, $url)),
+                ['http_code' => 200, 'response_headers' => ['content-type' => 'application/json']]
+            );
+        });
+
+        $ref = new \ReflectionProperty(McpClientService::class, 'httpClient');
+        $ref->setValue($this->service, $client);
+    }
+
+    /** @param array<string, mixed> $metadata */
+    private function oauthServer(array $metadata): McpServer {
+        $server = $this->makeServer(7, 'Cloud', 'https://cloud.example/apps/mcp/mcp');
+        $server->setAuthType('oauth2');
+        $server->setOauthMetadata((string)json_encode($metadata + [
+            'issuer' => 'https://cloud.example',
+            'authorization_endpoint' => 'https://cloud.example/authorize',
+            'token_endpoint' => 'https://cloud.example/token',
+        ]));
+        $this->mapper->method('update')->willReturnArgument(0);
+        return $server;
+    }
+
+    /** @return array<string, string> */
+    private function authorizeQuery(string $url): array {
+        parse_str((string)parse_url($url, PHP_URL_QUERY), $query);
+        return $query;
+    }
+
+    public function testPreRegisteredClientComesFirst(): void {
+        $server = $this->oauthServer([
+            'client_id_metadata_document_supported' => true,
+            'registration_endpoint' => 'https://cloud.example/register',
+        ]);
+        $server->setOauthStaticClientId('admin-registered');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['client_id' => 'should-not-register']);
+
+        $query = $this->authorizeQuery($this->service->initiateOAuth($server));
+
+        $this->assertSame([], $captured, 'no registration request');
+        $this->assertSame('admin-registered', $query['client_id']);
+        $this->assertSame($this->ncBase . '/api/admin/mcp-servers/oauth/callback', $query['redirect_uri']);
+        $this->assertSame('admin-registered', $server->getOauthClientId());
+        $this->assertSame('https://cloud.example', $server->getOauthClientIssuer());
+    }
+
+    /**
+     * "Authorization Server Binding": pre-registered credentials from another
+     * issuer SHOULD be surfaced as an error, not used.
+     */
+    public function testPreRegisteredClientFromAnotherIssuerIsRefused(): void {
+        $server = $this->oauthServer(['issuer' => 'https://other-as.example']);
+        $server->setOauthStaticClientId('admin-registered');
+        $server->setOauthClientId('admin-registered');
+        $server->setOauthClientIssuer('https://cloud.example');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/registered with https:\/\/cloud\.example.*https:\/\/other-as\.example/');
+        $this->service->initiateOAuth($server);
+    }
+
+    public function testClientMetadataDocumentIsPreferredOverRegistration(): void {
+        $server = $this->oauthServer([
+            'client_id_metadata_document_supported' => true,
+            'token_endpoint_auth_methods_supported' => ['none'],
+            'registration_endpoint' => 'https://cloud.example/register',
+        ]);
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['client_id' => 'should-not-register']);
+
+        $query = $this->authorizeQuery($this->service->initiateOAuth($server));
+
+        $this->assertSame([], $captured);
+        $this->assertSame($this->ncBase . '/oauth/mcp-client', $query['client_id']);
+        $this->assertSame($this->ncBase . '/api/admin/mcp-servers/oauth/callback', $query['redirect_uri']);
+        $this->assertNull($server->getOauthClientIssuer(), 'a metadata document URL is portable');
+    }
+
+    /** draft-ietf-oauth-client-id-metadata-document §3: the client_id must be https. */
+    public function testClientMetadataDocumentNeedsHttps(): void {
+        $this->ncBase = 'http://nc.local/apps/aiquila';
+        $server = $this->oauthServer([
+            'client_id_metadata_document_supported' => true,
+            'registration_endpoint' => 'https://cloud.example/register',
+        ]);
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['client_id' => 'registered']);
+
+        $query = $this->authorizeQuery($this->service->initiateOAuth($server));
+
+        $this->assertSame('https://cloud.example/register', $captured[0]['url']);
+        $this->assertSame('registered', $query['client_id']);
+        $this->assertSame('http://nc.local/apps/aiquila/api/admin/mcp-servers/7/oauth/callback', $query['redirect_uri']);
+    }
+
+    public function testClientMetadataDocumentNeedsPublicClientSupport(): void {
+        $server = $this->oauthServer([
+            'client_id_metadata_document_supported' => true,
+            'token_endpoint_auth_methods_supported' => ['private_key_jwt'],
+            'registration_endpoint' => 'https://cloud.example/register',
+        ]);
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['client_id' => 'registered']);
+
+        $this->service->initiateOAuth($server);
+
+        $this->assertSame('registered', $server->getOauthClientId());
+    }
+
+    public function testRegistrationSendsApplicationType(): void {
+        $server = $this->oauthServer(['registration_endpoint' => 'https://cloud.example/register']);
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['client_id' => 'registered']);
+
+        $this->service->registerOAuthClient($server, 'https://nc.example/callback');
+        $this->service->registerOAuthClient($server, 'http://localhost:8080/callback');
+
+        $this->assertSame('web', $captured[0]['body']['application_type']);
+        $this->assertSame('native', $captured[1]['body']['application_type']);
+        $this->assertSame('https://cloud.example', $server->getOauthClientIssuer());
+    }
+
+    public function testNoRegistrationPathExplainsWhatToConfigure(): void {
+        $server = $this->oauthServer([]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/neither Client ID Metadata Documents nor dynamic client registration.*client ID/');
+        $this->service->initiateOAuth($server);
+    }
+
+    /** "Authorization Server Binding": MUST NOT reuse a registration from another issuer. */
+    public function testRegisteredClientIsNotReusedWithAnotherIssuer(): void {
+        $server = $this->oauthServer([
+            'issuer' => 'https://new-as.example',
+            'registration_endpoint' => 'https://new-as.example/register',
+        ]);
+        $server->setOauthClientId('old-client');
+        $server->setOauthClientIssuer('https://cloud.example');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['client_id' => 'new-client']);
+
+        $query = $this->authorizeQuery($this->service->initiateOAuth($server));
+
+        $this->assertCount(1, $captured);
+        $this->assertSame('new-client', $query['client_id']);
+        $this->assertSame('https://new-as.example', $server->getOauthClientIssuer());
+    }
+
+    public function testRegisteredClientIsReusedWithTheSameIssuer(): void {
+        $server = $this->oauthServer(['registration_endpoint' => 'https://cloud.example/register']);
+        $server->setOauthClientId('old-client');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['client_id' => 'new-client']);
+
+        $query = $this->authorizeQuery($this->service->initiateOAuth($server));
+
+        $this->assertSame([], $captured);
+        $this->assertSame('old-client', $query['client_id']);
+        // A row registered before the binding was recorded adopts the issuer.
+        $this->assertSame('https://cloud.example', $server->getOauthClientIssuer());
+    }
+
+    /** A client left from a metadata document is not used as a registration. */
+    public function testFormerMetadataDocumentClientIsReplacedByRegistration(): void {
+        $server = $this->oauthServer(['registration_endpoint' => 'https://cloud.example/register']);
+        $server->setOauthClientId($this->ncBase . '/oauth/mcp-client');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['client_id' => 'registered']);
+
+        $this->service->initiateOAuth($server);
+
+        $this->assertSame('registered', $server->getOauthClientId());
+    }
+
+    /** RFC 6749 §2.3.1: HTTP Basic with form-urlencoded parts, and no client_id in the body. */
+    public function testConfidentialClientUsesBasicAuthAtTokenEndpoint(): void {
+        $server = $this->oauthServer([]);
+        $server->setOauthStaticClientId('my client');
+        $server->setOauthStaticClientSecret('s3cr:et');
+        $server->setOauthClientId('my client');
+        $server->setOauthState('st');
+        $server->setOauthCodeVerifier('verifier');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['access_token' => 'at', 'refresh_token' => 'rt', 'expires_in' => 60]);
+
+        $this->service->completeOAuth($server, 'the-code', 'st');
+
+        $this->assertSame('Basic ' . base64_encode('my+client:s3cr%3Aet'), $captured[0]['authorization']);
+        $this->assertArrayNotHasKey('client_id', $captured[0]['body']);
+        $this->assertArrayNotHasKey('client_secret', $captured[0]['body']);
+        $this->assertSame($this->ncBase . '/api/admin/mcp-servers/oauth/callback', $captured[0]['body']['redirect_uri']);
+        $this->assertSame('at', $server->getOauthAccessToken());
+    }
+
+    public function testConfidentialClientFallsBackToClientSecretPost(): void {
+        $server = $this->oauthServer(['token_endpoint_auth_methods_supported' => ['client_secret_post']]);
+        $server->setOauthStaticClientId('cid');
+        $server->setOauthStaticClientSecret('secret');
+        $server->setOauthClientId('cid');
+        $server->setOauthRefreshToken('rt');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['access_token' => 'at2']);
+
+        $this->service->refreshOAuthToken($server);
+
+        $this->assertNull($captured[0]['authorization']);
+        $this->assertSame('cid', $captured[0]['body']['client_id']);
+        $this->assertSame('secret', $captured[0]['body']['client_secret']);
+        $this->assertSame('refresh_token', $captured[0]['body']['grant_type']);
+    }
+
+    public function testPublicPreRegisteredClientSendsClientId(): void {
+        $server = $this->oauthServer([]);
+        $server->setOauthStaticClientId('public-client');
+        $server->setOauthClientId('public-client');
+        $server->setOauthState('st');
+        $server->setOauthCodeVerifier('verifier');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['access_token' => 'at']);
+
+        $this->service->completeOAuth($server, 'the-code', 'st');
+
+        $this->assertNull($captured[0]['authorization']);
+        $this->assertSame('public-client', $captured[0]['body']['client_id']);
+    }
+
+    public function testRegisteredClientKeepsPerServerRedirectUri(): void {
+        $server = $this->oauthServer([]);
+        $server->setOauthClientId('dcr-client');
+        $server->setOauthState('st');
+        $server->setOauthCodeVerifier('verifier');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => ['access_token' => 'at']);
+
+        $this->service->completeOAuth($server, 'the-code', 'st');
+
+        $this->assertSame($this->ncBase . '/api/admin/mcp-servers/7/oauth/callback', $captured[0]['body']['redirect_uri']);
+    }
+
+    public function testCompleteOAuthRejectsMissingStoredState(): void {
+        $server = $this->oauthServer([]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageIsOrContains('state mismatch');
+        $this->service->completeOAuth($server, 'code', '');
+    }
+
+    /**
+     * MCP 2026-07-28 "Client ID Metadata Documents": client_id, client_name and
+     * redirect_uris, client_id equal to the document URL; draft §4.1 no secret.
+     */
+    public function testClientMetadataDocument(): void {
+        $doc = $this->service->getClientMetadataDocument();
+
+        $this->assertSame($this->ncBase . '/oauth/mcp-client', $doc['client_id']);
+        $this->assertNotSame('', $doc['client_name']);
+        $this->assertSame([$this->ncBase . '/api/admin/mcp-servers/oauth/callback'], $doc['redirect_uris']);
+        $this->assertSame(['none'], $doc['token_endpoint_auth_methods_supported']);
+        $this->assertArrayNotHasKey('client_secret', $doc);
     }
 
     public function testGetOAuthBaseUrl(): void {

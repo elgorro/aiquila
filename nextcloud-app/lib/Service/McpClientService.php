@@ -7,6 +7,7 @@ namespace OCA\AIquila\Service;
 
 use OCA\AIquila\Db\McpServer;
 use OCA\AIquila\Db\McpServerMapper;
+use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
@@ -15,10 +16,18 @@ class McpClientService {
     private McpServerMapper $mapper;
     private LoggerInterface $logger;
     private CredentialService $credentials;
+    private IURLGenerator $urlGenerator;
     private HttpClientInterface $httpClient;
 
     private const PROTOCOL_VERSION = '2025-03-26';
     private const CLIENT_NAME = 'aiquila-nextcloud';
+
+    /** Per-server callback, registered by dynamic client registration. */
+    public const CALLBACK_ROUTE = 'aiquila.mcp_server.oauthCallback';
+    /** One callback for every server, for clients whose redirect URIs are fixed up front. */
+    public const SHARED_CALLBACK_ROUTE = 'aiquila.mcp_server.oauthCallbackShared';
+    /** The Client ID Metadata Document this instance publishes. */
+    public const CLIENT_METADATA_ROUTE = 'aiquila.mcp_server.clientMetadata';
 
     /** @var array<int, string> Session IDs keyed by server ID */
     private array $sessions = [];
@@ -26,10 +35,16 @@ class McpClientService {
     /** @var array<int, bool> Track which servers have been initialized */
     private array $initialized = [];
 
-    public function __construct(McpServerMapper $mapper, LoggerInterface $logger, CredentialService $credentials) {
+    public function __construct(
+        McpServerMapper $mapper,
+        LoggerInterface $logger,
+        CredentialService $credentials,
+        IURLGenerator $urlGenerator,
+    ) {
         $this->mapper = $mapper;
         $this->logger = $logger;
         $this->credentials = $credentials;
+        $this->urlGenerator = $urlGenerator;
         $this->httpClient = HttpClient::create(['timeout' => 30]);
     }
 
@@ -434,7 +449,13 @@ class McpClientService {
                 'client_name' => self::CLIENT_NAME,
                 'redirect_uris' => [$callbackUrl],
                 'grant_types' => ['authorization_code', 'refresh_token'],
+                'response_types' => ['code'],
                 'token_endpoint_auth_method' => 'none',
+                // MCP 2026-07-28 "Dynamic Client Registration": clients MUST send an
+                // application_type; a remote web app SHOULD use "web", one reached
+                // via localhost "native" (an OIDC server would refuse a loopback
+                // redirect for "web").
+                'application_type' => $this->isLoopbackUrl($callbackUrl) ? 'native' : 'web',
             ],
         ];
 
@@ -476,6 +497,7 @@ class McpClientService {
         }
 
         $server->setOauthClientId($clientId);
+        $server->setOauthClientIssuer($this->issuerOf($server, $metadata));
         $server->setUpdatedAt(time());
         $this->mapper->update($server);
 
@@ -483,13 +505,220 @@ class McpClientService {
     }
 
     /**
+     * Pick the client this server's authorization flow runs as, registering
+     * one if needed, and return its client_id.
+     *
+     * MCP 2026-07-28 "Client Registration" priority order (SHOULD):
+     *  1. a client the admin pre-registered with the authorization server;
+     *  2. a Client ID Metadata Document, when the authorization server
+     *     advertises `client_id_metadata_document_supported`;
+     *  3. dynamic client registration (RFC 7591) as the fallback.
+     *
+     * "Authorization Server Binding": a pre-registered or dynamically
+     * registered client is bound to the `issuer` it was registered with and
+     * MUST NOT be reused against another one. A metadata document URL is
+     * portable and needs no binding.
+     */
+    public function resolveClient(McpServer $server): string {
+        $metadata = $this->getOAuthMetadata($server);
+        $issuer = $this->issuerOf($server, $metadata);
+        $current = $server->getOauthClientId();
+        $bound = $server->getOauthClientIssuer();
+
+        $static = $server->getOauthStaticClientId();
+        if ($static !== null && $static !== '') {
+            if ($current === $static && $bound !== null && $bound !== $issuer) {
+                // SHOULD surface an error rather than use mismatched credentials.
+                throw new \RuntimeException(
+                    'The pre-registered OAuth client was registered with ' . $bound
+                    . ', but this MCP server now uses the authorization server ' . $issuer
+                    . '. Register a client there and update the client ID.'
+                );
+            }
+            $this->bindClient($server, $static, $issuer);
+            return $static;
+        }
+
+        $documentUrl = $this->getClientMetadataUrl();
+        if ($this->supportsClientMetadataDocument($metadata, $documentUrl)) {
+            $this->bindClient($server, $documentUrl, null);
+            return $documentUrl;
+        }
+
+        $reusable = $current !== null && $current !== ''
+            && $current !== $documentUrl
+            && ($bound === null || $bound === $issuer);
+        if ($reusable) {
+            // Rows registered before the binding was recorded adopt the current issuer.
+            if ($bound === null) {
+                $this->bindClient($server, $current, $issuer);
+            }
+            return $current;
+        }
+
+        if (empty($metadata['registration_endpoint'])) {
+            throw new \RuntimeException(
+                'The authorization server supports neither Client ID Metadata Documents'
+                . ($this->isHttpsUrl($documentUrl) ? '' : ' (which need Nextcloud to be served over HTTPS)')
+                . ' nor dynamic client registration. Register an OAuth client with it and enter'
+                . ' the client ID on the MCP server entry.'
+            );
+        }
+
+        return $this->registerOAuthClient($server, $this->getCallbackUrl($server));
+    }
+
+    /**
+     * The redirect URI the flow for the server's current client uses. Dynamic
+     * registration registers a per-server callback; a pre-registered client
+     * and the metadata document share one fixed callback, so the admin has a
+     * single URI to register and the document needs no per-server entries.
+     */
+    public function getRedirectUri(McpServer $server): string {
+        $clientId = $server->getOauthClientId();
+        $static = $server->getOauthStaticClientId();
+        $usesShared = $clientId !== null && $clientId !== ''
+            && ($clientId === $static || $clientId === $this->getClientMetadataUrl());
+        return $usesShared ? $this->getSharedCallbackUrl() : $this->getCallbackUrl($server);
+    }
+
+    public function getCallbackUrl(McpServer $server): string {
+        return $this->urlGenerator->linkToRouteAbsolute(self::CALLBACK_ROUTE, ['id' => $server->getId()]);
+    }
+
+    public function getSharedCallbackUrl(): string {
+        return $this->urlGenerator->linkToRouteAbsolute(self::SHARED_CALLBACK_ROUTE);
+    }
+
+    /** The client_id this instance uses with Client ID Metadata Documents. */
+    public function getClientMetadataUrl(): string {
+        return $this->urlGenerator->linkToRouteAbsolute(self::CLIENT_METADATA_ROUTE);
+    }
+
+    /**
+     * The Client ID Metadata Document (draft-ietf-oauth-client-id-metadata-document-03;
+     * MCP 2026-07-28 "Client ID Metadata Documents").
+     *
+     * MCP requires client_id, client_name and redirect_uris, with client_id
+     * equal to the document URL (draft §4). The client is public: the draft
+     * (§4.1) forbids secrets and the secret-based auth methods, and §5 asks for
+     * token_endpoint_auth_methods_supported. token_endpoint_auth_method "none"
+     * is kept as well because the MCP example uses it and servers written
+     * against earlier drafts read it.
+     *
+     * @return array<string, mixed>
+     */
+    public function getClientMetadataDocument(): array {
+        return [
+            'client_id' => $this->getClientMetadataUrl(),
+            'client_name' => 'AIquila (Nextcloud)',
+            'client_uri' => $this->urlGenerator->getAbsoluteURL('/'),
+            'redirect_uris' => [$this->getSharedCallbackUrl()],
+            'grant_types' => ['authorization_code', 'refresh_token'],
+            'response_types' => ['code'],
+            'token_endpoint_auth_method' => 'none',
+            'token_endpoint_auth_methods_supported' => ['none'],
+        ];
+    }
+
+    /**
+     * True when the authorization server takes a metadata document URL as
+     * client_id and this instance can publish one: the URL must be https with
+     * a path (draft §3), and the server must accept public clients.
+     *
+     * @param array<string, mixed> $metadata
+     */
+    private function supportsClientMetadataDocument(array $metadata, string $documentUrl): bool {
+        if (($metadata['client_id_metadata_document_supported'] ?? false) !== true) {
+            return false;
+        }
+        if (!$this->isHttpsUrl($documentUrl)) {
+            return false;
+        }
+        $methods = $metadata['token_endpoint_auth_methods_supported'] ?? null;
+        return !is_array($methods) || in_array('none', $methods, true);
+    }
+
+    private function bindClient(McpServer $server, string $clientId, ?string $issuer): void {
+        if ($server->getOauthClientId() === $clientId && $server->getOauthClientIssuer() === $issuer) {
+            return;
+        }
+        $server->setOauthClientId($clientId);
+        $server->setOauthClientIssuer($issuer);
+        $server->setUpdatedAt(time());
+        $this->mapper->update($server);
+    }
+
+    /**
+     * The authorization server's issuer identifier (RFC 8414 §2, REQUIRED).
+     * Servers that leave it out are identified by the URL they were
+     * discovered at.
+     *
+     * @param array<string, mixed> $metadata
+     */
+    private function issuerOf(McpServer $server, array $metadata): string {
+        $issuer = $metadata['issuer'] ?? null;
+        return is_string($issuer) && $issuer !== '' ? $issuer : $this->getOAuthBaseUrl($server);
+    }
+
+    /**
+     * Client authentication for a token request (RFC 6749 §2.3). A public
+     * client sends its client_id (§4.1.3, §6). A pre-registered confidential
+     * client authenticates with its secret: HTTP Basic, which every
+     * authorization server MUST support (§2.3.1) and which is the default
+     * when metadata lists no methods (RFC 8414 §2), else client_secret_post.
+     * Only one method is used per request (§2.3).
+     *
+     * @param array<string, mixed> $metadata
+     * @param array<string, string> $body
+     * @return array{body: array<string, string>, headers: array<string, string>}
+     */
+    private function withClientAuth(McpServer $server, array $metadata, array $body): array {
+        $clientId = (string)$server->getOauthClientId();
+        $secret = null;
+        if ($clientId !== '' && $clientId === $server->getOauthStaticClientId()) {
+            $secret = $this->credentials->decryptToken($server->getOauthStaticClientSecret());
+        }
+
+        if ($secret === null || $secret === '') {
+            $body['client_id'] = $clientId;
+            return ['body' => $body, 'headers' => []];
+        }
+
+        $methods = $metadata['token_endpoint_auth_methods_supported'] ?? ['client_secret_basic'];
+        $methods = is_array($methods) ? $methods : ['client_secret_basic'];
+        if (in_array('client_secret_basic', $methods, true)) {
+            // §2.3.1: both parts are form-urlencoded before the Basic encoding.
+            $credentials = base64_encode(urlencode($clientId) . ':' . urlencode($secret));
+            return ['body' => $body, 'headers' => ['Authorization' => 'Basic ' . $credentials]];
+        }
+        if (in_array('client_secret_post', $methods, true)) {
+            $body['client_id'] = $clientId;
+            $body['client_secret'] = $secret;
+            return ['body' => $body, 'headers' => []];
+        }
+        throw new \RuntimeException(
+            'The authorization server accepts none of the client authentication methods AIquila'
+            . ' supports for a client secret (client_secret_basic, client_secret_post).'
+        );
+    }
+
+    private function isHttpsUrl(string $url): bool {
+        return str_starts_with(strtolower($url), 'https://');
+    }
+
+    private function isLoopbackUrl(string $url): bool {
+        $host = strtolower(trim((string)parse_url($url, PHP_URL_HOST), '[]'));
+        return $host === 'localhost' || str_ends_with($host, '.localhost')
+            || $host === '::1' || str_starts_with($host, '127.');
+    }
+
+    /**
      * Initiate the OAuth 2.1 PKCE flow. Returns the authorize URL for the popup.
      */
-    public function initiateOAuth(McpServer $server, string $callbackUrl): string {
-        // Register client if not already done
-        if (!$server->getOauthClientId()) {
-            $this->registerOAuthClient($server, $callbackUrl);
-        }
+    public function initiateOAuth(McpServer $server): string {
+        $clientId = $this->resolveClient($server);
+        $redirectUri = $this->getRedirectUri($server);
 
         $metadata = $this->getOAuthMetadata($server);
         $authorizeEndpoint = $metadata['authorization_endpoint'] ?? null;
@@ -513,8 +742,8 @@ class McpClientService {
 
         // Build authorize URL
         $params = http_build_query([
-            'client_id' => $server->getOauthClientId(),
-            'redirect_uri' => $callbackUrl,
+            'client_id' => $clientId,
+            'redirect_uri' => $redirectUri,
             'response_type' => 'code',
             'code_challenge' => $challenge,
             'code_challenge_method' => 'S256',
@@ -527,9 +756,10 @@ class McpClientService {
     /**
      * Complete the OAuth flow by exchanging the authorization code for tokens.
      */
-    public function completeOAuth(McpServer $server, string $code, string $state, string $callbackUrl): void {
+    public function completeOAuth(McpServer $server, string $code, string $state): void {
         // Verify CSRF state
-        if ($state !== $server->getOauthState()) {
+        $expected = $server->getOauthState();
+        if ($expected === null || $expected === '' || !hash_equals($expected, $state)) {
             throw new \RuntimeException('OAuth state mismatch — possible CSRF attack');
         }
 
@@ -540,15 +770,13 @@ class McpClientService {
             throw new \RuntimeException('No token_endpoint in OAuth metadata');
         }
 
-        $response = $this->httpClient->request('POST', $tokenEndpoint, [
-            'body' => [
-                'grant_type' => 'authorization_code',
-                'code' => $code,
-                'code_verifier' => $server->getOauthCodeVerifier(),
-                'client_id' => $server->getOauthClientId(),
-                'redirect_uri' => $callbackUrl,
-            ],
+        $request = $this->withClientAuth($server, $metadata, [
+            'grant_type' => 'authorization_code',
+            'code' => $code,
+            'code_verifier' => (string)$server->getOauthCodeVerifier(),
+            'redirect_uri' => $this->getRedirectUri($server),
         ]);
+        $response = $this->httpClient->request('POST', $tokenEndpoint, $request);
 
         $result = $response->toArray();
 
@@ -579,13 +807,11 @@ class McpClientService {
         }
 
         try {
-            $response = $this->httpClient->request('POST', $tokenEndpoint, [
-                'body' => [
-                    'grant_type' => 'refresh_token',
-                    'refresh_token' => $this->credentials->decryptToken($server->getOauthRefreshToken()),
-                    'client_id' => $server->getOauthClientId(),
-                ],
+            $request = $this->withClientAuth($server, $metadata, [
+                'grant_type' => 'refresh_token',
+                'refresh_token' => (string)$this->credentials->decryptToken($server->getOauthRefreshToken()),
             ]);
+            $response = $this->httpClient->request('POST', $tokenEndpoint, $request);
 
             $result = $response->toArray();
 
@@ -653,6 +879,9 @@ class McpClientService {
      */
     public function clearOAuthFields(McpServer $server): void {
         $server->setOauthClientId(null);
+        $server->setOauthClientIssuer(null);
+        $server->setOauthStaticClientId(null);
+        $server->setOauthStaticClientSecret(null);
         $server->setOauthAccessToken(null);
         $server->setOauthRefreshToken(null);
         $server->setOauthTokenExpiresAt(null);

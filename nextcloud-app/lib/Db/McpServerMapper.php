@@ -31,6 +31,20 @@ class McpServerMapper extends QBMapper {
     }
 
     /**
+     * The server whose authorization flow is waiting for this `state`.
+     *
+     * @throws DoesNotExistException
+     */
+    public function findByOauthState(string $state): McpServer {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('oauth_state', $qb->createNamedParameter($state)));
+
+        return $this->findEntity($qb);
+    }
+
+    /**
      * @return list<McpServer>
      */
     public function findAll(): array {

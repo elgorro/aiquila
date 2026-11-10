@@ -3266,6 +3266,16 @@
                                         "type": "string",
                                         "default": "",
                                         "description": "RFC 7591 initial access token for gated OAuth client registration"
+                                    },
+                                    "staticClientId": {
+                                        "type": "string",
+                                        "default": "",
+                                        "description": "Client ID registered with the authorization server beforehand; used instead of dynamic registration"
+                                    },
+                                    "staticClientSecret": {
+                                        "type": "string",
+                                        "default": "",
+                                        "description": "Secret of that client, for a confidential client"
                                     }
                                 }
                             }
@@ -3431,6 +3441,22 @@
                                         ],
                                         "default": null,
                                         "description": "Updated registration token; null leaves it unchanged, an empty string clears it"
+                                    },
+                                    "staticClientId": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Updated pre-registered client ID; null leaves it unchanged, an empty string clears it"
+                                    },
+                                    "staticClientSecret": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Updated secret of the pre-registered client; null leaves it unchanged, an empty string clears it"
                                     },
                                     "isEnabled": {
                                         "type": "boolean",
