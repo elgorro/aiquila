@@ -60,6 +60,8 @@ Passed in the `$config` / `$changes` array of `register()` and `update()`:
 | `provider` | string\|null | Provider to pin, e.g. `anthropic`, `mistral`, `hetzner`. `null` follows the run user's setting. Unknown ids are rejected. |
 | `model` | string\|null | Model to pin. `null` uses the provider's default — which is what lets a routine task run a cheap model while chat runs a strong one. Applies only while the run goes to the pinned `provider`. |
 | `cron_schedule` | string | 5-field cron (`min hour dom month dow`), e.g. `0 3 * * *`. |
+| `scheduled` | bool | Default `true`. `false` runs the job only on triggers and `runNow()`. |
+| `trigger_files` | bool | Also run when files in `input_path` are added or changed. Needs coworker triggers allowed for the run user by the administrator ([Triggers](installation/aiquila-setup.md#triggers)); otherwise it is rejected. |
 | `input_type` | string | Default `folder`. |
 | `input_path` | string\|null | Nextcloud path resolved against the run user's folder. |
 | `output_type` | string | Default `system_tags`. |
@@ -69,7 +71,17 @@ Passed in the `$config` / `$changes` array of `register()` and `update()`:
 | `options` | array | Task-type-specific options (validated by the task type). Two keys apply to every task type on the Claude provider: `effort` (`low`…`max`) and `thinking` (`auto`, `on`, `off`). Unset, the instance's background-task defaults apply; a value the model rejects falls back to them. |
 
 Returned coworker arrays additionally include `id`, `userId`, `teamId` (always null for a coworker an app owns), `ownerApp`,
-`lastRunAt`, `nextRunAt`, `lastStatus`, `lastError`, `createdAt`, `updatedAt`.
+`lastRunAt`, `nextRunAt`, `lastStatus`, `lastError`, `createdAt`, `updatedAt`, `scheduled`, `triggerFiles`,
+`hasTriggerUrl` and `triggerDueAt` (a run a trigger asked for that has not started). Run arrays include
+`startedBy`: `schedule`, `manual`, `files` or `url`.
+
+## Events
+
+When a run ends, successfully, with an error or cancelled, AIquila dispatches
+`OCA\AIquila\Event\CoworkerRunFinishedEvent`. Listen to it like any Nextcloud event
+to act on a result. `getCoworker()` and `getRun()` return the entities, and
+`getWebhookSerializable()` the array the Webhook listeners app sends. It is dispatched
+for every coworker, including the ones your app owns.
 
 ## API Reference
 
