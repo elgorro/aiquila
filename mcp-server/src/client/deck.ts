@@ -55,7 +55,8 @@ export interface DeckCard {
   type: string;
   order: number;
   archived: boolean;
-  done: boolean | null;
+  // Deck stores completion as a datetime: an ISO 8601 string, or null when not done
+  done: string | null;
   duedate: string | null;
   labels: DeckLabel[];
   assignedUsers: DeckAssignedUser[];

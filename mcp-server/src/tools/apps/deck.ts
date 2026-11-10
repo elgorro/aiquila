@@ -399,7 +399,10 @@ export const updateCardTool = {
     title: z.string().optional().describe('New title'),
     description: z.string().optional().describe('New description (Markdown)'),
     duedate: z.string().nullable().optional().describe('Due date (ISO 8601) or null to clear'),
-    done: z.boolean().optional().describe('Mark card as done'),
+    done: z
+      .boolean()
+      .optional()
+      .describe('true marks the card as done now, false marks it as not done'),
   }),
   handler: async (args: {
     boardId: number;
@@ -414,6 +417,11 @@ export const updateCardTool = {
       const path = `/boards/${args.boardId}/stacks/${args.stackId}/cards/${args.cardId}`;
       const current = await fetchDeckAPI<DeckCard>(path);
 
+      // Deck parses `done` as a datetime and answers 500 to a boolean
+      let done = current.done;
+      if (args.done === true) done = current.done ?? new Date().toISOString();
+      else if (args.done === false) done = null;
+
       const updated = await fetchDeckAPI<DeckCard>(path, {
         method: 'PUT',
         body: {
@@ -422,7 +430,7 @@ export const updateCardTool = {
           type: current.type,
           order: current.order,
           duedate: args.duedate !== undefined ? args.duedate : current.duedate,
-          done: args.done ?? current.done,
+          done,
           owner: current.owner.uid,
         },
       });
@@ -466,15 +474,29 @@ export const moveCardTool = {
     order?: number;
   }) => {
     try {
+      // Nextcloud lets the route's {stackId} override the one in the body, so the
+      // destination must be in the URL or Deck only reorders the card in place.
       // Deck answers with the target stack's cards in their new order
       const cards = await fetchDeckAPI<DeckCard[]>(
-        `/boards/${args.boardId}/stacks/${args.stackId}/cards/${args.cardId}/reorder`,
+        `/boards/${args.boardId}/stacks/${args.targetStackId}/cards/${args.cardId}/reorder`,
         {
           method: 'PUT',
           body: { order: args.order ?? 0, stackId: args.targetStackId },
         }
       );
       const card = cards.find((c) => c.id === args.cardId);
+
+      if (card && card.stackId !== args.targetStackId) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Card ${args.cardId} was not moved: Deck reports it in stack ${card.stackId}.`,
+            },
+          ],
+          isError: true,
+        };
+      }
 
       return {
         content: [

@@ -38,7 +38,7 @@ const sampleCard = {
   type: 'plain',
   order: 0,
   archived: false,
-  done: false,
+  done: null,
   duedate: '2025-12-31T00:00:00+00:00',
   labels: [sampleLabel],
   assignedUsers: [{ id: 1, participant: sampleOwner, type: 0 }],
@@ -333,6 +333,37 @@ describe('Deck Tools', () => {
       );
     });
 
+    it('should send a datetime, not a boolean, when marking done', async () => {
+      mockFetchDeckAPI.mockResolvedValueOnce(sampleCard).mockResolvedValueOnce(sampleCard);
+
+      const { updateCardTool } = await import('../tools/apps/deck.js');
+      await updateCardTool.handler({ boardId: 1, stackId: 5, cardId: 100, done: true });
+
+      const body = mockFetchDeckAPI.mock.calls[1][1].body;
+      expect(typeof body.done).toBe('string');
+      expect(Number.isNaN(Date.parse(body.done))).toBe(false);
+    });
+
+    it('should keep the original completion date when already done', async () => {
+      const doneCard = { ...sampleCard, done: '2026-10-31T19:24:00+00:00' };
+      mockFetchDeckAPI.mockResolvedValueOnce(doneCard).mockResolvedValueOnce(doneCard);
+
+      const { updateCardTool } = await import('../tools/apps/deck.js');
+      await updateCardTool.handler({ boardId: 1, stackId: 5, cardId: 100, done: true });
+
+      expect(mockFetchDeckAPI.mock.calls[1][1].body.done).toBe('2026-10-31T19:24:00+00:00');
+    });
+
+    it('should clear done when false', async () => {
+      const doneCard = { ...sampleCard, done: '2026-10-31T19:24:00+00:00' };
+      mockFetchDeckAPI.mockResolvedValueOnce(doneCard).mockResolvedValueOnce(sampleCard);
+
+      const { updateCardTool } = await import('../tools/apps/deck.js');
+      await updateCardTool.handler({ boardId: 1, stackId: 5, cardId: 100, done: false });
+
+      expect(mockFetchDeckAPI.mock.calls[1][1].body.done).toBeNull();
+    });
+
     it('should handle 404 on get', async () => {
       const { ApiError } = await import('../client/aiquila.js');
       mockFetchDeckAPI.mockRejectedValue(new ApiError(404, 'Not Found', ''));
@@ -365,14 +396,30 @@ describe('Deck Tools', () => {
 
       expect(result.content[0].text).toContain('Card moved to stack 6');
       expect(result.content[0].text).toContain('Fix login bug');
-      expect(mockFetchDeckAPI).toHaveBeenCalledWith('/boards/1/stacks/5/cards/100/reorder', {
+      // The destination goes in the URL: Nextcloud lets it override the body
+      expect(mockFetchDeckAPI).toHaveBeenCalledWith('/boards/1/stacks/6/cards/100/reorder', {
         method: 'PUT',
         body: { order: 0, stackId: 6 },
       });
     });
 
-    it('should support custom order', async () => {
+    it('should report an error when Deck leaves the card in place', async () => {
       mockFetchDeckAPI.mockResolvedValue([sampleCard]);
+
+      const { moveCardTool } = await import('../tools/apps/deck.js');
+      const result = await moveCardTool.handler({
+        boardId: 1,
+        stackId: 5,
+        cardId: 100,
+        targetStackId: 6,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('was not moved');
+    });
+
+    it('should support custom order', async () => {
+      mockFetchDeckAPI.mockResolvedValue([{ ...sampleCard, stackId: 6 }]);
 
       const { moveCardTool } = await import('../tools/apps/deck.js');
       await moveCardTool.handler({
@@ -383,7 +430,7 @@ describe('Deck Tools', () => {
         order: 3,
       });
 
-      expect(mockFetchDeckAPI).toHaveBeenCalledWith('/boards/1/stacks/5/cards/100/reorder', {
+      expect(mockFetchDeckAPI).toHaveBeenCalledWith('/boards/1/stacks/6/cards/100/reorder', {
         method: 'PUT',
         body: { order: 3, stackId: 6 },
       });
