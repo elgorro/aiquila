@@ -521,6 +521,22 @@ END:VCALENDAR</c:calendar-data>
       expect(deleteCall[1].headers['If-Match']).toBe('"etag-del"');
     });
 
+    it('should delete only the task whose UID matches exactly', async () => {
+      // CALDAV:text-match is a substring match: "task" also matches "task-1"
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(resolveResponse),
+      });
+
+      const { deleteTaskTool } = await import('../tools/apps/tasks.js');
+      const result = await deleteTaskTool.handler({ uid: 'task', calendarName: 'tasks' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not found');
+      // Only the lookup REPORT went out: no DELETE
+      expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    });
+
     it('should handle task not found', async () => {
       const emptyResponse = `<d:multistatus xmlns:d="DAV:"></d:multistatus>`;
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({

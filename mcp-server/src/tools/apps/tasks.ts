@@ -5,6 +5,7 @@ import {
   decodeXmlEntities,
   encodeXmlEntities,
   fetchCalDAV,
+  findResourceByUid,
   nsTagContent,
 } from '../../client/caldav.js';
 import {
@@ -358,24 +359,11 @@ async function resolveTaskByUid(
     );
   }
 
-  const responseText = await response.text();
-
-  const hrefMatch = responseText.match(nsTagContent('href'));
-  const etagMatch = responseText.match(nsTagContent('getetag'));
-  const calDataMatch = responseText.match(nsTagContent('calendar-data'));
-
-  if (!hrefMatch || !etagMatch || !calDataMatch) {
+  const found = findResourceByUid(await response.text(), uid, 'calendar-data');
+  if (!found) {
     throw new Error(`Task with UID "${uid}" not found in calendar "${calendarName}"`);
   }
-
-  const rawEtag = decodeXmlEntities(etagMatch[1].trim());
-  const etag = rawEtag.startsWith('"') ? rawEtag : `"${rawEtag}"`;
-
-  return {
-    href: hrefMatch[1].trim(),
-    etag,
-    icalData: decodeXmlEntities(calDataMatch[1]),
-  };
+  return { href: found.href, etag: found.etag, icalData: found.data };
 }
 
 // ---------------------------------------------------------------------------
