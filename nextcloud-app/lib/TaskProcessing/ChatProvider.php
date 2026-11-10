@@ -49,6 +49,7 @@ class ChatProvider implements ISynchronousProvider {
                 'Optional LLM provider id override (e.g. anthropic, mistral)',
                 EShapeType::Text
             ),
+            'memories' => ProviderResolver::memoriesShape(),
         ];
     }
 

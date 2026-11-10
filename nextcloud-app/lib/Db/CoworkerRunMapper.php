@@ -40,7 +40,7 @@ class CoworkerRunMapper extends QBMapper {
         $qb = $this->db->getQueryBuilder();
         // Everything but `log`: the list never shows it, and a full log is
         // the largest thing a run row carries.
-        $qb->select('id', 'coworker_id', 'user_id', 'status', 'items_total', 'items_processed', 'summary', 'error', 'started_at', 'finished_at', 'state')
+        $qb->select('id', 'coworker_id', 'user_id', 'status', 'items_total', 'items_processed', 'summary', 'error', 'started_at', 'finished_at', 'state', 'started_by')
             ->from($this->getTableName())
             ->where($qb->expr()->eq('coworker_id', $qb->createNamedParameter($coworkerId, IQueryBuilder::PARAM_INT)));
         // A team coworker's runs are the team's, whoever each one ran as.
@@ -165,6 +165,25 @@ class CoworkerRunMapper extends QBMapper {
         $result->closeCursor();
 
         return $counts;
+    }
+
+    /**
+     * How many runs of a coworker a trigger started since $since, for the
+     * trigger rate limit.
+     *
+     * @param list<string> $startedBy
+     */
+    public function countStartedBySince(int $coworkerId, array $startedBy, int $since): int {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select($qb->func()->count('id', 'run_count'))
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('coworker_id', $qb->createNamedParameter($coworkerId, IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->in('started_by', $qb->createNamedParameter($startedBy, IQueryBuilder::PARAM_STR_ARRAY)))
+            ->andWhere($qb->expr()->gte('started_at', $qb->createNamedParameter($since, IQueryBuilder::PARAM_INT)));
+        $result = $qb->executeQuery();
+        $count = (int)$result->fetchOne();
+        $result->closeCursor();
+        return $count;
     }
 
     /**

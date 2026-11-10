@@ -182,6 +182,10 @@ class AudioProvidersTest extends TestCase {
         $this->assertArrayHasKey('provider', $this->audioTranslate()->getOptionalInputShape());
     }
 
+    public function testVoiceChatDeclaresMemoriesSoTheAssistantSendsThem(): void {
+        $this->assertArrayHasKey('memories', $this->voiceChat()->getOptionalInputShape());
+    }
+
     // ── Transcription ───────────────────────────────────────────────────────
 
     public function testTranscriptionPassesTheFileThroughAndReturnsTheText(): void {

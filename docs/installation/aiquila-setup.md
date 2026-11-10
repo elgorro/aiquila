@@ -462,6 +462,14 @@ Assistant actions run on whichever AI provider the user has selected — the sam
 choice that drives chat — within what the admin allows. A task may also pin a
 provider explicitly through the optional `provider` input.
 
+**Assistant memories.** In the Assistant chat, a user can mark a conversation to be
+remembered, and the Assistant hands summaries of those conversations to the chat
+provider with each new message. It does so only for a provider that declares the
+optional `memories` input, and AIquila declares it on `core:text2text:chat` and
+`core:audio2audio:chat`. The memories are added to the end of the system prompt, each
+cut at 4,000 characters and 16,000 in all. The Assistant stores them; AIquila keeps
+no copy.
+
 Not every provider can serve every action. Anything beyond plain text needs the
 matching capability, shown as a chip on the provider's card in the AIquila settings:
 
@@ -598,6 +606,55 @@ How it runs:
   price.
 - Other apps can register coworkers and their own task types through the
   [Cowork management API](../cowork-api.md).
+
+#### Triggers
+
+Besides its schedule, a coworker can start when files in its source folder change,
+or when another system calls its **trigger URL**. An administrator turns this on
+under **Settings → Administration → AIquila → Prompts → Coworker triggers**. It is
+off by default. Once on, it is open to everyone while both lists are empty, and
+otherwise to the users listed and the members of the groups listed. Taking someone
+off the list stops their triggers from firing; their coworkers stay as they are.
+
+With triggers allowed, the coworker form offers:
+
+- **Run on a schedule**: untick it for a coworker that should only run on triggers
+  or by hand.
+- **Run when files in the input folder are added or changed**: a file uploaded,
+  changed, moved or copied into the source folder starts a run about a minute
+  later, so an upload of many files is one run. Hidden files and upload chunks are
+  ignored. The files the coworker writes itself never start it, and neither do
+  files in its output folder. For a shared folder, the coworker's source folder has
+  to be the shared folder or a folder inside it.
+- **Trigger URL**: **Create trigger URL** shows a URL and a secret, once; only a
+  hash of the secret is kept. Another system starts the coworker with
+  `POST <url>` and the header `Authorization: Bearer <secret>`. The secret is never
+  accepted in the URL itself. The answer is `202` with the time the run is due,
+  `401` for a wrong secret (failed attempts are throttled), `409` while the
+  coworker is paused or triggers are not allowed for it, and `429` over the limit.
+  The request body is ignored: the run works on the coworker's own folder, so a
+  caller cannot hand the model text or point it at other files. **Replace secret**
+  invalidates the old one; **Remove trigger URL** turns it off.
+
+A trigger never runs the coworker inside the upload or the call. It marks a run as
+due, and the background job starts it, so cron has to be running. Triggers that
+come in before the run starts are one run, a run already in progress is not
+doubled, and a coworker starts at most 12 triggered runs an hour. The run history
+shows what started each run: the schedule, a run by hand, a file change or the
+trigger URL.
+
+Every run that ends is announced as the Nextcloud event
+`OCA\AIquila\Event\CoworkerRunFinishedEvent`. With the
+[Webhook listeners](https://docs.nextcloud.com/server/latest/admin_manual/webhook_listeners/index.html)
+app (`webhook_listeners`), an administrator can forward it to another system, such
+as an orchestrator, with the coworker, the run's status, counts, summary and error,
+and what started it. Runs end in a background job without a signed-in user, so
+filter on `userId` in the event data rather than with the webhook's user filter.
+
+A coworker trigger and a [Flow](#3-flow-process-files-automatically) rule do
+different things. A Flow rule processes the one file that matched and writes its
+answer next to it. A trigger starts a whole coworker, which works through its folder
+with its own task, options and run history.
 
 ### 5. Talk bot
 

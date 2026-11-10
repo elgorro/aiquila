@@ -99,11 +99,42 @@
 			</div>
 		</label>
 
-		<label class="field">
+		<label class="field checkbox">
+			<input v-model="form.scheduled" type="checkbox">
+			<span>{{ t('aiquila', 'Run on a schedule') }}</span>
+		</label>
+
+		<label v-if="form.scheduled" class="field">
 			<span>{{ t('aiquila', 'Schedule (cron)') }}</span>
 			<input v-model="form.cron_schedule" type="text" placeholder="0 3 * * *">
 			<small>{{ t('aiquila', 'min hour day-of-month month day-of-week. Example: 0 3 * * * = nightly at 03:00.') }}</small>
 		</label>
+
+		<template v-if="triggersAllowed">
+			<label v-if="!isAgent" class="field checkbox">
+				<input v-model="form.trigger_files" type="checkbox">
+				<span>{{ t('aiquila', 'Run when files in the input folder are added or changed') }}</span>
+			</label>
+			<small v-if="!isAgent && form.trigger_files" class="field-hint">{{ t('aiquila', 'It starts about a minute after the first change, so an upload of many files is one run. Files it writes itself, and files in its output folder, do not start it.') }}</small>
+
+			<div v-if="model.id" class="field">
+				<span>{{ t('aiquila', 'Trigger URL') }}</span>
+				<small>{{ t('aiquila', 'Other systems can start this coworker by calling a URL with a secret, at most {count} times an hour.', { count: maxRunsPerHour }) }}</small>
+				<template v-if="newTrigger">
+					<code class="trigger">POST {{ newTrigger.url }}</code>
+					<code class="trigger">Authorization: Bearer {{ newTrigger.token }}</code>
+					<small>{{ t('aiquila', 'Copy the secret now: it is not shown again.') }}</small>
+				</template>
+				<div class="actions">
+					<button :disabled="triggerBusy" @click="makeTriggerUrl">
+						{{ hasTriggerUrl ? t('aiquila', 'Replace secret') : t('aiquila', 'Create trigger URL') }}
+					</button>
+					<button v-if="hasTriggerUrl" :disabled="triggerBusy" @click="removeTriggerUrl">
+						{{ t('aiquila', 'Remove trigger URL') }}
+					</button>
+				</div>
+			</div>
+		</template>
 
 		<label v-if="isVision" class="field">
 			<span>{{ t('aiquila', 'Max tags per image') }}</span>
@@ -153,7 +184,7 @@
 
 <script>
 import { translate as t } from '@nextcloud/l10n'
-import { createCoworker, getTeams, getTeamWorkspace, listCoworkerTools, updateCoworker } from '../api.js'
+import { createCoworker, createCoworkerTriggerUrl, deleteCoworkerTriggerUrl, getCoworkerTriggerPolicy, getTeams, getTeamWorkspace, listCoworkerTools, updateCoworker } from '../api.js'
 
 export default {
 	name: 'CoworkerForm',
@@ -191,7 +222,14 @@ export default {
 				thinking: options.thinking || '',
 				is_active: m.isActive !== undefined ? !!m.isActive : true,
 				teamId: m.teamId || '',
+				scheduled: m.scheduled !== undefined ? !!m.scheduled : true,
+				trigger_files: !!m.triggerFiles,
 			},
+			triggersAllowed: false,
+			maxRunsPerHour: 12,
+			hasTriggerUrl: !!m.hasTriggerUrl,
+			newTrigger: null,
+			triggerBusy: false,
 			teams: [],
 			workspace: null,
 			workspaceLoading: false,
@@ -245,6 +283,14 @@ export default {
 			// Without the Teams app a coworker is simply personal.
 			this.teams = []
 		}
+		try {
+			const { data } = await getCoworkerTriggerPolicy()
+			this.triggersAllowed = !!data.allowed
+			this.maxRunsPerHour = data.maxRunsPerHour || this.maxRunsPerHour
+		} catch (e) {
+			// An older server: the schedule is the only trigger.
+			this.triggersAllowed = false
+		}
 	},
 	methods: { t,
 		// Team paths are edited relative to the workspace, so nothing outside
@@ -284,6 +330,34 @@ export default {
 			}
 			const relative = path.replace(/^\/+|\/+$/g, '')
 			return relative ? this.workspace + '/' + relative : this.workspace
+		},
+		async makeTriggerUrl() {
+			if (this.hasTriggerUrl && !window.confirm(t('aiquila', 'Replace the secret? Anything still using the old one stops working.'))) {
+				return
+			}
+			this.triggerBusy = true
+			this.error = ''
+			try {
+				this.newTrigger = (await createCoworkerTriggerUrl(this.model.id)).data
+				this.hasTriggerUrl = true
+			} catch (e) {
+				this.error = e?.response?.data?.error || t('aiquila', 'Could not create the trigger URL')
+			} finally {
+				this.triggerBusy = false
+			}
+		},
+		async removeTriggerUrl() {
+			this.triggerBusy = true
+			this.error = ''
+			try {
+				await deleteCoworkerTriggerUrl(this.model.id)
+				this.hasTriggerUrl = false
+				this.newTrigger = null
+			} catch (e) {
+				this.error = e?.response?.data?.error || t('aiquila', 'Could not remove the trigger URL')
+			} finally {
+				this.triggerBusy = false
+			}
 		},
 		async loadTools() {
 			if (!this.isAgent || this.availableTools.length > 0) {
@@ -328,6 +402,7 @@ export default {
 				// source; an agent writes its answer to one file, if asked.
 				output_type: this.isAgent ? (this.form.output_path ? 'file' : 'none') : (this.isDocs ? 'files' : 'system_tags'),
 				cron_schedule: this.form.cron_schedule,
+				scheduled: this.form.scheduled,
 				is_active: this.form.is_active,
 				// A model id belongs to one provider; drop it when switching away.
 				model: this.isClaude ? this.form.model : '',
@@ -338,6 +413,11 @@ export default {
 			}
 			if (this.isAgent) {
 				payload.custom_prompt = this.form.prompt
+			}
+			// Sent only when triggers are on for this account, or to turn one
+			// off, so saving never trips over a policy the user cannot change.
+			if (this.triggersAllowed || this.model.triggerFiles) {
+				payload.trigger_files = this.form.trigger_files && !this.isAgent
 			}
 			// A coworker's team is set once, when it is created.
 			if (!(this.model && this.model.id) && this.form.teamId) {
@@ -386,4 +466,6 @@ fieldset.field .checkbox { display: flex; align-items: center; gap: 8px; }
 .muted { color: var(--color-text-lighter); font-size: 13px; }
 .form-error { color: var(--color-error); font-size: 13px; }
 .actions { display: flex; gap: 8px; margin-top: 8px; }
+.field-hint { display: block; margin: -8px 0 12px; color: var(--color-text-lighter); font-size: 13px; }
+code.trigger { display: block; word-break: break-all; font-size: 12px; }
 </style>
