@@ -5,6 +5,7 @@ import {
   decodeXmlEntities,
   encodeXmlEntities,
   fetchCalDAV,
+  findResourceByUid,
   nsTagContent,
 } from '../../client/caldav.js';
 import {
@@ -388,7 +389,7 @@ async function resolveContactByUid(
   </d:prop>
   <cr:filter>
     <cr:prop-filter name="UID">
-      <cr:text-match collation="i;octet">${encodeXmlEntities(uid)}</cr:text-match>
+      <cr:text-match collation="i;octet" match-type="equals">${encodeXmlEntities(uid)}</cr:text-match>
     </cr:prop-filter>
   </cr:filter>
 </cr:addressbook-query>`;
@@ -406,26 +407,13 @@ async function resolveContactByUid(
     );
   }
 
-  const responseText = await response.text();
-
-  const hrefMatch = responseText.match(/<d:href>([^<]+)<\/d:href>/);
-  const etagMatch = responseText.match(nsTagContent('getetag'));
-  const cardDataMatch = responseText.match(
-    /<(?:[a-z0-9]+:)?address-data[^>]*>([\s\S]*?)<\/(?:[a-z0-9]+:)?address-data>/
-  );
-
-  if (!hrefMatch || !etagMatch || !cardDataMatch) {
+  // match-type="equals" narrows the query (RFC 6352 §10.5.4); the UID is
+  // still checked here, as for events and tasks
+  const found = findResourceByUid(await response.text(), uid, 'address-data');
+  if (!found) {
     throw new Error(`Contact with UID "${uid}" not found in address book "${addressBookName}"`);
   }
-
-  const rawEtag = decodeXmlEntities(etagMatch[1].trim());
-  const etag = rawEtag.startsWith('"') ? rawEtag : `"${rawEtag}"`;
-
-  return {
-    href: hrefMatch[1],
-    etag,
-    vcardData: decodeXmlEntities(cardDataMatch[1]).trim(),
-  };
+  return { href: found.href, etag: found.etag, vcardData: found.data.trim() };
 }
 
 // ---------------------------------------------------------------------------
