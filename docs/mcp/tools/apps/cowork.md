@@ -1,7 +1,7 @@
 # Coworker Tools
 
 Control AIquila **coworkers**: persistent AI jobs that run server-side in the AIquila
-Nextcloud app on a cron schedule, such as tagging new photos or translating a folder
+Nextcloud app on a cron schedule or on [triggers](#triggers), such as tagging new photos or translating a folder
 of documents. From any MCP client you can create, configure, schedule, start, stop
 and inspect them.
 
@@ -44,6 +44,22 @@ A coworker always runs as one account, which `list_coworkers` shows as `runs as`
 - When the team is deleted, its coworkers are stopped straight away and deleted with their run history.
 
 Providers and models are those of the account it runs as. Its input and output paths must be inside the [team's workspace](circles.md#workspaces), the one place every account it can move to shares, so a team coworker that uses paths needs a team with a workspace. An input folder is required unless `input_type` is `none`. A pinned provider the account may not use falls back to that account's own, as on any coworker.
+
+### Triggers
+
+When an administrator allows coworker triggers for the account, a coworker can also
+start on its own:
+
+- **File changes**: with `runOnFileChange`, a file added, changed, moved or copied
+  into its input folder starts it about a minute later. Files it writes itself, and
+  files in its output folder, do not.
+- **Trigger URL**: another system calls a URL with a secret. It is created in the
+  Coworker settings in Nextcloud, so the secret never passes through the chat.
+  `list_coworkers` shows whether a coworker has one.
+
+At most 12 triggered runs start per coworker per hour. `get_coworker_runs` shows what
+started each run. How triggers work, and how an administrator turns them on, is in
+[Triggers](../../../installation/aiquila-setup.md#triggers).
 
 ### Stop, pause or disable?
 
@@ -119,7 +135,8 @@ options, so setting one option keeps the others.
   e.g. `30 6 * * 1-5` for weekdays at 06:30
 
 **Returns:** the new schedule and the next run time. An invalid expression is rejected
-by the app.
+by the app. Setting a schedule also turns it on for a coworker that ran only on
+triggers.
 
 ### delete_coworker
 
@@ -164,8 +181,8 @@ Needs an AIquila app version that supports run cancellation; older versions answ
 - `limit` (number, optional): maximum runs, default 20
 
 **Returns:** one line per run: ID, status (`running`, `pending`, `success`, `error`,
-`cancelled`), items processed, start time, duration, and the first line of the summary
-or the error.
+`cancelled`), items processed, start time, duration, what started it (scheduled, run
+by hand, file change, trigger URL), and the first line of the summary or the error.
 
 ### get_coworker_run
 
@@ -193,6 +210,8 @@ Accepted by `create_coworker` and `update_coworker`:
 | `outputType` | string | `system_tags` (default) or `file` |
 | `outputPath` | string | Target file or folder when `outputType` needs one |
 | `cronSchedule` | string | 5-field cron, default `0 3 * * *` |
+| `scheduled` | boolean | Whether the schedule runs it. `false` leaves it to [triggers](#triggers) and runs by hand |
+| `runOnFileChange` | boolean | Also run when files in the input folder are added or changed, see [Triggers](#triggers) |
 | `isActive` | boolean | Enable or disable |
 | `maxTags` | number | Option: tags per image (`vision:classify`) |
 | `recursive` | boolean | Option: include sub-folders |

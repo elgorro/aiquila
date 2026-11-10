@@ -221,10 +221,69 @@ describe('Cowork Tools', () => {
       const res = await setCoworkerScheduleTool.handler({ id: 7, cronSchedule: '30 6 * * 1-5' });
       expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/coworkers/7', {
         method: 'PUT',
-        body: { cron_schedule: '30 6 * * 1-5' },
+        // A coworker that only ran on triggers starts running on the schedule.
+        body: { cron_schedule: '30 6 * * 1-5', scheduled: true },
       });
       expect(res.content[0].text).toContain('30 6 * * 1-5');
       expect(res.content[0].text).toContain(new Date(1800000000 * 1000).toISOString());
+    });
+  });
+
+  describe('triggers', () => {
+    it('sends the schedule switch and the file trigger, and shows them', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue({
+        ...sampleCoworker,
+        scheduled: false,
+        triggerFiles: true,
+        hasTriggerUrl: true,
+      });
+      const res = await updateCoworkerTool.handler({
+        id: 7,
+        scheduled: false,
+        runOnFileChange: true,
+      });
+      expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/coworkers/7', {
+        method: 'PUT',
+        body: { scheduled: false, trigger_files: true },
+      });
+      const out = res.content[0].text;
+      expect(out).toContain('schedule: off');
+      expect(out).toContain('also runs on: file changes, trigger URL');
+      expect(out).not.toContain('⚠');
+    });
+
+    it('says when an older app ignored them', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue({ ...sampleCoworker });
+      const res = await updateCoworkerTool.handler({ id: 7, runOnFileChange: true });
+      expect(res.content[0].text).toContain('ignored the trigger settings');
+    });
+
+    it('shows what started each run', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue([
+        {
+          id: 2,
+          coworkerId: 7,
+          status: 'success',
+          itemsTotal: 1,
+          itemsProcessed: 1,
+          startedAt: 1800000000,
+          finishedAt: 1800000010,
+          startedBy: 'files',
+        },
+        {
+          id: 1,
+          coworkerId: 7,
+          status: 'success',
+          itemsTotal: 1,
+          itemsProcessed: 1,
+          startedAt: 1700000000,
+          finishedAt: 1700000010,
+        },
+      ]);
+      const out = (await getCoworkerRunsTool.handler({ id: 7 })).content[0].text;
+      expect(out).toContain('#2 success — 1/1');
+      expect(out).toContain('— file change');
+      expect(out).not.toMatch(/#1 .*— (scheduled|file change)/);
     });
   });
 

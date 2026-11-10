@@ -6109,6 +6109,72 @@
                 }
             }
         },
+        "/index.php/apps/aiquila/api/coworkers/trigger-policy": {
+            "get": {
+                "operationId": "coworker-trigger-policy",
+                "summary": "Whether the current user may use coworker triggers",
+                "description": "Triggers start a coworker when files in its input folder change, or when its trigger URL is called. An administrator turns them on and chooses who may use them.",
+                "tags": [
+                    "coworker"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The policy for the current user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "allowed",
+                                        "debounceSeconds",
+                                        "maxRunsPerHour"
+                                    ],
+                                    "properties": {
+                                        "allowed": {
+                                            "type": "boolean"
+                                        },
+                                        "debounceSeconds": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "maxRunsPerHour": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/index.php/apps/aiquila/api/coworkers/{id}": {
             "get": {
                 "operationId": "coworker-show",
@@ -7165,6 +7231,334 @@
                                     ],
                                     "properties": {
                                         "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/coworkers/{id}/trigger-url": {
+            "post": {
+                "operationId": "coworker-create-trigger-url",
+                "summary": "Create a trigger URL for a coworker",
+                "description": "Returns the URL and its secret. The secret is shown this once; only a hash of it is stored. Calling this again replaces the secret, so the old one stops working. Call the URL with `POST` and the secret as a bearer token: `Authorization: Bearer <secret>`.",
+                "tags": [
+                    "coworker"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Coworker ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The trigger URL and its secret",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "url",
+                                        "token"
+                                    ],
+                                    "properties": {
+                                        "url": {
+                                            "type": "string"
+                                        },
+                                        "token": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Coworker triggers are not allowed for this account",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Coworker not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "coworker-delete-trigger-url",
+                "summary": "Remove a coworker's trigger URL",
+                "tags": [
+                    "coworker"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Coworker ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The coworker, now without a trigger URL",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "object"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Coworker not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/coworkers/{id}/trigger": {
+            "post": {
+                "operationId": "coworker_trigger-trigger",
+                "summary": "Start a coworker through its trigger URL",
+                "description": "Authenticate with `Authorization: Bearer <secret>`, the secret shown when the trigger URL was created. The run starts within a minute, as a background job; the response does not wait for it.",
+                "tags": [
+                    "coworker_trigger"
+                ],
+                "security": [
+                    {},
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Coworker ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "authorization",
+                        "in": "header",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "A run is due",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "coworkerId",
+                                        "dueAt"
+                                    ],
+                                    "properties": {
+                                        "coworkerId": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "dueAt": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or wrong secret",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "The coworker cannot run now: it is paused or disabled, or triggers are not allowed for its account",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Too many triggered runs in the last hour",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
                                             "type": "string"
                                         }
                                     }
@@ -8759,6 +9153,10 @@
         {
             "name": "coworker",
             "description": "REST API for cowork tasks — persistent scheduled AI jobs. Consumed by the Cowork UI and by the MCP server (Basic Auth), hence NoCSRFRequired alongside NoAdminRequired."
+        },
+        {
+            "name": "coworker_trigger",
+            "description": "The trigger URL of a coworker, for other systems: an orchestrator, a Webhook listeners webhook, a CI job. The caller has no Nextcloud session. It proves itself with the coworker's trigger secret as a bearer token (RFC 6750 §2.1, the header form only: a secret in the query string would end up in access logs). An unknown coworker and a wrong secret get the same 401, so the endpoint does not tell which coworker IDs exist, and both count as a brute-force attempt. The request body is not read. A trigger only says \"run now\"; what the run works on is the coworker's own input folder, so a caller cannot put text in front of the model or point the coworker at other files."
         }
     ]
 }

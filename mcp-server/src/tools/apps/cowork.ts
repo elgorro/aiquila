@@ -45,6 +45,12 @@ interface Coworker {
   nextRunAt?: number | null;
   lastStatus?: string | null;
   lastError?: string | null;
+  /** Whether the cron schedule starts it; absent on AIquila apps without triggers. */
+  scheduled?: boolean;
+  /** Whether a file added or changed in the input folder starts it. */
+  triggerFiles?: boolean;
+  /** Whether it has a trigger URL other systems can call. */
+  hasTriggerUrl?: boolean;
 }
 
 interface CoworkerRun {
@@ -58,6 +64,8 @@ interface CoworkerRun {
   error?: string | null;
   startedAt: number;
   finishedAt?: number | null;
+  /** schedule | manual | files | url; absent on older AIquila apps. */
+  startedBy?: string | null;
 }
 
 interface CoworkerRunLogEntry {
@@ -114,8 +122,10 @@ function formatCoworker(c: Coworker): string {
   lines.push(
     `  task: ${c.taskType} | provider: ${c.provider ?? 'default'}${c.model ? ` (${c.model})` : ''} | input: ${c.inputPath ?? '/'}`,
     `  output: ${c.outputType}${c.outputPath ? ` → ${c.outputPath}` : ''}`,
-    `  schedule: ${c.cronSchedule} | next run: ${fmtTime(c.nextRunAt)} | last run: ${fmtTime(c.lastRunAt)}${c.lastStatus ? ` (${c.lastStatus})` : ''}`
+    `  schedule: ${c.scheduled === false ? 'off' : c.cronSchedule} | next run: ${fmtTime(c.nextRunAt)} | last run: ${fmtTime(c.lastRunAt)}${c.lastStatus ? ` (${c.lastStatus})` : ''}`
   );
+  const triggers = [c.triggerFiles ? 'file changes' : '', c.hasTriggerUrl ? 'trigger URL' : ''];
+  if (triggers.some(Boolean)) lines.push(`  also runs on: ${triggers.filter(Boolean).join(', ')}`);
   const tuning = [
     typeof opts.effort === 'string' && opts.effort ? `effort: ${opts.effort}` : '',
     typeof opts.thinking === 'string' && opts.thinking ? `thinking: ${opts.thinking}` : '',
@@ -130,10 +140,18 @@ function formatCoworker(c: Coworker): string {
   return lines.join('\n');
 }
 
+const RUN_ORIGINS: Record<string, string> = {
+  schedule: 'scheduled',
+  manual: 'run by hand',
+  files: 'file change',
+  url: 'trigger URL',
+};
+
 function formatRun(r: CoworkerRun): string {
   const duration =
     r.finishedAt && r.startedAt ? ` (${Math.max(0, r.finishedAt - r.startedAt)}s)` : '';
-  return `- #${r.id} ${r.status} — ${r.itemsProcessed}/${r.itemsTotal} — ${fmtTime(r.startedAt)}${duration}`;
+  const origin = r.startedBy ? ` — ${RUN_ORIGINS[r.startedBy] ?? r.startedBy}` : '';
+  return `- #${r.id} ${r.status} — ${r.itemsProcessed}/${r.itemsTotal} — ${fmtTime(r.startedAt)}${duration}${origin}`;
 }
 
 /**
@@ -258,6 +276,16 @@ const coworkerFields = {
     .describe('Where results go, e.g. "system_tags" (default) or "file"'),
   outputPath: z.string().optional().describe('Output file or folder when outputType needs one'),
   cronSchedule: z.string().optional().describe('5-field cron, e.g. "0 3 * * *"'),
+  scheduled: z
+    .boolean()
+    .optional()
+    .describe('Whether the cron schedule runs it; false leaves it to triggers and runs by hand'),
+  runOnFileChange: z
+    .boolean()
+    .optional()
+    .describe(
+      'Also run about a minute after files in the input folder are added or changed. An administrator must allow coworker triggers for the account'
+    ),
   maxTags: z.number().optional().describe('Max tags per image (vision:classify)'),
   recursive: z.boolean().optional().describe('Include sub-folders'),
   effort: z.string().optional().describe('Reasoning effort, e.g. "low"; "" uses the default'),
@@ -294,6 +322,8 @@ interface CoworkerFieldArgs {
   outputType?: string;
   outputPath?: string;
   cronSchedule?: string;
+  scheduled?: boolean;
+  runOnFileChange?: boolean;
   maxTags?: number;
   recursive?: boolean;
   effort?: string;
@@ -330,20 +360,29 @@ function buildBody(args: CoworkerFieldArgs): Record<string, unknown> {
   if (args.outputType !== undefined) body.output_type = args.outputType;
   if (args.outputPath !== undefined) body.output_path = args.outputPath;
   if (args.cronSchedule !== undefined) body.cron_schedule = args.cronSchedule;
+  if (args.scheduled !== undefined) body.scheduled = args.scheduled;
+  if (args.runOnFileChange !== undefined) body.trigger_files = args.runOnFileChange;
   if (args.prompt !== undefined) body.custom_prompt = args.prompt;
   if (args.promptId !== undefined) body.prompt_id = args.promptId;
   if (args.isActive !== undefined) body.is_active = args.isActive;
   return body;
 }
 
-/** Older AIquila apps drop prompt fields silently; say so rather than report success. */
+/** Older AIquila apps drop fields they do not know silently; say so rather than report success. */
 function promptNotice(args: CoworkerFieldArgs, c: Coworker): string {
   const ignored =
     (args.prompt !== undefined && (c.customPrompt ?? '') !== args.prompt) ||
     (args.promptId !== undefined && c.promptId !== args.promptId);
-  return ignored
-    ? '\n\n⚠ The Nextcloud app ignored the prompt; agent coworkers need a newer AIquila app.'
-    : '';
+  const notes = ignored
+    ? ['⚠ The Nextcloud app ignored the prompt; agent coworkers need a newer AIquila app.']
+    : [];
+  const triggersIgnored =
+    (args.runOnFileChange !== undefined && c.triggerFiles === undefined) ||
+    (args.scheduled !== undefined && c.scheduled === undefined);
+  if (triggersIgnored) {
+    notes.push('⚠ The Nextcloud app ignored the trigger settings; they need a newer AIquila app.');
+  }
+  return notes.length > 0 ? `\n\n${notes.join('\n')}` : '';
 }
 
 export const createCoworkerTool = {
@@ -399,7 +438,7 @@ export const updateCoworkerTool = {
     openWorldHint: false,
   },
   description:
-    "Update a coworker's configuration (title, description, provider, input/output, schedule, prompt, tool allowlist, options). Only the given fields change; option changes are merged into the existing options.",
+    "Update a coworker's configuration (title, description, provider, input/output, schedule, file-change trigger, prompt, tool allowlist, options). Only the given fields change; option changes are merged into the existing options. A trigger URL is created in the Coworker settings in Nextcloud, so its secret never passes through the chat.",
   inputSchema: z.object({
     id: z.number().describe('Coworker ID'),
     ...coworkerFields,
@@ -443,7 +482,8 @@ export const setCoworkerScheduleTool = {
     try {
       const c = await fetchAiquilaAPI<Coworker>(`/coworkers/${args.id}`, {
         method: 'PUT',
-        body: { cron_schedule: args.cronSchedule },
+        // Setting a schedule turns it on, for a coworker that only ran on triggers.
+        body: { cron_schedule: args.cronSchedule, scheduled: true },
       });
       return text(
         `Schedule for "${c.title}" set to ${c.cronSchedule} — ` +

@@ -57,6 +57,16 @@ use OCP\AppFramework\Db\Entity;
  * @method void setCreatedAt(int $createdAt)
  * @method int getUpdatedAt()
  * @method void setUpdatedAt(int $updatedAt)
+ * @method int getScheduled()
+ * @method void setScheduled(int $scheduled)
+ * @method int getTriggerFiles()
+ * @method void setTriggerFiles(int $triggerFiles)
+ * @method string|null getTriggerTokenHash()
+ * @method void setTriggerTokenHash(?string $triggerTokenHash)
+ * @method int|null getTriggerDueAt()
+ * @method void setTriggerDueAt(?int $triggerDueAt)
+ * @method string|null getTriggerSource()
+ * @method void setTriggerSource(?string $triggerSource)
  */
 class Coworker extends Entity implements \JsonSerializable {
     use InsertsFullRow;
@@ -87,6 +97,16 @@ class Coworker extends Entity implements \JsonSerializable {
     protected ?string $lastError = null;
     protected int $createdAt = 0;
     protected int $updatedAt = 0;
+    /** Whether the cron schedule starts it; off for one only triggers start. */
+    protected int $scheduled = 1;
+    /** Run when files in the input folder are added or changed. */
+    protected int $triggerFiles = 0;
+    /** SHA-256 of the trigger URL's secret, or null when it has no trigger URL. */
+    protected ?string $triggerTokenHash = null;
+    /** A run a trigger asked for and that has not started yet. */
+    protected ?int $triggerDueAt = null;
+    /** What asked for that run: one of CoworkerRun::STARTED_BY_*. */
+    protected ?string $triggerSource = null;
 
     public function __construct() {
         $this->addType('userId', 'string');
@@ -113,6 +133,11 @@ class Coworker extends Entity implements \JsonSerializable {
         $this->addType('lastError', 'string');
         $this->addType('createdAt', 'integer');
         $this->addType('updatedAt', 'integer');
+        $this->addType('scheduled', 'integer');
+        $this->addType('triggerFiles', 'integer');
+        $this->addType('triggerTokenHash', 'string');
+        $this->addType('triggerDueAt', 'integer');
+        $this->addType('triggerSource', 'string');
         $this->markFieldsForInsert();
     }
 
@@ -147,6 +172,11 @@ class Coworker extends Entity implements \JsonSerializable {
             'lastError' => $this->getLastError(),
             'createdAt' => $this->getCreatedAt(),
             'updatedAt' => $this->getUpdatedAt(),
+            'scheduled' => (bool)$this->getScheduled(),
+            'triggerFiles' => (bool)$this->getTriggerFiles(),
+            // Whether it has a trigger URL; the secret is never sent back.
+            'hasTriggerUrl' => $this->getTriggerTokenHash() !== null,
+            'triggerDueAt' => $this->getTriggerDueAt(),
         ];
     }
 }
