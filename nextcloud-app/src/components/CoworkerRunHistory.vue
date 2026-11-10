@@ -13,6 +13,7 @@
 				<span class="progress">{{ run.itemsProcessed }}/{{ run.itemsTotal }}</span>
 				<span class="when">{{ formatTime(run.startedAt) }}</span>
 				<span class="who">{{ t('aiquila', 'as {user}', { user: run.userId }) }}</span>
+				<span v-if="run.startedBy" class="origin">{{ originLabel(run.startedBy) }}</span>
 				<span v-if="run.error" class="err" :title="run.error">{{ run.error }}</span>
 				<span v-else-if="run.summary" class="summary" :title="run.summary">{{ firstLine(run.summary) }}</span>
 				<button v-if="isActive(run)"
@@ -52,6 +53,14 @@ export default {
 				return t('aiquila', 'Waiting for batch')
 			}
 			return status === 'cancelled' ? t('aiquila', 'Cancelled') : status
+		},
+		originLabel(startedBy) {
+			return {
+				schedule: t('aiquila', 'scheduled'),
+				manual: t('aiquila', 'run by hand'),
+				files: t('aiquila', 'file change'),
+				url: t('aiquila', 'trigger URL'),
+			}[startedBy] || startedBy
 		},
 		isActive(run) {
 			return run.status === 'running' || run.status === 'pending'
@@ -99,6 +108,7 @@ export default {
 .run { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--color-border); font-size: 12px; }
 .who { color: var(--color-text-lighter); }
 .status { text-transform: capitalize; font-weight: 600; }
+.origin { color: var(--color-text-lighter); }
 .status.success { color: var(--color-success); }
 .status.error { color: var(--color-error); }
 .status.running { color: var(--color-warning); }
