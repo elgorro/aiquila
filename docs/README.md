@@ -13,7 +13,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 
 ## MCP Server
 
-- **[MCP Overview & Tools Reference](mcp/README.md)** — 381 tools across 47 categories
+- **[MCP Overview & Tools Reference](mcp/README.md)** — 384 tools across 47 categories
 - **[Setup Guide](mcp/setup.md)** — installation and MCP client configuration
 - **[OAuth 2.0](mcp/oauth.md)** — OAuth authentication for remote MCP clients
 - **[Standalone Docker](mcp/standalone-docker.md)** — run MCP server in Docker (external Nextcloud)
@@ -24,7 +24,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 | Category | Tools | Documentation |
 |----------|-------|---------------|
 | Files, status, apps, security, OCC, tags, search | 35 | [System Tools](mcp/tools/system-tools.md) |
-| Calendar events | 6 | [Calendar](mcp/tools/apps/calendar.md) |
+| Calendar events and rooms | 9 | [Calendar](mcp/tools/apps/calendar.md) |
 | Tasks (CalDAV) | 6 | [Tasks](mcp/tools/apps/tasks.md) |
 | Contacts (CardDAV) | 6 | [Contacts](mcp/tools/apps/contacts.md) |
 | Email | 10 | [Mail](mcp/tools/apps/mail.md) |
