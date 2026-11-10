@@ -19,7 +19,10 @@ the MCP authorization specification builds on:
 
 When OAuth is enabled, the standard flow looks like this:
 
-1. **The MCP client discovers** your server via the OAuth metadata endpoint (`/.well-known/oauth-authorization-server`)
+1. **The MCP client discovers** the authorization server: the `401` from `/mcp` points it to the
+   protected resource metadata (`/.well-known/oauth-protected-resource/mcp`, RFC 9728), which
+   names this server as the authorization server; its metadata is at
+   `/.well-known/oauth-authorization-server` (RFC 8414)
 2. **The client opens the server's sign-in page**, which links to your Nextcloud
 3. **You sign in on Nextcloud itself** — with your password, two-factor authentication,
    SSO or whatever your instance requires — and grant access to *AIquila MCP*

@@ -161,6 +161,8 @@ class McpServerController extends Controller {
             // Rediscover the authorization server on the next flow. A client
             // bound to a different issuer is then not reused.
             $server->setOauthMetadata(null);
+            $server->setOauthResourceMetadata(null);
+            $server->setOauthScope(null);
         }
         if (!empty($authType) && in_array($authType, ['none', 'bearer', 'oauth2'], true)) {
             $oldAuthType = $server->getAuthType();

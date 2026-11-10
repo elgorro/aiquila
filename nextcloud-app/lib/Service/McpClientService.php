@@ -417,20 +417,336 @@ class McpClientService {
     }
 
     /**
-     * Discover OAuth 2.1 endpoints from the MCP server's well-known metadata.
+     * Discover the MCP server's authorization server and cache its metadata.
+     *
+     * MCP 2026-07-28 "Authorization Server Discovery":
+     *  1. Protected Resource Metadata (RFC 9728) comes from the
+     *     `resource_metadata` URL of the 401 challenge, or else from the
+     *     well-known URIs, path-based first and then the root.
+     *  2. The authorization server is one of its `authorization_servers`.
+     *  3. That server's metadata is fetched from the RFC 8414 and OpenID
+     *     Connect well-known URIs in the spec's order, and used only when its
+     *     `issuer` is identical to the identifier the URL was built from
+     *     (RFC 8414 §3.3).
+     *
+     * The authorization request's scope follows "Scope Selection Strategy":
+     * the challenge's `scope`, else all of `scopes_supported`, else none.
+     *
+     * A server that publishes no Protected Resource Metadata is treated as
+     * its own authorization server at its origin, as MCP revisions up to
+     * 2025-03-26 described.
+     *
+     * Credentials belong to one authorization server ("Authorization Server
+     * Binding"): when the issuer changes, the tokens from the old one are
+     * dropped, and resolveClient() refuses or replaces a client bound to it.
+     *
+     * @return array<string, mixed> The authorization server metadata
      */
     public function discoverOAuth(McpServer $server): array {
-        $baseUrl = $this->getOAuthBaseUrl($server);
-        $url = rtrim($baseUrl, '/') . '/.well-known/oauth-authorization-server';
+        $challenge = $this->probeChallenge($server);
+        $resourceMetadata = $this->fetchResourceMetadata($server, $challenge['resource_metadata'] ?? null);
 
-        $response = $this->httpClient->request('GET', $url);
-        $metadata = $response->toArray();
+        if ($resourceMetadata !== null) {
+            $issuers = array_values(array_filter(
+                (array)($resourceMetadata['authorization_servers'] ?? []),
+                static fn ($v): bool => is_string($v) && $v !== ''
+            ));
+            if ($issuers === []) {
+                throw new \RuntimeException(
+                    'The MCP server\'s protected resource metadata lists no authorization_servers.'
+                );
+            }
+        } else {
+            $this->logger->info('MCP: no protected resource metadata, using the server origin as authorization server', [
+                'server' => $server->getDisplayName(),
+            ]);
+            $issuers = [$this->originOf($server->getUrl())];
+        }
+
+        $metadata = null;
+        $tried = [];
+        // RFC 9728 §7.6 leaves the choice among several authorization
+        // servers to the client: take the first whose metadata validates.
+        foreach ($issuers as $issuer) {
+            $metadata = $this->fetchAuthorizationServerMetadata($issuer, $tried);
+            if ($metadata !== null) {
+                break;
+            }
+        }
+        if ($metadata === null) {
+            throw new \RuntimeException(
+                'No valid authorization server metadata found. Tried: ' . implode(', ', $tried)
+            );
+        }
+
+        $scope = $challenge['scope'] ?? null;
+        if ($scope === null || $scope === '') {
+            $supported = $resourceMetadata['scopes_supported'] ?? null;
+            $scope = is_array($supported)
+                ? implode(' ', array_filter($supported, static fn ($v): bool => is_string($v) && $v !== ''))
+                : null;
+        }
+
+        $previous = $server->getOauthMetadata();
+        $previousIssuer = $previous ? (json_decode($previous, true)['issuer'] ?? null) : null;
+        if ($previousIssuer !== null && $previousIssuer !== $metadata['issuer']) {
+            // MUST NOT assume tokens from one authorization server are
+            // accepted by another.
+            $server->setOauthAccessToken(null);
+            $server->setOauthRefreshToken(null);
+            $server->setOauthTokenExpiresAt(null);
+        }
 
         $server->setOauthMetadata(json_encode($metadata) ?: null);
+        $server->setOauthResourceMetadata($resourceMetadata !== null ? (json_encode($resourceMetadata) ?: null) : null);
+        $server->setOauthScope($scope !== null && $scope !== '' ? $scope : null);
         $server->setUpdatedAt(time());
         $this->mapper->update($server);
 
         return $metadata;
+    }
+
+    /**
+     * Send an unauthenticated MCP request and return the Bearer challenge's
+     * parameters when the server answers 401 (MCP 2026-07-28: clients MUST
+     * parse WWW-Authenticate on a 401). Any other outcome yields [] and
+     * discovery falls back to the well-known URIs.
+     *
+     * @return array<string, string>
+     */
+    private function probeChallenge(McpServer $server): array {
+        try {
+            $response = $this->httpClient->request('POST', $server->getUrl(), [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json, text/event-stream',
+                ],
+                'json' => $this->buildRequestBody('initialize', [
+                    'protocolVersion' => self::PROTOCOL_VERSION,
+                    'capabilities' => new \stdClass(),
+                    'clientInfo' => ['name' => self::CLIENT_NAME, 'version' => '0.1.58'],
+                ], 1),
+            ]);
+            if ($response->getStatusCode() !== 401) {
+                $response->cancel();
+                return [];
+            }
+            $values = $response->getHeaders(false)['www-authenticate'] ?? [];
+            return self::parseBearerChallenge($values) ?? [];
+        } catch (\Throwable $e) {
+            $this->logger->debug('MCP: discovery probe failed', [
+                'server' => $server->getDisplayName(),
+                'error' => $e->getMessage(),
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Pull the parameters of the first Bearer challenge out of WWW-Authenticate
+     * field values (RFC 9110 §11.6.1, RFC 6750 §3). Parameter names are
+     * case-insensitive and returned lower-cased; quoted-string values are
+     * unescaped. A challenge carrying a token68 instead of parameters is
+     * skipped.
+     *
+     * @param list<string> $values
+     * @return array<string, string>|null Null when there is no Bearer challenge
+     */
+    public static function parseBearerChallenge(array $values): ?array {
+        $tchar = '[!#$%&\'*+.^_`|~0-9A-Za-z-]';
+        /** @var list<array{0: string, 1: array<string, string>}> $challenges */
+        $challenges = [];
+        $current = null;
+        foreach ($values as $value) {
+            $pos = 0;
+            $len = strlen($value);
+            while ($pos < $len) {
+                if (!preg_match('/\G[\s,]*(' . $tchar . '+)\s*/A', $value, $m, 0, $pos)) {
+                    break;
+                }
+                $pos += strlen($m[0]);
+                $token = $m[1];
+                if ($pos < $len && $value[$pos] === '=' && $current !== null
+                    && preg_match('/\G=\s*("(?:[^"\\\\]|\\\\.)*"|' . $tchar . '*)/A', $value, $v, 0, $pos)) {
+                    $pos += strlen($v[0]);
+                    $raw = $v[1];
+                    if ($raw !== '' && $raw[0] === '"') {
+                        $raw = (string)preg_replace('/\\\\(.)/s', '$1', substr($raw, 1, -1));
+                    }
+                    $challenges[$current][1][strtolower($token)] = $raw;
+                    continue;
+                }
+                // A token not followed by "=" starts a new challenge.
+                $challenges[] = [strtolower($token), []];
+                $current = count($challenges) - 1;
+                // Skip a token68 credential (RFC 9110 §11.2).
+                if (preg_match('/\G[A-Za-z0-9\-._~+\/]+=*(?=\s*(,|$))/A', $value, $t, 0, $pos)
+                    && !preg_match('/\G' . $tchar . '+\s*=[^=]/A', $value, $ignored, 0, $pos)) {
+                    $pos += strlen($t[0]);
+                }
+            }
+        }
+        foreach ($challenges as $challenge) {
+            if ($challenge[0] === 'bearer') {
+                return $challenge[1];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Fetch and validate the MCP server's Protected Resource Metadata.
+     *
+     * The challenge's `resource_metadata` URL is used when present; otherwise
+     * (or when it yields nothing usable) the well-known URIs (RFC 9728 §3.1),
+     * path-based first and then the root.
+     *
+     * RFC 9728 §3.3 requires `resource` to be identical to the resource
+     * identifier: the URL requested for a challenge-supplied document, or the
+     * URL the well-known suffix was inserted into. MCP 2026-07-28 also lets an
+     * MCP server at a path publish its metadata at the root, so a root document
+     * may name either the origin or the MCP endpoint. Scheme and host are
+     * compared case-insensitively and a trailing slash is ignored, as the MCP
+     * "Canonical Server URI" section asks.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function fetchResourceMetadata(McpServer $server, ?string $challengeUrl): ?array {
+        $resource = $server->getUrl();
+        $parts = parse_url($resource);
+        if (!is_array($parts) || !isset($parts['scheme'], $parts['host'])) {
+            throw new \RuntimeException('The MCP server URL is not an absolute URL: ' . $resource);
+        }
+        $origin = $this->originOf($resource);
+        $path = rtrim($parts['path'] ?? '', '/');
+        $query = isset($parts['query']) ? '?' . $parts['query'] : '';
+
+        $candidates = [];
+        if ($challengeUrl !== null && $challengeUrl !== '') {
+            $candidates[] = [$challengeUrl, [$resource]];
+        }
+        if ($path !== '' || $query !== '') {
+            $candidates[] = [$origin . '/.well-known/oauth-protected-resource' . $path . $query, [$resource]];
+        }
+        $candidates[] = [$origin . '/.well-known/oauth-protected-resource', [$origin, $resource]];
+
+        foreach ($candidates as [$url, $expected]) {
+            $document = $this->fetchJson($url);
+            if ($document === null) {
+                continue;
+            }
+            $actual = $document['resource'] ?? null;
+            $matches = is_string($actual) && in_array(
+                self::comparableUrl($actual),
+                array_map(static fn (string $u): string => self::comparableUrl($u), $expected),
+                true
+            );
+            if (!$matches) {
+                $this->logger->warning('MCP: ignoring protected resource metadata for another resource', [
+                    'server' => $server->getDisplayName(),
+                    'url' => $url,
+                    'resource' => is_string($actual) ? $actual : null,
+                ]);
+                continue;
+            }
+            return $document;
+        }
+        return null;
+    }
+
+    /**
+     * Fetch authorization server metadata for an issuer from the well-known
+     * URIs MCP 2026-07-28 lists, in its order, and return the first document
+     * whose `issuer` is identical to $issuer (RFC 8414 §3.3, OpenID Connect
+     * Discovery §4.3).
+     *
+     * @param list<string> $tried URLs attempted, appended to for error reporting
+     * @return array<string, mixed>|null
+     */
+    private function fetchAuthorizationServerMetadata(string $issuer, array &$tried): ?array {
+        $parts = parse_url($issuer);
+        if (!is_array($parts) || !isset($parts['scheme'], $parts['host'])
+            || isset($parts['query']) || isset($parts['fragment'])) {
+            // RFC 8414 §2: an issuer has no query or fragment component.
+            $tried[] = $issuer . ' (not a valid issuer)';
+            return null;
+        }
+        $origin = $this->originOf($issuer);
+        // RFC 8414 §3.1: a terminating "/" is removed before inserting.
+        $path = rtrim($parts['path'] ?? '', '/');
+
+        $urls = $path !== ''
+            ? [
+                $origin . '/.well-known/oauth-authorization-server' . $path,
+                $origin . '/.well-known/openid-configuration' . $path,
+                $origin . $path . '/.well-known/openid-configuration',
+            ]
+            : [
+                $origin . '/.well-known/oauth-authorization-server',
+                $origin . '/.well-known/openid-configuration',
+            ];
+
+        foreach ($urls as $url) {
+            $tried[] = $url;
+            $document = $this->fetchJson($url);
+            if ($document === null) {
+                continue;
+            }
+            if (($document['issuer'] ?? null) !== $issuer) {
+                // MUST NOT use metadata whose issuer differs.
+                $this->logger->warning('MCP: ignoring authorization server metadata with a different issuer', [
+                    'url' => $url,
+                    'expected' => $issuer,
+                    'issuer' => is_string($document['issuer'] ?? null) ? $document['issuer'] : null,
+                ]);
+                continue;
+            }
+            return $document;
+        }
+        return null;
+    }
+
+    /**
+     * GET a URL and return its body as a JSON object, or null on any failure.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function fetchJson(string $url): ?array {
+        try {
+            $response = $this->httpClient->request('GET', $url, [
+                'headers' => ['Accept' => 'application/json'],
+            ]);
+            if ($response->getStatusCode() !== 200) {
+                $response->cancel();
+                return null;
+            }
+            $data = json_decode($response->getContent(false), true);
+            return is_array($data) && !array_is_list($data) ? $data : null;
+        } catch (\Throwable $e) {
+            $this->logger->debug('MCP: metadata request failed', ['url' => $url, 'error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /** scheme://host[:port] of a URL, as written. */
+    private function originOf(string $url): string {
+        $parts = parse_url($url);
+        if (!is_array($parts) || !isset($parts['scheme'], $parts['host'])) {
+            return rtrim($url, '/');
+        }
+        $host = str_contains($parts['host'], ':') && !str_starts_with($parts['host'], '[')
+            ? '[' . $parts['host'] . ']'
+            : $parts['host'];
+        return $parts['scheme'] . '://' . $host . (isset($parts['port']) ? ':' . $parts['port'] : '');
+    }
+
+    /** A URL with lower-cased scheme and host and no trailing slash, for comparison. */
+    private static function comparableUrl(string $url): string {
+        $url = rtrim($url, '/');
+        if (!preg_match('#^([A-Za-z][A-Za-z0-9+.-]*://)([^/?\#]*)(.*)$#s', $url, $m)) {
+            return $url;
+        }
+        return strtolower($m[1]) . strtolower($m[2]) . $m[3];
     }
 
     /**
@@ -717,6 +1033,9 @@ class McpClientService {
      * Initiate the OAuth 2.1 PKCE flow. Returns the authorize URL for the popup.
      */
     public function initiateOAuth(McpServer $server): string {
+        // Rediscover on every sign-in: the protected resource may have moved
+        // to another authorization server since the metadata was cached.
+        $this->discoverOAuth($server);
         $clientId = $this->resolveClient($server);
         $redirectUri = $this->getRedirectUri($server);
 
@@ -741,14 +1060,20 @@ class McpClientService {
         $this->mapper->update($server);
 
         // Build authorize URL
-        $params = http_build_query([
+        $query = [
             'client_id' => $clientId,
             'redirect_uri' => $redirectUri,
             'response_type' => 'code',
             'code_challenge' => $challenge,
             'code_challenge_method' => 'S256',
             'state' => $state,
-        ]);
+        ];
+        // MCP 2026-07-28 "Scope Selection Strategy"; omitted when discovery found none.
+        $scope = $server->getOauthScope();
+        if ($scope !== null && $scope !== '') {
+            $query['scope'] = $scope;
+        }
+        $params = http_build_query($query);
 
         return $authorizeEndpoint . '?' . $params;
     }
@@ -888,6 +1213,8 @@ class McpClientService {
         $server->setOauthCodeVerifier(null);
         $server->setOauthState(null);
         $server->setOauthMetadata(null);
+        $server->setOauthResourceMetadata(null);
+        $server->setOauthScope(null);
         $server->setOauthRegistrationToken(null);
     }
 }

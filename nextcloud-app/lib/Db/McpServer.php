@@ -50,6 +50,10 @@ use OCP\AppFramework\Db\Entity;
  * @method void setOauthStaticClientSecret(?string $oauthStaticClientSecret)
  * @method string|null getOauthClientIssuer()
  * @method void setOauthClientIssuer(?string $oauthClientIssuer)
+ * @method string|null getOauthResourceMetadata()
+ * @method void setOauthResourceMetadata(?string $oauthResourceMetadata)
+ * @method string|null getOauthScope()
+ * @method void setOauthScope(?string $oauthScope)
  */
 class McpServer extends Entity {
     use InsertsFullRow;
@@ -76,6 +80,8 @@ class McpServer extends Entity {
     protected ?string $oauthStaticClientId = null;
     protected ?string $oauthStaticClientSecret = null;
     protected ?string $oauthClientIssuer = null;
+    protected ?string $oauthResourceMetadata = null;
+    protected ?string $oauthScope = null;
 
     public function __construct() {
         $this->addType('displayName', 'string');
@@ -100,6 +106,8 @@ class McpServer extends Entity {
         $this->addType('oauthStaticClientId', 'string');
         $this->addType('oauthStaticClientSecret', 'string');
         $this->addType('oauthClientIssuer', 'string');
+        $this->addType('oauthResourceMetadata', 'string');
+        $this->addType('oauthScope', 'string');
         $this->markFieldsForInsert();
     }
 

@@ -102,6 +102,16 @@ class McpClientServiceTest extends TestCase {
     private IURLGenerator $urlGenerator;
     private TestableMcpClientService $service;
 
+    /**
+     * Canned responses keyed by "METHOD url", answered without being captured.
+     *
+     * @var array<string, array{0: int, 1: mixed, 2?: array<string, string>}>
+     */
+    private array $routes = [];
+
+    /** @var list<string> Every request the mock client saw, as "METHOD url". */
+    private array $discoveryLog = [];
+
     /** Base URL the stub URL generator builds Nextcloud links on. */
     private string $ncBase = 'https://nc.example/apps/aiquila';
 
@@ -436,19 +446,12 @@ class McpClientServiceTest extends TestCase {
     }
 
     public function testInitiateOAuthGeneratesPkceAndReturnsUrl(): void {
-        $server = $this->makeServer();
-        $server->setAuthType('oauth2');
+        $server = $this->oauthServer([]);
         $server->setOauthClientId('existing-client-id');
-        $server->setOauthMetadata(json_encode([
-            'authorization_endpoint' => 'http://localhost:3339/authorize',
-            'token_endpoint' => 'http://localhost:3339/token',
-        ]));
-
-        $this->mapper->method('update')->willReturnArgument(0);
 
         $url = $this->service->initiateOAuth($server);
 
-        $this->assertStringStartsWith('http://localhost:3339/authorize?', $url);
+        $this->assertStringStartsWith('https://cloud.example/authorize?', $url);
         $this->assertStringContainsString('client_id=existing-client-id', $url);
         $this->assertStringContainsString('code_challenge_method=S256', $url);
         $this->assertStringContainsString('response_type=code', $url);
@@ -643,6 +646,13 @@ class McpClientServiceTest extends TestCase {
      */
     private function injectResponder(array &$captured, callable $handler): void {
         $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$captured, $handler) {
+            $this->discoveryLog[] = $method . ' ' . $url;
+            if (isset($this->routes[$method . ' ' . $url])) {
+                return $this->routeResponse($this->routes[$method . ' ' . $url]);
+            }
+            if ($method === 'GET' && str_contains($url, '/.well-known/')) {
+                return new MockResponse('not found', ['http_code' => 404]);
+            }
             $body = $options['body'] ?? '';
             $parsed = [];
             if (is_string($body) && $body !== '') {
@@ -669,17 +679,49 @@ class McpClientServiceTest extends TestCase {
         $ref->setValue($this->service, $client);
     }
 
-    /** @param array<string, mixed> $metadata */
+    /**
+     * An OAuth server entry whose authorization server metadata is both cached
+     * and served by discovery: the probe gets a bare 401, the path-based
+     * protected resource metadata names the issuer, and the issuer's RFC 8414
+     * well-known URI returns the metadata.
+     *
+     * @param array<string, mixed> $metadata
+     */
     private function oauthServer(array $metadata): McpServer {
         $server = $this->makeServer(7, 'Cloud', 'https://cloud.example/apps/mcp/mcp');
         $server->setAuthType('oauth2');
-        $server->setOauthMetadata((string)json_encode($metadata + [
+        $metadata += [
             'issuer' => 'https://cloud.example',
             'authorization_endpoint' => 'https://cloud.example/authorize',
             'token_endpoint' => 'https://cloud.example/token',
-        ]));
+        ];
+        $server->setOauthMetadata((string)json_encode($metadata));
         $this->mapper->method('update')->willReturnArgument(0);
+
+        $issuer = (string)$metadata['issuer'];
+        $this->routes = [
+            'POST https://cloud.example/apps/mcp/mcp' => [401, ''],
+            'GET https://cloud.example/.well-known/oauth-protected-resource/apps/mcp/mcp' => [200, [
+                'resource' => 'https://cloud.example/apps/mcp/mcp',
+                'authorization_servers' => [$issuer],
+            ]],
+            'GET ' . rtrim($issuer, '/') . '/.well-known/oauth-authorization-server' => [200, $metadata],
+        ];
+        $unused = [];
+        $this->injectResponder($unused, fn() => []);
         return $server;
+    }
+
+    /** @param array{0: int, 1: mixed, 2?: array<string, string>} $route */
+    private function routeResponse(array $route): MockResponse {
+        $headers = ['content-type' => 'application/json'];
+        foreach ($route[2] ?? [] as $name => $value) {
+            $headers[strtolower($name)] = $value;
+        }
+        return new MockResponse(
+            is_string($route[1]) ? $route[1] : (string)json_encode($route[1]),
+            ['http_code' => $route[0], 'response_headers' => $headers]
+        );
     }
 
     /** @return array<string, string> */
@@ -930,6 +972,279 @@ class McpClientServiceTest extends TestCase {
         $this->assertSame([$this->ncBase . '/api/admin/mcp-servers/oauth/callback'], $doc['redirect_uris']);
         $this->assertSame(['none'], $doc['token_endpoint_auth_methods_supported']);
         $this->assertArrayNotHasKey('client_secret', $doc);
+    }
+
+    // --- Authorization server discovery (RFC 9728; MCP 2026-07-28 "Authorization Server Discovery") ---
+
+    private const MCP_URL = 'https://mcp.example/tenant/mcp';
+
+    /**
+     * A server entry with nothing cached, routed through $this->routes.
+     *
+     * @param array<string, array{0: int, 1: mixed, 2?: array<string, string>}> $routes
+     */
+    private function discoveryServer(array $routes): McpServer {
+        $server = $this->makeServer(9, 'Remote', self::MCP_URL);
+        $server->setAuthType('oauth2');
+        $this->mapper->method('update')->willReturnArgument(0);
+        $this->routes = $routes;
+        $unused = [];
+        $this->injectResponder($unused, fn() => []);
+        return $server;
+    }
+
+    /** @return array<string, mixed> */
+    private function asMetadata(string $issuer): array {
+        return [
+            'issuer' => $issuer,
+            'authorization_endpoint' => $issuer . '/authorize',
+            'token_endpoint' => $issuer . '/token',
+        ];
+    }
+
+    /** @return list<string> GET requests to well-known URIs, in order */
+    private function wellKnownRequests(): array {
+        return array_values(array_filter(
+            $this->discoveryLog,
+            fn(string $r) => str_starts_with($r, 'GET ') && str_contains($r, '/.well-known/')
+        ));
+    }
+
+    /**
+     * The challenge's resource_metadata URL is used instead of the well-known
+     * URIs, and the authorization server it names may live on another host
+     * under a path (e.g. a Nextcloud app). Its scope is authoritative.
+     */
+    public function testDiscoveryFollowsResourceMetadataFromChallenge(): void {
+        $issuer = 'https://cloud.example/index.php/apps/oauth';
+        $server = $this->discoveryServer([
+            'POST ' . self::MCP_URL => [401, '', [
+                'WWW-Authenticate' => 'Bearer realm="mcp", resource_metadata="https://mcp.example/prm.json", scope="files mail"',
+            ]],
+            'GET https://mcp.example/prm.json' => [200, [
+                'resource' => self::MCP_URL,
+                'authorization_servers' => [$issuer],
+                'scopes_supported' => ['files', 'mail', 'calendar'],
+            ]],
+            'GET https://cloud.example/.well-known/oauth-authorization-server/index.php/apps/oauth' => [200, $this->asMetadata($issuer)],
+        ]);
+
+        $metadata = $this->service->discoverOAuth($server);
+
+        $this->assertSame($issuer, $metadata['issuer']);
+        $this->assertSame('files mail', $server->getOauthScope());
+        $this->assertSame(self::MCP_URL, json_decode((string)$server->getOauthResourceMetadata(), true)['resource']);
+        $this->assertSame([
+            'GET https://cloud.example/.well-known/oauth-authorization-server/index.php/apps/oauth',
+        ], $this->wellKnownRequests(), 'no well-known protected resource lookup when the challenge names one');
+    }
+
+    /** Without a challenge: path-based well-known URI first, then the root. */
+    public function testDiscoveryFallsBackToPathBasedThenRootResourceMetadata(): void {
+        $server = $this->discoveryServer([
+            'POST ' . self::MCP_URL => [200, ['jsonrpc' => '2.0', 'id' => 1, 'result' => []]],
+            'GET https://mcp.example/.well-known/oauth-protected-resource' => [200, [
+                'resource' => self::MCP_URL,
+                'authorization_servers' => ['https://auth.example'],
+            ]],
+            'GET https://auth.example/.well-known/oauth-authorization-server' => [200, $this->asMetadata('https://auth.example')],
+        ]);
+
+        $this->service->discoverOAuth($server);
+
+        $this->assertSame([
+            'GET https://mcp.example/.well-known/oauth-protected-resource/tenant/mcp',
+            'GET https://mcp.example/.well-known/oauth-protected-resource',
+            'GET https://auth.example/.well-known/oauth-authorization-server',
+        ], $this->wellKnownRequests());
+        $this->assertNull($server->getOauthScope(), 'no challenge scope and no scopes_supported');
+    }
+
+    /** Issuer with a path: RFC 8414 insertion, OIDC insertion, then OIDC appending. */
+    public function testIssuerWithPathTriesAllThreeEndpointsInOrder(): void {
+        $issuer = 'https://auth.example/tenant1';
+        $server = $this->discoveryServer([
+            'POST ' . self::MCP_URL => [401, '', ['WWW-Authenticate' => 'Bearer resource_metadata="https://mcp.example/prm"']],
+            'GET https://mcp.example/prm' => [200, ['resource' => self::MCP_URL, 'authorization_servers' => [$issuer]]],
+            'GET https://auth.example/tenant1/.well-known/openid-configuration' => [200, $this->asMetadata($issuer)],
+        ]);
+
+        $this->service->discoverOAuth($server);
+
+        $this->assertSame([
+            'GET https://auth.example/.well-known/oauth-authorization-server/tenant1',
+            'GET https://auth.example/.well-known/openid-configuration/tenant1',
+            'GET https://auth.example/tenant1/.well-known/openid-configuration',
+        ], $this->wellKnownRequests());
+    }
+
+    /** Issuer without a path: RFC 8414, then OIDC discovery. */
+    public function testIssuerWithoutPathFallsBackToOpenIdConfiguration(): void {
+        $server = $this->discoveryServer([
+            'POST ' . self::MCP_URL => [401, '', ['WWW-Authenticate' => 'Bearer resource_metadata="https://mcp.example/prm"']],
+            'GET https://mcp.example/prm' => [200, ['resource' => self::MCP_URL, 'authorization_servers' => ['https://auth.example']]],
+            'GET https://auth.example/.well-known/openid-configuration' => [200, $this->asMetadata('https://auth.example')],
+        ]);
+
+        $metadata = $this->service->discoverOAuth($server);
+
+        $this->assertSame('https://auth.example', $metadata['issuer']);
+        $this->assertSame([
+            'GET https://auth.example/.well-known/oauth-authorization-server',
+            'GET https://auth.example/.well-known/openid-configuration',
+        ], $this->wellKnownRequests());
+    }
+
+    /** RFC 8414 §3.3: metadata whose issuer differs MUST NOT be used. */
+    public function testIssuerMismatchIsRejected(): void {
+        $server = $this->discoveryServer([
+            'POST ' . self::MCP_URL => [401, '', ['WWW-Authenticate' => 'Bearer resource_metadata="https://mcp.example/prm"']],
+            'GET https://mcp.example/prm' => [200, ['resource' => self::MCP_URL, 'authorization_servers' => ['https://auth.example']]],
+            'GET https://auth.example/.well-known/oauth-authorization-server' => [200, $this->asMetadata('https://honest.example')],
+            'GET https://auth.example/.well-known/openid-configuration' => [200, $this->asMetadata('https://auth.example/')],
+        ]);
+
+        try {
+            $this->service->discoverOAuth($server);
+            $this->fail('metadata with a different issuer was used');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('No valid authorization server metadata', $e->getMessage());
+        }
+        $this->assertNull($server->getOauthMetadata());
+    }
+
+    /** A later endpoint with the right issuer is still used after a mismatch. */
+    public function testIssuerMismatchMovesOnToTheNextEndpoint(): void {
+        $server = $this->discoveryServer([
+            'POST ' . self::MCP_URL => [401, '', ['WWW-Authenticate' => 'Bearer resource_metadata="https://mcp.example/prm"']],
+            'GET https://mcp.example/prm' => [200, ['resource' => self::MCP_URL, 'authorization_servers' => ['https://auth.example']]],
+            'GET https://auth.example/.well-known/oauth-authorization-server' => [200, $this->asMetadata('https://attacker.example')],
+            'GET https://auth.example/.well-known/openid-configuration' => [200, $this->asMetadata('https://auth.example')],
+        ]);
+
+        $this->assertSame('https://auth.example', $this->service->discoverOAuth($server)['issuer']);
+    }
+
+    /** RFC 9728 §3.3: metadata for another resource MUST NOT be used. */
+    public function testResourceMetadataForAnotherResourceIsIgnored(): void {
+        $server = $this->discoveryServer([
+            'POST ' . self::MCP_URL => [401, '', ['WWW-Authenticate' => 'Bearer resource_metadata="https://evil.example/prm"']],
+            'GET https://evil.example/prm' => [200, ['resource' => 'https://evil.example/mcp', 'authorization_servers' => ['https://evil.example']]],
+            'GET https://mcp.example/.well-known/oauth-protected-resource/tenant/mcp' => [200, [
+                'resource' => 'HTTPS://MCP.example/tenant/mcp/',
+                'authorization_servers' => ['https://auth.example'],
+            ]],
+            'GET https://auth.example/.well-known/oauth-authorization-server' => [200, $this->asMetadata('https://auth.example')],
+        ]);
+
+        $this->assertSame('https://auth.example', $this->service->discoverOAuth($server)['issuer']);
+        $this->assertNotContains('GET https://evil.example/.well-known/oauth-authorization-server', $this->discoveryLog);
+    }
+
+    /** Scope Selection Strategy: all of scopes_supported when the challenge has none, sent on authorize. */
+    public function testScopeFallsBackToScopesSupportedAndIsSent(): void {
+        $server = $this->discoveryServer([
+            'POST ' . self::MCP_URL => [401, '', ['WWW-Authenticate' => 'Bearer error="invalid_token"']],
+            'GET https://mcp.example/.well-known/oauth-protected-resource/tenant/mcp' => [200, [
+                'resource' => self::MCP_URL,
+                'authorization_servers' => ['https://auth.example'],
+                'scopes_supported' => ['mcp:tools', 'mcp:files'],
+            ]],
+            'GET https://auth.example/.well-known/oauth-authorization-server' => [200, $this->asMetadata('https://auth.example')],
+        ]);
+        $server->setOauthStaticClientId('pre');
+
+        $query = $this->authorizeQuery($this->service->initiateOAuth($server));
+
+        $this->assertSame('mcp:tools mcp:files', $query['scope']);
+        $this->assertSame('https://auth.example/authorize', strtok($this->service->initiateOAuth($server), '?'));
+    }
+
+    public function testNoScopeIsSentWhenNoneIsKnown(): void {
+        $server = $this->oauthServer([]);
+        $server->setOauthStaticClientId('pre');
+
+        $query = $this->authorizeQuery($this->service->initiateOAuth($server));
+
+        $this->assertArrayNotHasKey('scope', $query);
+    }
+
+    /** A server without protected resource metadata is its own authorization server at its origin. */
+    public function testServerWithoutResourceMetadataUsesItsOrigin(): void {
+        $server = $this->discoveryServer([
+            'POST ' . self::MCP_URL => [401, ''],
+            'GET https://mcp.example/.well-known/oauth-authorization-server' => [200, $this->asMetadata('https://mcp.example')],
+        ]);
+
+        $this->assertSame('https://mcp.example', $this->service->discoverOAuth($server)['issuer']);
+        $this->assertNull($server->getOauthResourceMetadata());
+    }
+
+    public function testResourceMetadataWithoutAuthorizationServersFails(): void {
+        $server = $this->discoveryServer([
+            'POST ' . self::MCP_URL => [401, ''],
+            'GET https://mcp.example/.well-known/oauth-protected-resource/tenant/mcp' => [200, ['resource' => self::MCP_URL]],
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/lists no authorization_servers/');
+        $this->service->discoverOAuth($server);
+    }
+
+    /** MUST NOT assume tokens from one authorization server are accepted by another. */
+    public function testIssuerChangeDropsTokens(): void {
+        $server = $this->discoveryServer([
+            'POST ' . self::MCP_URL => [401, ''],
+            'GET https://mcp.example/.well-known/oauth-protected-resource/tenant/mcp' => [200, [
+                'resource' => self::MCP_URL,
+                'authorization_servers' => ['https://new-as.example'],
+            ]],
+            'GET https://new-as.example/.well-known/oauth-authorization-server' => [200, $this->asMetadata('https://new-as.example')],
+        ]);
+        $server->setOauthMetadata((string)json_encode($this->asMetadata('https://old-as.example')));
+        $server->setOauthAccessToken('old-at');
+        $server->setOauthRefreshToken('old-rt');
+        $server->setOauthTokenExpiresAt(time() + 3600);
+
+        $this->service->discoverOAuth($server);
+
+        $this->assertNull($server->getOauthAccessToken());
+        $this->assertNull($server->getOauthRefreshToken());
+        $this->assertNull($server->getOauthTokenExpiresAt());
+    }
+
+    public function testSameIssuerKeepsTokens(): void {
+        $server = $this->oauthServer([]);
+        $server->setOauthAccessToken('at');
+
+        $this->service->discoverOAuth($server);
+
+        $this->assertSame('at', $server->getOauthAccessToken());
+    }
+
+    /**
+     * RFC 9110 §11.6.1 / RFC 6750 §3: several challenges per field or per
+     * field line, case-insensitive scheme and parameter names, quoted-string
+     * escapes, and a token68 credential before the Bearer challenge.
+     */
+    public function testParseBearerChallenge(): void {
+        $this->assertSame(
+            ['realm' => 'a, "b"', 'resource_metadata' => 'https://x/prm'],
+            McpClientService::parseBearerChallenge([
+                'Basic YWxhZGRpbjpvcGVuc2VzYW1l==, bearer Realm="a, \\"b\\"", RESOURCE_METADATA="https://x/prm"',
+            ])
+        );
+        $this->assertSame(
+            ['resource_metadata' => 'https://x/prm', 'scope' => 'one two'],
+            McpClientService::parseBearerChallenge([
+                'Newauth realm="apps", type=1',
+                'Bearer resource_metadata="https://x/prm", scope="one two"',
+            ])
+        );
+        $this->assertSame(['error' => 'invalid_token'], McpClientService::parseBearerChallenge(['Bearer error=invalid_token']));
+        $this->assertSame([], McpClientService::parseBearerChallenge(['Bearer']));
+        $this->assertNull(McpClientService::parseBearerChallenge(['Basic realm="x"']));
+        $this->assertNull(McpClientService::parseBearerChallenge([]));
     }
 
     public function testGetOAuthBaseUrl(): void {
