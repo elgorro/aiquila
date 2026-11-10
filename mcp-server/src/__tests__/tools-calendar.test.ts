@@ -595,6 +595,60 @@ END:VCALENDAR</c:calendar-data>
       expect(body).toContain('DTEND;TZID=Europe/Berlin:20260512T160000');
     });
 
+    it('should invite a room with CUTYPE=ROOM and RSVP, so Nextcloud answers for it', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(verifyResponse),
+        });
+
+      const { createEventTool } = await import('../tools/apps/calendar.js');
+      await createEventTool.handler({
+        summary: 'Planning',
+        calendarName: 'personal',
+        dtstart: '20261123T100000Z',
+        attendees: [{ email: 'room-1@example.com', cn: 'Room 1', cutype: 'ROOM' }],
+      });
+
+      const body: string = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+        .map((c) => c[1]?.body)
+        .find((b) => typeof b === 'string' && b.includes('BEGIN:VEVENT'));
+      expect(body.replace(/\r\n /g, '')).toContain(
+        'ATTENDEE;CN="Room 1";ROLE=REQ-PARTICIPANT;CUTYPE=ROOM;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:room-1@example.com'
+      );
+    });
+
+    it('should end a UTC event one hour later whatever the server time zone', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: () => Promise.resolve(verifyResponse),
+        });
+      const tz = process.env.TZ;
+      process.env.TZ = 'Europe/Berlin';
+      try {
+        const { createEventTool } = await import('../tools/apps/calendar.js');
+        await createEventTool.handler({
+          summary: 'Standup',
+          calendarName: 'personal',
+          dtstart: '20261123T100000Z',
+        });
+      } finally {
+        if (tz === undefined) delete process.env.TZ;
+        else process.env.TZ = tz;
+      }
+
+      const body: string = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body;
+      expect(body).toContain('DTSTART:20261123T100000Z');
+      expect(body).toContain('DTEND:20261123T110000Z');
+    });
+
     it('should ignore tzid for all-day events', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce(propfindVeventOk)

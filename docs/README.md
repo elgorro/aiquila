@@ -13,7 +13,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 
 ## MCP Server
 
-- **[MCP Overview & Tools Reference](mcp/README.md)** — 372 tools across 46 categories
+- **[MCP Overview & Tools Reference](mcp/README.md)** — 384 tools across 47 categories
 - **[Setup Guide](mcp/setup.md)** — installation and MCP client configuration
 - **[OAuth 2.0](mcp/oauth.md)** — OAuth authentication for remote MCP clients
 - **[Standalone Docker](mcp/standalone-docker.md)** — run MCP server in Docker (external Nextcloud)
@@ -23,26 +23,46 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 
 | Category | Tools | Documentation |
 |----------|-------|---------------|
-| Files, status, apps, security, search | 25 | [System Tools](mcp/tools/system-tools.md) |
-| Calendar events | 6 | [Calendar](mcp/tools/apps/calendar.md) |
+| Files, status, apps, security, OCC, tags, search | 35 | [System Tools](mcp/tools/system-tools.md) |
+| Calendar events and rooms | 9 | [Calendar](mcp/tools/apps/calendar.md) |
 | Tasks (CalDAV) | 6 | [Tasks](mcp/tools/apps/tasks.md) |
 | Contacts (CardDAV) | 6 | [Contacts](mcp/tools/apps/contacts.md) |
-| Email | 8 | [Mail](mcp/tools/apps/mail.md) |
+| Email | 10 | [Mail](mcp/tools/apps/mail.md) |
+| Talk conversations & messages | 12 | [Talk](mcp/tools/apps/talk.md) |
+| Kanban boards | 12 | [Deck](mcp/tools/apps/deck.md) |
+| Photo albums & metadata | 11 | [Photos](mcp/tools/apps/photos.md) |
+| Office documents | 3 | [Office](mcp/tools/apps/office.md) |
+| Teams and their workspaces | 13 | [Teams](mcp/tools/apps/circles.md) |
+| Tables (structured data) | 13 | [Tables](mcp/tools/apps/tables.md) |
+| Projects, templates & prompt library | 11 | [Projects](mcp/tools/apps/projects.md) |
+| Coworkers (scheduled AI jobs) | 15 | [Coworkers](mcp/tools/apps/cowork.md) |
+| Folder workspaces and inline comments (Text) | 9 | [Text](mcp/tools/apps/text.md) |
+| File comments | 5 | [File Comments](mcp/tools/apps/comments.md) |
+| Trash | 3 | [Trash](mcp/tools/apps/trash.md) |
+| File versions | 2 | [Versions](mcp/tools/apps/versions.md) |
+| Notifications | 4 | [Notifications](mcp/tools/apps/notifications.md) |
+| User status | 5 | [User Status](mcp/tools/apps/user-status.md) |
+| Out of office | 3 | [Out of Office](mcp/tools/apps/absence.md) |
 | Bookmarks, folders, tags | 13 | [Bookmarks](mcp/tools/apps/bookmarks.md) |
 | Maps, GPS, tracks, photos, contacts | 40 | [Maps](mcp/tools/apps/maps.md) |
 | Notes | 5 | [Notes](mcp/tools/apps/notes.md) |
 | News (RSS feeds) | 17 | [News](mcp/tools/apps/news.md) |
+| Activity stream | 2 | [Activity](mcp/tools/apps/activity.md) |
+| Polls | 21 | [Polls](mcp/tools/apps/polls.md) |
+| Forms & surveys | 25 | [Forms](mcp/tools/apps/forms.md) |
 | Fediverse (Social) | 26 | [Social](mcp/tools/apps/social.md) |
 | Recipes | 6 | [Cookbook](mcp/tools/apps/cookbook.md) |
 | NC AI tasks & image gen | 4 | [Assistant](mcp/tools/apps/assistant.md) |
+| Translation | 1 | [Translate](mcp/tools/apps/translate.md) |
 | File shares | 10 | [Shares](mcp/tools/apps/shares.md) |
-| Teams and their workspaces | 13 | [Teams](mcp/tools/apps/circles.md) |
-| Office documents | 3 | [Office](mcp/tools/apps/office.md) |
-| Talk conversations & messages | 12 | [Talk](mcp/tools/apps/talk.md) |
-| Tables (structured data) | 13 | [Tables](mcp/tools/apps/tables.md) |
-| Users & groups | 8 | [Users](mcp/tools/apps/users.md) / [Groups](mcp/tools/apps/groups.md) |
-| Coworkers (scheduled AI jobs) | 15 | [Coworkers](mcp/tools/apps/cowork.md) |
+| Social network share links | 1 | [Social Sharing](mcp/tools/apps/social-sharing.md) |
+| Recommended files | 1 | [Recommendations](mcp/tools/apps/recommendations.md) |
+| Announcements | 3 | [Announcements](mcp/tools/apps/announcements.md) |
+| Self-service registration | 3 | [Registration](mcp/tools/apps/registration.md) |
+| Terms of service | 5 | [Terms of Service](mcp/tools/apps/terms-of-service.md) |
+| Password vault metadata | 3 | [Passman](mcp/tools/apps/passman.md) |
 | AIquila config | 3 | [AIquila](mcp/tools/apps/aiquila.md) |
+| Users & groups | 8 | [Users](mcp/tools/apps/users.md) / [Groups](mcp/tools/apps/groups.md) |
 
 ## Nextcloud App
 

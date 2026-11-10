@@ -129,6 +129,12 @@ class Application extends App implements IBootstrap {
             \OCA\AIquila\Listener\TalkBotInvokeListener::class
         );
 
+        // Coworkers that run when files in their input folder change. Inert
+        // until an administrator turns coworker triggers on.
+        foreach (\OCA\AIquila\Listener\CoworkerFileTriggerListener::EVENTS as $event) {
+            $context->registerEventListener($event, \OCA\AIquila\Listener\CoworkerFileTriggerListener::class);
+        }
+
         // AI actions in the Text editor for users without the Assistant app.
         foreach (\OCA\AIquila\Listener\LoadTextAssistantListener::EVENTS as $event) {
             $context->registerEventListener($event, \OCA\AIquila\Listener\LoadTextAssistantListener::class);

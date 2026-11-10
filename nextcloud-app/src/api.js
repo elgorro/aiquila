@@ -278,6 +278,18 @@ export function stopCoworker(id) {
 	return axios.post(url(`/api/coworkers/${id}/stop`))
 }
 
+export function getCoworkerTriggerPolicy() {
+	return axios.get(url('/api/coworkers/trigger-policy'))
+}
+
+export function createCoworkerTriggerUrl(id) {
+	return axios.post(url(`/api/coworkers/${id}/trigger-url`))
+}
+
+export function deleteCoworkerTriggerUrl(id) {
+	return axios.delete(url(`/api/coworkers/${id}/trigger-url`))
+}
+
 export function getCoworkerRuns(id, limit = 20) {
 	return axios.get(url(`/api/coworkers/${id}/runs`), { params: { limit } })
 }

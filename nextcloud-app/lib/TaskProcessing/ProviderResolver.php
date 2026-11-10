@@ -10,6 +10,8 @@ use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\Provider\NoPermittedProviderException;
 use OCA\AIquila\Service\UsageStatService;
+use OCP\TaskProcessing\EShapeType;
+use OCP\TaskProcessing\ShapeDescriptor;
 
 /**
  * Picks the LLM provider that should serve a TaskProcessing run.
@@ -38,16 +40,75 @@ class ProviderResolver {
     ) {
     }
 
+    /** Longest single memory, and all of them together, in characters. */
+    public const MEMORY_MAX_CHARS = 4000;
+    public const MEMORIES_MAX_CHARS = 16000;
+
+    /**
+     * The optional `memories` input of the chat task types.
+     *
+     * The Assistant hands a chat provider what the user asked it to remember
+     * from earlier chats (summaries of the sessions marked "remember"), but
+     * only to a provider that declares this input: it checks the provider's
+     * optional input shape before adding it (assistant ChatService). Without
+     * it, memories never reach a chat AIquila serves.
+     */
+    public static function memoriesShape(): ShapeDescriptor {
+        return new ShapeDescriptor(
+            'Memories',
+            'What the user asked the assistant to remember from earlier conversations',
+            EShapeType::ListOfTexts
+        );
+    }
+
+    /**
+     * The memories as a section for the system prompt, or null when there are
+     * none. Each is capped, and so is their total, so a long-remembered chat
+     * cannot crowd out the conversation itself.
+     */
+    public static function memorySection(mixed $memories): ?string {
+        if (!is_array($memories)) {
+            return null;
+        }
+        $kept = [];
+        $total = 0;
+        foreach ($memories as $memory) {
+            if (!is_string($memory) || trim($memory) === '') {
+                continue;
+            }
+            $memory = trim($memory);
+            if (mb_strlen($memory) > self::MEMORY_MAX_CHARS) {
+                $memory = mb_substr($memory, 0, self::MEMORY_MAX_CHARS) . '…';
+            }
+            if ($total + mb_strlen($memory) > self::MEMORIES_MAX_CHARS) {
+                break;
+            }
+            $total += mb_strlen($memory);
+            $kept[] = '- ' . str_replace("\n", "\n  ", $memory);
+        }
+        if ($kept === []) {
+            return null;
+        }
+        return "The user asked you to remember these things from earlier conversations. "
+            . "Use them where they help; don't bring them up otherwise.\n\n"
+            . implode("\n", $kept);
+    }
+
     /**
      * The system prompt for a chat-shaped task: the task's own `system_prompt`
-     * (from the Assistant or the Context Agent), with the admin's instance
-     * instructions in front when they are enabled for TaskProcessing.
+     * (from the Assistant or the Context Agent) and the user's `memories`,
+     * with the admin's instance instructions in front when they are enabled
+     * for TaskProcessing.
      *
      * @param array<string, mixed> $input
      */
     public function systemPrompt(?string $userId, array $input): ?string {
         $system = $input['system_prompt'] ?? '';
         $system = is_string($system) && $system !== '' ? $system : null;
+        $memories = self::memorySection($input['memories'] ?? null);
+        if ($memories !== null) {
+            $system = $system === null ? $memories : $system . "\n\n" . $memories;
+        }
         if ($this->instructions === null) {
             return $system;
         }

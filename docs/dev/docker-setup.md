@@ -15,7 +15,7 @@ The Docker environment provides a complete, isolated development setup with:
 - **Adminer** - Database management UI (opt-in, `make up-tools`)
 - **Collabora Online** - Document conversion and templates for the Office tools (opt-in, `make up-office`)
 
-The AIquila app is installed automatically on first start from a pre-built tarball, along with Talk, Notes, Tasks, Tables and Team folders. No manual setup wizard or app installation is needed.
+The AIquila app is installed automatically on first start from a pre-built tarball, along with Talk, Notes, Tasks, Tables, Team folders and Calendar Resource Management. The last comes with a building, two rooms and a projector to book, for the calendar room finder. No manual setup wizard or app installation is needed.
 
 > **Standalone mode?** If you already have a Nextcloud instance and only need the MCP server, see [Standalone Docker Setup](../mcp/standalone-docker.md).
 

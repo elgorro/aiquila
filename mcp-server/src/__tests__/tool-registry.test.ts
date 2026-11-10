@@ -273,6 +273,24 @@ describe('tool-registry', () => {
       expect(names).not.toContain('deck_list_boards');
     });
 
+    it('a non-admin gets file comments from the files.comments capability', async () => {
+      mockFetchOCS.mockImplementation(async (path: string) => {
+        if (path.startsWith('/ocs/v2.php/cloud/apps')) {
+          throw new Error('OCS request failed: 403 Forbidden');
+        }
+        if (path === '/ocs/v2.php/cloud/capabilities') {
+          return { ocs: { data: { capabilities: { files: { comments: true } } } } };
+        }
+        return { ocs: { data: [] } };
+      });
+      const names = flatToolNames(await runAs(asUser('bob'), () => getFilteredToolSets()));
+      expect(names).toContain('list_file_comments');
+
+      nonAdmin(['files'], []);
+      const without = flatToolNames(await runAs(asUser('carol'), () => getFilteredToolSets()));
+      expect(without).not.toContain('list_file_comments');
+    });
+
     it('apps a non-admin cannot see either way stay listed', async () => {
       nonAdmin([], []);
       const names = flatToolNames(await runAs(asUser('bob'), () => getFilteredToolSets()));

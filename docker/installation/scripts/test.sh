@@ -106,7 +106,7 @@ print(m.group(1) if m else '')
 
 occ() {
   $COMPOSE -f "$INSTALL_DIR/docker-compose.yml" exec -T nextcloud \
-    su -p www-data -s /bin/sh -c "php /var/www/html/occ $*"
+    su -p www-data -s /bin/sh -c 'php /var/www/html/occ "$@"' -- sh "$@"
 }
 
 mcp_tool() {

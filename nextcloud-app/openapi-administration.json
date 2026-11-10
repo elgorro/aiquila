@@ -4091,6 +4091,246 @@
                 }
             }
         },
+        "/index.php/apps/aiquila/api/admin/coworker-triggers": {
+            "get": {
+                "operationId": "coworker-admin-trigger-policy",
+                "summary": "Get the coworker trigger policy",
+                "description": "This endpoint requires admin access",
+                "tags": [
+                    "coworker"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Whether triggers are on, and for whom",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "enabled",
+                                        "users",
+                                        "groups"
+                                    ],
+                                    "properties": {
+                                        "enabled": {
+                                            "type": "boolean"
+                                        },
+                                        "users": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "groups": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "operationId": "coworker-set-admin-trigger-policy",
+                "summary": "Set the coworker trigger policy",
+                "description": "Triggers are off until turned on. Once on, they are open to everyone when both lists are empty, and otherwise to the users named and the members of the groups named. Settings left out are kept.\nThis endpoint requires admin access",
+                "tags": [
+                    "coworker"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "enabled": {
+                                        "type": [
+                                            "boolean",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Whether coworker triggers are on"
+                                    },
+                                    "users": {
+                                        "type": [
+                                            "array",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "User IDs allowed to use them",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "groups": {
+                                        "type": [
+                                            "array",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Group IDs whose members may use them",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The saved policy",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "enabled",
+                                        "users",
+                                        "groups"
+                                    ],
+                                    "properties": {
+                                        "enabled": {
+                                            "type": "boolean"
+                                        },
+                                        "users": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "groups": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/index.php/apps/aiquila/api/admin/coworker-templates": {
             "get": {
                 "operationId": "coworker-admin-templates",
@@ -4483,6 +4723,10 @@
         {
             "name": "coworker",
             "description": "REST API for cowork tasks — persistent scheduled AI jobs. Consumed by the Cowork UI and by the MCP server (Basic Auth), hence NoCSRFRequired alongside NoAdminRequired."
+        },
+        {
+            "name": "coworker_trigger",
+            "description": "The trigger URL of a coworker, for other systems: an orchestrator, a Webhook listeners webhook, a CI job. The caller has no Nextcloud session. It proves itself with the coworker's trigger secret as a bearer token (RFC 6750 §2.1, the header form only: a secret in the query string would end up in access logs). An unknown coworker and a wrong secret get the same 401, so the endpoint does not tell which coworker IDs exist, and both count as a brute-force attempt. The request body is not read. A trigger only says \"run now\"; what the run works on is the coworker's own input folder, so a caller cannot put text in front of the model or point the coworker at other files."
         }
     ]
 }

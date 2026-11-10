@@ -180,6 +180,19 @@ export function userLibrary(kind) {
 }
 
 /** Organization coworker templates: list and delete (published from Cowork). */
+export function getCoworkerTriggerPolicyAdmin() {
+	return axios.get(url('/api/admin/coworker-triggers'))
+}
+
+/**
+ * Save the coworker trigger policy.
+ *
+ * @param {{enabled?: boolean, users?: string[], groups?: string[]}} policy - settings to change
+ */
+export function saveCoworkerTriggerPolicyAdmin(policy) {
+	return axios.put(url('/api/admin/coworker-triggers'), policy)
+}
+
 export function listCoworkerTemplatesAdmin() {
 	return axios.get(url('/api/admin/coworker-templates'))
 }

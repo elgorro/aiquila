@@ -16,9 +16,11 @@ use OCA\AIquila\Db\CoworkerMapper;
 use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Db\CoworkerRunMapper;
 use OCA\AIquila\Db\PromptMapper;
+use OCA\AIquila\Event\CoworkerRunFinishedEvent;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\EventDispatcher\IEventDispatcher;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -37,6 +39,8 @@ class CoworkerService {
         private readonly LoggerInterface $logger,
         private readonly ?PromptMapper $prompts = null,
         private readonly ?TeamService $teams = null,
+        private readonly ?CoworkerTriggerPolicy $triggerPolicy = null,
+        private readonly ?IEventDispatcher $events = null,
     ) {
     }
 
@@ -298,7 +302,7 @@ class CoworkerService {
         if (!$this->prepareTeamRun($coworker)) {
             throw new DoesNotExistException('Coworker ' . $id . ' cannot run: ' . ($coworker->getLastError() ?? 'its team is gone'));
         }
-        return $this->execute($coworker);
+        return $this->execute($coworker, CoworkerRun::STARTED_BY_MANUAL);
     }
 
     /**
@@ -469,8 +473,11 @@ class CoworkerService {
     /**
      * Execute a coworker: record a run, dispatch to its task type, and update
      * scheduling/status fields. Never throws — failures are captured on the run.
+     *
+     * @param string|null $startedBy one of CoworkerRun::STARTED_BY_*; null works
+     *        it out: a due trigger, or else the schedule
      */
-    public function execute(Coworker $coworker): CoworkerRun {
+    public function execute(Coworker $coworker, ?string $startedBy = null): CoworkerRun {
         // A coworker whose previous batch has not come back yet must not start
         // another: that would bill the same folder twice and race two runs
         // onto the same output files. Skipping is the whole handling — the
@@ -485,11 +492,26 @@ class CoworkerService {
         }
 
         $now = $this->timeFactory->getTime();
+        if ($startedBy === null) {
+            $due = $coworker->getTriggerDueAt();
+            $startedBy = $due !== null && $due <= $now
+                ? ($coworker->getTriggerSource() ?? CoworkerRun::STARTED_BY_FILES)
+                : CoworkerRun::STARTED_BY_SCHEDULE;
+        }
+        // This run covers whatever the triggers so far asked for. A trigger
+        // that comes in while it runs asks for the next one.
+        if ($coworker->getTriggerDueAt() !== null) {
+            $coworker->setTriggerDueAt(null);
+            $coworker->setTriggerSource(null);
+            $this->mapper->update($coworker);
+        }
+
         $run = new CoworkerRun();
         $run->setCoworkerId($coworker->getId());
         $run->setUserId($coworker->getUserId());
         $run->setStatus(CoworkerRun::STATUS_RUNNING);
         $run->setStartedAt($now);
+        $run->setStartedBy($startedBy);
         $run = $this->runMapper->insert($run);
         // QBMapper never clears the updated-field marks, and the insert marked
         // every field. Left as is, each progress update would write the whole
@@ -497,6 +519,7 @@ class CoworkerService {
         // request. Cleared, the worker writes only what it changes.
         $run->resetUpdatedFields();
 
+        CoworkerTriggerService::enterRun($coworker->getId());
         try {
             $taskType = $this->registry->get($coworker->getTaskType());
             $result = $taskType->run($coworker, $run, $this->progressCallback($run));
@@ -504,6 +527,8 @@ class CoworkerService {
             return $this->finishCancelled($coworker, $run);
         } catch (\Throwable $e) {
             return $this->finishRun($coworker, $run, null, $e);
+        } finally {
+            CoworkerTriggerService::leaveRun($coworker->getId());
         }
 
         return $this->finishRun($coworker, $run, $result, null);
@@ -531,6 +556,7 @@ class CoworkerService {
             return $run;
         }
 
+        CoworkerTriggerService::enterRun($coworker->getId());
         try {
             $taskType = $this->registry->get($coworker->getTaskType());
             if (!$taskType instanceof ResumableCoworkerTaskType) {
@@ -548,6 +574,8 @@ class CoworkerService {
             return $this->finishCancelled($coworker, $run);
         } catch (\Throwable $e) {
             return $this->finishRun($coworker, $run, null, $e);
+        } finally {
+            CoworkerTriggerService::leaveRun($coworker->getId());
         }
 
         return $this->finishRun($coworker, $run, $result, null);
@@ -591,9 +619,43 @@ class CoworkerService {
         $coworker->setLastStatus(CoworkerRun::STATUS_CANCELLED);
         $coworker->setLastError(null);
         $coworker->setLastRunAt($finishedAt);
+        $this->reloadTriggerDue($coworker);
         $this->refreshNextRun($coworker, $finishedAt);
         $this->mapper->update($coworker);
+        $this->announceFinished($coworker, $run);
         return $run;
+    }
+
+    /**
+     * Take the pending trigger from the stored row. A trigger can come in from
+     * another request while a run is going, and writing this process's copy
+     * back would otherwise drop it.
+     */
+    private function reloadTriggerDue(Coworker $coworker): void {
+        try {
+            $stored = $this->mapper->findById($coworker->getId());
+        } catch (\Throwable) {
+            return;
+        }
+        if ($stored->getTriggerDueAt() !== $coworker->getTriggerDueAt()) {
+            $coworker->setTriggerDueAt($stored->getTriggerDueAt());
+            $coworker->setTriggerSource($stored->getTriggerSource());
+        }
+    }
+
+    /** Tell listeners, and through Webhook listeners other systems, that a run ended. */
+    private function announceFinished(Coworker $coworker, CoworkerRun $run): void {
+        if ($this->events === null) {
+            return;
+        }
+        try {
+            $this->events->dispatchTyped(new CoworkerRunFinishedEvent($coworker, $run));
+        } catch (\Throwable $e) {
+            $this->logger->warning('AIquila Cowork: a listener for the finished run failed', [
+                'coworker' => $coworker->getId(),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -651,15 +713,18 @@ class CoworkerService {
         $this->runMapper->update($run);
 
         $coworker->setLastRunAt($finishedAt);
+        $this->reloadTriggerDue($coworker);
         $this->refreshNextRun($coworker, $finishedAt);
         $this->mapper->update($coworker);
+        $this->announceFinished($coworker, $run);
 
         return $run;
     }
 
     /**
-     * Recompute next_run_at from the cron schedule, or null it out when the
-     * coworker is inactive/paused so the executor skips it.
+     * Recompute next_run_at: the earlier of the next scheduled time (when the
+     * schedule is on) and a run a trigger asked for. Null when the coworker is
+     * inactive or paused, so the executor skips it.
      */
     private function refreshNextRun(Coworker $coworker, ?int $from = null): void {
         if (!$coworker->getIsActive() || $coworker->getPaused()) {
@@ -667,17 +732,20 @@ class CoworkerService {
             return;
         }
         $from ??= $this->timeFactory->getTime();
-        try {
-            $next = (new CronSchedule($coworker->getCronSchedule()))->getNextRunTime($from);
-            $coworker->setNextRunAt($next);
-        } catch (\InvalidArgumentException $e) {
-            $this->logger->warning('AIquila Cowork: invalid cron schedule', [
-                'coworker' => $coworker->getId(),
-                'schedule' => $coworker->getCronSchedule(),
-                'error' => $e->getMessage(),
-            ]);
-            $coworker->setNextRunAt(null);
+        $next = $coworker->getTriggerDueAt();
+        if ($coworker->getScheduled()) {
+            try {
+                $scheduled = (new CronSchedule($coworker->getCronSchedule()))->getNextRunTime($from);
+                $next = $next === null ? $scheduled : min($next, $scheduled);
+            } catch (\InvalidArgumentException $e) {
+                $this->logger->warning('AIquila Cowork: invalid cron schedule', [
+                    'coworker' => $coworker->getId(),
+                    'schedule' => $coworker->getCronSchedule(),
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
+        $coworker->setNextRunAt($next);
     }
 
     /**
@@ -766,6 +834,16 @@ class CoworkerService {
         if (array_key_exists('paused', $data)) {
             $coworker->setPaused(!empty($data['paused']) ? 1 : 0);
         }
+        if (array_key_exists('scheduled', $data)) {
+            $coworker->setScheduled(!empty($data['scheduled']) ? 1 : 0);
+        }
+        if (array_key_exists('trigger_files', $data)) {
+            $on = !empty($data['trigger_files']);
+            if ($on && !$coworker->getTriggerFiles()) {
+                $this->assertTriggersAllowed($coworker);
+            }
+            $coworker->setTriggerFiles($on ? 1 : 0);
+        }
         if (array_key_exists('options', $data)) {
             $options = $data['options'];
             if (is_string($options)) {
@@ -792,6 +870,20 @@ class CoworkerService {
         }
         if ($coworker->getCronSchedule() === '') {
             $coworker->setCronSchedule('0 3 * * *');
+        }
+        if ($coworker->getTriggerFiles() && $coworker->getInputType() === 'none') {
+            throw new ValidationException('A coworker without an input folder cannot run on file changes');
+        }
+    }
+
+    /**
+     * Whether the account the coworker runs as may use triggers.
+     *
+     * @throws ValidationException when the administrator has not allowed it
+     */
+    public function assertTriggersAllowed(Coworker $coworker): void {
+        if ($this->triggerPolicy === null || !$this->triggerPolicy->isAllowed($coworker->getUserId())) {
+            throw new ValidationException('Your administrator has not allowed coworker triggers for your account');
         }
     }
 }

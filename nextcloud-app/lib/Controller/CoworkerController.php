@@ -11,6 +11,8 @@ use OCA\AIquila\Db\Coworker;
 use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Service\CoworkerService;
 use OCA\AIquila\Service\CoworkerTemplates;
+use OCA\AIquila\Service\CoworkerTriggerPolicy;
+use OCA\AIquila\Service\CoworkerTriggerService;
 use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\McpClientService;
 use OCP\AppFramework\Controller;
@@ -25,6 +27,7 @@ use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCA\AIquila\Service\AppSettings;
 use OCP\IRequest;
+use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -48,6 +51,9 @@ class CoworkerController extends Controller {
         private readonly LoggerInterface $logger,
         private readonly CoworkerTemplates $instanceTemplates,
         private readonly ?McpClientService $mcpClient = null,
+        private readonly ?CoworkerTriggerService $triggers = null,
+        private readonly ?CoworkerTriggerPolicy $triggerPolicy = null,
+        private readonly ?IURLGenerator $urlGenerator = null,
     ) {
         parent::__construct($appName, $request);
     }
@@ -479,10 +485,129 @@ class CoworkerController extends Controller {
     }
 
     /**
-     * Whitelisted request body fields for create/update.
+     * Whether the current user may use coworker triggers
      *
-     * @return array<string, mixed>
+     * Triggers start a coworker when files in its input folder change, or
+     * when its trigger URL is called. An administrator turns them on and
+     * chooses who may use them.
+     *
+     * 200: The policy for the current user
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{allowed: bool, debounceSeconds: int, maxRunsPerHour: int}, array{}>
      */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[OpenAPI]
+    public function triggerPolicy(): JSONResponse {
+        return new JSONResponse([
+            'allowed' => $this->triggerPolicy?->isAllowed((string)$this->userId) ?? false,
+            'debounceSeconds' => CoworkerTriggerService::DEBOUNCE_SECONDS,
+            'maxRunsPerHour' => CoworkerTriggerService::MAX_TRIGGERED_RUNS_PER_HOUR,
+        ]);
+    }
+
+    /**
+     * Create a trigger URL for a coworker
+     *
+     * Returns the URL and its secret. The secret is shown this once; only a
+     * hash of it is stored. Calling this again replaces the secret, so the old
+     * one stops working. Call the URL with `POST` and the secret as a bearer
+     * token: `Authorization: Bearer <secret>`.
+     *
+     * @param int $id Coworker ID
+     *
+     * 200: The trigger URL and its secret
+     * 403: Coworker triggers are not allowed for this account
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{url: string, token: string}, array{}>|JSONResponse<Http::STATUS_FORBIDDEN|Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[UserRateLimit(limit: 10, period: 300)]
+    #[OpenAPI]
+    public function createTriggerUrl(int $id): JSONResponse {
+        if ($this->triggers === null) {
+            return $this->clientError(403, 'Coworker triggers are not available');
+        }
+        try {
+            $coworker = $this->service->findForUser($id, (string)$this->userId);
+            $this->service->assertTriggersAllowed($coworker);
+        } catch (DoesNotExistException) {
+            return $this->clientError(404, 'Coworker not found');
+        } catch (ValidationException $e) {
+            return $this->clientError(403, $e->getMessage());
+        }
+        $token = $this->triggers->createToken($coworker);
+        return new JSONResponse(['url' => $this->triggerUrl($id), 'token' => $token]);
+    }
+
+    /**
+     * Remove a coworker's trigger URL
+     *
+     * @param int $id Coworker ID
+     *
+     * 200: The coworker, now without a trigger URL
+     * 404: Coworker not found
+     *
+     * @return JSONResponse<Http::STATUS_OK, array<string, mixed>, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     */
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
+    #[OpenAPI]
+    public function deleteTriggerUrl(int $id): JSONResponse {
+        try {
+            $coworker = $this->service->findForUser($id, (string)$this->userId);
+        } catch (DoesNotExistException) {
+            return $this->clientError(404, 'Coworker not found');
+        }
+        $this->triggers?->revokeToken($coworker);
+        return new JSONResponse($coworker->jsonSerialize());
+    }
+
+    private function triggerUrl(int $id): string {
+        $path = '/apps/aiquila/api/coworkers/' . $id . '/trigger';
+        return $this->urlGenerator === null
+            ? $path
+            : $this->urlGenerator->linkToRouteAbsolute('aiquila.coworker_trigger.trigger', ['id' => $id]);
+    }
+
+    /**
+     * Get the coworker trigger policy
+     *
+     * 200: Whether triggers are on, and for whom
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{enabled: bool, users: list<string>, groups: list<string>}, array{}>
+     */
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function adminTriggerPolicy(): JSONResponse {
+        return new JSONResponse($this->triggerPolicy?->get() ?? ['enabled' => false, 'users' => [], 'groups' => []]);
+    }
+
+    /**
+     * Set the coworker trigger policy
+     *
+     * Triggers are off until turned on. Once on, they are open to everyone
+     * when both lists are empty, and otherwise to the users named and the
+     * members of the groups named. Settings left out are kept.
+     *
+     * @param bool|null $enabled Whether coworker triggers are on
+     * @param list<string>|null $users User IDs allowed to use them
+     * @param list<string>|null $groups Group IDs whose members may use them
+     *
+     * 200: The saved policy
+     *
+     * @return JSONResponse<Http::STATUS_OK, array{enabled: bool, users: list<string>, groups: list<string>}, array{}>
+     */
+    #[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
+    public function setAdminTriggerPolicy(?bool $enabled = null, ?array $users = null, ?array $groups = null): JSONResponse {
+        if ($this->triggerPolicy === null) {
+            return new JSONResponse(['enabled' => false, 'users' => [], 'groups' => []]);
+        }
+        $this->triggerPolicy->set($enabled, $users, $groups);
+        return new JSONResponse($this->triggerPolicy->get());
+    }
+
     /**
      * List the coworker templates published for the instance
      *
@@ -556,12 +681,18 @@ class CoworkerController extends Controller {
         return array_merge($builtin, $this->instanceTemplates->list());
     }
 
+    /**
+     * Whitelisted request body fields for create/update.
+     *
+     * @return array<string, mixed>
+     */
     private function bodyData(): array {
         $params = $this->request->getParams();
         $allowed = [
             'title', 'description', 'provider', 'model', 'task_type', 'cron_schedule',
             'input_type', 'input_path', 'output_type', 'output_path',
             'is_active', 'paused', 'options', 'custom_prompt', 'prompt_id', 'teamId',
+            'scheduled', 'trigger_files',
         ];
         $data = [];
         foreach ($allowed as $key) {

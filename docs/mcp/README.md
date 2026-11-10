@@ -31,7 +31,7 @@ Core system operations via WebDAV and OCC:
 
 ### App Integrations
 Nextcloud apps and administration:
-- **Calendar** — Full CRUD for events with recurrence, attendees, and alarms (CalDAV)
+- **Calendar** — Full CRUD for events with recurrence, attendees, and alarms (CalDAV), plus a room finder and room booking
 - **Tasks** — Full CRUD for tasks with subtasks, priorities, and categories (CalDAV)
 - **Contacts** — Full CRUD for contacts with structured fields (CardDAV)
 - **Mail** — Email accounts, mailboxes, messages, send, flags, and attachments
@@ -43,7 +43,8 @@ Nextcloud apps and administration:
 - **Tables** — Structured data: tables, views, rows, columns, relations, and structure import/export
 - **Projects** — AIquila projects (paths plus a system prompt), project templates and the prompt library
 - **Coworkers** — Create, run, pause and inspect the AIquila Coworkers (saved AI jobs) and their run history
-- **Text** — Read, write and delete a folder's Text workspace (`Readme.md`), or get a direct-edit URL
+- **Text** — Read, write and delete a folder's Text workspace (`Readme.md`), get a direct-edit URL, and work with the inline comments in Markdown documents
+- **File Comments** — Read, write and mark read the comments on files and folders
 - **Notifications** — Read, mark and dismiss Nextcloud notifications
 - **User Status & Out of Office** — Set status, status message, and absence periods
 - **Bookmarks** — Bookmark CRUD, folder hierarchy, and tag management
@@ -65,7 +66,7 @@ Nextcloud apps and administration:
 - **Recommendations** — The files Nextcloud suggests for the current user
 - **AIquila** — Configure and test the AI provider integration
 
-**Total: 372 tools across 46 categories**
+**Total: 384 tools across 47 categories**
 
 ## Tools Reference
 
@@ -126,7 +127,7 @@ Nextcloud apps and administration:
 
 ### App Tools
 
-#### Calendar (6 tools)
+#### Calendar (9 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_calendars` | List all calendars | [Calendar](tools/apps/calendar.md#list_calendars) |
@@ -135,6 +136,9 @@ Nextcloud apps and administration:
 | `create_event` | Create an event | [Calendar](tools/apps/calendar.md#create_event) |
 | `update_event` | Update an event | [Calendar](tools/apps/calendar.md#update_event) |
 | `delete_event` | Delete an event | [Calendar](tools/apps/calendar.md#delete_event) |
+| `list_calendar_rooms` | List bookable rooms and resources | [Calendar](tools/apps/calendar.md#list_calendar_rooms) |
+| `get_free_busy` | Show when rooms, resources or people are busy | [Calendar](tools/apps/calendar.md#get_free_busy) |
+| `find_free_rooms` | Find the rooms free for a time range | [Calendar](tools/apps/calendar.md#find_free_rooms) |
 
 #### Tasks (6 tools)
 | Tool | Description | Documentation |
@@ -255,10 +259,10 @@ Nextcloud apps and administration:
 | `delete_news_folder` | Delete a folder | [News](tools/apps/news.md#delete_news_folder) |
 | `mark_news_folder_read` | Mark a folder's items read | [News](tools/apps/news.md#mark_news_folder_read) |
 | `list_news_items` | List/filter articles | [News](tools/apps/news.md#list_news_items) |
-| `mark_item_read` | Mark an article read | [News](tools/apps/news.md#mark_item_read) |
-| `mark_item_unread` | Mark an article unread | [News](tools/apps/news.md#mark_item_unread) |
-| `star_item` | Star an article | [News](tools/apps/news.md#star_item) |
-| `unstar_item` | Unstar an article | [News](tools/apps/news.md#unstar_item) |
+| `mark_item_read` | Mark an article read | [News](tools/apps/news.md#mark_item_read--mark_item_unread) |
+| `mark_item_unread` | Mark an article unread | [News](tools/apps/news.md#mark_item_read--mark_item_unread) |
+| `star_item` | Star an article | [News](tools/apps/news.md#star_item--unstar_item) |
+| `unstar_item` | Unstar an article | [News](tools/apps/news.md#star_item--unstar_item) |
 | `mark_items_read` | Mark multiple articles read | [News](tools/apps/news.md#mark_items_read) |
 
 #### Activity (2 tools)
@@ -275,8 +279,8 @@ Nextcloud apps and administration:
 | `create_poll` | Create a new poll (text or date) | [Polls](tools/apps/polls.md#create_poll) |
 | `update_poll` | Update poll configuration | [Polls](tools/apps/polls.md#update_poll) |
 | `delete_poll` | Delete a poll | [Polls](tools/apps/polls.md#delete_poll) |
-| `close_poll` | Close voting on a poll | [Polls](tools/apps/polls.md#close_poll) |
-| `reopen_poll` | Reopen a closed poll | [Polls](tools/apps/polls.md#reopen_poll) |
+| `close_poll` | Close voting on a poll | [Polls](tools/apps/polls.md#close_poll--reopen_poll) |
+| `reopen_poll` | Reopen a closed poll | [Polls](tools/apps/polls.md#close_poll--reopen_poll) |
 | `clone_poll` | Clone an existing poll | [Polls](tools/apps/polls.md#clone_poll) |
 | `list_poll_options` | List options with tallies | [Polls](tools/apps/polls.md#list_poll_options) |
 | `add_text_poll_option` | Add a text option | [Polls](tools/apps/polls.md#add_text_poll_option) |
@@ -404,33 +408,33 @@ Nextcloud apps and administration:
 #### Deck (12 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `deck_list_boards` | List all Deck boards | — |
-| `deck_get_board` | Get details of a Deck board including its labels and access control list (ACL) | — |
-| `deck_create_board` | Create a new Deck board, optionally owned by a team | — |
-| `deck_list_stacks` | List all stacks (columns) of a Deck board, including the cards in each stack | — |
-| `deck_create_stack` | Create a new stack (column) on a Deck board | — |
-| `deck_get_card` | Get full details of a Deck card including description, labels, and assigned users | — |
-| `deck_create_card` | Create a new card in a Deck stack | — |
-| `deck_update_card` | Update an existing Deck card | — |
-| `deck_move_card` | Move a card to a different stack (column) on the same board | — |
-| `deck_archive_card` | Archive or unarchive a Deck card | — |
-| `deck_assign_label` | Assign a label to a Deck card | — |
-| `deck_assign_user` | Assign a user to a Deck card | — |
+| `deck_list_boards` | List all Deck boards | [Deck](tools/apps/deck.md#deck_list_boards) |
+| `deck_get_board` | Get details of a Deck board including its labels and access control list (ACL) | [Deck](tools/apps/deck.md#deck_get_board) |
+| `deck_create_board` | Create a new Deck board, optionally owned by a team | [Deck](tools/apps/deck.md#deck_create_board) |
+| `deck_list_stacks` | List all stacks (columns) of a Deck board, including the cards in each stack | [Deck](tools/apps/deck.md#deck_list_stacks) |
+| `deck_create_stack` | Create a new stack (column) on a Deck board | [Deck](tools/apps/deck.md#deck_create_stack) |
+| `deck_get_card` | Get full details of a Deck card including description, labels, and assigned users | [Deck](tools/apps/deck.md#deck_get_card) |
+| `deck_create_card` | Create a new card in a Deck stack | [Deck](tools/apps/deck.md#deck_create_card) |
+| `deck_update_card` | Update an existing Deck card | [Deck](tools/apps/deck.md#deck_update_card) |
+| `deck_move_card` | Move a card to a different stack (column) on the same board | [Deck](tools/apps/deck.md#deck_move_card) |
+| `deck_archive_card` | Archive or unarchive a Deck card | [Deck](tools/apps/deck.md#deck_archive_card) |
+| `deck_assign_label` | Assign a label to a Deck card | [Deck](tools/apps/deck.md#deck_assign_label) |
+| `deck_assign_user` | Assign a user to a Deck card | [Deck](tools/apps/deck.md#deck_assign_user) |
 
 #### Photos (11 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `photos_list_albums` | List all photo albums owned by the current user | — |
-| `photos_get_album` | Get details of a photo album including its files | — |
-| `photos_create_album` | Create a new photo album | — |
-| `photos_delete_album` | Delete a photo album | — |
-| `photos_rename_album` | Rename a photo album | — |
-| `photos_add_to_album` | Add one or more files to a photo album | — |
-| `photos_remove_from_album` | Remove one or more files from a photo album by file ID (use photos_get_album to find… | — |
-| `photos_get_metadata` | Get photo/video metadata (EXIF) for a file | — |
-| `photos_set_favorite` | Mark or unmark a file as favorite | — |
-| `photos_set_album_location` | Set or update the location metadata on a photo album | — |
-| `photos_add_collaborators` | Add collaborators (users or groups) to a photo album | — |
+| `photos_list_albums` | List all photo albums owned by the current user | [Photos](tools/apps/photos.md#photos_list_albums) |
+| `photos_get_album` | Get details of a photo album including its files | [Photos](tools/apps/photos.md#photos_get_album) |
+| `photos_create_album` | Create a new photo album | [Photos](tools/apps/photos.md#photos_create_album) |
+| `photos_delete_album` | Delete a photo album | [Photos](tools/apps/photos.md#photos_delete_album) |
+| `photos_rename_album` | Rename a photo album | [Photos](tools/apps/photos.md#photos_rename_album) |
+| `photos_add_to_album` | Add one or more files to a photo album | [Photos](tools/apps/photos.md#photos_add_to_album) |
+| `photos_remove_from_album` | Remove one or more files from a photo album by file ID (use photos_get_album to find… | [Photos](tools/apps/photos.md#photos_remove_from_album) |
+| `photos_get_metadata` | Get photo/video metadata (EXIF) for a file | [Photos](tools/apps/photos.md#photos_get_metadata) |
+| `photos_set_favorite` | Mark or unmark a file as favorite | [Photos](tools/apps/photos.md#photos_set_favorite) |
+| `photos_set_album_location` | Set or update the location metadata on a photo album | [Photos](tools/apps/photos.md#photos_set_album_location) |
+| `photos_add_collaborators` | Add collaborators (users or groups) to a photo album | [Photos](tools/apps/photos.md#photos_add_collaborators) |
 
 #### Office (3 tools)
 | Tool | Description | Documentation |
@@ -476,17 +480,17 @@ Nextcloud apps and administration:
 #### Projects (11 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `list_projects` | List all AIquila projects for the current user | — |
-| `create_project` | Create a new AIquila project, optionally owned by a team | — |
-| `get_project` | Get details of an AIquila project including its file/directory paths | — |
-| `update_project` | Update an AIquila project | — |
-| `delete_project` | Delete an AIquila project | — |
-| `add_project_path` | Add a file or directory path to an AIquila project | — |
-| `remove_project_path` | Remove a file or directory path from an AIquila project | — |
-| `list_prompts` | List the AIquila prompt library: organization prompts and your own | — |
-| `get_prompt` | Get the full text of a prompt from the library | — |
-| `list_project_templates` | List organization and personal project templates | — |
-| `create_project_from_template` | Create a project as a copy of a template | — |
+| `list_projects` | List all AIquila projects for the current user | [Projects](tools/apps/projects.md#list_projects) |
+| `create_project` | Create a new AIquila project, optionally owned by a team | [Projects](tools/apps/projects.md#create_project) |
+| `get_project` | Get details of an AIquila project including its file/directory paths | [Projects](tools/apps/projects.md#get_project) |
+| `update_project` | Update an AIquila project | [Projects](tools/apps/projects.md#update_project) |
+| `delete_project` | Delete an AIquila project | [Projects](tools/apps/projects.md#delete_project) |
+| `add_project_path` | Add a file or directory path to an AIquila project | [Projects](tools/apps/projects.md#add_project_path) |
+| `remove_project_path` | Remove a file or directory path from an AIquila project | [Projects](tools/apps/projects.md#remove_project_path) |
+| `list_prompts` | List the AIquila prompt library: organization prompts and your own | [Projects](tools/apps/projects.md#list_prompts) |
+| `get_prompt` | Get the full text of a prompt from the library | [Projects](tools/apps/projects.md#get_prompt) |
+| `list_project_templates` | List organization and personal project templates | [Projects](tools/apps/projects.md#list_project_templates) |
+| `create_project_from_template` | Create a project as a copy of a template | [Projects](tools/apps/projects.md#create_project_from_template) |
 
 #### Coworkers (15 tools)
 | Tool | Description | Documentation |
@@ -507,72 +511,85 @@ Nextcloud apps and administration:
 | `get_coworker_runs` | Get recent run history (progress, status, summary) | [Coworkers](tools/apps/cowork.md#get_coworker_runs) |
 | `get_coworker_run` | Get one run in full: summary, error and per-item log | [Coworkers](tools/apps/cowork.md#get_coworker_run) |
 
-#### Text (5 tools)
+#### Text (9 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `get_text_workspace` | Get metadata of the Text workspace file (Readme.md) for a folder | — |
-| `read_text_workspace` | Read the content of a folder's Text workspace file (Readme.md) | — |
-| `write_text_workspace` | Create or overwrite a folder's Text workspace file | — |
-| `delete_text_workspace` | Delete the Text workspace file (Readme.md) for a folder | — |
-| `get_text_workspace_edit_url` | Get a one-shot direct-edit URL for a folder's Text workspace | — |
+| `get_text_workspace` | Get metadata of the Text workspace file (Readme.md) for a folder | [Text](tools/apps/text.md#get_text_workspace) |
+| `read_text_workspace` | Read the content of a folder's Text workspace file (Readme.md) | [Text](tools/apps/text.md#read_text_workspace) |
+| `write_text_workspace` | Create or overwrite a folder's Text workspace file | [Text](tools/apps/text.md#write_text_workspace) |
+| `delete_text_workspace` | Delete the Text workspace file (Readme.md) for a folder | [Text](tools/apps/text.md#delete_text_workspace) |
+| `get_text_workspace_edit_url` | Get a one-shot direct-edit URL for a folder's Text workspace | [Text](tools/apps/text.md#get_text_workspace_edit_url) |
+| `list_text_comments` | List the inline comment threads in a Markdown document | [Text](tools/apps/text.md#list_text_comments) |
+| `add_text_comment` | Start an inline comment thread after a piece of text | [Text](tools/apps/text.md#add_text_comment) |
+| `reply_text_comment` | Reply to an inline comment thread | [Text](tools/apps/text.md#reply_text_comment) |
+| `delete_text_comment` | Delete an inline comment thread, or one comment in it | [Text](tools/apps/text.md#delete_text_comment) |
+
+#### File Comments (5 tools)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_file_comments` | List the comments on a file or folder | [File Comments](tools/apps/comments.md#list_file_comments) |
+| `add_file_comment` | Comment on a file or folder | [File Comments](tools/apps/comments.md#add_file_comment) |
+| `update_file_comment` | Change one of your own comments | [File Comments](tools/apps/comments.md#update_file_comment) |
+| `delete_file_comment` | Delete one of your own comments | [File Comments](tools/apps/comments.md#delete_file_comment) |
+| `mark_file_comments_read` | Mark a file's comments as read | [File Comments](tools/apps/comments.md#mark_file_comments_read) |
 
 #### Trash (3 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `list_trash` | List files in the trash / recycle bin | — |
-| `restore_from_trash` | Restore a file from the trash to its original location (use the Key from list_trash) | — |
-| `empty_trash` | Permanently delete all files in the trash (cannot be undone) | — |
+| `list_trash` | List files in the trash / recycle bin | [Trash](tools/apps/trash.md#list_trash) |
+| `restore_from_trash` | Restore a file from the trash to its original location (use the Key from list_trash) | [Trash](tools/apps/trash.md#restore_from_trash) |
+| `empty_trash` | Permanently delete all files in the trash (cannot be undone) | [Trash](tools/apps/trash.md#empty_trash) |
 
 #### File Versions (2 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `list_file_versions` | List previous versions of a file (use get_file_info to find the fileId) | — |
-| `restore_file_version` | Restore a previous version of a file (creates a new current version from the old one) | — |
+| `list_file_versions` | List previous versions of a file (use get_file_info to find the fileId) | [File Versions](tools/apps/versions.md#list_file_versions) |
+| `restore_file_version` | Restore a previous version of a file (creates a new current version from the old one) | [File Versions](tools/apps/versions.md#restore_file_version) |
 
 #### Notifications (4 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `list_notifications` | List all notifications for the current user | — |
-| `get_notification` | Get details of a specific notification by ID | — |
-| `mark_notification_read` | Mark a notification as read (deletes it) | — |
-| `delete_all_notifications` | Delete all notifications for the current user | — |
+| `list_notifications` | List all notifications for the current user | [Notifications](tools/apps/notifications.md#list_notifications) |
+| `get_notification` | Get details of a specific notification by ID | [Notifications](tools/apps/notifications.md#get_notification) |
+| `mark_notification_read` | Mark a notification as read (deletes it) | [Notifications](tools/apps/notifications.md#mark_notification_read) |
+| `delete_all_notifications` | Delete all notifications for the current user | [Notifications](tools/apps/notifications.md#delete_all_notifications) |
 
 #### User Status (5 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `get_user_status` | Get the current user's presence status (online, away, DND, invisible, custom message) | — |
-| `set_user_status` | Set the current user's status type (online, away, dnd, invisible, offline) | — |
-| `set_user_status_message` | Set a custom status message with optional emoji icon and auto-clear time | — |
-| `clear_user_status_message` | Clear the current user's custom status message | — |
-| `list_user_statuses` | List all users' statuses for team presence visibility | — |
+| `get_user_status` | Get the current user's presence status (online, away, DND, invisible, custom message) | [User Status](tools/apps/user-status.md#get_user_status) |
+| `set_user_status` | Set the current user's status type (online, away, dnd, invisible, offline) | [User Status](tools/apps/user-status.md#set_user_status) |
+| `set_user_status_message` | Set a custom status message with optional emoji icon and auto-clear time | [User Status](tools/apps/user-status.md#set_user_status_message) |
+| `clear_user_status_message` | Clear the current user's custom status message | [User Status](tools/apps/user-status.md#clear_user_status_message) |
+| `list_user_statuses` | List all users' statuses for team presence visibility | [User Status](tools/apps/user-status.md#list_user_statuses) |
 
 #### Out of Office (3 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `get_out_of_office` | Get a user's configured out-of-office / absence, active or scheduled (NC 28+) | — |
-| `set_out_of_office` | Set an out-of-office / absence period with status message (NC 28+) | — |
-| `clear_out_of_office` | Clear a user's out-of-office / absence status (NC 28+) | — |
+| `get_out_of_office` | Get a user's configured out-of-office / absence, active or scheduled (NC 28+) | [Out of Office](tools/apps/absence.md#get_out_of_office) |
+| `set_out_of_office` | Set an out-of-office / absence period with status message (NC 28+) | [Out of Office](tools/apps/absence.md#set_out_of_office) |
+| `clear_out_of_office` | Clear a user's out-of-office / absence status (NC 28+) | [Out of Office](tools/apps/absence.md#clear_out_of_office) |
 
 #### Announcements (3 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `list_announcements` | List announcements from the Nextcloud Announcement Center (org-wide notices such as | — |
-| `create_announcement` | Create a new announcement in the Announcement Center | — |
-| `delete_announcement` | Delete an announcement by its ID | — |
+| `list_announcements` | List announcements from the Nextcloud Announcement Center (org-wide notices such as | [Announcements](tools/apps/announcements.md#list_announcements) |
+| `create_announcement` | Create a new announcement in the Announcement Center | [Announcements](tools/apps/announcements.md#create_announcement) |
+| `delete_announcement` | Delete an announcement by its ID | [Announcements](tools/apps/announcements.md#delete_announcement) |
 
 #### Passman (3 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `passman_list_vaults` | List all Passman password vaults | — |
-| `passman_list_credentials` | List credentials (metadata only) in a Passman vault | — |
-| `passman_get_credential_info` | Get non-secret metadata for a single Passman credential (label, id, timestamps, flags) | — |
+| `passman_list_vaults` | List all Passman password vaults | [Passman](tools/apps/passman.md#passman_list_vaults) |
+| `passman_list_credentials` | List credentials (metadata only) in a Passman vault | [Passman](tools/apps/passman.md#passman_list_credentials) |
+| `passman_get_credential_info` | Get non-secret metadata for a single Passman credential (label, id, timestamps, flags) | [Passman](tools/apps/passman.md#passman_get_credential_info) |
 
 #### Registration (3 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `get_registration_settings` | Read the Nextcloud Registration app settings (self-service signup configuration), such… | — |
-| `update_registration_settings` | Update one or more Nextcloud Registration app settings | — |
-| `reset_registration_setting` | Reset a Nextcloud Registration app setting to its default by deleting the stored value | — |
+| `get_registration_settings` | Read the Nextcloud Registration app settings (self-service signup configuration), such… | [Registration](tools/apps/registration.md#get_registration_settings) |
+| `update_registration_settings` | Update one or more Nextcloud Registration app settings | [Registration](tools/apps/registration.md#update_registration_settings) |
+| `reset_registration_setting` | Reset a Nextcloud Registration app setting to its default by deleting the stored value | [Registration](tools/apps/registration.md#reset_registration_setting) |
 
 #### Social (26 tools)
 | Tool | Description | Documentation |
@@ -607,67 +624,44 @@ Nextcloud apps and administration:
 #### Social Sharing (1 tool)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `generate_social_share_links` | Generate social-network share URLs (email, X/Twitter, Facebook, Telegram, WhatsApp, | — |
+| `generate_social_share_links` | Generate social-network share URLs (email, X/Twitter, Facebook, Telegram, WhatsApp, | [Social Sharing](tools/apps/social-sharing.md#generate_social_share_links) |
 
 #### Terms of Service (5 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `get_terms_of_service` | Read the Nextcloud Terms of Service admin configuration: all published terms (by | — |
-| `set_terms_of_service` | Create or update the terms of service for a given country/language pair | — |
-| `delete_terms_of_service` | Delete a single terms of service entry by its id (see get_terms_of_service) | — |
-| `reset_terms_signatures` | Reset ALL users' terms of service signatures org-wide, forcing every user to accept | — |
-| `update_terms_settings` | Update the Terms of Service enforcement settings: whether logged-in users must accept | — |
+| `get_terms_of_service` | Read the Nextcloud Terms of Service admin configuration: all published terms (by | [Terms of Service](tools/apps/terms-of-service.md#get_terms_of_service) |
+| `set_terms_of_service` | Create or update the terms of service for a given country/language pair | [Terms of Service](tools/apps/terms-of-service.md#set_terms_of_service) |
+| `delete_terms_of_service` | Delete a single terms of service entry by its id (see get_terms_of_service) | [Terms of Service](tools/apps/terms-of-service.md#delete_terms_of_service) |
+| `reset_terms_signatures` | Reset ALL users' terms of service signatures org-wide, forcing every user to accept | [Terms of Service](tools/apps/terms-of-service.md#reset_terms_signatures) |
+| `update_terms_settings` | Update the Terms of Service enforcement settings: whether logged-in users must accept | [Terms of Service](tools/apps/terms-of-service.md#update_terms_settings) |
 
 #### Translate (1 tool)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `translate_text` | Translate text between languages using Nextcloud's configured translation provider | — |
-
-`translate_text` runs as the `core:text2text:translate` AI task when a TaskProcessing provider
-offers it (translate2, the AIquila app, LLM apps), and falls back to the older Translation API,
-deprecated since Nextcloud 30, when none does. The category is registered when `translate2`,
-`aiquila`, `text_translate` or `translate` is enabled.
+| `translate_text` | Translate text between languages using Nextcloud's configured translation provider | [Translate](tools/apps/translate.md#translate_text) |
 
 #### Recommendations (1 tool)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `list_recommendations` | List files Nextcloud recommends for the configured user (e.g | — |
+| `list_recommendations` | List files Nextcloud recommends for the configured user (e.g | [Recommendations](tools/apps/recommendations.md#list_recommendations) |
 
 ## Architecture
 
 The AIquila MCP Server is built with a modular architecture:
 
 ```
-mcp-server/
-├── src/
-│   ├── index.ts              # Main server entry point
-│   ├── client/               # Client infrastructure
-│   │   ├── webdav.ts        # WebDAV client singleton
-│   │   └── caldav.ts        # CalDAV operations
-│   └── tools/
-│       ├── types.ts         # Shared type definitions
-│       ├── system/          # System-level tools
-│       │   ├── files.ts     # File operations (11 tools)
-│       │   ├── status.ts    # System status (3 tools)
-│       │   ├── apps.ts      # App management (6 tools)
-│       │   ├── security.ts  # Security checks (2 tools)
-│       │   ├── search.ts    # Unified search (2 tools)
-│       │   └── occ.ts       # OCC command execution (1 tool)
-│       └── apps/            # App-specific tools
-│           ├── calendar.ts  # Calendar events (6 tools)
-│           ├── tasks.ts     # Tasks via CalDAV (6 tools)
-│           ├── contacts.ts  # Contacts via CardDAV (6 tools)
-│           ├── mail.ts      # Email management (8 tools)
-│           ├── bookmarks.ts # Bookmarks, folders, tags (13 tools)
-│           ├── maps.ts      # Maps, GPS, tracks, photos (26 tools)
-│           ├── notes.ts     # Markdown notes (5 tools)
-│           ├── cookbook.ts   # Recipes (6 tools)
-│           ├── assistant.ts # NC AI task processing (4 tools)
-│           ├── shares.ts    # File sharing (4 tools)
-│           ├── users.ts     # User management (4 tools)
-│           ├── groups.ts    # Group management (4 tools)
-│           ├── tags.ts      # File tagging (6 tools)
-│           └── aiquila.ts   # AIquila config/test (3 tools)
+mcp-server/src/
+├── index.ts           # Entry point: picks the stdio or HTTP transport
+├── server.ts          # MCP server, registers the tools the account can use
+├── tool-registry.ts   # TOOL_REGISTRY: category → Nextcloud app → tools
+├── nc-context.ts      # The Nextcloud account a request acts as
+├── auth/              # OAuth 2.1 authorization server
+├── transports/        # stdio and Streamable HTTP
+├── client/            # Nextcloud clients: OCS, WebDAV, CalDAV and per-app REST
+└── tools/
+    ├── types.ts       # Shared tool types
+    ├── system/        # Always-available tools: files, status, apps, security, OCC, tags, search
+    └── apps/          # One module per category in the tables above
 ```
 
 For developers looking to extend the server, see:

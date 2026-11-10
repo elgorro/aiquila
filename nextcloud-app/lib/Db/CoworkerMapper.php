@@ -103,6 +103,23 @@ class CoworkerMapper extends QBMapper {
     }
 
     /**
+     * Active, unpaused coworkers that run when files in their input folder
+     * change.
+     *
+     * @return list<Coworker>
+     */
+    public function findFileTriggered(): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('trigger_files', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->eq('is_active', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->eq('paused', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)));
+
+        return $this->findEntities($qb);
+    }
+
+    /**
      * A row the user owns, or that one of their teams does.
      *
      * @param list<string> $teamIds

@@ -9,7 +9,8 @@ APPS_DIR="/var/www/html/custom_apps"
 
 occ() {
     if [ "$(id -u)" = "0" ]; then
-        su -p www-data -s /bin/sh -c "php /var/www/html/occ $*"
+        # Arguments go to the shell as "$@", so ones with spaces stay whole.
+        su -p www-data -s /bin/sh -c 'php /var/www/html/occ "$@"' -- sh "$@"
     else
         php /var/www/html/occ "$@"
     fi
@@ -37,11 +38,25 @@ echo "[OK] AIquila enabled"
 # --- Install optional apps for full test coverage ---
 # Installing an app that is already there fails, and this hook also runs on an
 # existing stack.
-echo "[OCC] Installing Talk, Notes, Tasks, Tables and Team folders..."
-for app in spreed notes tasks tables groupfolders; do
+echo "[OCC] Installing Talk, Notes, Tasks, Tables, Team folders and Calendar resources..."
+for app in spreed notes tasks tables groupfolders calendar_resource_management; do
     occ app:install "$app" 2>/dev/null || occ app:enable "$app"
 done
-echo "[OK] Talk, Notes, Tasks, Tables and Team folders installed"
+echo "[OK] Talk, Notes, Tasks, Tables, Team folders and Calendar resources installed"
+
+# --- Seed a building with rooms and a resource for the calendar room finder ---
+# Created once: the check keeps a rerun of this hook from adding duplicates.
+if ! occ calendar-resource:resources:list | grep -q 'dev-room-large'; then
+    echo "[SETUP] Creating calendar rooms and resources..."
+    building=$(occ calendar-resource:building:create "Dev HQ" --address="Dev Street 1" --wheelchair-accessible=1 | tail -1)
+    story=$(occ calendar-resource:story:create "$building" "1" | tail -1)
+    occ calendar-resource:room:create "$story" dev-room-large "Large meeting room" room-large@example.com "Meeting room" \
+        --capacity=12 --room-number=101 --has-projector=1 --has-video-conferencing=1 --has-whiteboard=1 --wheelchair-accessible=1
+    occ calendar-resource:room:create "$story" dev-room-booth "Phone booth" room-booth@example.com "Phone booth" \
+        --capacity=1 --room-number=102 --has-phone=1
+    occ calendar-resource:resource:create dev-projector "$building" "Mobile projector" projector@example.com "Projector"
+    echo "[OK] Calendar rooms and resources created"
+fi
 
 # --- Background jobs via the nextcloud-cron service ---
 occ background:cron
