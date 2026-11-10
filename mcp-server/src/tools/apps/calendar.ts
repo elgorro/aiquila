@@ -1278,8 +1278,9 @@ export const createEventTool = {
           // Timed with TZID: 1 hour after local wall time
           dtend = addHoursToLocalICal(localDtstart, 1);
         } else {
-          // Timed: 1 hour later (UTC)
-          const startDate = new Date(
+          // Timed: 1 hour later. The fields are read as UTC, not in the MCP
+          // server's own time zone, or the end shifts by its offset.
+          const startMs = Date.UTC(
             parseInt(args.dtstart.slice(0, 4)),
             parseInt(args.dtstart.slice(4, 6)) - 1,
             parseInt(args.dtstart.slice(6, 8)),
@@ -1287,8 +1288,9 @@ export const createEventTool = {
             parseInt(args.dtstart.slice(11, 13)),
             parseInt(args.dtstart.slice(13, 15))
           );
-          startDate.setHours(startDate.getHours() + 1);
-          dtend = startDate.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+          const endDate = new Date(startMs + 60 * 60 * 1000);
+          const utc = args.dtstart.endsWith('Z') ? 'Z' : '';
+          dtend = endDate.toISOString().replace(/[-:]/g, '').split('.')[0] + utc;
         }
       }
       const localDtend = tzid ? normalizeLocalICal(dtend, tzid) : dtend;
