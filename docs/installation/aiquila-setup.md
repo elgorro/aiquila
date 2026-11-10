@@ -462,6 +462,14 @@ Assistant actions run on whichever AI provider the user has selected — the sam
 choice that drives chat — within what the admin allows. A task may also pin a
 provider explicitly through the optional `provider` input.
 
+**Assistant memories.** In the Assistant chat, a user can mark a conversation to be
+remembered, and the Assistant hands summaries of those conversations to the chat
+provider with each new message. It does so only for a provider that declares the
+optional `memories` input, and AIquila declares it on `core:text2text:chat` and
+`core:audio2audio:chat`. The memories are added to the end of the system prompt, each
+cut at 4,000 characters and 16,000 in all. The Assistant stores them; AIquila keeps
+no copy.
+
 Not every provider can serve every action. Anything beyond plain text needs the
 matching capability, shown as a chip on the provider's card in the AIquila settings:
 

@@ -70,6 +70,34 @@ class ProviderResolverTest extends TestCase {
         $this->resolver->resolve('alice');
     }
 
+    public function testMemorySectionIsNullWithoutMemories(): void {
+        $this->assertNull(ProviderResolver::memorySection(null));
+        $this->assertNull(ProviderResolver::memorySection('not a list'));
+        $this->assertNull(ProviderResolver::memorySection(['', '  ', 42]));
+    }
+
+    public function testMemorySectionListsEachMemoryAndIndentsItsLines(): void {
+        $section = ProviderResolver::memorySection(["Prefers tea.", "Project Acme:\ndue in March"]);
+        $this->assertStringEndsWith("\n\n- Prefers tea.\n- Project Acme:\n  due in March", $section);
+    }
+
+    public function testMemorySectionCapsEachMemoryAndTheTotal(): void {
+        $long = str_repeat('a', ProviderResolver::MEMORY_MAX_CHARS + 100);
+        $section = ProviderResolver::memorySection([$long]);
+        $this->assertStringContainsString(str_repeat('a', ProviderResolver::MEMORY_MAX_CHARS) . '…', $section);
+        $this->assertStringNotContainsString(str_repeat('a', ProviderResolver::MEMORY_MAX_CHARS + 1), $section);
+
+        $many = array_fill(0, 10, str_repeat('b', ProviderResolver::MEMORY_MAX_CHARS));
+        $kept = substr_count(ProviderResolver::memorySection($many), "\n- ");
+        $this->assertSame(intdiv(ProviderResolver::MEMORIES_MAX_CHARS, ProviderResolver::MEMORY_MAX_CHARS), $kept);
+    }
+
+    public function testSystemPromptIsTheMemoriesAloneWithoutOne(): void {
+        $system = $this->resolver->systemPrompt('alice', ['memories' => ['Prefers tea.']]);
+        $this->assertStringStartsWith('The user asked you to remember', $system);
+        $this->assertSame(null, $this->resolver->systemPrompt('alice', ['memories' => []]));
+    }
+
     public function testRequestedIdIgnoresMissingAndEmptyValues(): void {
         $this->assertNull($this->resolver->requestedId([]));
         $this->assertNull($this->resolver->requestedId(['provider' => '']));
