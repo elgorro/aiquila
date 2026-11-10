@@ -30,6 +30,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setState(?string $state)
  * @method string|null getLog()
  * @method void setLog(?string $log)
+ * @method string|null getStartedBy()
+ * @method void setStartedBy(?string $startedBy)
  *
  * @psalm-type CoworkerRunLogEntry = array{ts: int, level: string, message: string, item: string|null}
  */
@@ -43,6 +45,12 @@ class CoworkerRun extends Entity implements \JsonSerializable {
     public const STATUS_ERROR   = 'error';
     /** Stopped by the user before it finished; see CoworkerService::stop(). */
     public const STATUS_CANCELLED = 'cancelled';
+
+    /** What started a run. */
+    public const STARTED_BY_SCHEDULE = 'schedule';
+    public const STARTED_BY_MANUAL = 'manual';
+    public const STARTED_BY_FILES = 'files';
+    public const STARTED_BY_URL = 'url';
 
     public const LOG_INFO = 'info';
     public const LOG_WARN = 'warn';
@@ -69,6 +77,8 @@ class CoworkerRun extends Entity implements \JsonSerializable {
     protected ?string $state = null;
     /** JSON list of log entries; see appendLog(). Never sent by the run list. */
     protected ?string $log = null;
+    /** What started the run: one of the STARTED_BY_* values; null before triggers existed. */
+    protected ?string $startedBy = null;
 
     public function __construct() {
         $this->addType('coworkerId', 'integer');
@@ -82,6 +92,7 @@ class CoworkerRun extends Entity implements \JsonSerializable {
         $this->addType('finishedAt', 'integer');
         $this->addType('state', 'string');
         $this->addType('log', 'string');
+        $this->addType('startedBy', 'string');
         $this->markFieldsForInsert();
     }
 
@@ -187,6 +198,7 @@ class CoworkerRun extends Entity implements \JsonSerializable {
             // The blob itself stays server-side: run history is user-facing,
             // and nothing in the UI has any use for a custom_id map.
             'pendingBatchId' => $this->getPendingBatchId(),
+            'startedBy' => $this->getStartedBy(),
         ];
     }
 }
