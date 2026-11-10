@@ -890,6 +890,7 @@ class McpClientServiceTest extends TestCase {
         $server->setOauthStaticClientSecret('s3cr:et');
         $server->setOauthClientId('my client');
         $server->setOauthState('st');
+        $server->setOauthFlowIssuer('https://cloud.example');
         $server->setOauthCodeVerifier('verifier');
 
         $captured = [];
@@ -927,6 +928,7 @@ class McpClientServiceTest extends TestCase {
         $server->setOauthStaticClientId('public-client');
         $server->setOauthClientId('public-client');
         $server->setOauthState('st');
+        $server->setOauthFlowIssuer('https://cloud.example');
         $server->setOauthCodeVerifier('verifier');
 
         $captured = [];
@@ -942,6 +944,7 @@ class McpClientServiceTest extends TestCase {
         $server = $this->oauthServer([]);
         $server->setOauthClientId('dcr-client');
         $server->setOauthState('st');
+        $server->setOauthFlowIssuer('https://cloud.example');
         $server->setOauthCodeVerifier('verifier');
 
         $captured = [];
@@ -1272,6 +1275,7 @@ class McpClientServiceTest extends TestCase {
         $server = $this->oauthServer([]);
         $server->setOauthClientId('dcr-client');
         $server->setOauthState('st');
+        $server->setOauthFlowIssuer('https://cloud.example');
         $server->setOauthCodeVerifier('verifier');
 
         $captured = [];
@@ -1324,5 +1328,193 @@ class McpClientServiceTest extends TestCase {
         ]));
 
         $this->assertSame('https://mcp.example.com', $this->service->getResourceUri($server));
+    }
+
+    // ── RFC 9207 / MCP 2026-07-28 "Authorization Response Validation" ──
+
+    /**
+     * A sign-in waiting for its callback, started against https://cloud.example.
+     *
+     * @param array<string, mixed> $metadata
+     * @param list<array<string, mixed>> $captured
+     */
+    private function pendingSignIn(array $metadata, array &$captured): McpServer {
+        $server = $this->oauthServer($metadata);
+        $server->setOauthClientId('dcr-client');
+        $this->service->initiateOAuth($server);
+        $this->injectResponder($captured, fn() => ['access_token' => 'at']);
+        return $server;
+    }
+
+    /** MUST record the issuer from the validated metadata before redirecting. */
+    public function testInitiateOAuthRecordsTheIssuer(): void {
+        $server = $this->oauthServer(['authorization_response_iss_parameter_supported' => true]);
+        $server->setOauthClientId('dcr-client');
+
+        $this->service->initiateOAuth($server);
+
+        $this->assertSame('https://cloud.example', $server->getOauthFlowIssuer());
+        $this->assertTrue($server->getOauthFlowIssRequired());
+    }
+
+    /** Row 1: supported, iss present and equal → proceed to the token request. */
+    public function testIssSupportedAndMatchingProceeds(): void {
+        $captured = [];
+        $server = $this->pendingSignIn(['authorization_response_iss_parameter_supported' => true], $captured);
+
+        $this->service->completeOAuth($server, 'the-code', (string)$server->getOauthState(), 'https://cloud.example');
+
+        $this->assertSame('the-code', $captured[0]['body']['code']);
+        $this->assertSame('at', $server->getOauthAccessToken());
+        $this->assertNull($server->getOauthFlowIssuer());
+        $this->assertNull($server->getOauthState());
+    }
+
+    /** Row 1: simple string comparison, RFC 3986 §6.2.1 — no normalization. */
+    public static function nonIdenticalIssuers(): array {
+        return [
+            'trailing slash' => ['https://cloud.example/'],
+            'host case' => ['https://CLOUD.example'],
+            'scheme case' => ['HTTPS://cloud.example'],
+            'default port' => ['https://cloud.example:443'],
+            'percent-encoding' => ['https://cloud%2Eexample'],
+            'other issuer' => ['https://attacker.example'],
+            'empty' => [''],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('nonIdenticalIssuers')]
+    public function testIssMismatchIsRejectedBeforeTheTokenRequest(string $iss): void {
+        $captured = [];
+        $server = $this->pendingSignIn(['authorization_response_iss_parameter_supported' => true], $captured);
+        $state = (string)$server->getOauthState();
+
+        try {
+            $this->service->completeOAuth($server, 'the-code', $state, $iss);
+            $this->fail('mismatched iss was accepted');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('issuer mismatch', $e->getMessage());
+        }
+
+        $this->assertSame([], $captured, 'no token request');
+        // A forged response must not cancel the real sign-in.
+        $this->assertSame($state, $server->getOauthState());
+    }
+
+    /** Row 2: supported, iss absent → reject. */
+    public function testIssSupportedButAbsentIsRejected(): void {
+        $captured = [];
+        $server = $this->pendingSignIn(['authorization_response_iss_parameter_supported' => true], $captured);
+
+        try {
+            $this->service->completeOAuth($server, 'the-code', (string)$server->getOauthState());
+            $this->fail('response without iss was accepted');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('without iss', $e->getMessage());
+        }
+        $this->assertSame([], $captured);
+    }
+
+    /** Row 3: not advertised, iss present → still compared. */
+    public function testIssNotAdvertisedButPresentIsCompared(): void {
+        $captured = [];
+        $server = $this->pendingSignIn([], $captured);
+        $state = (string)$server->getOauthState();
+
+        try {
+            $this->service->completeOAuth($server, 'the-code', $state, 'https://attacker.example');
+            $this->fail('mismatched iss was accepted');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('issuer mismatch', $e->getMessage());
+        }
+        $this->assertSame([], $captured);
+
+        $this->service->completeOAuth($server, 'the-code', $state, 'https://cloud.example');
+        $this->assertSame('the-code', $captured[0]['body']['code']);
+    }
+
+    /** Row 4: not advertised, iss absent → proceed. */
+    public function testIssNotAdvertisedAndAbsentProceeds(): void {
+        $captured = [];
+        $server = $this->pendingSignIn(['authorization_response_iss_parameter_supported' => false], $captured);
+
+        $this->service->completeOAuth($server, 'the-code', (string)$server->getOauthState());
+
+        $this->assertSame('the-code', $captured[0]['body']['code']);
+    }
+
+    /** Error responses: on a mismatch the client MUST NOT act on or display `error`. */
+    public function testErrorResponseWithMismatchedIssIsNotActedOn(): void {
+        $captured = [];
+        $server = $this->pendingSignIn([], $captured);
+        $state = (string)$server->getOauthState();
+
+        try {
+            $this->service->completeOAuth($server, '', $state, 'https://attacker.example', 'access_denied');
+            $this->fail('mismatched error response was accepted');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('issuer mismatch', $e->getMessage());
+            $this->assertStringNotContainsString('access_denied', $e->getMessage());
+        }
+        $this->assertSame([], $captured);
+        $this->assertSame($state, $server->getOauthState(), 'the pending sign-in survives');
+    }
+
+    /** An error from the expected issuer ends the flow without a token request. */
+    public function testErrorResponseFromTheExpectedIssuerEndsTheFlow(): void {
+        $captured = [];
+        $server = $this->pendingSignIn(['authorization_response_iss_parameter_supported' => true], $captured);
+
+        try {
+            $this->service->completeOAuth($server, '', (string)$server->getOauthState(), 'https://cloud.example', 'access_denied');
+            $this->fail('error response was not reported');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('access_denied', $e->getMessage());
+        }
+        $this->assertSame([], $captured);
+        $this->assertNull($server->getOauthState());
+        $this->assertNull($server->getOauthFlowIssuer());
+    }
+
+    /** RFC 6749 §4.1.2: a success response carries a code; an empty one is never sent on. */
+    public function testResponseWithoutCodeIsRejected(): void {
+        $captured = [];
+        $server = $this->pendingSignIn([], $captured);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageIsOrContains('without an authorization code');
+        try {
+            $this->service->completeOAuth($server, '', (string)$server->getOauthState());
+        } finally {
+            $this->assertSame([], $captured);
+        }
+    }
+
+    /** A flow without a recorded issuer (started before the upgrade) is not completed. */
+    public function testFlowWithoutRecordedIssuerIsRejected(): void {
+        $server = $this->oauthServer([]);
+        $server->setOauthState('st');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageIsOrContains('No issuer recorded');
+        $this->service->completeOAuth($server, 'code', 'st');
+    }
+
+    /** The code goes only to the token endpoint of the issuer the request was sent to. */
+    public function testCodeIsNotSentToAnotherIssuersTokenEndpoint(): void {
+        $captured = [];
+        $server = $this->pendingSignIn([], $captured);
+        $server->setOauthMetadata((string)json_encode([
+            'issuer' => 'https://other.example',
+            'token_endpoint' => 'https://other.example/token',
+        ]));
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageIsOrContains('changed during sign-in');
+        try {
+            $this->service->completeOAuth($server, 'the-code', (string)$server->getOauthState(), 'https://cloud.example');
+        } finally {
+            $this->assertSame([], $captured);
+        }
     }
 }

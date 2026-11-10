@@ -408,6 +408,15 @@ with the scheme and host in lowercase, the fragment removed and no trailing slas
 authorization server that serves several resources may reject a value it does not know
 with `invalid_target`. Enter the MCP URL exactly as the server publishes it.
 
+When the popup returns, AIquila checks that the response came from the authorization
+server it sent you to (RFC 9207), as the
+[MCP authorization spec](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)
+requires. Any `iss` parameter must equal that server's `issuer` character for character.
+A server that advertises `authorization_response_iss_parameter_supported` must send `iss`.
+A response that fails the check is rejected before the code goes to a token endpoint,
+and any error it carries is ignored. The sign-in also fails if the MCP server moved to
+another authorization server while the popup was open. Click **Authenticate** again.
+
 #### OAuth client registration
 
 Before signing in, AIquila needs a client ID at the server's authorization server. It
