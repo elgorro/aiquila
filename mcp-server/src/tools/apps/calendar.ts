@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { z } from 'zod';
+import { calendarRoomTools, describeBookings } from './calendar-rooms.js';
 import {
   decodeXmlEntities,
   encodeXmlEntities,
@@ -335,8 +336,9 @@ const MAILTO_ADDR_SPEC = /^[^\s@<>"(),;:\\[\]]+@[^\s@<>"(),;:\\[\]]+$/;
  *
  * ORGANIZER is a CAL-ADDRESS (RFC 5545 §3.8.4.3), a `mailto:` URI for an email
  * address (§3.3.3), and that URI needs an addr-spec (RFC 6068 §2). The login
- * name is not one. Without an address the property is left out, and
- * Nextcloud's scheduling fills in the owner's principal address on PUT.
+ * name is not one. Without an address the property is left out. Nextcloud
+ * does not add one on PUT, so such an event is not scheduled: no invitations
+ * go out and rooms are not asked (describeBookings reports that).
  */
 async function buildOrganizerLine(): Promise<string | null> {
   try {
@@ -1177,6 +1179,12 @@ export const createEventTool = {
             .optional()
             .describe('Attendee role'),
           rsvp: z.boolean().optional().describe('Request RSVP (default: true)'),
+          cutype: z
+            .enum(['INDIVIDUAL', 'GROUP', 'RESOURCE', 'ROOM', 'UNKNOWN'])
+            .optional()
+            .describe(
+              'Kind of attendee (RFC 5545 CUTYPE). ROOM or RESOURCE books a room or resource from list_calendar_rooms'
+            ),
         })
       )
       .optional()
@@ -1225,6 +1233,7 @@ export const createEventTool = {
       cn?: string;
       role?: string;
       rsvp?: boolean;
+      cutype?: string;
     }>;
     rrule?: string;
     accessClass?: string;
@@ -1343,6 +1352,7 @@ export const createEventTool = {
           let atLine = 'ATTENDEE';
           if (attendee.cn) atLine += `;CN=${quoteICalParam(attendee.cn)}`;
           atLine += `;ROLE=${attendee.role || 'REQ-PARTICIPANT'}`;
+          if (attendee.cutype) atLine += `;CUTYPE=${attendee.cutype}`;
           atLine += `;PARTSTAT=NEEDS-ACTION`;
           if (attendee.rsvp !== false) atLine += `;RSVP=TRUE`;
           atLine += `:mailto:${attendee.email}`;
@@ -1376,8 +1386,9 @@ export const createEventTool = {
       }
 
       // Verify the event was actually persisted
+      let stored: string;
       try {
-        await resolveEventByUid(slug, eventUid);
+        stored = (await resolveEventByUid(slug, eventUid)).icalData;
       } catch {
         throw new Error(
           `Event creation appeared to succeed (HTTP ${response.status}) but the event ` +
@@ -1393,7 +1404,9 @@ export const createEventTool = {
         content: [
           {
             type: 'text' as const,
-            text: `Event created successfully: ${args.summary}\n  When: ${timeInfo}\n  UID: ${eventUid}`,
+            text:
+              `Event created successfully: ${args.summary}\n  When: ${timeInfo}\n  UID: ${eventUid}` +
+              bookingLines(stored),
           },
         ],
       };
@@ -1480,6 +1493,12 @@ export const updateEventTool = {
             .optional()
             .describe('Attendee role'),
           rsvp: z.boolean().optional().describe('Request RSVP (default: true)'),
+          cutype: z
+            .enum(['INDIVIDUAL', 'GROUP', 'RESOURCE', 'ROOM', 'UNKNOWN'])
+            .optional()
+            .describe(
+              'Kind of attendee (RFC 5545 CUTYPE). ROOM or RESOURCE books a room or resource from list_calendar_rooms'
+            ),
         })
       )
       .nullable()
@@ -1513,6 +1532,7 @@ export const updateEventTool = {
       cn?: string;
       role?: string;
       rsvp?: boolean;
+      cutype?: string;
     }> | null;
     tzid?: string;
   }) => {
@@ -1614,6 +1634,8 @@ export const updateEventTool = {
             let atLine = 'ATTENDEE';
             if (attendee.cn) atLine += `;CN=${quoteICalParam(attendee.cn)}`;
             atLine += `;ROLE=${attendee.role || 'REQ-PARTICIPANT'}`;
+            if (attendee.cutype) atLine += `;CUTYPE=${attendee.cutype}`;
+            if (attendee.cutype) atLine += `;CUTYPE=${attendee.cutype}`;
             atLine += `;PARTSTAT=NEEDS-ACTION`;
             if (attendee.rsvp !== false) atLine += `;RSVP=TRUE`;
             atLine += `:mailto:${attendee.email}`;
@@ -1642,11 +1664,21 @@ export const updateEventTool = {
       });
 
       if (putResponse.ok) {
+        let bookings = '';
+        if (/^ATTENDEE[^:\r\n]*;CUTYPE=(ROOM|RESOURCE)/im.test(modified)) {
+          try {
+            bookings = bookingLines(
+              (await resolveEventByUid(args.calendarName, args.uid)).icalData
+            );
+          } catch {
+            bookings = '\n  (Could not read back whether the rooms accepted.)';
+          }
+        }
         return {
           content: [
             {
               type: 'text' as const,
-              text: `Event updated successfully (UID: ${args.uid})`,
+              text: `Event updated successfully (UID: ${args.uid})${bookings}`,
             },
           ],
         };
@@ -1669,6 +1701,12 @@ export const updateEventTool = {
     }
   },
 };
+
+/** The room and resource answers of a stored event, as lines for a tool result. */
+function bookingLines(icalData: string): string {
+  const lines = describeBookings(icalData);
+  return lines.length > 0 ? `\n  ${lines.join('\n  ')}` : '';
+}
 
 /**
  * Delete a calendar event by UID.
@@ -1741,4 +1779,5 @@ export const calendarTools = [
   createEventTool,
   updateEventTool,
   deleteEventTool,
+  ...calendarRoomTools,
 ];
