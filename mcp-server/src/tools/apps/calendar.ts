@@ -48,7 +48,9 @@ interface ParsedEvent {
   uid: string;
   summary: string;
   dtstart: string;
+  dtstartTzid?: string;
   dtend?: string;
+  dtendTzid?: string;
   duration?: string;
   isAllDay: boolean;
   location?: string;
@@ -90,12 +92,26 @@ function formatICalDate(icalDate: string): string {
   if (icalDate.length === 8) {
     return `${icalDate.slice(0, 4)}-${icalDate.slice(4, 6)}-${icalDate.slice(6, 8)}`;
   }
-  const match = icalDate.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/);
+  const match = icalDate.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/);
   if (match) {
-    const [, y, m, d, hh, mm] = match;
-    return `${y}-${m}-${d} ${hh}:${mm}`;
+    const [, y, m, d, hh, mm, , utc] = match;
+    // Keep the UTC marker: without it a UTC time reads as local wall-clock time
+    return `${y}-${m}-${d} ${hh}:${mm}${utc ? ' UTC' : ''}`;
   }
   return icalDate;
+}
+
+/**
+ * Format a DTSTART/DTEND value with the zone it is expressed in: UTC values
+ * carry " UTC", TZID values carry the zone name, floating values carry none.
+ */
+function formatEventTime(icalDate: string, tzid?: string): string {
+  const formatted = formatICalDate(icalDate);
+  return tzid && !icalDate.endsWith('Z') ? `${formatted} (${tzid})` : formatted;
+}
+
+function tzidParam(params?: string): string | undefined {
+  return params?.match(/;TZID="?([^";:]+)"?/)?.[1];
 }
 
 function icalNow(): string {
@@ -511,11 +527,13 @@ function parseICalEvents(icalData: string, etag?: string, href?: string): Parsed
           break;
         case 'DTSTART':
           event.dtstart = value;
+          event.dtstartTzid = tzidParam(params);
           event.isAllDay =
             params?.includes('VALUE=DATE') === true && !params?.includes('VALUE=DATE-TIME');
           break;
         case 'DTEND':
           event.dtend = value;
+          event.dtendTzid = tzidParam(params);
           break;
         case 'DURATION':
           event.duration = value;
@@ -629,8 +647,8 @@ function formatEvent(event: ParsedEvent): string {
       ? `${formatICalDate(event.dtstart)} - ${formatICalDate(event.dtend)} (all day)`
       : `${formatICalDate(event.dtstart)} (all day)`
     : event.dtend
-      ? `${formatICalDate(event.dtstart)} - ${formatICalDate(event.dtend)}`
-      : `${formatICalDate(event.dtstart)}`;
+      ? `${formatEventTime(event.dtstart, event.dtstartTzid)} - ${formatEventTime(event.dtend, event.dtendTzid)}`
+      : `${formatEventTime(event.dtstart, event.dtstartTzid)}`;
 
   let line = `${event.summary}`;
   line += `\n    When: ${dateRange}`;

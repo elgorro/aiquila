@@ -56,6 +56,10 @@ List events from a Nextcloud calendar within an optional time range.
 **Returns:**
 List of events with time, location, attendees, recurrence, and UIDs.
 
+Each time is shown as stored, with the zone it is expressed in: `2026-11-12 07:45 UTC` for a
+UTC time, `2026-11-12 08:45 (Europe/Paris)` for a time with a time zone (RFC 5545 §3.3.5,
+forms 2 and 3), and no zone for a floating time (form 1). Times are not converted.
+
 **Example Usage:**
 ```
 Ask Claude: "Show my events for this week"
@@ -74,7 +78,8 @@ Get detailed information about a single calendar event by its UID.
 - `calendarName` (string, required): The calendar name
 
 **Returns:**
-Complete event details including full description, attendees, and recurrence rules.
+Complete event details including full description, attendees, and recurrence rules. Times
+are shown with their zone, as for `list_events`.
 
 **Example Usage:**
 ```
