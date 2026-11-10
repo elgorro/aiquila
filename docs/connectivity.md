@@ -125,7 +125,7 @@ Benefits:
 ### API Key Storage
 
 - API keys are stored via Nextcloud's `ICredentialsManager` (encrypted at rest)
-- MCP server tokens (bearer, OAuth) are encrypted via `ICrypto` before database storage
+- MCP server credentials (bearer tokens, OAuth tokens, registration tokens, client secrets) are encrypted via `ICrypto` before database storage
 - On upgrade, existing plaintext keys are automatically migrated to encrypted storage
 - Keys are never exposed in admin UI or CLI output — only `(configured)` / `****` is shown
 
