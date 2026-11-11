@@ -274,38 +274,30 @@ class McpClientServiceTest extends TestCase {
         $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking);
 
         $captured = [];
-        $responses = [
-            new MockResponse(
-                "event: message\ndata: " . json_encode([
-                    'jsonrpc' => '2.0',
-                    'id' => 1,
-                    'result' => ['protocolVersion' => '2025-03-26'],
-                ]) . "\n\n",
-                [
-                    'http_code' => 200,
-                    'response_headers' => [
-                        'content-type' => ['text/event-stream'],
-                        'mcp-session-id' => ['sse-session-456'],
-                    ],
-                ]
-            ),
-            new MockResponse('', ['http_code' => 202]),
-            new MockResponse(
-                "event: message\ndata: " . json_encode([
-                    'jsonrpc' => '2.0',
-                    'id' => 2,
-                    'result' => ['tools' => [['name' => 'list_files']]],
-                ]) . "\n\n",
-                [
-                    'http_code' => 200,
-                    'response_headers' => ['content-type' => ['text/event-stream']],
-                ]
-            ),
+        $results = [
+            ['protocolVersion' => '2025-03-26'],
+            null,
+            ['tools' => [['name' => 'list_files']]],
         ];
 
-        $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$captured, &$responses): MockResponse {
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$captured, &$results): MockResponse {
             $captured[] = $options;
-            return array_shift($responses);
+            $result = array_shift($results);
+            if ($result === null) {
+                return new MockResponse('', ['http_code' => 202]);
+            }
+            $headers = ['content-type' => ['text/event-stream']];
+            if (count($captured) === 1) {
+                $headers['mcp-session-id'] = ['sse-session-456'];
+            }
+            return new MockResponse(
+                "event: message\ndata: " . json_encode([
+                    'jsonrpc' => '2.0',
+                    'id' => $this->requestBody($options)['id'],
+                    'result' => $result,
+                ]) . "\n\n",
+                ['http_code' => 200, 'response_headers' => $headers]
+            );
         });
 
         $ref = new \ReflectionProperty(McpClientService::class, 'httpClient');
@@ -1706,6 +1698,67 @@ class McpClientServiceTest extends TestCase {
             $this->assertSame('old-at', $server->getOauthAccessToken());
             $this->assertSame('old-rt', $server->getOauthRefreshToken());
         }
+    }
+
+    // --- SSE parsing (WHATWG HTML "Interpreting an event stream"; MCP Streamable HTTP) ---
+
+    public function testSseDataWithoutSpaceAfterColon(): void {
+        $this->assertSame(['{"a":1}'], McpClientService::parseSseEvents("data:{\"a\":1}\n\n"));
+    }
+
+    public function testSseMultiLineDataIsJoinedWithLineFeed(): void {
+        $this->assertSame(["{\n\"a\": 1\n}"], McpClientService::parseSseEvents("data: {\ndata: \"a\": 1\ndata: }\n\n"));
+    }
+
+    public function testSseAcceptsCrLfAndBareCrLineEndings(): void {
+        $this->assertSame(['one', 'two'], McpClientService::parseSseEvents("data: one\r\n\r\ndata: two\r\r"));
+    }
+
+    public function testSseSkipsCommentsBomAndNonMessageEvents(): void {
+        $stream = "\u{FEFF}: keep-alive\n\nevent: ping\ndata: x\n\nid: 5\nretry: 10\ndata: y\n\ndata: unfinished";
+        $this->assertSame(['y'], McpClientService::parseSseEvents($stream));
+    }
+
+    /** The response is the message whose id matches, wherever it sits in the stream. */
+    public function testSseResponseIsMatchedById(): void {
+        $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking);
+        $this->markInitialized($service, $server);
+
+        $client = new MockHttpClient(function (string $method, string $url, array $options): MockResponse {
+            $id = $this->requestBody($options)['id'];
+            $events = [
+                // A server request that happens to reuse our id
+                ['jsonrpc' => '2.0', 'id' => $id, 'method' => 'roots/list'],
+                ['jsonrpc' => '2.0', 'method' => 'notifications/progress', 'params' => ['progress' => 1]],
+                ['jsonrpc' => '2.0', 'id' => $id, 'result' => ['tools' => [['name' => 'right']]]],
+                ['jsonrpc' => '2.0', 'method' => 'notifications/message', 'params' => ['data' => 'late']],
+            ];
+            $body = '';
+            foreach ($events as $event) {
+                $body .= 'data:' . json_encode($event) . "\n\n";
+            }
+            return new MockResponse($body, ['http_code' => 200, 'response_headers' => ['content-type' => ['text/event-stream']]]);
+        });
+        (new \ReflectionProperty(McpClientService::class, 'httpClient'))->setValue($service, $client);
+
+        $this->assertSame([['name' => 'right']], $service->listTools($server));
+    }
+
+    public function testSseStreamWithoutTheResponseFails(): void {
+        $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking);
+        $this->markInitialized($service, $server);
+
+        $client = new MockHttpClient(fn() => new MockResponse(
+            'data: ' . json_encode(['jsonrpc' => '2.0', 'method' => 'notifications/progress']) . "\n\n",
+            ['http_code' => 200, 'response_headers' => ['content-type' => ['text/event-stream']]]
+        ));
+        (new \ReflectionProperty(McpClientService::class, 'httpClient'))->setValue($service, $client);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageIsOrContains('No response to request');
+        $service->listTools($server);
     }
 
     private function markInitialized(McpClientService $service, McpServer $server): void {
