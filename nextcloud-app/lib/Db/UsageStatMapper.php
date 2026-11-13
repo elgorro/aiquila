@@ -32,6 +32,13 @@ class UsageStatMapper extends QBMapper {
         return $this->findEntities($qb);
     }
 
+    public function deleteByUser(string $userId): void {
+        $qb = $this->db->getQueryBuilder();
+        $qb->delete($this->getTableName())
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)));
+        $qb->executeStatement();
+    }
+
     /**
      * @return array{input_tokens: int, output_tokens: int, cache_creation_tokens: int, cache_read_tokens: int}
      */

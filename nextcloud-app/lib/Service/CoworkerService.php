@@ -378,6 +378,44 @@ class CoworkerService {
         }
     }
 
+    /**
+     * Stop the runs in flight of a user's personal coworkers, while the
+     * account still exists: a pending batch is cancelled with the user's
+     * provider key. Team coworkers are left alone; their next run moves them
+     * to someone who can act for the team (see prepareTeamRun()).
+     */
+    public function stopForUser(string $userId): void {
+        foreach ($this->mapper->findPersonalByUser($userId) as $coworker) {
+            try {
+                $this->stopEntity($coworker);
+            } catch (NoActiveRunException) {
+                // Nothing in flight.
+            } catch (\Throwable $e) {
+                $this->logger->error('AIquila Cowork: could not stop a deleted user\'s coworker', [
+                    'coworker' => $coworker->getId(),
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Stop and delete a deleted user's personal coworkers and their run
+     * history. One that fails does not keep the others running.
+     */
+    public function removeForUser(string $userId): void {
+        foreach ($this->mapper->findPersonalByUser($userId) as $coworker) {
+            try {
+                $this->removeEntity($coworker);
+            } catch (\Throwable $e) {
+                $this->logger->error('AIquila Cowork: could not remove a deleted user\'s coworker', [
+                    'coworker' => $coworker->getId(),
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
     private function removeEntity(Coworker $coworker): void {
         try {
             $this->stopEntity($coworker);
