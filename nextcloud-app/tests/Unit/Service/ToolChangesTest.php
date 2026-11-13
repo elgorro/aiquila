@@ -80,6 +80,29 @@ class ToolChangesTest extends TestCase {
         $this->assertNull(ToolChanges::decodeState('nope'));
     }
 
+    /**
+     * The state is stored as JSON and decoded into PHP arrays, which turns
+     * each `{}` in a declared schema into `[]`. Decoded back, the declared
+     * tools must resend byte-identical and still compare equal to the same
+     * tools fetched again, or every turn would start over and miss the cache.
+     */
+    public function testEmptySchemaObjectsSurviveTheStoredState(): void {
+        $tool = [
+            'name' => 'browser_close',
+            'description' => 'Close the page',
+            'input_schema' => ['type' => 'object', 'properties' => new \stdClass(), 'additionalProperties' => false],
+        ];
+        $first = ToolChanges::plan(null, [$tool]);
+
+        $state = ToolChanges::decodeState(ToolChanges::encodeState($first['state']));
+        $plan = ToolChanges::plan($state, [$tool]);
+
+        $this->assertFalse($plan['reset']);
+        $this->assertSame([], $plan['blocks']);
+        $this->assertSame(json_encode($first['tools']), json_encode($plan['tools']));
+        $this->assertStringContainsString('"properties":{}', (string)json_encode($plan['tools']));
+    }
+
     public function testRequestsUsingItAreRecognised(): void {
         $this->assertFalse(ToolChanges::inRequest(['tools' => [self::tool('a')], 'messages' => []]));
         $this->assertTrue(ToolChanges::inRequest(['tools' => [self::tool('a') + ['defer_loading' => true]], 'messages' => []]));

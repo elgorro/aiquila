@@ -398,14 +398,21 @@ class McpClientService {
 
     /**
      * Call a tool on an MCP server.
+     *
+     * MCP `CallToolRequest.params.arguments` is an object, so an argument-less
+     * call goes out as `{}`, not `[]`. With the tool's $inputSchema, nested
+     * objects that decoding turned into `[]` are restored too (see JsonShape).
+     *
+     * @param array<array-key, mixed> $args
+     * @param array<array-key, mixed>|null $inputSchema the tool's `inputSchema` from `tools/list`
      */
-    public function callTool(McpServer $server, string $name, array $args): array {
+    public function callTool(McpServer $server, string $name, array $args, ?array $inputSchema = null): array {
         $this->initialize($server);
 
         try {
             $result = $this->jsonRpc($server, 'tools/call', [
                 'name' => $name,
-                'arguments' => $args,
+                'arguments' => JsonShape::arguments($args, $inputSchema),
             ]);
             return $result;
         } catch (\Throwable $e) {
@@ -428,7 +435,11 @@ class McpClientService {
      *
      * Returns:
      *   'tools' => Anthropic-format tool definitions
-     *   'mapping' => ['toolName' => ['serverId' => int, 'originalName' => string]]
+     *   'mapping' => ['toolName' => ['serverId' => int, 'originalName' => string, 'inputSchema' => array]]
+     *
+     * `tools/list` replies are decoded into PHP arrays, which loses empty JSON
+     * objects; each `inputSchema` is normalized back (see JsonShape) before a
+     * provider sends it on.
      */
     public function getAllTools(): array {
         $servers = $this->mapper->findAllEnabled();
@@ -461,14 +472,16 @@ class McpClientService {
                 }
                 $seenNames[$originalName] = true;
 
+                $inputSchema = JsonShape::toolInputSchema($tool['inputSchema'] ?? null);
                 $tools[] = [
                     'name' => $toolName,
                     'description' => $tool['description'] ?? '',
-                    'input_schema' => $tool['inputSchema'] ?? ['type' => 'object'],
+                    'input_schema' => $inputSchema,
                 ];
                 $mapping[$toolName] = [
                     'serverId' => $server->getId(),
                     'originalName' => $originalName,
+                    'inputSchema' => $inputSchema,
                 ];
             }
         }
@@ -501,7 +514,8 @@ class McpClientService {
             ];
         }
 
-        return $this->callTool($server, $info['originalName'], $args);
+        $inputSchema = $info['inputSchema'] ?? null;
+        return $this->callTool($server, $info['originalName'], $args, is_array($inputSchema) ? $inputSchema : null);
     }
 
     /**

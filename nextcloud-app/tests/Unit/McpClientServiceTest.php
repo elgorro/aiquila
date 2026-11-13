@@ -69,7 +69,7 @@ class TestableMcpClientService extends McpClientService {
     /**
      * Override callTool to use queued responses.
      */
-    public function callTool(McpServer $server, string $name, array $args): array {
+    public function callTool(McpServer $server, string $name, array $args, ?array $inputSchema = null): array {
         $this->initialize($server);
         try {
             return $this->consumeResponse('tools/call', ['name' => $name, 'arguments' => $args]);
@@ -430,6 +430,105 @@ class McpClientServiceTest extends TestCase {
         $this->assertFalse($result['isError'] ?? false);
     }
 
+    /**
+     * What json_decode(..., true) makes of an MCP tools/list reply whose
+     * schemas hold empty objects: `{}` arrives as `[]`. getAllTools() must
+     * hand providers the objects back, or `"properties": []` reaches them and
+     * a validating gateway rejects the whole request.
+     */
+    public function testGetAllToolsKeepsEmptySchemaObjectsAsObjects(): void {
+        $server = $this->makeServer(1, 'Browser');
+
+        $this->mapper->method('findAllEnabled')->willReturn([$server]);
+        $this->mapper->method('update')->willReturnArgument(0);
+
+        $decoded = json_decode('{"tools":['
+            . '{"name":"browser_close","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},'
+            . '{"name":"scrape","inputSchema":{"type":"object","properties":{"url":{"type":"string"},"headers":{"type":"object","additionalProperties":{}}},"required":["url"]}},'
+            . '{"name":"bare","inputSchema":{}},'
+            . '{"name":"missing"}'
+            . ']}', true);
+        $this->service->queueResponse([]);
+        $this->service->queueResponse($decoded);
+
+        $result = $this->service->getAllTools();
+
+        $this->assertSame(
+            '[{"type":"object","properties":{},"additionalProperties":false},'
+            . '{"type":"object","properties":{"url":{"type":"string"},"headers":{"type":"object","additionalProperties":{}}},"required":["url"]},'
+            . '{"type":"object","properties":{}},'
+            . '{"type":"object","properties":{}}]',
+            json_encode(array_column($result['tools'], 'input_schema'))
+        );
+        // The mapping carries the same schema, for executeTool() to conform arguments to.
+        $this->assertSame(
+            json_encode($result['tools'][1]['input_schema']),
+            json_encode($result['mapping']['scrape']['inputSchema'] ?? null)
+        );
+    }
+
+    /**
+     * MCP CallToolRequest `params.arguments` is an object. An argument-less
+     * call (the model sent `{}`, decoded to `[]`) must go out as `{}`: the
+     * TypeScript SDK rejects `[]` with "expected record, received array".
+     */
+    public function testCallToolSendsEmptyArgumentsAsAnObject(): void {
+        $bodies = [];
+        $service = $this->liveService([['content' => [['type' => 'text', 'text' => '12:00']]]], $bodies);
+
+        $result = $service->callTool($this->makeServer(1, 'Test', 'https://mcp.example/mcp'), 'get_local_time', []);
+
+        $this->assertFalse($result['isError'] ?? false);
+        $this->assertCount(3, $bodies);
+        $this->assertStringContainsString('"params":{"name":"get_local_time","arguments":{}}', $bodies[2]);
+    }
+
+    /**
+     * Nested objects lose their shape the same way. executeTool() conforms the
+     * arguments to the tool's input schema from the mapping: `[]` becomes `{}`
+     * where the schema wants an object, and stays `[]` where it wants an array.
+     */
+    public function testExecuteToolRestoresNestedObjectsFromTheInputSchema(): void {
+        $this->mapper = $this->createStub(McpServerMapper::class);
+        $this->mapper->method('findById')->willReturn($this->makeServer(1, 'Test', 'https://mcp.example/mcp'));
+        $bodies = [];
+        $service = $this->liveService([['content' => []]], $bodies);
+
+        $mapping = [
+            'search' => [
+                'serverId' => 1,
+                'originalName' => 'search',
+                'inputSchema' => json_decode('{"type":"object","properties":{'
+                    . '"filters":{"type":"object","additionalProperties":{"type":"object"}},'
+                    . '"tags":{"type":"array","items":{"type":"string"}},'
+                    . '"options":{"$ref":"#/$defs/options"}},'
+                    . '"$defs":{"options":{"type":["object","null"]}}}', true),
+            ],
+        ];
+        $args = json_decode('{"filters":{"owner":{}},"tags":[],"options":{}}', true);
+
+        $service->executeTool('search', $args, $mapping);
+
+        $this->assertStringContainsString(
+            '"arguments":{"filters":{"owner":{}},"tags":[],"options":{}}',
+            $bodies[2] ?? ''
+        );
+    }
+
+    /**
+     * A mapping without a schema still sends a top-level object.
+     */
+    public function testExecuteToolWithoutSchemaStillSendsAnObject(): void {
+        $this->mapper = $this->createStub(McpServerMapper::class);
+        $this->mapper->method('findById')->willReturn($this->makeServer(1, 'Test', 'https://mcp.example/mcp'));
+        $bodies = [];
+        $service = $this->liveService([['content' => []]], $bodies);
+
+        $service->executeTool('status', [], ['status' => ['serverId' => 1, 'originalName' => 'system_status']]);
+
+        $this->assertStringContainsString('"params":{"name":"system_status","arguments":{}}', $bodies[2] ?? '');
+    }
+
     public function testExecuteToolUnknownTool(): void {
         $result = $this->service->executeTool('unknown_tool', [], []);
         $this->assertTrue($result['isError']);
@@ -574,6 +673,35 @@ class McpClientServiceTest extends TestCase {
 
         $ref = new \ReflectionProperty(McpClientService::class, 'httpClient');
         $ref->setValue($this->service, $client);
+    }
+
+    /**
+     * The real service on a mock MCP server: it answers initialize, accepts
+     * the initialized notification, then returns $results in order. Each
+     * request body is recorded as the exact bytes sent, since decoding them
+     * would hide the `{}` / `[]` difference under test.
+     *
+     * @param list<array<string, mixed>> $results
+     * @param list<string> $bodies
+     */
+    private function liveService(array $results, array &$bodies): McpClientService {
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking, $this->appManager);
+        array_unshift($results, ['protocolVersion' => '2025-03-26'], null);
+
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$bodies, &$results): MockResponse {
+            $raw = $options['body'] ?? '';
+            $bodies[] = is_string($raw) ? $raw : (string)json_encode($options['json'] ?? null);
+            $result = array_shift($results);
+            if ($result === null) {
+                return new MockResponse('', ['http_code' => 202]);
+            }
+            return new MockResponse(
+                (string)json_encode(['jsonrpc' => '2.0', 'id' => $this->requestBody($options)['id'], 'result' => $result]),
+                ['http_code' => 200, 'response_headers' => ['content-type' => ['application/json']]]
+            );
+        });
+        (new \ReflectionProperty(McpClientService::class, 'httpClient'))->setValue($service, $client);
+        return $service;
     }
 
     /**

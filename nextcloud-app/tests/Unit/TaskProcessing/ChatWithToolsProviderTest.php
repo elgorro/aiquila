@@ -81,6 +81,55 @@ class ChatWithToolsProviderTest extends TestCase {
         $this->assertSame('{"city":"Berlin"}', $decoded[0]['function']['arguments']);
     }
 
+    /**
+     * The `tools` input is decoded into PHP arrays. Empty objects in the
+     * schemas must reach the provider as `{}`, and a missing or empty schema
+     * becomes an object schema, as Anthropic `input_schema` requires.
+     */
+    public function testEmptySchemaObjectsInTheToolsInputStayObjects(): void {
+        $sent = null;
+        $this->llm->method('chatToolsTurn')->willReturnCallback(function (array $messages, array $tools) use (&$sent): array {
+            $sent = $tools;
+            return ['response' => '', 'tool_calls' => []];
+        });
+
+        $this->provider->process('alice', [
+            'input' => 'Close it',
+            'tools' => '[{"type":"function","function":{"name":"browser_close","parameters":{"type":"object","properties":{}}}},'
+                . '{"type":"function","function":{"name":"no_params"}},'
+                . '{"name":"canonical","input_schema":{}}]',
+        ], static fn (float $p) => null);
+
+        $this->assertSame(
+            '[{"type":"object","properties":{}},{"type":"object","properties":{}},{"type":"object","properties":{}}]',
+            json_encode(array_column($sent, 'input_schema'))
+        );
+    }
+
+    /**
+     * `arguments` holds the JSON text of an object: an argument-less call is
+     * `"{}"`, and a nested object the tool's schema requires stays `{}`.
+     */
+    public function testToolCallArgumentsAreObjects(): void {
+        $this->llm->method('chatToolsTurn')->willReturn([
+            'response' => '',
+            'tool_calls' => [
+                ['id' => 'call_1', 'name' => 'get_local_time', 'arguments' => []],
+                ['id' => 'call_2', 'name' => 'search', 'arguments' => ['filters' => [], 'tags' => []]],
+            ],
+        ]);
+
+        $result = $this->provider->process('alice', [
+            'input' => 'Go',
+            'tools' => '[{"type":"function","function":{"name":"search","parameters":{"type":"object","properties":'
+                . '{"filters":{"type":"object"},"tags":{"type":"array"}}}}}]',
+        ], static fn (float $p) => null);
+
+        $calls = json_decode($result['tool_calls'], true);
+        $this->assertSame('{}', $calls[0]['function']['arguments']);
+        $this->assertSame('{"filters":{},"tags":[]}', $calls[1]['function']['arguments']);
+    }
+
     public function testNoToolCallsYieldsAnEmptyString(): void {
         $this->llm->method('chatToolsTurn')->willReturn(['response' => 'Sunny.', 'tool_calls' => []]);
 

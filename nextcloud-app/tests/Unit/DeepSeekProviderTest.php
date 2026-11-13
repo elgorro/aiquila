@@ -200,6 +200,72 @@ class DeepSeekProviderTest extends TestCase {
         $this->assertSame('auto', $captured['tool_choice']);
     }
 
+    /**
+     * The model calls a tool without arguments (`"{}"`, or nothing at all).
+     * Decoded, that is `[]`; the replay on the next request must send the
+     * JSON text of an object, `"{}"`, not `"[]"`.
+     */
+    public function testArgumentlessToolCallReplaysAsAnEmptyObject(): void {
+        $bodies = [];
+        $responses = [
+            $this->jsonResponse([
+                'choices' => [[
+                    'message' => ['content' => '', 'tool_calls' => [
+                        ['id' => 'call_1', 'type' => 'function', 'function' => ['name' => 'get_local_time', 'arguments' => '{}']],
+                        ['id' => 'call_2', 'type' => 'function', 'function' => ['name' => 'system_status', 'arguments' => '']],
+                    ]],
+                    'finish_reason' => 'tool_calls',
+                ]],
+            ]),
+            $this->jsonResponse(['choices' => [['message' => ['content' => 'Noon.'], 'finish_reason' => 'stop']]]),
+        ];
+        $this->client->method('post')->willReturnCallback(function (string $url, array $opts) use (&$responses, &$bodies) {
+            $bodies[] = $opts['body'];
+            return array_shift($responses);
+        });
+
+        $inputs = [];
+        $executor = function (string $name, array $input) use (&$inputs): array {
+            $inputs[] = $input;
+            return ['content' => [['type' => 'text', 'text' => 'ok']]];
+        };
+        $tools = [
+            ['name' => 'get_local_time', 'description' => '', 'input_schema' => ['type' => 'object']],
+            ['name' => 'system_status', 'description' => '', 'input_schema' => ['type' => 'object']],
+        ];
+        $this->provider->chatWithTools([['role' => 'user', 'content' => 'time?']], $tools, $executor, null, 'u');
+
+        $this->assertSame([[], []], $inputs);
+        $this->assertCount(2, $bodies);
+        $this->assertSame(2, substr_count($bodies[1], '"arguments":"{}"'));
+        $this->assertStringNotContainsString('"arguments":"[]"', $bodies[1]);
+    }
+
+    /**
+     * Tool schemas arrive decoded into PHP arrays; the request must carry
+     * their empty objects as `{}`, or a validating gateway rejects it.
+     */
+    public function testEmptySchemaObjectsReachTheApiAsObjects(): void {
+        $body = null;
+        $this->client->method('post')->willReturnCallback(function (string $url, array $opts) use (&$body) {
+            $body = $opts['body'];
+            return $this->jsonResponse(['choices' => [['message' => ['content' => 'done'], 'finish_reason' => 'stop']]]);
+        });
+
+        $schema = json_decode('{"type":"object","properties":{"headers":{"type":"object","additionalProperties":{}}}}', true);
+        $tools = [
+            ['name' => 'close', 'description' => '', 'input_schema' => ['type' => 'object', 'properties' => []]],
+            ['name' => 'scrape', 'description' => '', 'input_schema' => $schema],
+            ['name' => 'bare', 'description' => '', 'input_schema' => []],
+        ];
+        $this->provider->chatWithTools([['role' => 'user', 'content' => 'q']], $tools, fn() => [], null, 'u');
+
+        $this->assertStringContainsString('"name":"close","description":"","parameters":{"type":"object","properties":{}}', $body);
+        $this->assertStringContainsString('"parameters":{"type":"object","properties":{"headers":{"type":"object","additionalProperties":{}}}}', $body);
+        $this->assertStringContainsString('"name":"bare","description":"","parameters":{"type":"object","properties":{}}', $body);
+        $this->assertStringNotContainsString('[]', $body);
+    }
+
     public function testStreamingYieldsTextDeltasAndDone(): void {
         $sse = "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n"
             . "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":1}}\n"

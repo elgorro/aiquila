@@ -9,6 +9,7 @@ use OCA\AIquila\Http\SseDecoder;
 use OCA\AIquila\Http\SseStreaming;
 use OCA\AIquila\Http\StreamTap;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\JsonShape;
 use OCA\AIquila\Service\MistralModels;
 use OCP\Http\Client\IClientService;
 use OCA\AIquila\Service\AppSettings;
@@ -1058,7 +1059,8 @@ class MistralProvider implements LLMProviderInterface {
                     $toolCalls[] = [
                         'id' => $b['id'] ?? '',
                         'type' => 'function',
-                        'function' => ['name' => $b['name'] ?? '', 'arguments' => json_encode($b['input'] ?? new \stdClass())],
+                        // `arguments` is the JSON text of an object; an empty input must be "{}", not "[]".
+                        'function' => ['name' => $b['name'] ?? '', 'arguments' => json_encode(JsonShape::object($b['input'] ?? null))],
                     ];
                 }
                 $out[] = [
@@ -1133,7 +1135,7 @@ class MistralProvider implements LLMProviderInterface {
                 'function' => [
                     'name' => $tool['name'],
                     'description' => $tool['description'] ?? '',
-                    'parameters' => $tool['input_schema'] ?? ['type' => 'object'],
+                    'parameters' => JsonShape::toolInputSchema($tool['input_schema'] ?? null),
                 ],
             ];
         }

@@ -81,14 +81,31 @@ final class ToolChanges {
         ];
     }
 
-    /** @return ToolState|null */
+    /**
+     * The stored state. Decoding into PHP arrays turns each `{}` in a declared
+     * tool's `input_schema` into `[]`; it is restored here (see JsonShape), so
+     * the declared tools resend byte-identical and anyRedefined() compares
+     * them with the current ones like for like.
+     *
+     * @return ToolState|null
+     */
     public static function decodeState(?string $stored): ?array {
         $decoded = $stored !== null && $stored !== '' ? json_decode($stored, true) : null;
         if (!is_array($decoded) || !is_array($decoded['declared'] ?? null) || !is_array($decoded['available'] ?? null)) {
             return null;
         }
+        $declared = [];
+        foreach ($decoded['declared'] as $tool) {
+            if (!is_array($tool)) {
+                continue;
+            }
+            if (array_key_exists('input_schema', $tool)) {
+                $tool['input_schema'] = JsonShape::toolInputSchema($tool['input_schema']);
+            }
+            $declared[] = $tool;
+        }
         /** @var ToolState */
-        return ['declared' => array_values($decoded['declared']), 'available' => array_values(array_map('strval', $decoded['available']))];
+        return ['declared' => $declared, 'available' => array_values(array_map('strval', $decoded['available']))];
     }
 
     /** @param ToolState $state */
