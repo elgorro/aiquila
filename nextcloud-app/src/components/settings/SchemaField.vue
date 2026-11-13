@@ -45,13 +45,30 @@
 				@search="onPrincipalSearch"
 				@update:model-value="emitPrincipals" />
 
+			<!--
+				Model fields from a provider that reports capabilities carry
+				`option_details`: models that cannot chat are shown disabled,
+				with the reason as a tooltip, and `taggable` lets an admin type
+				an id the list does not know yet.
+			-->
 			<NcSelect v-else-if="field.type === 'select'"
 				:model-value="modelValue || null"
 				:input-id="inputId"
 				:options="field.options || []"
 				:placeholder="selectPlaceholder"
 				:clearable="clearable"
-				@update:model-value="emit" />
+				:selectable="isSelectable"
+				:taggable="!!field.taggable"
+				@update:model-value="emit">
+				<template v-if="field.option_details" #option="{ label }">
+					<span class="schema-field__option"
+						:class="{ 'schema-field__option--disabled': !isSelectable(label) }"
+						:title="optionDetail(label)?.message || ''">
+						{{ optionText(label) }}
+						<span v-if="optionBadge(label)" class="schema-field__badge">{{ optionBadge(label) }}</span>
+					</span>
+				</template>
+			</NcSelect>
 
 			<NcPasswordField v-else-if="field.type === 'password'"
 				:model-value="modelValue || ''"
@@ -91,6 +108,14 @@
 		<!-- Set by the backend when the current model cannot honour the value. -->
 		<p v-if="field.warning" class="schema-field__warning" role="status">
 			{{ field.warning }}
+		</p>
+		<!-- A remark rather than a problem, e.g. a model that cannot be verified. -->
+		<p v-if="field.notice" class="schema-field__hint" role="status">
+			{{ field.notice }}
+		</p>
+		<!-- The live model list failed; the options are the built-in fallback. -->
+		<p v-if="field.listing_error" class="schema-field__warning" role="status">
+			{{ field.listing_error }}
 		</p>
 	</div>
 </template>
@@ -208,6 +233,30 @@ export default {
 	},
 	methods: {
 		t,
+		/** Compatibility of one model option, or null when none is known. */
+		optionDetail(id) {
+			return this.field.option_details?.[id] || null
+		},
+		/** Incompatible and retired models cannot be picked; everything else can. */
+		isSelectable(option) {
+			const id = typeof option === 'object' && option !== null ? option.label : option
+			return this.optionDetail(id)?.selectable !== false
+		},
+		/** The display name with the id, when the backend reports one. */
+		optionText(id) {
+			const label = this.optionDetail(id)?.label
+			return label && label !== id ? `${label} (${id})` : id
+		},
+		optionBadge(id) {
+			switch (this.optionDetail(id)?.status) {
+			case 'incompatible': return t('aiquila', 'can\'t chat')
+			case 'retired': return t('aiquila', 'retired')
+			case 'deprecated': return t('aiquila', 'deprecated')
+			case 'no_tools': return t('aiquila', 'no tools')
+			case 'unverified': return t('aiquila', 'not verified')
+			default: return ''
+			}
+		},
 		emit(value) {
 			this.$emit('update:modelValue', value)
 		},
@@ -276,6 +325,19 @@ export default {
 	color: var(--color-text-maxcontrast);
 	font-size: 0.9em;
 	line-height: 1.4;
+}
+
+.schema-field__option--disabled {
+	color: var(--color-text-maxcontrast);
+}
+
+.schema-field__badge {
+	margin-inline-start: 6px;
+	padding: 0 6px;
+	border-radius: var(--border-radius-pill, 10px);
+	background-color: var(--color-background-dark);
+	color: var(--color-text-maxcontrast);
+	font-size: 0.85em;
 }
 
 .schema-field__warning {

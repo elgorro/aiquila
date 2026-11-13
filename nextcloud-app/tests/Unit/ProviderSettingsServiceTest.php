@@ -5,6 +5,9 @@ namespace OCA\AIquila\Tests\Unit;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\Provider\ModelCatalog;
+use OCA\AIquila\Service\Provider\ModelCatalogInterface;
+use OCA\AIquila\Service\Provider\ModelCompatibility;
 use OCA\AIquila\Service\Provider\ProviderAccessService;
 use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
@@ -647,5 +650,121 @@ class ProviderSettingsServiceTest extends TestCase {
 
         $this->expectException(\InvalidArgumentException::class);
         $this->service->writeAdmin($provider, ['service_account' => 'not json']);
+    }
+
+    // ── Model catalog (providers with capability metadata) ──────────────
+
+    /**
+     * A provider that reports a catalog, with $model configured and the
+     * vision capability set as given.
+     */
+    private function catalogProvider(ModelCatalog $catalog, string $model, bool $vision = false): LLMProviderInterface&ModelCatalogInterface {
+        $provider = $this->createStubForIntersectionOfInterfaces([LLMProviderInterface::class, ModelCatalogInterface::class]);
+        $provider->method('getId')->willReturn('testprovider');
+        $provider->method('getLabel')->willReturn('Test provider');
+        $provider->method('getSettingsSchema')->willReturn([ProviderSettingsSchema::model('model_test', 'user_model_test', 'default-model')]);
+        $provider->method('getModel')->willReturn($model);
+        $provider->method('getCapabilities')->willReturn(ProviderSettingsSchema::capabilities(['vision' => $vision, 'tools' => true, 'streaming' => true]));
+        $provider->method('fetchModelCatalog')->willReturn($catalog);
+        return $provider;
+    }
+
+    private static function sampleCatalog(): ModelCatalog {
+        return ModelCatalog::listed([
+            ModelCompatibility::chat('chat-model', '', true, false),
+            ModelCompatibility::chat('vision-model', '', true, true),
+            ModelCompatibility::embedding('embed-model'),
+            ModelCompatibility::unverified('mystery', '', 'no metadata.'),
+        ], 'test', 'Test provider', 'Pull {model} first.');
+    }
+
+    /** @return array<string, mixed> the described model field */
+    private function modelField(LLMProviderInterface $provider): array {
+        $described = $this->service->describe($provider, null, true);
+        foreach ($described['fields'] as $field) {
+            if ($field['id'] === 'model') {
+                return $field;
+            }
+        }
+        $this->fail('no model field');
+    }
+
+    public function testCatalogDecoratesThePickerWithPerModelDetails(): void {
+        $field = $this->modelField($this->catalogProvider(self::sampleCatalog(), 'chat-model'));
+
+        $this->assertSame(['chat-model', 'embed-model', 'mystery', 'vision-model'], $field['options']);
+        $this->assertFalse($field['option_details']['embed-model']['selectable']);
+        $this->assertSame('embed-model only creates embeddings and can\'t chat. Pick a chat model.', $field['option_details']['embed-model']['message']);
+        $this->assertTrue($field['taggable'], 'free-typed ids stay allowed');
+        $this->assertArrayNotHasKey('warning', $field, 'a compatible model in use says nothing');
+        $this->assertArrayNotHasKey('notice', $field);
+    }
+
+    public function testAnIncompatibleModelInUseIsAWarningOnTheCard(): void {
+        $provider = $this->catalogProvider(self::sampleCatalog(), 'embed-model');
+        $field = $this->modelField($provider);
+        $this->assertSame('embed-model only creates embeddings and can\'t chat. Pick a chat model.', $field['warning']);
+
+        $described = $this->service->describe($provider, null, true);
+        $this->assertSame(ModelCompatibility::STATUS_INCOMPATIBLE, $described['modelStatus']['status']);
+    }
+
+    public function testATypedInModelThatIsNotListedIsAWarningNotARefusal(): void {
+        $field = $this->modelField($this->catalogProvider(self::sampleCatalog(), 'not-pulled'));
+        $this->assertSame('not-pulled isn\'t in the model list from Test provider. Pull not-pulled first.', $field['warning']);
+    }
+
+    public function testAnUnverifiedModelIsANoticeNotAWarning(): void {
+        $field = $this->modelField($this->catalogProvider(self::sampleCatalog(), 'mystery'));
+        $this->assertSame('mystery is not verified: no metadata.', $field['notice']);
+        $this->assertArrayNotHasKey('warning', $field);
+    }
+
+    public function testImagesSentToAModelWithoutVisionIsAWarning(): void {
+        $field = $this->modelField($this->catalogProvider(self::sampleCatalog(), 'chat-model', vision: true));
+        $this->assertSame('chat-model doesn\'t accept images, but this provider is set to send them, so requests with images will fail.', $field['warning']);
+    }
+
+    public function testAVisionModelWithImagesOffIsANotice(): void {
+        $field = $this->modelField($this->catalogProvider(self::sampleCatalog(), 'vision-model', vision: false));
+        $this->assertSame('vision-model accepts images, but this provider is set not to send them.', $field['notice']);
+    }
+
+    public function testAFailedListingSaysWhyAndFallsBackToTheConfiguredModel(): void {
+        $field = $this->modelField($this->catalogProvider(
+            ModelCatalog::failed('Test provider', 'Nothing is listening at the endpoint.'),
+            'configured-tag',
+        ));
+        $this->assertSame(['configured-tag'], $field['options']);
+        $this->assertSame(
+            'Couldn\'t load the model list from Test provider: Nothing is listening at the endpoint. Showing the built-in list.',
+            $field['listing_error'],
+        );
+        $this->assertArrayNotHasKey('option_details', $field);
+    }
+
+    public function testACachedCatalogIsServedWithoutAskingTheProvider(): void {
+        $provider = $this->createMockForIntersectionOfInterfaces([LLMProviderInterface::class, ModelCatalogInterface::class]);
+        $provider->method('getId')->willReturn('testprovider');
+        $provider->expects($this->never())->method('fetchModelCatalog');
+        $this->cache->method('get')->willReturn(self::sampleCatalog()->toArray());
+
+        $this->assertSame(['chat-model', 'embed-model', 'mystery', 'vision-model'], $this->service->listModels($provider, 'alice'));
+    }
+
+    public function testAFailedCatalogIsRememberedOnlyBriefly(): void {
+        $this->cache = $this->createMock(ICache::class);
+        $this->cache->expects($this->once())->method('set')
+            ->with('catalog-instance', $this->callback(fn($v) => is_array($v) && $v['error'] !== ''), 60);
+        $this->buildService();
+
+        $this->service->modelCatalog($this->catalogProvider(ModelCatalog::failed('Test provider', 'down'), 'x'), null);
+    }
+
+    public function testProvidersWithoutACatalogKeepThePlainList(): void {
+        $provider = $this->provider([]);
+        $provider->method('listModels')->willReturn(['a']);
+        $this->assertNull($this->service->modelCatalog($provider, null));
+        $this->assertSame(['a'], $this->service->listModels($provider, null));
     }
 }
