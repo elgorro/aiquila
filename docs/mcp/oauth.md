@@ -204,6 +204,18 @@ are dropped when the server starts, and register again. If Nextcloud is reached 
 internal address (`NEXTCLOUD_URL=http://nc`), list its public host in
 `MCP_REDIRECT_ALLOWLIST`. The Hetzner full stack does this by default.
 
+Registered clients that are of no further use are removed, so abandoned registrations do
+not pile up in `clients.json`. A client that holds a live refresh token is always kept.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `MCP_CLIENT_UNUSED_TTL` | `86400` (1 day) | Seconds a registered client may go without obtaining a token before it is removed. `0` keeps it forever |
+| `MCP_CLIENT_IDLE_TTL` | `0` (never) | Seconds after a client's last token, once it holds no live refresh token, before it is removed |
+
+A removed client gets `invalid_client` and has to register again. Clients registered by
+an older version carry no record of use. They are kept while they hold a live refresh
+token and otherwise count as unused.
+
 With `MCP_REGISTRATION_TOKEN` set, `POST /register` answers `401` unless the request
 carries `Authorization: Bearer <token>` (RFC 7591 §3.1 initial access token). Clients must
 therefore be told the token — see
@@ -248,7 +260,7 @@ If the server gates registration, paste the same value you set in
 
 The token is encrypted at rest with Nextcloud's crypto service and only ever sent to the
 server's `registration_endpoint`. Leave it empty for servers with open registration.
-Changing the token discards the previously registered client and its access tokens, so the
+Changing the token revokes and discards the previously registered client's tokens, so the
 next **Authenticate** registers again against the gated endpoint.
 
 ### 4. Ensure your server is reachable over HTTPS

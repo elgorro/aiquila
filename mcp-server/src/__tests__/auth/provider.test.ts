@@ -15,6 +15,7 @@ const flow = vi.hoisted(() => ({
 vi.mock('../../auth/login-flow.js', () => flow);
 
 import { NextcloudOAuthProvider, renderFlowPage, LOGIN_PAGE_CSP } from '../../auth/provider.js';
+import { ClientsStore } from '../../auth/store.js';
 import {
   CredentialBackendUnavailableError,
   CredentialStore,
@@ -919,6 +920,32 @@ describe('NextcloudOAuthProvider', () => {
       await vi.waitFor(() =>
         expect(flow.deleteAppPassword).toHaveBeenCalledWith('alice', 'app-password-1')
       );
+    });
+
+    it('removes a registered client that never obtained a token, keeps one that did', async () => {
+      vi.useFakeTimers({ now: Date.now(), toFake: ['Date'] });
+      const clients = new ClientsStore({
+        enableDynamicRegistration: true,
+        unusedTtlMs: 24 * 60 * 60 * 1000,
+      });
+      const p = new NextcloudOAuthProvider(clients);
+      const unused = clients.registerClient!({ redirect_uris: [new URL('https://r.com')] });
+      const used = clients.registerClient!({ redirect_uris: [new URL('https://r.com')] });
+      const code = await p.issueAuthCode({
+        credential: CRED,
+        pkceChallenge: 'ch',
+        clientId: used.client_id,
+        scopes: [],
+        redirectUri: 'https://r.com',
+        userId: 'alice',
+      });
+      await p.exchangeAuthorizationCode(used, code);
+
+      vi.setSystemTime(Date.now() + 25 * 60 * 60 * 1000);
+      await p.sweep();
+
+      expect(await clients.getClient(unused.client_id)).toBeUndefined();
+      expect(await clients.getClient(used.client_id)).toBeDefined();
     });
   });
 

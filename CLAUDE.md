@@ -457,6 +457,8 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_REDIRECT_ALLOWLIST` | No | Extra redirect hosts (or `scheme:` entries, or `*`) dynamically registered clients may use. Loopback, `claude.ai`, `claude.com` and the `NEXTCLOUD_URL` host are always allowed |
 | `MCP_LAZY_AUTH` | No | `false` requires a bearer token on every JSON-RPC method. Default `true`: `server/discover`, `initialize`, `tools/list` and `get_local_time` are served without one |
 | `MCP_REFRESH_TOKEN_TTL` | No | Refresh token lifetime in seconds, sliding on each rotation (default `2592000` = 30 days) |
+| `MCP_CLIENT_UNUSED_TTL` | No | Seconds a dynamically registered client may go without obtaining a token before it is removed (default `86400`; `0` = never) |
+| `MCP_CLIENT_IDLE_TTL` | No | Seconds after its last token a registered client with no live refresh token is removed (default `0` = never) |
 | `MCP_INTERNAL_TOKEN` | No | Deprecated. Static service-to-service bearer token that bypasses OAuth and acts as `NEXTCLOUD_USER`. Accepted only on direct connections (no forwarding headers) from internal addresses |
 | `MCP_INTERNAL_TOKEN_NETWORKS` | No | Comma-separated CIDRs / addresses `MCP_INTERNAL_TOKEN` is accepted from; replaces the loopback + private-range default |
 | `MCP_LOCALE` | No | BCP 47 locale tag for `localTime` in `get_local_time` (e.g. `sv-SE`); defaults to system locale |
