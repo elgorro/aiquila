@@ -22,8 +22,23 @@ namespace OCA\AIquila\Service\Provider\Cloud;
  * SDK's own `ANTHROPIC_*_BASE_URL` environment fallbacks never take part.
  */
 final class CloudEndpoints {
-    /** e.g. us-east-1, eu-central-2, us-gov-west-1, ap-southeast-4 */
-    private const AWS_REGION = '/^[a-z]{2}(?:-[a-z]+)+-\d{1,2}$/D';
+    /**
+     * The public AWS partitions as region pattern, DNS suffix and dual-stack
+     * DNS suffix, from botocore/data/partitions.json: the table the AWS SDKs'
+     * aws.partition() endpoint function resolves against. A region is valid
+     * only if it belongs to one of them, and its hosts take that partition's
+     * suffixes, so China and the European Sovereign Cloud get amazonaws.com.cn
+     * and amazonaws.eu rather than a commercial host that does not serve them.
+     *
+     * Patterns are upstream's verbatim apart from /D, without which $ would
+     * also match before a trailing newline. The ISO partitions are left out.
+     */
+    private const AWS_PARTITIONS = [
+        'aws' => ['/^(us|eu|ap|sa|ca|me|af|il|mx)\-\w+\-\d+$/D', 'amazonaws.com', 'api.aws'],
+        'aws-us-gov' => ['/^us\-gov\-\w+\-\d+$/D', 'amazonaws.com', 'api.aws'],
+        'aws-cn' => ['/^cn\-\w+\-\d+$/D', 'amazonaws.com.cn', 'api.amazonwebservices.com.cn'],
+        'aws-eusc' => ['/^eusc\-(de)\-\w+\-\d+$/D', 'amazonaws.eu', 'api.amazonwebservices.eu'],
+    ];
     /** global, us, eu, or a region such as us-east5 / europe-west1 */
     private const GCP_LOCATION = '/^(?:global|us|eu|[a-z]+-[a-z]+\d{1,2})$/D';
     /** Project IDs: 6–30 chars, lowercase, digits, hyphens; optional legacy domain prefix. */
@@ -44,7 +59,8 @@ final class CloudEndpoints {
      * @throws \InvalidArgumentException
      */
     public static function requireAwsRegion(string $value): string {
-        return self::require($value, self::AWS_REGION, 'enter an AWS region such as us-east-1.');
+        self::awsPartition($value);
+        return $value;
     }
 
     /**
@@ -92,17 +108,34 @@ final class CloudEndpoints {
 
     /** @return non-empty-string */
     public static function bedrockRuntimeUrl(string $region): string {
-        return 'https://bedrock-runtime.' . self::requireAwsRegion($region) . '.amazonaws.com';
+        [, $dnsSuffix] = self::awsPartition($region);
+        return 'https://bedrock-runtime.' . $region . '.' . $dnsSuffix;
     }
 
-    /** @return non-empty-string */
+    /**
+     * Mantle sits on the dual-stack suffix: api.aws in the commercial partition,
+     * api.amazonwebservices.eu in the European Sovereign Cloud.
+     *
+     * @return non-empty-string
+     */
     public static function bedrockMantleUrl(string $region): string {
-        return 'https://bedrock-mantle.' . self::requireAwsRegion($region) . '.api.aws/anthropic';
+        [, , $dualStackDnsSuffix] = self::awsPartition($region);
+        return 'https://bedrock-mantle.' . $region . '.' . $dualStackDnsSuffix . '/anthropic';
     }
 
-    /** @return non-empty-string */
+    /**
+     * Anthropic documents Claude Platform on AWS for the commercial regions
+     * only, so other partitions are refused instead of guessing a host there.
+     *
+     * @return non-empty-string
+     * @throws \InvalidArgumentException
+     */
     public static function claudePlatformAwsUrl(string $region): string {
-        return 'https://aws-external-anthropic.' . self::requireAwsRegion($region) . '.api.aws';
+        [$partition, , $dualStackDnsSuffix] = self::awsPartition($region);
+        if ($partition !== 'aws') {
+            throw new \InvalidArgumentException('"' . $region . '": Claude Platform on AWS is only offered in the commercial AWS regions, not in ' . $partition . '.');
+        }
+        return 'https://aws-external-anthropic.' . $region . '.' . $dualStackDnsSuffix;
     }
 
     /** @return non-empty-string */
@@ -126,6 +159,20 @@ final class CloudEndpoints {
     /** @return non-empty-string */
     public static function foundryUrl(string $resource): string {
         return 'https://' . self::requireAzureResource($resource) . '.services.ai.azure.com/anthropic/';
+    }
+
+    /**
+     * @return array{0: non-empty-string, 1: non-empty-string, 2: non-empty-string} partition, DNS suffix, dual-stack DNS suffix
+     * @psalm-assert non-empty-string $region
+     * @throws \InvalidArgumentException
+     */
+    private static function awsPartition(string $region): array {
+        foreach (self::AWS_PARTITIONS as $partition => [$pattern, $dnsSuffix, $dualStackDnsSuffix]) {
+            if (preg_match($pattern, $region) === 1) {
+                return [$partition, $dnsSuffix, $dualStackDnsSuffix];
+            }
+        }
+        throw new \InvalidArgumentException('"' . $region . '": enter an AWS region such as us-east-1.');
     }
 
     /**

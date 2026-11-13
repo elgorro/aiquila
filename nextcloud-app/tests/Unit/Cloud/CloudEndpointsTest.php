@@ -56,6 +56,57 @@ class CloudEndpointsTest extends TestCase {
         );
     }
 
+    public function testRequireAwsRegionAcceptsEveryPublicPartition(): void {
+        foreach (['us-east-1', 'us-gov-west-1', 'cn-north-1', 'eusc-de-east-1'] as $region) {
+            $this->assertSame($region, CloudEndpoints::requireAwsRegion($region));
+        }
+    }
+
+    public static function awsRegionsOutsideThePublicPartitions(): array {
+        return [
+            'no such partition' => ['xx-east-1'],
+            'iso partition' => ['us-iso-east-1'],
+            'iso-e partition' => ['eu-isoe-west-1'],
+            'eusc outside de' => ['eusc-fr-east-1'],
+        ];
+    }
+
+    #[DataProvider('awsRegionsOutsideThePublicPartitions')]
+    public function testAwsRegionOutsideThePublicPartitionsIsRejected(string $region): void {
+        $this->expectException(\InvalidArgumentException::class);
+        CloudEndpoints::requireAwsRegion($region);
+    }
+
+    public static function awsPartitionUrls(): array {
+        return [
+            'eusc runtime' => ['bedrockRuntimeUrl', 'eusc-de-east-1', 'https://bedrock-runtime.eusc-de-east-1.amazonaws.eu'],
+            'eusc mantle' => ['bedrockMantleUrl', 'eusc-de-east-1', 'https://bedrock-mantle.eusc-de-east-1.api.amazonwebservices.eu/anthropic'],
+            'china runtime' => ['bedrockRuntimeUrl', 'cn-north-1', 'https://bedrock-runtime.cn-north-1.amazonaws.com.cn'],
+            'china mantle' => ['bedrockMantleUrl', 'cn-northwest-1', 'https://bedrock-mantle.cn-northwest-1.api.amazonwebservices.com.cn/anthropic'],
+            'govcloud mantle' => ['bedrockMantleUrl', 'us-gov-west-1', 'https://bedrock-mantle.us-gov-west-1.api.aws/anthropic'],
+        ];
+    }
+
+    #[DataProvider('awsPartitionUrls')]
+    public function testAwsUrlsUseThePartitionDnsSuffix(string $builder, string $region, string $expected): void {
+        $this->assertSame($expected, [CloudEndpoints::class, $builder]($region));
+    }
+
+    public static function nonCommercialAwsRegions(): array {
+        return [
+            'govcloud' => ['us-gov-west-1'],
+            'china' => ['cn-north-1'],
+            'eusc' => ['eusc-de-east-1'],
+        ];
+    }
+
+    /** Anthropic documents Claude Platform on AWS for the commercial regions only. */
+    #[DataProvider('nonCommercialAwsRegions')]
+    public function testClaudePlatformAwsRejectsNonCommercialPartitions(string $region): void {
+        $this->expectException(\InvalidArgumentException::class);
+        CloudEndpoints::claudePlatformAwsUrl($region);
+    }
+
     public function testGcpProjectAndWorkspaceAreChecked(): void {
         foreach (['ab', 'Upper-Case', 'my-project/../x', 'p@q'] as $bad) {
             try {
