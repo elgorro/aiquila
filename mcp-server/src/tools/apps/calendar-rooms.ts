@@ -23,6 +23,13 @@ import { getNextcloudConfig } from '../types.js';
  * §3.2.3) and RSVP=TRUE. Nextcloud answers for the room at once, ACCEPTED when
  * it is free and DECLINED when it is not, except for recurring events, which
  * it leaves unanswered.
+ *
+ * A declined booking still holds the slot: Nextcloud stores the request in the
+ * room's calendar before it decides, and leaves that copy at
+ * PARTSTAT=NEEDS-ACTION when it declines, so free/busy reports the room busy.
+ * Taking the room off the event sends it a CANCEL (RFC 5546 §3.2.5), which
+ * releases the slot, so create_event and update_event do that for every room
+ * or resource that declined.
  */
 
 const NC_NS = 'http://nextcloud.com/ns';
@@ -516,30 +523,95 @@ export const calendarRoomTools = [listCalendarRoomsTool, getFreeBusyTool, findFr
 // Booking results, for create_event and update_event
 // ---------------------------------------------------------------------------
 
-/**
- * What each room or resource attendee of a stored event answered. Nextcloud
- * writes the room's PARTSTAT into the organizer's copy while saving it.
- */
-export function describeBookings(icalData: string): string[] {
-  const unfolded = icalData.replace(/\r?\n[ \t]/g, '');
-  const recurring = /^(RRULE|RDATE)[;:]/m.test(unfolded);
-  const scheduled = /^ORGANIZER[;:]/m.test(unfolded);
-  const lines: string[] = [];
+interface Booking {
+  label: 'Room' | 'Resource';
+  who: string;
+  address: string;
+  partstat: string;
+}
+
+function unfold(icalData: string): string {
+  return icalData.replace(/\r?\n[ \t]/g, '');
+}
+
+/** The room and resource attendees of an event (RFC 5545 §3.2.3 CUTYPE). */
+function bookings(unfolded: string): Booking[] {
+  const found: Booking[] = [];
   for (const m of unfolded.matchAll(/^ATTENDEE([^:\r\n]*):(.*)$/gm)) {
     const params = m[1];
     const cutype = params.match(/;CUTYPE=([^;]+)/i)?.[1].toUpperCase();
     if (cutype !== 'ROOM' && cutype !== 'RESOURCE') continue;
-    const who =
-      params.match(/;CN=("[^"]*"|[^;]*)/i)?.[1].replace(/"/g, '') || m[2].replace(/^mailto:/i, '');
-    const partstat = params.match(/;PARTSTAT=([^;]+)/i)?.[1].toUpperCase() ?? 'NEEDS-ACTION';
-    const label = cutype === 'ROOM' ? 'Room' : 'Resource';
+    const address = m[2].trim();
+    found.push({
+      label: cutype === 'ROOM' ? 'Room' : 'Resource',
+      who:
+        params.match(/;CN=("[^"]*"|[^;]*)/i)?.[1].replace(/"/g, '') ||
+        address.replace(/^mailto:/i, ''),
+      address,
+      partstat: params.match(/;PARTSTAT=([^;]+)/i)?.[1].toUpperCase() ?? 'NEEDS-ACTION',
+    });
+  }
+  return found;
+}
+
+/**
+ * The calendar addresses of the rooms and resources that declined a stored,
+ * scheduled event. Nextcloud writes the room's PARTSTAT into the organizer's
+ * copy while saving it.
+ */
+export function declinedBookings(icalData: string): string[] {
+  const unfolded = unfold(icalData);
+  if (!/^ORGANIZER[;:]/m.test(unfolded)) return [];
+  return bookings(unfolded)
+    .filter((b) => b.partstat === 'DECLINED')
+    .map((b) => b.address);
+}
+
+/**
+ * The event without the ATTENDEE properties for these calendar addresses,
+ * continuation lines included (RFC 5545 §3.1 folding). Addresses compare
+ * case-insensitively, as `mailto:` URIs do.
+ */
+export function removeAttendees(icalData: string, addresses: string[]): string {
+  const drop = new Set(addresses.map((a) => a.toLowerCase()));
+  const lines = icalData.split(/\r?\n/);
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    let prop = lines[i];
+    let end = i;
+    while (end + 1 < lines.length && /^[ \t]/.test(lines[end + 1])) {
+      prop += lines[++end].slice(1);
+    }
+    const m = /^ATTENDEE[^:]*:(.*)$/i.exec(prop);
+    if (!m || !drop.has(m[1].trim().toLowerCase())) out.push(...lines.slice(i, end + 1));
+    i = end;
+  }
+  return out.join('\r\n');
+}
+
+/**
+ * What each room or resource attendee of a stored event answered.
+ * `released` lists the declined addresses already taken off the event.
+ */
+export function describeBookings(icalData: string, released: string[] = []): string[] {
+  const unfolded = unfold(icalData);
+  const recurring = /^(RRULE|RDATE)[;:]/m.test(unfolded);
+  const scheduled = /^ORGANIZER[;:]/m.test(unfolded);
+  const removed = new Set(released.map((a) => a.toLowerCase()));
+  const lines: string[] = [];
+  for (const { label, who, address, partstat } of bookings(unfolded)) {
     if (!scheduled) {
       lines.push(
         `${label} ${who}: not booked — the event has no organizer, so Nextcloud did not ask it. ` +
           'Rooms are booked by an organizer with an email address: add one to your account.'
       );
     } else if (partstat === 'ACCEPTED') lines.push(`${label} ${who}: booked`);
-    else if (partstat === 'DECLINED') {
+    else if (partstat === 'DECLINED' && removed.has(address.toLowerCase())) {
+      lines.push(
+        `${label} ${who}: DECLINED — it is already booked at that time (double booking). ` +
+          'Removed from the event so the declined booking does not hold the slot.'
+      );
+    } else if (partstat === 'DECLINED') {
       lines.push(
         `${label} ${who}: DECLINED — it is already booked at that time (double booking). ` +
           "Remove it from the event's attendees: until then Nextcloud keeps the declined " +

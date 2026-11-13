@@ -9,6 +9,7 @@ vi.mock('../client/caldav.js', async () => {
 });
 
 import {
+  declinedBookings,
   describeBookings,
   findFreeRoomsTool,
   getFreeBusyTool,
@@ -16,6 +17,7 @@ import {
   parseFreeBusy,
   parsePrincipals,
   parseScheduleResponse,
+  removeAttendees,
   toUtcICal,
 } from '../tools/apps/calendar-rooms.js';
 
@@ -139,6 +141,36 @@ describe('parsing', () => {
     expect(
       describeBookings('BEGIN:VEVENT\r\nATTENDEE;CUTYPE=ROOM:mailto:big@example.com\r\nEND:VEVENT')
     ).toEqual([expect.stringContaining('no organizer')]);
+  });
+});
+
+describe('declined bookings', () => {
+  const event =
+    'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e1\r\nORGANIZER:mailto:alice@example.com\r\n' +
+    'ATTENDEE;CN="Big room";CUTYPE=ROOM;PARTSTAT=DECLINED;RSVP=TRUE:mailto:BIG@\r\n example.com\r\n' +
+    'ATTENDEE;CUTYPE=RESOURCE;PARTSTAT=ACCEPTED:mailto:beamer@example.com\r\n' +
+    'ATTENDEE;PARTSTAT=DECLINED:mailto:bob@example.com\r\n' +
+    'END:VEVENT\r\nEND:VCALENDAR\r\n';
+
+  it('lists only rooms and resources that declined a scheduled event', () => {
+    expect(declinedBookings(event)).toEqual(['mailto:BIG@example.com']);
+    expect(declinedBookings(event.replace(/ORGANIZER[^\r]*\r\n/, ''))).toEqual([]);
+  });
+
+  it('removes a folded ATTENDEE whatever the address case, and nothing else', () => {
+    const out = removeAttendees(event, ['mailto:big@example.com']);
+    expect(out).not.toContain('Big room');
+    expect(out).not.toMatch(/^ example\.com/m);
+    expect(out).toContain('mailto:beamer@example.com');
+    expect(out).toContain('ATTENDEE;PARTSTAT=DECLINED:mailto:bob@example.com');
+    expect(out).toContain('ORGANIZER:mailto:alice@example.com');
+  });
+
+  it('says a released room was removed', () => {
+    expect(describeBookings(event, ['mailto:big@example.com'])).toEqual([
+      expect.stringMatching(/^Room Big room: DECLINED .*Removed from the event/),
+      'Resource beamer@example.com: booked',
+    ]);
   });
 });
 

@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: MIT
 
 import { z } from 'zod';
-import { calendarRoomTools, describeBookings } from './calendar-rooms.js';
+import {
+  calendarRoomTools,
+  declinedBookings,
+  describeBookings,
+  removeAttendees,
+} from './calendar-rooms.js';
 import {
   decodeXmlEntities,
   encodeXmlEntities,
@@ -1392,9 +1397,9 @@ export const createEventTool = {
       }
 
       // Verify the event was actually persisted
-      let stored: string;
+      let stored: { href: string; etag: string; icalData: string };
       try {
-        stored = (await resolveEventByUid(slug, eventUid)).icalData;
+        stored = await resolveEventByUid(slug, eventUid);
       } catch {
         throw new Error(
           `Event creation appeared to succeed (HTTP ${response.status}) but the event ` +
@@ -1412,7 +1417,7 @@ export const createEventTool = {
             type: 'text' as const,
             text:
               `Event created successfully: ${args.summary}\n  When: ${timeInfo}\n  UID: ${eventUid}` +
-              bookingLines(stored),
+              (await settleBookings(stored)),
           },
         ],
       };
@@ -1641,7 +1646,6 @@ export const updateEventTool = {
             if (attendee.cn) atLine += `;CN=${quoteICalParam(attendee.cn)}`;
             atLine += `;ROLE=${attendee.role || 'REQ-PARTICIPANT'}`;
             if (attendee.cutype) atLine += `;CUTYPE=${attendee.cutype}`;
-            if (attendee.cutype) atLine += `;CUTYPE=${attendee.cutype}`;
             atLine += `;PARTSTAT=NEEDS-ACTION`;
             if (attendee.rsvp !== false) atLine += `;RSVP=TRUE`;
             atLine += `:mailto:${attendee.email}`;
@@ -1673,9 +1677,7 @@ export const updateEventTool = {
         let bookings = '';
         if (/^ATTENDEE[^:\r\n]*;CUTYPE=(ROOM|RESOURCE)/im.test(modified)) {
           try {
-            bookings = bookingLines(
-              (await resolveEventByUid(args.calendarName, args.uid)).icalData
-            );
+            bookings = await settleBookings(await resolveEventByUid(args.calendarName, args.uid));
           } catch {
             bookings = '\n  (Could not read back whether the rooms accepted.)';
           }
@@ -1708,9 +1710,37 @@ export const updateEventTool = {
   },
 };
 
-/** The room and resource answers of a stored event, as lines for a tool result. */
-function bookingLines(icalData: string): string {
-  const lines = describeBookings(icalData);
+/**
+ * Take the rooms and resources that declined off a stored event, then report
+ * what each one answered, as lines for a tool result.
+ *
+ * Nextcloud keeps a declined booking in the room's calendar, and free/busy
+ * counts it as busy until the room is removed from the event (see
+ * calendar-rooms.ts). Removing it makes Nextcloud send the room a CANCEL
+ * (RFC 5546 §3.2.5). The PUT is conditional on the ETag just read
+ * (RFC 9110 §13.1.1); if it fails, the report tells the user to remove the
+ * room instead.
+ */
+async function settleBookings(stored: {
+  href: string;
+  etag: string;
+  icalData: string;
+}): Promise<string> {
+  const declined = declinedBookings(stored.icalData);
+  let released: string[] = [];
+  if (declined.length > 0 && stored.etag) {
+    try {
+      const res = await fetchCalDAV(`${getNextcloudConfig().url}${stored.href}`, {
+        method: 'PUT',
+        body: formatICalendar(removeAttendees(stored.icalData, declined)),
+        headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'If-Match': stored.etag },
+      });
+      if (res.ok) released = declined;
+    } catch {
+      // Report the declined rooms with the advice to remove them.
+    }
+  }
+  const lines = describeBookings(stored.icalData, released);
   return lines.length > 0 ? `\n  ${lines.join('\n  ')}` : '';
 }
 
