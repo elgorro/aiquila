@@ -136,7 +136,8 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
 
         return [
             'itemsTotal' => $total,
-            'itemsProcessed' => $processed,
+            'itemsProcessed' => $processed - $errors,
+            'itemsFailed' => $errors,
             'summary' => $summary,
         ];
     }

@@ -259,7 +259,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
      * @param array<string, int> $fileIds custom_id => file id
      * @param array<string, mixed> $options
      * @param array<string, mixed> $state
-     * @return array{itemsTotal: int, itemsProcessed: int, summary: string}
+     * @return array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string}
      */
     private function collectResults(
         Coworker $coworker,
@@ -331,6 +331,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
         return [
             'itemsTotal' => $total,
             'itemsProcessed' => $written,
+            'itemsFailed' => array_sum(array_map('count', $failures)),
             'summary' => $this->buildSummary($written, $total, 'anthropic (batch, 50% discount)', $failures, $skipped),
         ];
     }
@@ -341,7 +342,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
      *
      * @param list<File> $files
      * @param array<string, mixed> $options
-     * @return array{itemsTotal: int, itemsProcessed: int, summary: string}
+     * @return array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string}
      */
     private function runSynchronously(
         Coworker $coworker,
@@ -401,6 +402,7 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
         return [
             'itemsTotal' => $total,
             'itemsProcessed' => $written,
+            'itemsFailed' => array_sum(array_map('count', $failures)),
             'summary' => $this->buildSummary($written, $total, $label . ' (no batch API — full price)', $failures, $skipped),
         ];
     }

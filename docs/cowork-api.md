@@ -111,8 +111,11 @@ interface CoworkerTaskType {
     public function getFamily(): string;    // grouping, e.g. "text"
     public function validateOptions(array $options): void;   // throw on invalid
     public function run(Coworker $coworker, CoworkerRun $run, callable $progress): array;
-    // run() returns ['itemsTotal' => int, 'itemsProcessed' => int, 'summary' => string]
-    // and should call $progress(int $processed, int $total) as it goes.
+    // run() returns ['itemsTotal' => int, 'itemsProcessed' => int, 'itemsFailed' => int,
+    // 'summary' => string] and should call $progress(int $processed, int $total) as it goes.
+    // itemsProcessed counts the items that succeeded, itemsFailed (optional, default 0)
+    // the ones that failed; a skipped item counts as neither. Catch per-item errors and
+    // count them rather than throwing, so one bad item does not stop the rest.
     // $progress throws RunCancelledException once the run is stopped; let it
     // propagate (don't catch \Throwable around the call).
 }
@@ -160,8 +163,17 @@ Enable (`true`) or disable (`false`). Returns the updated coworker.
 ### `runNow(string $appId, int $id): array`
 
 Run the coworker immediately (synchronous). Returns the completed run record
-(`status`, `itemsTotal`, `itemsProcessed`, `summary`, `error`, `startedAt`,
-`finishedAt`).
+(`status`, `itemsTotal`, `itemsProcessed`, `itemsFailed`, `summary`, `error`,
+`startedAt`, `finishedAt`).
+
+A run whose task type returns normally ends as `success`, unless items failed:
+
+- If items failed and none succeeded, it ends as `error`, with `All N item(s) failed`
+  as its error.
+- If only some failed, it stays `success` and its error says `N of M item(s) failed`.
+
+A task type that throws ends the run as `error` with the exception's message. The
+coworker's `lastStatus` and `lastError` follow the run's.
 
 ### `stop(string $appId, int $id): array`
 

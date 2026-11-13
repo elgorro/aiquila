@@ -709,7 +709,7 @@ class CoworkerService {
      * no next-run recomputation — because the work has not happened yet and
      * the coworker has nothing to report.
      *
-     * @param array{itemsTotal?: int, itemsProcessed?: int, summary?: string, pending?: bool, state?: array<string, mixed>}|null $result
+     * @param array{itemsTotal?: int, itemsProcessed?: int, itemsFailed?: int, summary?: string, pending?: bool, state?: array<string, mixed>}|null $result
      */
     private function finishRun(
         Coworker $coworker,
@@ -729,27 +729,37 @@ class CoworkerService {
                 'error' => $error->getMessage(),
             ]);
         } elseif (($result['pending'] ?? false) === true) {
-            $run->setItemsTotal((int)($result['itemsTotal'] ?? 0));
-            $run->setItemsProcessed((int)($result['itemsProcessed'] ?? 0));
-            $run->setSummary((string)($result['summary'] ?? ''));
+            $this->recordCounts($run, $result);
             $run->setStatus(CoworkerRun::STATUS_PENDING);
             $run->setDecodedState($result['state'] ?? []);
             $this->runMapper->update($run);
             return $run;
         } elseif ($this->runMapper->findStatus($run->getId()) === CoworkerRun::STATUS_CANCELLED) {
             // Stopped after the last progress check: the stop stands.
-            $run->setItemsTotal((int)($result['itemsTotal'] ?? 0));
-            $run->setItemsProcessed((int)($result['itemsProcessed'] ?? 0));
-            $run->setSummary((string)($result['summary'] ?? ''));
+            $this->recordCounts($run, $result);
             return $this->finishCancelled($coworker, $run);
         } else {
-            $run->setItemsTotal((int)($result['itemsTotal'] ?? 0));
-            $run->setItemsProcessed((int)($result['itemsProcessed'] ?? 0));
-            $run->setSummary((string)($result['summary'] ?? ''));
-            $run->setStatus(CoworkerRun::STATUS_SUCCESS);
+            $this->recordCounts($run, $result);
+            $failed = $run->getItemsFailed();
+            // Task types catch per-item errors, so a run that returns may
+            // still have failed throughout. Nothing done and something failed
+            // is an error; some failures are reported on a successful run.
+            $status = $failed > 0 && $run->getItemsProcessed() === 0
+                ? CoworkerRun::STATUS_ERROR
+                : CoworkerRun::STATUS_SUCCESS;
+            $message = match (true) {
+                $failed === 0 => null,
+                $status === CoworkerRun::STATUS_ERROR => sprintf('All %d item(s) failed', $failed),
+                default => sprintf('%d of %d item(s) failed', $failed, $run->getItemsTotal()),
+            };
+            $run->setStatus($status);
+            $run->setError($message);
             $run->setState(null);
-            $coworker->setLastStatus(CoworkerRun::STATUS_SUCCESS);
-            $coworker->setLastError(null);
+            if ($message !== null) {
+                $run->appendLog($status === CoworkerRun::STATUS_ERROR ? CoworkerRun::LOG_ERROR : CoworkerRun::LOG_WARN, $message);
+            }
+            $coworker->setLastStatus($status);
+            $coworker->setLastError($message);
         }
 
         $finishedAt = $this->timeFactory->getTime();
@@ -763,6 +773,18 @@ class CoworkerService {
         $this->announceFinished($coworker, $run);
 
         return $run;
+    }
+
+    /**
+     * Copy a task type's counts and summary onto the run.
+     *
+     * @param array{itemsTotal?: int, itemsProcessed?: int, itemsFailed?: int, summary?: string, pending?: bool, state?: array<string, mixed>}|null $result
+     */
+    private function recordCounts(CoworkerRun $run, ?array $result): void {
+        $run->setItemsTotal((int)($result['itemsTotal'] ?? 0));
+        $run->setItemsProcessed((int)($result['itemsProcessed'] ?? 0));
+        $run->setItemsFailed((int)($result['itemsFailed'] ?? 0));
+        $run->setSummary((string)($result['summary'] ?? ''));
     }
 
     /**

@@ -183,7 +183,7 @@ Needs an AIquila app version that supports run cancellation; older versions answ
 - `limit` (number, optional): maximum runs, default 20
 
 **Returns:** one line per run: ID, status (`running`, `pending`, `success`, `error`,
-`cancelled`), items processed, start time, duration, what started it (scheduled, run
+`cancelled`), items that succeeded out of the total and how many failed, start time, duration, what started it (scheduled, run
 by hand, file change, trigger URL), and the first line of the summary or the error.
 
 ### get_coworker_run
@@ -192,8 +192,8 @@ by hand, file change, trigger URL), and the first line of the summary or the err
 - `id` (number, required): coworker ID
 - `runId` (number, required): run ID from `get_coworker_runs`
 
-**Returns:** status, duration, the complete summary and error, and the run's per-item
-log (timestamp, level, item path, message). Needs an AIquila app version that serves
+**Returns:** status, item counts, duration, the complete summary and error, and the
+run's per-item log (timestamp, level, item path, message). Needs an AIquila app version that serves
 single runs; older versions answer *not found*.
 
 ---

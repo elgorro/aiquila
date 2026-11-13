@@ -11,6 +11,7 @@
 			<li v-for="run in runs" :key="run.id" class="run">
 				<span class="status" :class="run.status">{{ statusLabel(run.status) }}</span>
 				<span class="progress">{{ run.itemsProcessed }}/{{ run.itemsTotal }}</span>
+				<span v-if="run.itemsFailed > 0" class="failed">{{ n('aiquila', '%n failed', '%n failed', run.itemsFailed) }}</span>
 				<span class="when">{{ formatTime(run.startedAt) }}</span>
 				<span class="who">{{ t('aiquila', 'as {user}', { user: run.userId }) }}</span>
 				<span v-if="run.startedBy" class="origin">{{ originLabel(run.startedBy) }}</span>
@@ -28,7 +29,7 @@
 </template>
 
 <script>
-import { translate as t } from '@nextcloud/l10n'
+import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { getCoworkerRuns, stopCoworker } from '../api.js'
 
 export default {
@@ -45,7 +46,7 @@ export default {
 	mounted() {
 		this.refresh()
 	},
-	methods: { t,
+	methods: { t, n,
 		// 'pending' reads as "something is stuck" on its own; the run is
 		// waiting on a batch that Anthropic may take hours to return.
 		statusLabel(status) {
@@ -111,6 +112,7 @@ export default {
 .origin { color: var(--color-text-lighter); }
 .status.success { color: var(--color-success); }
 .status.error { color: var(--color-error); }
+.failed { color: var(--color-error); }
 .status.running { color: var(--color-warning); }
 /* Neutral rather than warning: a pending run is healthy, just slow — its
    batch is with Anthropic and may take hours. */

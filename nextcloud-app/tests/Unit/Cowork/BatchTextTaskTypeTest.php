@@ -402,6 +402,7 @@ class BatchTextTaskTypeTest extends TestCase {
 
         $this->assertSame(4, $result['itemsTotal']);
         $this->assertSame(1, $result['itemsProcessed']);
+        $this->assertSame(3, $result['itemsFailed'] ?? null, 'refused, errored and missing all count as failed');
         $this->assertStringContainsString('1 refused', $result['summary']);
         $this->assertStringContainsString('1 errored', $result['summary']);
         $this->assertStringContainsString('1 missing', $result['summary']);

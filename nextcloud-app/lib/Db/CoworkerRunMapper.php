@@ -39,7 +39,7 @@ class CoworkerRunMapper extends ChangeTrackingMapper {
         $qb = $this->db->getQueryBuilder();
         // Everything but `log`: the list never shows it, and a full log is
         // the largest thing a run row carries.
-        $qb->select('id', 'coworker_id', 'user_id', 'status', 'items_total', 'items_processed', 'summary', 'error', 'started_at', 'finished_at', 'state', 'started_by')
+        $qb->select('id', 'coworker_id', 'user_id', 'status', 'items_total', 'items_processed', 'items_failed', 'summary', 'error', 'started_at', 'finished_at', 'state', 'started_by')
             ->from($this->getTableName())
             ->where($qb->expr()->eq('coworker_id', $qb->createNamedParameter($coworkerId, IQueryBuilder::PARAM_INT)));
         // A team coworker's runs are the team's, whoever each one ran as.

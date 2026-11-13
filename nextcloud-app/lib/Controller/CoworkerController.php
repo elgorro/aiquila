@@ -324,7 +324,7 @@ class CoworkerController extends Controller {
      * 200: The run with its log
      * 404: Coworker or run not found, or the run belongs to another coworker
      *
-     * @return JSONResponse<Http::STATUS_OK, array{id: int, coworkerId: int, userId: string, status: string, itemsTotal: int, itemsProcessed: int, summary: ?string, error: ?string, startedAt: int, finishedAt: ?int, pendingBatchId: ?string, log: list<array{ts: int, level: string, message: string, item: ?string}>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{id: int, coworkerId: int, userId: string, status: string, itemsTotal: int, itemsProcessed: int, itemsFailed: int, summary: ?string, error: ?string, startedAt: int, finishedAt: ?int, pendingBatchId: ?string, log: list<array{ts: int, level: string, message: string, item: ?string}>}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>
      */
     #[NoAdminRequired]
     #[NoCSRFRequired]

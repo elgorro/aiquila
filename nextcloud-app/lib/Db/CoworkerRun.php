@@ -18,6 +18,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setItemsTotal(int $itemsTotal)
  * @method int getItemsProcessed()
  * @method void setItemsProcessed(int $itemsProcessed)
+ * @method int getItemsFailed()
+ * @method void setItemsFailed(int $itemsFailed)
  * @method string|null getSummary()
  * @method void setSummary(?string $summary)
  * @method string|null getError()
@@ -64,7 +66,10 @@ class CoworkerRun extends Entity implements \JsonSerializable {
     protected string $userId = '';
     protected string $status = self::STATUS_RUNNING;
     protected int $itemsTotal = 0;
+    /** Items that succeeded. */
     protected int $itemsProcessed = 0;
+    /** Items that failed. Skipped items count as neither. */
+    protected int $itemsFailed = 0;
     protected ?string $summary = null;
     protected ?string $error = null;
     protected int $startedAt = 0;
@@ -86,6 +91,7 @@ class CoworkerRun extends Entity implements \JsonSerializable {
         $this->addType('status', 'string');
         $this->addType('itemsTotal', 'integer');
         $this->addType('itemsProcessed', 'integer');
+        $this->addType('itemsFailed', 'integer');
         $this->addType('summary', 'string');
         $this->addType('error', 'string');
         $this->addType('startedAt', 'integer');
@@ -191,6 +197,7 @@ class CoworkerRun extends Entity implements \JsonSerializable {
             'status' => $this->getStatus(),
             'itemsTotal' => $this->getItemsTotal(),
             'itemsProcessed' => $this->getItemsProcessed(),
+            'itemsFailed' => $this->getItemsFailed(),
             'summary' => $this->getSummary(),
             'error' => $this->getError(),
             'startedAt' => $this->getStartedAt(),
