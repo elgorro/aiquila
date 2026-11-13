@@ -167,16 +167,36 @@ class McpClientService {
 
     /**
      * Send a JSON-RPC 2.0 request to an MCP server.
+     *
+     * MCP 2025-03-26 / 2025-06-18 transports, "Session Management": a server
+     * that ended a session MUST answer requests carrying its ID with 404, and
+     * the client MUST then start a new session with an `initialize` sent
+     * without a session ID. The request is resent once in the new session; a
+     * 404 to that retry, or to a request that carried no session ID, is an
+     * ordinary error.
      */
-    private function jsonRpc(McpServer $server, string $method, array $params = [], ?int $id = null): array {
-        $id = $id ?? random_int(1, 999999);
+    private function jsonRpc(McpServer $server, string $method, array $params = [], bool $mayRestartSession = true): array {
+        $id = random_int(1, 999999);
 
         $body = $this->buildRequestBody($method, $params, $id);
 
         try {
+            $hadSession = isset($this->sessions[$server->getId()]);
             $response = $this->post($server, $body);
 
             $statusCode = $response->getStatusCode();
+            if ($statusCode === 404 && $hadSession) {
+                $this->forgetSession($server);
+                if (!$mayRestartSession || $method === 'initialize') {
+                    throw new \RuntimeException('HTTP 404: the MCP server ended the session again right after it was restarted');
+                }
+                $this->logger->info('MCP: server ended the session, starting a new one', [
+                    'server' => $server->getDisplayName(),
+                    'method' => $method,
+                ]);
+                $this->initialize($server);
+                return $this->jsonRpc($server, $method, $params, false);
+            }
             $responseHeaders = $response->getHeaders(false);
 
             // Capture session ID from response headers. It must be kept whether
@@ -192,11 +212,12 @@ class McpClientService {
                 return $this->parseSseResponse($response->getContent(false), $statusCode, $id);
             }
 
-            $result = $response->toArray(false);
-
             if ($statusCode >= 400) {
-                throw new \RuntimeException("HTTP $statusCode: " . (string)json_encode($result));
+                // The body need not be JSON (a proxy's or a router's 404 page).
+                throw new \RuntimeException("HTTP $statusCode: " . $response->getContent(false));
             }
+
+            $result = $response->toArray(false);
 
             if (isset($result['error'])) {
                 throw new \RuntimeException('JSON-RPC error: ' . ($result['error']['message'] ?? 'unknown'));
@@ -227,9 +248,17 @@ class McpClientService {
         }
 
         try {
+            $hadSession = isset($this->sessions[$server->getId()]);
             $response = $this->post($server, $body);
 
             $statusCode = $response->getStatusCode();
+            if ($statusCode === 404 && $hadSession) {
+                // The only notification sent is `notifications/initialized`,
+                // right after `initialize`: a 404 there means the new session
+                // is gone already. Fail rather than loop.
+                $this->forgetSession($server);
+                throw new \RuntimeException('HTTP 404: the MCP server ended the session during initialization');
+            }
 
             // A notification has no JSON-RPC response body to parse. Accept any
             // successful HTTP response, including 202/204 with an empty body.
@@ -333,6 +362,15 @@ class McpClientService {
             }
         }
         return $events;
+    }
+
+    /**
+     * Drop everything the client holds for a server's session: its ID, the
+     * initialized flag and the negotiated protocol version.
+     */
+    private function forgetSession(McpServer $server): void {
+        $serverId = $server->getId();
+        unset($this->sessions[$serverId], $this->initialized[$serverId], $this->protocolVersions[$serverId]);
     }
 
     /**

@@ -375,6 +375,10 @@ AIquila speaks MCP revisions `2025-06-18` and `2025-03-26`. It offers the newer 
 the server picks one of the two. A server that answers with any other revision is
 reported as an error.
 
+When a stateful server ends a session (it answers the session's ID with `404`), AIquila
+opens a new session and sends the request once more. A `404` to a request without a
+session, or a second one right after the new session opened, is reported as an error.
+
 Each entry takes one of three authentication types:
 
 | Type | Use it for |

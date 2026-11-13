@@ -1966,4 +1966,134 @@ class McpClientServiceTest extends TestCase {
         $this->assertStringContainsString('2099-01-01', $error->getMessage());
         $this->assertCount(1, $captured, 'nothing is sent after the rejected initialize');
     }
+
+    // --- Session restart (MCP transports, "Session Management") ---
+
+    /**
+     * Run listTools() then callTool() against a stateful server. Each
+     * `initialize` opens session "s<n>"; $endedSessions lists the session IDs
+     * the server answers with 404, as a server that ended them MUST.
+     *
+     * @param list<string> $endedSessions
+     * @return list<array<string, mixed>> request options, in order
+     */
+    private function statefulRun(array $endedSessions, ?array &$toolResult = null, ?\Throwable &$error = null, bool $withSession = true): array {
+        $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking, $this->appManager);
+        $captured = [];
+        $opened = 0;
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$captured, &$opened, &$endedSessions, $withSession): MockResponse {
+            $captured[] = $options;
+            $body = $this->requestBody($options);
+            $session = $this->headerValue($options, 'Mcp-Session-Id');
+            // "sN" ends session N for tools/call; "init:sN" ends it already
+            // at notifications/initialized.
+            $method = $body['method'] ?? '';
+            $key = ($method === 'notifications/initialized' ? 'init:' : '') . ($session ?? '-');
+            if (($method === 'tools/call' || str_starts_with($key, 'init:'))
+                && in_array($key, $endedSessions, true)) {
+                return new MockResponse('Session not found', ['http_code' => 404]);
+            }
+            if (!isset($body['id'])) {
+                return new MockResponse('', ['http_code' => 202]);
+            }
+            $headers = ['content-type' => ['application/json']];
+            if ($body['method'] === 'initialize') {
+                $opened++;
+                if ($withSession) {
+                    $headers['mcp-session-id'] = ['s' . $opened];
+                }
+                $result = ['protocolVersion' => '2025-06-18'];
+            } elseif ($body['method'] === 'tools/list') {
+                $result = ['tools' => [['name' => 't']]];
+            } else {
+                $result = ['content' => [['type' => 'text', 'text' => 'ok']]];
+            }
+            return new MockResponse(
+                (string)json_encode(['jsonrpc' => '2.0', 'id' => $body['id'], 'result' => $result]),
+                ['http_code' => 200, 'response_headers' => $headers]
+            );
+        });
+        (new \ReflectionProperty(McpClientService::class, 'httpClient'))->setValue($service, $client);
+        try {
+            $service->listTools($server);
+            $toolResult = $service->callTool($server, 't', []);
+        } catch (\Throwable $e) {
+            $error = $e;
+        }
+        return $captured;
+    }
+
+    /** @return list<string> "method@session" for each request */
+    private function trace(array $captured): array {
+        return array_map(
+            fn(array $o) => ($this->requestBody($o)['method'] ?? '?') . '@' . ($this->headerValue($o, 'Mcp-Session-Id') ?? '-'),
+            $captured
+        );
+    }
+
+    /** A 404 to a request with a session ID MUST start a new session; the request is resent once. */
+    public function testEndedSessionIsRestartedAndRequestRetried(): void {
+        $captured = $this->statefulRun(['s1'], $result);
+
+        $this->assertSame([
+            'initialize@-',
+            'notifications/initialized@s1',
+            'tools/list@s1',
+            'tools/call@s1',
+            'initialize@-',
+            'notifications/initialized@s2',
+            'tools/call@s2',
+        ], $this->trace($captured));
+        $this->assertNull($this->headerValue($captured[4], 'MCP-Protocol-Version'), 'the new initialize starts from scratch');
+        $this->assertSame('2025-06-18', $this->headerValue($captured[6], 'MCP-Protocol-Version'));
+        $this->assertArrayNotHasKey('isError', $result);
+        $this->assertSame('ok', $result['content'][0]['text']);
+    }
+
+    /** A 404 to a request without a session ID is an ordinary error, not a session restart. */
+    public function testNotFoundWithoutSessionIsNotRetried(): void {
+        $captured = $this->statefulRun(['-'], $result, $error, false);
+
+        $this->assertNull($error);
+        $this->assertSame(
+            ['initialize@-', 'notifications/initialized@-', 'tools/list@-', 'tools/call@-'],
+            $this->trace($captured)
+        );
+        $this->assertTrue($result['isError']);
+        $this->assertStringContainsString('HTTP 404', $result['content'][0]['text']);
+    }
+
+    /** A second 404 after restarting the session fails instead of looping. */
+    public function testSecondNotFoundAfterRestartFails(): void {
+        $captured = $this->statefulRun(['s1', 's2'], $result);
+
+        $this->assertSame([
+            'initialize@-',
+            'notifications/initialized@s1',
+            'tools/list@s1',
+            'tools/call@s1',
+            'initialize@-',
+            'notifications/initialized@s2',
+            'tools/call@s2',
+        ], $this->trace($captured));
+        $this->assertTrue($result['isError']);
+        $this->assertStringContainsString('HTTP 404', $result['content'][0]['text']);
+    }
+
+    /** A 404 to notifications/initialized of the new session is a hard failure. */
+    public function testNotFoundDuringReinitializationFails(): void {
+        $captured = $this->statefulRun(['s1', 'init:s2'], $result);
+
+        $this->assertSame([
+            'initialize@-',
+            'notifications/initialized@s1',
+            'tools/list@s1',
+            'tools/call@s1',
+            'initialize@-',
+            'notifications/initialized@s2',
+        ], $this->trace($captured));
+        $this->assertTrue($result['isError']);
+        $this->assertStringContainsString('during initialization', $result['content'][0]['text']);
+    }
 }
