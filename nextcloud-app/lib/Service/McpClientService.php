@@ -166,7 +166,7 @@ class McpClientService {
             // Handle SSE responses — extract the final JSON-RPC result
             $contentType = $responseHeaders['content-type'][0] ?? '';
             if (str_contains($contentType, 'text/event-stream')) {
-                return $this->parseSseResponse($response->getContent(false), $statusCode);
+                return $this->parseSseResponse($response->getContent(false), $statusCode, $id);
             }
 
             $result = $response->toArray(false);
@@ -221,31 +221,95 @@ class McpClientService {
     }
 
     /**
-     * Parse an SSE response to extract JSON-RPC result.
+     * Extract the response to request $id from an SSE stream.
+     *
+     * MCP Streamable HTTP lets the server send requests and notifications on
+     * the stream before the response, so the response is the message whose
+     * `id` matches, not the last one. Events are parsed per the WHATWG HTML
+     * "Interpreting an event stream" rules (see parseSseEvents()).
      */
-    private function parseSseResponse(string $content, int $statusCode): array {
-        $lastData = null;
-        foreach (explode("\n", $content) as $line) {
-            $line = trim($line);
-            if (str_starts_with($line, 'data: ')) {
-                $lastData = substr($line, 6);
+    private function parseSseResponse(string $content, int $statusCode, int $id): array {
+        $sawData = false;
+        foreach (self::parseSseEvents($content) as $data) {
+            $sawData = true;
+            $decoded = json_decode($data, true);
+            if (!is_array($decoded)) {
+                throw new \RuntimeException('Invalid JSON in SSE data');
+            }
+            // A JSON-RPC batch (MCP 2025-03-26) arrives as a list.
+            $messages = array_is_list($decoded) ? $decoded : [$decoded];
+            foreach ($messages as $message) {
+                if (!is_array($message)
+                    || isset($message['method'])
+                    || !array_key_exists('id', $message)
+                    || $message['id'] !== $id) {
+                    // A server request or notification, or another response.
+                    continue;
+                }
+                if (isset($message['error'])) {
+                    throw new \RuntimeException('JSON-RPC error: ' . ($message['error']['message'] ?? 'unknown'));
+                }
+                $result = $message['result'] ?? null;
+                return is_array($result) ? $result : [];
             }
         }
 
-        if ($lastData === null) {
+        if (!$sawData) {
             throw new \RuntimeException("No data in SSE response (HTTP $statusCode)");
         }
+        throw new \RuntimeException("No response to request $id in SSE stream (HTTP $statusCode)");
+    }
 
-        $result = json_decode($lastData, true);
-        if ($result === null) {
-            throw new \RuntimeException('Invalid JSON in SSE data');
+    /**
+     * Split an event stream into the data of its `message` events.
+     *
+     * WHATWG HTML §9.2.6 "Interpreting an event stream": lines end in CRLF,
+     * LF or CR; a leading BOM is dropped; a blank line dispatches the event;
+     * lines starting with `:` are comments; one space after the field's
+     * colon is removed, and is optional; several `data` lines join with LF,
+     * and the final LF is dropped. An event without data, or with a type
+     * other than `message`, is not dispatched. Data still pending at the end
+     * of the stream is discarded.
+     *
+     * @return list<string>
+     */
+    public static function parseSseEvents(string $content): array {
+        if (str_starts_with($content, "\u{FEFF}")) {
+            $content = substr($content, 3);
         }
-
-        if (isset($result['error'])) {
-            throw new \RuntimeException('JSON-RPC error: ' . ($result['error']['message'] ?? 'unknown'));
+        $events = [];
+        $data = '';
+        $type = '';
+        foreach (preg_split('/\r\n|\r|\n/', $content) ?: [] as $line) {
+            if ($line === '') {
+                if ($data !== '' && ($type === '' || $type === 'message')) {
+                    $events[] = substr($data, 0, -1);
+                }
+                $data = '';
+                $type = '';
+                continue;
+            }
+            if ($line[0] === ':') {
+                continue;
+            }
+            $colon = strpos($line, ':');
+            if ($colon === false) {
+                $field = $line;
+                $value = '';
+            } else {
+                $field = substr($line, 0, $colon);
+                $value = substr($line, $colon + 1);
+                if (str_starts_with($value, ' ')) {
+                    $value = substr($value, 1);
+                }
+            }
+            if ($field === 'data') {
+                $data .= $value . "\n";
+            } elseif ($field === 'event') {
+                $type = $value;
+            }
         }
-
-        return $result['result'] ?? [];
+        return $events;
     }
 
     /**
