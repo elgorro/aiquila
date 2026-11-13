@@ -305,6 +305,8 @@ MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
 | `MCP_MAX_FILE_SIZE` | No | `1073741824` | Max `write_file` content length in bytes (1 GB) |
 | `LOG_LEVEL` | No | `info` | `trace` / `debug` / `info` / `warn` / `error` / `fatal` |
 | `MCP_OCC_ALLOWLIST` | No | *(built-in)* | Comma-separated allowlist entries for `run_occ` (`cmd` = no arguments, `cmd *` = any) |
+| `MCP_TOOLS` | No | *(auto-detect)* | Comma-separated tool categories (see [upstream APIs](../mcp/upstream-apis.md)) and/or tool names to expose. Unset or empty registers the categories whose Nextcloud app is installed |
+| `MCP_LOCALE` | No | system locale | BCP 47 tag for `localTime` in `get_local_time` (e.g. `sv-SE`) |
 
 ### HTTP Transport
 
@@ -313,9 +315,9 @@ MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
 | `MCP_PORT` | No | `3339` | Listening port |
 | `MCP_HOST` | No | `0.0.0.0` | Bind address |
 | `MCP_TRUST_PROXY` | No | `false` | Set to `1` when behind a single reverse proxy |
-| `MCP_TLS_STRICT` | No | `false` | Set `true` to fail fast on TLS cert errors |
 | `MCP_ALLOWED_HOSTS` | No | — | Comma-separated extra hostnames accepted by DNS rebinding protection (e.g. `mcp` for a Docker service name). The `MCP_AUTH_ISSUER` hostname plus `localhost` / `127.0.0.1` are always allowed |
 | `MCP_CORS_ORIGINS` | No | — | Comma-separated extra origins allowed to make cross-origin browser requests. The `MCP_AUTH_ISSUER` origin is allowed by default when auth is enabled. Origins are matched exactly and echoed back — `*` is never sent, because these endpoints are credentialed. A request to `/mcp` with any other `Origin` is answered `403` |
+| `MCP_ALLOW_UNAUTHENTICATED` | No | `false` | `true` lets the HTTP transport start without `MCP_AUTH_ENABLED=true`. Development only |
 
 ### Auth (`MCP_AUTH_ENABLED=true`)
 
@@ -324,6 +326,7 @@ MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
 | `MCP_AUTH_ENABLED` | No | `false` | Enable OAuth 2.1 provider |
 | `MCP_AUTH_SECRET` | If auth | — | `openssl rand -hex 32` — signs JWT access tokens |
 | `MCP_AUTH_ISSUER` | If auth | — | Public HTTPS URL of this server |
+| `MCP_LAZY_AUTH` | No | `true` | `false` requires a bearer token on every JSON-RPC method. Otherwise `server/discover`, `initialize`, `tools/list` and `get_local_time` are served without one |
 | `MCP_AUTH_STATE_DIR` | No | `/app/state` | Directory for persisted OAuth state |
 | `MCP_REGISTRATION_ENABLED` | No | `false` | Enable dynamic client registration |
 | `MCP_REGISTRATION_TOKEN` | No | — | Bearer token to gate `POST /register` |

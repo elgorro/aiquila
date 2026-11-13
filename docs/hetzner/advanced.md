@@ -275,6 +275,16 @@ and what to expect from `rebuild`.
 | `GRAFANA_PASSWORD` | auto 32-char hex | Grafana admin password |
 | `LOG_LEVEL` | static `info` | Pino log level (`trace`/`debug`/`info`/`warn`/`error`) |
 
+The compose file also passes these server options through when you add them to
+`.env`: `MCP_REFRESH_TOKEN_TTL`, `MCP_CLIENT_UNUSED_TTL`, `MCP_CLIENT_IDLE_TTL`,
+`MCP_LAZY_AUTH`, `MCP_TOOLS`, `MCP_OCC_ALLOWLIST`, `MCP_MAX_FILE_SIZE`, `MCP_LOCALE`,
+`MCP_ALLOWED_HOSTS`, `MCP_CORS_ORIGINS` and the OpenBao variables. The full stack also
+passes through `MCP_INTERNAL_TOKEN` and `MCP_INTERNAL_TOKEN_NETWORKS`. An empty value
+means the server default. See the [environment variable reference](../dev/mcp-server-architecture.md#environment-variables)
+for what each one does.
+`MCP_AUTH_STATE_DIR` is not passed through, because the OAuth state has to stay on the
+volume mounted at `/app/state`.
+
 **Nextcloud stack** (`/opt/aiquila/.env`):
 
 | Variable | Source | Description |
