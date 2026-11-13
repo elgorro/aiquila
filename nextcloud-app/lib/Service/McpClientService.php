@@ -8,9 +8,12 @@ namespace OCA\AIquila\Service;
 use OCA\AIquila\Db\McpServer;
 use OCA\AIquila\Db\McpServerMapper;
 use OCP\IURLGenerator;
+use OCP\Lock\ILockingProvider;
+use OCP\Lock\LockedException;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\HttpClient\ResponseInterface;
 
 class McpClientService {
     private McpServerMapper $mapper;
@@ -18,6 +21,7 @@ class McpClientService {
     private CredentialService $credentials;
     private IURLGenerator $urlGenerator;
     private HttpClientInterface $httpClient;
+    private ILockingProvider $locking;
 
     private const PROTOCOL_VERSION = '2025-03-26';
     private const CLIENT_NAME = 'aiquila-nextcloud';
@@ -40,11 +44,13 @@ class McpClientService {
         LoggerInterface $logger,
         CredentialService $credentials,
         IURLGenerator $urlGenerator,
+        ILockingProvider $locking,
     ) {
         $this->mapper = $mapper;
         $this->logger = $logger;
         $this->credentials = $credentials;
         $this->urlGenerator = $urlGenerator;
+        $this->locking = $locking;
         $this->httpClient = HttpClient::create(['timeout' => 30]);
     }
 
@@ -102,19 +108,50 @@ class McpClientService {
     }
 
     /**
+     * POST a JSON-RPC message, recovering once from a rejected OAuth token.
+     *
+     * A 401 means the server no longer accepts the access token (RFC 6750
+     * §3.1 `invalid_token`), whatever its stored expiry says: it may have
+     * been revoked, or the server's clock may disagree with ours. MCP
+     * 2026-07-28 "Error Handling" treats it as "authorization required", so
+     * the token is refreshed and the message sent once more. A second 401
+     * ends the grant, and the admin is asked to sign in again. A 403
+     * (`insufficient_scope`) is a scope problem, not an invalid token, and
+     * is returned as is.
+     */
+    private function post(McpServer $server, array $body): ResponseInterface {
+        $response = $this->httpClient->request('POST', $server->getUrl(), [
+            'headers' => $this->buildHeaders($server),
+            'json' => $body,
+        ]);
+        if ($response->getStatusCode() !== 401
+            || $server->getAuthType() !== 'oauth2'
+            || !$server->getOauthAccessToken()) {
+            return $response;
+        }
+
+        $this->refreshOAuthToken($server, true);
+        $response = $this->httpClient->request('POST', $server->getUrl(), [
+            'headers' => $this->buildHeaders($server),
+            'json' => $body,
+        ]);
+        if ($response->getStatusCode() === 401) {
+            $this->markAuthExpired($server);
+            throw new \RuntimeException('HTTP 401: the MCP server rejected a freshly refreshed access token. Sign in again.');
+        }
+        return $response;
+    }
+
+    /**
      * Send a JSON-RPC 2.0 request to an MCP server.
      */
     private function jsonRpc(McpServer $server, string $method, array $params = [], ?int $id = null): array {
         $id = $id ?? random_int(1, 999999);
 
         $body = $this->buildRequestBody($method, $params, $id);
-        $headers = $this->buildHeaders($server);
 
         try {
-            $response = $this->httpClient->request('POST', $server->getUrl(), [
-                'headers' => $headers,
-                'json' => $body,
-            ]);
+            $response = $this->post($server, $body);
 
             $statusCode = $response->getStatusCode();
             $responseHeaders = $response->getHeaders(false);
@@ -166,13 +203,8 @@ class McpClientService {
             $body['params'] = $params;
         }
 
-        $headers = $this->buildHeaders($server);
-
         try {
-            $response = $this->httpClient->request('POST', $server->getUrl(), [
-                'headers' => $headers,
-                'json' => $body,
-            ]);
+            $response = $this->post($server, $body);
 
             $statusCode = $response->getStatusCode();
 
@@ -1194,10 +1226,91 @@ class McpClientService {
         $server->setUpdatedAt(time());
     }
 
+    /** Token endpoint errors that end the grant (RFC 6749 §5.2). */
+    private const TERMINAL_TOKEN_ERRORS = ['invalid_grant', 'invalid_client', 'unauthorized_client'];
+
+    /** How long a process waits for another one's refresh, in microseconds. */
+    private const REFRESH_LOCK_WAIT_US = 10_000_000;
+    private const REFRESH_LOCK_POLL_US = 100_000;
+
     /**
      * Refresh the OAuth access token using the refresh token.
+     *
+     * One token row serves every user and background job, and refresh
+     * tokens are single-use (OAuth 2.1 §4.3.1; RFC 9700 §4.14.2: a reused
+     * one may revoke the whole grant). So the refresh holds a per-server
+     * lock, and a process that waited for it first re-reads the row: when
+     * another process already stored a new access token, that one is used
+     * instead of spending the refresh token a second time.
+     *
+     * Only an RFC 6749 §5.2 error that invalidates the grant clears the
+     * stored tokens. A timeout, a 5xx or any other failure leaves them in
+     * place so the next request can try again.
+     *
+     * @param bool $rejected The current access token was refused (HTTP 401),
+     *                       so refresh even if it has not expired yet
      */
-    public function refreshOAuthToken(McpServer $server): void {
+    public function refreshOAuthToken(McpServer $server, bool $rejected = false): void {
+        $staleToken = $server->getOauthAccessToken();
+        $lockKey = 'aiquila/mcp-oauth-refresh/' . $server->getId();
+        $this->acquireRefreshLock($lockKey);
+        try {
+            if ($this->adoptStoredToken($server, $staleToken, $rejected)) {
+                return;
+            }
+            $this->doRefresh($server);
+        } finally {
+            try {
+                $this->locking->releaseLock($lockKey, ILockingProvider::LOCK_EXCLUSIVE);
+            } catch (\Throwable $e) {
+                $this->logger->warning('MCP: failed to release the token refresh lock', ['error' => $e->getMessage()]);
+            }
+        }
+    }
+
+    private function acquireRefreshLock(string $key): void {
+        $waited = 0;
+        while (true) {
+            try {
+                $this->locking->acquireLock($key, ILockingProvider::LOCK_EXCLUSIVE, 'MCP OAuth token refresh');
+                return;
+            } catch (LockedException $e) {
+                if ($waited >= self::REFRESH_LOCK_WAIT_US) {
+                    throw new \RuntimeException('OAuth token refresh is already in progress; try again', 0, $e);
+                }
+                usleep(self::REFRESH_LOCK_POLL_US);
+                $waited += self::REFRESH_LOCK_POLL_US;
+            }
+        }
+    }
+
+    /**
+     * Re-read the row under the lock. If another process replaced the token
+     * this one started from, copy its tokens over and report true.
+     */
+    private function adoptStoredToken(McpServer $server, ?string $staleToken, bool $rejected): bool {
+        if ($server->getId() === null) {
+            return false;
+        }
+        try {
+            $stored = $this->mapper->findById($server->getId());
+        } catch (\Throwable) {
+            return false;
+        }
+        $storedToken = $stored->getOauthAccessToken();
+        if (!$storedToken || $storedToken === $staleToken) {
+            return false;
+        }
+        if (!$rejected && $this->isTokenExpired($stored)) {
+            return false;
+        }
+        $server->setOauthAccessToken($storedToken);
+        $server->setOauthRefreshToken($stored->getOauthRefreshToken());
+        $server->setOauthTokenExpiresAt($stored->getOauthTokenExpiresAt());
+        return true;
+    }
+
+    private function doRefresh(McpServer $server): void {
         $metadata = $this->getOAuthMetadata($server);
         $tokenEndpoint = $metadata['token_endpoint'] ?? null;
 
@@ -1213,24 +1326,33 @@ class McpClientService {
                 'resource' => $this->getResourceUri($server),
             ]);
             $response = $this->httpClient->request('POST', $tokenEndpoint, $request);
-
-            $result = $response->toArray();
-
-            if (!isset($result['access_token'])) {
-                throw new \RuntimeException('No access_token in refresh response');
-            }
-
-            $server->setOauthAccessToken($this->credentials->encryptToken($result['access_token']));
-            if (isset($result['refresh_token'])) {
-                $server->setOauthRefreshToken($this->credentials->encryptToken($result['refresh_token']));
-            }
-            $server->setOauthTokenExpiresAt(time() + ($result['expires_in'] ?? 3600));
-            $server->setUpdatedAt(time());
-            $this->mapper->update($server);
+            $status = $response->getStatusCode();
+            $result = json_decode($response->getContent(false), true);
+            $result = is_array($result) ? $result : [];
         } catch (\Throwable $e) {
-            $this->markAuthExpired($server);
+            // Transport failure: the grant may well be intact.
             throw new \RuntimeException('OAuth token refresh failed: ' . $e->getMessage(), 0, $e);
         }
+
+        if ($status >= 400) {
+            $error = is_string($result['error'] ?? null) ? $result['error'] : '';
+            if (in_array($error, self::TERMINAL_TOKEN_ERRORS, true)) {
+                $this->markAuthExpired($server);
+            }
+            throw new \RuntimeException('OAuth token refresh failed: HTTP ' . $status . ($error !== '' ? ' ' . $error : ''));
+        }
+
+        if (!is_string($result['access_token'] ?? null) || $result['access_token'] === '') {
+            throw new \RuntimeException('OAuth token refresh failed: no access_token in refresh response');
+        }
+
+        $server->setOauthAccessToken($this->credentials->encryptToken($result['access_token']));
+        if (is_string($result['refresh_token'] ?? null)) {
+            $server->setOauthRefreshToken($this->credentials->encryptToken($result['refresh_token']));
+        }
+        $server->setOauthTokenExpiresAt(time() + (int)($result['expires_in'] ?? 3600));
+        $server->setUpdatedAt(time());
+        $this->mapper->update($server);
     }
 
     public function isTokenExpired(McpServer $server): bool {
