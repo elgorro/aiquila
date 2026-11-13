@@ -202,13 +202,15 @@ the capabilities read in `client/capabilities.ts`, which detection shares with t
 |-------|--------|-----|---------|
 | Authorization code | UUID | 5 min | In-memory (`CodeStore`) |
 | Access token | HS256 JWT (jose) | 1 hour | Verified by signature, then checked against `RevocationList` by `gid` (grant) and `jti` |
-| Refresh token | 256 random bits, base64url | 24 hours | Disk-persisted (`RefreshStore`), keyed by SHA-256 hash — the file holds no usable token |
+| Refresh token | 256 random bits, base64url | 30 days, sliding (`MCP_REFRESH_TOKEN_TTL`) | Disk-persisted (`RefreshStore`), keyed by SHA-256 hash — the file holds no usable token |
 
 ### Auth Storage
 
 Token state is persisted to `MCP_AUTH_STATE_DIR` (default `/app/state`):
 
-- `clients.json` — dynamically registered OAuth clients (`ClientsStore`)
+- `clients.json` — dynamically registered OAuth clients and when each last obtained a token
+  (`ClientsStore`). The periodic sweep removes clients that never obtained one, or went idle
+  (`MCP_CLIENT_UNUSED_TTL`, `MCP_CLIENT_IDLE_TTL`)
 - `refresh-tokens.json` — active refresh tokens, keyed by their SHA-256 hash (`RefreshStore`). Entries from older versions, keyed by the token itself, are hashed on load
 - `revoked.json` — revoked grants and access tokens, each kept until the access tokens it
   covers have expired (`RevocationList`)
@@ -327,6 +329,8 @@ MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
 | `MCP_REGISTRATION_TOKEN` | No | — | Bearer token to gate `POST /register` |
 | `MCP_REDIRECT_ALLOWLIST` | No | — | Extra redirect hosts / `scheme:` entries / `*` for registered clients (`RedirectUriPolicy`) |
 | `MCP_REFRESH_TOKEN_TTL` | No | `2592000` | Refresh token lifetime in seconds (30 days), sliding on each rotation |
+| `MCP_CLIENT_UNUSED_TTL` | No | `86400` | Seconds a registered client may go without a token before it is removed; `0` = never |
+| `MCP_CLIENT_IDLE_TTL` | No | `0` | Seconds after its last token a registered client without a live refresh token is removed; `0` = never |
 | `MCP_INTERNAL_TOKEN` | No | — | Static service-to-service bearer token; accepted only on direct connections from internal addresses |
 | `MCP_INTERNAL_TOKEN_NETWORKS` | No | loopback + private ranges | Comma-separated CIDRs / addresses `MCP_INTERNAL_TOKEN` is accepted from |
 | `MCP_CIMD_ENABLED` | No | `true` (`false` when `MCP_REGISTRATION_TOKEN` is set) | Accept Client ID Metadata Document URLs as `client_id` |

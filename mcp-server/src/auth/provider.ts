@@ -585,6 +585,7 @@ export class NextcloudOAuthProvider {
     if (this.revocations.isGrantRevoked(grantId)) {
       throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid authorization code');
     }
+    this._clientsStore.markUsed(client.client_id);
     const refreshToken = this.refreshStore.store({
       grantId,
       userId: entry.userId,
@@ -673,6 +674,7 @@ export class NextcloudOAuthProvider {
       entry.clientId,
       effectiveScopes
     );
+    this._clientsStore.markUsed(client.client_id);
     const newRefresh = this.refreshStore.store({
       grantId: entry.grantId,
       userId: entry.userId,
@@ -861,11 +863,16 @@ export class NextcloudOAuthProvider {
 
   /**
    * Housekeeping: ends grants whose credential expired, deletes the app
-   * passwords of codes never redeemed and of flows never finished, and polls
-   * flows whose page was closed so their app password is not left behind.
+   * passwords of codes never redeemed and of flows never finished, polls
+   * flows whose page was closed so their app password is not left behind, and
+   * removes registered clients that never obtained a token or went idle.
    */
   async sweep(): Promise<void> {
     for (const { grantId } of this.credentials.expired()) this.revokeGrant(grantId);
+    const removed = this._clientsStore.expireClients(this.refreshStore.activeClientIds());
+    if (removed.length > 0) {
+      logger.info({ count: removed.length }, '[auth] Removed unused registered clients');
+    }
     // An unredeemed code's credential expires with it in the store above.
     this.codeStore.takeExpired();
     const now = Date.now();

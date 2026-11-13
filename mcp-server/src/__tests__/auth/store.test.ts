@@ -14,7 +14,7 @@ vi.mock('../../logger.js', () => ({
 
 import * as fs from 'node:fs';
 import { logger } from '../../logger.js';
-import { ClientsStore, CodeStore, RefreshStore } from '../../auth/store.js';
+import { ClientsStore, CodeStore, RefreshStore, clientTtlMs } from '../../auth/store.js';
 
 // ---- ClientsStore (dynamic registration enabled) ----
 
@@ -413,6 +413,140 @@ describe('ClientsStore — persistence', () => {
       `${TEST_STATE_DIR}/clients.json.tmp`,
       `${TEST_STATE_DIR}/clients.json`
     );
+  });
+});
+
+// ---- ClientsStore — expiry of unused clients ----
+
+describe('ClientsStore — expiry', () => {
+  const HOUR = 60 * 60 * 1000;
+  const DAY = 24 * HOUR;
+  const stateFile = '/tmp/test-state/clients.json';
+
+  beforeEach(() => {
+    setupFsMocks();
+  });
+
+  afterEach(() => {
+    delete process.env.MCP_CLIENT_UNUSED_TTL;
+    delete process.env.MCP_CLIENT_IDLE_TTL;
+  });
+
+  function register(store: ClientsStore): string {
+    return store.registerClient!({ redirect_uris: [new URL('https://example.com/cb')] }).client_id;
+  }
+
+  it('removes a client that never obtained a token once the unused TTL has passed', async () => {
+    const store = new ClientsStore({ enableDynamicRegistration: true, unusedTtlMs: DAY });
+    const id = register(store);
+
+    expect(store.expireClients(new Set(), Date.now() + DAY - HOUR)).toEqual([]);
+    expect(store.expireClients(new Set(), Date.now() + DAY + HOUR)).toEqual([id]);
+    expect(await store.getClient(id)).toBeUndefined();
+  });
+
+  it('keeps a client that obtained a token', async () => {
+    const store = new ClientsStore({ enableDynamicRegistration: true, unusedTtlMs: DAY });
+    const id = register(store);
+    store.markUsed(id);
+
+    expect(store.expireClients(new Set(), Date.now() + 365 * DAY)).toEqual([]);
+    expect(await store.getClient(id)).toBeDefined();
+  });
+
+  it('keeps a client holding a live refresh token and records it as used', async () => {
+    const store = new ClientsStore({
+      enableDynamicRegistration: true,
+      unusedTtlMs: DAY,
+      idleTtlMs: 7 * DAY,
+    });
+    const id = register(store);
+    const later = Date.now() + 2 * DAY;
+
+    expect(store.expireClients(new Set([id]), later)).toEqual([]);
+    // Its refresh tokens are gone now; idleness counts from when it was seen active.
+    expect(store.expireClients(new Set(), later + 6 * DAY)).toEqual([]);
+    expect(store.expireClients(new Set(), later + 8 * DAY)).toEqual([id]);
+  });
+
+  it('removes an idle client only when an idle TTL is set', async () => {
+    const without = new ClientsStore({ enableDynamicRegistration: true, unusedTtlMs: DAY });
+    const a = register(without);
+    without.markUsed(a);
+    expect(without.expireClients(new Set(), Date.now() + 1000 * DAY)).toEqual([]);
+
+    const withIdle = new ClientsStore({
+      enableDynamicRegistration: true,
+      unusedTtlMs: DAY,
+      idleTtlMs: 30 * DAY,
+    });
+    const b = register(withIdle);
+    withIdle.markUsed(b);
+    expect(withIdle.expireClients(new Set(), Date.now() + 29 * DAY)).toEqual([]);
+    expect(withIdle.expireClients(new Set(), Date.now() + 31 * DAY)).toEqual([b]);
+  });
+
+  it('never removes a pre-seeded client', async () => {
+    const store = new ClientsStore({
+      preseededClients: [{ client_id: 'fixed', client_id_issued_at: 0, redirect_uris: [] }],
+      unusedTtlMs: 1,
+      idleTtlMs: 1,
+    });
+    store.markUsed('fixed');
+    expect(store.expireClients(new Set(), Date.now() + 1000 * DAY)).toEqual([]);
+    expect(await store.getClient('fixed')).toBeDefined();
+  });
+
+  it('keeps nothing when no TTL is configured', async () => {
+    const store = new ClientsStore({ enableDynamicRegistration: true });
+    register(store);
+    expect(store.expireClients(new Set(), Date.now() + 1000 * DAY)).toEqual([]);
+  });
+
+  it('persists last use and reloads it, without the pre-seeded client', async () => {
+    const store = new ClientsStore({
+      enableDynamicRegistration: true,
+      preseededClients: [{ client_id: 'fixed', client_id_issued_at: 0, redirect_uris: [] }],
+      stateFile,
+      unusedTtlMs: DAY,
+    });
+    const id = register(store);
+    mockWriteFileSync.mockClear();
+    store.markUsed(id);
+
+    const written = JSON.parse(
+      (mockWriteFileSync.mock.calls.at(-1) as [string, string, string])[1]
+    ) as { client_id: string; last_used_at?: number }[];
+    expect(written.map((c) => c.client_id)).toEqual([id]);
+    expect(written[0].last_used_at).toBeCloseTo(Math.floor(Date.now() / 1000), -2);
+
+    mockReadFileSync.mockReturnValue(JSON.stringify(written));
+    const reloaded = new ClientsStore({ stateFile, unusedTtlMs: DAY });
+    expect(reloaded.expireClients(new Set(), Date.now() + 10 * DAY)).toEqual([]);
+    // The usage field stays out of the client metadata.
+    expect(await reloaded.getClient(id)).not.toHaveProperty('last_used_at');
+  });
+
+  it('writes a repeated use at most once an hour', () => {
+    const store = new ClientsStore({ enableDynamicRegistration: true, stateFile });
+    const id = register(store);
+    const now = Date.now();
+    store.markUsed(id, now);
+    mockWriteFileSync.mockClear();
+    store.markUsed(id, now + 10 * 60 * 1000);
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+    store.markUsed(id, now + 2 * HOUR);
+    expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('fromEnv() reads MCP_CLIENT_UNUSED_TTL and MCP_CLIENT_IDLE_TTL', async () => {
+    expect(clientTtlMs('MCP_CLIENT_UNUSED_TTL', 86400)).toBe(DAY);
+    process.env.MCP_CLIENT_UNUSED_TTL = '0';
+    expect(clientTtlMs('MCP_CLIENT_UNUSED_TTL', 86400)).toBeUndefined();
+    process.env.MCP_CLIENT_IDLE_TTL = '3600';
+    expect(clientTtlMs('MCP_CLIENT_IDLE_TTL', 0)).toBe(HOUR);
+    process.env.MCP_CLIENT_IDLE_TTL = 'soon';
+    expect(clientTtlMs('MCP_CLIENT_IDLE_TTL', 0)).toBeUndefined();
   });
 });
 

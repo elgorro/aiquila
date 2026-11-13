@@ -213,6 +213,10 @@ export function probeStateDir(dir: string = stateDir()): void {
 
 interface ClientsStoreOptions {
   preseededClients?: OAuthClientInformationFull[];
+  // How long a registered client may go without obtaining a token, and how
+  // long one that did may sit idle, before it is removed. Omitted → never.
+  unusedTtlMs?: number;
+  idleTtlMs?: number;
   enableDynamicRegistration?: boolean;
   stateFile?: string;
   // Resolves https:// client_ids as Client ID Metadata Documents. Omitted →
@@ -235,10 +239,39 @@ function rejectedRedirect(
   return undefined;
 }
 
+const DEFAULT_CLIENT_UNUSED_TTL_SECS = 24 * 60 * 60; // 1 day
+
+/**
+ * A client expiry from `name` in seconds, as ms. `0` turns it off (undefined);
+ * an unset or invalid value falls back to `defaultSecs`.
+ */
+export function clientTtlMs(name: string, defaultSecs: number): number | undefined {
+  const raw = process.env[name];
+  let secs = defaultSecs;
+  if (raw !== undefined && raw !== '') {
+    const parsed = Number(raw);
+    if (Number.isSafeInteger(parsed) && parsed >= 0) secs = parsed;
+    else logger.warn({ name, value: raw }, '[config] Ignoring invalid client expiry');
+  }
+  return secs > 0 ? secs * 1000 : undefined;
+}
+
+/** A registered client as persisted: its metadata plus when it last obtained a token. */
+type PersistedClient = OAuthClientInformationFull & { last_used_at?: number };
+
+// A client's last use is written to disk at most this often, so a busy client
+// does not rewrite the state file on every refresh.
+const LAST_USED_GRANULARITY_SECS = 60 * 60;
+
 export class ClientsStore {
   private readonly clients = new Map<string, OAuthClientInformationFull>();
+  // Unix seconds a registered client last obtained a token. No entry: never.
+  private readonly lastUsed = new Map<string, number>();
+  private readonly preseeded = new Set<string>();
   private readonly stateFile?: string;
   private readonly clientIdDocuments?: ClientIdDocumentResolver;
+  private readonly unusedTtlMs?: number;
+  private readonly idleTtlMs?: number;
 
   // Optional: POST /register is only mounted when this is defined.
   readonly registerClient?: (
@@ -248,16 +281,18 @@ export class ClientsStore {
   constructor(options?: ClientsStoreOptions) {
     this.stateFile = options?.stateFile;
     this.clientIdDocuments = options?.clientIdDocuments;
+    this.unusedTtlMs = options?.unusedTtlMs;
+    this.idleTtlMs = options?.idleTtlMs;
     const policy = options?.redirectPolicy;
 
     // Load persisted clients first (dynamic registrations from previous runs).
     // The redirect policy applies to them too, so registrations from before
     // it existed, or before it was narrowed, are dropped.
     if (this.stateFile) {
-      const persisted = loadJson<OAuthClientInformationFull[]>(this.stateFile);
+      const persisted = loadJson<PersistedClient[]>(this.stateFile);
       if (persisted && Array.isArray(persisted)) {
         let dropped = 0;
-        for (const client of persisted) {
+        for (const { last_used_at: lastUsedAt, ...client } of persisted) {
           const reason = rejectedRedirect(client, policy);
           if (reason) {
             logger.warn(
@@ -268,6 +303,7 @@ export class ClientsStore {
             continue;
           }
           this.clients.set(client.client_id, client);
+          if (typeof lastUsedAt === 'number') this.lastUsed.set(client.client_id, lastUsedAt);
         }
         if (dropped > 0) this.persist();
       }
@@ -276,6 +312,8 @@ export class ClientsStore {
     // Pre-seeded clients always win on collision
     for (const client of options?.preseededClients ?? []) {
       this.clients.set(client.client_id, client);
+      this.lastUsed.delete(client.client_id);
+      this.preseeded.add(client.client_id);
     }
 
     if (options?.enableDynamicRegistration) {
@@ -320,9 +358,66 @@ export class ClientsStore {
     }
   }
 
+  /**
+   * Records that a registered client obtained a token. Pre-seeded and
+   * metadata-document clients are not stored, so they are left alone.
+   */
+  markUsed(clientId: string, now = Date.now()): void {
+    if (!this.clients.has(clientId) || this.preseeded.has(clientId)) return;
+    const nowSecs = Math.floor(now / 1000);
+    const previous = this.lastUsed.get(clientId);
+    this.lastUsed.set(clientId, nowSecs);
+    if (previous === undefined || nowSecs - previous >= LAST_USED_GRANULARITY_SECS) this.persist();
+  }
+
+  /**
+   * Removes registered clients that are of no further use (RFC 7591 leaves a
+   * client's lifetime to the server, §3.2.1 `client_secret_expires_at` aside):
+   * one that never obtained a token within `unusedTtlMs` of registering, and
+   * one whose last token is older than `idleTtlMs`. A client that still holds
+   * a live refresh token is kept either way, and counts as used: files from
+   * before usage was tracked carry no record of it.
+   *
+   * @param active client_ids that hold a live refresh token
+   * @returns the client_ids removed
+   */
+  expireClients(active: ReadonlySet<string>, now = Date.now()): string[] {
+    const removed: string[] = [];
+    let changed = false;
+    for (const [clientId, client] of this.clients) {
+      if (this.preseeded.has(clientId)) continue;
+      if (active.has(clientId)) {
+        if (!this.lastUsed.has(clientId)) {
+          this.lastUsed.set(clientId, Math.floor(now / 1000));
+          changed = true;
+        }
+        continue;
+      }
+      const lastUsed = this.lastUsed.get(clientId);
+      const expired =
+        lastUsed === undefined
+          ? this.unusedTtlMs !== undefined &&
+            (client.client_id_issued_at ?? 0) * 1000 + this.unusedTtlMs <= now
+          : this.idleTtlMs !== undefined && lastUsed * 1000 + this.idleTtlMs <= now;
+      if (expired) {
+        this.clients.delete(clientId);
+        this.lastUsed.delete(clientId);
+        removed.push(clientId);
+      }
+    }
+    if (removed.length > 0 || changed) this.persist();
+    return removed;
+  }
+
   private persist(): void {
     if (!this.stateFile) return;
-    saveJson(this.stateFile, [...this.clients.values()]);
+    const records: PersistedClient[] = [];
+    for (const [clientId, client] of this.clients) {
+      if (this.preseeded.has(clientId)) continue;
+      const lastUsedAt = this.lastUsed.get(clientId);
+      records.push(lastUsedAt === undefined ? client : { ...client, last_used_at: lastUsedAt });
+    }
+    saveJson(this.stateFile, records);
   }
 
   /**
@@ -334,6 +429,10 @@ export class ClientsStore {
    *   MCP_CIMD_ENABLED           → resolve https:// client_ids as metadata documents;
    *                                defaults to on, off when MCP_REGISTRATION_TOKEN gates
    *                                registration (see cimdEnabledFromEnv)
+   *   MCP_CLIENT_UNUSED_TTL      → seconds a registered client may go without a token
+   *                                before it is removed (default 86400; 0 = never)
+   *   MCP_CLIENT_IDLE_TTL        → seconds after its last token a registered client
+   *                                without a live refresh token is removed (default never)
    *
    * Note: no client_secret is stored for the pre-seeded client — client
    * authentication requires the caller to send client_secret whenever
@@ -388,6 +487,8 @@ export class ClientsStore {
       redirectPolicy: registrationEnabled ? RedirectUriPolicy.fromEnv() : undefined,
       stateFile,
       clientIdDocuments: cimdEnabledFromEnv() ? new ClientIdDocumentResolver() : undefined,
+      unusedTtlMs: clientTtlMs('MCP_CLIENT_UNUSED_TTL', DEFAULT_CLIENT_UNUSED_TTL_SECS),
+      idleTtlMs: clientTtlMs('MCP_CLIENT_IDLE_TTL', 0),
     });
   }
 }
@@ -552,6 +653,15 @@ export class RefreshStore {
     for (const [key] of spent.slice(0, spent.length - SPENT_TOKENS_PER_GRANT)) {
       this.tokens.delete(key);
     }
+  }
+
+  /** client_ids that hold at least one refresh token that has not expired. */
+  activeClientIds(now = Date.now()): Set<string> {
+    const ids = new Set<string>();
+    for (const entry of this.tokens.values()) {
+      if (entry.expiresAt > now) ids.add(entry.clientId);
+    }
+    return ids;
   }
 
   /** Removes every refresh token of a grant. */
