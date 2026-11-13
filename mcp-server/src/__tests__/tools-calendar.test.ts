@@ -448,6 +448,10 @@ END:VCALENDAR</c:calendar-data>
       return Promise.resolve(verifyResponse.replace('UID:test-uid', `UID:${uid}`));
     };
 
+    // verifyText with extra event lines, as Nextcloud stores them after scheduling
+    const verifyWith = (extra: string) => () =>
+      verifyText().then((v) => v.replace('END:VEVENT', `${extra}END:VEVENT`));
+
     it('should create a timed event', async () => {
       (global.fetch as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce(propfindVeventOk)
@@ -703,6 +707,81 @@ END:VCALENDAR</c:calendar-data>
       expect(body.replace(/\r\n /g, '')).toContain(
         'ATTENDEE;CN="Room 1";ROLE=REQ-PARTICIPANT;CUTYPE=ROOM;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:room-1@example.com'
       );
+    });
+
+    it('should take a room that declined off the event, so it does not hold the slot', async () => {
+      const declined = verifyWith(
+        'ORGANIZER:mailto:alice@example.com\n' +
+          'ATTENDEE;CN="Room 1";CUTYPE=ROOM;PARTSTAT=DECLINED;RSVP=TRUE:mailto:room-1@\n example.com\n' +
+          'ATTENDEE;CN="Room 2";CUTYPE=ROOM;PARTSTAT=ACCEPTED:mailto:room-2@example.com\n'
+      );
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
+        .mockResolvedValueOnce(ocsUser({ id: 'admin', email: 'alice@example.com' }))
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: declined,
+        })
+        .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+
+      const { createEventTool } = await import('../tools/apps/calendar.js');
+      const result = await createEventTool.handler({
+        summary: 'Planning',
+        calendarName: 'personal',
+        dtstart: '20261123T100000Z',
+        attendees: [
+          { email: 'room-1@example.com', cn: 'Room 1', cutype: 'ROOM' },
+          { email: 'room-2@example.com', cn: 'Room 2', cutype: 'ROOM' },
+        ],
+      });
+
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls).toHaveLength(5);
+      const release = calls[4];
+      expect(release[0]).toBe(
+        'https://cloud.example.com/remote.php/dav/calendars/admin/personal/event.ics'
+      );
+      expect(release[1].method).toBe('PUT');
+      expect(release[1].headers['If-Match']).toBe('"etag-verify"');
+      const body = release[1].body.replace(/\r\n[ \t]/g, '');
+      expect(body).not.toContain('room-1@example.com');
+      expect(body).toContain(
+        'ATTENDEE;CN="Room 2";CUTYPE=ROOM;PARTSTAT=ACCEPTED:mailto:room-2@example.com'
+      );
+      expect(body).toContain('ORGANIZER:mailto:alice@example.com');
+      expect(result.content[0].text).toContain('Room Room 1: DECLINED');
+      expect(result.content[0].text).toContain('Removed from the event');
+      expect(result.content[0].text).toContain('Room Room 2: booked');
+    });
+
+    it('should tell the user to remove a declined room when taking it off fails', async () => {
+      const declined = verifyWith(
+        'ORGANIZER:mailto:alice@example.com\n' +
+          'ATTENDEE;CN="Room 1";CUTYPE=ROOM;PARTSTAT=DECLINED:mailto:room-1@example.com\n'
+      );
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(propfindVeventOk)
+        .mockResolvedValueOnce(ocsUser({ id: 'admin', email: 'alice@example.com' }))
+        .mockResolvedValueOnce({ ok: true, status: 201, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 207,
+          text: declined,
+        })
+        .mockResolvedValueOnce({ ok: false, status: 412, text: () => Promise.resolve('') });
+
+      const { createEventTool } = await import('../tools/apps/calendar.js');
+      const result = await createEventTool.handler({
+        summary: 'Planning',
+        calendarName: 'personal',
+        dtstart: '20261123T100000Z',
+        attendees: [{ email: 'room-1@example.com', cn: 'Room 1', cutype: 'ROOM' }],
+      });
+
+      expect(result).not.toHaveProperty('isError');
+      expect(result.content[0].text).toContain("Remove it from the event's attendees");
     });
 
     it('should end a UTC event one hour later whatever the server time zone', async () => {
@@ -987,6 +1066,57 @@ END:VCALENDAR</c:calendar-data>
       const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body;
       expect(putBody).not.toContain('BEGIN:VALARM');
       expect(putBody).not.toContain('END:VALARM');
+    });
+
+    it('should write CUTYPE once for a room attendee', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(resolveResponse) })
+        .mockResolvedValueOnce(
+          ocsUser({ id: 'admin', email: 'admin@example.com', displayname: 'Ada Admin' })
+        )
+        .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(resolveResponse) });
+
+      const { updateEventTool } = await import('../tools/apps/calendar.js');
+      await updateEventTool.handler({
+        uid: 'event-1',
+        calendarName: 'personal',
+        attendees: [{ email: 'room-1@example.com', cn: 'Room 1', cutype: 'ROOM' }],
+      });
+
+      const putBody = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[2][1].body.replace(
+        /\r\n[ \t]/g,
+        ''
+      );
+      expect(putBody.match(/CUTYPE=/g)).toHaveLength(1);
+    });
+
+    it('should take a room that declined the updated time off the event', async () => {
+      const declined = resolveResponse.replace(
+        'END:VEVENT',
+        'ORGANIZER:mailto:admin@example.com\n' +
+          'ATTENDEE;CN="Room 1";CUTYPE=ROOM;PARTSTAT=DECLINED:mailto:room-1@example.com\n' +
+          'END:VEVENT'
+      );
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(declined) })
+        .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') })
+        .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(declined) })
+        .mockResolvedValueOnce({ ok: true, status: 204, text: () => Promise.resolve('') });
+
+      const { updateEventTool } = await import('../tools/apps/calendar.js');
+      const result = await updateEventTool.handler({
+        uid: 'event-1',
+        calendarName: 'personal',
+        dtstart: '20240315T110000Z',
+      });
+
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls).toHaveLength(4);
+      expect(calls[3][1].method).toBe('PUT');
+      expect(calls[3][1].headers['If-Match']).toBe('"etag-upd1"');
+      expect(calls[3][1].body).not.toContain('ATTENDEE');
+      expect(result.content[0].text).toContain('Removed from the event');
     });
 
     it('should add attendees to event', async () => {

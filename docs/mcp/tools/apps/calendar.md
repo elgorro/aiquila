@@ -226,7 +226,7 @@ Find the rooms that are free for the whole range, with the busy times of the oth
 Book a room by inviting it: pass its email address in `attendees` of `create_event` or `update_event`, with `cutype` `ROOM` (or `RESOURCE` for a resource). Nextcloud answers for the room while the event is saved: it accepts if the room is free and declines if it is already booked. The tool reads the event back and reports which:
 
 - **booked**: the room accepted.
-- **DECLINED**: the room was already booked at that time. Remove it from the attendees, or the declined booking stays in the room's calendar and keeps it shown as busy.
+- **DECLINED**: the room was already booked at that time. The tool takes it off the event's attendees. Nextcloud keeps a declined booking in the room's calendar, where free/busy counts it as busy until the room is removed from the event. If removing it fails (for example because the event changed in between), the report says so and asks you to remove the room yourself.
 - **not answered**: Nextcloud does not answer for recurring events, so a recurring booking stays unconfirmed.
 - **not booked**: the event has no organizer, because the signed-in user has no email address in their profile, so the room was never asked.
 
