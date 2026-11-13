@@ -115,8 +115,12 @@ After editing a controller annotated with `#[OpenAPI]`, regenerate and commit th
 spec (CI fails on a mismatch):
 
 ```bash
-cd nextcloud-app && vendor/bin/generate-spec
+cd nextcloud-app && composer openapi   # updates openapi.json, openapi-administration.json, openapi-full.json
 ```
+
+The specs are OpenAPI 3.1.0. `composer openapi` runs the generator and then rewrites
+its output into 3.1 form. Running `vendor/bin/generate-spec` on its own writes 3.0.3,
+and CI reports a mismatch.
 
 ## Documentation
 
@@ -127,7 +131,39 @@ workflow, update the page that describes it in the same pull request. A change t
 leaves `docs/` describing the old behaviour is not finished. If nothing needs
 changing, say so in the pull request — that tells a reviewer you looked.
 
+Where each kind of change is documented:
+
+| Changed | Update |
+|---|---|
+| Workflows, CI behaviour | `docs/dev/ci-cd.md` |
+| MCP tools | `docs/mcp/tools/**`, the tool table in `docs/mcp/README.md`, and the category's row in `docs/mcp/upstream-apis.md` |
+| Env vars, transports, auth | `docs/mcp/setup.md` |
+| Nextcloud endpoints | `docs/dev/openapi.md`, plus regenerating the spec |
+| Install or deploy steps | `docs/installation/**`, `docs/hetzner/**` |
+| How to propose a change | `CONTRIBUTING.md` |
+
 Not sure which page? Ask in the issue and we will point you at it.
+
+### Upstream APIs
+
+Most of AIquila wraps APIs that belong to someone else: Nextcloud server components,
+Nextcloud apps, and the LLM providers. [`docs/mcp/upstream-apis.md`](docs/mcp/upstream-apis.md)
+maps each MCP tool category to the app and API it calls, the upstream reference it
+follows, when it was `Introduced`, and when it was `Last verified`.
+
+Before working on a tool category, read its row:
+
+- Check your implementation against the linked reference for the upstream version
+  you target, not against the existing code. A `Last verified` of `—`, or one older
+  than the current Nextcloud major, means the code may follow an API that has moved.
+- In the same pull request, update `Last verified` (the app version from
+  `occ app:list`, the Nextcloud version from `occ status`, and the date) for every
+  category whose behaviour you exercised, and fix the reference link if it moved.
+- A new category gets a new row, with `Introduced` filled in.
+
+Where behaviour follows a protocol or format (OAuth, HTTP, WebDAV, iCalendar, vCard,
+JSON Schema, MCP), check it against the specification itself rather than another
+client's behaviour, and cite the section in a code comment or the pull request.
 
 **Keep documentation general.** The docs describe how AIquila works now, for someone
 reading them a year from now. They are not a changelog or a record of what went

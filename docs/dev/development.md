@@ -220,6 +220,26 @@ suite fails on how a test double is used, not only on assertions:
 - Type hints for all parameters and returns
 - PHPDoc for public methods
 
+### JSON objects in PHP
+
+`json_decode(..., true)` turns an empty JSON object `{}` into an empty PHP array, and
+`json_encode` writes that back as the list `[]`. An object with the keys `"0"`, `"1"`,
+… comes back as a list too. JSON the app decodes and later sends on, to a model
+provider or an MCP server, can therefore turn an object into a list. Tool schemas,
+tool-call arguments and stored tool definitions are all affected.
+
+Send such values through `OCA\AIquila\Service\JsonShape` at the point where they
+leave the app:
+
+| Value | Helper |
+|---|---|
+| Must be an object as a whole: MCP `tools/call` `arguments`, `tool_use.input`, the JSON in an OpenAI `function.arguments` string | `JsonShape::object()` |
+| A tool's input schema: MCP `inputSchema`, Anthropic `input_schema`, OpenAI `parameters` | `JsonShape::toolInputSchema()` (any other JSON Schema: `JsonShape::schema()`) |
+| Tool-call arguments where the tool's schema is known | `JsonShape::arguments($args, $schema)`, which also restores nested objects the schema requires |
+
+Assert on the encoded JSON in tests, not on the decoded array: `{}` and `[]` are the
+same PHP value, so only the bytes show the difference.
+
 ## Debugging
 
 ### MCP Server
