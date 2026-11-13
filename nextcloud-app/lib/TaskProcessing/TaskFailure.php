@@ -44,7 +44,7 @@ final class TaskFailure {
             'The input is too large for the AI provider. Shorten it or split it into smaller parts.',
         ],
         'rate_limited' => [
-            '/\b429\b|rate.?limit|quota|too many requests|credit balance|billing/i',
+            '/\b429\b|rate.?limit|spend.?limit|quota|too many requests|credit balance|billing/i',
             'The AI provider\'s rate limit or quota was reached. Try again later.',
         ],
         'not_configured' => [

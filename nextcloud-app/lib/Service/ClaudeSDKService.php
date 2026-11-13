@@ -14,9 +14,11 @@ use Anthropic\Core\Exceptions\APITimeoutException;
 use Anthropic\Core\Exceptions\APIStatusException;
 use Anthropic\Core\Exceptions\AuthenticationException;
 use Anthropic\Core\Exceptions\InternalServerException;
+use Anthropic\Core\Exceptions\OverloadedException;
 use Anthropic\Core\Exceptions\PermissionDeniedException;
 use Anthropic\Core\Exceptions\RateLimitException;
 use Anthropic\Core\FileParam;
+use Anthropic\EnforcedSpendLimitReachedException;
 use Anthropic\Files\FileMetadata;
 use Anthropic\Foundry\Client as FoundryClient;
 use Anthropic\Messages\Batches\MessageBatch;
@@ -1391,6 +1393,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * the log line the status endpoint writes.
      */
     private static function probeDetail(\Throwable $e): string {
+        if ($e instanceof APIStatusException && ($apiMessage = $e->getAPIMessage()) !== null && $apiMessage !== '') {
+            return $apiMessage;
+        }
         $first = strtok($e->getMessage(), "\n");
         return $first === false ? $e->getMessage() : trim($first);
     }
@@ -1524,40 +1529,76 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         }
         $prefix = $context ? "AIquila SDK: $context" : 'AIquila SDK';
         $logCtx = $this->buildErrorLogContext($e);
-        if ($e instanceof AuthenticationException) {
-            $this->logger->error("$prefix: Authentication error", $logCtx);
-            return ['error' => 'Invalid API key. Please check your configuration.'];
-        }
-        if ($e instanceof PermissionDeniedException) {
-            $this->logger->error("$prefix: Permission denied", $logCtx);
-            return ['error' => 'Your API key does not have permission to use this resource.'];
-        }
-        if ($e instanceof RateLimitException) {
-            $this->logger->error("$prefix: Rate limit exceeded", $logCtx);
-            return ['error' => 'Rate limit exceeded. Please try again later.'];
-        }
-        if ($e instanceof InternalServerException) {
-            $this->logger->error("$prefix: Anthropic server error", $logCtx);
-            return ['error' => 'Anthropic API is temporarily unavailable. Please try again later.'];
-        }
-        if ($e instanceof APIConnectionException || $e instanceof APITimeoutException) {
-            $this->logger->error("$prefix: Connection error", $logCtx);
-            return ['error' => 'Connection to Claude API failed: ' . $e->getMessage()];
+        $described = $this->describeSdkException($e);
+        if ($described !== null) {
+            $this->logger->error("$prefix: {$described[0]}", $logCtx);
+            return ['error' => $described[1]];
         }
         $this->logger->error("$prefix: Error", $logCtx + ['class' => get_class($e)]);
         return ['error' => 'Error: ' . $e->getMessage()];
     }
 
     /**
-     * Build a log context for an SDK exception, including the typed
-     * ErrorType enum value when the exception carries one (SDK v0.9+).
+     * The log headline and the user-facing message for an SDK exception the
+     * app reports in its own words, or null for anything else.
      *
-     * @return array{error: string, error_type?: string}
+     * Since SDK v1.5 the class is picked by HTTP status and then by
+     * `error.details.error_code`, so the subclasses are checked before their
+     * parents: a spend-limit 429 is a RateLimitException and a 529 an
+     * InternalServerException.
+     *
+     * @return array{string, string}|null
+     */
+    private function describeSdkException(\Throwable $e): ?array {
+        return match (true) {
+            $e instanceof AuthenticationException => ['Authentication error', 'Invalid API key. Please check your configuration.'],
+            $e instanceof PermissionDeniedException => ['Permission denied', 'Your API key does not have permission to use this resource.'],
+            $e instanceof EnforcedSpendLimitReachedException => [
+                'Spend limit reached',
+                'Your Anthropic organization has reached the monthly spend limit of its API tier. Please ask an administrator to raise it.',
+            ],
+            $e instanceof RateLimitException => ['Rate limit exceeded', 'Rate limit exceeded. Please try again later.'],
+            $e instanceof OverloadedException => ['Overloaded', 'Claude is overloaded right now. Please try again in a moment.'],
+            $e instanceof InternalServerException => ['Anthropic server error', 'Anthropic API is temporarily unavailable. Please try again later.'],
+            $e instanceof APIConnectionException,
+            $e instanceof APITimeoutException => ['Connection error', 'Connection to Claude API failed: ' . $e->getMessage()],
+            default => null,
+        };
+    }
+
+    /**
+     * The text of a stream's `error` event: the app's own wording for the
+     * errors describeSdkException() knows, the exception message otherwise.
+     */
+    private function streamErrorMessage(\Throwable $e): string {
+        return $this->describeSdkException($e)[1] ?? $e->getMessage();
+    }
+
+    /**
+     * Build a log context for an SDK exception: the status, `error.type`,
+     * `error.details.error_code` and `error.message` from the response body
+     * when it carries them, and the request ID support asks for.
+     *
+     * @return array{error: string, status?: int, error_type?: string, error_code?: string, api_message?: string, request_id?: string}
      */
     private function buildErrorLogContext(\Throwable $e): array {
         $ctx = ['error' => $e->getMessage()];
-        if ($e instanceof APIStatusException && $e->type !== null) {
-            $ctx['error_type'] = $e->type->value;
+        if (!$e instanceof APIStatusException) {
+            return $ctx;
+        }
+        if ($e->status !== null) {
+            $ctx['status'] = $e->status;
+        }
+        $optional = [
+            'error_type' => $e->getType(),
+            'error_code' => $e->getErrorCode(),
+            'api_message' => $e->getAPIMessage(),
+            'request_id' => $e->getRequestID(),
+        ];
+        foreach ($optional as $key => $value) {
+            if ($value !== null && $value !== '') {
+                $ctx[$key] = $value;
+            }
         }
         return $ctx;
     }
@@ -2894,22 +2935,12 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
 
         } catch (RefusalException $e) {
             throw $e;
-        } catch (AuthenticationException $e) {
-            $this->logger->error('AIquila SDK: Stream authentication error', $this->buildErrorLogContext($e));
-            throw new \Exception('Invalid API key. Please check your configuration.');
-        } catch (PermissionDeniedException $e) {
-            $this->logger->error('AIquila SDK: Stream permission denied', $this->buildErrorLogContext($e));
-            throw new \Exception('Your API key does not have permission to use this resource.');
-        } catch (RateLimitException $e) {
-            $this->logger->error('AIquila SDK: Stream rate limit exceeded', $this->buildErrorLogContext($e));
-            throw new \Exception('Rate limit exceeded. Please try again later.');
-        } catch (InternalServerException $e) {
-            $this->logger->error('AIquila SDK: Stream Anthropic server error', $this->buildErrorLogContext($e));
-            throw new \Exception('Anthropic API is temporarily unavailable. Please try again later.');
-        } catch (APIConnectionException | APITimeoutException $e) {
-            $this->logger->error('AIquila SDK: Stream connection error', $this->buildErrorLogContext($e));
-            throw new \Exception('Connection to Claude API failed: ' . $e->getMessage());
-        } catch (APIStatusException | \Exception $e) {
+        } catch (\Exception $e) {
+            $described = $this->describeSdkException($e);
+            if ($described !== null) {
+                $this->logger->error('AIquila SDK: Stream: ' . $described[0], $this->buildErrorLogContext($e));
+                throw new \Exception($described[1]);
+            }
             $this->logger->error('AIquila SDK: Stream error', $this->buildErrorLogContext($e) + ['class' => get_class($e)]);
             throw new \Exception('Stream error: ' . $e->getMessage());
         }
@@ -2977,7 +3008,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 $stream = $this->withSystemRoleFallback($params, fn (array $p): BaseStream => $this->callCreateStream($client, $p));
             } catch (\Throwable $e) {
                 $this->logger->error('AIquila SDK: chatWithToolsStream open failed', $this->buildErrorLogContext($e));
-                yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];
+                yield ['type' => 'error', 'error' => $this->streamErrorMessage($e), 'usage' => null];
                 return;
             }
 
@@ -3101,7 +3132,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                 }
             } catch (\Throwable $e) {
                 $this->logger->error('AIquila SDK: chatWithToolsStream stream failed', $this->buildErrorLogContext($e));
-                yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => [
+                yield ['type' => 'error', 'error' => $this->streamErrorMessage($e), 'usage' => [
                     'input_tokens' => $totalInput,
                     'output_tokens' => $totalOutput,
                     'cache_creation_tokens' => $totalCacheCreate ?: null,
@@ -3347,7 +3378,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             );
         } catch (\Throwable $e) {
             $this->logger->error('AIquila SDK: chatWithNativeMcp open failed', $this->buildErrorLogContext($e));
-            yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => null];
+            yield ['type' => 'error', 'error' => $this->streamErrorMessage($e), 'usage' => null];
             return;
         }
 
@@ -3478,7 +3509,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             }
         } catch (\Throwable $e) {
             $this->logger->error('AIquila SDK: chatWithNativeMcp stream failed', $this->buildErrorLogContext($e));
-            yield ['type' => 'error', 'error' => $e->getMessage(), 'usage' => [
+            yield ['type' => 'error', 'error' => $this->streamErrorMessage($e), 'usage' => [
                 'input_tokens' => $totalInput,
                 'output_tokens' => $totalOutput,
                 'cache_creation_tokens' => $totalCacheCreate ?: null,

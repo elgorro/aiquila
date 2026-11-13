@@ -3,12 +3,14 @@
 namespace OCA\AIquila\Tests\Unit;
 
 use Anthropic\Client;
+use Anthropic\EnforcedSpendLimitReachedException;
 use Anthropic\Core\Contracts\BaseStream;
 use Anthropic\Core\Exceptions\APIConnectionException;
 use Anthropic\Core\Exceptions\APIStatusException;
 use Anthropic\Core\Exceptions\APITimeoutException;
 use Anthropic\Core\Exceptions\AuthenticationException;
 use Anthropic\Core\Exceptions\InternalServerException;
+use Anthropic\Core\Exceptions\OverloadedException;
 use Anthropic\Core\Exceptions\PermissionDeniedException;
 use Anthropic\Core\Exceptions\RateLimitException;
 use Anthropic\Messages\Message;
@@ -223,6 +225,38 @@ class ClaudeServiceTest extends TestCase {
         return new $class(request: $request, response: $response);
     }
 
+    /**
+     * An API error built the way the SDK builds one from a response: the class
+     * comes from APIStatusException::from(), by status and then error code.
+     *
+     * @param array<string, mixed> $error the `error` object of the body
+     */
+    private function makeApiError(int $status, array $error, string $requestId = ''): APIStatusException {
+        $body = $this->createStub(StreamInterface::class);
+        $body->method('__toString')->willReturn(json_encode(['type' => 'error', 'error' => $error]));
+
+        $response = $this->createStub(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn($status);
+        $response->method('getBody')->willReturn($body);
+        $response->method('getHeaderLine')->willReturnCallback(
+            fn (string $name): string => strtolower($name) === 'request-id' ? $requestId : ''
+        );
+
+        return APIStatusException::from(request: $this->createStub(RequestInterface::class), response: $response);
+    }
+
+    private function spendLimitError(): APIStatusException {
+        return $this->makeApiError(429, [
+            'type' => 'rate_limit_error',
+            'message' => 'Your organization has reached its monthly usage limit.',
+            'details' => ['error_code' => 'enforced_spend_limit_reached'],
+        ]);
+    }
+
+    private function overloadedError(): APIStatusException {
+        return $this->makeApiError(529, ['type' => 'overloaded_error', 'message' => 'Overloaded']);
+    }
+
     private function makeConnectionException(): APIConnectionException {
         return new APIConnectionException(
             request: $this->createStub(RequestInterface::class),
@@ -408,6 +442,64 @@ class ClaudeServiceTest extends TestCase {
         $result = $this->testable->ask('Hi', '', 'testuser');
         $this->assertArrayHasKey('error', $result);
         $this->assertStringContainsString('temporarily unavailable', $result['error']);
+    }
+
+    public function testSdkPicksTheSpendLimitAndOverloadedClasses(): void {
+        // The handlers below depend on these subclasses (SDK v1.5+).
+        $this->assertInstanceOf(EnforcedSpendLimitReachedException::class, $this->spendLimitError());
+        $this->assertInstanceOf(RateLimitException::class, $this->spendLimitError());
+        $this->assertInstanceOf(OverloadedException::class, $this->overloadedError());
+        $this->assertInstanceOf(InternalServerException::class, $this->overloadedError());
+    }
+
+    public function testAskReportsTheSpendLimitApartFromTheRateLimit(): void {
+        $this->configWithApiKey();
+        $this->testable->throwOnCreate($this->spendLimitError());
+
+        $result = $this->testable->ask('Hi', '', 'testuser');
+        $this->assertStringContainsString('monthly spend limit', $result['error']);
+        $this->assertStringNotContainsString('Rate limit exceeded', $result['error']);
+    }
+
+    public function testAskReportsOverloadedOn529(): void {
+        $this->configWithApiKey();
+        $this->testable->throwOnCreate($this->overloadedError());
+
+        $result = $this->testable->ask('Hi', '', 'testuser');
+        $this->assertStringContainsString('overloaded', $result['error']);
+    }
+
+    public function testAskStillReportsUnavailableOnOther5xx(): void {
+        $this->configWithApiKey();
+        $this->testable->throwOnCreate($this->makeApiError(503, ['type' => 'api_error', 'message' => 'Service unavailable']));
+
+        $result = $this->testable->ask('Hi', '', 'testuser');
+        $this->assertStringContainsString('temporarily unavailable', $result['error']);
+    }
+
+    public function testErrorLogCarriesTheApiErrorFields(): void {
+        $this->logger = $this->createMock(LoggerInterface::class);
+        $this->buildService();
+        $this->configWithApiKey();
+        $this->testable->throwOnCreate($this->makeApiError(429, [
+            'type' => 'rate_limit_error',
+            'message' => 'Number of request tokens has exceeded your per-minute rate limit',
+            'details' => ['error_code' => 'ramp_limit_exceeded'],
+        ], 'req_011abc'));
+
+        $this->logger->expects($this->once())->method('error')->with(
+            'AIquila SDK: ask: Rate limit exceeded',
+            $this->callback(function (array $ctx): bool {
+                $this->assertSame(429, $ctx['status']);
+                $this->assertSame('rate_limit_error', $ctx['error_type']);
+                $this->assertSame('ramp_limit_exceeded', $ctx['error_code']);
+                $this->assertSame('Number of request tokens has exceeded your per-minute rate limit', $ctx['api_message']);
+                $this->assertSame('req_011abc', $ctx['request_id']);
+                return true;
+            }),
+        );
+
+        $this->testable->ask('Hi', '', 'testuser');
     }
 
     public function testAskReturnsConnectionErrorOnAPIConnectionException(): void {
@@ -1053,6 +1145,37 @@ class ClaudeServiceTest extends TestCase {
         $this->expectException(\Exception::class);
         $this->expectExceptionMessageMatches('/temporarily unavailable/');
         iterator_to_array($this->testable->askStream('Hi', '', 'testuser'));
+    }
+
+    public function testAskStreamThrowsOverloadedOn529(): void {
+        $this->configWithApiKey();
+        $this->testable->throwOnStream($this->overloadedError());
+
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/overloaded/');
+        iterator_to_array($this->testable->askStream('Hi', '', 'testuser'));
+    }
+
+    public function testChatWithToolsStreamErrorEventUsesTheAppWording(): void {
+        $this->configWithApiKey();
+        $this->testable->throwOnStream($this->spendLimitError());
+
+        $events = iterator_to_array(
+            $this->testable->chatWithToolsStream(
+                [['role' => 'user', 'content' => 'Hi']],
+                [],
+                fn($n, $i) => ['content' => []],
+                null,
+                'testuser',
+            ),
+            false,
+        );
+
+        $last = end($events);
+        $this->assertSame('error', $last['type']);
+        $this->assertStringContainsString('monthly spend limit', $last['error']);
+        // Not the SDK's headline-plus-JSON-body rendering.
+        $this->assertStringNotContainsString('"status"', $last['error']);
     }
 
     public function testAskStreamThrowsConnectionErrorOnAPIConnectionException(): void {
