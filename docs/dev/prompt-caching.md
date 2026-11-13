@@ -98,7 +98,7 @@ The row reaches the model as a
 `Provider\SystemMessages` makes that call per request:
 
 - **Claude, natively**: on models in `ClaudeModels::supportsMidConversationSystem()`
-  (Fable 5 and 5.1, Opus 5 and 5.5, Opus 4.8; not Sonnet 5) and on platforms with
+  (Fable 5, 5.1 and 5.2, Mythos 5.2, Opus 5 and 5.5, Opus 4.8; not Sonnet 5) and on platforms with
   `FEATURE_MID_CONVERSATION_SYSTEM` (the Claude API, Claude Platform on AWS,
   Bedrock, Vertex AI). A system message must directly follow a user turn and be
   last or followed by an assistant turn; one in any other position is folded even

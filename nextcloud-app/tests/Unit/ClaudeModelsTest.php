@@ -13,7 +13,8 @@ class ClaudeModelsTest extends TestCase {
 
     public function testGetAllModelsReturnsCurrentModelsOnly(): void {
         $models = ClaudeModels::getAllModels();
-        $this->assertCount(12, $models);
+        $this->assertCount(13, $models);
+        $this->assertContains(ClaudeModels::FABLE_5_2,  $models);
         $this->assertContains(ClaudeModels::FABLE_5_1,  $models);
         $this->assertContains(ClaudeModels::FABLE_5,    $models);
         $this->assertContains(ClaudeModels::OPUS_5_5,   $models);
@@ -31,8 +32,34 @@ class ClaudeModelsTest extends TestCase {
         // backward compat but we no longer advertise them in the UI.
         $this->assertNotContains(ClaudeModels::SONNET_4, $models);
         $this->assertNotContains(ClaudeModels::OPUS_4,   $models);
+        // Verification-gated: known to the capability tables, not offered.
+        $this->assertNotContains(ClaudeModels::MYTHOS_5_2, $models);
         // Most capable first
-        $this->assertSame(ClaudeModels::FABLE_5_1, $models[0]);
+        $this->assertSame(ClaudeModels::FABLE_5_2, $models[0]);
+    }
+
+    /**
+     * Fable 5.2 and Mythos 5.2 per the model docs: 128K output, 1M context,
+     * thinking always on, all five efforts, fast mode, mid-conversation
+     * system messages and task budgets, no 300K batch output.
+     */
+    public function testFable52AndMythos52Registry(): void {
+        foreach ([ClaudeModels::FABLE_5_2, ClaudeModels::MYTHOS_5_2] as $model) {
+            $this->assertSame(128000, ClaudeModels::getMaxTokenCeiling($model), $model);
+            $this->assertSame(1000000, ClaudeModels::getContextWindow($model), $model);
+            $this->assertTrue(ClaudeModels::supportsThinking($model), $model);
+            $this->assertSame('adaptive', ClaudeModels::thinkingDefault($model), $model);
+            $this->assertFalse(ClaudeModels::canDisableThinking($model), $model);
+            $this->assertTrue(ClaudeModels::thinkingSummaryNeedsOptIn($model), $model);
+            $this->assertSame(ClaudeModels::ALL_EFFORTS, ClaudeModels::getAllowedEfforts($model), $model);
+            $this->assertSame('xhigh', ClaudeModels::getEffortLevel($model), $model);
+            $this->assertTrue(ClaudeModels::supportsFastMode($model), $model);
+            $this->assertTrue(ClaudeModels::supportsMidConversationSystem($model), $model);
+            $this->assertTrue(ClaudeModels::supportsTaskBudget($model), $model);
+            $this->assertFalse(ClaudeModels::supportsExtendedOutput($model), $model);
+        }
+        // Cloud spellings resolve to the same entry.
+        $this->assertSame(ClaudeModels::FABLE_5_2, ClaudeModels::canonicalId('global.anthropic.claude-fable-5-2'));
     }
 
     public function testFable51AndOpus55Registry(): void {
@@ -55,6 +82,8 @@ class ClaudeModelsTest extends TestCase {
      */
     public static function thinkingPolicyProvider(): array {
         return [
+            'Fable 5.2 always thinks' => [ClaudeModels::FABLE_5_2, 'adaptive', 'never', null],
+            'Mythos 5.2 always thinks' => [ClaudeModels::MYTHOS_5_2, 'adaptive', 'never', null],
             'Fable 5.1 always thinks' => [ClaudeModels::FABLE_5_1, 'adaptive', 'never', null],
             'Fable 5 always thinks'   => [ClaudeModels::FABLE_5, 'adaptive', 'never', null],
             'Opus 5.5 always thinks'  => [ClaudeModels::OPUS_5_5, 'adaptive', 'never', null],

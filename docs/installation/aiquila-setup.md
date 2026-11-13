@@ -227,7 +227,7 @@ three values:
 
 | Model | Thinking off |
 |---|---|
-| Fable 5.1, Fable 5, Opus 5.5 | Not possible — these models always think. Lower the effort to make them cheaper. |
+| Fable 5.2, Mythos 5.2, Fable 5.1, Fable 5, Opus 5.5 | Not possible — these models always think. Lower the effort to make them cheaper. |
 | Opus 5 | Possible up to effort `high`; a higher effort is lowered to `high` while thinking is off. |
 | Sonnet 5 | Possible at any effort. |
 | Opus 4.x, Sonnet 4.6 | Possible; it is also their default. |
@@ -288,7 +288,7 @@ model before concluding a setting is broken.
 | Setting | What it does | Where it applies | Cost |
 |---|---|---|---|
 | **Service tier** | `auto` lets a request use priority capacity; `standard_only` never does. Blank leaves your Anthropic account's own default in charge. | Only if your organisation has purchased Priority Tier. Priority Tier is not offered on Opus 5, Sonnet 5 or the Fable models. | None |
-| **Fast mode** | Generates output roughly 2.5x faster. | Opus 5.5, Opus 5 and Opus 4.8 only; silently ignored elsewhere. Not available for batched work. | Roughly double the price per token |
+| **Fast mode** | Generates output roughly 2.5x faster. | Fable 5.2, Mythos 5.2, Opus 5.5, Opus 5 and Opus 4.8 only; silently ignored elsewhere. Not available for batched work. | Roughly double the price per token |
 
 Fast mode has its own rate limit, separate from the model's standard one.
 
