@@ -92,6 +92,16 @@ class Application extends App implements IBootstrap {
             \OCA\AIquila\Listener\TeamDeletedListener::class
         );
 
+        // Remove a deleted user's coworkers, conversations, projects and prompts.
+        $context->registerEventListener(
+            \OCP\User\Events\BeforeUserDeletedEvent::class,
+            \OCA\AIquila\Listener\UserDeletedListener::class
+        );
+        $context->registerEventListener(
+            \OCP\User\Events\UserDeletedEvent::class,
+            \OCA\AIquila\Listener\UserDeletedListener::class
+        );
+
         // Register setup checks for admin overview (Settings → Overview)
         $context->registerSetupCheck(\OCA\AIquila\SetupCheck\ApiKeyConfigured::class);
         $context->registerSetupCheck(\OCA\AIquila\SetupCheck\AnthropicApiReachable::class);

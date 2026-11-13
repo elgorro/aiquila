@@ -304,4 +304,33 @@ class CoworkerTeamTest extends TestCase {
         $this->expectException(DoesNotExistException::class);
         $this->service()->runNow(7, 'bob');
     }
+
+    public function testDeletingAUserStopsAndDeletesTheirPersonalCoworkers(): void {
+        $coworker = $this->coworker(null);
+        $run = new CoworkerRun();
+        $run->setStatus(CoworkerRun::STATUS_RUNNING);
+        $this->mapper->expects($this->once())->method('findPersonalByUser')->with('alice')->willReturn([$coworker]);
+        $this->mapper->expects($this->never())->method('findAllByTeam');
+        $this->runMapper->method('findActiveForCoworker')->willReturn($run);
+        $this->runMapper->expects($this->once())->method('deleteByCoworker')->with(7);
+        $this->mapper->expects($this->once())->method('delete')->with($coworker);
+
+        $this->service()->removeForUser('alice');
+
+        $this->assertSame(CoworkerRun::STATUS_CANCELLED, $run->getStatus());
+    }
+
+    public function testStoppingAUsersRunsKeepsTheCoworkers(): void {
+        $busy = $this->coworker(null);
+        $idle = $this->coworker(null);
+        $run = new CoworkerRun();
+        $run->setStatus(CoworkerRun::STATUS_RUNNING);
+        $this->mapper->method('findPersonalByUser')->willReturn([$busy, $idle]);
+        $this->runMapper->method('findActiveForCoworker')->willReturnOnConsecutiveCalls($run, null);
+        $this->mapper->expects($this->never())->method('delete');
+
+        $this->service()->stopForUser('alice');
+
+        $this->assertSame(CoworkerRun::STATUS_CANCELLED, $run->getStatus());
+    }
 }

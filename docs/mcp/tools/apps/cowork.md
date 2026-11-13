@@ -32,6 +32,8 @@ Nextcloud apps that register coworkers programmatically use the
 | `get_coworker_runs` | Recent run history |
 | `get_coworker_run` | One run in full, with its per-item log |
 
+A personal coworker runs as the user who created it. When that account is deleted, its coworkers are stopped and deleted with their run history.
+
 ### Team coworkers
 
 Pass `teamId` to `create_coworker` to give a coworker to a team you belong to. Any member can then see, change, run, stop and delete it, and see all of its runs. The team is set once, when the coworker is created.

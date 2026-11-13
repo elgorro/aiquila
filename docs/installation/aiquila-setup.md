@@ -932,6 +932,24 @@ Content-Type: application/json
 
 See [internal-api.md](../internal-api.md) for complete API documentation.
 
+### 8. When an account is deleted
+
+Deleting a user removes what they owned in AIquila:
+
+- their personal coworkers, with their run history. A run in progress is stopped
+  first, and a pending batch is cancelled with the provider while the account's
+  key still exists;
+- their conversations, with messages and attachments, and their entries in Context
+  Chat;
+- their personal projects, prompts and project templates;
+- their usage statistics and any provider access rule that names them.
+
+What belongs to a team stays with it: team coworkers move to another member on their
+next run (see [Team coworkers](../mcp/tools/apps/cowork.md#team-coworkers)), and team
+projects keep working for the other members. Instance prompts and templates an admin
+published stay too. Files sent to Anthropic's Files API expire through the daily
+cleanup job.
+
 ## Verification
 
 ### Quick Tests

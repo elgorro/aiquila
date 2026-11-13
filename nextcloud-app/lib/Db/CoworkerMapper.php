@@ -51,6 +51,22 @@ class CoworkerMapper extends QBMapper {
     }
 
     /**
+     * A user's personal coworkers, app-owned ones included: everything that
+     * runs as them and belongs to no team.
+     *
+     * @return list<Coworker>
+     */
+    public function findPersonalByUser(string $userId): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->isNull('team_id'));
+
+        return $this->findEntities($qb);
+    }
+
+    /**
      * Resolve a coworker by id, scoped to the owning app. Used by the public
      * ICoworkManager so an app can only read/steer its own coworkers.
      *
