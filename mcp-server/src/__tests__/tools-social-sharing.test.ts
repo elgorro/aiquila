@@ -25,7 +25,7 @@ function setupMocks(opts: {
   mockFetchOCS.mockImplementation((path: string) => {
     if (path.startsWith('/ocs/v2.php/cloud/apps')) {
       if (opts.enabledApps === null) {
-        return Promise.reject(new Error('Permission denied. This operation requires admin'));
+        return Promise.reject(new Error('Permission denied: Nextcloud gave no reason.'));
       }
       return Promise.resolve(ocsWrap({ apps: opts.enabledApps }));
     }

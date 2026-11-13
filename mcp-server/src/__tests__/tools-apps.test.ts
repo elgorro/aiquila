@@ -61,12 +61,7 @@ describe('App Management Tools', () => {
     });
 
     it('should handle errors', async () => {
-      mockFetchOCS.mockRejectedValue(
-        new Error(
-          'Permission denied. This operation requires admin or sub-admin privileges. ' +
-            'This Nextcloud account does not have them.'
-        )
-      );
+      mockFetchOCS.mockRejectedValue(new Error('Permission denied: Nextcloud gave no reason.'));
 
       const { listAppsTool } = await import('../tools/system/apps.js');
       const result = await listAppsTool.handler({});

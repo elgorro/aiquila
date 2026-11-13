@@ -105,14 +105,13 @@ export async function fetchOCS<T = unknown>(
     }
     const text = await response.text();
     if (response.status === 403) {
-      // Pass on the reason when Nextcloud gives one: a 403 is not always about
-      // admin rights (Mail answers it when an account has no Sent mailbox).
+      // Pass on the reason when Nextcloud gives one. Without one, stay neutral:
+      // a 403 is not always about admin rights (Mail answers it when an account
+      // has no Sent mailbox, Talk when a participant is not a moderator). The
+      // admin-only tools say so in their own descriptions.
       const reason = ocsErrorMessage(text);
       throw new Error(
-        reason
-          ? `Permission denied: ${reason}`
-          : 'Permission denied. This operation requires admin or sub-admin privileges. ' +
-              'This Nextcloud account does not have them.'
+        reason ? `Permission denied: ${reason}` : 'Permission denied: Nextcloud gave no reason.'
       );
     }
     throw new Error(`OCS API error: ${response.status} ${response.statusText} - ${text}`);

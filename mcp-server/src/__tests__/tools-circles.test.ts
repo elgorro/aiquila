@@ -168,7 +168,7 @@ describe('Circles (Teams) Tools', () => {
     it('should fall back to the circle list when the details route answers 403', async () => {
       // circles ships GET /circles/{circleId} without #[NoAdminRequired]
       mockFetchOCS
-        .mockRejectedValueOnce(new Error('Permission denied. This operation requires admin'))
+        .mockRejectedValueOnce(new Error('Permission denied: Nextcloud gave no reason.'))
         .mockResolvedValueOnce(
           ocsWrap([
             { id: 'other', name: 'Other', config: 0 },
@@ -186,7 +186,7 @@ describe('Circles (Teams) Tools', () => {
 
     it('should keep the 403 when the circle is not in the list either', async () => {
       mockFetchOCS
-        .mockRejectedValueOnce(new Error('Permission denied. This operation requires admin'))
+        .mockRejectedValueOnce(new Error('Permission denied: Nextcloud gave no reason.'))
         .mockResolvedValueOnce(ocsWrap([]));
 
       const { circlesGetTool } = await import('../tools/apps/circles.js');
