@@ -36,6 +36,8 @@ class CoworkerServiceStopTest extends TestCase {
     protected function setUp(): void {
         $this->mapper = $this->createStub(CoworkerMapper::class);
         $this->mapper->method('update')->willReturnArgument(0);
+        // The stored row a finished run reads its schedule back from.
+        $this->mapper->method('findById')->willReturnCallback(fn () => $this->coworker());
         $this->runMapper = $this->createStub(CoworkerRunMapper::class);
         $this->runMapper->method('insert')->willReturnCallback(function (CoworkerRun $run): CoworkerRun {
             (new \ReflectionProperty($run, 'id'))->setValue($run, 42);
@@ -201,12 +203,15 @@ class CoworkerServiceStopTest extends TestCase {
     public function testProgressUpdatesDoNotWriteTheStatus(): void {
         $written = [];
         $this->runMapper = $this->createStub(CoworkerRunMapper::class);
+        // As ChangeTrackingMapper does: a successful write clears the marks.
         $this->runMapper->method('insert')->willReturnCallback(function (CoworkerRun $run): CoworkerRun {
             (new \ReflectionProperty($run, 'id'))->setValue($run, 42);
+            $run->resetUpdatedFields();
             return $run;
         });
         $this->runMapper->method('update')->willReturnCallback(function (CoworkerRun $run) use (&$written): CoworkerRun {
             $written[] = array_keys($run->getUpdatedFields());
+            $run->resetUpdatedFields();
             return $run;
         });
         $task = $this->createStub(CoworkerTaskType::class);

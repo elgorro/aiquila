@@ -43,6 +43,9 @@ class ConversationControllerStreamTest extends TestCase {
     /** @var list<array<int, mixed>> UsageStatService::record() calls */
     private array $usageRecorded = [];
 
+    /** What the conditional title update finds in the stored row. */
+    private bool $storedTitleIsEmpty = true;
+
     /**
      * @param iterable<array<string, mixed>>|callable $events what the provider streams
      */
@@ -50,12 +53,14 @@ class ConversationControllerStreamTest extends TestCase {
         $this->inserted = [];
         $this->usageRecorded = [];
         $this->conversation = new Conversation();
+        $this->conversation->setId(1);
         $this->conversation->setUserId('testuser');
         $this->conversation->setTitle(null);
 
         $conversationMapper = $this->createStub(ConversationMapper::class);
         $conversationMapper->method('findByIdAndUser')->willReturn($this->conversation);
         $conversationMapper->method('update')->willReturnArgument(0);
+        $conversationMapper->method('setTitleIfUntitled')->willReturnCallback(fn () => $this->storedTitleIsEmpty);
 
         $nextId = 1;
         $this->messageMapper = $this->createStub(MessageMapper::class);
@@ -198,6 +203,16 @@ class ConversationControllerStreamTest extends TestCase {
         $this->drain([['type' => 'done', 'usage' => [], 'citations' => []]], 'What is a raincoat?');
 
         $this->assertSame('What is a raincoat?', $this->conversation->getTitle());
+    }
+
+    /** A rename made while the reply streamed is kept: the stored row decides. */
+    public function testARenameDuringTheTurnKeepsItsTitle(): void {
+        $this->storedTitleIsEmpty = false;
+
+        $this->drain([['type' => 'done', 'usage' => [], 'citations' => []]], 'What is a raincoat?');
+
+        $this->assertNull($this->conversation->getTitle());
+        $this->assertArrayNotHasKey('title', $this->conversation->getUpdatedFields(), 'the turn does not write a title');
     }
 
     public function testErrorEventPersistsPartialTextWithSuffix(): void {

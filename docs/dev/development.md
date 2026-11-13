@@ -240,6 +240,22 @@ leave the app:
 Assert on the encoded JSON in tests, not on the decoded array: `{}` and `[]` are the
 same PHP value, so only the bytes show the difference.
 
+### Entities and mappers
+
+An `update()` writes the fields marked as changed on the entity, not the whole row.
+Nextcloud's `QBMapper` never clears those marks, so an instance that was inserted or
+updated once would write every field set on it again on its next `update()`. If
+another request changed one of those columns in between, its change is lost.
+
+- Mappers extend `OCA\AIquila\Db\ChangeTrackingMapper`, not `QBMapper`. It clears
+  the marks after every successful `insert()` and `update()`, so the next `update()`
+  writes only what changed since. A test checks that every mapper does.
+- Entities use `InsertsFullRow` so an insert writes default values too.
+- That still lets two requests that write the *same* column overwrite each other.
+  Where that matters, decide from the stored row: re-read before computing the value
+  (`CoworkerService::reloadSchedule()`), or make the write conditional
+  (`ConversationMapper::setTitleIfUntitled()`).
+
 ## Debugging
 
 ### MCP Server

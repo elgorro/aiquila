@@ -550,12 +550,10 @@ class CoworkerService {
         $run->setStatus(CoworkerRun::STATUS_RUNNING);
         $run->setStartedAt($now);
         $run->setStartedBy($startedBy);
+        // The mapper clears the insert's marks (ChangeTrackingMapper), so each
+        // progress update writes only the counts, never `status: running`
+        // over a stop() from another request.
         $run = $this->runMapper->insert($run);
-        // QBMapper never clears the updated-field marks, and the insert marked
-        // every field. Left as is, each progress update would write the whole
-        // row again, `status: running` included, over a stop() from another
-        // request. Cleared, the worker writes only what it changes.
-        $run->resetUpdatedFields();
 
         CoworkerTriggerService::enterRun($coworker->getId());
         try {
@@ -657,7 +655,7 @@ class CoworkerService {
         $coworker->setLastStatus(CoworkerRun::STATUS_CANCELLED);
         $coworker->setLastError(null);
         $coworker->setLastRunAt($finishedAt);
-        $this->reloadTriggerDue($coworker);
+        $this->reloadSchedule($coworker);
         $this->refreshNextRun($coworker, $finishedAt);
         $this->mapper->update($coworker);
         $this->announceFinished($coworker, $run);
@@ -665,11 +663,13 @@ class CoworkerService {
     }
 
     /**
-     * Take the pending trigger from the stored row. A trigger can come in from
-     * another request while a run is going, and writing this process's copy
-     * back would otherwise drop it.
+     * Take what decides the next run from the stored row: the pending trigger
+     * and the schedule. Another request can change either while a run is
+     * going (a file trigger, or the user editing, pausing or disabling the
+     * coworker). Computing next_run_at from this process's copy and writing
+     * it back would drop that change.
      */
-    private function reloadTriggerDue(Coworker $coworker): void {
+    private function reloadSchedule(Coworker $coworker): void {
         try {
             $stored = $this->mapper->findById($coworker->getId());
         } catch (\Throwable) {
@@ -679,6 +679,12 @@ class CoworkerService {
             $coworker->setTriggerDueAt($stored->getTriggerDueAt());
             $coworker->setTriggerSource($stored->getTriggerSource());
         }
+        // The setters skip a value that did not change, so only what another
+        // request changed is written back, unchanged.
+        $coworker->setCronSchedule($stored->getCronSchedule());
+        $coworker->setScheduled($stored->getScheduled());
+        $coworker->setIsActive($stored->getIsActive());
+        $coworker->setPaused($stored->getPaused());
     }
 
     /** Tell listeners, and through Webhook listeners other systems, that a run ended. */
@@ -751,7 +757,7 @@ class CoworkerService {
         $this->runMapper->update($run);
 
         $coworker->setLastRunAt($finishedAt);
-        $this->reloadTriggerDue($coworker);
+        $this->reloadSchedule($coworker);
         $this->refreshNextRun($coworker, $finishedAt);
         $this->mapper->update($coworker);
         $this->announceFinished($coworker, $run);

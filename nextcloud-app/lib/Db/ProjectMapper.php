@@ -6,15 +6,14 @@ declare(strict_types=1);
 namespace OCA\AIquila\Db;
 
 use OCP\AppFramework\Db\DoesNotExistException;
-use OCP\AppFramework\Db\QBMapper;
 use OCP\DB\QueryBuilder\ICompositeExpression;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * @template-extends QBMapper<Project>
+ * @template-extends ChangeTrackingMapper<Project>
  */
-class ProjectMapper extends QBMapper {
+class ProjectMapper extends ChangeTrackingMapper {
     public function __construct(IDBConnection $db) {
         parent::__construct($db, 'aiquila_projects', Project::class);
     }

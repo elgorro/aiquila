@@ -326,7 +326,9 @@ class CoworkerTriggerTest extends TestCase {
         $cw->setScheduled(0);
         $cw->setTriggerDueAt(self::NOW - 5);
         $cw->setTriggerSource(CoworkerRun::STARTED_BY_URL);
-        $this->mapper->method('findById')->willReturn($this->coworker());
+        $stored = $this->coworker();
+        $stored->setScheduled(0);
+        $this->mapper->method('findById')->willReturn($stored);
 
         $run = $this->service()->execute($cw);
 
@@ -347,6 +349,33 @@ class CoworkerTriggerTest extends TestCase {
         $this->assertSame(CoworkerRun::STARTED_BY_SCHEDULE, $run->getStartedBy());
         $this->assertSame(self::NOW + 60, $cw->getTriggerDueAt());
         $this->assertSame(self::NOW + 60, $cw->getNextRunAt(), 'earlier than the 03:00 schedule');
+    }
+
+    public function testAScheduleChangedDuringTheRunDecidesTheNextRun(): void {
+        $cw = $this->coworker();
+        $stored = $this->coworker();
+        $stored->setCronSchedule('0 5 * * *');
+        $this->mapper->method('findById')->willReturn($stored);
+
+        $this->service()->execute($cw);
+
+        $this->assertSame('0 5 * * *', $cw->getCronSchedule());
+        $this->assertSame(
+            (new \OCA\AIquila\Cowork\CronSchedule('0 5 * * *'))->getNextRunTime(self::NOW),
+            $cw->getNextRunAt(),
+        );
+    }
+
+    public function testACoworkerPausedDuringTheRunGetsNoNextRun(): void {
+        $cw = $this->coworker();
+        $stored = $this->coworker();
+        $stored->setPaused(1);
+        $this->mapper->method('findById')->willReturn($stored);
+
+        $this->service()->execute($cw);
+
+        $this->assertSame(1, $cw->getPaused());
+        $this->assertNull($cw->getNextRunAt());
     }
 
     public function testAFinishedRunIsAnnouncedForWebhooks(): void {

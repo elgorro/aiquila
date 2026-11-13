@@ -135,6 +135,24 @@ class ConversationController extends Controller {
     }
 
     /**
+     * Title an untitled conversation after its first prompt. The stored row
+     * decides, not this request's copy: a rename made while the reply was
+     * being written is kept.
+     */
+    private function autoTitle(Conversation $conversation, string $prompt): void {
+        if ($conversation->getTitle() !== null && $conversation->getTitle() !== '') {
+            return;
+        }
+        $title = mb_substr($prompt, 0, 50);
+        if (mb_strlen($prompt) > 50) {
+            $title .= '…';
+        }
+        if ($this->conversationMapper->setTitleIfUntitled($conversation->getId(), $title)) {
+            $conversation->setTitle($title);
+        }
+    }
+
+    /**
      * Queue a best-effort Context Chat re-index for a conversation, off the
      * request path. No-op downstream when Context Chat is not installed.
      */
@@ -719,17 +737,11 @@ class ConversationController extends Controller {
         $assistantMsg->setCreatedAt(time());
         $assistantMsg = $this->messageMapper->insert($assistantMsg);
 
-        // 7. Auto-title: generate from first user message if no title yet
-        if ($conversation->getTitle() === null || $conversation->getTitle() === '') {
-            $title = mb_substr($prompt, 0, 50);
-            if (mb_strlen($prompt) > 50) {
-                $title .= '…';
-            }
-            $conversation->setTitle($title);
-        }
-
         $conversation->setUpdatedAt(time());
         $this->conversationMapper->update($conversation);
+
+        // 7. Auto-title: generate from first user message if no title yet
+        $this->autoTitle($conversation, $prompt);
 
         $this->queueContextChatIndex($id);
 
@@ -990,16 +1002,11 @@ class ConversationController extends Controller {
         $assistantMsg->setCreatedAt(time());
         $assistantMsg = $this->messageMapper->insert($assistantMsg);
 
-        // 6. Auto-title (mirrors message()).
-        if ($conversation->getTitle() === null || $conversation->getTitle() === '') {
-            $title = mb_substr($prompt, 0, 50);
-            if (mb_strlen($prompt) > 50) {
-                $title .= '…';
-            }
-            $conversation->setTitle($title);
-        }
         $conversation->setUpdatedAt(time());
         $this->conversationMapper->update($conversation);
+
+        // 6. Auto-title (mirrors message()).
+        $this->autoTitle($conversation, $prompt);
 
         $this->queueContextChatIndex($id);
 
