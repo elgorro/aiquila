@@ -42,12 +42,29 @@ describe('fetchOCS 403 handling', () => {
     );
   });
 
-  it('falls back to the admin-rights hint without a reason', async () => {
+  it('falls back to a neutral message without a reason', async () => {
     forbidden('<html>forbidden</html>');
 
     const { fetchOCS } = await import('../client/ocs.js');
     await expect(fetchOCS('/ocs/v2.php/cloud/users')).rejects.toThrow(
-      /^Permission denied\. This operation requires admin/
+      /^Permission denied: Nextcloud gave no reason\.$/
     );
+  });
+
+  it('does not blame admin rights for an empty OCS message', async () => {
+    // Talk's answer to a non-moderator changing a conversation's read-only state.
+    forbidden(
+      JSON.stringify({
+        ocs: { meta: { status: 'failure', statuscode: 403, message: '' }, data: [] },
+      })
+    );
+
+    const { fetchOCS } = await import('../client/ocs.js');
+    const err = await fetchOCS('/ocs/v2.php/apps/spreed/api/v4/room/t/read-only').catch(
+      (e: unknown) => e as Error
+    );
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe('Permission denied: Nextcloud gave no reason.');
+    expect((err as Error).message).not.toMatch(/admin/);
   });
 });
