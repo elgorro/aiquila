@@ -94,6 +94,7 @@ class CoworkerTeamTest extends TestCase {
             (new \ReflectionProperty($run, 'id'))->setValue($run, 42);
             return $run;
         });
+        $this->mapper->method('findById')->willReturn($this->coworker());
         $service = $this->service();
 
         $service->prepareTeamRun($coworker);

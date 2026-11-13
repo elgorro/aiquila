@@ -5,14 +5,13 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Db;
 
-use OCP\AppFramework\Db\QBMapper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * @template-extends QBMapper<MessageFile>
+ * @template-extends ChangeTrackingMapper<MessageFile>
  */
-class MessageFileMapper extends QBMapper {
+class MessageFileMapper extends ChangeTrackingMapper {
     public function __construct(IDBConnection $db) {
         parent::__construct($db, 'aiquila_message_files', MessageFile::class);
     }

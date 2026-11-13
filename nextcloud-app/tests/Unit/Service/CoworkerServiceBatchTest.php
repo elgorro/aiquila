@@ -225,6 +225,7 @@ class CoworkerServiceBatchTest extends TestCase {
         $task->method('run')->willThrowException(new \RuntimeException('Folder /Photos not found'));
         $this->registry->method('get')->willReturn($task);
         $this->runMapper->method('findPendingForCoworker')->willReturn(null);
+        $this->mapper->method('findById')->willReturn($this->coworker());
 
         $run = $this->service->execute($this->coworker());
 

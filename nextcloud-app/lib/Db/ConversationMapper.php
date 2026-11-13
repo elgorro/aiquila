@@ -6,14 +6,13 @@ declare(strict_types=1);
 namespace OCA\AIquila\Db;
 
 use OCP\AppFramework\Db\DoesNotExistException;
-use OCP\AppFramework\Db\QBMapper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * @template-extends QBMapper<Conversation>
+ * @template-extends ChangeTrackingMapper<Conversation>
  */
-class ConversationMapper extends QBMapper {
+class ConversationMapper extends ChangeTrackingMapper {
     public function __construct(IDBConnection $db) {
         parent::__construct($db, 'aiquila_conversations', Conversation::class);
     }
@@ -104,5 +103,22 @@ class ConversationMapper extends QBMapper {
             ->set('project_id', $qb->createNamedParameter(null, IQueryBuilder::PARAM_NULL))
             ->where($qb->expr()->eq('project_id', $qb->createNamedParameter($projectId, IQueryBuilder::PARAM_INT)));
         $qb->executeStatement();
+    }
+
+    /**
+     * Give a conversation its first title, unless it got one meanwhile: the
+     * user may rename it while a reply is still streaming, and that title
+     * wins. Returns whether this title was stored.
+     */
+    public function setTitleIfUntitled(int $id, string $title): bool {
+        $qb = $this->db->getQueryBuilder();
+        $qb->update($this->getTableName())
+            ->set('title', $qb->createNamedParameter($title, IQueryBuilder::PARAM_STR))
+            ->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->orX(
+                $qb->expr()->isNull('title'),
+                $qb->expr()->eq('title', $qb->createNamedParameter('', IQueryBuilder::PARAM_STR)),
+            ));
+        return $qb->executeStatement() > 0;
     }
 }

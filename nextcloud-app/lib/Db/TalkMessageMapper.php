@@ -5,14 +5,13 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Db;
 
-use OCP\AppFramework\Db\QBMapper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * @template-extends QBMapper<TalkMessage>
+ * @template-extends ChangeTrackingMapper<TalkMessage>
  */
-class TalkMessageMapper extends QBMapper {
+class TalkMessageMapper extends ChangeTrackingMapper {
     public function __construct(IDBConnection $db) {
         parent::__construct($db, 'aiquila_talk_messages', TalkMessage::class);
     }

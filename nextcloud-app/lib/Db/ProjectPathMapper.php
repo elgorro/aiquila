@@ -5,14 +5,13 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Db;
 
-use OCP\AppFramework\Db\QBMapper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * @template-extends QBMapper<ProjectPath>
+ * @template-extends ChangeTrackingMapper<ProjectPath>
  */
-class ProjectPathMapper extends QBMapper {
+class ProjectPathMapper extends ChangeTrackingMapper {
     public function __construct(IDBConnection $db) {
         parent::__construct($db, 'aiquila_project_paths', ProjectPath::class);
     }

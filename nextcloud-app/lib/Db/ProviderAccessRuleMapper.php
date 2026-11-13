@@ -5,14 +5,13 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Db;
 
-use OCP\AppFramework\Db\QBMapper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * @template-extends QBMapper<ProviderAccessRule>
+ * @template-extends ChangeTrackingMapper<ProviderAccessRule>
  */
-class ProviderAccessRuleMapper extends QBMapper {
+class ProviderAccessRuleMapper extends ChangeTrackingMapper {
     public function __construct(IDBConnection $db) {
         parent::__construct($db, 'aiquila_provider_access', ProviderAccessRule::class);
     }

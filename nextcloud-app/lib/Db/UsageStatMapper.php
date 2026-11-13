@@ -5,14 +5,13 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Db;
 
-use OCP\AppFramework\Db\QBMapper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * @template-extends QBMapper<UsageStat>
+ * @template-extends ChangeTrackingMapper<UsageStat>
  */
-class UsageStatMapper extends QBMapper {
+class UsageStatMapper extends ChangeTrackingMapper {
     public function __construct(IDBConnection $db) {
         parent::__construct($db, 'aiquila_usage_stats', UsageStat::class);
     }
