@@ -469,6 +469,18 @@ describe('OCS-based Tools', () => {
       expect(parsed.utcOffset).toMatch(/^[+-]\d{2}:\d{2}$/);
       expect(parsed.utcTime).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
+
+    // docker-compose passes unset variables through as empty strings
+    it('treats an empty MCP_LOCALE as unset', async () => {
+      vi.stubEnv('MCP_LOCALE', '');
+      try {
+        const { getLocalTimeTool } = await import('../tools/system/status.js');
+        const result = await getLocalTimeTool.handler();
+        expect(JSON.parse(result.content[0].text).localTime).toEqual(expect.any(String));
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
   });
 
   // ─── Bulk File Operations ─────────────────────────────────────────────
