@@ -58,7 +58,11 @@ We do not mint new short-lived bearer tokens for each request. Instead we
 forward the existing per-server credentials already stored against each
 `McpServer` row:
 
-- `auth_type = 'oauth2'` → decrypts and forwards `oauth_access_token`.
+- `auth_type = 'oauth2'` → decrypts and forwards `oauth_access_token`. An
+  expired token is refreshed first through `McpClientService::refreshOAuthToken()`,
+  under the same per-server lock as the direct path, because the provider calls
+  the server on its own and cannot refresh it. A server whose refresh fails, or
+  that has no access token, is left out of `mcp_servers` and a warning is logged.
 - `auth_type = 'bearer'` → decrypts and forwards `auth_token`.
 - `auth_type = 'none'` → no `authorization_token` field.
 
@@ -78,9 +82,9 @@ otherwise
     → chatWithTools[Stream]()
 ```
 
-`buildServerDefinitions()` filters out non-HTTPS URLs, so the dispatch is
-self-protecting: an HTTP-only MCP environment will silently fall back to
-the local loop even with the flag on.
+`buildServerDefinitions()` filters out non-HTTPS URLs and OAuth servers
+without a usable token, so the dispatch is self-protecting: an HTTP-only MCP
+environment will silently fall back to the local loop even with the flag on.
 
 ## Tradeoffs
 

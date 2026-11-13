@@ -5,7 +5,9 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Service;
 
+use OCA\AIquila\Db\McpServer;
 use OCA\AIquila\Db\McpServerMapper;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
@@ -20,16 +22,22 @@ class NativeMcpService {
     private McpServerMapper $mapper;
     private CredentialService $credentials;
     private AppSettings $config;
+    private McpClientService $mcpClient;
+    private LoggerInterface $logger;
     private HttpClientInterface $httpClient;
 
     public function __construct(
         McpServerMapper $mapper,
         CredentialService $credentials,
         AppSettings $config,
+        McpClientService $mcpClient,
+        LoggerInterface $logger,
     ) {
         $this->mapper = $mapper;
         $this->credentials = $credentials;
         $this->config = $config;
+        $this->mcpClient = $mcpClient;
+        $this->logger = $logger;
         $this->httpClient = HttpClient::create(['timeout' => 5]);
     }
 
@@ -50,6 +58,8 @@ class NativeMcpService {
      * Build the list of mcp_servers definitions to pass to the Anthropic beta
      * messages endpoint. Filters out non-HTTPS URLs since Anthropic cannot
      * reach plaintext HTTP from its infrastructure (and we'd leak tokens).
+     * An OAuth server without a usable access token is left out too: the
+     * provider would only get a 401 from it.
      *
      * @return list<array{type: string, name: string, url: string, authorization_token?: string}>
      */
@@ -61,12 +71,19 @@ class NativeMcpService {
             if (!$this->isHttpsUrl($url)) {
                 continue;
             }
+            if ($server->getAuthType() === 'oauth2') {
+                $token = $this->currentOAuthToken($server);
+                if ($token === null) {
+                    continue;
+                }
+            } else {
+                $token = $this->resolveBearerToken($server);
+            }
             $entry = [
                 'type' => 'url',
                 'name' => $this->slugifyName($server->getDisplayName()),
                 'url' => $url,
             ];
-            $token = $this->resolveAuthToken($server);
             if ($token !== null && $token !== '') {
                 $entry['authorization_token'] = $token;
             }
@@ -197,13 +214,36 @@ class NativeMcpService {
     }
 
     /**
-     * Resolve the appropriate auth token for an McpServer entity, decrypting
-     * via CredentialService. OAuth access token wins; bearer token next.
+     * The server's OAuth access token, refreshed first when it has expired,
+     * the way the direct path does (McpClientService::buildHeaders(), under
+     * the same per-server lock). The provider calls the server on its own,
+     * so it cannot refresh a token itself. Null when there is no token or
+     * the refresh failed.
      */
-    private function resolveAuthToken(\OCA\AIquila\Db\McpServer $server): ?string {
-        if ($server->getAuthType() === 'oauth2' && $server->getOauthAccessToken()) {
-            return $this->credentials->decryptToken($server->getOauthAccessToken());
+    private function currentOAuthToken(McpServer $server): ?string {
+        if (!$server->getOauthAccessToken()) {
+            $this->logger->info('MCP: leaving an OAuth server out of the native connector: not signed in', [
+                'server' => $server->getDisplayName(),
+            ]);
+            return null;
         }
+        if ($this->mcpClient->isTokenExpired($server)) {
+            try {
+                $this->mcpClient->refreshOAuthToken($server);
+            } catch (\Throwable $e) {
+                $this->logger->warning('MCP: leaving an OAuth server out of the native connector: token refresh failed', [
+                    'server' => $server->getDisplayName(),
+                    'error' => $e->getMessage(),
+                ]);
+                return null;
+            }
+        }
+        $token = $server->getOauthAccessToken() ? $this->credentials->decryptToken($server->getOauthAccessToken()) : null;
+        return $token !== null && $token !== '' ? $token : null;
+    }
+
+    /** The decrypted bearer token of a `bearer` server, or null. */
+    private function resolveBearerToken(McpServer $server): ?string {
         if ($server->getAuthType() === 'bearer' && $server->getAuthToken()) {
             return $this->credentials->decryptToken($server->getAuthToken());
         }
