@@ -176,6 +176,7 @@ class CoworkerServiceBatchTest extends TestCase {
         ]);
         $this->registry->method('get')->willReturn($task);
         $this->runMapper->method('findPendingForCoworker')->willReturn(null);
+        $this->mapper->method('findById')->willReturn($this->coworker());
         $coworker = $this->coworker();
 
         $run = $this->service->execute($coworker);
@@ -194,6 +195,7 @@ class CoworkerServiceBatchTest extends TestCase {
         $task->method('run')->willReturn(['itemsTotal' => 1, 'itemsProcessed' => 1, 'summary' => 'ok']);
         $this->registry->method('get')->willReturn($task);
         $this->runMapper->method('findPendingForCoworker')->willReturn(null);
+        $this->mapper->method('findById')->willReturn($this->coworker());
 
         $run = $this->service->execute($this->coworker());
 
