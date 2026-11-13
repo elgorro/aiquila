@@ -147,7 +147,7 @@ export const getLocalTimeTool = {
           type: 'text' as const,
           text: JSON.stringify(
             {
-              localTime: now.toLocaleString(process.env.MCP_LOCALE, { timeZone: tz }),
+              localTime: now.toLocaleString(process.env.MCP_LOCALE || undefined, { timeZone: tz }),
               utcTime: now.toISOString(),
               timezone: tz, // e.g. "Europe/Berlin"
               utcOffset, // e.g. "+01:00"
