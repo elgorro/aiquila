@@ -406,6 +406,118 @@ class McpServerControllerTest extends TestCase {
         $this->assertNull($server->getOauthMetadata());
     }
 
+    private function signedInOauthServer(): McpServer {
+        $server = $this->makeServer();
+        $server->setUrl('https://old.example/mcp');
+        $server->setAuthType('oauth2');
+        $server->setOauthMetadata('{"issuer":"https://old.example"}');
+        $server->setOauthClientId('client-abc');
+        $server->setOauthClientIssuer('https://old.example');
+        $server->setOauthAccessToken('encrypted:access');
+        $server->setOauthRefreshToken('encrypted:refresh');
+        $server->setOauthTokenExpiresAt(time() + 3600);
+        return $server;
+    }
+
+    private function controllerWith(McpClientService $mcpClient): McpServerController {
+        return new McpServerController(
+            'aiquila',
+            $this->request,
+            $this->mapper,
+            $mcpClient,
+            $this->credentials,
+            $this->createStub(\Psr\Log\LoggerInterface::class)
+        );
+    }
+
+    /**
+     * RFC 8707 §2: the tokens are bound to the old resource. A new URL drops
+     * them and the client, and revokes them at the old authorization server.
+     */
+    public function testUpdateUrlDropsAndRevokesTheGrant(): void {
+        $server = $this->signedInOauthServer();
+        $server->setOauthState('pending-state');
+        $this->mapper->method('findById')->willReturn($server);
+        $mcpClient = $this->createMock(McpClientService::class);
+        $mcpClient->expects($this->once())->method('revokeOAuthTokens')
+            ->with($this->callback(fn(McpServer $old) => $old->getUrl() === 'https://old.example/mcp'
+                && $old->getOauthRefreshToken() === 'encrypted:refresh'
+                && $old->getOauthMetadata() === '{"issuer":"https://old.example"}'
+                && $old->getOauthClientId() === 'client-abc'));
+
+        $response = $this->controllerWith($mcpClient)->update(1, url: 'https://new.example/mcp');
+
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertSame('https://new.example/mcp', $server->getUrl());
+        $this->assertNull($server->getOauthClientId());
+        $this->assertNull($server->getOauthClientIssuer());
+        $this->assertNull($server->getOauthAccessToken());
+        $this->assertNull($server->getOauthRefreshToken());
+        $this->assertNull($server->getOauthTokenExpiresAt());
+        $this->assertNull($server->getOauthState());
+        $this->assertSame('not_authenticated', $response->getData()['oauth_status']);
+    }
+
+    public function testUpdateSameUrlKeepsTheGrant(): void {
+        $server = $this->signedInOauthServer();
+        $this->mapper->method('findById')->willReturn($server);
+        $mcpClient = $this->createMock(McpClientService::class);
+        $mcpClient->expects($this->never())->method('revokeOAuthTokens');
+
+        $this->controllerWith($mcpClient)->update(1, 'Renamed', 'https://old.example/mcp');
+
+        $this->assertSame('encrypted:access', $server->getOauthAccessToken());
+        $this->assertSame('client-abc', $server->getOauthClientId());
+    }
+
+    public function testUpdateChangedRegistrationTokenRevokesTheGrant(): void {
+        $server = $this->signedInOauthServer();
+        $this->mapper->method('findById')->willReturn($server);
+        $mcpClient = $this->createMock(McpClientService::class);
+        $mcpClient->expects($this->once())->method('revokeOAuthTokens')
+            ->with($this->callback(fn(McpServer $old) => $old->getOauthClientId() === 'client-abc'));
+
+        $this->controllerWith($mcpClient)->update(1, registrationToken: 'new-secret');
+    }
+
+    public function testUpdateSwitchingAwayFromOauthRevokesTheGrant(): void {
+        $server = $this->signedInOauthServer();
+        $this->mapper->method('findById')->willReturn($server);
+        $mcpClient = $this->createMock(McpClientService::class);
+        $mcpClient->expects($this->once())->method('revokeOAuthTokens');
+
+        $this->controllerWith($mcpClient)->update(1, authType: 'none');
+    }
+
+    /** RFC 7009: deleting a signed-in server revokes its tokens before the row goes. */
+    public function testDestroyRevokesTheGrantBeforeDeleting(): void {
+        $server = $this->signedInOauthServer();
+        $this->mapper->method('findById')->willReturn($server);
+        $calls = [];
+        $mcpClient = $this->createMock(McpClientService::class);
+        $mcpClient->expects($this->once())->method('revokeOAuthTokens')->with($server)
+            ->willReturnCallback(function () use (&$calls) { $calls[] = 'revoke'; });
+        $mapper = $this->createMock(McpServerMapper::class);
+        $mapper->method('findById')->willReturn($server);
+        $mapper->expects($this->once())->method('delete')
+            ->willReturnCallback(function (McpServer $s) use (&$calls) { $calls[] = 'delete'; return $s; });
+        $this->mapper = $mapper;
+
+        $response = $this->controllerWith($mcpClient)->destroy(1);
+
+        $this->assertEquals(200, $response->getStatus());
+        $this->assertSame(['revoke', 'delete'], $calls);
+    }
+
+    public function testDestroyWithoutGrantRevokesNothing(): void {
+        $server = $this->makeServer();
+        $this->mapper->method('findById')->willReturn($server);
+        $mcpClient = $this->createMock(McpClientService::class);
+        $mcpClient->expects($this->never())->method('revokeOAuthTokens');
+
+        $this->assertEquals(200, $this->controllerWith($mcpClient)->destroy(1)->getStatus());
+    }
+
     public function testSharedOauthCallbackFindsServerByState(): void {
         $server = $this->makeServer(5);
         $server->setAuthType('oauth2');

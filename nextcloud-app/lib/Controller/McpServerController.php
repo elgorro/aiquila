@@ -153,6 +153,11 @@ class McpServerController extends Controller {
             return $this->clientError(404, 'Server not found');
         }
 
+        // The grant as it stands, for revoking it at its own authorization
+        // server once a change below drops it.
+        $before = clone $server;
+        $grantDropped = false;
+
         if (!empty($displayName)) {
             $server->setDisplayName($displayName);
         }
@@ -163,6 +168,12 @@ class McpServerController extends Controller {
             $server->setOauthMetadata(null);
             $server->setOauthResourceMetadata(null);
             $server->setOauthScope(null);
+            // A token's audience is the resource it was requested for (RFC
+            // 8707 §2), and MCP clients MUST NOT send a token to a server it
+            // was not issued for. A new URL is a new resource: drop the grant
+            // and sign in again.
+            McpClientService::clearOAuthGrant($server);
+            $grantDropped = true;
         }
         if (!empty($authType) && in_array($authType, ['none', 'bearer', 'oauth2'], true)) {
             $oldAuthType = $server->getAuthType();
@@ -173,6 +184,7 @@ class McpServerController extends Controller {
             // Clear OAuth fields when switching away from oauth2
             if ($oldAuthType === 'oauth2' && $authType !== 'oauth2') {
                 $this->mcpClient->clearOAuthFields($server);
+                $grantDropped = true;
             }
             // Clear bearer token when switching to oauth2
             if ($authType === 'oauth2') {
@@ -193,19 +205,22 @@ class McpServerController extends Controller {
                 // The existing client_id was registered under the old token (or
                 // under none): drop it plus the tokens it earned so the next
                 // Authorize re-registers against the gated endpoint.
-                $server->setOauthClientId(null);
-                $server->setOauthAccessToken(null);
-                $server->setOauthRefreshToken(null);
-                $server->setOauthTokenExpiresAt(null);
+                McpClientService::clearOAuthGrant($server);
+                $grantDropped = true;
             }
         }
-        if ($server->getAuthType() === 'oauth2') {
-            $this->applyStaticClient($server, $staticClientId, $staticClientSecret);
+        if ($server->getAuthType() === 'oauth2'
+            && $this->applyStaticClient($server, $staticClientId, $staticClientSecret)) {
+            $grantDropped = true;
         }
         if ($isEnabled !== null) {
             $server->setIsEnabled($isEnabled);
         }
         $server->setUpdatedAt(time());
+
+        if ($grantDropped && $this->holdsGrant($before)) {
+            $this->mcpClient->revokeOAuthTokens($before);
+        }
 
         $this->mapper->update($server);
         return new JSONResponse($this->serializeServer($server));
@@ -229,6 +244,10 @@ class McpServerController extends Controller {
             return $this->clientError(404, 'Server not found');
         }
 
+        // Best effort: a failed revocation is logged and the delete proceeds.
+        if ($this->holdsGrant($server)) {
+            $this->mcpClient->revokeOAuthTokens($server);
+        }
         $this->mapper->delete($server);
         return new JSONResponse(['status' => 'ok']);
     }
@@ -427,8 +446,10 @@ class McpServerController extends Controller {
      * Apply a change to the pre-registered client. null leaves a value
      * unchanged, '' clears it. A different client invalidates the active
      * client and the tokens issued to it.
+     *
+     * @return bool Whether the grant was dropped
      */
-    private function applyStaticClient(McpServer $server, ?string $clientId, ?string $secret): void {
+    private function applyStaticClient(McpServer $server, ?string $clientId, ?string $secret): bool {
         $changed = false;
         if ($clientId !== null) {
             $clientId = trim($clientId);
@@ -448,12 +469,15 @@ class McpServerController extends Controller {
             }
         }
         if ($changed) {
-            $server->setOauthClientId(null);
-            $server->setOauthClientIssuer(null);
-            $server->setOauthAccessToken(null);
-            $server->setOauthRefreshToken(null);
-            $server->setOauthTokenExpiresAt(null);
+            McpClientService::clearOAuthGrant($server);
         }
+        return $changed;
+    }
+
+    /** Whether an OAuth server holds tokens that could be revoked. */
+    private function holdsGrant(McpServer $server): bool {
+        return $server->getAuthType() === 'oauth2'
+            && ($server->getOauthRefreshToken() !== null || $server->getOauthAccessToken() !== null);
     }
 
     /**

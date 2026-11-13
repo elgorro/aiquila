@@ -260,7 +260,7 @@ If the server gates registration, paste the same value you set in
 
 The token is encrypted at rest with Nextcloud's crypto service and only ever sent to the
 server's `registration_endpoint`. Leave it empty for servers with open registration.
-Changing the token discards the previously registered client and its access tokens, so the
+Changing the token revokes and discards the previously registered client's tokens, so the
 next **Authenticate** registers again against the gated endpoint.
 
 ### 4. Ensure your server is reachable over HTTPS

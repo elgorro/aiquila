@@ -371,6 +371,12 @@ default** unpins the conversation so it tracks your personal setting again.
 (streamable HTTP) whose tools the model may use. They are configured for the whole
 instance, so connect a server only with credentials every user may act under.
 
+> **An OAuth 2.0 server has one shared sign-in.** The account that clicks
+> **Authenticate** is the account every user's tool calls act as, in chats, Assistant
+> tasks and background jobs alike. Do not connect a server that holds personal data
+> (mail, calendars, contacts, files) this way. Every user could then read and change the
+> data of whoever signed in.
+
 AIquila speaks MCP revisions `2025-06-18` and `2025-03-26`. It offers the newer one, and
 the server picks one of the two. A server that answers with any other revision is
 reported as an error.
@@ -438,6 +444,29 @@ The entry shows `auth_expired` only when the grant is gone: the token endpoint a
 also rejects the renewed token. Click **Authenticate** to sign in again. A timeout or a
 server error during a refresh fails only that request and keeps the stored tokens.
 
+The [native MCP connector](../dev/native-mcp-connector.md) renews an expired token the same
+way before it hands the token to the provider. If the renewal fails, it leaves that server
+out of the request and logs a warning. An OAuth server nobody has signed in to is left out
+too.
+
+#### Editing or removing a server
+
+A token is issued for one MCP server (RFC 8707 §2), so the sign-in ends when its target
+changes. Each of these discards the client and its tokens, and the entry shows
+`not_authenticated` until you click **Authenticate** again:
+
+- changing the **URL**
+- switching **Authentication** away from OAuth 2.0
+- changing the **Registration token**, or the pre-registered **Client ID** or **Client
+  secret**
+
+Deleting the entry ends the sign-in too. In each case AIquila first revokes the refresh
+and access tokens at the authorization server's `revocation_endpoint` (RFC 7009), with the
+same client authentication as at the token endpoint. Revocation is best effort: if the
+server has no `revocation_endpoint` or the request fails, a warning is logged, the tokens
+are still dropped in Nextcloud, and they stay valid at the authorization server until they
+expire.
+
 #### OAuth client registration
 
 Before signing in, AIquila needs a client ID at the server's authorization server. It
@@ -468,8 +497,8 @@ A pre-registered or dynamically registered client belongs to the authorization s
 that issued it (its `issuer`). AIquila discovers the authorization server again on every
 **Authenticate**. If the issuer has changed, it drops the old access tokens and does not
 reuse a registration from the old issuer. A pre-registered client is refused until you
-enter one registered there. Changing the
-client ID or secret discards the access tokens, so sign in again with **Authenticate**.
+enter one registered there. Changing the client ID or secret ends the sign-in; see
+[Editing or removing a server](#editing-or-removing-a-server).
 
 ## Features
 

@@ -10,6 +10,7 @@ use OCA\AIquila\Db\McpServerMapper;
 use OCA\AIquila\AppInfo\Application;
 use OCP\App\IAppManager;
 use OCP\IURLGenerator;
+use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
 use Psr\Log\LoggerInterface;
@@ -1449,8 +1450,19 @@ class McpClientService {
         }
         try {
             $stored = $this->mapper->findById($server->getId());
+        } catch (DoesNotExistException $e) {
+            throw new \RuntimeException('The MCP server was deleted', 0, $e);
         } catch (\Throwable) {
             return false;
+        }
+        // The admin changed the URL, signed out, deleted the client or the
+        // grant was found invalid while this process waited: the refresh
+        // token in memory belongs to a grant that has been dropped (and may
+        // have been revoked), and a token for the old resource must not be
+        // requested again (RFC 8707 §2).
+        if ($stored->getUrl() !== $server->getUrl()
+            || ($server->getOauthRefreshToken() !== null && $stored->getOauthRefreshToken() === null)) {
+            throw new \RuntimeException('The OAuth grant was removed; sign in again');
         }
         $storedToken = $stored->getOauthAccessToken();
         if (!$storedToken || $storedToken === $staleToken) {
@@ -1600,13 +1612,117 @@ class McpClientService {
     }
 
     /**
-     * Clear all OAuth fields from a server entity.
+     * Revoke the server's grant at its authorization server (RFC 7009).
+     *
+     * The refresh token goes first: the authorization server SHOULD then
+     * also invalidate the access tokens of the same grant (§2.1). The access
+     * token is revoked as well, for servers that do not. The request carries
+     * the client authentication of the token endpoint (§2.1, RFC 6749 §2.3),
+     * using `revocation_endpoint_auth_methods_supported` (RFC 8414 §2).
+     *
+     * Best effort, and it never throws: without a cached
+     * `revocation_endpoint` or on any failure it logs and returns, and the
+     * caller drops the tokens locally either way. It only reads the cached
+     * metadata, so the server row is never written. It holds the refresh
+     * lock and reads the newest tokens from the row, so a refresh racing it
+     * cannot leave a newer token behind unrevoked.
      */
-    public function clearOAuthFields(McpServer $server): void {
+    public function revokeOAuthTokens(McpServer $server): void {
+        $lockKey = 'aiquila/mcp-oauth-refresh/' . $server->getId();
+        $locked = false;
+        try {
+            $this->acquireRefreshLock($lockKey);
+            $locked = true;
+        } catch (\Throwable $e) {
+            $this->logger->warning('MCP: revoking without the token refresh lock', ['error' => $e->getMessage()]);
+        }
+        try {
+            $this->doRevoke($server);
+        } catch (\Throwable $e) {
+            $this->logger->warning('MCP: OAuth token revocation failed', [
+                'server' => $server->getDisplayName(),
+                'error' => $e->getMessage(),
+            ]);
+        } finally {
+            if ($locked) {
+                try {
+                    $this->locking->releaseLock($lockKey, ILockingProvider::LOCK_EXCLUSIVE);
+                } catch (\Throwable $e) {
+                    $this->logger->warning('MCP: failed to release the token refresh lock', ['error' => $e->getMessage()]);
+                }
+            }
+        }
+    }
+
+    private function doRevoke(McpServer $server): void {
+        $refreshToken = $server->getOauthRefreshToken();
+        $accessToken = $server->getOauthAccessToken();
+        if ($server->getId() !== null) {
+            try {
+                $stored = $this->mapper->findById($server->getId());
+                // The row holds the newest tokens unless it moved elsewhere.
+                if ($stored->getUrl() === $server->getUrl()) {
+                    $refreshToken = $stored->getOauthRefreshToken() ?? $refreshToken;
+                    $accessToken = $stored->getOauthAccessToken() ?? $accessToken;
+                }
+            } catch (\Throwable) {
+                // Deleted already: revoke what the caller holds.
+            }
+        }
+
+        $tokens = [];
+        foreach (['refresh_token' => $refreshToken, 'access_token' => $accessToken] as $hint => $encrypted) {
+            $token = $encrypted !== null ? $this->credentials->decryptToken($encrypted) : null;
+            if (is_string($token) && $token !== '') {
+                $tokens[$hint] = $token;
+            }
+        }
+        if ($tokens === []) {
+            return;
+        }
+
+        $cached = $server->getOauthMetadata();
+        $metadata = $cached ? json_decode($cached, true) : null;
+        $metadata = is_array($metadata) ? $metadata : [];
+        $endpoint = $metadata['revocation_endpoint'] ?? null;
+        if (!is_string($endpoint) || $endpoint === '' || (string)$server->getOauthClientId() === '') {
+            $this->logger->info('MCP: the authorization server offers no token revocation; tokens dropped locally', [
+                'server' => $server->getDisplayName(),
+            ]);
+            return;
+        }
+        // RFC 8414 §2: client_secret_basic when the list is omitted.
+        $methods = $metadata['revocation_endpoint_auth_methods_supported'] ?? ['client_secret_basic'];
+        $authMetadata = ['token_endpoint_auth_methods_supported' => is_array($methods) ? $methods : ['client_secret_basic']];
+
+        foreach ($tokens as $hint => $token) {
+            $request = $this->withClientAuth($server, $authMetadata, [
+                'token' => $token,
+                'token_type_hint' => $hint,
+            ]);
+            $response = $this->httpClient->request('POST', $endpoint, $request);
+            $status = $response->getStatusCode();
+            // §2.2: 200 also for a token that was already invalid.
+            if ($status !== 200) {
+                $result = json_decode($response->getContent(false), true);
+                $error = is_array($result) && is_string($result['error'] ?? null) ? ' ' . $result['error'] : '';
+                $this->logger->warning('MCP: the authorization server refused to revoke a token', [
+                    'server' => $server->getDisplayName(),
+                    'token_type_hint' => $hint,
+                    'status' => $status . $error,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Drop the grant: the active client, its tokens and any pending sign-in.
+     * The server's configuration (static client, registration token,
+     * discovered metadata) is left alone.
+     */
+    public static function clearOAuthGrant(McpServer $server): void {
         $server->setOauthClientId(null);
         $server->setOauthClientIssuer(null);
-        $server->setOauthStaticClientId(null);
-        $server->setOauthStaticClientSecret(null);
         $server->setOauthAccessToken(null);
         $server->setOauthRefreshToken(null);
         $server->setOauthTokenExpiresAt(null);
@@ -1614,6 +1730,15 @@ class McpClientService {
         $server->setOauthState(null);
         $server->setOauthFlowIssuer(null);
         $server->setOauthFlowIssRequired(null);
+    }
+
+    /**
+     * Clear all OAuth fields from a server entity.
+     */
+    public function clearOAuthFields(McpServer $server): void {
+        self::clearOAuthGrant($server);
+        $server->setOauthStaticClientId(null);
+        $server->setOauthStaticClientSecret(null);
         $server->setOauthMetadata(null);
         $server->setOauthResourceMetadata(null);
         $server->setOauthScope(null);

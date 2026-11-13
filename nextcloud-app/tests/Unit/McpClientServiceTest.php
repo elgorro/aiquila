@@ -7,6 +7,7 @@ use OCA\AIquila\Db\McpServerMapper;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\McpClientService;
 use OCP\App\IAppManager;
+use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\IURLGenerator;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
@@ -99,6 +100,8 @@ class TestableMcpClientService extends McpClientService {
 }
 
 class McpClientServiceTest extends TestCase {
+    /** @var array<int, McpServer> */
+    private array $rows = [];
     private McpServerMapper $mapper;
     private LoggerInterface $logger;
     private CredentialService $credentials;
@@ -122,6 +125,11 @@ class McpClientServiceTest extends TestCase {
 
     protected function setUp(): void {
         $this->mapper = $this->createStub(McpServerMapper::class);
+        // The row of each server makeServer() built, as the database holds it.
+        $this->rows = [];
+        $this->mapper->method('findById')->willReturnCallback(
+            fn(int $id) => $this->rows[$id] ?? throw new DoesNotExistException('no row ' . $id)
+        );
         $this->logger = $this->createStub(LoggerInterface::class);
         $this->credentials = $this->createStub(CredentialService::class);
         $this->locking = $this->createStub(ILockingProvider::class);
@@ -167,6 +175,7 @@ class McpClientServiceTest extends TestCase {
         $server->setIsEnabled(true);
         $server->setCreatedAt(time());
         $server->setUpdatedAt(time());
+        $this->rows[$id] = $server;
         return $server;
     }
 
@@ -1049,6 +1058,123 @@ class McpClientServiceTest extends TestCase {
         $this->assertSame('cid', $captured[0]['body']['client_id']);
         $this->assertSame('secret', $captured[0]['body']['client_secret']);
         $this->assertSame('refresh_token', $captured[0]['body']['grant_type']);
+    }
+
+    // --- Token revocation (RFC 7009) ---
+
+    /** RFC 7009 §2.1: refresh token first, with a hint and the client's authentication. */
+    public function testRevokeSendsRefreshThenAccessTokenToTheRevocationEndpoint(): void {
+        $server = $this->oauthServer(['revocation_endpoint' => 'https://cloud.example/revoke']);
+        $server->setOauthClientId('dcr-client');
+        $server->setOauthAccessToken('at');
+        $server->setOauthRefreshToken('rt');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => []);
+
+        $this->service->revokeOAuthTokens($server);
+
+        $this->assertCount(2, $captured);
+        $this->assertSame('https://cloud.example/revoke', $captured[0]['url']);
+        $this->assertSame(['token' => 'rt', 'token_type_hint' => 'refresh_token', 'client_id' => 'dcr-client'], $captured[0]['body']);
+        $this->assertSame(['token' => 'at', 'token_type_hint' => 'access_token', 'client_id' => 'dcr-client'], $captured[1]['body']);
+        // Revocation never rewrites the row's tokens; the caller drops them.
+        $this->assertSame('rt', $server->getOauthRefreshToken());
+    }
+
+    /** RFC 8414 §2: revocation_endpoint_auth_methods_supported defaults to client_secret_basic. */
+    public function testRevokeAuthenticatesAConfidentialClientPerRevocationMethods(): void {
+        $server = $this->oauthServer([
+            'revocation_endpoint' => 'https://cloud.example/revoke',
+            'token_endpoint_auth_methods_supported' => ['client_secret_post'],
+        ]);
+        $server->setOauthStaticClientId('cid');
+        $server->setOauthStaticClientSecret('secret');
+        $server->setOauthClientId('cid');
+        $server->setOauthRefreshToken('rt');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => []);
+
+        $this->service->revokeOAuthTokens($server);
+
+        $this->assertCount(1, $captured);
+        $this->assertSame('Basic ' . base64_encode('cid:secret'), $captured[0]['authorization']);
+        $this->assertArrayNotHasKey('client_secret', $captured[0]['body']);
+    }
+
+    public function testRevokeWithoutRevocationEndpointSendsNothing(): void {
+        $server = $this->oauthServer([]);
+        $server->setOauthClientId('dcr-client');
+        $server->setOauthRefreshToken('rt');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => []);
+
+        $this->service->revokeOAuthTokens($server);
+
+        $this->assertSame([], $captured);
+    }
+
+    /** Best effort: a failure is logged, never thrown, and the lock is released. */
+    public function testRevokeFailureDoesNotThrow(): void {
+        $locking = $this->createMock(ILockingProvider::class);
+        $locking->expects($this->once())->method('acquireLock');
+        $locking->expects($this->once())->method('releaseLock');
+        [$service, $server] = $this->refreshableServer(
+            fn() => throw new \RuntimeException('connection refused'),
+            null,
+            $locking,
+        );
+        $server->setOauthMetadata((string)json_encode($this->asMetadata('https://cloud.example') + [
+            'revocation_endpoint' => 'https://cloud.example/revoke',
+        ]));
+
+        $service->revokeOAuthTokens($server);
+
+        $this->assertSame('old-rt', $server->getOauthRefreshToken());
+    }
+
+    /** A refresh that ran meanwhile stored a newer token: that one is revoked. */
+    public function testRevokeUsesTheNewestTokensFromTheRow(): void {
+        $server = $this->oauthServer(['revocation_endpoint' => 'https://cloud.example/revoke']);
+        $server->setOauthClientId('dcr-client');
+        $server->setOauthRefreshToken('rt');
+        $before = clone $server;
+        $server->setOauthRefreshToken('rotated-rt');
+
+        $captured = [];
+        $this->injectResponder($captured, fn() => []);
+
+        $this->service->revokeOAuthTokens($before);
+
+        $this->assertSame('rotated-rt', $captured[0]['body']['token']);
+    }
+
+    /**
+     * A process that waited for the refresh lock while the admin changed the
+     * URL or the grant was dropped must not spend the old refresh token, nor
+     * ask for a token for the old resource (RFC 8707 §2).
+     */
+    public function testWaitingRefreshDoesNotRefreshADroppedGrant(): void {
+        $requests = 0;
+        [$service, $server] = $this->refreshableServer(function () use (&$requests) {
+            $requests++;
+            return $this->json(200, ['access_token' => 'unexpected']);
+        });
+        $server->setOauthTokenExpiresAt(time() - 10);
+        $stale = clone $server;
+        $server->setUrl('https://new.example/mcp');
+        $server->setOauthAccessToken(null);
+        $server->setOauthRefreshToken(null);
+
+        try {
+            $service->refreshOAuthToken($stale);
+            $this->fail('expected an exception');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('sign in again', $e->getMessage());
+        }
+        $this->assertSame(0, $requests);
     }
 
     public function testPublicPreRegisteredClientSendsClientId(): void {
