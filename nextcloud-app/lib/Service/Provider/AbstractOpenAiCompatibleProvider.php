@@ -7,6 +7,7 @@ namespace OCA\AIquila\Service\Provider;
 
 use OCA\AIquila\Http\SseStreaming;
 use OCA\AIquila\Service\CredentialService;
+use OCA\AIquila\Service\JsonShape;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
 use OCA\AIquila\Service\AppSettings;
@@ -708,7 +709,8 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
                     $toolCalls[] = [
                         'id' => $b['id'] ?? '',
                         'type' => 'function',
-                        'function' => ['name' => $b['name'] ?? '', 'arguments' => json_encode($b['input'] ?? new \stdClass())],
+                        // `arguments` is the JSON text of an object; an empty input must be "{}", not "[]".
+                        'function' => ['name' => $b['name'] ?? '', 'arguments' => json_encode(JsonShape::object($b['input'] ?? null))],
                     ];
                 }
                 $out[] = ['role' => 'assistant', 'content' => $text, 'tool_calls' => $toolCalls];
@@ -818,7 +820,7 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
                 'function' => [
                     'name' => $tool['name'],
                     'description' => $tool['description'] ?? '',
-                    'parameters' => $tool['input_schema'] ?? ['type' => 'object'],
+                    'parameters' => JsonShape::toolInputSchema($tool['input_schema'] ?? null),
                 ],
             ];
         }

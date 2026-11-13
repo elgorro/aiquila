@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\TaskProcessing;
 
+use OCA\AIquila\Service\JsonShape;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCP\TaskProcessing\EShapeType;
 use OCP\TaskProcessing\ISynchronousProvider;
@@ -143,10 +144,12 @@ class ChatWithToolsProvider implements ISynchronousProvider {
 
         $reportProgress(0.1);
 
+        $tools = $this->toInternalTools($input['tools'] ?? '');
+
         $provider = $resolve();
         $result = $provider->chatToolsTurn(
             $messages,
-            $this->toInternalTools($input['tools'] ?? ''),
+            $tools,
             $system,
             $userId,
             LLMProviderInterface::TASK_OPTIONS,
@@ -159,7 +162,7 @@ class ChatWithToolsProvider implements ISynchronousProvider {
 
         return [
             'output' => $result['response'] ?? '',
-            'tool_calls' => $this->toOpenAiToolCalls($result['tool_calls'] ?? []),
+            'tool_calls' => $this->toOpenAiToolCalls($result['tool_calls'] ?? [], $tools),
         ];
     }
 
@@ -169,6 +172,9 @@ class ChatWithToolsProvider implements ISynchronousProvider {
      *
      * Entries that are already in the canonical shape are passed through, so a
      * caller that hands us Anthropic-style tools is not silently dropped.
+     *
+     * The JSON is decoded into PHP arrays, which loses empty objects, so each
+     * schema is normalized back before a provider sends it on (see JsonShape).
      *
      * @return list<array<string, mixed>>
      */
@@ -192,7 +198,7 @@ class ChatWithToolsProvider implements ISynchronousProvider {
                 $out[] = [
                     'name' => (string)$tool['name'],
                     'description' => (string)($tool['description'] ?? ''),
-                    'input_schema' => $tool['input_schema'] ?? ['type' => 'object'],
+                    'input_schema' => JsonShape::toolInputSchema($tool['input_schema'] ?? null),
                 ];
                 continue;
             }
@@ -204,7 +210,7 @@ class ChatWithToolsProvider implements ISynchronousProvider {
             $out[] = [
                 'name' => (string)$fn['name'],
                 'description' => (string)($fn['description'] ?? ''),
-                'input_schema' => $fn['parameters'] ?? ['type' => 'object'],
+                'input_schema' => JsonShape::toolInputSchema($fn['parameters'] ?? null),
             ];
         }
 
@@ -216,23 +222,32 @@ class ChatWithToolsProvider implements ISynchronousProvider {
      * `tool_calls` output shape is documented to carry.
      *
      * `arguments` is a JSON *string* there, not an object — that is the OpenAI
-     * wire format the consumer parses.
+     * wire format the consumer parses. The string holds a JSON object, so an
+     * argument-less call is `"{}"`, and nested objects the tool's schema
+     * requires are restored (see JsonShape).
      *
      * @param list<array{id: string, name: string, arguments: array}> $calls
+     * @param list<array<string, mixed>> $tools the tools the turn was offered, from toInternalTools()
      */
-    private function toOpenAiToolCalls(array $calls): string {
+    private function toOpenAiToolCalls(array $calls, array $tools): string {
         if ($calls === []) {
             return '';
         }
 
+        $schemas = [];
+        foreach ($tools as $tool) {
+            $schemas[(string)($tool['name'] ?? '')] = $tool['input_schema'] ?? null;
+        }
+
         $out = [];
         foreach ($calls as $call) {
+            $name = (string)($call['name'] ?? '');
             $out[] = [
                 'id' => (string)($call['id'] ?? ''),
                 'type' => 'function',
                 'function' => [
-                    'name' => (string)($call['name'] ?? ''),
-                    'arguments' => json_encode($call['arguments'] ?? new \stdClass()),
+                    'name' => $name,
+                    'arguments' => json_encode(JsonShape::arguments($call['arguments'] ?? null, $schemas[$name] ?? null)),
                 ],
             ];
         }
