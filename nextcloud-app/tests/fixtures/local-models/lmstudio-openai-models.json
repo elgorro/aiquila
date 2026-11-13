@@ -1,0 +1,15 @@
+{
+  "data": [
+    {
+      "id": "prism-ml/bonsai-27b",
+      "object": "model",
+      "owned_by": "organization_owner"
+    },
+    {
+      "id": "text-embedding-nomic-embed-text-v1.5",
+      "object": "model",
+      "owned_by": "organization_owner"
+    }
+  ],
+  "object": "list"
+}

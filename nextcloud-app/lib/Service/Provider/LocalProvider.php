@@ -27,8 +27,11 @@ namespace OCA\AIquila\Service\Provider;
  *     is often published with a certificate no public bundle trusts.
  *   - Requests may target a local/private address (localhost, the Docker
  *     network, a LAN box), which Nextcloud's HTTP client blocks by default.
- *   - Vision is opt-in per deployment: we cannot know whether the loaded model
- *     is multimodal, so an admin toggle decides whether images are sent.
+ *   - Vision is opt-in per deployment: an admin toggle decides whether images
+ *     are sent. Where the backend reports capabilities (Ollama, LM Studio) the
+ *     settings card says when the toggle disagrees with the model.
+ *   - The model list comes from the backend's own API when one is detected —
+ *     see fetchModelCatalog() — because `/v1/models` carries ids only.
  *   - `tool_choice` is not sent — Ollama rejects the field.
  *   - Timeouts default much higher; CPU inference is slow.
  *
@@ -38,7 +41,7 @@ namespace OCA\AIquila\Service\Provider;
  * on top of it would be a way to post an instance credential wherever the user
  * likes. Secrets go through CredentialService, never app config.
  */
-class LocalProvider extends AbstractOpenAiCompatibleProvider {
+class LocalProvider extends AbstractOpenAiCompatibleProvider implements ModelCatalogInterface {
     private const PROVIDER_ID = 'local';
 
     /** Fallback model id when the admin has not picked one. */
@@ -68,6 +71,25 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
     /** Credential-store names for the two secrets that are not the API key. */
     private const SECRET_EXTRA_HEADERS = 'local_extra_headers';
     private const SECRET_CLIENT_KEY_PASSWORD = 'local_client_key_password';
+
+    /** Which listing answered fetchModelCatalog(); recorded in the catalog. */
+    public const SOURCE_LMSTUDIO = 'lmstudio';
+    public const SOURCE_LMSTUDIO_V0 = 'lmstudio-v0';
+    public const SOURCE_OLLAMA = 'ollama';
+    public const SOURCE_OPENAI = 'openai';
+
+    /**
+     * Ollama reports capabilities per model only, one `/api/show` each. Past
+     * this many pulled models the rest are listed unverified rather than
+     * spending a request apiece on a settings page load.
+     */
+    public const OLLAMA_SHOW_LIMIT = 50;
+
+    /** `/api/tags` lists pulled models, so a missing one has not been pulled. */
+    private const OLLAMA_MISSING_HINT = 'Pull it on the Ollama host with `ollama pull {model}`, or pick one from the list.';
+
+    /** Model id of the request in flight, for the runtime error sentences. */
+    private string $lastModel = '';
 
     public function getId(): string {
         return self::PROVIDER_ID;
@@ -168,7 +190,7 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
                 'model_local',
                 'user_model_local',
                 self::DEFAULT_MODEL,
-                'The model tag as your backend reports it, e.g. llama3.2. Refresh to pull the loaded list from the endpoint.',
+                'The model tag as your backend reports it, e.g. llama3.2. Refresh to pull the list from the endpoint. Ollama and LM Studio report what each model can do; models that cannot chat are greyed out.',
             ),
             ProviderSettingsSchema::maxTokens(
                 'max_tokens_local',
@@ -184,7 +206,7 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
                 'local_vision',
                 'local_vision',
                 'Send images to this model',
-                'Only enable when the loaded model is multimodal; Nextcloud cannot detect this.',
+                'Only enable when the model is multimodal. Ollama and LM Studio report this, and the model field warns when the two disagree; llama.cpp and other backends cannot tell.',
             ),
             ProviderSettingsSchema::checkbox(
                 'local_audio_in',
@@ -400,6 +422,13 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
         }
     }
 
+    /** Remember the model, so a failure can name it in errorMessage(). */
+    protected function buildBody(array $messages, ?string $system, ?string $userId, array $options, bool $stream = false): array {
+        $body = parent::buildBody($messages, $system, $userId, $options, $stream);
+        $this->lastModel = is_string($body['model'] ?? null) ? $body['model'] : '';
+        return $body;
+    }
+
     /** Ollama does not accept `tool_choice`; the other backends tolerate its absence. */
     protected function sendsToolChoice(): bool {
         return false;
@@ -416,6 +445,266 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
     private function configuredTimeout(): int {
         $stored = (int)$this->config->getAppValue(self::APP_NAME, 'local_timeout', (string)self::DEFAULT_TIMEOUT);
         return $stored > 0 ? $stored : self::DEFAULT_TIMEOUT;
+    }
+
+    // ── Model catalog ───────────────────────────────────────────────────────
+
+    /**
+     * The ids from the catalog, so the picker and the plain list agree.
+     * Incompatible models are included: the picker shows them disabled with
+     * the reason, which beats a model that silently isn't there.
+     */
+    public function listModels(?string $userId = null): ?array {
+        if (!$this->isConfigured($userId)) {
+            return null;
+        }
+        $catalog = $this->fetchModelCatalog($userId);
+        if ($catalog->isFailure()) {
+            $this->logger->warning('AIquila ' . $this->getLabel() . ': Could not list models', ['error' => $catalog->error]);
+            return null;
+        }
+        $ids = $catalog->ids();
+        return $ids !== [] ? $ids : null;
+    }
+
+    /**
+     * Live model list with capabilities, from the first listing that answers
+     * in its documented shape:
+     *
+     *   1. LM Studio's native REST API, `GET /api/v1/models` (LM Studio 0.4+):
+     *      `type` llm / embedding, `capabilities.vision`,
+     *      `capabilities.trained_for_tool_use`, `loaded_instances`.
+     *   2. Its predecessor `GET /api/v0/models` (LM Studio 0.3.6+): `type`
+     *      llm / vlm / embeddings, `state`, and on recent builds a
+     *      `capabilities` list with `tool_use`.
+     *   3. Ollama, `GET /api/tags` then `POST /api/show` per model, whose
+     *      `capabilities` list holds completion, tools, vision, embedding, …
+     *   4. Anything else (llama.cpp, vLLM, LocalAI): the OpenAI-compatible
+     *      `GET /v1/models`, ids only, every model "not verified".
+     *
+     * Detection is by response shape, not status: LM Studio answers an
+     * endpoint it does not know with 200 and `{"error": "Unexpected
+     * endpoint…"}`. A transport failure (refused, unresolvable, TLS) stops
+     * the walk at once — every later step would fail the same way, three
+     * timeouts later.
+     */
+    public function fetchModelCatalog(?string $userId = null): ModelCatalog {
+        if (!$this->isConfigured($userId)) {
+            return ModelCatalog::failed($this->getLabel(), $this->notConfiguredMessage());
+        }
+        $root = substr($this->apiBase(), 0, -strlen('/v1'));
+
+        try {
+            $data = $this->nativeGet($root . '/api/v1/models', $userId);
+            if (is_array($data) && self::isListOf($data['models'] ?? null, 'key')) {
+                return $this->lmStudioCatalog($data['models']);
+            }
+            $data = $this->nativeGet($root . '/api/v0/models', $userId);
+            if (is_array($data) && self::isListOf($data['data'] ?? null, 'type')) {
+                return $this->lmStudioV0Catalog($data['data']);
+            }
+            $data = $this->nativeGet($root . '/api/tags', $userId);
+            if (is_array($data) && self::isListOf($data['models'] ?? null, 'name')) {
+                return $this->ollamaCatalog($root, $data['models'], $userId);
+            }
+            return $this->openAiCatalog($this->fetchModelIds($userId));
+        } catch (\Throwable $e) {
+            $this->logger->warning('AIquila ' . $this->getLabel() . ': Could not list models', ['error' => $e->getMessage()]);
+            return ModelCatalog::failed($this->getLabel(), $this->errorMessage($e));
+        }
+    }
+
+    /**
+     * GET a backend-native listing. An HTTP error status means "not this
+     * backend" and yields null; a failure without a response is rethrown.
+     *
+     * @return array<array-key, mixed>|null
+     */
+    private function nativeGet(string $url, ?string $userId): ?array {
+        try {
+            $response = $this->clientService->newClient()->get($url, $this->requestOptions($userId, ['timeout' => 15]));
+        } catch (\Throwable $e) {
+            if (self::isHttpStatusError($e)) {
+                return null;
+            }
+            throw $e;
+        }
+        $decoded = json_decode((string)$response->getBody(), true);
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * Guzzle's BadResponseException carries the HTTP status as its code; a
+     * connect or TLS failure carries 0 (or a cURL number below 100).
+     */
+    private static function isHttpStatusError(\Throwable $e): bool {
+        $code = $e->getCode();
+        return $code >= 400 && $code < 600;
+    }
+
+    /** A non-empty list whose first entry is an object carrying $key. */
+    private static function isListOf(mixed $value, string $key): bool {
+        return is_array($value) && array_is_list($value) && $value !== []
+            && is_array($value[0]) && isset($value[0][$key]);
+    }
+
+    /** @param array<array-key, mixed> $entries */
+    private function lmStudioCatalog(array $entries): ModelCatalog {
+        $models = [];
+        foreach ($entries as $m) {
+            if (!is_array($m) || !is_string($m['key'] ?? null) || $m['key'] === '') {
+                continue;
+            }
+            $id = $m['key'];
+            $label = is_string($m['display_name'] ?? null) ? $m['display_name'] : '';
+            $type = is_string($m['type'] ?? null) ? $m['type'] : '';
+            $loaded = is_array($m['loaded_instances'] ?? null) ? $m['loaded_instances'] !== [] : null;
+            $caps = is_array($m['capabilities'] ?? null) ? $m['capabilities'] : [];
+
+            $models[] = match ($type) {
+                'llm' => $this->lmStudioChat(
+                    $id,
+                    $label,
+                    is_bool($caps['trained_for_tool_use'] ?? null) ? $caps['trained_for_tool_use'] : null,
+                    is_bool($caps['vision'] ?? null) ? $caps['vision'] : null,
+                    $loaded,
+                ),
+                'embedding' => ModelCompatibility::embedding($id, $label, '', $loaded),
+                default => ModelCompatibility::cannotChat($id, $label, $type !== '' ? 'a "' . $type . '" model' : ''),
+            };
+        }
+        return ModelCatalog::listed($models, self::SOURCE_LMSTUDIO, $this->getLabel(), self::lmStudioMissingHint());
+    }
+
+    /**
+     * The v0 listing. `vlm` is how it says "vision"; tool use is only on
+     * builds that add a `capabilities` list, and unknown otherwise.
+     *
+     * @param array<array-key, mixed> $entries
+     */
+    private function lmStudioV0Catalog(array $entries): ModelCatalog {
+        $models = [];
+        foreach ($entries as $m) {
+            if (!is_array($m) || !is_string($m['id'] ?? null) || $m['id'] === '') {
+                continue;
+            }
+            $id = $m['id'];
+            $type = is_string($m['type'] ?? null) ? $m['type'] : '';
+            $loaded = is_string($m['state'] ?? null) ? $m['state'] === 'loaded' : null;
+            $tools = is_array($m['capabilities'] ?? null) ? in_array('tool_use', $m['capabilities'], true) : null;
+            $vision = $type === 'vlm';
+
+            $models[] = match ($type) {
+                'llm', 'vlm' => $this->lmStudioChat($id, '', $tools, $vision, $loaded),
+                'embeddings' => ModelCompatibility::embedding($id, '', '', $loaded),
+                default => ModelCompatibility::cannotChat($id, '', $type !== '' ? 'a "' . $type . '" model' : ''),
+            };
+        }
+        return ModelCatalog::listed($models, self::SOURCE_LMSTUDIO_V0, $this->getLabel(), self::lmStudioMissingHint());
+    }
+
+    /**
+     * LM Studio still offers tools to a model not trained for them, in a
+     * generic prompt format, so "no tools" there means "unreliable" rather
+     * than "refused".
+     *
+     * A model that is not loaded gets a note, because what happens next
+     * depends on a server setting AIquila cannot read: with just-in-time
+     * loading (the default) LM Studio loads it on first use; with it off,
+     * LM Studio answers with whichever model *is* loaded, under that model's
+     * name, without an error.
+     */
+    private function lmStudioChat(string $id, string $label, ?bool $tools, ?bool $vision, ?bool $loaded): ModelCompatibility {
+        $name = $label !== '' && $label !== $id ? $label . ' (' . $id . ')' : $id;
+        return ModelCompatibility::chat(
+            $id,
+            $label,
+            $tools,
+            $vision,
+            $loaded,
+            $loaded === false
+                ? 'It isn\'t loaded in LM Studio yet. With just-in-time loading on (the default) LM Studio loads it on the first request; with it off, LM Studio answers with whichever model is loaded instead, so load this one first.'
+                : '',
+            sprintf('%s isn\'t trained for tool use. LM Studio still offers it tools in a generic format, so Nextcloud tools and Cowork may work poorly with it.', $name),
+        );
+    }
+
+    private static function lmStudioMissingHint(): string {
+        return 'Download it in LM Studio (or with `lms get`), or pick one from the list. LM Studio does not reject an unknown model: it answers with whichever model is loaded.';
+    }
+
+    /**
+     * Ollama lists pulled models in `/api/tags` without capabilities; those
+     * come from `/api/show`, one request per model. A model whose show call
+     * fails, or that predates the `capabilities` field, is listed unverified
+     * rather than dropped.
+     *
+     * Embedding-only models have `embedding` and no `completion`; a model with
+     * neither cannot chat for some other reason (an image generator, say).
+     *
+     * @param array<array-key, mixed> $entries
+     */
+    private function ollamaCatalog(string $root, array $entries, ?string $userId): ModelCatalog {
+        $models = [];
+        $shown = 0;
+        foreach ($entries as $m) {
+            if (!is_array($m) || !is_string($m['name'] ?? null) || $m['name'] === '') {
+                continue;
+            }
+            $id = $m['name'];
+            $caps = null;
+            if ($shown < self::OLLAMA_SHOW_LIMIT) {
+                $shown++;
+                $caps = $this->ollamaCapabilities($root, $id, $userId);
+            }
+
+            if ($caps === null) {
+                $models[] = ModelCompatibility::unverified($id, '', 'Ollama did not report its capabilities. Updating Ollama adds them.');
+                continue;
+            }
+            if (!in_array('completion', $caps, true)) {
+                $models[] = in_array('embedding', $caps, true)
+                    ? ModelCompatibility::embedding($id)
+                    : ModelCompatibility::cannotChat($id, '', $caps !== [] ? 'a model for ' . implode(', ', $caps) : '');
+                continue;
+            }
+            $models[] = ModelCompatibility::chat($id, '', in_array('tools', $caps, true), in_array('vision', $caps, true));
+        }
+        return ModelCatalog::listed($models, self::SOURCE_OLLAMA, $this->getLabel(), self::OLLAMA_MISSING_HINT);
+    }
+
+    /**
+     * One model's `capabilities` from `POST /api/show`, or null when the call
+     * fails or the field is absent (Ollama releases before it existed).
+     *
+     * @return list<string>|null
+     */
+    private function ollamaCapabilities(string $root, string $model, ?string $userId): ?array {
+        try {
+            $response = $this->clientService->newClient()->post($root . '/api/show', $this->requestOptions($userId, [
+                'body' => json_encode(['model' => $model]),
+                'timeout' => 15,
+            ]));
+        } catch (\Throwable $e) {
+            $this->logger->info('AIquila ' . $this->getLabel() . ': Ollama /api/show failed for ' . $model, ['error' => $e->getMessage()]);
+            return null;
+        }
+        $decoded = json_decode((string)$response->getBody(), true);
+        $caps = is_array($decoded) ? ($decoded['capabilities'] ?? null) : null;
+        if (!is_array($caps)) {
+            return null;
+        }
+        return array_values(array_filter($caps, 'is_string'));
+    }
+
+    /** @param list<string> $ids */
+    private function openAiCatalog(array $ids): ModelCatalog {
+        $why = 'this endpoint only offers the OpenAI-compatible /v1/models list (llama.cpp, vLLM and similar), which does not say what a model can do. Vision follows the "Send images" setting, and tool calling is assumed.';
+        return ModelCatalog::listed(
+            array_map(static fn(string $id) => ModelCompatibility::unverified($id, '', $why), $ids),
+            self::SOURCE_OPENAI,
+            $this->getLabel(),
+        );
     }
 
     // ── HTTP ────────────────────────────────────────────────────────────────
@@ -587,6 +876,10 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
      */
     protected function errorMessage(\Throwable $e): string {
         $msg = $e->getMessage();
+        $model = $this->modelSentence($msg);
+        if ($model !== '') {
+            return $model;
+        }
         if ($e instanceof \OCP\Http\Client\LocalServerException) {
             return 'Nextcloud blocked the request to the local model endpoint. Enable "Allow local addresses" in the AIquila admin settings.';
         }
@@ -633,6 +926,39 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider {
                 . '". Check the header name and the key in the AIquila admin settings.',
             default => 'The local model endpoint rejected the API key. Check the token in the AIquila admin settings.',
         };
+    }
+
+    /**
+     * Requests refused because of the model, in the same sentences the picker
+     * uses. The wordings are Ollama's (server/routes.go, server/images.go):
+     *   - `"x" does not support tools` (400) — tools sent to a model without them;
+     *   - `"x" does not support chat` / `generate` (400) — no completion capability,
+     *     typically an embedding model;
+     *   - `model "x" not found, try pulling it first` (404).
+     * LM Studio has no equivalent: it answers an unknown or embedding-only model
+     * with whichever model is loaded, so only the picker can catch that.
+     *
+     * The model named is the one this request asked for; the id in Ollama's
+     * text carries a registry prefix and is used only when that is unknown.
+     */
+    private function modelSentence(string $msg): string {
+        $model = $this->lastModel;
+        if ($model === '' && preg_match('/\\\\?"([^"\\\\]+)\\\\?"\s+does not support|model\s+\\\\?"([^"\\\\]+)\\\\?"\s+not found/i', $msg, $m) === 1) {
+            $model = ($m[1] ?? '') !== '' ? $m[1] : ($m[2] ?? '');
+        }
+        if ($model === '') {
+            $model = $this->getModel();
+        }
+        if (stripos($msg, 'does not support tools') !== false) {
+            return ModelCompatibility::toolsRefusedMessage($model);
+        }
+        if (stripos($msg, 'does not support chat') !== false || stripos($msg, 'does not support generate') !== false) {
+            return ModelCompatibility::cannotChatMessage($model);
+        }
+        if (stripos($msg, 'try pulling it first') !== false) {
+            return ModelCompatibility::missingMessage($model, $this->getLabel(), str_replace('{model}', $model, self::OLLAMA_MISSING_HINT));
+        }
+        return '';
     }
 
     /** @param list<string> $needles */
