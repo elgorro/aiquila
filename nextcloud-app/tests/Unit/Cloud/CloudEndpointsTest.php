@@ -2,6 +2,7 @@
 
 namespace OCA\AIquila\Tests\Unit\Cloud;
 
+use Anthropic\Core\Util;
 use OCA\AIquila\Service\Provider\Cloud\CloudEndpoints;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -56,6 +57,27 @@ class CloudEndpointsTest extends TestCase {
         );
     }
 
+    /**
+     * We hand the SDK a ready base URL, so ours must be the one the SDK would
+     * derive from the same values with its own path encoding (v1.5+).
+     */
+    #[DataProvider('googleCloudValues')]
+    public function testGoogleCloudUrlMatchesTheSdkEncoding(string $project, string $location, string $workspaceId): void {
+        $sdk = 'https://claude.googleapis.com'
+            . Util::parsePath(['/v1/projects/%1$s/locations/%2$s', $project, $location])
+            . Util::parsePath(['/workspaces/%1$s/invoke', $workspaceId]);
+        $this->assertSame($sdk, CloudEndpoints::claudePlatformGoogleCloudUrl($project, $location, $workspaceId));
+    }
+
+    /** @return array<string, array{string, string, string}> */
+    public static function googleCloudValues(): array {
+        return [
+            'global' => ['my-project-1', 'global', 'wrkspc_01Ab'],
+            'region' => ['proj-123456', 'us-east5', 'wrkspc_Z9'],
+            'legacy domain project' => ['example.com:my-project', 'eu', 'wrkspc_abc'],
+        ];
+    }
+
     public function testGcpProjectAndWorkspaceAreChecked(): void {
         foreach (['ab', 'Upper-Case', 'my-project/../x', 'p@q'] as $bad) {
             try {
@@ -80,7 +102,9 @@ class CloudEndpointsTest extends TestCase {
         ] as $ok) {
             $this->assertSame($ok, CloudEndpoints::requireModelId($ok));
         }
-        foreach (['../x', 'a..b', "claude\n", '', ' claude', 'claude?x=1', 'claude#x'] as $bad) {
+        // '.', '..' and anything around a ';' are what the SDK's path encoding
+        // throws on (v1.5 / v1.8); they never reach it.
+        foreach (['../x', 'a..b', "claude\n", '', ' claude', 'claude?x=1', 'claude#x', '.', '..', ';x', '..;x', 'claude;x', 'claude%2Fx'] as $bad) {
             try {
                 CloudEndpoints::requireModelId($bad);
                 $this->fail('accepted model ' . json_encode($bad));

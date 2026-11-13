@@ -4,7 +4,6 @@ namespace OCA\AIquila\Tests\Unit;
 
 use Anthropic\Client;
 use Anthropic\Core\Exceptions\RateLimitException;
-use Anthropic\ErrorType;
 use Anthropic\Messages\RefusalStopDetails;
 use Anthropic\Models\ModelInfo;
 use OCA\AIquila\Service\ClaudeModels;
@@ -601,14 +600,18 @@ class ClaudeSDKServiceCapabilityTest extends TestCase {
             'supports_effort' => false,
         ]);
 
-        // Build a RateLimitException (subclass of APIStatusException) and
-        // force the typed ErrorType via reflection — the SDK constructor
-        // needs full HTTP Request/Response objects which are awkward to mock.
-        $e = (new \ReflectionClass(RateLimitException::class))->newInstanceWithoutConstructor();
-        $typeProp = new \ReflectionProperty(\Anthropic\Core\Exceptions\APIStatusException::class, 'type');
-        $typeProp->setValue($e, ErrorType::RATE_LIMIT_ERROR);
-        $msgProp = new \ReflectionProperty(\Exception::class, 'message');
-        $msgProp->setValue($e, 'rate limited');
+        // Built the way the SDK builds it, from the response: the class comes
+        // from the status, the error type from the body.
+        $body = $this->createStub(\Psr\Http\Message\StreamInterface::class);
+        $body->method('__toString')->willReturn('{"type":"error","error":{"type":"rate_limit_error","message":"rate limited"}}');
+        $response = $this->createStub(\Psr\Http\Message\ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(429);
+        $response->method('getBody')->willReturn($body);
+        $e = \Anthropic\Core\Exceptions\APIStatusException::from(
+            request: $this->createStub(\Psr\Http\Message\RequestInterface::class),
+            response: $response,
+        );
+        $this->assertInstanceOf(RateLimitException::class, $e);
 
         $capturedCtx = null;
         $logger = $this->createMock(LoggerInterface::class);

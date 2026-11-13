@@ -14,7 +14,17 @@ class ClaudeModels {
 
     // ── Model ID constants ─────────────────────────────────────────────────
 
-    /** Fable 5.1 – most capable widely released model; successor to Fable 5 (thinking always on, 128K output, 1M context) */
+    /** Fable 5.2 – most capable widely released model; successor to Fable 5.1 (thinking always on, 128K output, 1M context, fast mode) */
+    public const FABLE_5_2  = 'claude-fable-5-2';
+
+    /**
+     * Mythos 5.2 – Fable 5.2's capabilities for organisations verified through
+     * Anthropic's verification programs. Not in getAllModels(): most API keys
+     * cannot use it, but an admin who types it in gets the right limits.
+     */
+    public const MYTHOS_5_2 = 'claude-mythos-5-2';
+
+    /** Fable 5.1 – previous Fable; successor to Fable 5 (thinking always on, 128K output, 1M context) */
     public const FABLE_5_1  = 'claude-fable-5-1';
 
     /** Fable 5 – new tier above Opus (thinking always on, 128K output, 1M context, xhigh effort) */
@@ -127,6 +137,8 @@ class ClaudeModels {
     // ── Per-model output token ceilings ────────────────────────────────────
 
     private const MAX_TOKENS_CEILING = [
+        self::FABLE_5_2  => 128000,
+        self::MYTHOS_5_2 => 128000,
         self::FABLE_5_1  => 128000,
         self::FABLE_5    => 128000,
         self::OPUS_5_5   => 128000,
@@ -144,6 +156,8 @@ class ClaudeModels {
     public const DEFAULT_CONTEXT_WINDOW = 200000;
 
     private const CONTEXT_WINDOW = [
+        self::FABLE_5_2  => 1000000,
+        self::MYTHOS_5_2 => 1000000,
         self::FABLE_5_1  => 1000000,
         self::FABLE_5    => 1000000,
         self::OPUS_5_5   => 1000000,
@@ -158,6 +172,8 @@ class ClaudeModels {
     // ── Capability flags ───────────────────────────────────────────────────
 
     private const SUPPORTS_THINKING = [
+        self::FABLE_5_2  => true,
+        self::MYTHOS_5_2 => true,
         self::FABLE_5_1  => true,
         self::FABLE_5    => true,
         self::OPUS_5_5   => true,
@@ -170,6 +186,8 @@ class ClaudeModels {
     ];
 
     private const SUPPORTS_EFFORT = [
+        self::FABLE_5_2  => true,
+        self::MYTHOS_5_2 => true,
         self::FABLE_5_1  => true,
         self::FABLE_5    => true,
         self::OPUS_5_5   => true,
@@ -216,6 +234,7 @@ class ClaudeModels {
      */
     public static function getAllModels(): array {
         return [
+            self::FABLE_5_2,
             self::FABLE_5_1,
             self::FABLE_5,
             self::OPUS_5_5,
@@ -234,6 +253,8 @@ class ClaudeModels {
     // ── Per-model effort level (app-level policy) ────────────────────────
 
     public const EFFORT_LEVEL = [
+        self::FABLE_5_2  => 'xhigh',
+        self::MYTHOS_5_2 => 'xhigh',
         self::FABLE_5_1  => 'xhigh',
         self::FABLE_5    => 'xhigh',
         self::OPUS_5_5   => 'xhigh',
@@ -259,6 +280,8 @@ class ClaudeModels {
 
     /** `xhigh` requires the Fable 5, Opus 5 and Sonnet 5 families or Opus 4.7+; older models reject it with a 400. */
     private const ALLOWED_EFFORTS = [
+        self::FABLE_5_2  => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::MYTHOS_5_2 => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::FABLE_5_1  => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::FABLE_5    => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::OPUS_5_5   => ['low', 'medium', 'high', 'xhigh', 'max'],
@@ -308,6 +331,8 @@ class ClaudeModels {
      * @var array<string, array{default: string, off: string, off_max_effort?: string}>
      */
     private const THINKING_POLICY = [
+        self::FABLE_5_2  => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
+        self::MYTHOS_5_2 => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
         self::FABLE_5_1  => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
         self::FABLE_5    => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
         self::OPUS_5_5   => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
@@ -355,13 +380,15 @@ class ClaudeModels {
      * default and are left alone.
      */
     private const THINKING_SUMMARY_OPT_IN = [
-        self::FABLE_5_1 => true,
-        self::FABLE_5   => true,
-        self::OPUS_5_5  => true,
-        self::OPUS_5    => true,
-        self::SONNET_5  => true,
-        self::OPUS_4_8  => true,
-        self::OPUS_4_7  => true,
+        self::FABLE_5_2  => true,
+        self::MYTHOS_5_2 => true,
+        self::FABLE_5_1  => true,
+        self::FABLE_5    => true,
+        self::OPUS_5_5   => true,
+        self::OPUS_5     => true,
+        self::SONNET_5   => true,
+        self::OPUS_4_8   => true,
+        self::OPUS_4_7   => true,
     ];
 
     public static function thinkingSummaryNeedsOptIn(string $model): bool {
@@ -393,9 +420,11 @@ class ClaudeModels {
      * an unsupported combination is rejected by the API at create time.
      */
     private const SUPPORTS_FAST_MODE = [
-        self::OPUS_5_5 => true,
-        self::OPUS_5   => true,
-        self::OPUS_4_8 => true,
+        self::FABLE_5_2  => true,
+        self::MYTHOS_5_2 => true,
+        self::OPUS_5_5   => true,
+        self::OPUS_5     => true,
+        self::OPUS_4_8   => true,
     ];
 
     /**
@@ -416,11 +445,13 @@ class ClaudeModels {
      * Models API has no flag for it, so the table is hand-maintained.
      */
     private const SUPPORTS_MID_CONVERSATION_SYSTEM = [
-        self::FABLE_5_1 => true,
-        self::FABLE_5   => true,
-        self::OPUS_5_5  => true,
-        self::OPUS_5    => true,
-        self::OPUS_4_8  => true,
+        self::FABLE_5_2  => true,
+        self::MYTHOS_5_2 => true,
+        self::FABLE_5_1  => true,
+        self::FABLE_5    => true,
+        self::OPUS_5_5   => true,
+        self::OPUS_5     => true,
+        self::OPUS_4_8   => true,
     ];
 
     /**
@@ -464,6 +495,8 @@ class ClaudeModels {
      * and Haiku 5.5 are listed by id until the registry carries them.
      */
     private const SUPPORTS_TASK_BUDGET = [
+        self::FABLE_5_2    => true,
+        self::MYTHOS_5_2   => true,
         self::FABLE_5_1    => true,
         self::FABLE_5      => true,
         self::OPUS_5_5     => true,

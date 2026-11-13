@@ -8,16 +8,16 @@
     "packages": [
         {
             "name": "anthropic-ai/sdk",
-            "version": "v1.3.0",
+            "version": "v1.8.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/anthropics/anthropic-sdk-php.git",
-                "reference": "3f558cd8a929695c6d0798ed53c9d986884dec7f"
+                "reference": "67df24ec030b3d21a1b88edc057ba6d3e9593028"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/anthropics/anthropic-sdk-php/zipball/3f558cd8a929695c6d0798ed53c9d986884dec7f",
-                "reference": "3f558cd8a929695c6d0798ed53c9d986884dec7f",
+                "url": "https://api.github.com/repos/anthropics/anthropic-sdk-php/zipball/67df24ec030b3d21a1b88edc057ba6d3e9593028",
+                "reference": "67df24ec030b3d21a1b88edc057ba6d3e9593028",
                 "shasum": ""
             },
             "require": {
@@ -67,10 +67,10 @@
             "description": "Anthropic PHP SDK",
             "support": {
                 "issues": "https://github.com/anthropics/anthropic-sdk-php/issues",
-                "source": "https://github.com/anthropics/anthropic-sdk-php/tree/v1.3.0"
+                "source": "https://github.com/anthropics/anthropic-sdk-php/tree/v1.8.0"
             },
-            "time": "2026-10-23T23:14:10+00:00",
-            "published-time": "2026-10-23T23:17:19+00:00"
+            "time": "2026-11-10T16:24:39+00:00",
+            "published-time": "2026-11-10T16:33:51+00:00"
         },
         {
             "name": "nyholm/psr7",
@@ -153,36 +153,43 @@
         },
         {
             "name": "open-telemetry/api",
-            "version": "1.10.1",
+            "version": "1.11.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/opentelemetry-php/api.git",
-                "reference": "b2bc26bf8bd6b2b6447b3626b2a1b5733873aa0b"
+                "reference": "bc169d9ecd11858e941657770dc708c6a15fc5f4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/opentelemetry-php/api/zipball/b2bc26bf8bd6b2b6447b3626b2a1b5733873aa0b",
-                "reference": "b2bc26bf8bd6b2b6447b3626b2a1b5733873aa0b",
+                "url": "https://api.github.com/repos/opentelemetry-php/api/zipball/bc169d9ecd11858e941657770dc708c6a15fc5f4",
+                "reference": "bc169d9ecd11858e941657770dc708c6a15fc5f4",
                 "shasum": ""
             },
             "require": {
                 "open-telemetry/context": "^1.4",
-                "php": "^8.1",
-                "psr/log": "^1.1|^2.0|^3.0",
-                "symfony/polyfill-php82": "^1.26"
+                "php": "^8.2",
+                "psr/log": "^1.1|^2.0|^3.0"
             },
             "conflict": {
-                "open-telemetry/sdk": "<=1.11"
+                "open-telemetry/sdk": "<=1.11",
+                "open-telemetry/sdk-configuration": "<0.10"
+            },
+            "suggest": {
+                "symfony/config": "To implement a ComponentProvider for declarative configuration"
             },
             "type": "library",
             "extra": {
                 "spi": {
+                    "OpenTelemetry\\API\\Configuration\\Config\\ComponentProvider": [
+                        "OpenTelemetry\\API\\Baggage\\Propagation\\Config\\TextMapPropagatorBaggage",
+                        "OpenTelemetry\\API\\Trace\\Propagation\\Config\\TextMapPropagatorTraceContext"
+                    ],
                     "OpenTelemetry\\API\\Instrumentation\\AutoInstrumentation\\HookManagerInterface": [
                         "OpenTelemetry\\API\\Instrumentation\\AutoInstrumentation\\ExtensionHookManager"
                     ]
                 },
                 "branch-alias": {
-                    "dev-main": "1.8.x-dev"
+                    "dev-main": "1.11.x-dev"
                 }
             },
             "autoload": {
@@ -219,26 +226,25 @@
                 "issues": "https://github.com/open-telemetry/opentelemetry-php/issues",
                 "source": "https://github.com/open-telemetry/opentelemetry-php"
             },
-            "time": "2026-09-16T01:59:09+00:00",
-            "published-time": "2026-10-20T00:48:16+00:00"
+            "time": "2026-11-05T11:54:49+00:00",
+            "published-time": "2026-11-05T12:00:54+00:00"
         },
         {
             "name": "open-telemetry/context",
-            "version": "1.5.0",
+            "version": "1.6.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/opentelemetry-php/context.git",
-                "reference": "3c414b246e0dabb7d6145404e6a5e4536ca18d07"
+                "reference": "711e7291d9cf8a984c059c5afd926e45ab444b7f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/opentelemetry-php/context/zipball/3c414b246e0dabb7d6145404e6a5e4536ca18d07",
-                "reference": "3c414b246e0dabb7d6145404e6a5e4536ca18d07",
+                "url": "https://api.github.com/repos/opentelemetry-php/context/zipball/711e7291d9cf8a984c059c5afd926e45ab444b7f",
+                "reference": "711e7291d9cf8a984c059c5afd926e45ab444b7f",
                 "shasum": ""
             },
             "require": {
-                "php": "^8.1",
-                "symfony/polyfill-php82": "^1.26"
+                "php": "^8.2"
             },
             "suggest": {
                 "ext-ffi": "To allow context switching in Fibers"
@@ -246,7 +252,7 @@
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-main": "1.0.x-dev"
+                    "dev-main": "1.6.x-dev"
                 }
             },
             "autoload": {
@@ -279,8 +285,8 @@
                 "issues": "https://github.com/open-telemetry/opentelemetry-php/issues",
                 "source": "https://github.com/open-telemetry/opentelemetry-php"
             },
-            "time": "2025-10-19T06:44:33+00:00",
-            "published-time": "2026-03-25T14:04:42+00:00"
+            "time": "2026-11-05T11:54:49+00:00",
+            "published-time": "2026-11-05T12:00:45+00:00"
         },
         {
             "name": "php-http/discovery",
@@ -928,87 +934,6 @@
             ],
             "time": "2026-08-04T08:41:16+00:00",
             "published-time": "2026-08-30T19:56:36+00:00"
-        },
-        {
-            "name": "symfony/polyfill-php82",
-            "version": "v1.43.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/symfony/polyfill-php82.git",
-                "reference": "843bbe8b2a7934307b749751eede0f111f5d1cfc"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/symfony/polyfill-php82/zipball/843bbe8b2a7934307b749751eede0f111f5d1cfc",
-                "reference": "843bbe8b2a7934307b749751eede0f111f5d1cfc",
-                "shasum": ""
-            },
-            "require": {
-                "php": ">=7.2"
-            },
-            "type": "library",
-            "extra": {
-                "thanks": {
-                    "url": "https://github.com/symfony/polyfill",
-                    "name": "symfony/polyfill"
-                }
-            },
-            "autoload": {
-                "files": [
-                    "bootstrap.php"
-                ],
-                "psr-4": {
-                    "Symfony\\Polyfill\\Php82\\": ""
-                },
-                "classmap": [
-                    "Resources/stubs"
-                ]
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Nicolas Grekas",
-                    "email": "p@tchwork.com"
-                },
-                {
-                    "name": "Symfony Community",
-                    "homepage": "https://symfony.com/contributors"
-                }
-            ],
-            "description": "Symfony polyfill backporting some PHP 8.2+ features to lower PHP versions",
-            "homepage": "https://symfony.com",
-            "keywords": [
-                "compatibility",
-                "polyfill",
-                "portable",
-                "shim"
-            ],
-            "support": {
-                "source": "https://github.com/symfony/polyfill-php82/tree/v1.43.0"
-            },
-            "funding": [
-                {
-                    "url": "https://symfony.com/sponsor",
-                    "type": "custom"
-                },
-                {
-                    "url": "https://github.com/fabpot",
-                    "type": "github"
-                },
-                {
-                    "url": "https://github.com/nicolas-grekas",
-                    "type": "github"
-                },
-                {
-                    "url": "https://tidelift.com/funding/github/packagist/symfony/symfony",
-                    "type": "tidelift"
-                }
-            ],
-            "time": "2026-09-25T15:50:05+00:00",
-            "published-time": "2026-09-30T10:23:32+00:00"
         },
         {
             "name": "symfony/service-contracts",

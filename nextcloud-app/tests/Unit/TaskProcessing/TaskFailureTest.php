@@ -41,6 +41,8 @@ class TaskFailureTest extends TestCase {
             'claude: invalid key' => ['Invalid API key. Please check your configuration.', self::AUTH],
             'claude: permission' => ['Your API key does not have permission to use this resource.', self::AUTH],
             'claude: rate limit' => ['Rate limit exceeded. Please try again later.', self::RATE],
+            'claude: spend limit' => ['Your Anthropic organization has reached the monthly spend limit of its API tier. Please ask an administrator to raise it.', self::RATE],
+            'claude: overloaded' => ['Claude is overloaded right now. Please try again in a moment.', self::UNREACHABLE],
             'claude: server error' => ['Anthropic API is temporarily unavailable. Please try again later.', self::UNREACHABLE],
             'claude: connection' => ['Connection to Claude API failed: cURL error 28: Operation timed out after 30001 milliseconds', self::UNREACHABLE],
             'claude: prompt too long' => ['Error: prompt is too long: 215000 tokens > 200000 maximum', self::TOO_LARGE],
