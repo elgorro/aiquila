@@ -74,8 +74,13 @@ class VisionClassifyImagesTaskTypeTest extends TestCase {
         $coworker->setOptions('{}');
         $run = new CoworkerRun();
 
-        $task->run($coworker, $run, static function (): void {
+        $result = $task->run($coworker, $run, static function (): void {
         });
+
+        // The failed image is counted as failed, not as processed.
+        $this->assertSame(2, $result['itemsTotal']);
+        $this->assertSame(1, $result['itemsProcessed']);
+        $this->assertSame(1, $result['itemsFailed'] ?? null);
 
         $log = $run->getDecodedLog();
         $this->assertSame(['info', 'error'], array_column($log, 'level'));

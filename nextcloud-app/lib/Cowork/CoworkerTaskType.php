@@ -44,8 +44,13 @@ interface CoworkerTaskType {
      * `pending: true` along with a `state` array to resume from, and finish
      * on a later tick. See {@see ResumableCoworkerTaskType}.
      *
+     * `itemsProcessed` counts the items that succeeded and `itemsFailed` the
+     * ones that failed; an item skipped on purpose counts as neither. A run
+     * whose items all failed is recorded as an error, one where some failed
+     * as a success with the failures in its error.
+     *
      * @param callable(int, int): void $progress
-     * @return array{itemsTotal: int, itemsProcessed: int, summary: string, pending?: bool, state?: array<string, mixed>}
+     * @return array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string, pending?: bool, state?: array<string, mixed>}
      */
     public function run(Coworker $coworker, CoworkerRun $run, callable $progress): array;
 }

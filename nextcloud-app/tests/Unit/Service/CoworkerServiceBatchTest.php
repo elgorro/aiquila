@@ -40,7 +40,10 @@ class CoworkerServiceBatchTest extends TestCase {
         $this->timeFactory->method('getTime')->willReturn(1_700_000_000);
         $this->logger = $this->createStub(LoggerInterface::class);
 
-        $this->runMapper->method('insert')->willReturnArgument(0);
+        $this->runMapper->method('insert')->willReturnCallback(function (CoworkerRun $run): CoworkerRun {
+            (new \ReflectionProperty($run, 'id'))->setValue($run, 99);
+            return $run;
+        });
         $this->runMapper->method('update')->willReturnArgument(0);
         $this->mapper->method('update')->willReturnArgument(0);
 
@@ -144,6 +147,76 @@ class CoworkerServiceBatchTest extends TestCase {
         $this->assertSame(5, $run->getItemsProcessed());
         $this->assertNotNull($run->getFinishedAt());
         $this->assertNull($run->getState(), 'finished runs carry no resume state');
+    }
+
+    /**
+     * Task types catch per-item errors and return normally, so the counts
+     * decide the outcome, not whether run() threw.
+     *
+     * @return array<string, array{int, int, int, string, ?string}>
+     */
+    public static function outcomes(): array {
+        return [
+            'every item failed' => [10, 0, 10, CoworkerRun::STATUS_ERROR, 'All 10 item(s) failed'],
+            'some items failed' => [10, 7, 3, CoworkerRun::STATUS_SUCCESS, '3 of 10 item(s) failed'],
+            'nothing failed' => [10, 10, 0, CoworkerRun::STATUS_SUCCESS, null],
+            'nothing to do' => [0, 0, 0, CoworkerRun::STATUS_SUCCESS, null],
+            'everything skipped' => [3, 0, 0, CoworkerRun::STATUS_SUCCESS, null],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('outcomes')]
+    public function testItemFailuresDecideTheOutcome(int $total, int $processed, int $failed, string $status, ?string $error): void {
+        $task = $this->createStub(CoworkerTaskType::class);
+        $task->method('run')->willReturn([
+            'itemsTotal' => $total,
+            'itemsProcessed' => $processed,
+            'itemsFailed' => $failed,
+            'summary' => 'done',
+        ]);
+        $this->registry->method('get')->willReturn($task);
+        $this->runMapper->method('findPendingForCoworker')->willReturn(null);
+        $coworker = $this->coworker();
+
+        $run = $this->service->execute($coworker);
+
+        $this->assertSame($status, $run->getStatus());
+        $this->assertSame($failed, $run->getItemsFailed());
+        $this->assertSame($processed, $run->getItemsProcessed());
+        $this->assertSame($error, $run->getError());
+        $this->assertSame($status, $coworker->getLastStatus());
+        $this->assertSame($error, $coworker->getLastError());
+        $this->assertSame($failed, $run->jsonSerialize()['itemsFailed']);
+    }
+
+    public function testATaskTypeWithoutAFailedCountStillSucceeds(): void {
+        $task = $this->createStub(CoworkerTaskType::class);
+        $task->method('run')->willReturn(['itemsTotal' => 1, 'itemsProcessed' => 1, 'summary' => 'ok']);
+        $this->registry->method('get')->willReturn($task);
+        $this->runMapper->method('findPendingForCoworker')->willReturn(null);
+
+        $run = $this->service->execute($this->coworker());
+
+        $this->assertSame(CoworkerRun::STATUS_SUCCESS, $run->getStatus());
+        $this->assertSame(0, $run->getItemsFailed());
+    }
+
+    public function testAResumedBatchWhereEveryItemFailedIsAnError(): void {
+        $task = $this->createStub(ResumableCoworkerTaskType::class);
+        $task->method('resume')->willReturn([
+            'itemsTotal' => 5,
+            'itemsProcessed' => 0,
+            'itemsFailed' => 5,
+            'summary' => 'Summarized 0/5 document(s).',
+        ]);
+        $this->registry->method('get')->willReturn($task);
+        $this->mapper->method('findById')->willReturn($this->coworker());
+
+        $run = $this->service->resumePending($this->pendingRun(1, ['batch_id' => 'batch_01ABC']));
+
+        $this->assertSame(CoworkerRun::STATUS_ERROR, $run->getStatus());
+        $this->assertSame('All 5 item(s) failed', $run->getError());
+        $this->assertNotNull($run->getFinishedAt());
     }
 
     public function testResumeKeepsTheRunOpenWhileTheBatchIsStillRunning(): void {

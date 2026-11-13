@@ -7098,6 +7098,7 @@
                                         "status",
                                         "itemsTotal",
                                         "itemsProcessed",
+                                        "itemsFailed",
                                         "summary",
                                         "error",
                                         "startedAt",
@@ -7125,6 +7126,10 @@
                                             "format": "int64"
                                         },
                                         "itemsProcessed": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "itemsFailed": {
                                             "type": "integer",
                                             "format": "int64"
                                         },

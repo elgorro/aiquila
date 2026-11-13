@@ -59,7 +59,10 @@ interface CoworkerRun {
   /** running | pending | success | error | cancelled */
   status: string;
   itemsTotal: number;
+  /** Items that succeeded. */
   itemsProcessed: number;
+  /** Items that failed; absent on older AIquila apps. */
+  itemsFailed?: number;
   summary?: string | null;
   error?: string | null;
   startedAt: number;
@@ -147,11 +150,17 @@ const RUN_ORIGINS: Record<string, string> = {
   url: 'trigger URL',
 };
 
+/** "7/10", or "7/10, 3 failed" when items failed. */
+function formatCounts(r: CoworkerRun): string {
+  const failed = r.itemsFailed ? `, ${r.itemsFailed} failed` : '';
+  return `${r.itemsProcessed}/${r.itemsTotal}${failed}`;
+}
+
 function formatRun(r: CoworkerRun): string {
   const duration =
     r.finishedAt && r.startedAt ? ` (${Math.max(0, r.finishedAt - r.startedAt)}s)` : '';
   const origin = r.startedBy ? ` — ${RUN_ORIGINS[r.startedBy] ?? r.startedBy}` : '';
-  return `- #${r.id} ${r.status} — ${r.itemsProcessed}/${r.itemsTotal} — ${fmtTime(r.startedAt)}${duration}${origin}`;
+  return `- #${r.id} ${r.status} — ${formatCounts(r)} — ${fmtTime(r.startedAt)}${duration}${origin}`;
 }
 
 /**
@@ -538,7 +547,7 @@ function stateTool(
             method: 'POST',
           });
           return text(
-            `Run finished: ${run.status} — processed ${run.itemsProcessed}/${run.itemsTotal}.` +
+            `Run finished: ${run.status} — processed ${formatCounts(run)}.` +
               (run.summary ? `\n${run.summary}` : '') +
               (run.error ? `\n⚠ ${run.error}` : '')
           );
@@ -688,9 +697,7 @@ export const stopCoworkerTool = {
       const run = await fetchAiquilaAPI<CoworkerRun>(`/coworkers/${args.id}/stop`, {
         method: 'POST',
       });
-      return text(
-        `Run #${run.id} ${run.status} after ${run.itemsProcessed}/${run.itemsTotal} item(s).`
-      );
+      return text(`Run #${run.id} ${run.status} after ${formatCounts(run)} item(s).`);
     } catch (error) {
       return notFoundOr(
         'stopping runs',

@@ -322,6 +322,25 @@ describe('Cowork Tools', () => {
       expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/coworkers/7/run', { method: 'POST' });
       expect(res.content[0].text).toContain('processed 3/3');
       expect(res.content[0].text).toContain('success');
+      expect(res.content[0].text).not.toContain('failed');
+    });
+
+    it('reports failed items and the error of a run where everything failed', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue({
+        id: 2,
+        coworkerId: 7,
+        status: 'error',
+        itemsTotal: 10,
+        itemsProcessed: 0,
+        itemsFailed: 10,
+        summary: 'Processed 0/10 image file(s) via mistral (10 error(s)).',
+        error: 'All 10 item(s) failed',
+        startedAt: 1700000000,
+        finishedAt: 1700000050,
+      });
+      const res = await runCoworkerTool.handler({ id: 7 });
+      expect(res.content[0].text).toContain('Run finished: error — processed 0/10, 10 failed.');
+      expect(res.content[0].text).toContain('⚠ All 10 item(s) failed');
     });
   });
 

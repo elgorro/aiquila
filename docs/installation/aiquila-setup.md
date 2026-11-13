@@ -749,8 +749,10 @@ Every run that ends is announced as the Nextcloud event
 `OCA\AIquila\Event\CoworkerRunFinishedEvent`. With the
 [Webhook listeners](https://docs.nextcloud.com/server/latest/admin_manual/webhook_listeners/index.html)
 app (`webhook_listeners`), an administrator can forward it to another system, such
-as an orchestrator, with the coworker, the run's status, counts, summary and error,
-and what started it. Runs end in a background job without a signed-in user, so
+as an orchestrator, with the coworker, the run's status, counts (`itemsTotal`,
+`itemsProcessed` for the items that succeeded, `itemsFailed`), summary and error, and
+what started it. A run in which every item failed ends as `error`, and one in which
+some failed is a `success` whose error says how many. Runs end in a background job without a signed-in user, so
 filter on `userId` in the event data rather than with the webhook's user filter.
 
 A coworker trigger and a [Flow](#3-flow-process-files-automatically) rule do
