@@ -7,6 +7,8 @@ namespace OCA\AIquila\Service;
 
 use OCA\AIquila\Db\McpServer;
 use OCA\AIquila\Db\McpServerMapper;
+use OCA\AIquila\AppInfo\Application;
+use OCP\App\IAppManager;
 use OCP\IURLGenerator;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
@@ -22,8 +24,18 @@ class McpClientService {
     private IURLGenerator $urlGenerator;
     private HttpClientInterface $httpClient;
     private ILockingProvider $locking;
+    private IAppManager $appManager;
 
-    private const PROTOCOL_VERSION = '2025-03-26';
+    /**
+     * Protocol revisions this client implements, newest first. The first is
+     * offered in `initialize` (MCP lifecycle, "Version Negotiation": the
+     * latest the client supports). 2025-11-25 is not listed: it lets a
+     * server close an SSE stream mid-request and expects the client to
+     * resume it with `Last-Event-ID`, which this client does not do.
+     */
+    private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26'];
+    /** The revision a server assumes when the header is missing. */
+    private const LEGACY_PROTOCOL_VERSION = '2025-03-26';
     private const CLIENT_NAME = 'aiquila-nextcloud';
 
     /** Per-server callback, registered by dynamic client registration. */
@@ -39,18 +51,23 @@ class McpClientService {
     /** @var array<int, bool> Track which servers have been initialized */
     private array $initialized = [];
 
+    /** @var array<int, string> Negotiated protocol version keyed by server ID */
+    private array $protocolVersions = [];
+
     public function __construct(
         McpServerMapper $mapper,
         LoggerInterface $logger,
         CredentialService $credentials,
         IURLGenerator $urlGenerator,
         ILockingProvider $locking,
+        IAppManager $appManager,
     ) {
         $this->mapper = $mapper;
         $this->logger = $logger;
         $this->credentials = $credentials;
         $this->urlGenerator = $urlGenerator;
         $this->locking = $locking;
+        $this->appManager = $appManager;
         $this->httpClient = HttpClient::create(['timeout' => 30]);
     }
 
@@ -102,6 +119,12 @@ class McpClientService {
         $serverId = $server->getId();
         if (isset($this->sessions[$serverId])) {
             $headers['Mcp-Session-Id'] = $this->sessions[$serverId];
+        }
+        // MCP 2025-06-18+ transports, "Protocol Version Header": MUST be sent
+        // on every request after initialize. A 2025-03-26 server never asks.
+        $version = $this->protocolVersions[$serverId] ?? null;
+        if ($version !== null && $version !== self::LEGACY_PROTOCOL_VERSION) {
+            $headers['MCP-Protocol-Version'] = $version;
         }
 
         return $headers;
@@ -321,14 +344,22 @@ class McpClientService {
             return;
         }
 
-        $result = $this->jsonRpc($server, 'initialize', [
-            'protocolVersion' => self::PROTOCOL_VERSION,
-            'capabilities' => new \stdClass(),
-            'clientInfo' => [
-                'name' => self::CLIENT_NAME,
-                'version' => '0.1.58',
-            ],
-        ]);
+        $result = $this->jsonRpc($server, 'initialize', $this->initializeParams());
+
+        // MCP lifecycle, "Version Negotiation": the server answers with the
+        // version it chose. If the client does not support it, it SHOULD
+        // disconnect.
+        $version = $result['protocolVersion'] ?? null;
+        if (!is_string($version) || !in_array($version, self::SUPPORTED_PROTOCOL_VERSIONS, true)) {
+            unset($this->sessions[$serverId]);
+            throw new \RuntimeException(sprintf(
+                'MCP server "%s" negotiated protocol version %s; this client supports %s',
+                $server->getDisplayName(),
+                is_string($version) ? $version : '(none)',
+                implode(', ', self::SUPPORTED_PROTOCOL_VERSIONS),
+            ));
+        }
+        $this->protocolVersions[$serverId] = $version;
 
         // MCP requires the client to acknowledge the initialize response before
         // sending normal requests such as tools/list or tools/call.
@@ -338,8 +369,20 @@ class McpClientService {
 
         $this->logger->debug('MCP: initialized session with server', [
             'server' => $server->getDisplayName(),
-            'protocol' => $result['protocolVersion'] ?? 'unknown',
+            'protocol' => $version,
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function initializeParams(): array {
+        return [
+            'protocolVersion' => self::SUPPORTED_PROTOCOL_VERSIONS[0],
+            'capabilities' => new \stdClass(),
+            'clientInfo' => [
+                'name' => self::CLIENT_NAME,
+                'version' => $this->appManager->getAppVersion(Application::APP_ID),
+            ],
+        ];
     }
 
     /**
@@ -617,11 +660,7 @@ class McpClientService {
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json, text/event-stream',
                 ],
-                'json' => $this->buildRequestBody('initialize', [
-                    'protocolVersion' => self::PROTOCOL_VERSION,
-                    'capabilities' => new \stdClass(),
-                    'clientInfo' => ['name' => self::CLIENT_NAME, 'version' => '0.1.58'],
-                ], 1),
+                'json' => $this->buildRequestBody('initialize', $this->initializeParams(), 1),
             ]);
             if ($response->getStatusCode() !== 401) {
                 $response->cancel();

@@ -6,6 +6,7 @@ use OCA\AIquila\Db\McpServer;
 use OCA\AIquila\Db\McpServerMapper;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\McpClientService;
+use OCP\App\IAppManager;
 use OCP\IURLGenerator;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
@@ -25,8 +26,8 @@ class TestableMcpClientService extends McpClientService {
     /** Captured calls: [['method' => ..., 'params' => ...], ...] */
     public array $capturedCalls = [];
 
-    public function __construct(McpServerMapper $mapper, LoggerInterface $logger, CredentialService $credentials, IURLGenerator $urlGenerator, ILockingProvider $locking) {
-        parent::__construct($mapper, $logger, $credentials, $urlGenerator, $locking);
+    public function __construct(McpServerMapper $mapper, LoggerInterface $logger, CredentialService $credentials, IURLGenerator $urlGenerator, ILockingProvider $locking, IAppManager $appManager) {
+        parent::__construct($mapper, $logger, $credentials, $urlGenerator, $locking, $appManager);
     }
 
     /** Expose the protected JSON-RPC body builder for assertions. */
@@ -103,6 +104,7 @@ class McpClientServiceTest extends TestCase {
     private CredentialService $credentials;
     private IURLGenerator $urlGenerator;
     private ILockingProvider $locking;
+    private IAppManager $appManager;
     private TestableMcpClientService $service;
 
     /**
@@ -123,6 +125,8 @@ class McpClientServiceTest extends TestCase {
         $this->logger = $this->createStub(LoggerInterface::class);
         $this->credentials = $this->createStub(CredentialService::class);
         $this->locking = $this->createStub(ILockingProvider::class);
+        $this->appManager = $this->createStub(IAppManager::class);
+        $this->appManager->method('getAppVersion')->willReturn('9.8.7');
 
         // Default: encrypt/decrypt pass through for test simplicity
         $this->credentials->method('encryptToken')
@@ -146,7 +150,7 @@ class McpClientServiceTest extends TestCase {
     }
 
     private function buildService(): void {
-        $this->service = new TestableMcpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking);
+        $this->service = new TestableMcpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking, $this->appManager);
     }
 
     private function makeServer(int $id = 1, string $name = 'Test Server', string $url = 'http://localhost:3339/mcp'): McpServer {
@@ -196,7 +200,7 @@ class McpClientServiceTest extends TestCase {
      */
     public function testListToolsCompletesInitializationHandshakeBeforeListingTools(): void {
         $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
-        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking);
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking, $this->appManager);
 
         $captured = [];
         $responses = [
@@ -271,7 +275,7 @@ class McpClientServiceTest extends TestCase {
      */
     public function testSessionIdFromSseInitializeResponseIsReused(): void {
         $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
-        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking);
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking, $this->appManager);
 
         $captured = [];
         $results = [
@@ -1531,7 +1535,7 @@ class McpClientServiceTest extends TestCase {
         $server->setOauthRefreshToken('old-rt');
         $server->setOauthTokenExpiresAt(time() + 3600);
 
-        $service = new McpClientService($mapper, $this->logger, $this->credentials, $this->urlGenerator, $locking ?? $this->locking);
+        $service = new McpClientService($mapper, $this->logger, $this->credentials, $this->urlGenerator, $locking ?? $this->locking, $this->appManager);
         $client = new MockHttpClient(function (string $method, string $url, array $options) use ($handler) {
             return $handler($method, $url, $this->headerValue($options, 'Authorization'));
         });
@@ -1722,7 +1726,7 @@ class McpClientServiceTest extends TestCase {
     /** The response is the message whose id matches, wherever it sits in the stream. */
     public function testSseResponseIsMatchedById(): void {
         $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
-        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking);
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking, $this->appManager);
         $this->markInitialized($service, $server);
 
         $client = new MockHttpClient(function (string $method, string $url, array $options): MockResponse {
@@ -1747,7 +1751,7 @@ class McpClientServiceTest extends TestCase {
 
     public function testSseStreamWithoutTheResponseFails(): void {
         $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
-        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking);
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking, $this->appManager);
         $this->markInitialized($service, $server);
 
         $client = new MockHttpClient(fn() => new MockResponse(
@@ -1763,5 +1767,75 @@ class McpClientServiceTest extends TestCase {
 
     private function markInitialized(McpClientService $service, McpServer $server): void {
         (new \ReflectionProperty(McpClientService::class, 'initialized'))->setValue($service, [$server->getId() => true]);
+    }
+
+    // --- Protocol version negotiation (MCP lifecycle "Version Negotiation"; transports "Protocol Version Header") ---
+
+    /**
+     * Run listTools() against a server that answers initialize with
+     * $negotiated and every other request with one tool.
+     *
+     * @return list<array<string, mixed>> request options, in order
+     */
+    private function handshake(string $negotiated, ?\Throwable &$error = null): array {
+        $server = $this->makeServer(1, 'Test Server', 'https://mcp.example/mcp');
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking, $this->appManager);
+        $captured = [];
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$captured, $negotiated): MockResponse {
+            $captured[] = $options;
+            $body = $this->requestBody($options);
+            if (!isset($body['id'])) {
+                return new MockResponse('', ['http_code' => 202]);
+            }
+            $result = $body['method'] === 'initialize' ? ['protocolVersion' => $negotiated] : ['tools' => [['name' => 't']]];
+            return new MockResponse(
+                (string)json_encode(['jsonrpc' => '2.0', 'id' => $body['id'], 'result' => $result]),
+                ['http_code' => 200, 'response_headers' => ['content-type' => ['application/json']]]
+            );
+        });
+        (new \ReflectionProperty(McpClientService::class, 'httpClient'))->setValue($service, $client);
+        try {
+            $service->listTools($server);
+        } catch (\Throwable $e) {
+            $error = $e;
+        }
+        return $captured;
+    }
+
+    /** The client offers the latest revision it supports and reports the installed app version. */
+    public function testInitializeOffersLatestSupportedVersionAndAppVersion(): void {
+        $captured = $this->handshake('2025-06-18');
+
+        $params = $this->requestBody($captured[0])['params'];
+        $this->assertSame('2025-06-18', $params['protocolVersion']);
+        $this->assertSame(['name' => 'aiquila-nextcloud', 'version' => '9.8.7'], $params['clientInfo']);
+        $this->assertNull($this->headerValue($captured[0], 'MCP-Protocol-Version'));
+    }
+
+    /** 2025-06-18+: MUST send MCP-Protocol-Version on every request after initialize. */
+    public function testNegotiatedVersionIsSentOnSubsequentRequests(): void {
+        $captured = $this->handshake('2025-06-18');
+
+        $this->assertCount(3, $captured);
+        $this->assertSame('2025-06-18', $this->headerValue($captured[1], 'MCP-Protocol-Version'));
+        $this->assertSame('2025-06-18', $this->headerValue($captured[2], 'MCP-Protocol-Version'));
+    }
+
+    /** A server that falls back to 2025-03-26 predates the header. */
+    public function testLegacyVersionSendsNoHeader(): void {
+        $captured = $this->handshake('2025-03-26');
+
+        $this->assertCount(3, $captured);
+        $this->assertNull($this->headerValue($captured[2], 'MCP-Protocol-Version'));
+    }
+
+    /** If the client does not support the server's version, it SHOULD disconnect. */
+    public function testUnsupportedNegotiatedVersionFails(): void {
+        $error = null;
+        $captured = $this->handshake('2099-01-01', $error);
+
+        $this->assertInstanceOf(\RuntimeException::class, $error);
+        $this->assertStringContainsString('2099-01-01', $error->getMessage());
+        $this->assertCount(1, $captured, 'nothing is sent after the rejected initialize');
     }
 }
