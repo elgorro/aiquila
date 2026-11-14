@@ -220,7 +220,7 @@ class SystemMessagesTest extends TestCase {
         $service = $this->service(ClaudeModels::OPUS_4_8);
         $service->failFirst = new \RuntimeException('overloaded');
 
-        $this->expectExceptionMessage('overloaded');
+        $this->expectExceptionMessageIs('overloaded');
         try {
             $service->send($service->params([
                 ['role' => 'user', 'content' => 'Hi'],

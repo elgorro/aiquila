@@ -59,7 +59,7 @@ describe('Office tools', () => {
     vi.clearAllMocks();
     _resetCapabilitiesCache();
     mockExists.mockResolvedValue(false);
-    mockStat.mockResolvedValue({ data: { mime: DOCX, props: { fileid: 42 } } });
+    mockStat.mockResolvedValue({ mime: DOCX, props: { fileid: '42' } });
     serve();
   });
 
@@ -151,7 +151,7 @@ describe('Office tools', () => {
     });
 
     it('says when a type has no conversion', async () => {
-      mockStat.mockResolvedValue({ data: { mime: 'application/x-bin', props: { fileid: 1 } } });
+      mockStat.mockResolvedValue({ mime: 'application/x-bin', props: { fileid: '1' } });
 
       const result = await convertDocumentTool.handler({ path: '/a.bin', format: 'pdf' });
 

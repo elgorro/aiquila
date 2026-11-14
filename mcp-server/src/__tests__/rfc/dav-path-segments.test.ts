@@ -8,8 +8,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { davFilePath, davPath, davSegment, lastHrefSegment } from '../../tools/dav-utils.js';
 
-vi.mock('webdav', () => ({ createClient: vi.fn(() => ({})) }));
-
 const urls: string[] = [];
 
 beforeEach(() => {

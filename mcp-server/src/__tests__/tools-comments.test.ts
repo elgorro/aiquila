@@ -52,7 +52,7 @@ describe('file comments', () => {
     process.env.NEXTCLOUD_URL = 'https://cloud.example.com';
     process.env.NEXTCLOUD_USER = 'alice';
     process.env.NEXTCLOUD_PASSWORD = 'secret';
-    mockStat.mockResolvedValue({ data: { props: { fileid: 42 } } });
+    mockStat.mockResolvedValue({ props: { fileid: '42' } });
   });
 
   it('parses the comment properties and decodes entities', () => {
@@ -73,7 +73,7 @@ describe('file comments', () => {
 
     const result = await listFileCommentsTool.handler({ path: '/a.txt', limit: 10, offset: 5 });
 
-    expect(mockStat).toHaveBeenCalledWith('/a.txt', expect.anything());
+    expect(mockStat).toHaveBeenCalledWith('/a.txt', { props: ['oc:fileid'] });
     const [url, options] = mockFetchCalDAV.mock.calls[0];
     expect(url).toBe(`${BASE}/42`);
     expect(options.method).toBe('REPORT');
