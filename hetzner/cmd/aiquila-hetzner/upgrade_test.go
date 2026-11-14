@@ -56,3 +56,36 @@ func TestMCPStateVolumeComesFromTheComposeFile(t *testing.T) {
 		t.Errorf("no compose: volume %q, want the template default", got)
 	}
 }
+
+// A rollback must never hand the previous release the state from before the
+// upgrade: refresh tokens rotated or revoked since would come back as valid.
+// Once the new version has run, the old one starts on an empty volume.
+func TestRollbackEmptiesTheStateInsteadOfRestoringIt(t *testing.T) {
+	p := &upgradePlan{stack: upgrade.StackMCP, mcpImageID: "sha256:old", mcpStarted: true}
+	out := rollbackSteps(p, "/opt/aiquila/backups/x")
+	for _, want := range []string{
+		"docker compose stop mcp",
+		"docker run --rm -v aiq-mcp_state:/s alpine find /s -mindepth 1 -delete",
+		"occ user:auth-tokens:delete",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("rollback lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "mcp-state.tar.gz") {
+		t.Errorf("rollback restores the MCP state backup:\n%s", out)
+	}
+}
+
+// When the new MCP container never started, the state is as the old version
+// left it, and the rollback leaves it alone.
+func TestRollbackKeepsTheStateTheNewVersionNeverTouched(t *testing.T) {
+	p := &upgradePlan{stack: upgrade.StackMCP, mcpImageID: "sha256:old"}
+	out := rollbackSteps(p, "/opt/aiquila/backups/x")
+	if strings.Contains(out, "-delete") || strings.Contains(out, "mcp-state.tar.gz") {
+		t.Errorf("rollback touches untouched state:\n%s", out)
+	}
+	if !strings.Contains(out, "up -d mcp") {
+		t.Errorf("rollback does not restart mcp on the restored .env:\n%s", out)
+	}
+}

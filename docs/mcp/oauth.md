@@ -484,6 +484,41 @@ If OpenBao cannot be reached at startup, the server logs an error and keeps runn
 calls get `503` until OpenBao answers, and sessions are kept. A sign-in granted meanwhile
 completes once OpenBao is back, as long as its page is still open.
 
+## Upgrades and downgrades
+
+State only moves forward. The server migrates older state when it starts, and never
+writes it back in an older format.
+
+**Upgrading from JSON state.** Earlier versions kept the state in `clients.json`,
+`refresh-tokens.json`, `revoked.json` and `credentials.json`. On first start the server
+imports them into `state.db` and renames each one `*.migrated`. Once the server is up,
+delete those files. The compose service is `mcp-server` in `docker/standalone/`, and
+`mcp` in the Hetzner stacks:
+
+```bash
+docker compose exec mcp-server sh -c 'rm -f "${MCP_AUTH_STATE_DIR:-/app/state}"/*.migrated'
+```
+
+They are a frozen copy of the state at the upgrade. They hold refresh-token keys,
+sometimes the tokens themselves (files from versions before hashing kept them in the
+clear), sealed app passwords, and grants that no longer exist.
+
+**Downgrading below the database.** Do not hand an older server old state. That means
+renaming the `*.migrated` files back, or restoring a copy of `MCP_AUTH_STATE_DIR` from
+before the upgrade. A token rotated or revoked since then would come back as unspent and
+valid, and reuse detection could not catch it, because the record that it was spent is
+gone. Start the older version on an empty state directory instead:
+
+1. Stop the MCP server.
+2. End the grants in Nextcloud. The app passwords sealed in `state.db` stay valid there
+   until they are removed. Every user can remove the `AIquila MCP (…)` devices under
+   **Settings → Security → Devices & sessions**. An admin can do it for one user with
+   `occ user:auth-tokens:list <user>` and `occ user:auth-tokens:delete <user> <id>`.
+3. Empty `MCP_AUTH_STATE_DIR`, then start the older image.
+
+Every client then registers again and every user signs in again. Pre-seeded clients
+come from the environment, so they are not affected.
+
 ## Security Notes
 
 - **`MCP_AUTH_SECRET` is critical.** Rotate it by updating the env var and restarting. Every session ends: access tokens no longer verify, and refresh tokens issued under the old secret are dropped from the state directory on start, so clients sign in again.
