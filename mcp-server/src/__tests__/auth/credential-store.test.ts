@@ -2,7 +2,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { randomBytes } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -12,6 +13,7 @@ import {
   OpenBaoCipher,
   cipherFromEnv,
 } from '../../auth/credential-store.js';
+import { StateDb, STATE_DB_FILE } from '../../auth/state-db.js';
 
 const CRED = { grantId: 'g1', userId: 'alice', loginName: 'alice@example.com', appPassword: 'pw' };
 const LATER = () => Date.now() + 60_000;
@@ -152,14 +154,27 @@ describe('OpenBaoCipher (Transit)', () => {
 
 describe('CredentialStore', () => {
   let dir: string;
-  let file: string;
+  let file: StateDb;
   const cipher = new LocalCipher(randomBytes(64));
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'aiquila-creds-'));
-    file = join(dir, 'credentials.json');
+    file = StateDb.open(dir);
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => {
+    file.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** The credentials table as another process sees it. */
+  function rows(): { grant_id: string; user_id: string; sealed: string }[] {
+    const raw = new DatabaseSync(join(dir, STATE_DB_FILE), { readOnly: true });
+    try {
+      return raw.prepare('SELECT grant_id, user_id, sealed FROM credentials').all() as never;
+    } finally {
+      raw.close();
+    }
+  }
 
   it('returns what was stored, for the grant and user it was stored for', async () => {
     const store = new CredentialStore(cipher, file);
@@ -171,17 +186,22 @@ describe('CredentialStore', () => {
 
   it('persists only sealed values, in a file only its owner can read', async () => {
     await new CredentialStore(cipher, file).put(CRED, LATER());
-    const text = readFileSync(file, 'utf8');
-    expect(text).not.toContain('"pw"');
-    expect(text).not.toContain('alice@example.com');
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    const [row] = rows();
+    expect(row.sealed).not.toContain('pw');
+    expect(row.sealed).not.toContain('alice@example.com');
+    for (const f of [STATE_DB_FILE, `${STATE_DB_FILE}-wal`]) {
+      const bytes = readFileSync(join(dir, f));
+      expect(bytes.includes(Buffer.from('alice@example.com'))).toBe(false);
+    }
+    expect(statSync(join(dir, STATE_DB_FILE)).mode & 0o777).toBe(0o600);
     await expect(new CredentialStore(cipher, file).get('g1', 'alice')).resolves.toEqual(CRED);
   });
 
   it('an entry moved to another grant does not decrypt', async () => {
     await new CredentialStore(cipher, file).put(CRED, LATER());
-    const data = JSON.parse(readFileSync(file, 'utf8'));
-    writeFileSync(file, JSON.stringify({ g2: data.g1 }));
+    const raw = new DatabaseSync(join(dir, STATE_DB_FILE));
+    raw.prepare("UPDATE credentials SET grant_id = 'g2' WHERE grant_id = 'g1'").run();
+    raw.close();
     await expect(new CredentialStore(cipher, file).get('g2', 'alice')).resolves.toBeUndefined();
   });
 

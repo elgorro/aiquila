@@ -205,7 +205,7 @@ internal address (`NEXTCLOUD_URL=http://nc`), list its public host in
 `MCP_REDIRECT_ALLOWLIST`. The Hetzner full stack does this by default.
 
 Registered clients that are of no further use are removed, so abandoned registrations do
-not pile up in `clients.json`. A client that holds a live refresh token is always kept.
+not pile up in the state database. A client that holds a live refresh token is always kept.
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -431,8 +431,8 @@ issued along the way, all belong to that grant.
 ## Stored credentials
 
 Each grant holds the app password Nextcloud issued for it. The server needs it for every
-tool call, so it is stored, encrypted, in `credentials.json` in `MCP_AUTH_STATE_DIR` (file
-mode `0600`). The plaintext exists only in memory while a request that needs it runs, and
+tool call, so it is stored, encrypted, in the state database `state.db` in
+`MCP_AUTH_STATE_DIR` (file mode `0600`). The plaintext exists only in memory while a request that needs it runs, and
 never appears in the logs. The app password is sealed the moment Nextcloud hands it over,
 before the client has exchanged its code. If the server restarts mid sign-in, the stored
 value still expires, and its app password is then deleted in Nextcloud.

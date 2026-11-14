@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   OAuthError,
   OAuthErrorCode,
@@ -11,6 +11,7 @@ import {
 import { ClientIdDocumentError, ClientIdDocumentResolver, looksLikeClientIdUrl } from './cimd.js';
 import { RedirectUriPolicy } from './redirect-uri.js';
 import { logger } from '../logger.js';
+import { sharedStateDb, StateDb } from './state-db.js';
 
 export interface CodeEntry {
   pkceChallenge: string;
@@ -84,44 +85,7 @@ export function stateDir(): string {
   return (process.env.MCP_AUTH_STATE_DIR ?? DEFAULT_STATE_DIR).replace(/\/+$/, '');
 }
 
-// True once we've emitted the loud "state dir not writable" warning, so the
-// startup probe and the first failed persist warn at most once between them —
-// subsequent persist failures drop to debug to avoid flooding the logs.
-let warnedUnwritable = false;
-
-/**
- * Operator-facing remediation for an unwritable state directory. The fix is to
- * recreate the (root-owned) Docker named volume so a fresh one inherits the
- * image's node ownership — `docker compose exec ... chown` cannot be used here
- * because the container would otherwise be in a crash loop. See discussion #342.
- */
-export function stateUnwritableMessage(dir: string, code?: string): string {
-  return (
-    `State directory ${dir} is not writable${code ? ` (${code})` : ''} — ` +
-    `OAuth tokens will NOT persist; clients must re-authenticate after every restart. ` +
-    `To restore persistence, recreate the state volume (this clears existing tokens; ` +
-    `clients re-authenticate once):\n` +
-    `  docker compose down mcp && docker volume rm <project>_mcp_state && docker compose up -d mcp\n` +
-    `See https://github.com/elgorro/aiquila/discussions/342`
-  );
-}
-
-/**
- * Marks the unwritable-state warning as already emitted (called by the startup
- * probe in the HTTP transport) so the first failed persist does not warn twice.
- */
-export function markStateUnwritableWarned(): void {
-  warnedUnwritable = true;
-}
-
-function warnPersistFailed(dir: string, code: string | undefined, err: unknown): void {
-  if (warnedUnwritable) {
-    logger.debug({ dir, code, err }, '[state] persist failed — state dir not writable');
-    return;
-  }
-  warnedUnwritable = true;
-  logger.warn({ dir, code }, stateUnwritableMessage(dir, code));
-}
+export { markStateUnwritableWarned, stateUnwritableMessage } from './state-db.js';
 
 export function ensureDir(dir: string): void {
   try {
@@ -133,41 +97,11 @@ export function ensureDir(dir: string): void {
   }
 }
 
-export function loadJson<T>(filePath: string): T | null {
-  try {
-    return JSON.parse(readFileSync(filePath, 'utf8')) as T;
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      logger.warn({ file: filePath, err }, '[state] Failed to load state file — starting fresh');
-      try {
-        unlinkSync(filePath);
-      } catch {
-        /* ignore */
-      }
-    }
-    return null;
-  }
-}
-
-/** Writes `data` atomically. `mode` applies to a newly created file (e.g. 0o600 for secrets). */
-export function saveJson(filePath: string, data: unknown, mode?: number): void {
-  const tmp = filePath + '.tmp';
-  try {
-    const json = JSON.stringify(data, null, 2);
-    if (mode === undefined) writeFileSync(tmp, json, 'utf8');
-    else writeFileSync(tmp, json, { encoding: 'utf8', mode });
-    renameSync(tmp, filePath);
-  } catch (err) {
-    try {
-      unlinkSync(tmp);
-    } catch {
-      // ignore cleanup failure
-    }
-    // Graceful degradation: a persist failure must never crash a request or the
-    // process. The server keeps running with in-memory state (tokens just won't
-    // survive a restart) and warns the operator how to fix it. See discussion #342.
-    warnPersistFailed(dirname(filePath), (err as NodeJS.ErrnoException).code, err);
-  }
+/** The shared state database in the state directory, created on first use. */
+function envStateDb(): StateDb {
+  const dir = stateDir();
+  ensureDir(dir);
+  return sharedStateDb(dir);
 }
 
 export class StateDirNotWritableError extends Error {
@@ -218,7 +152,8 @@ interface ClientsStoreOptions {
   unusedTtlMs?: number;
   idleTtlMs?: number;
   enableDynamicRegistration?: boolean;
-  stateFile?: string;
+  // Where registered clients are kept. Omitted → an in-memory database.
+  db?: StateDb;
   // Resolves https:// client_ids as Client ID Metadata Documents. Omitted →
   // such client_ids are unknown unless registered.
   clientIdDocuments?: ClientIdDocumentResolver;
@@ -256,19 +191,22 @@ export function clientTtlMs(name: string, defaultSecs: number): number | undefin
   return secs > 0 ? secs * 1000 : undefined;
 }
 
-/** A registered client as persisted: its metadata plus when it last obtained a token. */
-type PersistedClient = OAuthClientInformationFull & { last_used_at?: number };
-
-// A client's last use is written to disk at most this often, so a busy client
-// does not rewrite the state file on every refresh.
+// A client's last use is recorded to the hour, so a busy client does not
+// write on every refresh.
 const LAST_USED_GRANULARITY_SECS = 60 * 60;
 
+interface ClientRow {
+  client_id: string;
+  metadata: string;
+  issued_at: number | null;
+  last_used_at: number | null;
+}
+
 export class ClientsStore {
-  private readonly clients = new Map<string, OAuthClientInformationFull>();
-  // Unix seconds a registered client last obtained a token. No entry: never.
-  private readonly lastUsed = new Map<string, number>();
-  private readonly preseeded = new Set<string>();
-  private readonly stateFile?: string;
+  // Pre-seeded clients live in memory only: they come from the environment on
+  // every start, and win over a registered client with the same id.
+  private readonly preseeded = new Map<string, OAuthClientInformationFull>();
+  private readonly db: StateDb;
   private readonly clientIdDocuments?: ClientIdDocumentResolver;
   private readonly unusedTtlMs?: number;
   private readonly idleTtlMs?: number;
@@ -279,41 +217,31 @@ export class ClientsStore {
   ) => OAuthClientInformationFull;
 
   constructor(options?: ClientsStoreOptions) {
-    this.stateFile = options?.stateFile;
+    this.db = options?.db ?? StateDb.memory();
     this.clientIdDocuments = options?.clientIdDocuments;
     this.unusedTtlMs = options?.unusedTtlMs;
     this.idleTtlMs = options?.idleTtlMs;
     const policy = options?.redirectPolicy;
 
-    // Load persisted clients first (dynamic registrations from previous runs).
-    // The redirect policy applies to them too, so registrations from before
-    // it existed, or before it was narrowed, are dropped.
-    if (this.stateFile) {
-      const persisted = loadJson<PersistedClient[]>(this.stateFile);
-      if (persisted && Array.isArray(persisted)) {
-        let dropped = 0;
-        for (const { last_used_at: lastUsedAt, ...client } of persisted) {
-          const reason = rejectedRedirect(client, policy);
-          if (reason) {
-            logger.warn(
-              { clientId: client.client_id, reason },
-              '[auth] Dropping registered client: redirect URI not allowed'
-            );
-            dropped++;
-            continue;
-          }
-          this.clients.set(client.client_id, client);
-          if (typeof lastUsedAt === 'number') this.lastUsed.set(client.client_id, lastUsedAt);
-        }
-        if (dropped > 0) this.persist();
+    // The redirect policy applies to stored registrations too, so ones from
+    // before it existed, or before it was narrowed, are dropped.
+    if (policy) {
+      for (const row of this.db.all<ClientRow>('SELECT * FROM clients')) {
+        const reason = rejectedRedirect(
+          JSON.parse(row.metadata) as OAuthClientInformationFull,
+          policy
+        );
+        if (!reason) continue;
+        logger.warn(
+          { clientId: row.client_id, reason },
+          '[auth] Dropping registered client: redirect URI not allowed'
+        );
+        this.db.run('DELETE FROM clients WHERE client_id = ?', row.client_id);
       }
     }
 
-    // Pre-seeded clients always win on collision
     for (const client of options?.preseededClients ?? []) {
-      this.clients.set(client.client_id, client);
-      this.lastUsed.delete(client.client_id);
-      this.preseeded.add(client.client_id);
+      this.preseeded.set(client.client_id, client);
     }
 
     if (options?.enableDynamicRegistration) {
@@ -328,8 +256,12 @@ export class ClientsStore {
           client_id: randomUUID(),
           client_id_issued_at: Math.floor(Date.now() / 1000),
         };
-        this.clients.set(full.client_id, full);
-        this.persist();
+        this.db.run(
+          'INSERT INTO clients (client_id, metadata, issued_at) VALUES (?, ?, ?)',
+          full.client_id,
+          JSON.stringify(full),
+          full.client_id_issued_at ?? null
+        );
         return full;
       };
     }
@@ -340,13 +272,21 @@ export class ClientsStore {
     return this.clientIdDocuments !== undefined;
   }
 
+  private registered(clientId: string): OAuthClientInformationFull | undefined {
+    const row = this.db.get<ClientRow>(
+      'SELECT metadata FROM clients WHERE client_id = ?',
+      clientId
+    );
+    return row ? (JSON.parse(row.metadata) as OAuthClientInformationFull) : undefined;
+  }
+
   /**
    * Looks up a pre-seeded or registered client, then — for an https:// client_id
    * — fetches its Client ID Metadata Document. Returns undefined for an unknown
    * client or a document that fails validation.
    */
   async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
-    const known = this.clients.get(clientId);
+    const known = this.preseeded.get(clientId) ?? this.registered(clientId);
     if (known) return known;
     if (!this.clientIdDocuments || !looksLikeClientIdUrl(clientId)) return undefined;
     try {
@@ -360,14 +300,20 @@ export class ClientsStore {
 
   /**
    * Records that a registered client obtained a token. Pre-seeded and
-   * metadata-document clients are not stored, so they are left alone.
+   * metadata-document clients are not stored, so they are left alone. The
+   * time is kept to the hour, so a busy client does not write on every refresh.
    */
   markUsed(clientId: string, now = Date.now()): void {
-    if (!this.clients.has(clientId) || this.preseeded.has(clientId)) return;
+    if (this.preseeded.has(clientId)) return;
     const nowSecs = Math.floor(now / 1000);
-    const previous = this.lastUsed.get(clientId);
-    this.lastUsed.set(clientId, nowSecs);
-    if (previous === undefined || nowSecs - previous >= LAST_USED_GRANULARITY_SECS) this.persist();
+    this.db.run(
+      `UPDATE clients SET last_used_at = ?
+         WHERE client_id = ? AND (last_used_at IS NULL OR ? - last_used_at >= ?)`,
+      nowSecs,
+      clientId,
+      nowSecs,
+      LAST_USED_GRANULARITY_SECS
+    );
   }
 
   /**
@@ -375,49 +321,35 @@ export class ClientsStore {
    * client's lifetime to the server, §3.2.1 `client_secret_expires_at` aside):
    * one that never obtained a token within `unusedTtlMs` of registering, and
    * one whose last token is older than `idleTtlMs`. A client that still holds
-   * a live refresh token is kept either way, and counts as used: files from
-   * before usage was tracked carry no record of it.
+   * a live refresh token is kept either way, and counts as used: state from
+   * before usage was tracked carries no record of it.
    *
    * @param active client_ids that hold a live refresh token
    * @returns the client_ids removed
    */
   expireClients(active: ReadonlySet<string>, now = Date.now()): string[] {
     const removed: string[] = [];
-    let changed = false;
-    for (const [clientId, client] of this.clients) {
+    const nowSecs = Math.floor(now / 1000);
+    for (const row of this.db.all<ClientRow>(
+      'SELECT client_id, issued_at, last_used_at FROM clients'
+    )) {
+      const clientId = row.client_id;
       if (this.preseeded.has(clientId)) continue;
       if (active.has(clientId)) {
-        if (!this.lastUsed.has(clientId)) {
-          this.lastUsed.set(clientId, Math.floor(now / 1000));
-          changed = true;
+        if (row.last_used_at === null) {
+          this.db.run('UPDATE clients SET last_used_at = ? WHERE client_id = ?', nowSecs, clientId);
         }
         continue;
       }
-      const lastUsed = this.lastUsed.get(clientId);
       const expired =
-        lastUsed === undefined
-          ? this.unusedTtlMs !== undefined &&
-            (client.client_id_issued_at ?? 0) * 1000 + this.unusedTtlMs <= now
-          : this.idleTtlMs !== undefined && lastUsed * 1000 + this.idleTtlMs <= now;
-      if (expired) {
-        this.clients.delete(clientId);
-        this.lastUsed.delete(clientId);
+        row.last_used_at === null
+          ? this.unusedTtlMs !== undefined && (row.issued_at ?? 0) * 1000 + this.unusedTtlMs <= now
+          : this.idleTtlMs !== undefined && row.last_used_at * 1000 + this.idleTtlMs <= now;
+      if (expired && this.db.run('DELETE FROM clients WHERE client_id = ?', clientId) > 0) {
         removed.push(clientId);
       }
     }
-    if (removed.length > 0 || changed) this.persist();
     return removed;
-  }
-
-  private persist(): void {
-    if (!this.stateFile) return;
-    const records: PersistedClient[] = [];
-    for (const [clientId, client] of this.clients) {
-      if (this.preseeded.has(clientId)) continue;
-      const lastUsedAt = this.lastUsed.get(clientId);
-      records.push(lastUsedAt === undefined ? client : { ...client, last_used_at: lastUsedAt });
-    }
-    saveJson(this.stateFile, records);
   }
 
   /**
@@ -473,19 +405,14 @@ export class ClientsStore {
       });
     }
 
-    let stateFile: string | undefined;
+    // Registrations are only kept, and only read back, while registration is on.
     const registrationEnabled = process.env.MCP_REGISTRATION_ENABLED === 'true';
-    if (registrationEnabled) {
-      const dir = stateDir();
-      ensureDir(dir);
-      stateFile = join(dir, 'clients.json');
-    }
 
     return new ClientsStore({
       preseededClients: preseeded,
       enableDynamicRegistration: registrationEnabled,
       redirectPolicy: registrationEnabled ? RedirectUriPolicy.fromEnv() : undefined,
-      stateFile,
+      db: registrationEnabled ? envStateDb() : undefined,
       clientIdDocuments: cimdEnabledFromEnv() ? new ClientIdDocumentResolver() : undefined,
       unusedTtlMs: clientTtlMs('MCP_CLIENT_UNUSED_TTL', DEFAULT_CLIENT_UNUSED_TTL_SECS),
       idleTtlMs: clientTtlMs('MCP_CLIENT_IDLE_TTL', 0),
@@ -550,141 +477,140 @@ function refreshTokenKey(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-const HASHED_KEY = /^[0-9a-f]{64}$/;
+interface RefreshRow {
+  token_hash: string;
+  grant_id: string;
+  user_id: string;
+  client_id: string;
+  scopes: string;
+  spent: number;
+  secret_id: string | null;
+  expires_at: number;
+}
+
+function toEntry(row: RefreshRow): RefreshEntry {
+  return {
+    grantId: row.grant_id,
+    userId: row.user_id,
+    clientId: row.client_id,
+    scopes: JSON.parse(row.scopes) as string[],
+    ...(row.spent ? { spent: true } : {}),
+    ...(row.secret_id !== null ? { secretId: row.secret_id } : {}),
+    expiresAt: row.expires_at,
+  };
+}
 
 /**
- * Refresh tokens, keyed by their SHA-256 hash so the state file holds nothing
- * a reader could present as a token. The tokens are 256 random bits, so a
- * plain hash needs no salt or stretching.
+ * Refresh tokens, keyed by their SHA-256 hash so the database holds nothing a
+ * reader could present as a token. The tokens are 256 random bits, so a plain
+ * hash needs no salt or stretching.
  */
 export class RefreshStore {
-  private readonly tokens = new Map<string, RefreshEntry>();
-  private readonly stateFile?: string;
+  private readonly db: StateDb;
 
-  constructor(stateFile?: string) {
-    this.stateFile = stateFile;
-
-    if (this.stateFile) {
-      const persisted = loadJson<Record<string, RefreshEntry>>(this.stateFile);
-      if (persisted && typeof persisted === 'object') {
-        const now = Date.now();
-        const secretId = authSecretId();
-        let loaded = 0;
-        let migrated = 0;
-        let dropped = 0;
-        for (const [key, entry] of Object.entries(persisted)) {
-          if (entry.expiresAt <= now) continue;
-          // Issued under a previous MCP_AUTH_SECRET: rotating the secret ends the session.
-          if (entry.secretId !== undefined && entry.secretId !== secretId) {
-            dropped++;
-            continue;
-          }
-          // Files from earlier versions keyed entries by the token itself.
-          const hashed = HASHED_KEY.test(key) ? key : refreshTokenKey(key);
-          if (hashed !== key || entry.secretId === undefined) migrated++;
-          this.tokens.set(hashed, {
-            ...entry,
-            // Entries written before grants existed get one of their own.
-            grantId: entry.grantId ?? randomUUID(),
-            secretId,
-          });
-          loaded++;
-        }
-        if (loaded > 0) {
-          logger.info({ count: loaded }, '[state] Loaded refresh tokens from file');
-        }
-        if (dropped > 0) {
-          logger.info(
-            { count: dropped },
-            '[state] Dropped refresh tokens issued under a previous MCP_AUTH_SECRET'
-          );
-        }
-        if (migrated > 0 || dropped > 0) {
-          if (migrated > 0)
-            logger.info({ count: migrated }, '[state] Upgraded refresh token entries');
-          this.persist();
-        }
-      }
+  constructor(db: StateDb = StateDb.memory()) {
+    this.db = db;
+    const now = Date.now();
+    const secretId = authSecretId();
+    this.db.run('DELETE FROM refresh_tokens WHERE expires_at <= ?', now);
+    // Issued under a previous MCP_AUTH_SECRET: rotating the secret ends the session.
+    const dropped = this.db.run(
+      'DELETE FROM refresh_tokens WHERE secret_id IS NOT NULL AND secret_id <> ?',
+      secretId
+    );
+    // Imported from a version that did not record the secret yet.
+    const upgraded = this.db.run(
+      'UPDATE refresh_tokens SET secret_id = ? WHERE secret_id IS NULL',
+      secretId
+    );
+    const loaded = this.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM refresh_tokens')?.n ?? 0;
+    if (loaded > 0 && this.db.persistent) {
+      logger.info({ count: loaded }, '[state] Loaded refresh tokens');
     }
+    if (dropped > 0) {
+      logger.info(
+        { count: dropped },
+        '[state] Dropped refresh tokens issued under a previous MCP_AUTH_SECRET'
+      );
+    }
+    if (upgraded > 0) logger.info({ count: upgraded }, '[state] Upgraded refresh token entries');
   }
 
   store(entry: Omit<RefreshEntry, 'expiresAt'>): string {
     const token = randomBytes(32).toString('base64url');
-    this.tokens.set(refreshTokenKey(token), {
-      ...entry,
-      secretId: authSecretId(),
-      expiresAt: Date.now() + refreshTtlMs(),
-    });
+    this.db.run(
+      `INSERT INTO refresh_tokens
+         (token_hash, grant_id, user_id, client_id, scopes, spent, secret_id, expires_at)
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+      refreshTokenKey(token),
+      entry.grantId,
+      entry.userId,
+      entry.clientId,
+      JSON.stringify(entry.scopes),
+      authSecretId(),
+      Date.now() + refreshTtlMs()
+    );
     this.pruneSpent(entry.grantId);
-    this.persist();
     return token;
   }
 
   get(token: string): RefreshEntry | undefined {
     const key = refreshTokenKey(token);
-    const entry = this.tokens.get(key);
-    if (!entry) return undefined;
-    if (Date.now() > entry.expiresAt) {
-      this.tokens.delete(key);
-      this.persist();
+    const row = this.db.get<RefreshRow>('SELECT * FROM refresh_tokens WHERE token_hash = ?', key);
+    if (!row) return undefined;
+    if (Date.now() > row.expires_at) {
+      this.db.run('DELETE FROM refresh_tokens WHERE token_hash = ?', key);
       return undefined;
     }
-    return entry;
+    return toEntry(row);
   }
 
   delete(token: string): void {
-    this.tokens.delete(refreshTokenKey(token));
-    this.persist();
+    this.db.run('DELETE FROM refresh_tokens WHERE token_hash = ?', refreshTokenKey(token));
   }
 
-  /** Marks a token as exchanged. It no longer redeems, but is still recognised. */
-  markSpent(token: string): void {
-    const entry = this.tokens.get(refreshTokenKey(token));
-    if (!entry) return;
-    entry.spent = true;
-    this.persist();
+  /**
+   * Marks a token as exchanged. It no longer redeems, but is still recognised.
+   * Returns true only for the call that spent it: of two requests racing to
+   * redeem one token, in this process or another sharing the database, one
+   * gets false and must treat it as reuse.
+   */
+  markSpent(token: string): boolean {
+    return (
+      this.db.run(
+        'UPDATE refresh_tokens SET spent = 1 WHERE token_hash = ? AND spent = 0',
+        refreshTokenKey(token)
+      ) > 0
+    );
   }
 
   /** Keeps only the newest SPENT_TOKENS_PER_GRANT spent tokens of a grant. */
   private pruneSpent(grantId: string): void {
-    const spent = [...this.tokens].filter(([, e]) => e.grantId === grantId && e.spent);
-    if (spent.length <= SPENT_TOKENS_PER_GRANT) return;
-    spent.sort(([, a], [, b]) => a.expiresAt - b.expiresAt);
-    for (const [key] of spent.slice(0, spent.length - SPENT_TOKENS_PER_GRANT)) {
-      this.tokens.delete(key);
-    }
+    this.db.run(
+      `DELETE FROM refresh_tokens WHERE token_hash IN (
+         SELECT token_hash FROM refresh_tokens WHERE grant_id = ? AND spent = 1
+         ORDER BY expires_at DESC, rowid DESC LIMIT -1 OFFSET ?)`,
+      grantId,
+      SPENT_TOKENS_PER_GRANT
+    );
   }
 
   /** client_ids that hold at least one refresh token that has not expired. */
   activeClientIds(now = Date.now()): Set<string> {
-    const ids = new Set<string>();
-    for (const entry of this.tokens.values()) {
-      if (entry.expiresAt > now) ids.add(entry.clientId);
-    }
-    return ids;
+    const rows = this.db.all<{ client_id: string }>(
+      'SELECT DISTINCT client_id FROM refresh_tokens WHERE expires_at > ?',
+      now
+    );
+    return new Set(rows.map((r) => r.client_id));
   }
 
   /** Removes every refresh token of a grant. */
   deleteGrant(grantId: string): void {
-    for (const [token, entry] of this.tokens) {
-      if (entry.grantId === grantId) this.tokens.delete(token);
-    }
-    this.persist();
-  }
-
-  private persist(): void {
-    if (!this.stateFile) return;
-    const obj: Record<string, RefreshEntry> = {};
-    for (const [key, entry] of this.tokens) {
-      obj[key] = entry;
-    }
-    saveJson(this.stateFile, obj);
+    this.db.run('DELETE FROM refresh_tokens WHERE grant_id = ?', grantId);
   }
 
   static fromEnv(): RefreshStore {
-    const dir = stateDir();
-    ensureDir(dir);
-    return new RefreshStore(join(dir, 'refresh-tokens.json'));
+    return new RefreshStore(envStateDb());
   }
 }
 
@@ -694,20 +620,11 @@ export class RefreshStore {
  * is what makes them revocable before they expire (RFC 7009 §2).
  */
 export class RevocationList {
-  private readonly revoked = new Map<string, number>();
-  private readonly stateFile?: string;
+  private readonly db: StateDb;
 
-  constructor(stateFile?: string) {
-    this.stateFile = stateFile;
-    if (this.stateFile) {
-      const persisted = loadJson<Record<string, number>>(this.stateFile);
-      if (persisted && typeof persisted === 'object') {
-        const now = Date.now();
-        for (const [key, expiresAt] of Object.entries(persisted)) {
-          if (typeof expiresAt === 'number' && expiresAt > now) this.revoked.set(key, expiresAt);
-        }
-      }
-    }
+  constructor(db: StateDb = StateDb.memory()) {
+    this.db = db;
+    this.db.run('DELETE FROM revocations WHERE expires_at <= ?', Date.now());
   }
 
   revokeGrant(grantId: string, untilMs: number): void {
@@ -727,27 +644,23 @@ export class RevocationList {
   }
 
   private add(key: string, untilMs: number): void {
-    const now = Date.now();
-    for (const [k, expiresAt] of this.revoked) {
-      if (expiresAt <= now) this.revoked.delete(k);
-    }
-    this.revoked.set(key, Math.max(untilMs, this.revoked.get(key) ?? 0));
-    this.persist();
+    this.db.run('DELETE FROM revocations WHERE expires_at <= ?', Date.now());
+    this.db.run(
+      `INSERT INTO revocations (key, expires_at) VALUES (?, ?)
+         ON CONFLICT (key) DO UPDATE SET expires_at = MAX(expires_at, excluded.expires_at)`,
+      key,
+      untilMs
+    );
   }
 
   private has(key: string): boolean {
-    const expiresAt = this.revoked.get(key);
-    return expiresAt !== undefined && expiresAt > Date.now();
-  }
-
-  private persist(): void {
-    if (!this.stateFile) return;
-    saveJson(this.stateFile, Object.fromEntries(this.revoked));
+    return (
+      this.db.get('SELECT 1 FROM revocations WHERE key = ? AND expires_at > ?', key, Date.now()) !==
+      undefined
+    );
   }
 
   static fromEnv(): RevocationList {
-    const dir = stateDir();
-    ensureDir(dir);
-    return new RevocationList(join(dir, 'revoked.json'));
+    return new RevocationList(envStateDb());
   }
 }

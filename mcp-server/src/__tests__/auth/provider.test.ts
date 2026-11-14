@@ -22,6 +22,7 @@ import {
   LocalCipher,
   type CredentialCipher,
 } from '../../auth/credential-store.js';
+import { StateDb } from '../../auth/state-db.js';
 import { LOGIN_STYLESHEET_PATH } from '../../auth/login-page-css.js';
 
 const TEST_SECRET = 'super-secret-32-char-key-for-testing!!';
@@ -275,10 +276,12 @@ describe('NextcloudOAuthProvider', () => {
       flow.pollLoginFlow.mockResolvedValue(CRED);
       await provider.sweep();
       // The page was not reloaded yet, but the credential is already on disk.
-      const { readFileSync } = await import('node:fs');
-      const file = readFileSync(join(stateDir, 'credentials.json'), 'utf8');
-      expect(Object.keys(JSON.parse(file))).toHaveLength(1);
-      expect(file).not.toContain('app-password-1');
+      const { DatabaseSync } = await import('node:sqlite');
+      const raw = new DatabaseSync(join(stateDir, 'state.db'), { readOnly: true });
+      const sealed = raw.prepare('SELECT sealed FROM credentials').all() as { sealed: string }[];
+      raw.close();
+      expect(sealed).toHaveLength(1);
+      expect(sealed[0].sealed).not.toContain('app-password-1');
       const res = mockRes();
       await provider.continueFlow(flowId, binding, res);
       expect(res.redirect).toHaveBeenCalled();
@@ -831,7 +834,7 @@ describe('NextcloudOAuthProvider', () => {
     beforeEach(() => {
       cipher = new FlakyCipher();
       p = new NextcloudOAuthProvider(undefined, {
-        credentials: new CredentialStore(cipher, join(stateDir, 'credentials.json')),
+        credentials: new CredentialStore(cipher, StateDb.open(stateDir)),
       });
     });
     async function login() {

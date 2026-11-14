@@ -640,9 +640,17 @@ export class NextcloudOAuthProvider {
       );
     }
     const effectiveScopes = scopes ?? entry.scopes;
-    // Spend the token before the first await, so two concurrent requests
-    // cannot both redeem it.
-    this.refreshStore.markSpent(refreshToken);
+    // Spend the token before the first await. Only one request can: a second
+    // one racing for the same token, here or in another process sharing the
+    // state, loses and is treated as reuse.
+    if (!this.refreshStore.markSpent(refreshToken)) {
+      this.revokeGrant(entry.grantId);
+      logger.warn(
+        { user: entry.userId, client: client.client_id },
+        '[token] Refresh token redeemed concurrently — grant revoked'
+      );
+      throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Invalid refresh token');
+    }
 
     // The grant is only as good as its app password. Nextcloud rejects it
     // once the user revokes the device, or is disabled or deleted, and then

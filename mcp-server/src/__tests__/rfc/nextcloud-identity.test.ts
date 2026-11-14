@@ -8,6 +8,7 @@
 
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   startStack,
@@ -164,10 +165,17 @@ describe('credentials at rest', () => {
     const before = new Set(s.nc.appPasswords.keys());
     await obtainTokens(s, clientId);
     const issued = [...s.nc.appPasswords.keys()].find((k) => !before.has(k))!;
-    const file = join(s.stateDir, 'credentials.json');
-    const text = readFileSync(file, 'utf8');
-    expect(text).not.toContain(issued);
-    expect(text).toContain('local:v1:');
+    const file = join(s.stateDir, 'state.db');
+    const raw = new DatabaseSync(file, { readOnly: true });
+    const sealed = (raw.prepare('SELECT sealed FROM credentials').all() as { sealed: string }[])
+      .map((r) => r.sealed)
+      .join('\n');
+    raw.close();
+    expect(sealed).not.toContain(issued);
+    expect(sealed).toContain('local:v1:');
+    for (const f of [file, `${file}-wal`]) {
+      expect(readFileSync(f).includes(Buffer.from(issued))).toBe(false);
+    }
     expect(statSync(file).mode & 0o777).toBe(0o600);
   });
 });
