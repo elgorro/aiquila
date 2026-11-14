@@ -224,7 +224,10 @@ earlier versions (`clients.json`, `refresh-tokens.json`, `revoked.json`, `creden
 are imported in one transaction and renamed `*.migrated`; they can be deleted once the
 server runs. When the directory cannot be written, the server runs on an in-memory database
 and logs how to fix the volume. A write that fails later (disk full) is logged and skipped
-instead of failing the request.
+instead of failing the request. The exception is spending a refresh token: whether
+it was spent decides between a new token and ending the grant for reuse, so a failed
+write there fails the token request with `server_error` and leaves the token
+redeemable.
 
 A grant is one sign-in. Its id (`gid` in the access token, `grantId` in the refresh entry)
 stays the same across refresh rotations. The grant's app password is checked against
