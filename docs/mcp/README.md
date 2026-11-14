@@ -66,7 +66,7 @@ Nextcloud apps and administration:
 - **Recommendations** — The files Nextcloud suggests for the current user
 - **AIquila** — Configure and test the AI provider integration
 
-**Total: 393 tools across 47 categories**
+**Total: 401 tools across 47 categories**
 
 ## Tools Reference
 
@@ -452,7 +452,7 @@ Nextcloud apps and administration:
 | `create_document_from_template` | Create a document from a template | [Office](tools/apps/office.md#create_document_from_template) |
 | `convert_document` | Convert a file to another format | [Office](tools/apps/office.md#convert_document) |
 
-#### Tables (13 tools)
+#### Tables (21 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_tables` | List the tables the user can access | [Tables](tools/apps/tables.md#list_tables) |
@@ -468,6 +468,14 @@ Nextcloud apps and administration:
 | `delete_table_view` | Delete a view | [Tables](tools/apps/tables.md#delete_table_view) |
 | `export_table_structure` | Export the structure of a table | [Tables](tools/apps/tables.md#export_table_structure) |
 | `import_table_structure` | Create or update a table from a structure | [Tables](tools/apps/tables.md#import_table_structure) |
+| `list_table_shares` | List who a table or view is shared with | [Tables](tools/apps/tables.md#list_table_shares) |
+| `share_table` | Share a table, view or application with a user, group, team or federated user | [Tables](tools/apps/tables.md#share_table) |
+| `update_table_share` | Change the permissions of a share | [Tables](tools/apps/tables.md#update_table_share) |
+| `delete_table_share` | Stop sharing | [Tables](tools/apps/tables.md#delete_table_share) |
+| `list_table_contexts` | List Tables applications | [Tables](tools/apps/tables.md#list_table_contexts) |
+| `get_table_context` | Get an application with its tables, views and shares | [Tables](tools/apps/tables.md#get_table_context) |
+| `save_table_context` | Create or change an application | [Tables](tools/apps/tables.md#save_table_context) |
+| `delete_table_context` | Delete an application | [Tables](tools/apps/tables.md#delete_table_context) |
 
 #### Circles (13 tools)
 | Tool | Description | Documentation |

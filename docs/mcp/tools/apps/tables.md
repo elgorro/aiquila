@@ -1,6 +1,6 @@
 # Nextcloud Tables Tools
 
-Integration with [Nextcloud Tables](https://apps.nextcloud.com/apps/tables). Read and write structured data, including relations between tables, and move a table's structure between tables or servers.
+Integration with [Nextcloud Tables](https://apps.nextcloud.com/apps/tables). Read and write structured data, including relations between tables, move a table's structure between tables or servers, share tables and views, and build applications from them.
 
 ## Prerequisites
 
@@ -9,7 +9,7 @@ Integration with [Nextcloud Tables](https://apps.nextcloud.com/apps/tables). Rea
 
 ## API
 
-Uses both Tables APIs: OCS v2 at `/ocs/v2.php/apps/tables/api/2/` for tables and structure, and REST v1 at `/index.php/apps/tables/api/1/` for rows, views and columns, which OCS v2 does not fully cover. Both are described in the [Tables OpenAPI spec](https://github.com/nextcloud/tables/blob/main/openapi.json).
+Uses both Tables APIs: OCS v2 at `/ocs/v2.php/apps/tables/api/2/` for tables, structure and applications, and REST v1 at `/index.php/apps/tables/api/1/` for rows, views, columns and shares, which OCS v2 does not fully cover. Both are described in the [Tables OpenAPI spec](https://github.com/nextcloud/tables/blob/main/openapi.json).
 
 ## How values work
 
@@ -126,3 +126,73 @@ Create a table from an exported structure, or apply one to an existing table.
 - `preview` (boolean, optional) — with `tableId`, report the changes and make none.
 
 Applying a structure makes the table match it: columns and views it does not have are removed along with their data. Preview first.
+
+### Sharing
+
+A table or view can be shared with a user, a group, a team, or an account on another Nextcloud (federation). Each share carries its own permissions: `read`, `create`, `update` and `delete` for rows, and `manage` for columns, views and shares. Listing and changing shares needs `manage` on the table.
+
+#### `list_table_shares`
+List who a table or view is shared with.
+
+**Parameters:**
+- `tableId` or `viewId` (number) — exactly one.
+
+#### `share_table`
+Share a table, a view or an application.
+
+**Parameters:**
+- `tableId`, `viewId` or `contextId` (number) — exactly one.
+- `receiver` (string, required) — a user ID, group ID, team ID, or Federated Cloud ID (`user@cloud.example.com`).
+- `receiverType` (string, required) — `user`, `group`, `circle` (a team) or `remote` (federated).
+- `permissions` (object, optional) — `read`, `create`, `update`, `delete`, `manage` (booleans). A permission left out is not granted. Default: `read` only. Not used for applications, whose users get the permissions set on each of its tables and views.
+- `displayMode` (number, optional) — applications only: show it in the navigation bar for nobody (`0`), the receivers (`1`) or everyone (`2`, default).
+
+A `remote` share works for tables and views, not applications. Tables must allow federated sharing (its `federationEnabled` setting, on by default) on both servers. Tables saves the share before it tells the other server, and keeps it when that fails, so after an error check `list_table_shares` and remove it.
+
+**Example:** "Share the Inventory table with the Warehouse team so they can add and change rows."
+
+#### `update_table_share`
+Change the permissions of a table or view share. Only the permissions passed change. A remote receiver is told of the change.
+
+**Parameters:**
+- `shareId` (number, required)
+- `permissions` (object, required) — as for `share_table`.
+
+#### `delete_table_share`
+Stop sharing with that receiver.
+
+**Parameters:**
+- `shareId` (number, required)
+
+### Applications
+
+An application (Tables calls it a context) bundles tables and views under its own name, icon and navigation entry. Each table or view in it carries the permissions its users get there.
+
+#### `list_table_contexts`
+List the applications you own or that are shared with you.
+
+#### `get_table_context`
+Get an application with its tables and views, their permissions, and who it is shared with.
+
+**Parameters:**
+- `contextId` (number, required)
+
+#### `save_table_context`
+Create an application, or change one when `contextId` is given.
+
+**Parameters:**
+- `contextId` (number, optional) — the application to change. Omit to create one.
+- `name` (string) — required to create.
+- `iconName` (string, optional) — a Material Design icon bundled with Tables, such as `briefcase` or `folder`. Default `apps`. An unknown name is refused.
+- `description` (string, optional)
+- `nodes` (array, optional) — the tables and views it shows, each `{ tableId }` or `{ viewId }` with optional `permissions` (default `read`). Passing `nodes` replaces the current list. The order is the order shown.
+
+Share it with `share_table` and `contextId`.
+
+**Example:** "Make a CRM application from the Customers table and the Open deals view, read-only for deals."
+
+#### `delete_table_context`
+Delete an application. Its tables and views are kept.
+
+**Parameters:**
+- `contextId` (number, required)
