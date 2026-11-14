@@ -836,6 +836,33 @@ class ClaudeServiceTest extends TestCase {
         $this->assertStringContainsString('mid-conversation-tool-changes-2026-07-01', $this->testable->lastRequestOptions['extraHeaders']['anthropic-beta']);
     }
 
+    /** inline-tools covers the by-reference changes too: exactly one of the two headers. */
+    public function testAByValueToolDefinitionSendsInlineToolsInsteadOfTheReferenceHeader(): void {
+        // A model that takes system messages, so the blocks are not folded into text.
+        $this->configWithApiKey(ClaudeModels::OPUS_5_5, ['server_fallback' => '0']);
+
+        $this->testable->chatWithTools(
+            [
+                ['role' => 'user', 'content' => 'Hi'],
+                ['role' => 'system', 'content' => [
+                    ['type' => 'tool_addition', 'tool' => ['type' => 'tool_reference', 'name' => 'b']],
+                    ['type' => 'tool_addition', 'tool' => ['type' => 'tool_definition', 'definition' => ['name' => 'a', 'description' => 'A2', 'input_schema' => ['type' => 'object']]]],
+                ]],
+            ],
+            [
+                ['name' => 'a', 'description' => 'A', 'input_schema' => ['type' => 'object']],
+                ['name' => 'b', 'description' => 'B', 'input_schema' => ['type' => 'object'], 'defer_loading' => true],
+            ],
+            fn() => [],
+            null,
+            'testuser',
+        );
+
+        $betas = explode(',', $this->testable->lastRequestOptions['extraHeaders']['anthropic-beta']);
+        $this->assertContains('inline-tools-2026-09-15', $betas);
+        $this->assertNotContains('mid-conversation-tool-changes-2026-07-01', $betas);
+    }
+
     // ── Files API beta header detection ────────────────────────────────────
 
     public function testRequestOptionsOmitFilesBetaWhenNoFileIdSource(): void {
