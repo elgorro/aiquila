@@ -14,7 +14,7 @@ All three popular local runtimes expose the *same* OpenAI-compatible surface:
 - `GET {base}/v1/models`
 - `POST {base}/v1/embeddings`
 
-So they need no per-backend code, and no vendor SDK:
+So chat needs no per-backend code, and no vendor SDK:
 
 - Ollama ships `ollama` for npm and PyPI; LM Studio ships `lmstudio-js` and
   `lmstudio-python`. **Neither has a PHP client**, and AIquila's provider layer
@@ -25,7 +25,9 @@ So they need no per-backend code, and no vendor SDK:
 
 `LocalProvider` therefore extends `AbstractOpenAiCompatibleProvider`
 (`nextcloud-app/lib/Service/Provider/`), the same base class `DeepSeekProvider`
-uses. It only supplies the base URL, the model, and a few capability flags.
+uses. It only supplies the base URL, the model, and a few capability flags. The
+model list is the one exception: it reads each backend's native listing where
+there is one (see [below](#model-list-and-compatibility)).
 
 ## Backend reference
 
@@ -66,10 +68,10 @@ occ aiquila:test --provider local
 | Client certificate path | `local_client_cert` | *(empty)* | mTLS; absolute path. |
 | Client key path | `local_client_key` | *(empty)* | mTLS; absolute path. |
 | Client key passphrase | credential manager, secret `local_client_key_password` | *(empty)* | Only for an encrypted private key. |
-| Model | `model_local` | `llama3.2` | Free text; autocompletes from the endpoint's `/v1/models`. Users may override with `user_model_local`. |
+| Model | `model_local` | `llama3.2` | Picked from the endpoint's model list, or typed in. Models that cannot chat are disabled; see [Model list and compatibility](#model-list-and-compatibility). Users may override with `user_model_local`. |
 | Max response tokens | `max_tokens_local` | `4096` | No per-model ceiling table — local model ids are arbitrary tags. |
 | Request timeout | `local_timeout` | `300` | Applies to streaming and non-streaming. The shared `api_timeout` (30 s) is far too low for CPU inference. |
-| Accepts images | `local_vision` | `no` | Only enable for a multimodal model (llava, llama3.2-vision, qwen2-vl, …). Images are sent as `image_url` data URIs. |
+| Accepts images | `local_vision` | `no` | Only enable for a multimodal model (llava, llama3.2-vision, qwen2-vl, …). Images are sent as `image_url` data URIs. On Ollama and LM Studio the model field warns when this disagrees with the model. |
 | Transcribes audio | `local_audio_in` | `no` | Only enable when the backend serves `/v1/audio/transcriptions`. |
 | Transcription model | `local_stt_model` | `whisper-1` | The speech-to-text tag as the backend reports it. |
 | Generates speech | `local_audio_out` | `no` | Only enable when the backend serves `/v1/audio/speech`. |
@@ -120,6 +122,54 @@ Every field above is declared `SCOPE_ADMIN`, so
 `ProviderSettingsService::writeUser()` refuses it even if the personal page were
 to submit it — see the Security section below. The only user-scope setting this
 provider has is `user_model_local`.
+
+## Model list and compatibility
+
+`/v1/models` returns ids only, on every backend. `fetchModelCatalog()` therefore
+tries each backend's native listing and keeps the first one that answers in its
+documented shape:
+
+| Order | Request | Backend | What it reports |
+|---|---|---|---|
+| 1 | `GET /api/v1/models` | LM Studio 0.4+ | `type` (`llm`, `embedding`), `capabilities.vision`, `capabilities.trained_for_tool_use`, `loaded_instances` |
+| 2 | `GET /api/v0/models` | LM Studio 0.3.6+ | `type` (`llm`, `vlm`, `embeddings`), `state` (`loaded`, `not-loaded`); recent builds add `capabilities: ["tool_use"]` |
+| 3 | `GET /api/tags`, then `POST /api/show` per model | Ollama | `capabilities`: `completion`, `tools`, `vision`, `embedding`, `thinking`, … |
+| 4 | `GET /v1/models` | llama.cpp, vLLM, LocalAI, … | ids only |
+
+Detection goes by response shape, not by status code. LM Studio answers an
+endpoint it does not know with `200` and `{"error": "Unexpected endpoint or
+method…"}`. An HTTP error moves on to the next step. A transport failure, such
+as refused, unresolvable or TLS, stops at once with the same sentence chat would
+show. Ollama needs one `/api/show` call per model: past 50 pulled models, the
+rest are listed unverified.
+
+What the picker then shows (wording in `ModelCompatibility`, see
+[Model compatibility](provider-settings.md#model-compatibility)):
+
+- **Embedding models** are disabled: *"<model> only creates embeddings and can't chat."*
+- **No tool support** (Ollama without `tools`) warns that Nextcloud tools and
+  Cowork need a model with tool support. In LM Studio, `trained_for_tool_use:
+  false` says the tools may work poorly, because LM Studio still offers them in
+  a generic format.
+- **Not loaded** (LM Studio) adds a notice. With just-in-time loading on (the
+  default), LM Studio loads the model on the first request. With it off, LM
+  Studio answers with whichever model *is* loaded, under that model's name, and
+  returns no error.
+- **Not in the list** warns, with the fix: `ollama pull <model>` on Ollama,
+  download it on LM Studio. LM Studio does not reject an unknown model id
+  either; it answers with the loaded model. The picker is the only place that
+  can catch it.
+- **llama.cpp and the rest:** every model is *"not verified"*. Vision follows
+  `local_vision`, and tool calling is assumed.
+
+Ollama refuses a bad model at runtime, and `errorMessage()` maps those refusals
+(wordings from Ollama's `server/routes.go`) to the same sentences:
+
+| Ollama error | Shown |
+|---|---|
+| `400` `"<model>" does not support tools` | *"<model> can't use tools. Pick a model with tool support or turn tools off."* |
+| `400` `"<model>" does not support chat` / `generate` | *"<model> can't chat. Pick a chat model."* |
+| `404` `model "<model>" not found, try pulling it first` | *"<model> isn't in the model list from Local model. Pull it on the Ollama host with `ollama pull <model>` …"* |
 
 ## Authentication
 
@@ -272,7 +322,7 @@ make build-tarball && make up
 docker compose exec -T nextcloud bash /docker-entrypoint-hooks.d/post-installation/aiquila-install.sh
 
 # Admin settings → Local model endpoint → Ollama preset → Save → Test connection
-# The Model field should then autocomplete from /v1/models.
+# The Model field then lists the pulled models; embedding models are greyed out.
 
 make nc-log
 docker compose exec -T nextcloud sh -c "grep '\"level\":[34]' /var/www/html/data/nextcloud.log | tail"
@@ -280,4 +330,7 @@ docker compose exec -T nextcloud sh -c "grep '\"level\":[34]' /var/www/html/data
 
 Unit coverage lives in `nextcloud-app/tests/Unit/LocalProviderTest.php` (base-URL
 normalization, optional auth, the local-address allowance, `tool_choice`
-omission, vision gating, streaming, tool round-trip).
+omission, vision gating, streaming, tool round-trip) and
+`LocalProviderCatalogTest.php` (backend detection and compatibility, using
+recorded LM Studio responses in `tests/fixtures/local-models/`, and the mapping
+of Ollama's runtime errors).

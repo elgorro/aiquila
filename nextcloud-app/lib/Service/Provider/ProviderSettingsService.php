@@ -84,15 +84,23 @@ class ProviderSettingsService {
      */
     public function describe(LLMProviderInterface $provider, ?string $userId, bool $admin, bool $refreshModels = false): array {
         $id = $provider->getId();
+        $scopeUser = $admin ? null : $userId;
+        $currentModel = $provider->getModel($scopeUser);
+        $catalog = $this->modelCatalog($provider, $scopeUser, $refreshModels);
+        $modelStatus = $catalog?->assess($currentModel);
+
         $fields = [];
         foreach ($this->schemaFor($provider) as $field) {
             if (!$admin && !ProviderSettingsSchema::isUserWritable($field)) {
                 continue;
             }
-            $fields[] = $this->describeField($field, $id, $userId, $admin, $provider, $refreshModels);
+            $described = $this->describeField($field, $id, $userId, $admin, $provider, $refreshModels, $catalog);
+            if (($field['options'] ?? null) === ProviderSettingsSchema::OPTIONS_MODELS) {
+                $described = $this->withModelStatus($described, $provider, $catalog, $modelStatus);
+            }
+            $fields[] = $described;
         }
 
-        $currentModel = $provider->getModel($admin ? null : $userId);
         $modelProfile = null;
         if ($provider instanceof ThinkingProfileInterface) {
             $modelProfile = $provider->getThinkingProfile($currentModel);
@@ -108,11 +116,70 @@ class ProviderSettingsService {
             'hasKey' => $this->credentials->hasApiKey(null, $id),
             'hasUserKey' => $userId !== null && $this->credentials->hasApiKey($userId, $id),
             'currentModel' => $currentModel,
+            // Compatibility of currentModel from the live listing; null for
+            // providers without capability metadata or when it failed.
+            'modelStatus' => $modelStatus?->toArray(),
             // How thinking and effort behave on currentModel; null for
             // providers without per-model differences.
             'modelProfile' => $modelProfile,
             'fields' => $fields,
         ];
+    }
+
+    /**
+     * Decorate the model field from the provider's catalog: per-option
+     * compatibility for the picker, a warning when the model in use is a
+     * problem, a quieter notice when it merely cannot be verified, and the
+     * reason when the live list could not be fetched at all.
+     *
+     * A vision mismatch is appended too, since only the catalog knows whether
+     * the model accepts images while the provider's settings decide whether
+     * they are sent.
+     *
+     * @param array<string, mixed> $field
+     * @return array<string, mixed>
+     */
+    private function withModelStatus(array $field, LLMProviderInterface $provider, ?ModelCatalog $catalog, ?ModelCompatibility $status): array {
+        if ($catalog === null) {
+            return $field;
+        }
+        if ($catalog->isFailure()) {
+            $field['listing_error'] = $catalog->failureMessage();
+            return $field;
+        }
+
+        $details = [];
+        foreach ($catalog->models as $model) {
+            $details[$model->id] = $model->toArray();
+        }
+        $field['option_details'] = $details;
+        // Free-typed ids stay allowed: a model often ships before the list
+        // knows it. The value is only marked, never refused.
+        $field['taggable'] = true;
+
+        if ($status === null) {
+            return $field;
+        }
+        $visionSent = $provider->getCapabilities()['vision'];
+        $mismatch = false;
+        if ($status->vision === true && !$visionSent) {
+            $status = $status->withNote(sprintf('%s accepts images, but this provider is set not to send them.', $status->id));
+        } elseif ($status->vision === false && $visionSent && $status->isSelectable()) {
+            $status = $status->withNote(sprintf('%s doesn\'t accept images, but this provider is set to send them, so requests with images will fail.', $status->id));
+            $mismatch = true;
+        }
+        if ($status->message === '') {
+            return $field;
+        }
+        // An "ok" model can still carry a remark (not loaded yet, images it
+        // could take but is not sent), which is a notice; images sent to a
+        // model that refuses them is something to fix, which is a warning.
+        if ($status->isWarning() || $mismatch) {
+            $field['warning'] = $status->message;
+        } else {
+            $field['notice'] = $status->message;
+        }
+        return $field;
     }
 
     /**
@@ -288,6 +355,12 @@ class ProviderSettingsService {
      * @return list<string>
      */
     public function listModels(LLMProviderInterface $provider, ?string $userId, bool $refresh = false): array {
+        $catalog = $this->modelCatalog($provider, $userId, $refresh);
+        if ($catalog !== null) {
+            $ids = $catalog->ids();
+            return $ids !== [] ? $ids : $this->staticModels($provider);
+        }
+
         $cache = $this->modelCache($provider->getId());
         $cacheKey = $this->credentialScope($provider->getId(), $userId);
 
@@ -315,6 +388,39 @@ class ProviderSettingsService {
 
         $cache->set($cacheKey, $models, self::MODEL_CACHE_TTL);
         return $models;
+    }
+
+    /**
+     * The provider's model catalog, for providers that implement
+     * ModelCatalogInterface; null for the rest.
+     *
+     * Cached beside the plain lists and on the same terms: MODEL_CACHE_TTL on
+     * success, MODEL_FAILURE_TTL on failure — the failure is kept, with its
+     * reason, so the card can say why it shows the built-in list without
+     * asking a dead endpoint again on every page load.
+     */
+    public function modelCatalog(LLMProviderInterface $provider, ?string $userId, bool $refresh = false): ?ModelCatalog {
+        if (!$provider instanceof ModelCatalogInterface) {
+            return null;
+        }
+        $cache = $this->modelCache($provider->getId());
+        $cacheKey = 'catalog-' . $this->credentialScope($provider->getId(), $userId);
+
+        if (!$refresh) {
+            $cached = ModelCatalog::fromArray($cache->get($cacheKey));
+            if ($cached !== null) {
+                return $cached;
+            }
+        }
+
+        $catalog = $provider->fetchModelCatalog($userId);
+        if ($catalog->isFailure()) {
+            $this->logger->warning('AIquila: no live model list from ' . $provider->getId() . ', using the static registry: ' . $catalog->error, [
+                'provider' => $provider->getId(),
+            ]);
+        }
+        $cache->set($cacheKey, $catalog->toArray(), $catalog->isFailure() ? self::MODEL_FAILURE_TTL : self::MODEL_CACHE_TTL);
+        return $catalog;
     }
 
     /**
@@ -483,11 +589,17 @@ class ProviderSettingsService {
         bool $admin,
         LLMProviderInterface $provider,
         bool $refreshModels,
+        ?ModelCatalog $catalog = null,
     ): array {
         $out = $field;
 
         if (($field['options'] ?? null) === ProviderSettingsSchema::OPTIONS_MODELS) {
-            $out['options'] = $this->listModels($provider, $admin ? null : $userId, $refreshModels);
+            // describe() already fetched the catalog; asking again would
+            // refetch it a second time on a refresh.
+            $ids = $catalog?->ids() ?? [];
+            $out['options'] = $catalog !== null
+                ? ($ids !== [] ? $ids : $this->staticModels($provider))
+                : $this->listModels($provider, $admin ? null : $userId, $refreshModels);
         }
 
         // Access lists live in their own table, not app config, and only ever have

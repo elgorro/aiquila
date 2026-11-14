@@ -20,9 +20,27 @@
 			:placeholder="t('aiquila', 'Model')"
 			:clearable="false"
 			:disabled="saving || modelOptions.length === 0"
-			@update:model-value="onModelChange" />
+			:selectable="isSelectable"
+			@update:model-value="onModelChange">
+			<template v-if="modelDetails" #option="{ label }">
+				<span :class="{ 'model-picker__option--disabled': !isSelectable(label) }"
+					:title="modelDetails[label]?.message || ''">
+					{{ label }}
+				</span>
+			</template>
+		</NcSelect>
 
 		<span v-if="error" class="model-picker__error">{{ error }}</span>
+		<!--
+			Why the model this conversation uses is a problem (can't chat, no
+			tools, not pulled), in the backend's own words.
+		-->
+		<span v-else-if="modelMessage"
+			class="model-picker__notice"
+			:class="{ 'model-picker__notice--warning': modelWarning }"
+			role="status">
+			{{ modelMessage }}
+		</span>
 	</div>
 </template>
 
@@ -75,10 +93,42 @@ export default {
 		effectiveProviderId() {
 			return this.conversation.provider || this.defaultProvider
 		},
+		effectiveProvider() {
+			return this.providers.find(p => p.id === this.effectiveProviderId) || null
+		},
+		modelField() {
+			return this.effectiveProvider?.fields?.find(f => f.id === 'model') || null
+		},
 		modelOptions() {
-			const provider = this.providers.find(p => p.id === this.effectiveProviderId)
-			const modelField = provider?.fields?.find(f => f.id === 'model')
-			return modelField?.options || []
+			return this.modelField?.options || []
+		},
+		/** Per-model compatibility, for providers that report it. */
+		modelDetails() {
+			return this.modelField?.option_details || null
+		},
+		/**
+		 * The verdict for the model in use: its listed entry, or — for an
+		 * unpinned conversation, whose model is the user's default — the
+		 * backend's assessment of that default, which also covers a model
+		 * missing from the list.
+		 */
+		modelVerdict() {
+			const model = this.modelChoice
+			if (!model) {
+				return null
+			}
+			const listed = this.modelDetails?.[model]
+			if (listed) {
+				return listed
+			}
+			const status = this.effectiveProvider?.modelStatus
+			return status && status.id === model ? status : null
+		},
+		modelMessage() {
+			return this.modelVerdict?.message || ''
+		},
+		modelWarning() {
+			return !['ok', 'unverified'].includes(this.modelVerdict?.status)
 		},
 	},
 	watch: {
@@ -90,6 +140,11 @@ export default {
 	},
 	methods: {
 		t,
+		/** Models that cannot chat are shown but cannot be picked. */
+		isSelectable(option) {
+			const id = typeof option === 'object' && option !== null ? option.label : option
+			return this.modelDetails?.[id]?.selectable !== false
+		},
 		async load() {
 			try {
 				const { data } = await getUserProviders(false)
@@ -146,6 +201,19 @@ export default {
 
 .model-picker__select {
 	min-width: 180px;
+}
+
+.model-picker__option--disabled {
+	color: var(--color-text-maxcontrast);
+}
+
+.model-picker__notice {
+	color: var(--color-text-maxcontrast);
+	font-size: 0.9em;
+}
+
+.model-picker__notice--warning {
+	color: var(--color-warning-text, var(--color-warning));
 }
 
 .model-picker__error {

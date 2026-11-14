@@ -1,0 +1,31 @@
+{
+  "data": [
+    {
+      "id": "prism-ml/bonsai-27b",
+      "object": "model",
+      "type": "vlm",
+      "publisher": "prism-ml",
+      "arch": "qwen35",
+      "compatibility_type": "gguf",
+      "quantization": "Q1_0",
+      "state": "loaded",
+      "max_context_length": 262144,
+      "loaded_context_length": 8192,
+      "capabilities": [
+        "tool_use"
+      ]
+    },
+    {
+      "id": "text-embedding-nomic-embed-text-v1.5",
+      "object": "model",
+      "type": "embeddings",
+      "publisher": "nomic-ai",
+      "arch": "nomic-bert",
+      "compatibility_type": "gguf",
+      "quantization": "Q4_K_M",
+      "state": "not-loaded",
+      "max_context_length": 2048
+    }
+  ],
+  "object": "list"
+}

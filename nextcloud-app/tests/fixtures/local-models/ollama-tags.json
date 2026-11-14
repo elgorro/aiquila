@@ -1,0 +1,36 @@
+{
+  "models": [
+    {
+      "name": "llama3.2:latest",
+      "model": "llama3.2:latest",
+      "modified_at": "2026-10-02T14:21:07.123456789+02:00",
+      "size": 2019393189,
+      "digest": "a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72",
+      "details": {"parent_model": "", "format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "3.2B", "quantization_level": "Q4_K_M"}
+    },
+    {
+      "name": "llava:7b",
+      "model": "llava:7b",
+      "modified_at": "2026-09-14T09:11:42.000000000+02:00",
+      "size": 4733363377,
+      "digest": "8dd30f6b0cb19f555f2c7a7ebda861449ea2cc76bf1f44e262931f45fc81d081",
+      "details": {"parent_model": "", "format": "gguf", "family": "llama", "families": ["llama", "clip"], "parameter_size": "7B", "quantization_level": "Q4_0"}
+    },
+    {
+      "name": "gemma:2b",
+      "model": "gemma:2b",
+      "modified_at": "2026-08-01T18:00:00.000000000+02:00",
+      "size": 1678456656,
+      "digest": "b50d6c999e592ae4f79acae23b4feaefbdfceaa7cd366df2610e3072c052a160",
+      "details": {"parent_model": "", "format": "gguf", "family": "gemma", "families": ["gemma"], "parameter_size": "3B", "quantization_level": "Q4_0"}
+    },
+    {
+      "name": "nomic-embed-text:latest",
+      "model": "nomic-embed-text:latest",
+      "modified_at": "2026-07-20T12:00:00.000000000+02:00",
+      "size": 274302450,
+      "digest": "0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f",
+      "details": {"parent_model": "", "format": "gguf", "family": "nomic-bert", "families": ["nomic-bert"], "parameter_size": "137M", "quantization_level": "F16"}
+    }
+  ]
+}

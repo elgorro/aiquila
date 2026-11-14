@@ -260,6 +260,60 @@ method overrides the trait, so implementing one is just declaring it.
 4. Done — both settings pages render a card for it, with its fields, capability
    chips, live model list and a Test connection button.
 
+## Model compatibility
+
+A provider whose listing says what each model can do implements
+`ModelCatalogInterface` (`lib/Service/Provider/`). Its `fetchModelCatalog()`
+returns a `ModelCatalog`: one `ModelCompatibility` verdict per model, or the
+reason the listing failed. It never throws, because the card needs the reason.
+Providers without the interface keep the plain id list from `listModels()`, and
+their picker looks as before.
+
+"Compatible" means text chat in and text out through the provider's chat API.
+Tool calling is needed for MCP tools and Cowork, image input for vision tasks.
+The verdict comes from the provider's own metadata, never from the model id.
+
+| Status | Picker | Meaning |
+|---|---|---|
+| `ok` | selectable | Chats and calls tools |
+| `no_tools` | selectable, warns | Chats, but tool calling is missing or unreliable |
+| `incompatible` | disabled | Cannot chat (embeddings, rerankers, …) |
+| `unverified` | selectable, notice | Listed, but the provider reports no capabilities |
+| `deprecated` | selectable, warns | Still served, retirement announced |
+| `retired` | disabled | No longer served |
+| `missing` | selectable, warns | Not in the list: typed in, not pulled, or removed |
+
+Free-typed ids stay allowed: a model often ships before the list knows it, so a
+missing id is marked, not refused.
+
+**One wording everywhere.** Every sentence is built in `ModelCompatibility`, and
+each names the model, gives the reason and says what to do. The picker tooltip,
+the card, the chat header and a provider's runtime `errorMessage()` all use the
+same text, so a request that fails because of the model shows the sentence the
+picker would have shown. The provider's raw error goes to the log. Providers add
+only what is specific to them: a not-loaded note, the command that pulls a model.
+
+**What `describe()` adds.** With a catalog, the model field also carries:
+
+- `option_details`: `{id → {status, message, selectable, label, tools, vision, loaded}}`.
+- `taggable: true`, so the picker accepts a typed id.
+- `warning`: the problem with the model in use, or images sent to a model that
+  takes none.
+- `notice`: a remark, such as unverified, not loaded yet, or a vision model with
+  images turned off.
+- `listing_error`: *"Couldn't load the model list from <provider>: <reason>.
+  Showing the built-in list."* in place of the details when the listing failed.
+
+The provider object gets `modelStatus`, the verdict for `currentModel`. The chat
+header reads it for a conversation that follows the user's default.
+
+### What the picker shows per provider
+
+| Provider | Source | Why |
+|---|---|---|
+| Local model | Ollama `/api/tags` and `/api/show`; LM Studio `/api/v1/models` (`/api/v0/models` on older servers); otherwise `/v1/models` | `/v1/models` has ids only. The backends' native APIs report chat, tool and vision support, and LM Studio also reports whether a model is loaded. llama.cpp, vLLM and the rest offer nothing more, so their models are `unverified`. See [Local model provider](local-provider.md#model-list-and-compatibility). |
+| Others | `listModels()` ids | No catalog yet; plain list without markings |
+
 ## Model list caching
 
 `listModels()` is a live HTTP call. Rendering a settings page used to make one
@@ -275,6 +329,7 @@ button to bypass the cache entirely.
 |---|---|---|
 | Successful listing | 3600s | The line-up changes rarely |
 | Failed listing (marker) | 60s | Serves the static fallback without a request |
+| Model catalog | 3600s / 60s | Same terms as the list; a failure keeps its reason for the card |
 | Status probe | 30s | The per-card status light |
 
 **Keyed per credential, not per provider.** The cache key is the *credential
@@ -309,7 +364,9 @@ either can change what the provider serves.
   to user-writable fields.
 - **Chat header** (`src/components/ConversationModelPicker.vue`) — reads
   `GET /api/providers` for the provider list and each provider's model options,
-  and lists only providers the user actually has credentials for.
+  and lists only providers the user actually has credentials for. With a
+  catalog, it disables models that cannot chat and shows the sentence for the
+  conversation's model.
 
 ## See also
 

@@ -1,0 +1,6 @@
+{
+  "llama3.2:latest": {"modelfile": "FROM llama3.2", "parameters": "", "template": "", "details": {"format": "gguf", "family": "llama"}, "model_info": {}, "capabilities": ["completion", "tools"]},
+  "llava:7b": {"modelfile": "FROM llava", "parameters": "", "template": "", "details": {"format": "gguf", "family": "llama"}, "model_info": {}, "capabilities": ["completion", "vision"]},
+  "gemma:2b": {"modelfile": "FROM gemma", "parameters": "", "template": "", "details": {"format": "gguf", "family": "gemma"}, "model_info": {}, "capabilities": ["completion"]},
+  "nomic-embed-text:latest": {"modelfile": "FROM nomic-embed-text", "parameters": "", "template": "", "details": {"format": "gguf", "family": "nomic-bert"}, "model_info": {}, "capabilities": ["embedding"]}
+}
