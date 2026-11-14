@@ -198,7 +198,7 @@ class TalkBotTest extends TestCase {
         $client->method('post')->willReturn($response);
         $this->clientService->method('newClient')->willReturn($client);
 
-        $this->expectExceptionMessage('HTTP 401');
+        $this->expectExceptionMessageIsOrContains('HTTP 401');
         $this->service()->postReply('abc123', 'Hello', 17);
     }
 

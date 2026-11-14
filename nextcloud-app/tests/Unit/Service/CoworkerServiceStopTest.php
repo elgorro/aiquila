@@ -236,7 +236,7 @@ class CoworkerServiceStopTest extends TestCase {
         $this->mapper->method('findByIdAndUser')->willReturn($this->coworker());
 
         $this->expectException(\OCA\AIquila\Service\Exception\ValidationException::class);
-        $this->expectExceptionMessage('Prompt not found: 9');
+        $this->expectExceptionMessageIs('Prompt not found: 9');
         $service->update(7, 'alice', ['prompt_id' => 9]);
     }
 }

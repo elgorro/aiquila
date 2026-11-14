@@ -204,6 +204,10 @@ suite fails on how a test double is used, not only on assertions:
   depends on the arguments, use `willReturnMap()` or `willReturnCallback()` on a stub.
 - Fixtures shared through `setUp()` are stubs. A test that verifies one swaps in
   a mock and rebuilds the object under test, as the `build…()` helpers do.
+- Assert an exception message with `expectExceptionMessageIs()` (exact) or
+  `expectExceptionMessageIsOrContains()` (substring), not
+  `expectExceptionMessage()`, which the next PHPUnit major deprecates.
+  `TestSuiteConventionsTest` fails on APIs like this before PHPUnit itself does.
 
 ## Code Style
 
