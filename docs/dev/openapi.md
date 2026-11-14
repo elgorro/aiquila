@@ -37,9 +37,9 @@ Commit all three output files together with any annotation changes.
 ### User endpoint (default scope)
 
 ```php
-use OpenAPI\Attributes as OA;
+use OCP\AppFramework\Http\Attribute\OpenAPI;
 
-#[OA\OpenAPI]
+#[OpenAPI]
 public function myAction(string $param): JSONResponse {
     // ...
 }
@@ -48,9 +48,9 @@ public function myAction(string $param): JSONResponse {
 ### Admin endpoint
 
 ```php
-use OpenAPI\Attributes as OA;
+use OCP\AppFramework\Http\Attribute\OpenAPI;
 
-#[OA\OpenAPI(scope: OA\OpenAPI::SCOPE_ADMINISTRATION)]
+#[OpenAPI(scope: OpenAPI::SCOPE_ADMINISTRATION)]
 public function adminAction(string $param): JSONResponse {
     // ...
 }
@@ -76,12 +76,36 @@ unit test can assert that by reflection.
  * 200: Success response with result
  * 400: Invalid input
  */
-#[OA\OpenAPI]
+#[OpenAPI]
 public function process(string $fileId): JSONResponse {
     // Implementation — no Http::STATUS_* constants needed here
     return new JSONResponse(['result' => $output]);
 }
 ```
+
+### Shared response shapes
+
+When several endpoints return the same object, define it once as a Psalm type alias in
+`lib/ResponseDefinitions.php` instead of repeating the `array{...}` in each `@return`:
+
+```php
+namespace OCA\AIquila;
+
+/**
+ * @psalm-type AIquilaFileNode = array{name: string, path: string, ...}
+ */
+class ResponseDefinitions {
+}
+```
+
+The alias name must start with `AIquila` (the app namespace from `appinfo/info.xml`); the
+extractor rejects any other prefix. It publishes the alias as a schema under
+`components/schemas` with the prefix stripped (`AIquilaFileNode` becomes `FileNode`), and
+endpoints that use it reference that schema.
+
+Import the alias with `@psalm-import-type AIquilaFileNode from ResponseDefinitions` in the
+class docblock. Use it both in the controller's `@return` and on the service method that
+builds the array, so Psalm fails when the code and the spec drift apart.
 
 ### Rules
 

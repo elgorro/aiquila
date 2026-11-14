@@ -20,7 +20,63 @@
                 "scheme": "bearer"
             }
         },
-        "schemas": {}
+        "schemas": {
+            "FileNode": {
+                "type": "object",
+                "required": [
+                    "name",
+                    "path",
+                    "size",
+                    "mimeType",
+                    "mtime",
+                    "etag",
+                    "permissions",
+                    "type",
+                    "isEncrypted",
+                    "id"
+                ],
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "path": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "mimeType": {
+                        "type": "string"
+                    },
+                    "mtime": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "etag": {
+                        "type": "string"
+                    },
+                    "permissions": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "file",
+                            "folder"
+                        ]
+                    },
+                    "isEncrypted": {
+                        "type": "boolean"
+                    },
+                    "id": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                }
+            }
+        }
     },
     "paths": {
         "/index.php/apps/aiquila/api/conversations": {
@@ -7844,42 +7900,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "object",
-                                    "required": [
-                                        "name",
-                                        "path",
-                                        "size",
-                                        "mimeType",
-                                        "mtime",
-                                        "etag",
-                                        "permissions"
-                                    ],
-                                    "properties": {
-                                        "name": {
-                                            "type": "string"
-                                        },
-                                        "path": {
-                                            "type": "string"
-                                        },
-                                        "size": {
-                                            "type": "integer",
-                                            "format": "int64"
-                                        },
-                                        "mimeType": {
-                                            "type": "string"
-                                        },
-                                        "mtime": {
-                                            "type": "integer",
-                                            "format": "int64"
-                                        },
-                                        "etag": {
-                                            "type": "string"
-                                        },
-                                        "permissions": {
-                                            "type": "integer",
-                                            "format": "int64"
-                                        }
-                                    }
+                                    "$ref": "#/components/schemas/FileNode"
                                 }
                             }
                         }
@@ -8005,43 +8026,22 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
-                                        "files"
+                                        "path",
+                                        "count",
+                                        "items"
                                     ],
                                     "properties": {
-                                        "files": {
+                                        "path": {
+                                            "type": "string"
+                                        },
+                                        "count": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "items": {
                                             "type": "array",
                                             "items": {
-                                                "type": "object",
-                                                "required": [
-                                                    "name",
-                                                    "path",
-                                                    "size",
-                                                    "mimeType",
-                                                    "mtime",
-                                                    "type"
-                                                ],
-                                                "properties": {
-                                                    "name": {
-                                                        "type": "string"
-                                                    },
-                                                    "path": {
-                                                        "type": "string"
-                                                    },
-                                                    "size": {
-                                                        "type": "integer",
-                                                        "format": "int64"
-                                                    },
-                                                    "mimeType": {
-                                                        "type": "string"
-                                                    },
-                                                    "mtime": {
-                                                        "type": "integer",
-                                                        "format": "int64"
-                                                    },
-                                                    "type": {
-                                                        "type": "string"
-                                                    }
-                                                }
+                                                "$ref": "#/components/schemas/FileNode"
                                             }
                                         }
                                     }
@@ -8362,34 +8362,29 @@
                                 "schema": {
                                     "type": "object",
                                     "required": [
+                                        "query",
+                                        "mimeFilter",
+                                        "count",
                                         "results"
                                     ],
                                     "properties": {
+                                        "query": {
+                                            "type": "string"
+                                        },
+                                        "mimeFilter": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "count": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
                                         "results": {
                                             "type": "array",
                                             "items": {
-                                                "type": "object",
-                                                "required": [
-                                                    "name",
-                                                    "path",
-                                                    "mimeType",
-                                                    "size"
-                                                ],
-                                                "properties": {
-                                                    "name": {
-                                                        "type": "string"
-                                                    },
-                                                    "path": {
-                                                        "type": "string"
-                                                    },
-                                                    "mimeType": {
-                                                        "type": "string"
-                                                    },
-                                                    "size": {
-                                                        "type": "integer",
-                                                        "format": "int64"
-                                                    }
-                                                }
+                                                "$ref": "#/components/schemas/FileNode"
                                             }
                                         }
                                     }
