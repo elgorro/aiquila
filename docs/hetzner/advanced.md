@@ -262,13 +262,11 @@ and what to expect from `rebuild`.
 | `MCP_CREDENTIAL_KEY` | auto 128-char hex (512 bits) | Encrypts signed-in users' app passwords at rest |
 | `MCP_AUTH_ISSUER` | `https://<domain>` | OAuth issuer URL |
 | `MCP_CLIENT_ID` | empty | OAuth client ID (set for static pre-seeded client) |
-| `MCP_CLIENT_SECRET` | auto 64-char hex | OAuth client secret |
 | `MCP_CLIENT_REDIRECT_URIS` | empty | Redirect URIs for pre-seeded client |
 | `MCP_REGISTRATION_ENABLED` | static `true` | Allow dynamic client registration |
 | `MCP_REGISTRATION_TOKEN` | auto 32-char hex | Token required for dynamic registration |
 | `MCP_CIMD_ENABLED` | not written | Client ID Metadata Documents. Off while `MCP_REGISTRATION_TOKEN` is set; add `MCP_CIMD_ENABLED=true` to accept them — see [OAuth setup](../mcp/oauth.md#3-configure-client-registration) |
 | `MCP_REDIRECT_ALLOWLIST` | not written | Extra redirect hosts for registered clients. The full stack's compose file defaults it to `NC_DOMAIN`, so the Nextcloud app can register — see [OAuth setup](../mcp/oauth.md#3-configure-client-registration) |
-| `MCP_TRUST_PROXY` | static `true` | Trust Traefik reverse-proxy headers |
 | `MCP_DOMAIN` | `--mcp-domain` | Traefik routing domain |
 | `ACME_EMAIL` | `--acme-email` | Let's Encrypt notifications |
 | `CROWDSEC_BOUNCER_KEY` | auto 64-char hex | CrowdSec bouncer API key |
@@ -282,8 +280,11 @@ The compose file also passes these server options through when you add them to
 passes through `MCP_INTERNAL_TOKEN` and `MCP_INTERNAL_TOKEN_NETWORKS`. An empty value
 means the server default. See the [environment variable reference](../dev/mcp-server-architecture.md#environment-variables)
 for what each one does.
-`MCP_AUTH_STATE_DIR` is not passed through, because the OAuth state has to stay on the
-volume mounted at `/app/state`.
+Two server options are pinned in the compose file rather than read from `.env`:
+`MCP_AUTH_STATE_DIR`, because the OAuth state has to stay on the volume mounted at
+`/app/state`, and `MCP_TRUST_PROXY`, set to `1` because Traefik is always exactly one
+proxy hop in front of the server. Trusting more hops would let clients spoof their
+address in `X-Forwarded-For` and evade the per-IP rate limits.
 
 **Nextcloud stack** (`/opt/aiquila/.env`):
 
@@ -321,7 +322,7 @@ cd /opt/aiquila && docker compose up -d
 
 This workflow is appropriate for: `LOG_LEVEL`, Nextcloud credentials (`NEXTCLOUD_URL` /
 `NEXTCLOUD_USER` / `NEXTCLOUD_PASSWORD`), and OAuth settings such as
-`MCP_AUTH_SECRET` or `MCP_CLIENT_SECRET`.
+`MCP_AUTH_SECRET` or `MCP_REGISTRATION_TOKEN`.
 
 ### What `rebuild` does to the .env
 
@@ -329,7 +330,6 @@ This workflow is appropriate for: `LOG_LEVEL`, Nextcloud credentials (`NEXTCLOUD
 for every auto-generated field. Running `rebuild` will:
 
 - Invalidate all existing OAuth tokens (new `MCP_AUTH_SECRET`)
-- Change the OAuth client secret (`MCP_CLIENT_SECRET`)
 - Rotate the dynamic registration token (`MCP_REGISTRATION_TOKEN`)
 - Rotate the CrowdSec bouncer key (`CROWDSEC_BOUNCER_KEY`)
 - Regenerate the Grafana admin password (`GRAFANA_PASSWORD`)
