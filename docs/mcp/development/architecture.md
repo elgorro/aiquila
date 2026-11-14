@@ -205,9 +205,9 @@ Each app has its own module following the same pattern as system tools.
 - `create_note` - Create markdown note files
 
 #### AIquila (aiquila.ts)
-- `aiquila_show_config` - OCC command instructions
-- `aiquila_configure` - OCC configure instructions
-- `aiquila_test` - OCC test instructions
+- `aiquila_show_config` - runs `occ aiquila:configure --show` through the app's `/api/occ`
+- `aiquila_configure` - runs `occ aiquila:configure <options>`
+- `aiquila_test` - runs `occ aiquila:test`
 
 ## Design Principles
 

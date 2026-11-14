@@ -18,16 +18,16 @@ The Model Context Protocol (MCP) is an open standard developed by Anthropic that
 ## Features
 
 ### System Tools
-Core system operations via WebDAV and OCC:
+Core system operations via WebDAV, OCS and OCC:
 - **File Operations** (WebDAV) — List, read, write, move, copy, search, and delete files and folders
 - **Bulk & Archives** — Multi-file operations, and creating, listing and extracting archives
 - **File Analysis** — Read binary files (images, PDFs) and analyze images with Claude vision
 - **Trash & Versions** — Restore deleted files, browse and roll back to earlier file versions
-- **System Status** (OCC) — Monitor system status, local time, and run configuration checks
-- **App Management** (OCC) — List, enable, disable, install, and uninstall Nextcloud apps
+- **System Status** — Version and capabilities, local time, and setup checks (OCC)
+- **App Management** — List, enable and disable apps (OCS), install and uninstall them (OCC)
 - **Security** (OCC) — Verify system and app integrity
 - **Search** — Unified search across all Nextcloud apps
-- **OCC** — Execute arbitrary Nextcloud CLI commands
+- **OCC** — Run allowlisted Nextcloud CLI commands (read-only by default)
 
 ### App Integrations
 Nextcloud apps and administration:
@@ -77,26 +77,26 @@ Nextcloud apps and administration:
 |------|-------------|---------------|
 | `list_files` | List files and folders | [System Tools](tools/system-tools.md#list_files) |
 | `read_file` | Read file contents (text) | [System Tools](tools/system-tools.md#read_file) |
-| `get_file_content` | Read file with mime type (text/base64/image) | [System Tools](tools/system-tools.md) |
+| `get_file_content` | Read file with mime type (text/base64/image) | [System Tools](tools/system-tools.md#get_file_content) |
 | `write_file` | Create or update files | [System Tools](tools/system-tools.md#write_file) |
 | `create_folder` | Create folders | [System Tools](tools/system-tools.md#create_folder) |
 | `delete` | Delete files or folders | [System Tools](tools/system-tools.md#delete) |
-| `move_file` | Move or rename files/folders | [System Tools](tools/system-tools.md) |
-| `copy_file` | Copy files/folders | [System Tools](tools/system-tools.md) |
-| `get_file_info` | Get file metadata | [System Tools](tools/system-tools.md) |
-| `search_files` | Search files by name/mime type | [System Tools](tools/system-tools.md) |
-| `analyze_image` | Analyze image with Claude vision | [System Tools](tools/system-tools.md) |
-| `bulk_file_operations` | Execute multiple file operations (move, copy, delete) sequentially in a single call | [System Tools](tools/system-tools.md) |
-| `create_archive` | Create a zip archive in Nextcloud from one or more files and/or folders | [System Tools](tools/system-tools.md) |
-| `extract_archive` | Extract a zip archive in Nextcloud into a destination folder | [System Tools](tools/system-tools.md) |
-| `list_archive` | List the contents of a zip archive in Nextcloud without extracting it | [System Tools](tools/system-tools.md) |
+| `move_file` | Move or rename files/folders | [System Tools](tools/system-tools.md#move_file) |
+| `copy_file` | Copy files/folders | [System Tools](tools/system-tools.md#copy_file) |
+| `get_file_info` | Get file metadata | [System Tools](tools/system-tools.md#get_file_info) |
+| `search_files` | Search files by name/mime type | [System Tools](tools/system-tools.md#search_files) |
+| `analyze_image` | Analyze image with Claude vision | [System Tools](tools/system-tools.md#analyze_image) |
+| `bulk_file_operations` | Execute multiple file operations (move, copy, delete) sequentially in a single call | [System Tools](tools/system-tools.md#bulk_file_operations) |
+| `create_archive` | Create a zip archive in Nextcloud from one or more files and/or folders | [System Tools](tools/system-tools.md#create_archive) |
+| `extract_archive` | Extract a zip archive in Nextcloud into a destination folder | [System Tools](tools/system-tools.md#extract_archive) |
+| `list_archive` | List the contents of a zip archive in Nextcloud without extracting it | [System Tools](tools/system-tools.md#list_archive) |
 
 #### System Status & Diagnostics (3 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `system_status` | Get system status | [System Tools](tools/system-tools.md#system_status) |
 | `run_setup_checks` | Run configuration checks | [System Tools](tools/system-tools.md#run_setup_checks) |
-| `get_local_time` | Get server local time & timezone | [System Tools](tools/system-tools.md) |
+| `get_local_time` | Get server local time & timezone | [System Tools](tools/system-tools.md#get_local_time) |
 
 #### App Management (6 tools)
 | Tool | Description | Documentation |
@@ -105,8 +105,8 @@ Nextcloud apps and administration:
 | `get_app_info` | Get app details | [System Tools](tools/system-tools.md#get_app_info) |
 | `enable_app` | Enable an app | [System Tools](tools/system-tools.md#enable_app) |
 | `disable_app` | Disable an app | [System Tools](tools/system-tools.md#disable_app) |
-| `install_app` | Install an app from the App Store | [System Tools](tools/system-tools.md) |
-| `uninstall_app` | Remove an app | [System Tools](tools/system-tools.md) |
+| `install_app` | Install an app from the App Store | [System Tools](tools/system-tools.md#install_app) |
+| `uninstall_app` | Remove an app | [System Tools](tools/system-tools.md#uninstall_app) |
 
 #### Security & Integrity (2 tools)
 | Tool | Description | Documentation |
@@ -123,7 +123,7 @@ Nextcloud apps and administration:
 #### OCC (1 tool)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `run_occ` | Execute an allowlisted OCC command (read-only by default) | [System Tools](tools/system-tools.md) |
+| `run_occ` | Execute an allowlisted OCC command (read-only by default) | [System Tools](tools/system-tools.md#run_occ) |
 
 ### App Tools
 
@@ -385,12 +385,12 @@ Nextcloud apps and administration:
 #### File Tags (6 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
-| `get_file_tags` | Get tags on a file | [System Tools](tools/system-tools.md) |
-| `set_file_tags` | Set tags on a file | [System Tools](tools/system-tools.md) |
-| `list_system_tags` | List all system tags | [System Tools](tools/system-tools.md) |
-| `create_system_tag` | Create a system tag | [System Tools](tools/system-tools.md) |
-| `assign_system_tag` | Assign system tag to file | [System Tools](tools/system-tools.md) |
-| `remove_system_tag` | Remove system tag from file | [System Tools](tools/system-tools.md) |
+| `get_file_tags` | Get tags on a file | [System Tools](tools/system-tools.md#get_file_tags) |
+| `set_file_tags` | Set tags on a file | [System Tools](tools/system-tools.md#set_file_tags) |
+| `list_system_tags` | List all system tags | [System Tools](tools/system-tools.md#list_system_tags) |
+| `create_system_tag` | Create a system tag | [System Tools](tools/system-tools.md#create_system_tag) |
+| `assign_system_tag` | Assign system tag to file | [System Tools](tools/system-tools.md#assign_system_tag) |
+| `remove_system_tag` | Remove system tag from file | [System Tools](tools/system-tools.md#remove_system_tag) |
 
 #### AIquila Internal (3 tools)
 | Tool | Description | Documentation |

@@ -211,6 +211,36 @@ Endpoint URLs stay admin-only deliberately: Nextcloud makes outbound requests to
 whatever is stored there, so a user-settable endpoint would be a server-side
 request forgery vector.
 
+#### Claude models
+
+The Claude card lists the models the key can use. AIquila knows the limits of
+these:
+
+- `claude-fable-5-2` - Most capable; thinking always on, xhigh effort, fast mode
+- `claude-fable-5-1` - Previous Fable; thinking always on, xhigh effort
+- `claude-fable-5` - Older Fable; thinking always on, xhigh effort
+- `claude-opus-5-5` - Newest Opus; thinking always on, xhigh effort
+- `claude-opus-5` - Complex agentic coding and enterprise work; adaptive thinking (can be turned off up to effort high), xhigh effort
+- `claude-sonnet-5` - Best speed/intelligence balance; adaptive thinking, medium effort (**default**)
+- `claude-opus-4-8` - Previous-generation Opus; adaptive thinking, xhigh effort
+- `claude-opus-4-7` - Adaptive thinking, xhigh effort
+- `claude-opus-4-6` - Adaptive thinking, high effort
+- `claude-sonnet-4-6` - Adaptive thinking, medium effort
+- `claude-sonnet-4-5-20250929` - Fast, cost-effective
+- `claude-haiku-4-5-20251001` - Fastest, most economical
+- `claude-opus-4-5-20251101` - Older Opus generation
+
+The retired `claude-sonnet-4-20250514` and `claude-opus-4-20250514` are mapped
+to `claude-sonnet-4-6` and `claude-opus-4-7`.
+
+`claude-mythos-5-2` has Fable 5.2's limits but is open only to organisations verified
+through Anthropic's verification programs, so it is not suggested in the model list.
+Enter it by hand if your key has access.
+
+The Claude API rejects the `temperature` / `top_p` / `top_k` sampling parameters on every
+model, so AIquila never sends them to Claude, on any provider. The OpenAI-compatible providers
+(Mistral, DeepSeek, Local) still receive them where the backend accepts them.
+
 #### Thinking and effort
 
 **Effort** sets how much work Claude puts into a response; lower is faster and

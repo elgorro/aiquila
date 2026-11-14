@@ -290,7 +290,7 @@ Requests made through this API count as background work, like Assistant tasks
 and coworkers: on the Claude provider they use the instance's **Effort for
 background tasks** and **Thinking for background tasks** before the chat
 defaults. See
-[Thinking and effort](../installation/aiquila-setup.md#thinking-and-effort).
+[Thinking and effort](installation/aiquila-setup.md#thinking-and-effort).
 
 ### Provider resolution
 
