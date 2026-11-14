@@ -3,6 +3,7 @@
 
 namespace OCA\AIquila\Controller;
 
+use OCA\AIquila\ResponseDefinitions;
 use OCA\AIquila\Service\Exception\ContentTooLargeException;
 use OCA\AIquila\Service\Exception\DestinationExistsException;
 use OCA\AIquila\Service\FileService;
@@ -17,6 +18,9 @@ use OCP\Files\NotFoundException;
 use OCP\IRequest;
 use Psr\Log\LoggerInterface;
 
+/**
+ * @psalm-import-type AIquilaFileNode from ResponseDefinitions
+ */
 class FileController extends Controller {
     use RequiresUserIdTrait;
     use ErrorResponseTrait;
@@ -48,7 +52,7 @@ class FileController extends Controller {
      * 404: File or directory not found at the given path
      * 500: Reading the file metadata failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{name: string, path: string, size: int, mimeType: string, mtime: int, etag: string, permissions: int}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, AIquilaFileNode, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
      *
      * @NoAdminRequired
      * @NoCSRFRequired
@@ -79,7 +83,7 @@ class FileController extends Controller {
      * 404: Directory not found at the given path
      * 500: Reading the directory failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{files: list<array{name: string, path: string, size: int, mimeType: string, mtime: int, type: string}>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{path: string, count: int, items: list<AIquilaFileNode>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
      *
      * @NoAdminRequired
      * @NoCSRFRequired
@@ -175,7 +179,7 @@ class FileController extends Controller {
      * 404: Base path not found
      * 500: The search failed
      *
-     * @return JSONResponse<Http::STATUS_OK, array{results: list<array{name: string, path: string, mimeType: string, size: int}>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
+     * @return JSONResponse<Http::STATUS_OK, array{query: string, mimeFilter: string|null, count: int, results: list<AIquilaFileNode>}, array{}>|JSONResponse<Http::STATUS_BAD_REQUEST, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_NOT_FOUND, array{error: string, errorId: string}, array{}>|JSONResponse<Http::STATUS_INTERNAL_SERVER_ERROR, array{error: string, errorId: string}, array{}>
      *
      * @NoAdminRequired
      * @NoCSRFRequired

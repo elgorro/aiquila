@@ -3,6 +3,7 @@
 
 namespace OCA\AIquila\Service;
 
+use OCA\AIquila\ResponseDefinitions;
 use OCA\AIquila\Service\Exception\ContentTooLargeException;
 use OCA\AIquila\Service\Exception\DestinationExistsException;
 use OCP\Files\File;
@@ -17,6 +18,8 @@ use OCP\IPreview;
  *
  * Provides file metadata, content reading, search, and preview generation
  * for use by controllers, other services, and the MCP server.
+ *
+ * @psalm-import-type AIquilaFileNode from ResponseDefinitions
  */
 class FileService {
     private IRootFolder $rootFolder;
@@ -54,6 +57,9 @@ class FileService {
         return $this->rootFolder->getUserFolder($userId);
     }
 
+    /**
+     * @return AIquilaFileNode
+     */
     private function nodeToArray(Node $node): array {
         return [
             'name' => $node->getName(),
@@ -81,6 +87,7 @@ class FileService {
     /**
      * Get file or folder metadata.
      *
+     * @return AIquilaFileNode
      * @throws NotFoundException
      */
     public function getInfo(string $path, string $userId): array {
@@ -92,6 +99,7 @@ class FileService {
     /**
      * List directory contents with metadata.
      *
+     * @return array{path: string, count: int, items: list<AIquilaFileNode>}
      * @throws NotFoundException
      * @throws \InvalidArgumentException if path is not a directory
      */
@@ -170,6 +178,7 @@ class FileService {
     /**
      * Search for files by name pattern and optional mime type filter.
      *
+     * @return array{query: string, mimeFilter: string|null, count: int, results: list<AIquilaFileNode>}
      * @throws NotFoundException
      * @throws \InvalidArgumentException if basePath is not a directory
      */
