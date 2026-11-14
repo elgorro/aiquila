@@ -24,61 +24,127 @@ namespace OCA\AIquila\Service;
  * turn. The conversation keeps that message (see ConversationController), so
  * later turns replay it in place and the history stays byte-identical too.
  *
- * Only by reference: this header cannot redefine a tool. A tool whose
- * definition changed (an MCP server was updated) starts the state over, and
- * that one request misses the cache.
+ * Redefining a tool (an MCP server was updated) needs the definition by
+ * value. Where the platform takes `inline-tools-2026-09-15`, a changed tool
+ * is offered as a `tool_addition` carrying its new `tool_definition`; the new
+ * definition replaces the old one from that message on, and `tools` stays as
+ * first sent. `current` keeps each tool's live definition where it differs
+ * from the declared one, so a later re-offer sends the right one. Elsewhere,
+ * or once the by-value definitions grow past the cap, the state starts over
+ * and that one request misses the cache.
  *
  * @see https://platform.claude.com/docs/en/build-with-claude/mid-conversation-system-messages
  *
- * @psalm-type ToolState = array{declared: list<array<string, mixed>>, available: list<string>}
+ * @psalm-type ToolState = array{declared: list<array<string, mixed>>, available: list<string>, current?: array<string, array<string, mixed>>}
  */
 final class ToolChanges {
+    /**
+     * By-value definitions kept in a conversation's state before it starts
+     * over. The API refuses more than 4 MiB of definitions sent after the
+     * first user message, or 10,000 such tools (`available_tools_limit_exceeded`);
+     * staying well inside means the conversation never gets stuck on it.
+     */
+    public const MAX_BY_VALUE_BYTES = 1048576;
+    public const MAX_BY_VALUE_TOOLS = 1000;
+
     /**
      * Plan one turn: what to send as `tools`, which change blocks to append,
      * and the state to keep for the next turn.
      *
      * @param ToolState|null $state the conversation's state, null when it has none
      * @param list<array<string, mixed>> $current the tools available now
+     * @param bool $byValue whether the request may carry definitions by value (inline-tools-2026-09-15)
      * @return array{tools: list<array<string, mixed>>, blocks: list<array<string, mixed>>, state: ToolState, reset: bool}
      */
-    public static function plan(?array $state, array $current): array {
+    public static function plan(?array $state, array $current, bool $byValue = false): array {
         $byName = [];
         foreach ($current as $tool) {
             $byName[(string)($tool['name'] ?? '')] = $tool;
         }
 
-        if ($state === null || self::anyRedefined($state['declared'], $byName)) {
-            /** @var ToolState $fresh */
-            $fresh = ['declared' => $current, 'available' => array_keys($byName)];
-            return ['tools' => $current, 'blocks' => [], 'state' => $fresh, 'reset' => $state !== null];
+        /** @var ToolState $fresh */
+        $fresh = ['declared' => $current, 'available' => array_keys($byName)];
+        if ($state === null) {
+            return ['tools' => $current, 'blocks' => [], 'state' => $fresh, 'reset' => false];
+        }
+        $overrides = $state['current'] ?? [];
+        $startOver = $byValue
+            ? !self::withinCap($overrides, $state['declared'], $byName)
+            // A history with by-value definitions cannot go to a request
+            // without them, and a reference cannot redefine a tool.
+            : $overrides !== [] || self::anyRedefined($state['declared'], [], $byName);
+        if ($startOver) {
+            return ['tools' => $current, 'blocks' => [], 'state' => $fresh, 'reset' => true];
         }
 
         $declared = $state['declared'];
         $available = $state['available'];
+        $declaredByName = [];
+        foreach ($declared as $tool) {
+            $copy = $tool;
+            unset($copy['defer_loading']);
+            $declaredByName[(string)($tool['name'] ?? '')] = $copy;
+        }
         $blocks = [];
         foreach ($available as $name) {
             if (!isset($byName[$name])) {
                 $blocks[] = ['type' => 'tool_removal', 'tool' => ['type' => 'tool_reference', 'name' => $name]];
             }
         }
-        $isDeclared = array_fill_keys(array_map(static fn (array $t): string => (string)($t['name'] ?? ''), $declared), true);
         $isAvailable = array_fill_keys($available, true);
         foreach ($byName as $name => $tool) {
-            if (isset($isAvailable[$name])) {
+            $live = $overrides[$name] ?? $declaredByName[$name] ?? null;
+            $same = $live !== null && json_encode($live) === json_encode($tool);
+            if (isset($isAvailable[$name]) && $same) {
                 continue;
             }
-            if (!isset($isDeclared[$name])) {
+            if ($live === null) {
+                // New: declared at the end, deferred, so the prefix is untouched.
                 $declared[] = $tool + ['defer_loading' => true];
+                $declaredByName[$name] = $tool;
+                $blocks[] = ['type' => 'tool_addition', 'tool' => ['type' => 'tool_reference', 'name' => $name]];
+            } elseif ($same && !isset($overrides[$name])) {
+                $blocks[] = ['type' => 'tool_addition', 'tool' => ['type' => 'tool_reference', 'name' => $name]];
+            } else {
+                // Redefined now, or earlier: a reference names the declared
+                // tool, so a tool with an override is always offered by value.
+                // The new definition replaces the old one from here on.
+                $blocks[] = ['type' => 'tool_addition', 'tool' => ['type' => 'tool_definition', 'definition' => $tool]];
+                $overrides[$name] = $tool;
             }
-            $blocks[] = ['type' => 'tool_addition', 'tool' => ['type' => 'tool_reference', 'name' => $name]];
+            if (isset($overrides[$name]) && json_encode($overrides[$name]) === json_encode($declaredByName[$name])) {
+                unset($overrides[$name]);
+            }
         }
 
-        return [
-            'tools' => $declared,
-            'blocks' => $blocks,
-            'state' => ['declared' => $declared, 'available' => array_keys($byName)],
-            'reset' => false,
-        ];
+        /** @var ToolState $next */
+        $next = ['declared' => $declared, 'available' => array_keys($byName)];
+        if ($overrides !== []) {
+            $next['current'] = $overrides;
+        }
+        return ['tools' => $declared, 'blocks' => $blocks, 'state' => $next, 'reset' => false];
+    }
+
+    /**
+     * Whether the by-value definitions after this turn stay inside the cap:
+     * the ones kept so far plus the ones this turn would add.
+     *
+     * @param array<string, array<string, mixed>> $overrides
+     * @param list<array<string, mixed>> $declared
+     * @param array<string, array<string, mixed>> $current
+     */
+    private static function withinCap(array $overrides, array $declared, array $current): bool {
+        $changed = $overrides;
+        foreach ($declared as $tool) {
+            $name = (string)($tool['name'] ?? '');
+            unset($tool['defer_loading']);
+            $live = $overrides[$name] ?? $tool;
+            if (isset($current[$name]) && json_encode($live) !== json_encode($current[$name])) {
+                $changed[$name] = $current[$name];
+            }
+        }
+        return count($changed) <= self::MAX_BY_VALUE_TOOLS
+            && strlen((string)json_encode(array_values($changed))) <= self::MAX_BY_VALUE_BYTES;
     }
 
     /**
@@ -104,8 +170,23 @@ final class ToolChanges {
             }
             $declared[] = $tool;
         }
+        $state = ['declared' => $declared, 'available' => array_values(array_map('strval', $decoded['available']))];
+        if (is_array($decoded['current'] ?? null)) {
+            $current = [];
+            foreach ($decoded['current'] as $name => $tool) {
+                if (is_array($tool)) {
+                    if (array_key_exists('input_schema', $tool)) {
+                        $tool['input_schema'] = JsonShape::toolInputSchema($tool['input_schema']);
+                    }
+                    $current[(string)$name] = $tool;
+                }
+            }
+            if ($current !== []) {
+                $state['current'] = $current;
+            }
+        }
         /** @var ToolState */
-        return ['declared' => $declared, 'available' => array_values(array_map('strval', $decoded['available']))];
+        return $state;
     }
 
     /** @param ToolState $state */
@@ -135,10 +216,39 @@ final class ToolChanges {
      * @param array<string, mixed> $block
      */
     public static function describe(array $block): string {
+        if (self::isByValue($block)) {
+            return sprintf('The tool %s changed from here on.', (string)($block['tool']['definition']['name'] ?? 'a tool'));
+        }
         $name = (string)($block['tool']['name'] ?? 'a tool');
         return ($block['type'] ?? null) === 'tool_removal'
             ? sprintf('The tool %s is no longer available.', $name)
             : sprintf('The tool %s is available from here on.', $name);
+    }
+
+    /** @param mixed $block */
+    public static function isByValue($block): bool {
+        return is_array($block)
+            && ($block['type'] ?? null) === 'tool_addition'
+            && ($block['tool']['type'] ?? null) === 'tool_definition';
+    }
+
+    /**
+     * Whether a request carries a tool definition by value, so it needs
+     * `inline-tools-2026-09-15` (which also covers the by-reference changes).
+     * Later requests replay the block, so they need it too.
+     */
+    public static function needsInlineTools(array $params): bool {
+        foreach ($params['messages'] ?? [] as $message) {
+            if (($message['role'] ?? null) !== 'system' || !is_array($message['content'] ?? null)) {
+                continue;
+            }
+            foreach ($message['content'] as $block) {
+                if (self::isByValue($block)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -186,17 +296,21 @@ final class ToolChanges {
     }
 
     /**
+     * Whether any tool's live definition (its override, else as declared)
+     * differs from the one available now.
+     *
      * @param list<array<string, mixed>> $declared
+     * @param array<string, array<string, mixed>> $overrides
      * @param array<string, array<string, mixed>> $current
      */
-    private static function anyRedefined(array $declared, array $current): bool {
+    private static function anyRedefined(array $declared, array $overrides, array $current): bool {
         foreach ($declared as $tool) {
             $name = (string)($tool['name'] ?? '');
             if (!isset($current[$name])) {
                 continue;
             }
             unset($tool['defer_loading']);
-            if (json_encode($tool) !== json_encode($current[$name])) {
+            if (json_encode($overrides[$name] ?? $tool) !== json_encode($current[$name])) {
                 return true;
             }
         }

@@ -154,8 +154,8 @@ Anthropic and are not stored.
 added, removed or offering a new tool) would rebuild its whole cache on that turn.
 Where the model and platform take mid-conversation tool changes (beta
 `mid-conversation-tool-changes-2026-07-01`; Opus 4.8 and later, the Fable models,
-not Sonnet 5; the Claude API, Bedrock and Vertex AI), `ToolChanges` keeps `tools`
-as the conversation first sent it:
+not Sonnet 5; the Claude API, Claude Platform on AWS, Bedrock and Vertex AI),
+`ToolChanges` keeps `tools` as the conversation first sent it:
 
 - **A new tool** is appended with `defer_loading: true`, which keeps it out of the
   prefix, and offered by a `tool_addition` block.
@@ -168,12 +168,27 @@ as the conversation first sent it:
 - The cache breakpoint on `tools` sits on the last non-deferred tool. A deferred
   definition cannot carry one.
 
-This header changes tools by reference only. A tool whose definition changed starts
-the state over. That one request misses the cache, and the stored change rows
-become plain text, so they never point at a declared list that no longer exists.
-The same happens when the conversation moves to a model or provider without the
-feature. There the tools go out as they are, and earlier changes are replayed as
-text.
+**A tool whose definition changed** (an MCP server was updated) depends on the
+platform:
+
+- **Redefined in place** where it takes `inline-tools-2026-09-15` (the Claude API and
+  Claude Platform on AWS). The change goes out as a `tool_addition` carrying a
+  `tool_definition`, which replaces the old definition from that message on, and
+  `tools` stays byte-identical, so the cache still hits. `tool_state.current` keeps
+  each tool's live definition where it differs from the declared one. A redefined
+  tool that is removed and offered again comes back by value, because a reference
+  names the declared definition. Any request whose history holds such a block sends
+  `inline-tools-2026-09-15` in place of the reference-only header, which it covers.
+- **Started over** everywhere else (Bedrock, Vertex AI). The header changes tools
+  by reference only, so that one request misses the cache, and the stored change
+  rows become plain text, so they never point at a declared list that no longer
+  exists.
+
+The state also starts over, once, when its by-value definitions would pass 1 MiB or
+1,000 tools. That keeps it well inside the API's limits (4 MiB or 10,000 tools defined
+after the first user message, `available_tools_limit_exceeded`). It starts over, too,
+when the conversation moves to a model or provider without the feature. There the
+tools go out as they are, and earlier changes are replayed as text.
 
 ## Turning it off
 
