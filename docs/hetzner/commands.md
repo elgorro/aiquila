@@ -172,9 +172,14 @@ Over SSH it:
 6. **Verifies**: the MCP healthcheck, both versions, no pending Nextcloud upgrade, and an MCP
    smoke test (`server/discover`, `tools/list`) from inside the container.
 
-It ends with the commands that restore the previous configuration, image, MCP state and app
-from the backup; on a failure it prints them straight away. The MCP state is restored too,
-because a release may migrate it, and the previous image needs the state it left behind.
+It ends with the commands that restore the previous configuration, image and app from the
+backup; on a failure it prints them straight away. The MCP state is not restored. A copy
+from before the upgrade would bring back refresh tokens that were rotated or revoked since,
+as valid ones. So once the new MCP container has started, the rollback empties the state
+volume instead: every user signs in again, and the old app passwords have to be removed in
+Nextcloud (see [Upgrades and downgrades](../mcp/oauth.md#upgrades-and-downgrades)). If the
+upgrade fails before the MCP container is replaced, the state is left alone. The state
+backup is kept for disaster recovery only.
 
 | Flag | Default | Description |
 |------|---------|-------------|

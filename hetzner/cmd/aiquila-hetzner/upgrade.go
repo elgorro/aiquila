@@ -98,6 +98,7 @@ type upgradePlan struct {
 	mcpFrom     string // running MCP version
 	mcpImageID  string // image the MCP container runs now
 	mcpPulledID string // image the target tag resolves to after pulling
+	mcpStarted  bool   // the new MCP container was started, so it may have written the state
 }
 
 func (p *upgradePlan) configChanged() bool {
@@ -197,6 +198,8 @@ func runUpgrade(_ *cobra.Command, _ []string) error {
 	}
 	if plan.mcpChanged() {
 		fmt.Println("\n── Updating the MCP server")
+		// From here the new version may have written the state.
+		plan.mcpStarted = true
 		if out, err := r.compose("up -d mcp 2>&1"); err != nil {
 			fmt.Fprintln(os.Stderr, out)
 			return withRollback(fmt.Errorf("start the new MCP container: %w", err), plan, backupDir)
@@ -654,24 +657,43 @@ func withRollback(err error, p *upgradePlan, backupDir string) error {
 }
 
 func printRollback(p *upgradePlan, dir string) {
-	fmt.Printf("\nTo roll back, on the server:\n  cd %s\n", stackDir)
-	fmt.Printf("  cp %s/.env %s/docker-compose.yml .\n", dir, dir)
+	fmt.Print(rollbackSteps(p, dir))
+}
+
+// rollbackSteps returns the commands that put the previous release back.
+//
+// The MCP state is never restored from the backup. It only moves forward: a
+// copy from before the upgrade would bring back refresh tokens rotated or
+// revoked since, as unspent and valid, beyond the reach of reuse detection
+// (RFC 9700 §4.14.2). Once the new version has run, the old one starts on an
+// empty state volume and every user signs in again.
+func rollbackSteps(p *upgradePlan, dir string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nTo roll back, on the server:\n  cd %s\n", stackDir)
+	fmt.Fprintf(&b, "  cp %s/.env %s/docker-compose.yml .\n", dir, dir)
 	if p.stack.HasMCP() && p.mcpImageID != "" {
 		if from := upgrade.MCPImageTag(p.oldCompose); from != "" {
-			fmt.Printf("  docker tag %s ghcr.io/elgorro/aiquila-mcp:%s\n", p.mcpImageID, from)
+			fmt.Fprintf(&b, "  docker tag %s ghcr.io/elgorro/aiquila-mcp:%s\n", p.mcpImageID, from)
 		}
-		// The new version may have migrated the state (0.6 moved it from JSON
-		// files into state.db), so the old one needs the state it left behind.
-		fmt.Printf("  docker compose stop mcp\n")
-		fmt.Printf("  docker run --rm -i -v %s:/s alpine sh -c 'find /s -mindepth 1 -delete && tar -C /s -xzf -' < %s/mcp-state.tar.gz\n", mcpStateVolume(p.oldCompose, p.stack), dir)
-		fmt.Printf("  docker compose %sup -d mcp\n", profileArg(p))
+		if p.mcpStarted {
+			fmt.Fprintf(&b, "  docker compose stop mcp\n")
+			fmt.Fprintf(&b, "  docker run --rm -v %s:/s alpine find /s -mindepth 1 -delete\n", mcpStateVolume(p.oldCompose, p.stack))
+		}
+		fmt.Fprintf(&b, "  docker compose %sup -d mcp\n", profileArg(p))
+		if p.mcpStarted {
+			b.WriteString("  # The MCP state starts empty: every user signs in again. Their old app passwords\n")
+			b.WriteString("  # stay valid in Nextcloud until removed: each user under Settings → Security →\n")
+			b.WriteString("  # Devices & sessions (\"AIquila MCP (…)\"), or an admin with\n")
+			b.WriteString("  # occ user:auth-tokens:list <user> and occ user:auth-tokens:delete <user> <id>.\n")
+		}
 	}
 	if p.stack.HasNextcloud() && p.appTo != "" {
-		fmt.Println("  docker compose exec -T nc rm -rf /var/www/html/custom_apps/aiquila")
-		fmt.Printf("  docker compose exec -T nc tar -C /var/www/html -xzf - custom_apps/aiquila < %s/nextcloud-config-app.tar.gz\n", dir)
-		fmt.Println("  # if the app's migrations already ran, restore the database too:")
-		fmt.Printf("  docker compose exec -T nc-db pg_restore -U nextcloud -d nextcloud --clean --if-exists < %s/nextcloud-db.dump\n", dir)
+		b.WriteString("  docker compose exec -T nc rm -rf /var/www/html/custom_apps/aiquila\n")
+		fmt.Fprintf(&b, "  docker compose exec -T nc tar -C /var/www/html -xzf - custom_apps/aiquila < %s/nextcloud-config-app.tar.gz\n", dir)
+		b.WriteString("  # if the app's migrations already ran, restore the database too:\n")
+		fmt.Fprintf(&b, "  docker compose exec -T nc-db pg_restore -U nextcloud -d nextcloud --clean --if-exists < %s/nextcloud-db.dump\n", dir)
 	}
+	return b.String()
 }
 
 func profileArg(p *upgradePlan) string {
