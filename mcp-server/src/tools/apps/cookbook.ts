@@ -202,7 +202,7 @@ async function readAllRecipes(): Promise<{ folderName: string; recipe: Recipe }[
       });
       return {
         folderName: dir,
-        recipe: JSON.parse(json as string) as Recipe,
+        recipe: JSON.parse(json) as Recipe,
       };
     })
   );
@@ -369,7 +369,7 @@ export const getRecipeTool = {
       const json = await client.getFileContents(`${root}/${args.folderName}/recipe.json`, {
         format: 'text',
       });
-      const recipe = JSON.parse(json as string) as Recipe;
+      const recipe = JSON.parse(json) as Recipe;
 
       return {
         content: [
@@ -569,7 +569,7 @@ export const updateRecipeTool = {
       const json = await client.getFileContents(recipePath, {
         format: 'text',
       });
-      const recipe = JSON.parse(json as string) as Recipe;
+      const recipe = JSON.parse(json) as Recipe;
 
       // Merge provided fields
       const { folderName: _folderName, ...updates } = args;

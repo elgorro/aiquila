@@ -11,7 +11,7 @@ const mockClient = {
   moveFile: vi.fn(),
   copyFile: vi.fn(),
 };
-vi.mock('webdav', () => ({ createClient: vi.fn(() => mockClient) }));
+vi.mock('../client/webdav.js', () => ({ getWebDAVClient: () => mockClient }));
 
 describe('Recipe Tools', () => {
   beforeEach(() => {

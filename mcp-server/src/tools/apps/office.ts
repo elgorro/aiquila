@@ -57,14 +57,8 @@ async function officeCreators(): Promise<TemplateFileCreator[]> {
 /** The file's ID and MIME type, which the conversion API works from. */
 async function fileDetails(path: string): Promise<{ id: number; mime: string }> {
   const client = getWebDAVClient();
-  const stat = (await client.stat(path, {
-    details: true,
-    data: `<?xml version="1.0"?>
-<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
-  <d:prop><oc:fileid/><d:getcontenttype/></d:prop>
-</d:propfind>`,
-  })) as unknown as { data: { mime?: string; props?: { fileid?: number } } };
-  return { id: Number(stat.data.props?.fileid), mime: stat.data.mime ?? '' };
+  const stat = await client.stat(path, { props: ['oc:fileid'] });
+  return { id: Number(stat.props.fileid), mime: stat.mime ?? '' };
 }
 
 export const listDocumentTemplatesTool = {

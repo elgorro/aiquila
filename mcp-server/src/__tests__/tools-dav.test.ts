@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { FileStat } from 'webdav';
+import type { FileStat } from '../client/webdav.js';
 
-// Mock webdav client
+// Mock the WebDAV client
 const mockClient = {
   getDirectoryContents: vi.fn(),
   getFileContents: vi.fn(),
@@ -14,9 +14,7 @@ const mockClient = {
   copyFile: vi.fn(),
 };
 
-vi.mock('webdav', () => ({
-  createClient: vi.fn(() => mockClient),
-}));
+vi.mock('../client/webdav.js', () => ({ getWebDAVClient: () => mockClient }));
 
 // Mock fetch for CalDAV and OCS
 global.fetch = vi.fn();
@@ -30,22 +28,19 @@ describe('MCP Tools', () => {
   });
 
   describe('list_files', () => {
-    it('should format directory contents', async () => {
+    it('returns the listing as JSON', async () => {
       mockClient.getDirectoryContents.mockResolvedValue([
         { type: 'directory', basename: 'Documents' },
         { type: 'file', basename: 'readme.txt' },
+      ] satisfies Partial<FileStat>[]);
+
+      const { listFilesTool } = await import('../tools/system/files.js');
+      const result = await listFilesTool.handler({ path: '/' });
+
+      expect(JSON.parse(result.content[0].text)).toEqual([
+        { type: 'directory', basename: 'Documents' },
+        { type: 'file', basename: 'readme.txt' },
       ]);
-
-      const { createClient } = await import('webdav');
-      const client = createClient('https://example.com', { username: '', password: '' });
-      const items = await client.getDirectoryContents('/');
-
-      const listing = Array.isArray(items) ? items : [];
-      const formatted = listing
-        .map((item: FileStat) => `${item.type === 'directory' ? '📁' : '📄'} ${item.basename}`)
-        .join('\n');
-
-      expect(formatted).toBe('📁 Documents\n📄 readme.txt');
     });
 
     it('should call handler and return JSON', async () => {
@@ -65,11 +60,11 @@ describe('MCP Tools', () => {
     it('should return file contents', async () => {
       mockClient.getFileContents.mockResolvedValue('Hello, World!');
 
-      const { createClient } = await import('webdav');
-      const client = createClient('https://example.com', { username: '', password: '' });
-      const content = await client.getFileContents('/test.txt', { format: 'text' });
+      const { readFileTool } = await import('../tools/system/files.js');
+      const result = await readFileTool.handler({ path: '/test.txt' });
 
-      expect(content).toBe('Hello, World!');
+      expect(result.content[0].text).toBe('Hello, World!');
+      expect(mockClient.getFileContents).toHaveBeenCalledWith('/test.txt', { format: 'text' });
     });
   });
 
@@ -77,11 +72,13 @@ describe('MCP Tools', () => {
     it('should write file contents', async () => {
       mockClient.putFileContents.mockResolvedValue(undefined);
 
-      const { createClient } = await import('webdav');
-      const client = createClient('https://example.com', { username: '', password: '' });
-      await client.putFileContents('/test.txt', 'New content');
+      const { writeFileTool } = await import('../tools/system/files.js');
+      const result = await writeFileTool.handler({ path: '/test.txt', content: 'New content' });
 
-      expect(mockClient.putFileContents).toHaveBeenCalledWith('/test.txt', 'New content');
+      expect(result.content[0].text).toContain('/test.txt');
+      expect(mockClient.putFileContents).toHaveBeenCalledWith('/test.txt', 'New content', {
+        overwrite: true,
+      });
     });
 
     it('should reject content exceeding MCP_MAX_FILE_SIZE', async () => {
