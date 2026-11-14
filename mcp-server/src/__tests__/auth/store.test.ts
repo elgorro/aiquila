@@ -112,10 +112,8 @@ describe('ClientsStore.fromEnv()', () => {
 
   beforeEach(() => {
     savedEnv.MCP_CLIENT_ID = process.env.MCP_CLIENT_ID;
-    savedEnv.MCP_CLIENT_SECRET = process.env.MCP_CLIENT_SECRET;
     savedEnv.MCP_REGISTRATION_ENABLED = process.env.MCP_REGISTRATION_ENABLED;
     delete process.env.MCP_CLIENT_ID;
-    delete process.env.MCP_CLIENT_SECRET;
     delete process.env.MCP_REGISTRATION_ENABLED;
   });
 
