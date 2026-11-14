@@ -25,9 +25,11 @@ The MCP server is a TypeScript/Node.js implementation of the [Model Context Prot
   - `jose` ^6.x — JWT signing and verification
   - `express-rate-limit` ^8.x — per-IP limits on the OAuth endpoints
   - `pino` ^10.x — structured JSON logging to stderr
-  - `webdav` ^5.x — WebDAV client
   - `zod` ^4.x — schema validation
 - **Dev Tools**: `vitest`, `tsx`, `eslint`, `prettier`
+
+There is no WebDAV, CalDAV or CardDAV library: those requests go through native `fetch`
+in `client/` (see [Client Layer](#3-client-layer-client)).
 
 ## Project Structure
 
@@ -47,7 +49,7 @@ mcp-server/src/
 │   ├── store.ts         # ClientsStore, CodeStore, RefreshStore, RevocationList (disk-persisted)
 │   └── internal-token.ts # Where MCP_INTERNAL_TOKEN is accepted from
 ├── client/
-│   ├── webdav.ts        # WebDAV clients, one per account
+│   ├── webdav.ts        # Files over WebDAV (RFC 4918) on native fetch
 │   ├── caldav.ts        # CalDAV helper (authenticated fetch)
 │   ├── ocs.ts           # OCS API (Nextcloud REST)
 │   ├── aiquila.ts       # AIquila app client
@@ -356,12 +358,18 @@ Infrastructure adapters for each Nextcloud API surface:
 
 | File | Pattern | Used by |
 |------|---------|---------|
-| `webdav.ts` | Singleton | files, notes, cookbook |
+| `webdav.ts` | Stateless client per call | files, text, cookbook, office, comments |
 | `caldav.ts` | Functional helper | tasks, calendar |
 | `ocs.ts` | Functional helper | system tools |
 | `mail.ts`, `maps.ts`, etc. | Functional helpers | app tools |
 
-The WebDAV client is a singleton to reuse connections across tool calls. CalDAV and OCS helpers are stateless functions.
+All of them are stateless. `getWebDAVClient()` binds the request's account and returns
+the Files operations (PROPFIND, GET, PUT, DELETE, MKCOL, COPY, MOVE). Its requests go
+through `fetchCalDAV()` like every other DAV call, so authentication, trace logging and
+redirect handling live in one place, and a signed-in user's app password is never cached
+beyond the call. Node's `fetch` keeps connections alive by itself. Multistatus responses
+are parsed with namespace-prefix-tolerant patterns rather than an XML library, and
+`src/__tests__/rfc/webdav.test.ts` holds the RFC 4918 cases.
 
 ### 4. Tool Layer (`tools/`)
 

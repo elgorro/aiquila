@@ -3,10 +3,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock webdav (needed because files.ts imports getWebDAVClient)
-vi.mock('webdav', () => ({
-  createClient: vi.fn(() => ({})),
-}));
-
 const mockFetchAiquilaAPI = vi.fn();
 
 vi.mock('../client/aiquila.js', async () => {

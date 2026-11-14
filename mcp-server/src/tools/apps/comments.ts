@@ -7,7 +7,7 @@ import {
   fetchCalDAV,
   nsTagContent,
 } from '../../client/caldav.js';
-import { getWebDAVClient } from '../../client/webdav.js';
+import { getWebDAVClient, type DetailedFileStat } from '../../client/webdav.js';
 import { davPath } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
 
@@ -52,22 +52,16 @@ const FileArgs = {
 export async function resolveFileId(args: { path?: string; fileId?: number }): Promise<number> {
   if (args.fileId !== undefined) return args.fileId;
   if (!args.path) throw new Error('Pass either path or fileId.');
-  let stat: { data: { props?: { fileid?: number | string } } };
+  let stat: DetailedFileStat;
   try {
-    stat = (await getWebDAVClient().stat(args.path, {
-      details: true,
-      data: `<?xml version="1.0"?>
-<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
-  <d:prop><oc:fileid/></d:prop>
-</d:propfind>`,
-    })) as unknown as typeof stat;
+    stat = await getWebDAVClient().stat(args.path, { props: ['oc:fileid'] });
   } catch (error) {
     if ((error as { status?: number }).status === 404) {
       throw new Error(`${args.path} does not exist.`, { cause: error });
     }
     throw error;
   }
-  const id = Number(stat.data.props?.fileid);
+  const id = Number(stat.props.fileid);
   if (!Number.isInteger(id)) throw new Error(`Nextcloud returned no file ID for ${args.path}.`);
   return id;
 }
