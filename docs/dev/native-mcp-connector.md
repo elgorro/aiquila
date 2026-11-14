@@ -7,14 +7,21 @@ AIquila's default tool-execution path runs an agentic loop in PHP:
 each `tool_use` block back to MCP via `McpClientService::executeTool()`
 until the model emits `end_turn`.
 
-The **native MCP connector** short-circuits that loop. It uses the SDK 0.20
-beta header `mcp-client-2025-11-20` and the `mcp_servers` parameter on
-`$client->beta->messages->createStream()` so the Anthropic API connects to
-each MCP server directly over HTTPS. AIquila makes one API call and persists
-the result; Anthropic returns `mcp_tool_use` and `mcp_tool_result` content
-blocks inline, which `chatWithNativeMcp()` unpacks into the same generator
-event shape (`text_delta` / `tool_use` / `tool_result` / `done` / `error`)
-as the local-loop streaming path.
+The **native MCP connector** short-circuits that loop: the provider's cloud
+connects to the MCP servers itself. AIquila makes one API call and persists
+the result. `chatWithNativeMcp()` unpacks the response into the same
+generator event shape (`text_delta` / `tool_use` / `tool_result` / `done` /
+`error`) as the local-loop streaming path.
+
+Providers report support through `supportsNativeMcp()`:
+
+| Provider | Mechanism |
+|----------|-----------|
+| Claude (Anthropic API), Claude Platform on AWS, Claude on Google Cloud (Anthropic managed) | Beta header `mcp-client-2025-11-20` and the `mcp_servers` parameter on `$client->beta->messages->createStream()`, built by `NativeMcpService::buildServerDefinitions()`. The response carries `mcp_tool_use` and `mcp_tool_result` blocks inline. |
+| Mistral | Pre-registered connectors on the Conversations API, built by `NativeMcpService::buildMistralConnectorTools()` from `mistral_connector_ids`. See [Mistral provider](mistral-provider.md#native-mcp-connector-mistral-connectors--conversations-api). |
+| Bedrock, Vertex AI, Microsoft Foundry, OpenAI-compatible providers | Not supported. The local loop always runs. |
+
+The rest of this page describes the Anthropic path.
 
 ## When this works
 
@@ -32,12 +39,17 @@ as the local-loop streaming path.
 
 ## Configuration
 
+MCP servers (`aiquila_mcp_servers`) are configured by the admin and apply to the
+whole instance: the table has no user column, and every user's request
+forwards the same enabled servers. The only per-user setting is whether the
+native path is used at all (below).
+
 ### Admin defaults (Settings → Administration → AIquila)
 
 | Field | Storage | Notes |
 |-------|---------|-------|
 | Enable native MCP connector | `appconfig.aiquila.native_mcp_enabled` (`'1'` / `'0'`, default `'0'`) | Global default for users who have not set an override. |
-| Extra MCP URL | `appconfig.aiquila.native_mcp_extra_url` | Optional. Forwarded in addition to the per-user `aiquila_mcp_servers` rows. Use only if HTTPS-public-reachable. |
+| Extra MCP URL | `appconfig.aiquila.native_mcp_extra_url` | Optional. Forwarded in addition to the enabled `aiquila_mcp_servers` rows. Use only if HTTPS-public-reachable. |
 | Extra MCP bearer token | Nextcloud credentials manager (`aiquila/native_mcp_extra_token`) | Token used as `authorization_token` on the extra URL above. Encrypted at rest by Nextcloud's credential manager. |
 
 ### Per-user override (Personal → AIquila)
@@ -67,7 +79,10 @@ forward the existing per-server credentials already stored against each
 - `auth_type = 'none'` → no `authorization_token` field.
 
 This reuses the same scope the MCP server already grants AIquila during a
-direct PHP-driven tool call; no new audience expansion is performed. Admins
+direct PHP-driven tool call; no new audience expansion is performed. Because
+the credentials belong to the server row, not to a user, every user's
+request reaches the MCP server under the identity that signed in or whose
+token was entered. Admins
 who want a narrower scope should configure a dedicated OAuth client on the
 MCP server with reduced scopes and use a separate `McpServer` entity for it.
 
@@ -76,13 +91,14 @@ MCP server with reduced scopes and use a separate `McpServer` entity for it.
 Both controllers prefer the native path when it is feasible:
 
 ```
-isEnabledForUser($userId) && buildServerDefinitions() !== []
+supportsNativeMcp() && isEnabledForUser($userId) && <descriptors> !== []
     → chatWithNativeMcp[Collect]()
 otherwise
     → chatWithTools[Stream]()
 ```
 
-`buildServerDefinitions()` filters out non-HTTPS URLs and OAuth servers
+`<descriptors>` is `buildMistralConnectorTools()` on Mistral and
+`buildServerDefinitions()` everywhere else. `buildServerDefinitions()` filters out non-HTTPS URLs and OAuth servers
 without a usable token, so the dispatch is self-protecting: an HTTP-only MCP
 environment will silently fall back to the local loop even with the flag on.
 
