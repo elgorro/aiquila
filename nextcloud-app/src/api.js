@@ -294,6 +294,11 @@ export function getCoworkerRuns(id, limit = 20) {
 	return axios.get(url(`/api/coworkers/${id}/runs`), { params: { limit } })
 }
 
+// One run with its per-item log (newest 500 entries, oldest first).
+export function getCoworkerRun(id, runId) {
+	return axios.get(url(`/api/coworkers/${id}/runs/${runId}`))
+}
+
 export function getDashboardCoworker() {
 	return axios.get(url('/api/dashboard/coworker-output'))
 }
