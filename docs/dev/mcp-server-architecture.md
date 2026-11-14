@@ -223,9 +223,10 @@ the number of grants. WAL mode lets several server processes on the same host sh
 
 The schema is versioned with `PRAGMA user_version`. On first start the JSON files of
 earlier versions (`clients.json`, `refresh-tokens.json`, `revoked.json`, `credentials.json`)
-are imported in one transaction and renamed `*.migrated`; they can be deleted once the
-server runs. When the directory cannot be written, the server runs on an in-memory database
-and logs how to fix the volume. A write that fails later (disk full) is logged and skipped
+are imported in one transaction and renamed `*.migrated`. Nothing ever writes state back
+in the old format, so a downgrade starts from an empty directory; see
+[Upgrades and downgrades](../mcp/oauth.md#upgrades-and-downgrades). When the directory
+cannot be written, the server runs on an in-memory database and logs how to fix the volume. A write that fails later (disk full) is logged and skipped
 instead of failing the request. The exception is spending a refresh token: whether
 it was spent decides between a new token and ending the grant for reuse, so a failed
 write there fails the token request with `server_error` and leaves the token
