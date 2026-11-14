@@ -18,7 +18,6 @@ type Env struct {
 	Domain            string
 	AuthSecret        string
 	CredentialKey     string
-	ClientSecret      string
 	// Pre-filled static values
 	AuthIssuer          string
 	ClientID            string
@@ -44,24 +43,23 @@ type NCEnv struct {
 
 // FullEnv holds all variables needed for the full (Nextcloud + MCP) stack .env file.
 type FullEnv struct {
-	NCDomain           string
-	MCPDomain          string
-	NCAdminUser        string
-	NCAdminPassword    string
-	NCMCPUser          string
-	NCMCPPassword      string
-	PostgresPassword   string
-	AuthSecret         string
-	CredentialKey      string
-	ClientSecret       string
-	AuthIssuer         string
-	ClientID           string
+	NCDomain            string
+	MCPDomain           string
+	NCAdminUser         string
+	NCAdminPassword     string
+	NCMCPUser           string
+	NCMCPPassword       string
+	PostgresPassword    string
+	AuthSecret          string
+	CredentialKey       string
+	AuthIssuer          string
+	ClientID            string
 	RegistrationEnabled bool
-	RegistrationToken  string
-	MCPInternalToken   string
-	CrowdSecBouncerKey string
-	AcmeEmail          string
-	NCMetricsToken     string
+	RegistrationToken   string
+	MCPInternalToken    string
+	CrowdSecBouncerKey  string
+	AcmeEmail           string
+	NCMetricsToken      string
 }
 
 // Generate builds the .env file content with random secrets.
@@ -74,10 +72,6 @@ func Generate(ncURL, ncUser, ncPassword, domain, acmeEmail string) (*Env, error)
 	credentialKey, err := randomHex(64)
 	if err != nil {
 		return nil, fmt.Errorf("generate credential key: %w", err)
-	}
-	clientSecret, err := randomHex(32)
-	if err != nil {
-		return nil, fmt.Errorf("generate client secret: %w", err)
 	}
 	regToken, err := randomHex(16)
 	if err != nil {
@@ -103,7 +97,6 @@ func Generate(ncURL, ncUser, ncPassword, domain, acmeEmail string) (*Env, error)
 		Domain:              domain,
 		AuthSecret:          authSecret,
 		CredentialKey:       credentialKey,
-		ClientSecret:        clientSecret,
 		AuthIssuer:          "https://" + domain,
 		ClientID:            "",
 		RegistrationEnabled: true,
@@ -141,11 +134,9 @@ func (e *Env) Render() string {
 	b.WriteString(fmt.Sprintf("MCP_CREDENTIAL_KEY=%s\n", e.CredentialKey))
 	b.WriteString(fmt.Sprintf("MCP_AUTH_ISSUER=%s\n", e.AuthIssuer))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_ID=%s\n", e.ClientID))
-	b.WriteString(fmt.Sprintf("MCP_CLIENT_SECRET=%s\n", e.ClientSecret))
 	b.WriteString("MCP_CLIENT_REDIRECT_URIS=\n")
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_ENABLED=%v\n", e.RegistrationEnabled))
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_TOKEN=%s\n", e.RegistrationToken))
-	b.WriteString("MCP_TRUST_PROXY=true\n")
 	b.WriteString("\n")
 
 	b.WriteString("# Traefik / TLS\n")
@@ -238,10 +229,6 @@ func GenerateFull(ncDomain, mcpDomain, ncAdminUser, ncAdminPassword, ncMCPUser, 
 	if err != nil {
 		return nil, fmt.Errorf("generate credential key: %w", err)
 	}
-	clientSecret, err := randomHex(32)
-	if err != nil {
-		return nil, fmt.Errorf("generate client secret: %w", err)
-	}
 	regToken, err := randomHex(16)
 	if err != nil {
 		return nil, fmt.Errorf("generate registration token: %w", err)
@@ -268,7 +255,6 @@ func GenerateFull(ncDomain, mcpDomain, ncAdminUser, ncAdminPassword, ncMCPUser, 
 		PostgresPassword:    postgresPassword,
 		AuthSecret:          authSecret,
 		CredentialKey:       credentialKey,
-		ClientSecret:        clientSecret,
 		AuthIssuer:          "https://" + mcpDomain,
 		ClientID:            "",
 		RegistrationEnabled: true,
@@ -312,11 +298,9 @@ func (e *FullEnv) Render() string {
 	b.WriteString(fmt.Sprintf("MCP_CREDENTIAL_KEY=%s\n", e.CredentialKey))
 	b.WriteString(fmt.Sprintf("MCP_AUTH_ISSUER=%s\n", e.AuthIssuer))
 	b.WriteString(fmt.Sprintf("MCP_CLIENT_ID=%s\n", e.ClientID))
-	b.WriteString(fmt.Sprintf("MCP_CLIENT_SECRET=%s\n", e.ClientSecret))
 	b.WriteString("MCP_CLIENT_REDIRECT_URIS=\n")
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_ENABLED=%v\n", e.RegistrationEnabled))
 	b.WriteString(fmt.Sprintf("MCP_REGISTRATION_TOKEN=%s\n", e.RegistrationToken))
-	b.WriteString("MCP_TRUST_PROXY=true\n")
 	b.WriteString("\n")
 
 	b.WriteString("# Extra hostnames for MCP SDK DNS rebinding protection (Docker service names)\n")

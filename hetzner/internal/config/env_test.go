@@ -40,3 +40,24 @@ func TestGenerateCredentialKeyIs512Bits(t *testing.T) {
 		t.Error("rendered .env writes NEXTCLOUD_USER although none was given")
 	}
 }
+
+// The compose files pin MCP_TRUST_PROXY to 1 (Traefik is one hop) and the
+// server no longer reads MCP_CLIENT_SECRET, so neither belongs in a generated
+// .env: a value there would suggest that editing it changes something.
+func TestRenderOmitsVariablesTheStackIgnores(t *testing.T) {
+	mcp, err := Generate("https://nc.example.com", "", "", "mcp.example.com", "a@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, err := GenerateFull("nc.example.com", "mcp.example.com", "admin", "pw", "mcp", "pw", "a@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, out := range map[string]string{"mcp": mcp.Render(), "full": full.Render()} {
+		for _, v := range []string{"MCP_TRUST_PROXY", "MCP_CLIENT_SECRET"} {
+			if strings.Contains(out, v) {
+				t.Errorf("%s stack .env contains %s", name, v)
+			}
+		}
+	}
+}
