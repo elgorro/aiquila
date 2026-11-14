@@ -491,6 +491,38 @@ export const listProjectTemplatesTool = {
   },
 };
 
+export const saveProjectAsTemplateTool = {
+  name: 'save_project_as_template',
+  title: 'Save Project as Template',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+  description:
+    "Save a copy of an AIquila project as one of the user's own project templates: title, description, system prompt and paths. Works for team projects too, for any member, which is how a member keeps a team project that is deleted with its team. Create a project from it later with create_project_from_template.",
+  inputSchema: z.object({
+    projectId: z.number().describe('Project ID from list_projects'),
+    title: z.string().optional().describe("Template title (default: the project's)"),
+  }),
+  handler: async (args: { projectId: number; title?: string }) => {
+    try {
+      const template = await fetchAiquilaAPI<ProjectTemplate>('/project-templates', {
+        method: 'POST',
+        body: { projectId: args.projectId, ...(args.title ? { title: args.title } : {}) },
+      });
+      const lines = [`Template #${template.id} saved: ${template.title}`];
+      if (template.description) lines.push(`  Description: ${template.description}`);
+      if (template.systemPrompt) lines.push(`  System prompt: ${template.systemPrompt}`);
+      for (const path of template.paths) lines.push(`  - [${path.pathType}] ${path.path}`);
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    } catch (error) {
+      return errorResult('saving project as template', error);
+    }
+  },
+};
+
 export const createProjectFromTemplateTool = {
   name: 'create_project_from_template',
   title: 'Create Project from Template',
@@ -532,5 +564,6 @@ export const projectsTools = [
   listPromptsTool,
   getPromptTool,
   listProjectTemplatesTool,
+  saveProjectAsTemplateTool,
   createProjectFromTemplateTool,
 ];

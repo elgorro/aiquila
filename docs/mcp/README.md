@@ -66,7 +66,7 @@ Nextcloud apps and administration:
 - **Recommendations** — The files Nextcloud suggests for the current user
 - **AIquila** — Configure and test the AI provider integration
 
-**Total: 393 tools across 47 categories**
+**Total: 394 tools across 47 categories**
 
 ## Tools Reference
 
@@ -486,7 +486,7 @@ Nextcloud apps and administration:
 | `circles_set_workspace_quota` | Set the storage quota of a team's workspace | [Teams](tools/apps/circles.md#circles_set_workspace_quota) |
 | `circles_remove_workspace` | Unlink or delete a team's workspace folder | [Teams](tools/apps/circles.md#circles_remove_workspace) |
 
-#### Projects (11 tools)
+#### Projects (12 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_projects` | List all AIquila projects for the current user | [Projects](tools/apps/projects.md#list_projects) |
@@ -499,6 +499,7 @@ Nextcloud apps and administration:
 | `list_prompts` | List the AIquila prompt library: organization prompts and your own | [Projects](tools/apps/projects.md#list_prompts) |
 | `get_prompt` | Get the full text of a prompt from the library | [Projects](tools/apps/projects.md#get_prompt) |
 | `list_project_templates` | List organization and personal project templates | [Projects](tools/apps/projects.md#list_project_templates) |
+| `save_project_as_template` | Save a copy of a project, a team project included, as a personal template | [Projects](tools/apps/projects.md#save_project_as_template) |
 | `create_project_from_template` | Create a project as a copy of a template | [Projects](tools/apps/projects.md#create_project_from_template) |
 
 #### Coworkers (15 tools)

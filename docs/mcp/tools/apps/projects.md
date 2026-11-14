@@ -64,6 +64,15 @@ Add a file or folder to a project.
 #### `list_project_templates`
 List the organization's templates and the user's own. A template holds a title, description, system prompt and suggested paths.
 
+#### `save_project_as_template`
+Save a copy of a project as one of your own templates: title, description, system prompt and paths. Works for a team project too, for any member of the team. A team project is deleted with its team, so this is how a member keeps a copy, and `create_project_from_template` turns it back into a project. The **Save as template** action in the project list does the same.
+
+**Parameters:**
+- `projectId` (number, required)
+- `title` (string, optional) — default: the project's title.
+
+**Example:** "Keep a copy of the Bids team's tender project before the team is deleted."
+
 #### `create_project_from_template`
 Create a project as a copy of a template. Later changes to the template do not reach the project.
 

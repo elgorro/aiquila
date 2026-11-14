@@ -13,6 +13,7 @@ use OCA\AIquila\Db\ProjectTemplate;
 use OCA\AIquila\Db\ProjectTemplateMapper;
 use OCA\AIquila\Db\Prompt;
 use OCA\AIquila\Service\InstructionsService;
+use OCA\AIquila\Service\TeamService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -43,6 +44,7 @@ class ProjectTemplateController extends Controller {
         private ProjectPathMapper $pathMapper,
         private ?string $userId,
         private LoggerInterface $logger,
+        private ?TeamService $teams = null,
     ) {
         parent::__construct($appName, $request);
     }
@@ -65,7 +67,9 @@ class ProjectTemplateController extends Controller {
      * Create a personal template
      *
      * With `projectId`, the template starts as a copy of that project (one of
-     * the caller's own); the other parameters then override its fields.
+     * the caller's own, or one of a team they belong to); the other parameters
+     * then override its fields. A team project is deleted with its team, so
+     * this is how a member keeps a copy.
      *
      * @param string|null $title Template title (required without projectId)
      * @param string|null $description Description
@@ -304,7 +308,12 @@ class ProjectTemplateController extends Controller {
 
         if ($projectId !== null) {
             try {
-                $project = $this->projectMapper->findByIdAndUser($projectId, $this->requireUserId());
+                // Any project the caller can use, team projects included.
+                $project = $this->projectMapper->findAccessible(
+                    $projectId,
+                    $this->requireUserId(),
+                    $this->teams?->teamIdsFor($this->requireUserId()) ?? [],
+                );
             } catch (DoesNotExistException) {
                 return $this->clientError(404, 'Project not found');
             }
