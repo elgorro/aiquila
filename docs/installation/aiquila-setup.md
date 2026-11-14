@@ -720,7 +720,10 @@ unless `force` is set, and never process their own output. A run handles up to 2
 documents; the rest wait for the next run. `vision:classify` needs a `vision` provider.
 
 Each coworker can be paused, run immediately with **Run now**, and keeps a run
-history with a summary of what it did. **Stop** in the run history cancels a run
+history with a summary of what it did. Open a run in the history to see its full
+summary and its log: one entry per file or step, with its time, its level (info,
+warning, error) and the file it is about. For your own runs, the file links to it
+in Files. The log keeps a run's newest 500 entries. **Stop** in the run history cancels a run
 that is still going. A running run ends at its next file, and a run waiting for a
 batch has its batch cancelled. The run keeps what it already processed, and the
 schedule is unchanged: pause or disable the coworker to skip future runs. The
