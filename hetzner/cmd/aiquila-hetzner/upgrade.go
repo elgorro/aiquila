@@ -364,6 +364,25 @@ func printPlan(p *upgradePlan) {
 	}
 }
 
+// mcpStateSnapshotJS copies the running server's state database with VACUUM
+// INTO, which reads one consistent snapshot even while the server writes. A
+// plain tar of state.db and its -wal file could catch them mid-checkpoint.
+// Servers before 0.6 keep JSON files instead and have no state.db.
+const mcpStateSnapshotJS = `const fs=require("fs");` +
+	`const s="/app/state/state.db",d="/tmp/aiq-state/state.db";` +
+	`if(fs.existsSync(s)){new (require("node:sqlite").DatabaseSync)(s).exec("VACUUM INTO \x27"+d+"\x27");fs.chmodSync(d,0o600)}`
+
+// mcpStateBackupCmd streams a tar of the MCP state volume into
+// <dir>/mcp-state.tar.gz, with the state database as a consistent snapshot.
+func mcpStateBackupCmd(dir string) string {
+	return strings.Join([]string{
+		`docker compose exec -T mcp sh -c 'rm -rf /tmp/aiq-state && mkdir -m 700 /tmp/aiq-state && cp -a /app/state/. /tmp/aiq-state/ && rm -f /tmp/aiq-state/state.db /tmp/aiq-state/state.db-wal /tmp/aiq-state/state.db-shm'`,
+		fmt.Sprintf("docker compose exec -T mcp node -e %s", shellQuote(mcpStateSnapshotJS)),
+		fmt.Sprintf("docker compose exec -T mcp tar -C /tmp/aiq-state -czf - . > %s/mcp-state.tar.gz", dir),
+		"docker compose exec -T mcp rm -rf /tmp/aiq-state",
+	}, " && ")
+}
+
 // backup writes a timestamped directory under /opt/aiquila/backups and keeps
 // the newest --keep-backups of them.
 func backup(r *remote, p *upgradePlan) (string, error) {
@@ -382,8 +401,7 @@ func backup(r *remote, p *upgradePlan) (string, error) {
 	}
 	if p.stack.HasMCP() {
 		steps = append(steps,
-			struct{ what, cmd string }{"MCP state",
-				fmt.Sprintf("docker compose exec -T mcp tar -C /app/state -czf - . > %s/mcp-state.tar.gz", dir)},
+			struct{ what, cmd string }{"MCP state", mcpStateBackupCmd(dir)},
 			struct{ what, cmd string }{"MCP image id",
 				fmt.Sprintf("echo %s > %s/mcp-image-id", shellQuote(p.mcpImageID), dir)},
 		)
@@ -627,6 +645,10 @@ func printRollback(p *upgradePlan, dir string) {
 		if from := upgrade.MCPImageTag(p.oldCompose); from != "" {
 			fmt.Printf("  docker tag %s ghcr.io/elgorro/aiquila-mcp:%s\n", p.mcpImageID, from)
 		}
+		// The new version may have migrated the state (0.6 moved it from JSON
+		// files into state.db), so the old one needs the state it left behind.
+		fmt.Printf("  docker compose stop mcp\n")
+		fmt.Printf("  docker run --rm -i -v aiquila_mcp_state:/s alpine sh -c 'find /s -mindepth 1 -delete && tar -C /s -xzf -' < %s/mcp-state.tar.gz\n", dir)
 		fmt.Printf("  docker compose %sup -d mcp\n", profileArg(p))
 	}
 	if p.stack.HasNextcloud() && p.appTo != "" {
