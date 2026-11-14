@@ -221,9 +221,9 @@ node --version
 
 ---
 
-**Problem**: "OCC commands must be run on the Nextcloud server"
+**Problem**: `Permission denied. OCC commands require admin rights…` from `run_setup_checks`, `install_app`, the integrity checks or the `aiquila_*` tools
 
-**Solution**: This is expected. AIquila configuration tools provide instructions for running OCC commands manually. See [AIquila Tools documentation](tools/apps/aiquila.md).
+**Solution**: These tools run OCC on the Nextcloud server through the AIquila app, which only admins may call. Sign in as a Nextcloud admin (for stdio, set `NEXTCLOUD_USER` to one). See [How OCC-backed tools run](tools/system-tools.md#how-occ-backed-tools-run).
 
 ## Docker Setup (HTTP Transport)
 

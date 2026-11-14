@@ -1,57 +1,77 @@
-# System Tools Documentation
+# System Tools
 
-System tools provide core operations for your Nextcloud instance including file management (via WebDAV and the AIquila app) and system diagnostics (via OCC commands).
+System tools cover files, tags, search, instance status, app management and integrity checks.
+They are always registered, except the categories marked **AIquila app** below, which are only
+registered when the AIquila Nextcloud app is installed and enabled.
 
-## Overview
+Every tool acts as one Nextcloud account: under OAuth, the signed-in user; for stdio and
+unauthenticated HTTP, `NEXTCLOUD_USER`. Nextcloud enforces that account's permissions, so a tool
+marked **Admin** fails with `403` for anyone else.
 
-System tools are divided into two categories:
-- **File Operations**: file and folder management over WebDAV and the AIquila app
-- **System Status**: OCC-based system diagnostics and monitoring
+| Category | Tools | Calls | Needs |
+|---|---|---|---|
+| [Files](#file-tools) | `list_files`, `read_file`, `write_file`, `create_folder`, `delete`, `move_file`, `copy_file`, `bulk_file_operations` | WebDAV | — |
+| [Files](#file-tools) | `get_file_info`, `search_files`, `get_file_content`, `analyze_image`, `create_archive`, `extract_archive`, `list_archive` | AIquila app `/api/files/*` | AIquila app |
+| [Tags](#tag-tools) | `get_file_tags`, `set_file_tags`, `list_system_tags`, `create_system_tag`, `assign_system_tag`, `remove_system_tag` | WebDAV (`systemtags`) | — |
+| [Search](#search-tools) | `unified_search`, `list_search_providers` | OCS Unified Search | — |
+| [Status](#status-tools) | `system_status`, `get_local_time` | `status.php`, OCS capabilities | — |
+| [Status](#status-tools) | `run_setup_checks` | OCC through the AIquila app | AIquila app, Admin |
+| [Apps](#app-management-tools) | `list_apps`, `get_app_info`, `enable_app`, `disable_app` | OCS Provisioning API | Admin |
+| [Apps](#app-management-tools) | `install_app`, `uninstall_app` | OCC through the AIquila app | AIquila app, Admin |
+| [Security](#integrity-tools) | `check_core_integrity`, `check_app_integrity` | OCC through the AIquila app | AIquila app, Admin |
+| [OCC](#run_occ) | `run_occ` | OCC through the AIquila app | AIquila app, Admin |
 
-## File Operation Tools
+## How OCC-backed tools run
 
-`list_files`, `read_file`, `write_file`, `create_folder`, `delete`, `move_file`, `copy_file`
-and `bulk_file_operations` use WebDAV. `get_file_info`, `search_files`, `get_file_content`,
-`analyze_image` and the archive tools (`create_archive`, `extract_archive`, `list_archive`)
-call the AIquila app's `/api/files/*` endpoints, so they need the app installed. Paths are relative to your user's home directory (e.g., `/Documents/file.txt`).
+The tools that run OCC commands do so on the Nextcloud server. They `POST` the command and its
+arguments to the AIquila app's `/api/occ` endpoint, which runs `php occ <command> --no-ansi
+--no-interaction <args>` and returns `success`, `stdout`, `stderr` and `exitCode`. There is
+nothing to copy and run by hand.
+
+`/api/occ` is admin-only, and it accepts only invocations in the app's own OCC allowlist (see
+[The allowlist](#the-allowlist)). Its default covers every command the dedicated tools run. A
+refused or failed call comes back as a tool error:
+
+| Status | Message |
+|---|---|
+| `401` | Nextcloud no longer accepts the account's credentials; sign in again |
+| `403` | The account is not an admin, or the app's allowlist refused the invocation (the reason is included) |
+| `404` | The AIquila app is not installed or not enabled |
+| `408` | The command ran past its timeout |
+
+A command that ran but exited non-zero is also reported as an error, with its output.
+
+## File tools
+
+Paths are relative to the account's home folder and start with `/`, e.g. `/Documents/file.txt`.
+Use forward slashes.
 
 ### list_files
 
-List files and folders in a Nextcloud directory.
+List the entries of a folder.
 
 **Parameters:**
-- `path` (string, optional): The directory path to list. Default: `/` (root directory)
+- `path` (string, optional): folder to list. Default `/`
 
-**Returns:**
-JSON array of file and folder information including:
-- `basename`: File/folder name
-- `filename`: Full path
-- `lastmod`: Last modified date
-- `size`: File size in bytes
-- `type`: `"file"` or `"directory"`
-- `etag`: Entity tag for caching
+**Returns:** a JSON array, one object per entry, without the folder itself:
+- `filename`: full path, e.g. `/Documents/plan.md`
+- `basename`: last path segment
+- `type`: `file` or `directory`
+- `size`: bytes
+- `lastmod`: `getlastmodified` as Nextcloud sends it (an HTTP date), or `null`
+- `etag`: entity tag without quotes, or `null`
+- `mime`: media type, files only
 
-**Example Usage:**
-```
-Ask Claude: "List the files in my Documents folder"
-Ask Claude: "Show me what's in /Photos/2024/"
-Ask Claude: "What folders are in my root directory?"
-```
-
-**Example Response:**
 ```json
 [
   {
-    "basename": "project-plan.md",
-    "filename": "/Documents/project-plan.md",
-    "lastmod": "2024-01-15T10:30:00Z",
+    "filename": "/Documents/plan.md",
+    "basename": "plan.md",
+    "lastmod": "Mon, 09 Nov 2026 10:30:00 GMT",
     "size": 2048,
-    "type": "file"
-  },
-  {
-    "basename": "meeting-notes",
-    "filename": "/Documents/meeting-notes",
-    "type": "directory"
+    "type": "file",
+    "etag": "5f2c7e0d1a9b3",
+    "mime": "text/markdown"
   }
 ]
 ```
@@ -60,192 +80,319 @@ Ask Claude: "What folders are in my root directory?"
 
 ### read_file
 
-Read the contents of a file from Nextcloud.
+Read a file as text over WebDAV.
 
 **Parameters:**
-- `path` (string, required): The file path to read
+- `path` (string, required): file to read
 
-**Returns:**
-The file contents as text.
-
-**Example Usage:**
-```
-Ask Claude: "Read the file /Documents/readme.txt"
-Ask Claude: "What's in my config.json file?"
-Ask Claude: "Show me the contents of /Notes/ideas.md"
-```
-
-**Notes:**
-- Binary files will be returned as text representation
-- Large files may be truncated
-- Supports all text formats (txt, md, json, xml, etc.)
+**Returns:** the file body as text. Binary files come back garbled; use
+[`get_file_content`](#get_file_content) for those.
 
 ---
 
 ### write_file
 
-Create or update a file in Nextcloud.
+Create a file or replace its contents.
 
 **Parameters:**
-- `path` (string, required): The file path to write
-- `content` (string, required): The content to write to the file
+- `path` (string, required): file to write
+- `content` (string, required): text to store. Limited to `MCP_MAX_FILE_SIZE` characters
+  (default 1 GB)
 
-**Returns:**
-Success message with the file path.
+**Returns:** `File written successfully to <path>`.
 
-**Example Usage:**
-```
-Ask Claude: "Create a file called /Documents/meeting-notes.md with today's meeting summary"
-Ask Claude: "Write 'Hello World' to /test.txt"
-Ask Claude: "Update /config.json with the new configuration"
-```
-
-**Notes:**
-- Automatically creates parent directories if they don't exist
-- Overwrites existing files
-- Supports all text formats
-
-**Example:**
-```json
-{
-  "path": "/Documents/todo.md",
-  "content": "# TODO\n\n- Review pull requests\n- Update documentation\n- Deploy to production"
-}
-```
+The parent folder must exist; Nextcloud answers `409 Conflict` otherwise (RFC 4918 §9.7.1).
+Create it first with [`create_folder`](#create_folder). An existing file is overwritten, and
+Nextcloud keeps the previous content as a [version](apps/versions.md).
 
 ---
 
 ### create_folder
 
-Create a folder in Nextcloud.
+Create one folder.
 
 **Parameters:**
-- `path` (string, required): The folder path to create
+- `path` (string, required): folder to create
 
-**Returns:**
-Success message with the folder path.
+**Returns:** `Folder created successfully at <path>`.
 
-**Example Usage:**
-```
-Ask Claude: "Create a folder called /Documents/2024"
-Ask Claude: "Make a new directory /Projects/AIquila"
-Ask Claude: "Create /Photos/Vacation folder"
-```
-
-**Notes:**
-- Creates parent directories if they don't exist
-- Returns success even if folder already exists
-- Use forward slashes for path separators
+This is a single `MKCOL` (RFC 4918 §9.3.1): it fails with `409` when the parent folder is missing
+and with `405` when the folder already exists. Create nested folders one level at a time.
 
 ---
 
 ### delete
 
-Delete a file or folder from Nextcloud.
+Delete a file or folder, including everything inside a folder.
 
 **Parameters:**
-- `path` (string, required): The path to delete
+- `path` (string, required): file or folder to delete
 
-**Returns:**
-Success message confirming deletion.
+**Returns:** `Deleted successfully: <path>`.
 
-**Example Usage:**
-```
-Ask Claude: "Delete the file /temp/old-data.txt"
-Ask Claude: "Remove the /archive folder"
-Ask Claude: "Delete /Documents/draft.md"
-```
-
-**Warning:**
-- Deletion is permanent and cannot be undone via MCP
-- Deleting a folder removes all its contents recursively
-- Check Nextcloud trash/recycle bin if you need to recover files
+With the Deleted files app (`files_trashbin`) enabled, which it is by default, the item moves to
+the trash bin and can be restored with the [trash tools](apps/trash.md).
 
 ---
 
-## Error Handling
+### move_file
 
-All system tools handle common errors gracefully:
+Move or rename a file or folder.
 
-- **Authentication errors**: Invalid credentials
-- **Not found errors**: File or folder doesn't exist
-- **Permission errors**: Insufficient permissions
-- **Network errors**: Connection issues
+**Parameters:**
+- `source` (string, required): current path
+- `destination` (string, required): new path
+- `overwrite` (boolean, optional): replace an existing destination. Default `false`; an existing
+  destination then fails with `412 Precondition Failed` (RFC 4918 §9.9.4)
 
-Error messages are returned in plain text format.
-
-## Path Format
-
-All paths should:
-- Start with `/` (relative to user home directory)
-- Use forward slashes `/` (not backslashes `\`)
-- Be URL-safe (avoid special characters)
-
-**Examples:**
-- ✅ `/Documents/project.md`
-- ✅ `/Photos/2024/vacation.jpg`
-- ✅ `/Backup/data-2024-01-15.zip`
-- ❌ `Documents/project.md` (missing leading slash)
-- ❌ `\Documents\project.md` (backslashes)
-
-## Performance Considerations
-
-- **Listing large directories**: May take time for folders with many files
-- **Reading large files**: Content may be truncated for very large files
-- **Network latency**: All operations depend on Nextcloud server response time
-
-## Related Tools
-
-- **Tasks**: Create and manage tasks → [Tasks Documentation](apps/tasks.md)
-- **Notes**: Create notes as markdown files → [Notes Documentation](apps/notes.md)
-- **Cookbook**: Add recipes as markdown files → [Cookbook Documentation](apps/cookbook.md)
-
-## Security
-
-- All operations use your Nextcloud credentials
-- Files are accessed with your user permissions
-- App passwords are recommended over main password
-- See [Setup Guide](../setup.md#security-best-practice-app-passwords)
+**Returns:** `Moved successfully: <source> → <destination>`.
 
 ---
 
-## System Status & Diagnostics Tools
+### copy_file
 
-These tools provide system status information and diagnostics via OCC commands.
+Copy a file or folder (folders recursively).
+
+**Parameters:**
+- `source` (string, required): path to copy
+- `destination` (string, required): path of the copy
+- `overwrite` (boolean, optional): replace an existing destination. Default `false`
+
+**Returns:** `Copied successfully: <source> → <destination>`.
+
+---
+
+### bulk_file_operations
+
+Run up to 100 moves, copies and deletes in order, in one call.
+
+**Parameters:**
+- `operations` (array, required, 1–100 items), each with:
+  - `action`: `move`, `copy` or `delete`
+  - `source` (string): path to act on
+  - `destination` (string): target path; required for `move` and `copy`
+
+**Returns:** `Bulk operations: <succeeded>/<total> succeeded`, then one `✓` or `✗` line per
+operation with the reason for each failure. A failed operation does not stop the ones after it.
+The result is an error when any operation failed.
+
+Moves and copies here overwrite an existing destination. Use `move_file` or `copy_file` with
+`overwrite: false` where that matters.
+
+---
+
+### get_file_info
+
+Metadata for a file or folder, from the AIquila app (`GET /api/files/info`).
+
+**Parameters:**
+- `path` (string, required)
+
+**Returns:** JSON with `id` (the file ID [`assign_system_tag`](#assign_system_tag) takes),
+`name`, `path`, `type` (`file` or `folder`), `size`, `mimeType`, `mtime` (Unix seconds), `etag`,
+`permissions` (Nextcloud's permission bitmask) and `isEncrypted`. `path` is Nextcloud's internal
+path, `/<user>/files/…`, not the path the other tools take.
+
+---
+
+### search_files
+
+Find files whose name contains a string, optionally of one media type
+(`GET /api/files/search`).
+
+**Parameters:**
+- `query` (string, required): text to look for in file names
+- `mime` (string, optional): media type prefix, e.g. `image/` or `application/pdf`
+- `path` (string, optional): folder to search under. Default `/`
+
+**Returns:** JSON with `query`, `mimeFilter`, `count` and `results`, each result carrying the
+same fields as `get_file_info`.
+
+---
+
+### get_file_content
+
+Read a file of any type (`GET /api/files/content`). Files over 20 MB are refused with `413`.
+
+**Parameters:**
+- `path` (string, required)
+
+**Returns:** a header line `File: <name> (<mimeType>, <size> bytes)`, then:
+- text files: the text
+- images: an MCP image block, so the model can look at it
+- other binary files: `Encoding: base64` and the base64 body
+
+---
+
+### analyze_image
+
+Hand one or more images to the model together with a question about them. The images are read
+through `GET /api/files/content`, so the 20 MB per-file limit applies.
+
+**Parameters:**
+- `path` (string, optional): one image
+- `paths` (string[], optional): up to 20 images; takes precedence over `path`
+- `prompt` (string, required): what to ask about the images
+
+**Returns:** a text block with the file names and the prompt, followed by one MCP image block per
+file. A path that is not an image fails the whole call.
+
+---
+
+### create_archive
+
+Create a zip archive on the server from files and folders (`POST /api/files/zip`). The MCP
+file-size limit does not apply; the uncompressed total is capped at 512 MB.
+
+**Parameters:**
+- `sources` (string[], required, at least one): files and folders to include
+- `destination` (string, required): path of the `.zip` to create
+- `overwrite` (boolean, optional): replace an existing archive. Default `false` (`409` otherwise)
+
+**Returns:** JSON with `archive` (its path), `entries` and `size`.
+
+---
+
+### extract_archive
+
+Extract a zip archive on the server into a folder (`POST /api/files/unzip`). Entries that would
+escape the destination are refused; the uncompressed total is capped at 512 MB.
+
+**Parameters:**
+- `archive` (string, required): path of the `.zip`
+- `destination` (string, required): folder to extract into
+- `overwrite` (boolean, optional): replace existing entries. Default `false` (`409` otherwise)
+
+**Returns:** JSON with `destination` and `extracted` (number of entries written).
+
+---
+
+### list_archive
+
+List a zip archive without extracting it (`GET /api/files/zip/list`).
+
+**Parameters:**
+- `archive` (string, required): path of the `.zip`
+
+**Returns:** JSON with `archive`, `count` and `entries`, each with `name`, `size`,
+`compressedSize` and `isDirectory`.
+
+## Tag tools
+
+Nextcloud has two kinds of tag. **Personal tags** (`oc:tags`) are private to the account and set
+by name on a path. **System tags** are shared across the instance, have numeric IDs and are
+attached by file ID.
+
+### get_file_tags
+
+**Parameters:** `path` (string, required)
+
+**Returns:** `Tags for <path>: a, b` or `No tags found for <path>`. Personal tags only.
+
+---
+
+### set_file_tags
+
+Replace the personal tags on a file or folder.
+
+**Parameters:**
+- `path` (string, required)
+- `tags` (string[], required): the complete new set; `[]` clears them
+
+**Returns:** `Tags set on <path>: …` or `All tags cleared from <path>`.
+
+---
+
+### list_system_tags
+
+**Parameters:** none
+
+**Returns:** one line per tag with `ID`, `Name`, `Visible`, `Assignable` and `CanAssign` (whether
+this account may assign it).
+
+---
+
+### create_system_tag
+
+**Parameters:**
+- `name` (string, required)
+- `userVisible` (boolean, optional): default `true`
+- `userAssignable` (boolean, optional): default `true`
+
+**Returns:** `System tag created: "<name>" (ID: <id>)`. Only admins can create a tag that is
+not visible or not assignable.
+
+---
+
+### assign_system_tag
+
+**Parameters:**
+- `fileId` (number, required): from [`get_file_info`](#get_file_info)
+- `tagId` (number, required): from [`list_system_tags`](#list_system_tags)
+
+**Returns:** `System tag <tagId> assigned to file <fileId>`.
+
+---
+
+### remove_system_tag
+
+**Parameters:** `fileId` (number, required), `tagId` (number, required)
+
+**Returns:** `System tag <tagId> removed from file <fileId>`.
+
+## Search tools
+
+### unified_search
+
+Search Nextcloud's Unified Search providers (files, mail, calendar, contacts, notes, …) through
+`/ocs/v2.php/search/providers/<id>/search`.
+
+**Parameters:**
+- `query` (string, required)
+- `provider` (string, optional): one provider ID from
+  [`list_search_providers`](#list_search_providers)
+- `limit` (number, optional): results per provider. Default 5
+- `cursor` (string, optional): the `cursor` from a previous result, to fetch the next page.
+  Only used together with `provider`
+
+**Returns:** JSON. With `provider`: `provider`, `name`, `isPaginated`, `cursor` and `entries`.
+Without it, up to six providers are searched in parallel (`files`, `mail`, `calendar` and
+`notes` first, if installed, then the rest by their order) and the result is an array with one
+object per provider that found something. Each entry has `title`, `subline` and `resourceUrl`.
+
+---
+
+### list_search_providers
+
+**Parameters:** none
+
+**Returns:** JSON array of providers with `id`, `name`, `appId` and `order`.
+
+## Status tools
 
 ### system_status
 
-Get Nextcloud system status including version, installation path, and configuration.
+Version and capabilities of the instance.
 
-**Parameters:**
-None
+**Parameters:** none
 
-**Returns:**
-OCC command instructions to display system status in JSON format.
+**Returns:** JSON with two keys:
+- `status`: the instance's `status.php` (`installed`, `maintenance`, `needsDbUpgrade`,
+  `version`, `versionstring`, `edition`, `productname`, `extendedSupport`)
+- `capabilities`: the OCS capabilities (`/ocs/v2.php/cloud/capabilities`) as the account sees
+  them, i.e. what each installed app advertises
 
-**Example Usage:**
-```
-Ask Claude: "Check Nextcloud system status"
-Ask Claude: "What version of Nextcloud is running?"
-Ask Claude: "Show me system information"
-```
-
-**Example Command:**
-```bash
-docker exec -u www-data aiquila-nextcloud php occ status
-```
-
-**Example Output:**
 ```json
 {
-  "installed": true,
-  "version": "28.0.1.1",
-  "versionstring": "28.0.1",
-  "edition": "",
-  "maintenance": false,
-  "needsDbUpgrade": false,
-  "productname": "Nextcloud",
-  "extendedSupport": false
+  "status": {
+    "installed": true,
+    "maintenance": false,
+    "needsDbUpgrade": false,
+    "version": "35.0.2.1",
+    "versionstring": "35.0.2",
+    "productname": "Nextcloud"
+  },
+  "capabilities": { "version": { "major": 35 }, "capabilities": { "…": {} } }
 }
 ```
 
@@ -253,39 +400,29 @@ docker exec -u www-data aiquila-nextcloud php occ status
 
 ### run_setup_checks
 
-Run Nextcloud setup checks to verify security and configuration.
+Runs `occ setupchecks`: the same security, performance and configuration checks as
+**Administration settings → Overview**.
 
-**Parameters:**
-None
+**Parameters:** none
 
-**Returns:**
-OCC command instructions to run comprehensive system checks on security, performance, and configuration.
+**Returns:** `Setup checks completed successfully.` or `Setup checks found issues (exit code:
+<n>).`, followed by the command's output. Non-zero exit (any warning or error in the checks) is
+reported as a tool error, so read the output rather than treating the error as a failure to run.
 
-**Example Usage:**
-```
-Ask Claude: "Run Nextcloud setup checks"
-Ask Claude: "Check my Nextcloud configuration"
-Ask Claude: "Verify my system security"
-```
+Needs the AIquila app and an admin account.
 
-**Example Command:**
-```bash
-docker exec -u www-data aiquila-nextcloud php occ setupchecks
-```
+---
 
-**What It Checks:**
-- **Security**: HTTPS, headers, PHP settings, database security
-- **Performance**: PHP memory, opcache, database config, caching
-- **Configuration**: PHP modules, database compatibility, cron jobs, file locking
+### get_local_time
 
-**Example Output:**
-```
-[✅] PHP version: 8.2.15 - OK
-[✅] Database: MySQL 8.0.35 - OK
-[⚠️ ] PHP memory limit: 512M (recommended: 1024M)
-[✅] HTTPS configured correctly
-[❌] Cron not configured - using AJAX
-```
+The MCP server's clock, for resolving "today" or "at 3pm" before calendar and task calls. It
+makes no Nextcloud request.
+
+**Parameters:** none
+
+**Returns:** JSON with `localTime` (formatted for `MCP_LOCALE`, else the system locale),
+`utcTime` (ISO 8601), `timezone` (IANA name, e.g. `Europe/Berlin`) and `utcOffset`
+(e.g. `+01:00`).
 
 ---
 
@@ -350,6 +487,10 @@ The list is enforced twice, and an invocation must pass both:
    MCP_OCC_ALLOWLIST='status *,app:list *,maintenance:mode,maintenance:mode --on,maintenance:mode --off'
    ```
 
+   This check applies to `run_occ` only. The dedicated tools (`run_setup_checks`,
+   `install_app`, the integrity checks, the `aiquila_*` tools) run fixed commands and are
+   checked by Nextcloud alone.
+
 2. **Nextcloud** — the AIquila app's `occ_allowlist` app config value guards
    `POST /api/occ` with the same syntax. Its default is the list above plus the commands
    the dedicated tools run (`app:install *`, `app:remove *`, `aiquila:configure *`,
@@ -365,183 +506,117 @@ The list is enforced twice, and an invocation must pass both:
 `run_occ` needs the account it acts as to be a Nextcloud admin: under OAuth, the signed-in
 user; for stdio, `NEXTCLOUD_USER`.
 
----
+## App management tools
 
-## App Management Tools
-
-Tools for managing Nextcloud apps via OCC commands.
+All six need an admin account.
 
 ### list_apps
 
-List all installed Nextcloud apps with their status.
+List app IDs (`GET /ocs/v2.php/cloud/apps`).
 
 **Parameters:**
-- `showDisabled` (boolean, optional): Show only disabled apps
+- `filter` (string, optional): `all` (default), `enabled` or `disabled`
 
-**Returns:**
-OCC command instructions to list apps with enabled/disabled status.
-
-**Example Usage:**
-```
-Ask Claude: "List all Nextcloud apps"
-Ask Claude: "Show me disabled apps"
-Ask Claude: "What apps are installed?"
-```
+**Returns:** `Nextcloud apps (<filter>):` followed by one app ID per line. `all` includes apps
+that are present but disabled.
 
 ---
 
 ### get_app_info
 
-Get detailed information about a specific app.
+The app's `info.xml` metadata as Nextcloud parses it (`GET /ocs/v2.php/cloud/apps/<appId>`).
 
 **Parameters:**
-- `appId` (string, required): App ID (e.g., "tasks", "deck", "photos")
+- `appId` (string, required), e.g. `tasks`
 
-**Returns:**
-OCC command instructions to get app installation path and details.
-
-**Example Usage:**
-```
-Ask Claude: "Get info about the tasks app"
-Ask Claude: "Show me details for the deck app"
-```
+**Returns:** JSON with fields such as `id`, `name`, `summary`, `version`, `licence`, `author`,
+`dependencies` and `category`.
 
 ---
 
 ### enable_app
 
-Enable a disabled Nextcloud app.
+Enable an app that is present on the server (`POST /ocs/v2.php/cloud/apps/<appId>`). To fetch an
+app from the App Store first, use [`install_app`](#install_app).
 
 **Parameters:**
-- `appId` (string, required): App ID to enable
+- `appId` (string, required)
 
-**Returns:**
-OCC command instructions to enable the app.
-
-**Example Usage:**
-```
-Ask Claude: "Enable the tasks app"
-Ask Claude: "Turn on the photos app"
-```
+**Returns:** `App "<appId>" has been enabled successfully.`
 
 ---
 
 ### disable_app
 
-Disable an enabled Nextcloud app.
+Disable an app (`DELETE /ocs/v2.php/cloud/apps/<appId>`). Its data stays and it can be enabled
+again.
 
 **Parameters:**
-- `appId` (string, required): App ID to disable
+- `appId` (string, required)
 
-**Returns:**
-OCC command instructions to disable the app with warnings.
-
-**Example Usage:**
-```
-Ask Claude: "Disable the survey app"
-Ask Claude: "Turn off the firstrunwizard app"
-```
+**Returns:** `App "<appId>" has been disabled successfully. …`
 
 ---
 
-## Security & Integrity Tools
+### install_app
 
-Tools for verifying system and app integrity via file signature checks.
+Download an app from the App Store and enable it, via `occ app:install`. Runs with a 300-second
+timeout. Needs the AIquila app.
+
+**Parameters:**
+- `appId` (string, required)
+- `keepDisabled` (boolean, optional): install without enabling (`--keep-disabled`)
+
+**Returns:** the command's output. An app that is already installed, or not compatible with this
+Nextcloud version, is reported as an error with the command's message.
+
+---
+
+### uninstall_app
+
+Remove an app's code from the server, via `occ app:remove`. Needs the AIquila app.
+
+**Parameters:**
+- `appId` (string, required)
+- `keepData` (boolean, optional): keep the app's database tables and settings (`--keep-data`)
+
+**Returns:** the command's output. Without `keepData`, the app's data is deleted as well.
+
+## Integrity tools
+
+Both compare installed files against the signature Nextcloud ships for each release. They need
+the AIquila app and an admin account.
 
 ### check_core_integrity
 
-Verify Nextcloud core system integrity.
+Runs `occ integrity:check-core`.
 
-**Parameters:**
-None
+**Parameters:** none
 
-**Returns:**
-OCC command instructions to check core file signatures and detect unauthorized modifications.
-
-**Example Usage:**
-```
-Ask Claude: "Check Nextcloud core integrity"
-Ask Claude: "Verify system files haven't been tampered with"
-Ask Claude: "Run security integrity check"
-```
-
-**What It Checks:**
-- Core file modifications
-- Extra files that shouldn't exist
-- Missing required files
-- File signature mismatches
+**Returns:** `Core integrity check passed.` with no further output when the files match.
+Otherwise `Core integrity check found issues (exit code: <n>).` and the list of modified,
+extra or missing files.
 
 ---
 
 ### check_app_integrity
 
-Verify integrity of a specific app.
+Runs `occ integrity:check-app <appId>`.
 
 **Parameters:**
-- `appId` (string, required): App ID to check (e.g., "tasks", "deck")
+- `appId` (string, required)
 
-**Returns:**
-OCC command instructions to check app file signatures.
-
-**Example Usage:**
-```
-Ask Claude: "Check integrity of tasks app"
-Ask Claude: "Verify the deck app files"
-Ask Claude: "Has the photos app been modified?"
-```
-
----
-
-## Search Tools
-
-Tools for searching across all Nextcloud apps via the Unified Search API.
-
-### unified_search
-
-Search across all Nextcloud apps (files, calendar, contacts, mail, notes, etc.) using Unified Search. Optionally filter by a specific provider ID.
-
-**Parameters:**
-- `query` (string, required): The search query
-- `provider` (string, optional): Search a specific provider by ID (e.g., `files`, `calendar`, `contacts`)
-- `limit` (number, optional): Maximum results per provider (default 5)
-- `cursor` (string, optional): Pagination cursor returned from a previous search
-
-**Returns:**
-Search results grouped by provider, each with title, subtitle, and resource URL.
-
-**Example Usage:**
-```
-Ask Claude: "Search Nextcloud for 'meeting notes'"
-Ask Claude: "Search my contacts for 'Alice'"
-Ask Claude: "Find files matching 'budget 2026'"
-```
-
----
-
-### list_search_providers
-
-List all available Unified Search providers in Nextcloud. Use this to discover provider IDs for targeted searches with `unified_search`.
-
-**Parameters:**
-None
-
-**Returns:**
-List of available search providers with IDs and names.
-
-**Example Usage:**
-```
-Ask Claude: "What search providers are available?"
-Ask Claude: "List search sources in Nextcloud"
-```
-
----
+**Returns:** `App "<appId>" integrity check passed.`, or the issues found. Apps without a
+signature (most apps installed from git or by hand) report that the signature is missing.
 
 ## Development
 
-To extend system tools or add new operations:
-- See [Adding Tools Guide](../development/adding-tools.md)
-- Source code:
-  - File tools: [mcp-server/src/tools/system/files.ts](../../../mcp-server/src/tools/system/files.ts)
-  - Status tools: [mcp-server/src/tools/system/status.ts](../../../mcp-server/src/tools/system/status.ts)
-  - App tools: [mcp-server/src/tools/system/apps.ts](../../../mcp-server/src/tools/system/apps.ts)
-  - Security tools: [mcp-server/src/tools/system/security.ts](../../../mcp-server/src/tools/system/security.ts)
+- [Adding tools](../development/adding-tools.md)
+- Source: [`files.ts`](../../../mcp-server/src/tools/system/files.ts),
+  [`tags.ts`](../../../mcp-server/src/tools/system/tags.ts),
+  [`search.ts`](../../../mcp-server/src/tools/system/search.ts),
+  [`status.ts`](../../../mcp-server/src/tools/system/status.ts),
+  [`apps.ts`](../../../mcp-server/src/tools/system/apps.ts),
+  [`security.ts`](../../../mcp-server/src/tools/system/security.ts),
+  [`occ.ts`](../../../mcp-server/src/tools/system/occ.ts)
+- The AIquila app endpoints these tools call are described in [OpenAPI](../../dev/openapi.md).
