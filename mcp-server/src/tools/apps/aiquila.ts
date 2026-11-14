@@ -102,8 +102,11 @@ export const configureTool = {
       .describe(
         "Claude model to use (e.g., 'claude-fable-5-2', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5')"
       ),
-    maxTokens: z.number().optional().describe('Maximum tokens for responses (default: 4096)'),
-    timeout: z.number().optional().describe('Request timeout in seconds (default: 60)'),
+    maxTokens: z
+      .number()
+      .optional()
+      .describe("Maximum tokens for responses (1-128000; default: the model's own limit)"),
+    timeout: z.number().optional().describe('Request timeout in seconds (10-1800, default: 30)'),
     effort: z
       .enum(['', ...EFFORTS])
       .optional()
