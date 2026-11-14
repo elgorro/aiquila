@@ -47,6 +47,10 @@ class ClaudePlatformAwsProvider extends AbstractAwsClaudeProvider {
             self::FEATURE_NATIVE_MCP => true,
             self::FEATURE_METADATA => true,
             self::FEATURE_TASK_BUDGET => true,
+            // Both tool-change headers are documented here; system messages,
+            // which carry the changes, come from AbstractAwsClaudeProvider.
+            self::FEATURE_MID_CONVERSATION_TOOL_CHANGES => true,
+            self::FEATURE_INLINE_TOOLS => true,
         ] + parent::platformFeatures();
     }
 

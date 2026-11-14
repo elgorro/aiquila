@@ -117,7 +117,7 @@ class MultimodalChatWithToolsProviderTest extends TestCase {
         $this->llm = $this->llmWith([]);
         $this->llm->expects($this->never())->method('chatToolsTurn');
 
-        $this->expectExceptionMessage('Test cannot process images');
+        $this->expectExceptionMessageIsOrContains('Test cannot process images');
         $this->provider->process('alice', [
             'input' => 'What is this?',
             'input_attachments' => [$this->file('cat.png', 'image/png', 'x')],
@@ -128,7 +128,7 @@ class MultimodalChatWithToolsProviderTest extends TestCase {
         $this->llm = $this->llmWith(['vision' => true]);
         $this->llm->expects($this->never())->method('chatToolsTurn');
 
-        $this->expectExceptionMessage('Test cannot read PDF documents');
+        $this->expectExceptionMessageIsOrContains('Test cannot read PDF documents');
         $this->provider->process('alice', [
             'input' => 'Summarize',
             'input_attachments' => [$this->file('a.pdf', 'application/pdf', '%PDF')],
@@ -155,7 +155,7 @@ class MultimodalChatWithToolsProviderTest extends TestCase {
         $this->llm = $this->llmWith([]);
         $this->llm->expects($this->never())->method('chatToolsTurn');
 
-        $this->expectExceptionMessage('cannot send to a model (application/zip)');
+        $this->expectExceptionMessageIsOrContains('cannot send to a model (application/zip)');
         $this->provider->process('alice', [
             'input' => 'Open this',
             'input_attachments' => [$this->file('a.zip', 'application/zip', 'PK')],

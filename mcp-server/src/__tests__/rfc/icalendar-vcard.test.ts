@@ -7,8 +7,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('webdav', () => ({ createClient: vi.fn(() => ({})) }));
-
 /** What `/ocs/v2.php/cloud/user` answers for the signed-in user. */
 let ocsUser: Record<string, unknown> = {};
 

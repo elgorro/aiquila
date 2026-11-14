@@ -54,7 +54,7 @@ Nextcloud apps and administration:
 - **Polls** — Create text/date polls, vote, comment, and share
 - **Forms** — Build surveys, collect responses, and export results
 - **Cookbook** — Recipe management with schema.org format
-- **Assistant** — Nextcloud AI task processing and image generation
+- **Assistant** — Nextcloud AI task processing, image generation, and the Assistant's skills and scheduled assignments
 - **Shares** — File share CRUD and auditing
 - **Users** — Manage user accounts
 - **Groups** — Manage groups and memberships
@@ -66,7 +66,7 @@ Nextcloud apps and administration:
 - **Recommendations** — The files Nextcloud suggests for the current user
 - **AIquila** — Configure and test the AI provider integration
 
-**Total: 384 tools across 47 categories**
+**Total: 393 tools across 47 categories**
 
 ## Tools Reference
 
@@ -335,13 +335,22 @@ Nextcloud apps and administration:
 | `update_recipe` | Update a recipe | [Cookbook](tools/apps/cookbook.md#update_recipe) |
 | `delete_recipe` | Delete a recipe | [Cookbook](tools/apps/cookbook.md#delete_recipe) |
 
-#### Assistant / AI (4 tools)
+#### Assistant / AI (13 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_text_tasks` | List available AI task types | [Assistant](tools/apps/assistant.md#list_text_tasks) |
 | `process_text` | Submit text processing task | [Assistant](tools/apps/assistant.md#process_text) |
 | `get_task_result` | Get AI task status/result | [Assistant](tools/apps/assistant.md#get_task_result) |
 | `generate_image` | Generate image from prompt | [Assistant](tools/apps/assistant.md#generate_image) |
+| `list_assistant_skills` | List Assistant skills | [Assistant](tools/apps/assistant.md#list_assistant_skills) |
+| `get_assistant_skill` | Read a skill | [Assistant](tools/apps/assistant.md#get_assistant_skill) |
+| `save_assistant_skill` | Create or replace a skill | [Assistant](tools/apps/assistant.md#save_assistant_skill) |
+| `delete_assistant_skill` | Delete a skill | [Assistant](tools/apps/assistant.md#delete_assistant_skill) |
+| `list_assistant_assignments` | List scheduled assignments | [Assistant](tools/apps/assistant.md#list_assistant_assignments--get_assistant_assignment--delete_assistant_assignment) |
+| `get_assistant_assignment` | Get an assignment | [Assistant](tools/apps/assistant.md#list_assistant_assignments--get_assistant_assignment--delete_assistant_assignment) |
+| `create_assistant_assignment` | Schedule a prompt | [Assistant](tools/apps/assistant.md#create_assistant_assignment) |
+| `update_assistant_assignment` | Change an assignment | [Assistant](tools/apps/assistant.md#update_assistant_assignment) |
+| `delete_assistant_assignment` | Delete an assignment | [Assistant](tools/apps/assistant.md#list_assistant_assignments--get_assistant_assignment--delete_assistant_assignment) |
 
 #### Shares (10 tools)
 | Tool | Description | Documentation |

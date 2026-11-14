@@ -63,7 +63,7 @@ export const readFileTool = {
       content: [
         {
           type: 'text',
-          text: content as string,
+          text: content,
         },
       ],
     };
