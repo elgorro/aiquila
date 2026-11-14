@@ -73,15 +73,57 @@ export function recurrenceProblem(rule: string): string | undefined {
   if (!/^FREQ=(SECONDLY|MINUTELY|HOURLY|DAILY|WEEKLY|MONTHLY|YEARLY)$/i.test(freq[0])) {
     return 'FREQ must be one of SECONDLY, MINUTELY, HOURLY, DAILY, WEEKLY, MONTHLY, YEARLY';
   }
+  const get = (name: string) =>
+    parts.find((p) => p.toUpperCase().startsWith(`${name}=`))?.slice(name.length + 1);
+  const ints = (list: string) =>
+    list.split(',').map((v) => (/^[+-]?\d+$/.test(v) ? Number(v) : NaN));
+  const frequency = freq[0].slice(5).toUpperCase();
+
   // weekdaynum = [[plus / minus] ordwk] weekday, ordwk 1 to 53. The Assistant
   // accepts any BYDAY text, and a rule it cannot evaluate would never run.
-  const byday = parts.find((p) => /^BYDAY=/i.test(p));
-  if (byday) {
-    for (const day of byday.slice(6).split(',')) {
+  const byday = get('BYDAY');
+  if (byday !== undefined) {
+    for (const day of byday.split(',')) {
       const m = day.match(/^([+-]?)(\d{1,2})?(SU|MO|TU|WE|TH|FR|SA)$/i);
       if (!m || (m[2] !== undefined && (Number(m[2]) < 1 || Number(m[2]) > 53))) {
         return `BYDAY "${day}" is not a weekday such as MO, -1FR or 2TU`;
       }
+      if (m[2] === undefined) continue;
+      // "MUST NOT be specified with a numeric value when the FREQ rule part is
+      // not set to MONTHLY or YEARLY", nor with YEARLY and BYWEEKNO.
+      if (frequency !== 'MONTHLY' && frequency !== 'YEARLY') {
+        return `BYDAY "${day}" has a number, which only FREQ=MONTHLY or FREQ=YEARLY allows`;
+      }
+      if (frequency === 'YEARLY' && get('BYWEEKNO') !== undefined) {
+        return `BYDAY "${day}" has a number, which FREQ=YEARLY with BYWEEKNO does not allow`;
+      }
+      // Within a month a weekday occurs at most five times. A larger ordinal
+      // never matches, and the Assistant's rule engine (Recurr) then searches
+      // without end instead of finding no date.
+      if ((frequency === 'MONTHLY' || get('BYMONTH') !== undefined) && Number(m[2]) > 5) {
+        return `BYDAY "${day}" never occurs: a weekday occurs at most 5 times in a month`;
+      }
+    }
+  }
+
+  const bymonth = get('BYMONTH');
+  const months = bymonth === undefined ? [] : ints(bymonth);
+  if (months.some((n) => !Number.isInteger(n) || n < 1 || n > 12)) {
+    return `BYMONTH "${bymonth}" must list months 1 to 12`;
+  }
+  const bymonthday = get('BYMONTHDAY');
+  const days = bymonthday === undefined ? [] : ints(bymonthday);
+  if (days.some((n) => !Number.isInteger(n) || n === 0 || Math.abs(n) > 31)) {
+    return `BYMONTHDAY "${bymonthday}" must list days 1 to 31 or -31 to -1`;
+  }
+  // A day no listed month has (BYMONTH=4;BYMONTHDAY=31) never matches, which
+  // Recurr also cannot detect. February counts 29 days for leap years.
+  if (months.length > 0 && days.length > 0) {
+    const longest = Math.max(
+      ...months.map((n) => [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][n - 1])
+    );
+    if (days.every((d) => Math.abs(d) > longest)) {
+      return `BYMONTHDAY "${bymonthday}" never occurs in BYMONTH "${bymonth}"`;
     }
   }
   return undefined;

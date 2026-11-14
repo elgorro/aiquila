@@ -137,6 +137,11 @@ describe('RFC 5545 §3.3.10 — recurrence rules', () => {
     'FREQ=WEEKLY;BYDAY=MO,TH',
     'freq=monthly;BYMONTHDAY=-1',
     'RRULE:FREQ=YEARLY',
+    'FREQ=MONTHLY;BYDAY=-1FR',
+    'FREQ=MONTHLY;BYDAY=5MO',
+    'FREQ=YEARLY;BYDAY=20MO',
+    'FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=29',
+    'FREQ=YEARLY;BYMONTH=4,5;BYMONTHDAY=31',
   ])('accepts %s', (rule) => expect(recurrenceProblem(rule)).toBeUndefined());
 
   it.each([
@@ -147,6 +152,17 @@ describe('RFC 5545 §3.3.10 — recurrence rules', () => {
     ['FREQ=DAILY; COUNT=2', /may only contain/],
     ['FREQ=WEEKLY;BYDAY=XX', /not a weekday/],
     ['FREQ=MONTHLY;BYDAY=54MO', /not a weekday/],
+    ['FREQ=WEEKLY;BYDAY=2MO', /only FREQ=MONTHLY or FREQ=YEARLY/],
+    ['FREQ=YEARLY;BYWEEKNO=1;BYDAY=1MO', /BYWEEKNO does not allow/],
+    // Rules that never match: the Assistant's Recurr engine loops on them.
+    ['FREQ=MONTHLY;BYDAY=9MO', /at most 5 times/],
+    ['FREQ=MONTHLY;BYDAY=-6MO', /at most 5 times/],
+    ['FREQ=YEARLY;BYMONTH=2;BYDAY=6MO', /at most 5 times/],
+    ['FREQ=MONTHLY;BYMONTH=4;BYMONTHDAY=31', /never occurs in BYMONTH/],
+    ['FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30,-30', /never occurs in BYMONTH/],
+    ['FREQ=YEARLY;BYMONTH=13', /months 1 to 12/],
+    ['FREQ=MONTHLY;BYMONTHDAY=0', /days 1 to 31/],
+    ['FREQ=MONTHLY;BYMONTHDAY=32', /days 1 to 31/],
   ])('rejects %s', (rule, why) => expect(recurrenceProblem(rule)).toMatch(why));
 });
 

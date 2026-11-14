@@ -173,8 +173,15 @@ of the result.
 | `timezone` | string | No | IANA time zone the recurrence follows, e.g. `Europe/Berlin`. Default: the user's |
 
 The start time needs an offset so it cannot be read in the wrong zone. The rule is checked
-before it is sent (one `FREQ`, `NAME=value` parts, valid `BYDAY` weekdays), because the
-Assistant stores a rule it cannot evaluate, and such an assignment never runs.
+before it is sent, because the Assistant stores a rule it cannot evaluate, and such an
+assignment never runs. The check covers:
+
+- one `FREQ` and `NAME=value` parts;
+- valid `BYDAY` weekdays, with a number such as `2TU` only for `MONTHLY` or `YEARLY`;
+- `BYMONTH` 1 to 12 and `BYMONTHDAY` ±1 to 31;
+- rules that can never match, such as `FREQ=MONTHLY;BYDAY=6MO` or
+  `BYMONTH=4;BYMONTHDAY=31`. The Assistant's rule engine keeps searching for a date on
+  those instead of giving up, which stalls its background job.
 
 ### update_assistant_assignment
 
