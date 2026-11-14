@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RedirectUriPolicy } from '../../auth/redirect-uri.js';
 import { ClientsStore } from '../../auth/store.js';
+import { StateDb } from '../../auth/state-db.js';
 
 vi.mock('../../logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
@@ -79,14 +80,18 @@ describe('ClientsStore with a redirect policy', () => {
           { client_id: 'evil', redirect_uris: ['https://attacker.example/cb'] },
         ])
       );
+      // Registrations from an earlier version, imported on first start.
+      const db = StateDb.open(dir);
       const store = new ClientsStore({
         enableDynamicRegistration: true,
-        stateFile: file,
+        db,
         redirectPolicy: new RedirectUriPolicy(),
       });
       expect(await store.getClient('good')).toBeDefined();
       expect(await store.getClient('evil')).toBeUndefined();
-      expect(readFileSync(file, 'utf8')).not.toContain('evil');
+      // Dropped from storage too, not just hidden.
+      expect(await new ClientsStore({ db }).getClient('evil')).toBeUndefined();
+      db.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

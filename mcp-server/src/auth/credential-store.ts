@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
-import { join } from 'node:path';
 import type { NextcloudUserCredential } from '../nc-context.js';
 import { logger } from '../logger.js';
-import { ensureDir, loadJson, saveJson, stateDir } from './store.js';
+import { ensureDir, stateDir } from './store.js';
+import { sharedStateDb, StateDb } from './state-db.js';
 
 /**
  * Encrypts and decrypts the Nextcloud app passwords held for OAuth grants.
@@ -237,43 +237,37 @@ function aadFor(grantId: string, userId: string): Buffer {
   return Buffer.from(JSON.stringify(['aiquila-credential-v1', grantId, userId]));
 }
 
+interface CredentialRow {
+  grant_id: string;
+  user_id: string;
+  sealed: string;
+  expires_at: number;
+}
+
 /**
- * One Nextcloud credential per OAuth grant, encrypted at rest. The state file
+ * One Nextcloud credential per OAuth grant, encrypted at rest. The database
  * holds only sealed values; a plaintext app password exists in memory only
  * while a request that needs it runs.
  */
 export class CredentialStore {
-  private readonly entries = new Map<string, StoredCredential>();
-
   constructor(
     private readonly cipher: CredentialCipher,
-    private readonly stateFile?: string
-  ) {
-    if (this.stateFile) {
-      const persisted = loadJson<Record<string, StoredCredential>>(this.stateFile);
-      if (persisted && typeof persisted === 'object') {
-        for (const [grantId, e] of Object.entries(persisted)) {
-          if (
-            e &&
-            typeof e.userId === 'string' &&
-            typeof e.sealed === 'string' &&
-            typeof e.expiresAt === 'number'
-          ) {
-            this.entries.set(grantId, e);
-          }
-        }
-      }
-    }
-  }
+    private readonly db: StateDb = StateDb.memory()
+  ) {}
 
   static fromEnv(cipher: CredentialCipher = cipherFromEnv()): CredentialStore {
     const dir = stateDir();
     ensureDir(dir);
-    return new CredentialStore(cipher, join(dir, 'credentials.json'));
+    return new CredentialStore(cipher, sharedStateDb(dir));
   }
 
   get cipherName(): string {
     return this.cipher.name;
+  }
+
+  private row(grantId: string): StoredCredential | undefined {
+    const r = this.db.get<CredentialRow>('SELECT * FROM credentials WHERE grant_id = ?', grantId);
+    return r ? { userId: r.user_id, sealed: r.sealed, expiresAt: r.expires_at } : undefined;
   }
 
   async put(cred: NextcloudUserCredential, expiresAt: number): Promise<void> {
@@ -282,8 +276,15 @@ export class CredentialStore {
       Buffer.from(JSON.stringify(payload)),
       aadFor(cred.grantId, cred.userId)
     );
-    this.entries.set(cred.grantId, { userId: cred.userId, sealed, expiresAt });
-    this.persist();
+    this.db.run(
+      `INSERT INTO credentials (grant_id, user_id, sealed, expires_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (grant_id) DO UPDATE SET
+           user_id = excluded.user_id, sealed = excluded.sealed, expires_at = excluded.expires_at`,
+      cred.grantId,
+      cred.userId,
+      sealed,
+      expiresAt
+    );
   }
 
   /**
@@ -294,37 +295,37 @@ export class CredentialStore {
    * asked, which says nothing about the grant.
    */
   async get(grantId: string, userId: string): Promise<NextcloudUserCredential | undefined> {
-    const e = this.entries.get(grantId);
+    const e = this.row(grantId);
     if (!e || e.userId !== userId || e.expiresAt <= Date.now()) return undefined;
     return this.open(grantId, e);
   }
 
   has(grantId: string): boolean {
-    return this.entries.has(grantId);
+    return this.db.get('SELECT 1 FROM credentials WHERE grant_id = ?', grantId) !== undefined;
   }
 
   /** Slides the expiry along with the grant's refresh token; `Date.now()` marks it for the sweep. */
   extend(grantId: string, expiresAt: number): void {
-    const e = this.entries.get(grantId);
-    if (!e) return;
-    e.expiresAt = expiresAt;
-    this.persist();
+    this.db.run('UPDATE credentials SET expires_at = ? WHERE grant_id = ?', expiresAt, grantId);
   }
 
   delete(grantId: string): void {
-    if (this.entries.delete(grantId)) this.persist();
+    this.db.run('DELETE FROM credentials WHERE grant_id = ?', grantId);
   }
 
   /** Grant ids whose credential has expired, with their user. */
   expired(now = Date.now()): { grantId: string; userId: string }[] {
-    return [...this.entries]
-      .filter(([, e]) => e.expiresAt <= now)
-      .map(([grantId, e]) => ({ grantId, userId: e.userId }));
+    return this.db
+      .all<CredentialRow>(
+        'SELECT grant_id, user_id FROM credentials WHERE expires_at <= ? ORDER BY grant_id',
+        now
+      )
+      .map((r) => ({ grantId: r.grant_id, userId: r.user_id }));
   }
 
   /** Reads an entry whatever its expiry, to delete its app password in Nextcloud. */
   async getForCleanup(grantId: string): Promise<NextcloudUserCredential | undefined> {
-    const e = this.entries.get(grantId);
+    const e = this.row(grantId);
     return e ? this.open(grantId, e) : undefined;
   }
 
@@ -345,10 +346,5 @@ export class CredentialStore {
       );
       return undefined;
     }
-  }
-
-  private persist(): void {
-    if (!this.stateFile) return;
-    saveJson(this.stateFile, Object.fromEntries(this.entries), 0o600);
   }
 }
