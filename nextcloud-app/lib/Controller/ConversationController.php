@@ -1434,10 +1434,12 @@ class ConversationController extends Controller {
             return ['tools' => $tools, 'messages' => ToolChanges::describeAll($messages)];
         }
 
-        $plan = ToolChanges::plan($state, $tools);
+        $plan = ToolChanges::plan($state, $tools, $provider->supportsInlineTools($this->userId, $options));
         if ($plan['reset']) {
-            // A tool was redefined: the declared list starts over and this
-            // request rebuilds the cache once. Earlier changes become text.
+            // A tool was redefined where it cannot be in place, or the
+            // by-value definitions reached their cap: the declared list
+            // starts over and this request rebuilds the cache once. Earlier
+            // changes become text.
             $this->logger->info('AIquila: conversation tools redefined, starting their state over', ['conversationId' => $conversation->getId()]);
             $this->retireToolChanges($conversation);
             $messages = ToolChanges::describeAll($messages);

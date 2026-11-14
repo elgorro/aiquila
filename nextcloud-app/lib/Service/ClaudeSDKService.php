@@ -102,10 +102,18 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     /**
      * Adding and removing tools mid-conversation (`tool_addition` /
      * `tool_removal` system blocks, `defer_loading` tools; beta
-     * `mid-conversation-tool-changes-2026-07-01`): the Claude API, Amazon
-     * Bedrock and Vertex AI.
+     * `mid-conversation-tool-changes-2026-07-01`): the Claude API, Claude
+     * Platform on AWS, Amazon Bedrock and Vertex AI.
      */
     public const FEATURE_MID_CONVERSATION_TOOL_CHANGES = 'mid_conversation_tool_changes';
+    /**
+     * Tool definitions by value in `tool_addition` blocks, so a changed tool
+     * is redefined in place (beta `inline-tools-2026-09-15`, which also covers
+     * the by-reference changes): the Claude API, Claude Platform on AWS,
+     * Claude on Google Cloud (Anthropic managed) and Microsoft Foundry. Not
+     * Amazon Bedrock or Vertex AI, which keep the reference-only header.
+     */
+    public const FEATURE_INLINE_TOOLS = 'inline_tools';
     /** Smallest `task_budget.total` the API accepts; smaller is a 400. */
     public const MIN_TASK_BUDGET = 20000;
 
@@ -170,6 +178,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             self::FEATURE_SERVER_FALLBACK => true,
             self::FEATURE_TASK_BUDGET => true,
             self::FEATURE_MID_CONVERSATION_TOOL_CHANGES => true,
+            self::FEATURE_INLINE_TOOLS => true,
         ];
     }
 
@@ -199,6 +208,15 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         $model = $this->capabilityModel($this->resolveRequestModel($userId, $options));
         return $this->hasFeature(self::FEATURE_MID_CONVERSATION_TOOL_CHANGES)
             && $this->supportsMidConversationSystem($model);
+    }
+
+    /**
+     * Whether a conversation's changed tools can be redefined in place
+     * (ToolChanges by value) rather than starting their state over.
+     */
+    public function supportsInlineTools(?string $userId, array $options = []): bool {
+        return $this->hasFeature(self::FEATURE_INLINE_TOOLS)
+            && $this->supportsMidConversationToolChanges($userId, $options);
     }
 
     /** Whether the Message Batches API is available, i.e. the batch paths may be used. */
@@ -1016,7 +1034,11 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $options['extraBodyParams']['fallbacks'] = $params['fallbacks'];
         }
 
-        if (ToolChanges::inRequest($params)) {
+        // inline-tools covers the by-reference changes too, so one header
+        // is sent, never both.
+        if (ToolChanges::needsInlineTools($params)) {
+            $betas[] = AnthropicBeta::INLINE_TOOLS_2026_09_15->value;
+        } elseif (ToolChanges::inRequest($params)) {
             $betas[] = AnthropicBeta::MID_CONVERSATION_TOOL_CHANGES_2026_07_01->value;
         }
 
