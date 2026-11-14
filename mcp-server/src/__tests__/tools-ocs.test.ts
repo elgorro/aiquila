@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock webdav client (needed for bulk file operations)
+// Mock the WebDAV client (needed for bulk file operations)
 const mockClient = {
   getDirectoryContents: vi.fn(),
   getFileContents: vi.fn(),
@@ -13,9 +13,7 @@ const mockClient = {
   copyFile: vi.fn(),
 };
 
-vi.mock('webdav', () => ({
-  createClient: vi.fn(() => mockClient),
-}));
+vi.mock('../client/webdav.js', () => ({ getWebDAVClient: () => mockClient }));
 
 // Mock fetch for CalDAV (trash & versions)
 global.fetch = vi.fn();

@@ -3,7 +3,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock declarations
-vi.mock('webdav', () => ({ createClient: vi.fn(() => ({})) }));
 global.fetch = vi.fn();
 
 /**

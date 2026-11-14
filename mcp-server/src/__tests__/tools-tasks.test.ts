@@ -2,7 +2,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('webdav', () => ({ createClient: vi.fn(() => ({})) }));
 global.fetch = vi.fn();
 
 describe('Task Tools', () => {

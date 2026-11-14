@@ -3,10 +3,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock webdav (required by file tools)
-vi.mock('webdav', () => ({
-  createClient: vi.fn(() => ({})),
-}));
-
 // Mock fetch for CalDAV/OCS
 global.fetch = vi.fn();
 

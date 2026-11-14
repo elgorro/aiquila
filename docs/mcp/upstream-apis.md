@@ -47,7 +47,7 @@ category to `TOOL_REGISTRY`; after a squash merge, that is the merge commit on `
 
 | Category | Source | Upstream | API | Reference | Introduced | Last verified |
 |---|---|---|---|---|---|---|
-| `files` | `system/files.ts` | `dav`, `aiquila` | WebDAV, App REST | [WebDAV basics](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/basic.html), [OpenAPI](../dev/openapi.md) | 0.1.2 · `33a6ce8` · 2025-11-21 | dav 2.0.0, aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
+| `files` | `system/files.ts` | `dav`, `aiquila` | WebDAV, App REST | [WebDAV basics](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/basic.html), [OpenAPI](../dev/openapi.md) | 0.1.2 · `33a6ce8` · 2025-11-21 | dav 2.0.0 · NC 35.0.2 · 2026-11-14; aiquila 0.5.1 · 2026-10-31 |
 | `status` | `system/status.ts` | core | OCS, OCC | [OCS API overview](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-api-overview.html) | 0.1.5 · `8f5df8b` · 2026-02-07 | core, aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
 | `apps` | `system/apps.ts` | `provisioning_api` | OCS, OCC | [Apps provisioning](https://docs.nextcloud.com/server/latest/admin_manual/configuration_user/instruction_set_for_apps.html) | 0.1.5 · `8f5df8b` · 2026-02-07 | provisioning_api 2.0.0, aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
 | `tags` | `system/tags.ts` | `systemtags` | WebDAV | [WebDAV](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/index.html) | 0.1.12 · `ab9c5aa` · 2026-02-10 | systemtags 2.0.0, dav 2.0.0 · NC 35.0.2 · 2026-10-31 |

@@ -118,7 +118,7 @@ export const readTextWorkspaceTool = {
         };
       }
       const client = getWebDAVClient();
-      const content = (await client.getFileContents(file.path, { format: 'text' })) as string;
+      const content = await client.getFileContents(file.path, { format: 'text' });
       return { content: [{ type: 'text' as const, text: content }] };
     } catch (error) {
       return handleAppError(error, 'Error reading workspace', textStatusMap);

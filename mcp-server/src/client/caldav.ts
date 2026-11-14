@@ -94,7 +94,7 @@ export async function fetchCalDAV(
   url: string,
   options: {
     method?: string;
-    body?: string;
+    body?: string | Uint8Array<ArrayBuffer>;
     headers?: Record<string, string>;
   } = {}
 ): Promise<Response> {
