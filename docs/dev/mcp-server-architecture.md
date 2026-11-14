@@ -41,7 +41,8 @@ mcp-server/src/
 ├── logger.ts            # pino → stderr
 ├── transports/
 │   ├── stdio.ts         # StdioServerTransport (local MCP clients)
-│   └── http.ts          # createHttpApp(): Express app + MCP handler + auth middleware; startHttp() listens
+│   ├── http.ts          # createHttpApp(): Express app + MCP handler + auth middleware; startHttp() listens
+│   └── tool-list-changes.ts # Per-user list_changed for subscriptions/listen streams
 ├── auth/
 │   ├── provider.ts      # NextcloudOAuthProvider — sign-in flows, JWT sign/verify, grants
 │   ├── login-flow.ts    # Nextcloud Login Flow v2 client, app password check and deletion
@@ -114,6 +115,11 @@ Key points:
 - `createMcpHandler` (from `@modelcontextprotocol/server`) serves `2026-07-28` requests itself and passes legacy ones to its `legacy: 'stateless'` leg: a session-less streamable transport, so no `Mcp-Session-Id` is minted. `'reject'` would cut off every client that still opens with `initialize`
 - `toNodeHandler` (from `@modelcontextprotocol/node`) adapts it to Express and forwards `req.auth` (set by `requireBearerAuth`) and the already-parsed `req.body`
 - `GET` and `DELETE` on `/mcp` are answered `405` (once auth has passed): there is no standalone SSE stream and no session to end. Long-lived change notifications use `subscriptions/listen` under `2026-07-28`
+- **Tool list changes** (`src/transports/tool-list-changes.ts`). App detection runs per signed-in user and is cached for 10 minutes (`src/tool-registry.ts`), so enabling or disabling an app in Nextcloud changes that user's `tools/list`:
+  - `2026-07-28` requests are told `tools.listChanged: true`. When a re-detection finds a different tool list, `notifications/tools/list_changed` goes to that user's open `subscriptions/listen` streams that asked for `toolsListChanged`, and to no other user's. The handler uses its own event bus, which records each stream's identity when it subscribes
+  - While a user has a stream open, their tool list is re-detected every 5 minutes, so a client holding only the stream still hears of a change. The timer stops when the user's last stream closes
+  - The stateless 2025-era leg has no stream to notify on, so it advertises `tools.listChanged: false`. Those clients see changes on their next `tools/list`
+  - With `MCP_TOOLS` set, or for the environment account (stdio, no OAuth, `MCP_INTERNAL_TOKEN`), the list is fixed for the life of the process and nothing is sent
 - No client affinity is required, so distributed clients (e.g. Claude.ai, Cursor) can connect from multiple IPs
 - The deprecated HTTP+SSE transport (`2024-11-05`) is not served
 
@@ -364,7 +370,7 @@ Reads `MCP_TRANSPORT` and delegates to `startStdio()` or `startHttp()`. No busin
 
 ### 2. Server Factory (`server.ts`)
 
-`createServer()` instantiates an `McpServer` and registers all tool modules via `registerTools()`. Called once at startup (stdio) or once per request (HTTP).
+`createServer()` instantiates an `McpServer` and registers the tools `getFilteredToolSets()` (`tool-registry.ts`) returns for the current account. Called once per connection (stdio) or once per request (HTTP). Its `toolsListChanged` option sets the `tools.listChanged` capability; HTTP passes `true` for `2026-07-28` requests and `false` for the 2025-era leg.
 
 ### 3. Client Layer (`client/`)
 

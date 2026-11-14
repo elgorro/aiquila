@@ -31,6 +31,9 @@ import { runAs } from '../nc-context.js';
 import {
   getFilteredToolSets,
   _resetCache,
+  _expireCache,
+  onToolSetChange,
+  toolSetKey,
   TOOL_REGISTRY,
   HIGH_TOOL_COUNT,
 } from '../tool-registry.js';
@@ -300,6 +303,36 @@ describe('tool-registry', () => {
       expect(mockFetchOCS).toHaveBeenCalledTimes(1);
       await runAs(asUser('bob'), () => getFilteredToolSets());
       expect(mockFetchOCS).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports a changed tool list on re-detection, keyed by the user', async () => {
+      const changes: string[] = [];
+      const stop = onToolSetChange((key) => changes.push(key));
+      try {
+        mockFetchOCS.mockResolvedValue({ ocs: { data: { apps: ['calendar'] } } });
+        await runAs(asUser('alice'), () => getFilteredToolSets());
+        expect(changes).toEqual([]); // a first detection has nothing to compare with
+
+        _expireCache();
+        await runAs(asUser('alice'), () => getFilteredToolSets());
+        expect(changes).toEqual([]); // same apps, same tools
+
+        mockFetchOCS.mockResolvedValue({ ocs: { data: { apps: ['calendar', 'deck'] } } });
+        _expireCache();
+        await runAs(asUser('alice'), () => getFilteredToolSets());
+        expect(changes).toEqual(['user:alice']);
+      } finally {
+        stop();
+      }
+    });
+
+    it('keys tool lists by account', () => {
+      expect(toolSetKey(asUser('alice'))).toBe('user:alice');
+      expect(toolSetKey({ kind: 'anonymous' })).toBe('anonymous');
+      expect(toolSetKey({ kind: 'service' })).toBe('env');
+      expect(toolSetKey(undefined)).toBe('env');
+      process.env.MCP_TOOLS = 'files';
+      expect(toolSetKey(asUser('alice'))).toBe('mcp_tools');
     });
 
     it('a request without a token gets every tool and asks Nextcloud nothing', async () => {
