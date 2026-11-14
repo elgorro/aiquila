@@ -13,7 +13,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 
 ## MCP Server
 
-- **[MCP Overview & Tools Reference](mcp/README.md)** — 384 tools across 47 categories
+- **[MCP Overview & Tools Reference](mcp/README.md)** — 393 tools across 47 categories
 - **[Setup Guide](mcp/setup.md)** — installation and MCP client configuration
 - **[OAuth 2.0](mcp/oauth.md)** — OAuth authentication for remote MCP clients
 - **[Standalone Docker](mcp/standalone-docker.md)** — run MCP server in Docker (external Nextcloud)
@@ -52,7 +52,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 | Forms & surveys | 25 | [Forms](mcp/tools/apps/forms.md) |
 | Fediverse (Social) | 26 | [Social](mcp/tools/apps/social.md) |
 | Recipes | 6 | [Cookbook](mcp/tools/apps/cookbook.md) |
-| NC AI tasks & image gen | 4 | [Assistant](mcp/tools/apps/assistant.md) |
+| NC AI tasks, image gen, Assistant skills & assignments | 13 | [Assistant](mcp/tools/apps/assistant.md) |
 | Translation | 1 | [Translate](mcp/tools/apps/translate.md) |
 | File shares | 10 | [Shares](mcp/tools/apps/shares.md) |
 | Social network share links | 1 | [Social Sharing](mcp/tools/apps/social-sharing.md) |
@@ -128,7 +128,7 @@ docs/
 │   │   ├── system-tools.md          # Files, status, apps, security, search
 │   │   └── apps/                    # App-specific tools
 │   │       ├── aiquila.md           # AIquila config & test
-│   │       ├── assistant.md         # NC AI task processing
+│   │       ├── assistant.md         # NC AI task processing, Assistant skills & assignments
 │   │       ├── bookmarks.md         # Bookmarks, folders, tags
 │   │       ├── calendar.md          # Calendar events
 │   │       ├── circles.md           # Teams and workspaces

@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { fetchOCS } from '../../client/ocs.js';
+import { assistantAgentTools } from './assistant-agent.js';
 
 /**
  * Nextcloud Assistant / AI Task Processing Tools
@@ -321,4 +322,5 @@ export const assistantTools = [
   processTextTool,
   getTaskResultTool,
   generateImageTool,
+  ...assistantAgentTools,
 ];
