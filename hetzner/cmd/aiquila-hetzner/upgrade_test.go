@@ -3,8 +3,11 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/elgorro/aiquila/hetzner/internal/upgrade"
 )
 
 // The state database must be copied as a snapshot, not tarred live with its
@@ -23,5 +26,33 @@ func TestMCPStateBackupSnapshotsTheDatabase(t *testing.T) {
 	}
 	if strings.Contains(cmd, "tar -C /app/state") {
 		t.Errorf("backup command tars the live state directory:\n%s", cmd)
+	}
+}
+
+// The volume is named in the compose file; a default-named one would be a new,
+// empty volume, and a restore into it would leave the real state behind.
+func TestMCPStateVolumeComesFromTheComposeFile(t *testing.T) {
+	for _, c := range []struct {
+		file  string
+		stack upgrade.Stack
+		want  string
+	}{
+		{"../../docker/mcp/docker-compose.yml", upgrade.StackMCP, "aiq-mcp_state"},
+		{"../../docker/full/docker-compose.yml", upgrade.StackFull, "aiq-full_mcp_state"},
+	} {
+		compose, err := os.ReadFile(c.file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := mcpStateVolume(string(compose), c.stack); got != c.want {
+			t.Errorf("%s: volume %q, want %q", c.file, got, c.want)
+		}
+	}
+	custom := "volumes:\n  mcp_state:\n    driver: local\n    name: \"my-state\"\n"
+	if got := mcpStateVolume(custom, upgrade.StackMCP); got != "my-state" {
+		t.Errorf("custom compose: volume %q, want my-state", got)
+	}
+	if got := mcpStateVolume("", upgrade.StackFull); got != "aiq-full_mcp_state" {
+		t.Errorf("no compose: volume %q, want the template default", got)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -372,6 +373,20 @@ const mcpStateSnapshotJS = `const fs=require("fs");` +
 	`const s="/app/state/state.db",d="/tmp/aiq-state/state.db";` +
 	`if(fs.existsSync(s)){new (require("node:sqlite").DatabaseSync)(s).exec("VACUUM INTO \x27"+d+"\x27");fs.chmodSync(d,0o600)}`
 
+var mcpStateVolumeName = regexp.MustCompile(`(?m)^  mcp_state:\s*\n(?:    [^\n]*\n)*?    name:\s*["']?([^"'\s]+)`)
+
+// mcpStateVolume is the Docker volume holding the MCP state: the name the
+// deployed compose file gives it, else the one the CLI's templates use.
+func mcpStateVolume(compose string, stack upgrade.Stack) string {
+	if m := mcpStateVolumeName.FindStringSubmatch(compose); m != nil {
+		return m[1]
+	}
+	if stack == upgrade.StackFull {
+		return "aiq-full_mcp_state"
+	}
+	return "aiq-mcp_state"
+}
+
 // mcpStateBackupCmd streams a tar of the MCP state volume into
 // <dir>/mcp-state.tar.gz, with the state database as a consistent snapshot.
 func mcpStateBackupCmd(dir string) string {
@@ -409,7 +424,7 @@ func backup(r *remote, p *upgradePlan) (string, error) {
 	for _, s := range steps {
 		if s.what == "MCP state" && p.mcpFrom == "" {
 			// The container is not running; its volume still exists, read it directly.
-			s.cmd = fmt.Sprintf("docker run --rm -v aiquila_mcp_state:/s:ro alpine tar -C /s -czf - . > %s/mcp-state.tar.gz", dir)
+			s.cmd = fmt.Sprintf("docker run --rm -v %s:/s:ro alpine tar -C /s -czf - . > %s/mcp-state.tar.gz", mcpStateVolume(p.oldCompose, p.stack), dir)
 		}
 		if out, err := r.run(s.cmd); err != nil {
 			fmt.Fprintln(os.Stderr, out)
@@ -648,7 +663,7 @@ func printRollback(p *upgradePlan, dir string) {
 		// The new version may have migrated the state (0.6 moved it from JSON
 		// files into state.db), so the old one needs the state it left behind.
 		fmt.Printf("  docker compose stop mcp\n")
-		fmt.Printf("  docker run --rm -i -v aiquila_mcp_state:/s alpine sh -c 'find /s -mindepth 1 -delete && tar -C /s -xzf -' < %s/mcp-state.tar.gz\n", dir)
+		fmt.Printf("  docker run --rm -i -v %s:/s alpine sh -c 'find /s -mindepth 1 -delete && tar -C /s -xzf -' < %s/mcp-state.tar.gz\n", mcpStateVolume(p.oldCompose, p.stack), dir)
 		fmt.Printf("  docker compose %sup -d mcp\n", profileArg(p))
 	}
 	if p.stack.HasNextcloud() && p.appTo != "" {

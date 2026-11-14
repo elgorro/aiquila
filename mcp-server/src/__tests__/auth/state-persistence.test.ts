@@ -32,7 +32,12 @@ vi.mock('../../logger.js', () => ({
 import { logger } from '../../logger.js';
 import { ClientsStore, RefreshStore, RevocationList } from '../../auth/store.js';
 import { CredentialStore, LocalCipher } from '../../auth/credential-store.js';
-import { StateDb, STATE_DB_FILE } from '../../auth/state-db.js';
+import {
+  resetStateUnwritableWarning,
+  StateDb,
+  StateWriteError,
+  STATE_DB_FILE,
+} from '../../auth/state-db.js';
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 
@@ -49,6 +54,7 @@ describe('state persistence (real filesystem)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetStateUnwritableWarning();
     dir = mkdtempSync(join(tmpdir(), 'aiquila-persist-'));
   });
 
@@ -157,6 +163,20 @@ describe('state persistence (real filesystem)', () => {
     expect(a.markSpent(token)).toBe(true);
     expect(b.markSpent(token)).toBe(false);
     expect(b.get(token)?.spent).toBe(true);
+  });
+
+  it('a storage failure throws from markSpent, so it is never read as reuse', () => {
+    const db = boot();
+    const store = new RefreshStore(db);
+    const token = store.store({ grantId: 'g', userId: 'alice', clientId: 'c1', scopes: [] });
+    // SQLite now refuses every write with SQLITE_READONLY, as on a read-only volume.
+    db.get('PRAGMA query_only = ON');
+    expect(() => store.markSpent(token)).toThrow(StateWriteError);
+    // Other writes are logged and skipped instead of failing the request.
+    expect(() => store.delete(token)).not.toThrow();
+    db.get('PRAGMA query_only = OFF');
+    expect(store.get(token)?.spent).toBeUndefined();
+    expect(store.markSpent(token)).toBe(true);
   });
 
   describe('import of the JSON files of earlier versions', () => {

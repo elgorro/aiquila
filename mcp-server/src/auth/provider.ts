@@ -642,7 +642,9 @@ export class NextcloudOAuthProvider {
     const effectiveScopes = scopes ?? entry.scopes;
     // Spend the token before the first await. Only one request can: a second
     // one racing for the same token, here or in another process sharing the
-    // state, loses and is treated as reuse.
+    // state, loses and is treated as reuse. When the state cannot be written,
+    // markSpent throws (StateWriteError): the request fails with a server
+    // error, the token stays unspent and the grant intact for a retry.
     if (!this.refreshStore.markSpent(refreshToken)) {
       this.revokeGrant(entry.grantId);
       logger.warn(

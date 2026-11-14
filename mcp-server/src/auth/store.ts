@@ -573,11 +573,12 @@ export class RefreshStore {
    * Marks a token as exchanged. It no longer redeems, but is still recognised.
    * Returns true only for the call that spent it: of two requests racing to
    * redeem one token, in this process or another sharing the database, one
-   * gets false and must treat it as reuse.
+   * gets false and must treat it as reuse. A storage failure throws
+   * StateWriteError instead, so it never reads as reuse.
    */
   markSpent(token: string): boolean {
     return (
-      this.db.run(
+      this.db.runOrThrow(
         'UPDATE refresh_tokens SET spent = 1 WHERE token_hash = ? AND spent = 0',
         refreshTokenKey(token)
       ) > 0

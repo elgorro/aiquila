@@ -66,6 +66,11 @@ export function markStateUnwritableWarned(): void {
   warnedUnwritable = true;
 }
 
+/** Lets the warning be emitted again; tests use it between cases. */
+export function resetStateUnwritableWarning(): void {
+  warnedUnwritable = false;
+}
+
 /**
  * Operator-facing remediation for an unwritable state directory. The fix is to
  * recreate the (root-owned) Docker named volume so a fresh one inherits the
@@ -105,6 +110,17 @@ function isStorageError(err: unknown): boolean {
 function errorCode(err: unknown): string | undefined {
   const e = err as { code?: string; errcode?: number; errstr?: string };
   return e.code === 'ERR_SQLITE_ERROR' ? (e.errstr ?? e.code) : e.code;
+}
+
+/**
+ * A write the storage refused, from runOrThrow(). Says nothing about the row:
+ * the caller must fail the request rather than read it as "no such row".
+ */
+export class StateWriteError extends Error {
+  constructor(cause: unknown) {
+    super('The OAuth state could not be written', { cause });
+    this.name = 'StateWriteError';
+  }
 }
 
 export class StateDb {
@@ -178,6 +194,22 @@ export class StateDb {
       if (!isStorageError(err)) throw err;
       warnUnwritable(this.dir ?? ':memory:', errorCode(err), err);
       return 0;
+    }
+  }
+
+  /**
+   * Like run(), but a storage failure throws StateWriteError instead of
+   * reading as 0 rows. For a write whose row count is a decision, such as
+   * spending a refresh token: 0 must mean "someone else did", never "the disk
+   * was full".
+   */
+  runOrThrow(sql: string, ...params: SQLInputValue[]): number {
+    try {
+      return Number(this.db.prepare(sql).run(...params).changes);
+    } catch (err) {
+      if (!isStorageError(err)) throw err;
+      warnUnwritable(this.dir ?? ':memory:', errorCode(err), err);
+      throw new StateWriteError(err);
     }
   }
 

@@ -15,14 +15,14 @@ const flow = vi.hoisted(() => ({
 vi.mock('../../auth/login-flow.js', () => flow);
 
 import { NextcloudOAuthProvider, renderFlowPage, LOGIN_PAGE_CSP } from '../../auth/provider.js';
-import { ClientsStore } from '../../auth/store.js';
+import { ClientsStore, RefreshStore } from '../../auth/store.js';
 import {
   CredentialBackendUnavailableError,
   CredentialStore,
   LocalCipher,
   type CredentialCipher,
 } from '../../auth/credential-store.js';
-import { StateDb } from '../../auth/state-db.js';
+import { StateDb, StateWriteError } from '../../auth/state-db.js';
 import { LOGIN_STYLESHEET_PATH } from '../../auth/login-page-css.js';
 
 const TEST_SECRET = 'super-secret-32-char-key-for-testing!!';
@@ -539,6 +539,21 @@ describe('NextcloudOAuthProvider', () => {
       const refreshToken = await issueRefreshToken();
       await provider.exchangeRefreshToken(CLIENT, refreshToken);
       await expect(provider.exchangeRefreshToken(CLIENT, refreshToken)).rejects.toThrow();
+    });
+
+    it('a storage failure while spending fails the request but keeps the grant', async () => {
+      const refreshToken = await issueRefreshToken();
+      const store = (provider as unknown as { refreshStore: RefreshStore }).refreshStore;
+      const spy = vi.spyOn(store, 'markSpent').mockImplementationOnce(() => {
+        throw new StateWriteError(new Error('SQLITE_FULL'));
+      });
+      await expect(provider.exchangeRefreshToken(CLIENT, refreshToken)).rejects.toBeInstanceOf(
+        StateWriteError
+      );
+      spy.mockRestore();
+      // Not read as reuse: the same token still refreshes once the disk is back.
+      const tokens = await provider.exchangeRefreshToken(CLIENT, refreshToken);
+      expect(tokens.refresh_token).toBeDefined();
     });
 
     it('new access token is valid and verifiable', async () => {
