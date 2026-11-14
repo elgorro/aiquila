@@ -119,14 +119,14 @@ class AgentRunTaskTypeTest extends TestCase {
     }
 
     public function testNoPromptIsAnError(): void {
-        $this->expectExceptionMessage('no prompt to run');
+        $this->expectExceptionMessageIsOrContains('no prompt to run');
         $this->task()->run($this->coworker([], null), new CoworkerRun(), self::progress());
     }
 
     public function testARefusalFailsTheRunAsSuch(): void {
         $this->provider->method('chat')->willReturn(['error' => 'Declined (cyber).', 'error_type' => 'refused']);
 
-        $this->expectExceptionMessage('Refused: Declined (cyber).');
+        $this->expectExceptionMessageIs('Refused: Declined (cyber).');
         $this->task()->run($this->coworker(), new CoworkerRun(), self::progress());
     }
 

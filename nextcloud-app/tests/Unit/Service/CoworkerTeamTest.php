@@ -239,7 +239,7 @@ class CoworkerTeamTest extends TestCase {
         $coworker = $this->service()->create('bob', ['teamId' => 'team1', 'input_type' => 'none']);
         $this->assertSame('none', $coworker->getInputType());
 
-        $this->expectExceptionMessage('This team has no workspace');
+        $this->expectExceptionMessageIsOrContains('This team has no workspace');
         $this->service()->create('bob', ['teamId' => 'team1', 'input_path' => '/Docs']);
     }
 
