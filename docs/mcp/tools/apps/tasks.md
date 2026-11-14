@@ -118,6 +118,8 @@ Ask Claude: "Create a subtask 'Write unit tests' under parent task uid-123"
 }
 ```
 
+[**Structured result**](../../README.md#structured-results): `uid`, `calendarName` (the task list slug), `href` and `summary`.
+
 ---
 
 ### update_task

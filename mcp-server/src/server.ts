@@ -38,6 +38,7 @@ export async function createServer(): Promise<McpServer> {
           description: tool.description,
           annotations: tool.annotations,
           inputSchema: tool.inputSchema,
+          ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
         },
         async (...args: unknown[]) => {
           const start = Date.now();

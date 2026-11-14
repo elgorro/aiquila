@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { expectStructured } from './helpers/structured.js';
 
 // Mock webdav (needed because files.ts imports getWebDAVClient)
 const mockFetchAiquilaAPI = vi.fn();
@@ -35,6 +36,7 @@ describe('File Tools (AIquila API)', () => {
 
       const { getFileInfoTool } = await import('../tools/system/files.js');
       const result = await getFileInfoTool.handler({ path: '/Documents/report.pdf' });
+      expectStructured(result, getFileInfoTool);
 
       expect(result.content[0].text).toContain('report.pdf');
       expect(result.content[0].text).toContain('application/pdf');

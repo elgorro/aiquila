@@ -159,6 +159,14 @@ export class FakeNextcloud {
       this.appPasswords.delete(password);
       return json(200, 200, []);
     }
+    if (req.method === 'MKCOL' && url.pathname.startsWith('/remote.php/dav/files/')) {
+      if (!this.basicUser(req)) {
+        res.writeHead(401).end();
+        return;
+      }
+      res.writeHead(201).end();
+      return;
+    }
     if (url.pathname === '/ocs/v2.php/cloud/user') {
       const user = this.basicUser(req);
       if (!user) return json(401, 997, []);
