@@ -2,7 +2,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-vi.mock('node:fs');
 vi.mock('../../logger.js', () => ({
   logger: {
     warn: vi.fn(),
@@ -12,9 +11,25 @@ vi.mock('../../logger.js', () => ({
   },
 }));
 
-import * as fs from 'node:fs';
-import { logger } from '../../logger.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ClientsStore, CodeStore, RefreshStore, clientTtlMs } from '../../auth/store.js';
+import { resetSharedStateDb, StateDb } from '../../auth/state-db.js';
+
+// fromEnv() opens the shared state database in MCP_AUTH_STATE_DIR: give every
+// test a fresh directory instead of /app/state.
+let stateDirForTest: string;
+beforeEach(() => {
+  resetSharedStateDb();
+  stateDirForTest = mkdtempSync(join(tmpdir(), 'aiquila-store-'));
+  process.env.MCP_AUTH_STATE_DIR = stateDirForTest;
+});
+afterEach(() => {
+  resetSharedStateDb();
+  delete process.env.MCP_AUTH_STATE_DIR;
+  rmSync(stateDirForTest, { recursive: true, force: true });
+});
 
 // ---- ClientsStore (dynamic registration enabled) ----
 
@@ -35,7 +50,8 @@ describe('ClientsStore with dynamic registration', () => {
     });
     expect(client.client_id).toBeDefined();
     expect(client.client_id_issued_at).toBeCloseTo(Math.floor(Date.now() / 1000), -2);
-    expect(await store.getClient(client.client_id)).toEqual(client);
+    // Stored as JSON, so URL objects come back as their string form.
+    expect(await store.getClient(client.client_id)).toEqual(JSON.parse(JSON.stringify(client)));
   });
 
   it('assigns a unique client_id on each registration', async () => {
@@ -254,7 +270,7 @@ describe('RefreshStore', () => {
   });
 
   it('stores and retrieves a refresh token entry', async () => {
-    const token = store.store({ userId: 'bob', clientId: 'c1', scopes: ['read'] });
+    const token = store.store({ grantId: 'g', userId: 'bob', clientId: 'c1', scopes: ['read'] });
     expect(typeof token).toBe('string');
     const entry = store.get(token);
     expect(entry?.userId).toBe('bob');
@@ -267,152 +283,16 @@ describe('RefreshStore', () => {
   });
 
   it('deletes a token so it cannot be retrieved again', async () => {
-    const token = store.store({ userId: 'u', clientId: 'c', scopes: [] });
+    const token = store.store({ grantId: 'g', userId: 'u', clientId: 'c', scopes: [] });
     store.delete(token);
     expect(store.get(token)).toBeUndefined();
   });
 
   it('stores each token with a unique ID', async () => {
-    const params = { userId: 'u', clientId: 'c', scopes: [] };
+    const params = { grantId: 'g', userId: 'u', clientId: 'c', scopes: [] };
     const a = store.store(params);
     const b = store.store(params);
     expect(a).not.toBe(b);
-  });
-});
-
-// ---- Persistence helpers setup ----
-
-const mockReadFileSync = vi.mocked(fs.readFileSync);
-const mockWriteFileSync = vi.mocked(fs.writeFileSync);
-const mockMkdirSync = vi.mocked(fs.mkdirSync);
-const mockRenameSync = vi.mocked(fs.renameSync);
-const mockUnlinkSync = vi.mocked(fs.unlinkSync);
-
-function setupFsMocks() {
-  vi.resetAllMocks();
-  mockMkdirSync.mockReturnValue(undefined as unknown as string);
-  // Default: file not found
-  mockReadFileSync.mockImplementation(() => {
-    const err = new Error('ENOENT') as NodeJS.ErrnoException;
-    err.code = 'ENOENT';
-    throw err;
-  });
-  // Default: writeFileSync and renameSync succeed
-  mockWriteFileSync.mockReturnValue(undefined);
-  mockRenameSync.mockReturnValue(undefined);
-}
-
-// ---- ClientsStore — persistence ----
-
-describe('ClientsStore — persistence', () => {
-  const TEST_STATE_DIR = '/tmp/test-state';
-
-  beforeEach(() => {
-    setupFsMocks();
-    process.env.MCP_AUTH_STATE_DIR = TEST_STATE_DIR;
-  });
-
-  afterEach(() => {
-    delete process.env.MCP_AUTH_STATE_DIR;
-    delete process.env.MCP_REGISTRATION_ENABLED;
-    delete process.env.MCP_CLIENT_ID;
-  });
-
-  it('loads clients from file on construction', async () => {
-    const persistedClient = {
-      client_id: 'persisted-id',
-      client_id_issued_at: 1700000000,
-      redirect_uris: ['https://example.com/cb'],
-    };
-    mockReadFileSync.mockReturnValue(JSON.stringify([persistedClient]));
-
-    const store = new ClientsStore({ stateFile: `${TEST_STATE_DIR}/clients.json` });
-    expect(await store.getClient('persisted-id')).toMatchObject({ client_id: 'persisted-id' });
-  });
-
-  it('is silent on ENOENT — no warning logged, no writeFileSync called', async () => {
-    // readFileSync already throws ENOENT by default in setupFsMocks
-    const store = new ClientsStore({ stateFile: `${TEST_STATE_DIR}/clients.json` });
-    expect(await store.getClient('anything')).toBeUndefined();
-    expect(mockWriteFileSync).not.toHaveBeenCalled();
-  });
-
-  it('warns and starts fresh on corrupt JSON', async () => {
-    mockReadFileSync.mockReturnValue('not-valid-json{{');
-
-    const store = new ClientsStore({ stateFile: `${TEST_STATE_DIR}/clients.json` });
-    expect(await store.getClient('anything')).toBeUndefined();
-    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
-      expect.objectContaining({ file: `${TEST_STATE_DIR}/clients.json` }),
-      expect.stringContaining('[state]')
-    );
-  });
-
-  it('pre-seeded client overrides persisted client with same id', async () => {
-    const persisted = {
-      client_id: 'same-id',
-      client_id_issued_at: 1000,
-      redirect_uris: ['https://old.example.com/cb'],
-      client_name: 'Old Name',
-    };
-    mockReadFileSync.mockReturnValue(JSON.stringify([persisted]));
-
-    const preseeded = {
-      client_id: 'same-id',
-      client_id_issued_at: 9999,
-      redirect_uris: ['https://new.example.com/cb'],
-      client_name: 'New Name',
-    };
-    const store = new ClientsStore({
-      preseededClients: [preseeded],
-      stateFile: `${TEST_STATE_DIR}/clients.json`,
-    });
-    expect((await store.getClient('same-id'))?.client_name).toBe('New Name');
-  });
-
-  it('writes file after dynamic registration with correct path and content', async () => {
-    const stateFile = `${TEST_STATE_DIR}/clients.json`;
-    const store = new ClientsStore({
-      enableDynamicRegistration: true,
-      stateFile,
-    });
-
-    const client = store.registerClient!({
-      redirect_uris: [new URL('https://example.com/cb')],
-      client_name: 'Test App',
-    });
-
-    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile + '.tmp', expect.any(String), 'utf8');
-    expect(mockRenameSync).toHaveBeenCalledWith(stateFile + '.tmp', stateFile);
-
-    const written = JSON.parse(
-      (mockWriteFileSync.mock.calls[0] as [string, string, string])[1]
-    ) as unknown[];
-    expect(written).toHaveLength(1);
-    expect((written[0] as { client_id: string }).client_id).toBe(client.client_id);
-  });
-
-  it('does NOT write file when stateFile is not set', async () => {
-    const store = new ClientsStore({ enableDynamicRegistration: true });
-    store.registerClient!({ redirect_uris: [new URL('https://example.com/cb')] });
-    expect(mockWriteFileSync).not.toHaveBeenCalled();
-  });
-
-  it('fromEnv() sets stateFile when MCP_REGISTRATION_ENABLED=true', async () => {
-    process.env.MCP_REGISTRATION_ENABLED = 'true';
-
-    const store = ClientsStore.fromEnv();
-    store.registerClient!({ redirect_uris: [new URL('https://claude.ai/api/mcp/auth_callback')] });
-
-    expect(mockWriteFileSync).toHaveBeenCalledWith(
-      `${TEST_STATE_DIR}/clients.json.tmp`,
-      expect.any(String),
-      'utf8'
-    );
-    expect(mockRenameSync).toHaveBeenCalledWith(
-      `${TEST_STATE_DIR}/clients.json.tmp`,
-      `${TEST_STATE_DIR}/clients.json`
-    );
   });
 });
 
@@ -421,12 +301,6 @@ describe('ClientsStore — persistence', () => {
 describe('ClientsStore — expiry', () => {
   const HOUR = 60 * 60 * 1000;
   const DAY = 24 * HOUR;
-  const stateFile = '/tmp/test-state/clients.json';
-
-  beforeEach(() => {
-    setupFsMocks();
-  });
-
   afterEach(() => {
     delete process.env.MCP_CLIENT_UNUSED_TTL;
     delete process.env.MCP_CLIENT_IDLE_TTL;
@@ -503,40 +377,38 @@ describe('ClientsStore — expiry', () => {
     expect(store.expireClients(new Set(), Date.now() + 1000 * DAY)).toEqual([]);
   });
 
-  it('persists last use and reloads it, without the pre-seeded client', async () => {
+  it('keeps last use across instances, without storing the pre-seeded client', async () => {
+    const db = StateDb.memory();
     const store = new ClientsStore({
       enableDynamicRegistration: true,
       preseededClients: [{ client_id: 'fixed', client_id_issued_at: 0, redirect_uris: [] }],
-      stateFile,
+      db,
       unusedTtlMs: DAY,
     });
     const id = register(store);
-    mockWriteFileSync.mockClear();
     store.markUsed(id);
+    store.markUsed('fixed');
 
-    const written = JSON.parse(
-      (mockWriteFileSync.mock.calls.at(-1) as [string, string, string])[1]
-    ) as { client_id: string; last_used_at?: number }[];
-    expect(written.map((c) => c.client_id)).toEqual([id]);
-    expect(written[0].last_used_at).toBeCloseTo(Math.floor(Date.now() / 1000), -2);
-
-    mockReadFileSync.mockReturnValue(JSON.stringify(written));
-    const reloaded = new ClientsStore({ stateFile, unusedTtlMs: DAY });
+    const reloaded = new ClientsStore({ db, unusedTtlMs: DAY });
     expect(reloaded.expireClients(new Set(), Date.now() + 10 * DAY)).toEqual([]);
+    expect(await reloaded.getClient('fixed')).toBeUndefined();
     // The usage field stays out of the client metadata.
     expect(await reloaded.getClient(id)).not.toHaveProperty('last_used_at');
   });
 
-  it('writes a repeated use at most once an hour', () => {
-    const store = new ClientsStore({ enableDynamicRegistration: true, stateFile });
+  it('records a repeated use at most once an hour', () => {
+    const db = StateDb.memory();
+    const store = new ClientsStore({ enableDynamicRegistration: true, db, idleTtlMs: HOUR });
     const id = register(store);
     const now = Date.now();
     store.markUsed(id, now);
-    mockWriteFileSync.mockClear();
     store.markUsed(id, now + 10 * 60 * 1000);
-    expect(mockWriteFileSync).not.toHaveBeenCalled();
-    store.markUsed(id, now + 2 * HOUR);
-    expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+    // Still counted from the first use: idle an hour after it, not after the second.
+    expect(store.expireClients(new Set(), now + HOUR + 1000)).toEqual([id]);
+    const id2 = register(store);
+    store.markUsed(id2, now);
+    store.markUsed(id2, now + 2 * HOUR);
+    expect(store.expireClients(new Set(), now + 2 * HOUR + 1000)).toEqual([]);
   });
 
   it('fromEnv() reads MCP_CLIENT_UNUSED_TTL and MCP_CLIENT_IDLE_TTL', async () => {
@@ -547,151 +419,6 @@ describe('ClientsStore — expiry', () => {
     expect(clientTtlMs('MCP_CLIENT_IDLE_TTL', 0)).toBe(HOUR);
     process.env.MCP_CLIENT_IDLE_TTL = 'soon';
     expect(clientTtlMs('MCP_CLIENT_IDLE_TTL', 0)).toBeUndefined();
-  });
-});
-
-// ---- RefreshStore — persistence ----
-
-describe('RefreshStore — persistence', () => {
-  const TEST_STATE_DIR = '/tmp/test-state';
-  const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-
-  beforeEach(() => {
-    setupFsMocks();
-    process.env.MCP_AUTH_STATE_DIR = TEST_STATE_DIR;
-  });
-
-  afterEach(() => {
-    delete process.env.MCP_AUTH_STATE_DIR;
-    vi.useRealTimers();
-  });
-
-  it('loads valid tokens from file on construction', async () => {
-    const futureExpiry = Date.now() + REFRESH_TTL_MS;
-    const persistedTokens = {
-      'token-abc': { userId: 'alice', clientId: 'c1', scopes: ['read'], expiresAt: futureExpiry },
-    };
-    mockReadFileSync.mockReturnValue(JSON.stringify(persistedTokens));
-
-    const store = new RefreshStore(`${TEST_STATE_DIR}/refresh-tokens.json`);
-    const entry = store.get('token-abc');
-    expect(entry?.userId).toBe('alice');
-    expect(entry?.clientId).toBe('c1');
-  });
-
-  it('prunes expired tokens on load', async () => {
-    const pastExpiry = Date.now() - 1000;
-    const persistedTokens = {
-      'expired-token': {
-        userId: 'bob',
-        clientId: 'c2',
-        scopes: [],
-        expiresAt: pastExpiry,
-      },
-    };
-    mockReadFileSync.mockReturnValue(JSON.stringify(persistedTokens));
-
-    const store = new RefreshStore(`${TEST_STATE_DIR}/refresh-tokens.json`);
-    expect(store.get('expired-token')).toBeUndefined();
-  });
-
-  it('writes file after store()', async () => {
-    const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
-    const store = new RefreshStore(stateFile);
-
-    store.store({ userId: 'alice', clientId: 'c1', scopes: ['read'] });
-
-    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile + '.tmp', expect.any(String), 'utf8');
-    expect(mockRenameSync).toHaveBeenCalledWith(stateFile + '.tmp', stateFile);
-  });
-
-  it('writes file after delete() — deleted token absent from written content', async () => {
-    const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
-    const store = new RefreshStore(stateFile);
-
-    const token = store.store({ userId: 'alice', clientId: 'c1', scopes: ['read'] });
-    mockWriteFileSync.mockClear();
-    mockRenameSync.mockClear();
-
-    store.delete(token);
-
-    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile + '.tmp', expect.any(String), 'utf8');
-    expect(mockRenameSync).toHaveBeenCalledWith(stateFile + '.tmp', stateFile);
-
-    const written = JSON.parse(
-      (mockWriteFileSync.mock.calls[0] as [string, string, string])[1]
-    ) as Record<string, unknown>;
-    expect(written[token]).toBeUndefined();
-  });
-
-  it('writes file on lazy expiry in get()', async () => {
-    vi.useFakeTimers();
-    const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
-    const store = new RefreshStore(stateFile);
-
-    const token = store.store({ userId: 'alice', clientId: 'c1', scopes: ['read'] });
-    mockWriteFileSync.mockClear();
-    mockRenameSync.mockClear();
-
-    // Advance time past the 30-day TTL
-    vi.advanceTimersByTime(31 * 24 * 60 * 60 * 1000);
-
-    const result = store.get(token);
-    expect(result).toBeUndefined();
-    expect(mockWriteFileSync).toHaveBeenCalledWith(stateFile + '.tmp', expect.any(String), 'utf8');
-    expect(mockRenameSync).toHaveBeenCalledWith(stateFile + '.tmp', stateFile);
-  });
-
-  it('does NOT write file when stateFile is not set', async () => {
-    const store = new RefreshStore(); // no stateFile
-    store.store({ userId: 'alice', clientId: 'c1', scopes: ['read'] });
-    expect(mockWriteFileSync).not.toHaveBeenCalled();
-  });
-
-  it('writeFileSync error degrades gracefully — does not throw, warns with #342 guidance', async () => {
-    const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
-    const err = new Error('permission denied') as NodeJS.ErrnoException;
-    err.code = 'EACCES';
-    mockWriteFileSync.mockImplementation(() => {
-      throw err;
-    });
-
-    const store = new RefreshStore(stateFile);
-    const token = store.store({ userId: 'alice', clientId: 'c1', scopes: [] });
-
-    // Token still works in-memory even though it couldn't be persisted.
-    expect(store.get(token)?.userId).toBe('alice');
-    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
-      expect.objectContaining({ dir: TEST_STATE_DIR, code: 'EACCES' }),
-      expect.stringContaining('discussions/342')
-    );
-  });
-
-  it('renameSync error degrades gracefully — does not throw and cleans up the .tmp file', async () => {
-    const stateFile = `${TEST_STATE_DIR}/refresh-tokens.json`;
-    mockRenameSync.mockImplementation(() => {
-      throw new Error('cross-device link');
-    });
-    mockUnlinkSync.mockReturnValue(undefined);
-
-    const store = new RefreshStore(stateFile);
-    expect(() => store.store({ userId: 'alice', clientId: 'c1', scopes: [] })).not.toThrow();
-    expect(mockUnlinkSync).toHaveBeenCalledWith(stateFile + '.tmp');
-  });
-
-  it('fromEnv() wires up the state file', async () => {
-    const store = RefreshStore.fromEnv();
-    store.store({ userId: 'alice', clientId: 'c1', scopes: [] });
-
-    expect(mockWriteFileSync).toHaveBeenCalledWith(
-      `${TEST_STATE_DIR}/refresh-tokens.json.tmp`,
-      expect.any(String),
-      'utf8'
-    );
-    expect(mockRenameSync).toHaveBeenCalledWith(
-      `${TEST_STATE_DIR}/refresh-tokens.json.tmp`,
-      `${TEST_STATE_DIR}/refresh-tokens.json`
-    );
   });
 });
 

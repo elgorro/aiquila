@@ -156,8 +156,9 @@ Over SSH it:
    When nothing would change it stops here, so running it twice is a no-op.
 3. **Backs up** to `/opt/aiquila/backups/<UTC timestamp>/` (mode 700): `.env`,
    `docker-compose.yml`, a `pg_dump` of the database, a tarball of Nextcloud's `config/` and
-   `custom_apps/aiquila`, the MCP state volume, and the MCP image id. Only the newest
-   `--keep-backups` are kept.
+   `custom_apps/aiquila`, the MCP state volume, and the MCP image id. The MCP state database
+   is copied with SQLite's `VACUUM INTO` inside the running container, so the backup is a
+   consistent snapshot even while the server writes. Only the newest `--keep-backups` are kept.
 4. **Migrates the configuration**: adds what the release needs to `.env`, generating values
    where that is safe (`MCP_CREDENTIAL_KEY`), keeps every existing value, and replaces
    `docker-compose.yml` with this CLI's template, MCP image pinned to the release. A variable
@@ -171,8 +172,9 @@ Over SSH it:
 6. **Verifies**: the MCP healthcheck, both versions, no pending Nextcloud upgrade, and an MCP
    smoke test (`server/discover`, `tools/list`) from inside the container.
 
-It ends with the commands that restore the previous configuration, image and app from the
-backup; on a failure it prints them straight away.
+It ends with the commands that restore the previous configuration, image, MCP state and app
+from the backup; on a failure it prints them straight away. The MCP state is restored too,
+because a release may migrate it, and the previous image needs the state it left behind.
 
 | Flag | Default | Description |
 |------|---------|-------------|

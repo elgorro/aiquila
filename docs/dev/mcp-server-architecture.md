@@ -202,21 +202,32 @@ the capabilities read in `client/capabilities.ts`, which detection shares with t
 |-------|--------|-----|---------|
 | Authorization code | UUID | 5 min | In-memory (`CodeStore`) |
 | Access token | HS256 JWT (jose) | 1 hour | Verified by signature, then checked against `RevocationList` by `gid` (grant) and `jti` |
-| Refresh token | 256 random bits, base64url | 30 days, sliding (`MCP_REFRESH_TOKEN_TTL`) | Disk-persisted (`RefreshStore`), keyed by SHA-256 hash — the file holds no usable token |
+| Refresh token | 256 random bits, base64url | 30 days, sliding (`MCP_REFRESH_TOKEN_TTL`) | `state.db` (`RefreshStore`), keyed by SHA-256 hash — the database holds no usable token |
 
 ### Auth Storage
 
-Token state is persisted to `MCP_AUTH_STATE_DIR` (default `/app/state`):
+Token state lives in one SQLite database, `state.db` (mode `0600`) in `MCP_AUTH_STATE_DIR`
+(default `/app/state`), opened through Node's built-in `node:sqlite` by `StateDb`
+(`src/auth/state-db.ts`). It is the source of truth: every change is a single-row write and
+every lookup a keyed query, so nothing is rewritten wholesale and memory does not grow with
+the number of grants. WAL mode lets several server processes on the same host share the file.
 
-- `clients.json` — dynamically registered OAuth clients and when each last obtained a token
-  (`ClientsStore`). The periodic sweep removes clients that never obtained one, or went idle
-  (`MCP_CLIENT_UNUSED_TTL`, `MCP_CLIENT_IDLE_TTL`)
-- `refresh-tokens.json` — active refresh tokens, keyed by their SHA-256 hash (`RefreshStore`). Entries from older versions, keyed by the token itself, are hashed on load
-- `revoked.json` — revoked grants and access tokens, each kept until the access tokens it
-  covers have expired (`RevocationList`)
-- `credentials.json` (mode `0600`) — each grant's app password, sealed by `CredentialStore`
-  with AES-256-GCM (key: HKDF-SHA-512 over `MCP_CREDENTIAL_KEY`) or by OpenBao Transit; the
-  grant and user ids are the associated data
+| Table | Store | Holds |
+|-------|-------|-------|
+| `clients` | `ClientsStore` | Dynamically registered OAuth clients and when each last obtained a token (to the hour). The periodic sweep removes clients that never obtained one, or went idle (`MCP_CLIENT_UNUSED_TTL`, `MCP_CLIENT_IDLE_TTL`) |
+| `refresh_tokens` | `RefreshStore` | Refresh tokens, keyed by their SHA-256 hash, with the grant, user, client, scopes, `spent` flag and the fingerprint of the `MCP_AUTH_SECRET` they were issued under |
+| `revocations` | `RevocationList` | Revoked grants and access tokens, each kept until the access tokens it covers have expired |
+| `credentials` | `CredentialStore` | Each grant's app password, sealed with AES-256-GCM (key: HKDF-SHA-512 over `MCP_CREDENTIAL_KEY`) or by OpenBao Transit; the grant and user ids are the associated data |
+
+The schema is versioned with `PRAGMA user_version`. On first start the JSON files of
+earlier versions (`clients.json`, `refresh-tokens.json`, `revoked.json`, `credentials.json`)
+are imported in one transaction and renamed `*.migrated`; they can be deleted once the
+server runs. When the directory cannot be written, the server runs on an in-memory database
+and logs how to fix the volume. A write that fails later (disk full) is logged and skipped
+instead of failing the request. The exception is spending a refresh token: whether
+it was spent decides between a new token and ending the grant for reuse, so a failed
+write there fails the token request with `server_error` and leaves the token
+redeemable.
 
 A grant is one sign-in. Its id (`gid` in the access token, `grantId` in the refresh entry)
 stays the same across refresh rotations. The grant's app password is checked against
@@ -228,7 +239,9 @@ credential expired and deletes the app passwords of codes never redeemed and of 
 finished.
 
 A refresh token is marked `spent` when exchanged rather than deleted, and kept until it
-would have expired. Presenting a spent token revokes its grant (RFC 9700 §4.14.2).
+would have expired. Presenting a spent token revokes its grant (RFC 9700 §4.14.2). Spending
+is a conditional update, so of two requests racing to redeem one token, in one process or
+two, exactly one wins and the other counts as reuse.
 
 Authorization codes and pending sign-in flows are in-memory only (5 min and 20 min, lost on
 restart by design).

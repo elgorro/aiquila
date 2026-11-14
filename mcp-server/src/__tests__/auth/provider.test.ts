@@ -15,13 +15,14 @@ const flow = vi.hoisted(() => ({
 vi.mock('../../auth/login-flow.js', () => flow);
 
 import { NextcloudOAuthProvider, renderFlowPage, LOGIN_PAGE_CSP } from '../../auth/provider.js';
-import { ClientsStore } from '../../auth/store.js';
+import { ClientsStore, RefreshStore } from '../../auth/store.js';
 import {
   CredentialBackendUnavailableError,
   CredentialStore,
   LocalCipher,
   type CredentialCipher,
 } from '../../auth/credential-store.js';
+import { StateDb, StateWriteError } from '../../auth/state-db.js';
 import { LOGIN_STYLESHEET_PATH } from '../../auth/login-page-css.js';
 
 const TEST_SECRET = 'super-secret-32-char-key-for-testing!!';
@@ -275,10 +276,12 @@ describe('NextcloudOAuthProvider', () => {
       flow.pollLoginFlow.mockResolvedValue(CRED);
       await provider.sweep();
       // The page was not reloaded yet, but the credential is already on disk.
-      const { readFileSync } = await import('node:fs');
-      const file = readFileSync(join(stateDir, 'credentials.json'), 'utf8');
-      expect(Object.keys(JSON.parse(file))).toHaveLength(1);
-      expect(file).not.toContain('app-password-1');
+      const { DatabaseSync } = await import('node:sqlite');
+      const raw = new DatabaseSync(join(stateDir, 'state.db'), { readOnly: true });
+      const sealed = raw.prepare('SELECT sealed FROM credentials').all() as { sealed: string }[];
+      raw.close();
+      expect(sealed).toHaveLength(1);
+      expect(sealed[0].sealed).not.toContain('app-password-1');
       const res = mockRes();
       await provider.continueFlow(flowId, binding, res);
       expect(res.redirect).toHaveBeenCalled();
@@ -536,6 +539,21 @@ describe('NextcloudOAuthProvider', () => {
       const refreshToken = await issueRefreshToken();
       await provider.exchangeRefreshToken(CLIENT, refreshToken);
       await expect(provider.exchangeRefreshToken(CLIENT, refreshToken)).rejects.toThrow();
+    });
+
+    it('a storage failure while spending fails the request but keeps the grant', async () => {
+      const refreshToken = await issueRefreshToken();
+      const store = (provider as unknown as { refreshStore: RefreshStore }).refreshStore;
+      const spy = vi.spyOn(store, 'markSpent').mockImplementationOnce(() => {
+        throw new StateWriteError(new Error('SQLITE_FULL'));
+      });
+      await expect(provider.exchangeRefreshToken(CLIENT, refreshToken)).rejects.toBeInstanceOf(
+        StateWriteError
+      );
+      spy.mockRestore();
+      // Not read as reuse: the same token still refreshes once the disk is back.
+      const tokens = await provider.exchangeRefreshToken(CLIENT, refreshToken);
+      expect(tokens.refresh_token).toBeDefined();
     });
 
     it('new access token is valid and verifiable', async () => {
@@ -831,7 +849,7 @@ describe('NextcloudOAuthProvider', () => {
     beforeEach(() => {
       cipher = new FlakyCipher();
       p = new NextcloudOAuthProvider(undefined, {
-        credentials: new CredentialStore(cipher, join(stateDir, 'credentials.json')),
+        credentials: new CredentialStore(cipher, StateDb.open(stateDir)),
       });
     });
     async function login() {
