@@ -628,7 +628,7 @@ TASK_SUMMARY="Test Task $TIMESTAMP"
 sep "MCP 65 — create_task"
 mcp_tool $((RPC_ID++)) "create_task" "{\"calendarName\":\"tasks\",\"summary\":\"$TASK_SUMMARY\"}"
 check_text "Task created successfully" && step_ok || step_fail "create_task failed"
-TASK_UID=$(extract_text 'UID: (.+)')
+TASK_UID=$(extract_text 'UID: ([^)\s]+)')
 echo "  task_uid: $TASK_UID"
 
 sep "MCP 66 — list_tasks"
