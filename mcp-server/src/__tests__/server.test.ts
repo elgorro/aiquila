@@ -20,6 +20,7 @@ vi.mock('../client/bookmarks.js', () => ({
 }));
 
 import { InMemoryTransport } from '@modelcontextprotocol/server';
+import { BUILTIN_SEQUENCES } from '../sequences/builtin.js';
 import { createServer } from '../server.js';
 import { _resetCache, getFilteredToolSets } from '../tool-registry.js';
 
@@ -54,13 +55,17 @@ describe('createServer', () => {
     }
   });
 
-  it('should register exactly the tools from getFilteredToolSets', async () => {
+  it('should register exactly the tools from getFilteredToolSets, then the pinned sequences', async () => {
     const server = await createServer();
-    const registeredCount = Object.keys((server as any)._registeredTools).length;
+    const names = Object.keys((server as any)._registeredTools);
     _resetCache();
     const toolSets = await getFilteredToolSets();
-    const expectedCount = toolSets.reduce((sum, ts) => sum + ts.length, 0);
-    expect(registeredCount).toBe(expectedCount);
+    const expected = toolSets.flat().map((t) => t.name);
+    expect(names.filter((n) => !n.startsWith('seq_'))).toEqual(expected);
+    // Built-ins only here: no Nextcloud answers for organization or personal ones.
+    expect(names.filter((n) => n.startsWith('seq_'))).toEqual(
+      BUILTIN_SEQUENCES.filter((s) => s.pinned).map((s) => `seq_${s.slug}`)
+    );
   });
 
   it('should connect to a transport', async () => {

@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit -p .",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write src/",
+    "catalog": "tsx scripts/build-sequence-catalog.ts",
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",
     "inspect:cli": "npx @modelcontextprotocol/inspector --cli node dist/index.js --method tools/list"
   },

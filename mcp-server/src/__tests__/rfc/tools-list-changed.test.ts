@@ -14,53 +14,11 @@ import {
   mcp,
   modernBody,
   rpcResult,
+  sseMessages as messages,
   LEGACY,
   type Stack,
 } from './harness.js';
 import { _expireCache } from '../../tool-registry.js';
-
-/** Reads SSE `data:` messages from a stream as they arrive. */
-function messages(res: Response) {
-  const reader = res.body!.getReader();
-  const decoder = new TextDecoder();
-  const seen: any[] = [];
-  let buffer = '';
-  let waiting: (() => void) | undefined;
-  void (async () => {
-    for (;;) {
-      const { value, done } = await reader.read().catch(() => ({ value: undefined, done: true }));
-      if (done) return;
-      buffer += decoder.decode(value, { stream: true });
-      let i;
-      while ((i = buffer.indexOf('\n\n')) >= 0) {
-        const frame = buffer.slice(0, i);
-        buffer = buffer.slice(i + 2);
-        const data = frame
-          .split('\n')
-          .filter((l) => l.startsWith('data:'))
-          .map((l) => l.slice(5).trim())
-          .join('');
-        if (data) seen.push(JSON.parse(data));
-      }
-      waiting?.();
-    }
-  })();
-  return {
-    seen,
-    async waitFor(pred: (m: any) => boolean, ms = 2000): Promise<any | undefined> {
-      const deadline = Date.now() + ms;
-      for (;;) {
-        const hit = seen.find(pred);
-        if (hit || Date.now() >= deadline) return hit;
-        await new Promise<void>((r) => {
-          waiting = r;
-          setTimeout(r, 50);
-        });
-      }
-    },
-    cancel: () => reader.cancel().catch(() => {}),
-  };
-}
 
 const listen = (id: number) =>
   modernBody(id, 'subscriptions/listen', { notifications: { toolsListChanged: true } });
