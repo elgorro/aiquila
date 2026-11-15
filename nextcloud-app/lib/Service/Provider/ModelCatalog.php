@@ -22,9 +22,10 @@ final class ModelCatalog {
      * @param string $error        user-facing reason the listing failed, '' on success
      * @param string $missingHint  what to do about an id that is not listed (pull it, load it, …);
      *                             `{model}` is replaced with the id
-     * @param list<ModelCompatibility> $retired models the provider still reports but no longer
-     *                             serves: kept out of the picker, and used only to explain why a
-     *                             saved or pinned id stopped working
+     * @param list<ModelCompatibility> $hidden models the provider knows but the picker does
+     *                             not offer: retired ones, which explain why a saved or pinned
+     *                             id stopped working, and aliases of a listed model, so a saved
+     *                             alias still resolves to its verdict
      */
     private function __construct(
         public readonly array $models,
@@ -32,19 +33,19 @@ final class ModelCatalog {
         public readonly string $providerLabel,
         public readonly string $error,
         public readonly string $missingHint,
-        public readonly array $retired = [],
+        public readonly array $hidden = [],
     ) {
     }
 
     /**
      * @param list<ModelCompatibility> $models
-     * @param list<ModelCompatibility> $retired see the constructor
+     * @param list<ModelCompatibility> $hidden see the constructor
      */
-    public static function listed(array $models, string $source, string $providerLabel, string $missingHint = '', array $retired = []): self {
+    public static function listed(array $models, string $source, string $providerLabel, string $missingHint = '', array $hidden = []): self {
         $byId = static fn(ModelCompatibility $a, ModelCompatibility $b) => strcmp($a->id, $b->id);
         usort($models, $byId);
-        usort($retired, $byId);
-        return new self($models, $source, $providerLabel, '', $missingHint, $retired);
+        usort($hidden, $byId);
+        return new self($models, $source, $providerLabel, '', $missingHint, $hidden);
     }
 
     public static function failed(string $providerLabel, string $error): self {
@@ -65,9 +66,9 @@ final class ModelCatalog {
         return array_map(static fn(ModelCompatibility $m) => $m->id, $this->models);
     }
 
-    /** The listed entry for $id, or its retired entry; null when the provider knows neither. */
+    /** The listed entry for $id, or its hidden one; null when the provider knows neither. */
     public function find(string $id): ?ModelCompatibility {
-        foreach ([...$this->models, ...$this->retired] as $model) {
+        foreach ([...$this->models, ...$this->hidden] as $model) {
             if ($model->id === $id) {
                 return $model;
             }
@@ -88,7 +89,7 @@ final class ModelCatalog {
     }
 
     /**
-     * @return array{source: string, providerLabel: string, error: string, missingHint: string, models: list<array<string, mixed>>, retired: list<array<string, mixed>>}
+     * @return array{source: string, providerLabel: string, error: string, missingHint: string, models: list<array<string, mixed>>, hidden: list<array<string, mixed>>}
      */
     public function toArray(): array {
         return [
@@ -97,7 +98,7 @@ final class ModelCatalog {
             'error' => $this->error,
             'missingHint' => $this->missingHint,
             'models' => array_map(static fn(ModelCompatibility $m) => $m->toArray(), $this->models),
-            'retired' => array_map(static fn(ModelCompatibility $m) => $m->toArray(), $this->retired),
+            'hidden' => array_map(static fn(ModelCompatibility $m) => $m->toArray(), $this->hidden),
         ];
     }
 
@@ -112,8 +113,8 @@ final class ModelCatalog {
             return null;
         }
         $models = self::entriesFromArray($data['models']);
-        $retired = self::entriesFromArray(is_array($data['retired'] ?? null) ? $data['retired'] : []);
-        if ($models === null || $retired === null) {
+        $hidden = self::entriesFromArray(is_array($data['hidden'] ?? null) ? $data['hidden'] : []);
+        if ($models === null || $hidden === null) {
             return null;
         }
         return new self(
@@ -122,7 +123,7 @@ final class ModelCatalog {
             $data['providerLabel'],
             $data['error'],
             is_string($data['missingHint'] ?? null) ? $data['missingHint'] : '',
-            $retired,
+            $hidden,
         );
     }
 

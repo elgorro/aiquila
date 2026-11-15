@@ -156,9 +156,10 @@ class ProviderSettingsService {
             foreach ($catalog->models as $model) {
                 $details[$model->id] = $model->toArray();
             }
-            // Retired models are not options, but a conversation pinned to one
-            // looks its verdict up here, so the chat can say why it fails.
-            foreach ($catalog->retired as $model) {
+            // Hidden models (retired, aliases) are not options, but a
+            // conversation pinned to one looks its verdict up here, so the
+            // chat can say why it fails — or that it is fine.
+            foreach ($catalog->hidden as $model) {
                 $details[$model->id] = $model->toArray();
             }
             // The model in use gets its verdict even when the picker does not
