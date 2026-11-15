@@ -119,6 +119,8 @@ Create one folder.
 This is a single `MKCOL` (RFC 4918 §9.3.1): it fails with `409` when the parent folder is missing
 and with `405` when the folder already exists. Create nested folders one level at a time.
 
+[**Structured result**](../README.md#structured-results): `{path}`.
+
 ---
 
 ### delete
@@ -192,6 +194,8 @@ Metadata for a file or folder, from the AIquila app (`GET /api/files/info`).
 `name`, `path`, `type` (`file` or `folder`), `size`, `mimeType`, `mtime` (Unix seconds), `etag`,
 `permissions` (Nextcloud's permission bitmask) and `isEncrypted`. `path` is Nextcloud's internal
 path, `/<user>/files/…`, not the path the other tools take.
+
+[**Structured result**](../README.md#structured-results): the same fields; `path` falls back to the requested path if Nextcloud reports none.
 
 ---
 

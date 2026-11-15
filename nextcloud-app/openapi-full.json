@@ -2286,7 +2286,7 @@
                                             "null"
                                         ],
                                         "default": null,
-                                        "description": "Team that owns the project ('' makes it personal, null keeps it). Only its creator can change this"
+                                        "description": "Team that owns the project ('' makes it personal, null keeps it). The creator can change this, and so can an owner or admin of the team that owns it, who can move it to another team but not make it personal. The new team must be one the caller belongs to"
                                     }
                                 }
                             }
@@ -2874,7 +2874,7 @@
             "post": {
                 "operationId": "project_template-create",
                 "summary": "Create a personal template",
-                "description": "With `projectId`, the template starts as a copy of that project (one of the caller's own); the other parameters then override its fields.",
+                "description": "With `projectId`, the template starts as a copy of that project (one of the caller's own, or one of a team they belong to); the other parameters then override its fields. A team project is deleted with its team, so this is how a member keeps a copy.",
                 "tags": [
                     "project_template"
                 ],

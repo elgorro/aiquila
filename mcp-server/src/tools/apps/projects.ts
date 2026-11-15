@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { fetchAiquilaAPI } from '../../client/aiquila.js';
+import { bool, int, str, structuredResult } from '../structured.js';
 
 /**
  * Project Tools
@@ -27,6 +28,45 @@ interface Project {
   createdAt: number;
   updatedAt: number;
   paths: ProjectPath[];
+}
+
+/** A project with its paths, as the AIquila app returns it (Db/Project, Db/ProjectPath). */
+const ProjectSchema = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  userId: z.string().nullable().describe('Creator'),
+  teamId: z.string().nullable().describe('Owning team (circle), or null for a personal project'),
+  description: z.string().nullable(),
+  systemPrompt: z.string().nullable(),
+  isActive: z.boolean().nullable(),
+  createdAt: z.number().int().nullable().describe('Unix seconds'),
+  updatedAt: z.number().int().nullable().describe('Unix seconds'),
+  paths: z.array(
+    z.object({
+      id: z.number().int(),
+      path: z.string(),
+      pathType: z.string().nullable().describe("'file' or 'directory'"),
+    })
+  ),
+});
+
+function projectData(p: Project): z.input<typeof ProjectSchema> {
+  return {
+    id: p.id,
+    title: p.title,
+    userId: str(p.userId),
+    teamId: str(p.teamId),
+    description: str(p.description),
+    systemPrompt: str(p.systemPrompt),
+    isActive: bool(p.isActive),
+    createdAt: int(p.createdAt),
+    updatedAt: int(p.updatedAt),
+    paths: (p.paths ?? []).map((path) => ({
+      id: path.id,
+      path: path.path,
+      pathType: str(path.pathType),
+    })),
+  };
 }
 
 function formatProject(p: Project): string {
@@ -107,6 +147,7 @@ export const createProjectTool = {
       .optional()
       .describe('Team (circle) that owns the project, for its members. Deleted with the team'),
   }),
+  outputSchema: ProjectSchema,
   handler: async (args: {
     title: string;
     description?: string;
@@ -124,9 +165,11 @@ export const createProjectTool = {
         },
       });
 
-      return {
-        content: [{ type: 'text' as const, text: `Project created:\n\n${formatProject(project)}` }],
-      };
+      return structuredResult(
+        ProjectSchema,
+        projectData(project),
+        `Project created:\n\n${formatProject(project)}`
+      );
     } catch (error) {
       return {
         content: [
@@ -154,13 +197,12 @@ export const getProjectTool = {
   inputSchema: z.object({
     id: z.number().describe('Project ID'),
   }),
+  outputSchema: ProjectSchema,
   handler: async (args: { id: number }) => {
     try {
       const project = await fetchAiquilaAPI<Project>(`/projects/${args.id}`);
 
-      return {
-        content: [{ type: 'text' as const, text: formatProject(project) }],
-      };
+      return structuredResult(ProjectSchema, projectData(project), formatProject(project));
     } catch (error) {
       return {
         content: [
@@ -184,7 +226,8 @@ export const updateProjectTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: 'Update an AIquila project. Only provided fields are updated.',
+  description:
+    'Update an AIquila project. Only provided fields are updated. teamId moves the project to another team, for example before its team is deleted (a team project is deleted with its team).',
   inputSchema: z.object({
     id: z.number().describe('Project ID'),
     title: z.string().optional().describe('New project title'),
@@ -193,18 +236,26 @@ export const updateProjectTool = {
       .string()
       .optional()
       .describe('New system prompt for conversations using this project'),
+    teamId: z
+      .string()
+      .optional()
+      .describe(
+        "Move the project to this team (circle id); '' makes it personal. Allowed for the creator, and for an owner or admin of the project's team, who can move it to another team but not make it personal. The caller must belong to the new team"
+      ),
   }),
   handler: async (args: {
     id: number;
     title?: string;
     description?: string;
     systemPrompt?: string;
+    teamId?: string;
   }) => {
     try {
       const body: Record<string, string> = {};
       if (args.title !== undefined) body.title = args.title;
       if (args.description !== undefined) body.description = args.description;
       if (args.systemPrompt !== undefined) body.systemPrompt = args.systemPrompt;
+      if (args.teamId !== undefined) body.teamId = args.teamId;
 
       const project = await fetchAiquilaAPI<Project>(`/projects/${args.id}`, {
         method: 'PUT',
@@ -491,6 +542,38 @@ export const listProjectTemplatesTool = {
   },
 };
 
+export const saveProjectAsTemplateTool = {
+  name: 'save_project_as_template',
+  title: 'Save Project as Template',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+  description:
+    "Save a copy of an AIquila project as one of the user's own project templates: title, description, system prompt and paths. Works for team projects too, for any member, which is how a member keeps a team project that is deleted with its team. Create a project from it later with create_project_from_template.",
+  inputSchema: z.object({
+    projectId: z.number().describe('Project ID from list_projects'),
+    title: z.string().optional().describe("Template title (default: the project's)"),
+  }),
+  handler: async (args: { projectId: number; title?: string }) => {
+    try {
+      const template = await fetchAiquilaAPI<ProjectTemplate>('/project-templates', {
+        method: 'POST',
+        body: { projectId: args.projectId, ...(args.title ? { title: args.title } : {}) },
+      });
+      const lines = [`Template #${template.id} saved: ${template.title}`];
+      if (template.description) lines.push(`  Description: ${template.description}`);
+      if (template.systemPrompt) lines.push(`  System prompt: ${template.systemPrompt}`);
+      for (const path of template.paths) lines.push(`  - [${path.pathType}] ${path.path}`);
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    } catch (error) {
+      return errorResult('saving project as template', error);
+    }
+  },
+};
+
 export const createProjectFromTemplateTool = {
   name: 'create_project_from_template',
   title: 'Create Project from Template',
@@ -506,15 +589,18 @@ export const createProjectFromTemplateTool = {
     templateId: z.number().describe('Template ID from list_project_templates'),
     title: z.string().optional().describe("Title for the new project (default: the template's)"),
   }),
+  outputSchema: ProjectSchema,
   handler: async (args: { templateId: number; title?: string }) => {
     try {
       const project = await fetchAiquilaAPI<Project>(
         `/project-templates/${args.templateId}/project`,
         { method: 'POST', body: args.title ? { title: args.title } : {} }
       );
-      return {
-        content: [{ type: 'text' as const, text: `Project created:\n\n${formatProject(project)}` }],
-      };
+      return structuredResult(
+        ProjectSchema,
+        projectData(project),
+        `Project created:\n\n${formatProject(project)}`
+      );
     } catch (error) {
       return errorResult('creating project from template', error);
     }
@@ -532,5 +618,6 @@ export const projectsTools = [
   listPromptsTool,
   getPromptTool,
   listProjectTemplatesTool,
+  saveProjectAsTemplateTool,
   createProjectFromTemplateTool,
 ];

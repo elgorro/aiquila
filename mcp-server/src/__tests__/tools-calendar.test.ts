@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { expectStructured } from './helpers/structured.js';
 
 // Mock declarations
 global.fetch = vi.fn();
@@ -369,6 +370,7 @@ END:VCALENDAR</c:calendar-data>
 
       const { getEventTool } = await import('../tools/apps/calendar.js');
       const result = await getEventTool.handler({ uid: 'event-1', calendarName: 'personal' });
+      expectStructured(result, getEventTool);
 
       expect(result.content[0].text).toContain('Project review');
       expect(result.content[0].text).toContain('2024-03-20 14:00 UTC');
@@ -471,6 +473,9 @@ END:VCALENDAR</c:calendar-data>
         description: 'Discuss Q2 plans',
       });
 
+      const created = expectStructured(result, createEventTool);
+      expect(created).toMatchObject({ calendarName: 'personal', summary: 'Lunch meeting' });
+      expect(result.content[0].text).toContain(`UID: ${created.uid}`);
       expect(result.content[0].text).toContain('created successfully');
       expect(result.content[0].text).toContain('Lunch meeting');
       expect(result.content[0].text).toContain('UID:');

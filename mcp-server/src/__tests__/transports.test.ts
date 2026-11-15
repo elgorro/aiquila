@@ -15,6 +15,9 @@ vi.mock('../server.js', () => ({
 
 vi.mock('../tool-registry.js', () => ({
   getFilteredToolSets: vi.fn().mockResolvedValue([]),
+  USER_CACHE_TTL_MS: 600_000,
+  onToolSetChange: vi.fn(() => () => {}),
+  toolSetKey: vi.fn(() => 'env'),
 }));
 
 // Mock the MCP SDK serving entries
@@ -128,7 +131,8 @@ describe('http transport', () => {
     await startHttp();
 
     const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
-    const handler = mcpCall?.[1] as (req: unknown, res: unknown) => Promise<void>;
+    // Mounted behind the tool-call rate limit.
+    const handler = mcpCall?.[mcpCall.length - 1] as (req: unknown, res: unknown) => Promise<void>;
     expect(handler).toBeDefined();
     const req = { body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } };
     const res = { on: vi.fn() };
@@ -146,14 +150,20 @@ describe('http transport', () => {
     expect(createMcpHandler).toHaveBeenCalledTimes(1);
     const factory = vi.mocked(createMcpHandler).mock.calls[0][0];
     await factory({ era: 'modern' });
-    expect(createServer).toHaveBeenCalled();
+    expect(createServer).toHaveBeenLastCalledWith({ toolsListChanged: true });
+    // The stateless legacy leg cannot deliver list_changed.
+    await factory({ era: 'legacy' });
+    expect(createServer).toHaveBeenLastCalledWith({ toolsListChanged: false });
+    // subscriptions/listen streams use the identity-scoped bus.
+    expect(vi.mocked(createMcpHandler).mock.calls[0][1]?.bus).toBeDefined();
   });
 
   it('should mount handler on /mcp', async () => {
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
 
-    expect(mockAll).toHaveBeenCalledWith('/mcp', expect.any(Function));
+    // Tool-call rate limit, then the handler.
+    expect(mockAll).toHaveBeenCalledWith('/mcp', expect.any(Function), expect.any(Function));
   });
 
   // Stateless mode makes the SDK answer `GET /mcp` with 405, because it does not offer the
@@ -201,8 +211,8 @@ describe('http transport', () => {
     await startHttp();
 
     expect(mockPost).not.toHaveBeenCalled();
-    // /mcp is mounted with only one handler (no bearer middleware)
-    expect(mockAll).toHaveBeenCalledWith('/mcp', expect.any(Function));
+    // /mcp is mounted with the rate limit and the handler only (no bearer middleware)
+    expect(mockAll).toHaveBeenCalledWith('/mcp', expect.any(Function), expect.any(Function));
   });
 
   it('registers GET /health endpoint', async () => {
@@ -286,6 +296,7 @@ describe('http transport with auth enabled', () => {
       expect.any(Function), // lazy-auth gate
       expect.any(Function), // internal-token network check
       mockBearerMiddleware,
+      expect.any(Function), // tool-call rate limit, keyed by the signed-in user
       expect.any(Function) // authenticated handler
     );
   });
@@ -295,18 +306,19 @@ describe('http transport with auth enabled', () => {
     const { startHttp } = await import('../transports/http.js');
     await startHttp();
 
-    // Chain collapses to logging + internal-token check + bearer + handler:
-    // every method needs a token.
+    // Chain collapses to logging + internal-token check + bearer + rate limit
+    // + handler: every method needs a token.
     expect(mockAll).toHaveBeenCalledWith(
       '/mcp',
       expect.any(Function),
       expect.any(Function),
       mockBearerMiddleware,
+      expect.any(Function),
       expect.any(Function)
     );
 
     const mcpCall = mockAll.mock.calls.find((c) => c[0] === '/mcp');
-    expect(mcpCall).toHaveLength(5);
+    expect(mcpCall).toHaveLength(6);
     expect(mcpCall?.[3]).toBe(mockBearerMiddleware);
   });
 

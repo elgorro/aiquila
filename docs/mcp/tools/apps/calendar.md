@@ -86,6 +86,8 @@ are shown with their zone, as for `list_events`.
 Ask Claude: "Get details for event uid-abc123 in my personal calendar"
 ```
 
+[**Structured result**](../../README.md#structured-results): `uid`, `calendarName` (the slug), `href`, `etag`, `summary`, `dtstart`, `dtstartTzid`, `dtend`, `dtendTzid`, `duration`, `isAllDay`, `location`, `description`, `status`, `rrule`, `recurrenceId`, `organizer`, `categories` and `attendees` (`email`, `name`, `role`, `partstat`). Date-times are iCalendar values (RFC 5545 §3.3.5).
+
 ---
 
 ### create_event
@@ -133,6 +135,8 @@ Ask Claude: "Schedule a birthday party on 20260401 in my personal calendar"
   "alarm": 15
 }
 ```
+
+[**Structured result**](../../README.md#structured-results): `uid`, `calendarName` (the slug), `href`, `etag` and `summary` of the stored event.
 
 ---
 

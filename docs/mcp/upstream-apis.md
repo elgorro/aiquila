@@ -47,14 +47,14 @@ category to `TOOL_REGISTRY`; after a squash merge, that is the merge commit on `
 
 | Category | Source | Upstream | API | Reference | Introduced | Last verified |
 |---|---|---|---|---|---|---|
-| `files` | `system/files.ts` | `dav`, `aiquila` | WebDAV, App REST | [WebDAV basics](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/basic.html), [OpenAPI](../dev/openapi.md) | 0.1.2 · `33a6ce8` · 2025-11-21 | dav 2.0.0 · NC 35.0.2 · 2026-11-14; aiquila 0.5.1 · 2026-10-31 |
+| `files` | `system/files.ts` | `dav`, `aiquila` | WebDAV, App REST | [WebDAV basics](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/basic.html), [OpenAPI](../dev/openapi.md) | 0.1.2 · `33a6ce8` · 2025-11-21 | dav 2.0.0 · NC 35.0.2 · 2026-11-14; aiquila 0.5.3 · 2026-11-14 |
 | `status` | `system/status.ts` | core | OCS, OCC | [OCS API overview](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-api-overview.html) | 0.1.5 · `8f5df8b` · 2026-02-07 | core, aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
 | `apps` | `system/apps.ts` | `provisioning_api` | OCS, OCC | [Apps provisioning](https://docs.nextcloud.com/server/latest/admin_manual/configuration_user/instruction_set_for_apps.html) | 0.1.5 · `8f5df8b` · 2026-02-07 | provisioning_api 2.0.0, aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
 | `tags` | `system/tags.ts` | `systemtags` | WebDAV | [WebDAV](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/index.html) | 0.1.12 · `ab9c5aa` · 2026-02-10 | systemtags 2.0.0, dav 2.0.0 · NC 35.0.2 · 2026-10-31 |
 | `search` | `system/search.ts` | core | OCS | [Unified search](https://docs.nextcloud.com/server/latest/developer_manual/digging_deeper/search.html) | 0.1.64 · `11ba400` · 2026-03-19 | core · NC 35.0.2 · 2026-10-31 |
 | `users` | `apps/users.ts` | `provisioning_api` | OCS | [User provisioning](https://docs.nextcloud.com/server/latest/admin_manual/configuration_user/instruction_set_for_users.html) | 0.1.5 · `8f5df8b` · 2026-02-07 | provisioning_api 2.0.0 · NC 35.0.2 · 2026-10-31 |
 | `groups` | `apps/groups.ts` | `provisioning_api` | OCS | [Group provisioning](https://docs.nextcloud.com/server/latest/admin_manual/configuration_user/instruction_set_for_groups.html) | 0.1.5 · `8f5df8b` · 2026-02-07 | provisioning_api 2.0.0 · NC 35.0.2 · 2026-10-31 |
-| `shares` | `apps/shares.ts` | `files_sharing` | OCS | [OCS Share API](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-share-api.html) | 0.1.5 · `8f5df8b` · 2026-02-07 | files_sharing 2.0.0 · NC 35.0.2 · 2026-11-05 |
+| `shares` | `apps/shares.ts` | `files_sharing` | OCS | [OCS Share API](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-share-api.html) | 0.1.5 · `8f5df8b` · 2026-02-07 | files_sharing 2.0.0 · NC 35.0.2 · 2026-11-14 |
 | `absence` | `apps/absence.ts` | `dav` | OCS | [Out-of-office API](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-out-of-office-api.html) | 0.2.8 · `bacc1f2` · 2026-03-24 | dav 2.0.0 · NC 35.0.2 · 2026-10-31 |
 | `trash` | `apps/trash.ts` | `files_trashbin` | WebDAV | [Trashbin](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/trashbin.html) | 0.2.8 · `bacc1f2` · 2026-03-24 | files_trashbin 2.0.0 · NC 35.0.2 · 2026-10-31 |
 | `versions` | `apps/versions.ts` | `files_versions` | WebDAV | [Versions](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/versions.html) | 0.2.8 · `bacc1f2` · 2026-03-24 | files_versions 2.0.0 · NC 35.0.2 · 2026-10-31 |
@@ -70,17 +70,17 @@ this repository ([OpenAPI](../dev/openapi.md)) rather than an external reference
 | `aiquila` | `apps/aiquila.ts` | `aiquila` | OCC | [OpenAPI](../dev/openapi.md) | 0.1.2 · `a3fccfc` · 2026-02-01 | aiquila 0.5.2 · NC 35.0.2 · 2026-11-01 |
 | `security` | `system/security.ts` | `aiquila` | OCC | [OpenAPI](../dev/openapi.md) | 0.1.5 · `8f5df8b` · 2026-02-07 | aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
 | `occ` | `system/occ.ts` | `aiquila` | OCC | [OpenAPI](../dev/openapi.md) | 0.1.8 · `1962222` · 2026-02-08 | aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
-| `projects` | `apps/projects.ts` | `aiquila` | App REST | [OpenAPI](../dev/openapi.md) | 0.2.11 · `6f8e108` · 2026-04-02 | aiquila 0.5.2 · NC 35.0.2 · 2026-11-01 |
+| `projects` | `apps/projects.ts` | `aiquila` | App REST | [OpenAPI](../dev/openapi.md) | 0.2.11 · `6f8e108` · 2026-04-02 | aiquila 0.5.3 · NC 35.0.2 · 2026-11-14 |
 | `cowork` | `apps/cowork.ts` | `aiquila` | App REST | [OpenAPI](../dev/openapi.md) | 0.3.20 · `d80fd73` · 2026-06-13 | aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
 
 ### Nextcloud apps
 
 | Category | Source | Upstream | API | Reference | Introduced | Last verified |
 |---|---|---|---|---|---|---|
-| `calendar` | `apps/calendar.ts` | `calendar` | CalDAV, CalDAV scheduling (rooms, free-busy) | [RFC 4791](https://www.rfc-editor.org/rfc/rfc4791), [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545), [RFC 6638](https://www.rfc-editor.org/rfc/rfc6638) | 0.1.7 · `b98bd51` · 2026-02-08 | calendar 6.6.5, dav 2.0.0, calendar_resource_management 1.0.0 · NC 35.0.2 · 2026-11-13 |
-| `tasks` | `apps/tasks.ts` | `tasks` | CalDAV | [RFC 4791](https://www.rfc-editor.org/rfc/rfc4791), [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545) | 0.1.2 · `33a6ce8` · 2025-11-21 | tasks 0.18.1, dav 2.0.0 · NC 35.0.2 · 2026-10-31 |
+| `calendar` | `apps/calendar.ts` | `calendar` | CalDAV, CalDAV scheduling (rooms, free-busy) | [RFC 4791](https://www.rfc-editor.org/rfc/rfc4791), [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545), [RFC 6638](https://www.rfc-editor.org/rfc/rfc6638) | 0.1.7 · `b98bd51` · 2026-02-08 | calendar 6.6.5, dav 2.0.0, calendar_resource_management 1.0.0 · NC 35.0.2 · 2026-11-14 |
+| `tasks` | `apps/tasks.ts` | `tasks` | CalDAV | [RFC 4791](https://www.rfc-editor.org/rfc/rfc4791), [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545) | 0.1.2 · `33a6ce8` · 2025-11-21 | tasks 0.18.1, dav 2.0.0 · NC 35.0.2 · 2026-11-14 |
 | `contacts` | `apps/contacts.ts` | `contacts` | CardDAV | [RFC 6352](https://www.rfc-editor.org/rfc/rfc6352), [RFC 6350](https://www.rfc-editor.org/rfc/rfc6350) | 0.1.7 · `b98bd51` · 2026-02-08 | contacts 8.9.3, dav 2.0.0 · NC 35.0.2 · 2026-10-31 |
-| `notes` | `apps/notes.ts` | `notes` | App REST v1 | [Notes API v1](https://github.com/nextcloud/notes/blob/main/docs/api/v1.md) | 0.1.2 · `33a6ce8` · 2025-11-21 | notes 6.1.0 · NC 35.0.2 · 2026-10-31 |
+| `notes` | `apps/notes.ts` | `notes` | App REST v1 | [Notes API v1](https://github.com/nextcloud/notes/blob/main/docs/api/v1.md) | 0.1.2 · `33a6ce8` · 2025-11-21 | notes 6.1.0 · NC 35.0.2 · 2026-11-14 |
 | `news` | `apps/news.ts` | `news` | App REST v1-3 | [News API v1-3](https://github.com/nextcloud/news/blob/master/docs/development/api/api-v1-3.md) | 0.3.18 · `0a6ce5e` · 2026-06-12 | news 29.0.0 · NC 35.0.2 · 2026-10-31 |
 | `mail` | `apps/mail.ts` | `mail` | App REST, OCS (send) | [nextcloud/mail](https://github.com/nextcloud/mail) | 0.1.7 · `b98bd51` · 2026-02-08 | mail 5.12.6 · NC 35.0.2 · 2026-10-31 |
 | `deck` | `apps/deck.ts` | `deck` | App REST v1.0 | [Deck API](https://deck.readthedocs.io/en/latest/API/) | 0.2.10 · `5ac75d0` · 2026-03-28 | deck 1.19.2 · NC 35.0.2 · 2026-11-06 |

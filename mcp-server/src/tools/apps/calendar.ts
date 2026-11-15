@@ -27,6 +27,7 @@ import {
 } from '../dav-utils.js';
 import { fetchOCS } from '../../client/ocs.js';
 import { getNextcloudConfig } from '../types.js';
+import { structuredResult } from '../structured.js';
 
 /**
  * Nextcloud Calendar App Tools
@@ -805,7 +806,7 @@ async function assertCalendarSupportsEvents(
 async function resolveEventByUid(
   calendarName: string,
   uid: string
-): Promise<{ href: string; etag: string; icalData: string }> {
+): Promise<{ href: string; etag: string; icalData: string; calendar: string }> {
   const config = getNextcloudConfig();
   let slug = calendarName;
   const buildUrl = () => `${config.url}${davPath('calendars', config.user, slug)}/`;
@@ -856,8 +857,48 @@ async function resolveEventByUid(
   if (!found) {
     throw new Error(`Event with UID "${uid}" not found in calendar "${calendarName}"`);
   }
-  return { href: found.href, etag: found.etag, icalData: found.data };
+  return { href: found.href, etag: found.etag, icalData: found.data, calendar: slug };
 }
+
+/** Where a calendar object lives (RFC 4791 §4.1; ETag per RFC 9110 §8.8.3). */
+const eventLocationShape = {
+  uid: z.string().describe('iCalendar UID (RFC 5545 §3.8.4.7)'),
+  calendarName: z.string().describe('Calendar slug the event is in'),
+  href: z.string().describe('CalDAV resource path'),
+  etag: z.string().describe('For If-Match on update'),
+};
+
+const CreatedEventSchema = z.object({
+  ...eventLocationShape,
+  summary: z.string(),
+});
+
+/** An event as get_event parses it; date-times are iCalendar values (RFC 5545 §3.3.5). */
+const EventSchema = z.object({
+  ...eventLocationShape,
+  summary: z.string(),
+  dtstart: z.string(),
+  dtstartTzid: z.string().nullable(),
+  dtend: z.string().nullable(),
+  dtendTzid: z.string().nullable(),
+  duration: z.string().nullable(),
+  isAllDay: z.boolean(),
+  location: z.string().nullable(),
+  description: z.string().nullable(),
+  status: z.string().nullable(),
+  rrule: z.string().nullable(),
+  recurrenceId: z.string().nullable(),
+  organizer: z.string().nullable(),
+  categories: z.array(z.string()),
+  attendees: z.array(
+    z.object({
+      email: z.string().nullable(),
+      name: z.string().nullable(),
+      role: z.string().nullable(),
+      partstat: z.string().nullable(),
+    })
+  ),
+});
 
 // ---------------------------------------------------------------------------
 // Tools
@@ -1098,9 +1139,11 @@ export const getEventTool = {
       .string()
       .describe('The calendar name. Use list_calendars to find available calendar names.'),
   }),
+  outputSchema: EventSchema,
   handler: async (args: { uid: string; calendarName: string }) => {
     try {
-      const { icalData } = await resolveEventByUid(args.calendarName, args.uid);
+      const stored = await resolveEventByUid(args.calendarName, args.uid);
+      const { icalData } = stored;
 
       // resolveEventByUid returns the iCalendar text already XML-decoded
       const events = parseICalEvents(icalData);
@@ -1117,14 +1160,36 @@ export const getEventTool = {
         output = output.replace(event.description.substring(0, 200) + '...', event.description);
       }
 
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: output,
-          },
-        ],
-      };
+      return structuredResult(
+        EventSchema,
+        {
+          uid: event.uid,
+          calendarName: stored.calendar,
+          href: stored.href,
+          etag: stored.etag,
+          summary: event.summary,
+          dtstart: event.dtstart,
+          dtstartTzid: event.dtstartTzid ?? null,
+          dtend: event.dtend ?? null,
+          dtendTzid: event.dtendTzid ?? null,
+          duration: event.duration ?? null,
+          isAllDay: event.isAllDay,
+          location: event.location ?? null,
+          description: event.description ?? null,
+          status: event.status ?? null,
+          rrule: event.rrule ?? null,
+          recurrenceId: event.recurrenceId ?? null,
+          organizer: event.organizer ?? null,
+          categories: event.categories,
+          attendees: event.attendees.map((a) => ({
+            email: a.email ?? null,
+            name: a.cn ?? null,
+            role: a.role ?? null,
+            partstat: a.partstat ?? null,
+          })),
+        },
+        output
+      );
     } catch (error) {
       return {
         content: [
@@ -1229,6 +1294,7 @@ export const createEventTool = {
         'IANA time zone (e.g. "Europe/Berlin"). When set, a VTIMEZONE block is emitted and dtstart/dtend use TZID instead of UTC. Required for reliable iOS Calendar and Thunderbird CalDAV sync of timed events. UTC inputs (trailing Z) are converted to wall-clock time in this zone.'
       ),
   }),
+  outputSchema: CreatedEventSchema,
   handler: async (args: {
     summary: string;
     calendarName: string;
@@ -1397,7 +1463,7 @@ export const createEventTool = {
       }
 
       // Verify the event was actually persisted
-      let stored: { href: string; etag: string; icalData: string };
+      let stored: Awaited<ReturnType<typeof resolveEventByUid>>;
       try {
         stored = await resolveEventByUid(slug, eventUid);
       } catch {
@@ -1411,16 +1477,18 @@ export const createEventTool = {
       const timeInfo = isAllDay
         ? formatICalDate(args.dtstart)
         : `${formatICalDate(args.dtstart)} - ${formatICalDate(dtend)}`;
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text:
-              `Event created successfully: ${args.summary}\n  When: ${timeInfo}\n  UID: ${eventUid}` +
-              (await settleBookings(stored)),
-          },
-        ],
-      };
+      return structuredResult(
+        CreatedEventSchema,
+        {
+          uid: eventUid,
+          calendarName: stored.calendar,
+          href: stored.href,
+          etag: stored.etag,
+          summary: args.summary,
+        },
+        `Event created successfully: ${args.summary}\n  When: ${timeInfo}\n  UID: ${eventUid}` +
+          (await settleBookings(stored))
+      );
     } catch (error) {
       return {
         content: [

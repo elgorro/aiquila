@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getWebDAVClient } from '../../client/webdav.js';
 import { fetchAiquilaAPI } from '../../client/aiquila.js';
 import { PathSchema, FilePathSchema, FileContentSchema, FolderPathSchema } from '../types.js';
+import { bool, int, str, structuredResult } from '../structured.js';
 
 /**
  * File System Tools for Nextcloud
@@ -101,6 +102,8 @@ export const writeFileTool = {
   },
 };
 
+const CreatedFolderSchema = z.object({ path: z.string().describe('Path of the created folder') });
+
 /**
  * Create a folder in Nextcloud
  */
@@ -115,17 +118,15 @@ export const createFolderTool = {
   },
   description: 'Create a folder in Nextcloud',
   inputSchema: FolderPathSchema,
+  outputSchema: CreatedFolderSchema,
   handler: async (args: { path: string }) => {
     const client = getWebDAVClient();
     await client.createDirectory(args.path);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Folder created successfully at ${args.path}`,
-        },
-      ],
-    };
+    return structuredResult(
+      CreatedFolderSchema,
+      { path: args.path },
+      `Folder created successfully at ${args.path}`
+    );
   },
 };
 
@@ -158,6 +159,42 @@ export const deleteTool = {
 };
 
 /**
+ * A file or folder as the AIquila app's /files/info returns it (`FileNode` in
+ * nextcloud-app/openapi.json).
+ */
+const FileNodeSchema = z.object({
+  path: z
+    .string()
+    .describe(
+      'As Nextcloud reports it (internal, e.g. /alice/files/a.pdf); else the requested path'
+    ),
+  id: z.number().int().nullable().describe('Nextcloud file id'),
+  name: z.string().nullable(),
+  type: z.enum(['file', 'folder']).nullable(),
+  size: z.number().int().nullable().describe('Size in bytes'),
+  mimeType: z.string().nullable(),
+  mtime: z.number().int().nullable().describe('Last modified, Unix seconds'),
+  etag: z.string().nullable(),
+  permissions: z.number().int().nullable().describe('Nextcloud permission bitmask'),
+  isEncrypted: z.boolean().nullable(),
+});
+
+function fileNodeData(info: Record<string, unknown>, path: string): z.input<typeof FileNodeSchema> {
+  return {
+    path: str(info.path) ?? path,
+    id: int(info.id),
+    name: str(info.name),
+    type: info.type === 'file' || info.type === 'folder' ? info.type : null,
+    size: int(info.size),
+    mimeType: str(info.mimeType),
+    mtime: int(info.mtime),
+    etag: str(info.etag),
+    permissions: int(info.permissions),
+    isEncrypted: bool(info.isEncrypted),
+  };
+}
+
+/**
  * Get detailed file metadata via AIquila REST API
  */
 export const getFileInfoTool = {
@@ -176,14 +213,17 @@ export const getFileInfoTool = {
       .string()
       .describe("The file or folder path in Nextcloud (e.g., '/Documents/report.pdf')"),
   }),
+  outputSchema: FileNodeSchema,
   handler: async (args: { path: string }) => {
     try {
       const info = await fetchAiquilaAPI<Record<string, unknown>>('/files/info', {
         queryParams: { path: args.path },
       });
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(info, null, 2) }],
-      };
+      return structuredResult(
+        FileNodeSchema,
+        fileNodeData(info, args.path),
+        JSON.stringify(info, null, 2)
+      );
     } catch (error) {
       return {
         content: [

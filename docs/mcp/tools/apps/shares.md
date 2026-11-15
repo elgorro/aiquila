@@ -31,6 +31,8 @@ Get everything the server knows about one share.
 **Parameters:**
 - `shareId` (number, required)
 
+[**Structured result**](../../README.md#structured-results): `id` (a string, as OCS sends it), `shareType`, `path`, `itemType`, `permissions`, `owner`, `shareWith`, `shareWithDisplayName`, `token`, `url`, `expiration`, `label` and `created` (Unix seconds).
+
 #### `create_share`
 Share a file or folder.
 
@@ -50,6 +52,8 @@ Share a file or folder.
 **Returns:** the share ID and type, the token and URL for links, and any password and attribute details.
 
 **Example:** "Share the report with Bob, read-only, and don't let him download it."
+
+[**Structured result**](../../README.md#structured-results): the new share, as for `get_share`.
 
 #### `update_share`
 Change an existing share. Only the parameters passed are changed.

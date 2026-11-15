@@ -13,6 +13,7 @@ use OCA\AIquila\Db\ProjectPath;
 use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Db\ProjectTemplate;
 use OCA\AIquila\Db\ProjectTemplateMapper;
+use OCA\AIquila\Service\TeamService;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\IRequest;
@@ -20,7 +21,7 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
 class ProjectTemplateControllerTest extends TestCase {
-    private function controller(ProjectTemplateMapper $templates, ?ProjectMapper $projects = null, ?ProjectPathMapper $paths = null): ProjectTemplateController {
+    private function controller(ProjectTemplateMapper $templates, ?ProjectMapper $projects = null, ?ProjectPathMapper $paths = null, ?TeamService $teams = null): ProjectTemplateController {
         return new ProjectTemplateController(
             'aiquila',
             $this->createStub(IRequest::class),
@@ -29,6 +30,7 @@ class ProjectTemplateControllerTest extends TestCase {
             $paths ?? $this->createStub(ProjectPathMapper::class),
             'alice',
             $this->createStub(LoggerInterface::class),
+            $teams,
         );
     }
 
@@ -93,7 +95,7 @@ class ProjectTemplateControllerTest extends TestCase {
         $project->setTitle('Garden');
         $project->setSystemPrompt('Plants only.');
         $projects = $this->createStub(ProjectMapper::class);
-        $projects->method('findByIdAndUser')->willReturn($project);
+        $projects->method('findAccessible')->willReturn($project);
 
         $path = new ProjectPath();
         $path->setPath('/Garden/plan.md');
@@ -111,6 +113,39 @@ class ProjectTemplateControllerTest extends TestCase {
         $this->assertSame('Mine', $data['description']);
         $this->assertSame('Plants only.', $data['systemPrompt']);
         $this->assertSame([['path' => '/Garden/plan.md', 'pathType' => 'file']], $data['paths']);
+    }
+
+    public function testATeamMemberSavesTheTeamsProjectAsTheirTemplate(): void {
+        $project = new Project();
+        $project->setId(5);
+        $project->setUserId('carol');
+        $project->setTeamId('team-a');
+        $project->setTitle('Tender');
+        $projects = $this->createMock(ProjectMapper::class);
+        $projects->expects($this->once())->method('findAccessible')
+            ->with(5, 'alice', ['team-a'])
+            ->willReturn($project);
+        $paths = $this->createStub(ProjectPathMapper::class);
+        $paths->method('findByProject')->willReturn([]);
+        $teams = $this->createStub(TeamService::class);
+        $teams->method('teamIdsFor')->willReturn(['team-a']);
+        $templates = $this->createMock(ProjectTemplateMapper::class);
+        $templates->expects($this->once())->method('insert')->willReturnArgument(0);
+
+        $res = $this->controller($templates, $projects, $paths, $teams)->create(projectId: 5);
+
+        $this->assertSame(200, $res->getStatus());
+        $this->assertSame('Tender', $res->getData()['title']);
+        $this->assertSame('user', $res->getData()['scope']);
+    }
+
+    public function testSavingAProjectTheCallerCannotUseIs404(): void {
+        $projects = $this->createStub(ProjectMapper::class);
+        $projects->method('findAccessible')->willThrowException(new DoesNotExistException(''));
+        $templates = $this->createMock(ProjectTemplateMapper::class);
+        $templates->expects($this->never())->method('insert');
+
+        $this->assertSame(404, $this->controller($templates, $projects)->create(projectId: 9)->getStatus());
     }
 
     public function testAdminCreateIsInstanceScopeAndNeedsATitle(): void {

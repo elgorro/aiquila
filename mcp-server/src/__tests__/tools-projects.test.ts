@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { expectStructured } from './helpers/structured.js';
 
 const mockFetchAiquilaAPI = vi.fn();
 
@@ -78,6 +79,7 @@ describe('Project Tools', () => {
         systemPrompt: 'You are helpful',
       });
 
+      expect(expectStructured(result, createProjectTool).id).toBe(sampleProject.id);
       expect(result.content[0].text).toContain('Project created');
       expect(result.content[0].text).toContain('My Project');
       expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/projects', {
@@ -106,6 +108,7 @@ describe('Project Tools', () => {
 
       const { getProjectTool } = await import('../tools/apps/projects.js');
       const result = await getProjectTool.handler({ id: 1 });
+      expectStructured(result, getProjectTool);
 
       expect(result.content[0].text).toContain('My Project');
       expect(result.content[0].text).toContain('You are helpful');
@@ -133,6 +136,24 @@ describe('Project Tools', () => {
       expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/projects/1', {
         method: 'PUT',
         body: { title: 'Updated' },
+      });
+    });
+
+    it('moves a project to another team, and makes it personal with an empty teamId', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue({ ...sampleProject, teamId: 'team-b' });
+      const { updateProjectTool } = await import('../tools/apps/projects.js');
+
+      const moved = await updateProjectTool.handler({ id: 1, teamId: 'team-b' });
+      expect(mockFetchAiquilaAPI).toHaveBeenLastCalledWith('/projects/1', {
+        method: 'PUT',
+        body: { teamId: 'team-b' },
+      });
+      expect(moved.content[0].text).toContain('Team: team-b');
+
+      await updateProjectTool.handler({ id: 1, teamId: '' });
+      expect(mockFetchAiquilaAPI).toHaveBeenLastCalledWith('/projects/1', {
+        method: 'PUT',
+        body: { teamId: '' },
       });
     });
 
@@ -286,6 +307,43 @@ describe('Project Tools', () => {
   });
 
   describe('project templates', () => {
+    it('saves a project, a team project included, as a template', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue({
+        id: 21,
+        scope: 'user',
+        title: 'Tender copy',
+        description: null,
+        systemPrompt: 'Formal German.',
+        paths: [{ path: '/Bids/Acme', pathType: 'directory' }],
+        createdAt: 1,
+        updatedAt: 1,
+      });
+
+      const { saveProjectAsTemplateTool } = await import('../tools/apps/projects.js');
+      const result = await saveProjectAsTemplateTool.handler({
+        projectId: 5,
+        title: 'Tender copy',
+      });
+
+      expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/project-templates', {
+        method: 'POST',
+        body: { projectId: 5, title: 'Tender copy' },
+      });
+      expect(result.content[0].text).toContain('Template #21 saved: Tender copy');
+      expect(result.content[0].text).toContain('[directory] /Bids/Acme');
+    });
+
+    it('sends no title when none is given, and reports a missing project', async () => {
+      mockFetchAiquilaAPI.mockRejectedValue(new Error('404 Project not found'));
+      const { saveProjectAsTemplateTool } = await import('../tools/apps/projects.js');
+      const result = await saveProjectAsTemplateTool.handler({ projectId: 9 });
+      expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/project-templates', {
+        method: 'POST',
+        body: { projectId: 9 },
+      });
+      expect(result.isError).toBe(true);
+    });
+
     it('list_project_templates shows prompt and paths', async () => {
       mockFetchAiquilaAPI.mockResolvedValue([
         {
@@ -314,6 +372,7 @@ describe('Project Tools', () => {
 
       const { createProjectFromTemplateTool } = await import('../tools/apps/projects.js');
       const result = await createProjectFromTemplateTool.handler({ templateId: 4, title: 'Mine' });
+      expectStructured(result, createProjectFromTemplateTool);
 
       expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/project-templates/4/project', {
         method: 'POST',
