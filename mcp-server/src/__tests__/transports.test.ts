@@ -15,6 +15,9 @@ vi.mock('../server.js', () => ({
 
 vi.mock('../tool-registry.js', () => ({
   getFilteredToolSets: vi.fn().mockResolvedValue([]),
+  USER_CACHE_TTL_MS: 600_000,
+  onToolSetChange: vi.fn(() => () => {}),
+  toolSetKey: vi.fn(() => 'env'),
 }));
 
 // Mock the MCP SDK serving entries
@@ -147,7 +150,12 @@ describe('http transport', () => {
     expect(createMcpHandler).toHaveBeenCalledTimes(1);
     const factory = vi.mocked(createMcpHandler).mock.calls[0][0];
     await factory({ era: 'modern' });
-    expect(createServer).toHaveBeenCalled();
+    expect(createServer).toHaveBeenLastCalledWith({ toolsListChanged: true });
+    // The stateless legacy leg cannot deliver list_changed.
+    await factory({ era: 'legacy' });
+    expect(createServer).toHaveBeenLastCalledWith({ toolsListChanged: false });
+    // subscriptions/listen streams use the identity-scoped bus.
+    expect(vi.mocked(createMcpHandler).mock.calls[0][1]?.bus).toBeDefined();
   });
 
   it('should mount handler on /mcp', async () => {

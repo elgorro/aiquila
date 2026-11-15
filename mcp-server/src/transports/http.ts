@@ -37,6 +37,7 @@ import {
   rateLimit,
   rateLimitCheck,
 } from './rate-limit.js';
+import { IdentityScopedEventBus } from './tool-list-changes.js';
 import { internalNetworks, internalTokenAllowed, isInternalToken } from '../auth/internal-token.js';
 import { logger } from '../logger.js';
 import { SUPPORT_NOTICE } from '../support.js';
@@ -305,9 +306,18 @@ export async function createHttpApp(): Promise<express.Express> {
   // without a shared session. Both legs answer GET and DELETE with 405.
   // `toNodeHandler` forwards `req.auth` (set by requireBearerAuth) and the
   // already-parsed `req.body`.
+  //
+  // tools.listChanged is advertised to 2026-07-28 requests only: their
+  // `subscriptions/listen` streams receive list_changed, scoped to the account
+  // whose list changed (tool-list-changes.ts). The stateless legacy leg has
+  // no stream to send it on, so 2025-era clients are told `false` and see
+  // changes on their next tools/list (MCP 2026-07-28, Tools: listChanged
+  // says whether the server will emit the notification).
+  const toolListBus = new IdentityScopedEventBus();
   const mcpHandler = toNodeHandler(
-    createMcpHandler(() => createServer(), {
+    createMcpHandler((ctx) => createServer({ toolsListChanged: ctx.era === 'modern' }), {
       legacy: 'stateless',
+      bus: toolListBus,
       onerror: (err) => logger.warn({ err: err.message }, '[mcp] Request error'),
     })
   );
