@@ -124,14 +124,34 @@ abstract class AbstractBedrockClaudeProvider extends AbstractAwsClaudeProvider {
         return $data;
     }
 
+    /**
+     * AWS answers a bad credential with 403 as well as a missing permission
+     * ("The security token included in the request is invalid", "Invalid API
+     * Key format"), so a 403 quotes AWS's own reason before naming the
+     * permissions listing needs.
+     */
     protected function listingErrorMessage(\Throwable $e): string {
-        return match (true) {
-            $e instanceof AuthenticationException => 'the credentials were rejected.',
-            $e instanceof PermissionDeniedException => $this->authMode() === self::AUTH_API_KEY
-                ? 'this API key is not allowed to list models. Listing needs bedrock:ListFoundationModels and bedrock:ListInferenceProfiles, which a key allowed only on the Mantle endpoint may not have; type the model ID instead.'
-                : 'the AWS principal lacks bedrock:ListFoundationModels or bedrock:ListInferenceProfiles.',
-            default => parent::listingErrorMessage($e),
-        };
+        if ($e instanceof PermissionDeniedException) {
+            $reason = self::awsReason($e);
+            $needs = $this->authMode() === self::AUTH_API_KEY
+                ? 'Check the API key. Listing also needs bedrock:ListFoundationModels and bedrock:ListInferenceProfiles, which a key allowed only on the Mantle endpoint may not have; type the model ID instead.'
+                : 'Check the credentials, and that the AWS principal has bedrock:ListFoundationModels and bedrock:ListInferenceProfiles.';
+            return ($reason !== '' ? 'AWS refused the request: ' . rtrim($reason, '.') . '. ' : 'AWS refused the request. ') . $needs;
+        }
+        if ($e instanceof AuthenticationException) {
+            return 'the credentials were rejected.';
+        }
+        return parent::listingErrorMessage($e);
+    }
+
+    /** AWS's `message` (or `Message`) from an error body; '' when there is none. */
+    private static function awsReason(\Anthropic\Core\Exceptions\APIStatusException $e): string {
+        $body = $e->body;
+        if (!is_array($body)) {
+            return '';
+        }
+        $message = $body['message'] ?? $body['Message'] ?? null;
+        return is_string($message) ? trim($message) : '';
     }
 
     protected function modelNotFoundMessage(string $model): string {

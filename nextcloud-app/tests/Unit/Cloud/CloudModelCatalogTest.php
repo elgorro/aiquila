@@ -190,13 +190,27 @@ class CloudModelCatalogTest extends TestCase {
         );
     }
 
+    /** AWS's 403 for a bad key, as recorded from the live control plane. */
+    public function testInvalidKeyQuotesAwsReason(): void {
+        $provider = $this->bedrock();
+        $body = (new \Nyholm\Psr7\Factory\Psr17Factory())->createStream('{"Message":"Invalid API Key format: Must start with pre-defined prefix"}');
+        $provider->responses['foundation-models'] = APIStatusException::from(
+            request: new \Nyholm\Psr7\Request('GET', 'https://bedrock.eu-central-1.amazonaws.com/foundation-models'),
+            response: new \Nyholm\Psr7\Response(403, [], $body),
+        );
+        $this->assertStringStartsWith(
+            'Couldn\'t load the model list from Claude in Amazon Bedrock: AWS refused the request: Invalid API Key format: Must start with pre-defined prefix. Check the API key.',
+            (string)$provider->fetchModelCatalog()?->failureMessage(),
+        );
+    }
+
     public function testApiKeyWithoutListPermissionSaysSoOnTheCard(): void {
         $provider = $this->bedrock();
         $provider->responses['foundation-models'] = self::apiError(403);
         $catalog = $provider->fetchModelCatalog();
         $this->assertNotNull($catalog);
         $this->assertSame(
-            'Couldn\'t load the model list from Claude in Amazon Bedrock: this API key is not allowed to list models. Listing needs bedrock:ListFoundationModels and bedrock:ListInferenceProfiles, which a key allowed only on the Mantle endpoint may not have; type the model ID instead. Showing the built-in list.',
+            'Couldn\'t load the model list from Claude in Amazon Bedrock: AWS refused the request: denied. Check the API key. Listing also needs bedrock:ListFoundationModels and bedrock:ListInferenceProfiles, which a key allowed only on the Mantle endpoint may not have; type the model ID instead. Showing the built-in list.',
             $catalog->failureMessage(),
         );
     }
