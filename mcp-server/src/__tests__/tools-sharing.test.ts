@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { expectStructured } from './helpers/structured.js';
 
 const mockFetchOCS = vi.fn();
 
@@ -100,6 +101,12 @@ describe('Share Tools', () => {
         shareWith: 'bob',
       });
 
+      // The OCS share id is a string on the wire, and stays one.
+      expect(expectStructured(result, createShareTool)).toMatchObject({
+        id: '42',
+        shareType: 0,
+        shareWith: 'bob',
+      });
       expect(mockFetchOCS).toHaveBeenCalledWith('/ocs/v2.php/apps/files_sharing/api/v1/shares', {
         method: 'POST',
         body: { path: '/Documents/report.pdf', shareType: '0', shareWith: 'bob' },
@@ -387,15 +394,32 @@ describe('Share Tools', () => {
       mockFetchOCS.mockResolvedValue({
         ocs: {
           meta: { status: 'ok', statuscode: 200, message: 'OK' },
-          data: { id: 42, share_type: 0, path: '/doc.pdf', share_with: 'bob' },
+          // The endpoint returns a one-element list, as Nextcloud does.
+          data: [{ id: '42', share_type: 0, path: '/doc.pdf', share_with: 'bob' }],
         },
       });
 
       const { getShareTool } = await import('../tools/apps/shares.js');
       const result = await getShareTool.handler({ shareId: 42 });
+      expect(expectStructured(result, getShareTool)).toMatchObject({
+        id: '42',
+        shareType: 0,
+        path: '/doc.pdf',
+        shareWith: 'bob',
+      });
 
       expect(result.content[0].text).toContain('42');
       expect(result.content[0].text).toContain('doc.pdf');
+    });
+  });
+
+  describe('get_share, empty list', () => {
+    it('reports a share the list does not contain as an error', async () => {
+      mockFetchOCS.mockResolvedValue({ ocs: { meta: { statuscode: 200 }, data: [] } });
+      const { getShareTool } = await import('../tools/apps/shares.js');
+      const result = await getShareTool.handler({ shareId: 1 });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Share not found');
     });
   });
 

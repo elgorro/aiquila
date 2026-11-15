@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { fetchNotesAPI, type Note } from '../../client/notes.js';
 import { handleAppError } from '../error-utils.js';
+import { bool, int, str, structuredResult } from '../structured.js';
 
 /**
  * Nextcloud Notes App Tools
@@ -24,6 +25,31 @@ function formatNote(note: Note): string {
     .filter(Boolean)
     .join(' | ');
   return `[${note.id}] ${note.title}${meta ? ` (${meta})` : ''} — modified: ${date}`;
+}
+
+/** A note as Notes API v1 returns it (GET/POST /notes). */
+const NoteSchema = z.object({
+  id: z.number().int(),
+  title: z.string().nullable(),
+  content: z.string().nullable().describe('Markdown'),
+  category: z.string().nullable().describe('Empty for none; maps to a subfolder'),
+  favorite: z.boolean().nullable(),
+  readonly: z.boolean().nullable(),
+  modified: z.number().int().nullable().describe('Last modified, Unix seconds'),
+  etag: z.string().nullable().describe('For If-Match on update'),
+});
+
+function noteData(note: Note): z.input<typeof NoteSchema> {
+  return {
+    id: note.id,
+    title: str(note.title),
+    content: str(note.content),
+    category: str(note.category),
+    favorite: bool(note.favorite),
+    readonly: bool(note.readonly),
+    modified: int(note.modified),
+    etag: str(note.etag),
+  };
 }
 
 export const listNotesTool = {
@@ -84,17 +110,11 @@ export const getNoteTool = {
   inputSchema: z.object({
     id: z.number().int().describe('Note ID (from list_notes)'),
   }),
+  outputSchema: NoteSchema,
   handler: async (args: { id: number }) => {
     try {
       const note = await fetchNotesAPI<Note>(`/notes/${args.id}`);
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `# ${note.title}\n\n${note.content}`,
-          },
-        ],
-      };
+      return structuredResult(NoteSchema, noteData(note), `# ${note.title}\n\n${note.content}`);
     } catch (error) {
       return handleAppError(error, 'Error getting note', notesStatusMap);
     }
@@ -117,6 +137,7 @@ export const createNoteTool = {
     category: z.string().optional().describe('Category (maps to a subfolder)'),
     favorite: z.boolean().optional().describe('Mark as favorite'),
   }),
+  outputSchema: NoteSchema,
   handler: async (args: {
     title: string;
     content: string;
@@ -133,14 +154,7 @@ export const createNoteTool = {
           favorite: args.favorite ?? false,
         },
       });
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `Note created: ${formatNote(note)}`,
-          },
-        ],
-      };
+      return structuredResult(NoteSchema, noteData(note), `Note created: ${formatNote(note)}`);
     } catch (error) {
       return handleAppError(error, 'Error creating note', notesStatusMap);
     }

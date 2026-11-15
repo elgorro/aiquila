@@ -13,9 +13,16 @@ const mockClient = {
 };
 vi.mock('../client/webdav.js', () => ({ getWebDAVClient: () => mockClient }));
 
+// The Cookbook API (/config for the recipe folder, /reindex after a change).
+// Without this the tools reached out to the real network for cloud.example.com.
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
+
 describe('Recipe Tools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // No Cookbook config: the tools use the default /Recipes folder.
+    mockFetch.mockResolvedValue({ ok: false, status: 404, json: async () => ({}) });
     process.env.NEXTCLOUD_URL = 'https://cloud.example.com';
     process.env.NEXTCLOUD_USER = 'admin';
     process.env.NEXTCLOUD_PASSWORD = 'testpass';
@@ -47,6 +54,23 @@ describe('Recipe Tools', () => {
         printImage: true,
         imageUrl: '',
       });
+
+    it('reads the recipe folder from the Cookbook config', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ folder: '/Food/' }),
+      });
+      mockClient.getDirectoryContents.mockResolvedValue([]);
+
+      const { listRecipesTool } = await import('../tools/apps/cookbook.js');
+      await listRecipesTool.handler({});
+
+      expect(mockFetch.mock.calls[0][0]).toBe(
+        'https://cloud.example.com/index.php/apps/cookbook/api/v1/config'
+      );
+      expect(mockClient.getDirectoryContents).toHaveBeenCalledWith('/Food/');
+    });
 
     it('should list recipe folders and parse recipe.json', async () => {
       mockClient.getDirectoryContents.mockResolvedValue([

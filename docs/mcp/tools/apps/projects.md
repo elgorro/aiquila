@@ -47,11 +47,15 @@ List the projects the user can use: their own, and those of the teams they belon
 
 **Example:** "Make a project for the Acme tender with the tender folder and a prompt to answer in formal German."
 
+[**Structured result**](../../README.md#structured-results): the project as for `get_project`.
+
 #### `get_project`
 Get a project with its paths and their IDs.
 
 **Parameters:**
 - `id` (number, required)
+
+[**Structured result**](../../README.md#structured-results): `id`, `title`, `userId`, `teamId`, `description`, `systemPrompt`, `isActive`, `createdAt`, `updatedAt` and `paths` (`id`, `path`, `pathType`).
 
 #### `update_project`
 Change a project. Only the fields passed change.
@@ -93,6 +97,8 @@ Create a project as a copy of a template. Later changes to the template do not r
 **Parameters:**
 - `templateId` (number, required)
 - `title` (string, optional) — default: the template's title.
+
+[**Structured result**](../../README.md#structured-results): the new project, as for `get_project`.
 
 ### Prompt library
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { expectStructured } from './helpers/structured.js';
 import type { FileStat } from '../client/webdav.js';
 
 // Mock the WebDAV client
@@ -205,6 +206,7 @@ describe('MCP Tools', () => {
 
       const { createFolderTool } = await import('../tools/system/files.js');
       const result = await createFolderTool.handler({ path: '/NewFolder' });
+      expectStructured(result, createFolderTool);
 
       expect(mockClient.createDirectory).toHaveBeenCalledWith('/NewFolder');
       expect(result.content[0].text).toContain('Folder created successfully');

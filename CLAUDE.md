@@ -461,6 +461,8 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_CLIENT_IDLE_TTL` | No | Seconds after its last token a registered client with no live refresh token is removed (default `0` = never) |
 | `MCP_INTERNAL_TOKEN` | No | Deprecated. Static service-to-service bearer token that bypasses OAuth and acts as `NEXTCLOUD_USER`. Accepted only on direct connections (no forwarding headers) from internal addresses |
 | `MCP_INTERNAL_TOKEN_NETWORKS` | No | Comma-separated CIDRs / addresses `MCP_INTERNAL_TOKEN` is accepted from; replaces the loopback + private-range default |
+| `MCP_RATE_LIMIT` | No | `tools/call` messages per minute per signed-in user (per client address without OAuth); `429` + `Retry-After` over it. Default `300`, `0` disables |
+| `MCP_RATE_LIMIT_ANONYMOUS` | No | Unauthenticated (lazy-auth) requests per minute per client address. Default `60`, `0` disables |
 | `MCP_LOCALE` | No | BCP 47 locale tag for `localTime` in `get_local_time` (e.g. `sv-SE`); defaults to system locale |
 | `MCP_MAX_FILE_SIZE` | No | Max `write_file` content length in bytes (default `1073741824` = 1 GB) |
 | `MCP_ALLOWED_HOSTS` | No | Comma-separated extra hostnames for DNS rebinding protection (e.g. `mcp` for Docker service name) |

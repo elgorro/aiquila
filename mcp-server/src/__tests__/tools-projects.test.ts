@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { expectStructured } from './helpers/structured.js';
 
 const mockFetchAiquilaAPI = vi.fn();
 
@@ -78,6 +79,7 @@ describe('Project Tools', () => {
         systemPrompt: 'You are helpful',
       });
 
+      expect(expectStructured(result, createProjectTool).id).toBe(sampleProject.id);
       expect(result.content[0].text).toContain('Project created');
       expect(result.content[0].text).toContain('My Project');
       expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/projects', {
@@ -106,6 +108,7 @@ describe('Project Tools', () => {
 
       const { getProjectTool } = await import('../tools/apps/projects.js');
       const result = await getProjectTool.handler({ id: 1 });
+      expectStructured(result, getProjectTool);
 
       expect(result.content[0].text).toContain('My Project');
       expect(result.content[0].text).toContain('You are helpful');
@@ -332,6 +335,7 @@ describe('Project Tools', () => {
 
       const { createProjectFromTemplateTool } = await import('../tools/apps/projects.js');
       const result = await createProjectFromTemplateTool.handler({ templateId: 4, title: 'Mine' });
+      expectStructured(result, createProjectFromTemplateTool);
 
       expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/project-templates/4/project', {
         method: 'POST',

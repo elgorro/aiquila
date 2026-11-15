@@ -79,6 +79,13 @@ The method is read from the JSON-RPC body. Under `2026-07-28` the client also mi
 into the `Mcp-Method` header, and the server rejects a request whose header and body
 disagree, so a header cannot get a protected call past the check.
 
+Requests served without a token are rate limited per client address
+(`MCP_RATE_LIMIT_ANONYMOUS`, default 60 per minute). Signed-in users have their own
+per-user budget for tool calls (`MCP_RATE_LIMIT`, default 300 per minute). Over either
+limit the server answers `429` with `Retry-After`. Behind a reverse proxy, set
+`MCP_TRUST_PROXY` so the address is the client's, not the proxy's. See
+[HTTP transport](../dev/mcp-server-architecture.md#http-createmcphandler--remotenetwork-mcp-clients).
+
 > **Behaviour change (v0.3.30).** Before this release, *every* `/mcp` request required a
 > token. Anyone who can reach your `/mcp` endpoint can now enumerate tool names,
 > descriptions and input schemas, and read the server's timezone. No Nextcloud data is
@@ -298,14 +305,17 @@ You should receive a JSON document similar to:
 ```json
 {
   "issuer": "https://mcp.example.com/",
+  "service_documentation": "https://github.com/elgorro/aiquila",
   "authorization_endpoint": "https://mcp.example.com/authorize",
-  "token_endpoint": "https://mcp.example.com/token",
-  "revocation_endpoint": "https://mcp.example.com/revoke",
-  "registration_endpoint": "https://mcp.example.com/register",
   "response_types_supported": ["code"],
-  "grant_types_supported": ["authorization_code", "refresh_token"],
   "code_challenge_methods_supported": ["S256"],
+  "token_endpoint": "https://mcp.example.com/token",
   "token_endpoint_auth_methods_supported": ["client_secret_post", "none"],
+  "grant_types_supported": ["authorization_code", "refresh_token"],
+  "scopes_supported": ["mcp:tools"],
+  "revocation_endpoint": "https://mcp.example.com/revoke",
+  "revocation_endpoint_auth_methods_supported": ["client_secret_post", "none"],
+  "registration_endpoint": "https://mcp.example.com/register",
   "authorization_response_iss_parameter_supported": true,
   "client_id_metadata_document_supported": true
 }
@@ -313,6 +323,12 @@ You should receive a JSON document similar to:
 
 `registration_endpoint` appears only with `MCP_REGISTRATION_ENABLED=true`, and
 `client_id_metadata_document_supported` only while CIMD is enabled.
+
+`scopes_supported` lists `mcp:tools` only, in this document and in the protected
+resource metadata, because the server serves tools and no prompts or resources. The
+scope is advertised but not enforced: a token is accepted whatever scope it was granted.
+A grant issued with a wider scope keeps it, and a refresh without `scope` returns the
+scope originally granted (RFC 6749 §6).
 
 ### 7. Confirm protected requests are rejected
 

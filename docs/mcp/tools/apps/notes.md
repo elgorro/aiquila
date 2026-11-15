@@ -25,6 +25,8 @@ Get a note with its full content.
 **Parameters:**
 - `id` (integer, required) — from `list_notes`.
 
+[**Structured result**](../../README.md#structured-results): `id`, `title`, `content`, `category`, `favorite`, `readonly`, `modified` (Unix seconds) and `etag`.
+
 #### `create_note`
 **Parameters:**
 - `title` (string, required)
@@ -33,6 +35,8 @@ Get a note with its full content.
 - `favorite` (boolean, optional)
 
 **Example:** "Make a note of today's decisions under Work."
+
+[**Structured result**](../../README.md#structured-results): the new note, as for `get_note`.
 
 #### `update_note`
 Change a note. Only the fields passed change.

@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { fetchAiquilaAPI } from '../../client/aiquila.js';
+import { bool, int, str, structuredResult } from '../structured.js';
 
 /**
  * Project Tools
@@ -27,6 +28,45 @@ interface Project {
   createdAt: number;
   updatedAt: number;
   paths: ProjectPath[];
+}
+
+/** A project with its paths, as the AIquila app returns it (Db/Project, Db/ProjectPath). */
+const ProjectSchema = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  userId: z.string().nullable().describe('Creator'),
+  teamId: z.string().nullable().describe('Owning team (circle), or null for a personal project'),
+  description: z.string().nullable(),
+  systemPrompt: z.string().nullable(),
+  isActive: z.boolean().nullable(),
+  createdAt: z.number().int().nullable().describe('Unix seconds'),
+  updatedAt: z.number().int().nullable().describe('Unix seconds'),
+  paths: z.array(
+    z.object({
+      id: z.number().int(),
+      path: z.string(),
+      pathType: z.string().nullable().describe("'file' or 'directory'"),
+    })
+  ),
+});
+
+function projectData(p: Project): z.input<typeof ProjectSchema> {
+  return {
+    id: p.id,
+    title: p.title,
+    userId: str(p.userId),
+    teamId: str(p.teamId),
+    description: str(p.description),
+    systemPrompt: str(p.systemPrompt),
+    isActive: bool(p.isActive),
+    createdAt: int(p.createdAt),
+    updatedAt: int(p.updatedAt),
+    paths: (p.paths ?? []).map((path) => ({
+      id: path.id,
+      path: path.path,
+      pathType: str(path.pathType),
+    })),
+  };
 }
 
 function formatProject(p: Project): string {
@@ -107,6 +147,7 @@ export const createProjectTool = {
       .optional()
       .describe('Team (circle) that owns the project, for its members. Deleted with the team'),
   }),
+  outputSchema: ProjectSchema,
   handler: async (args: {
     title: string;
     description?: string;
@@ -124,9 +165,11 @@ export const createProjectTool = {
         },
       });
 
-      return {
-        content: [{ type: 'text' as const, text: `Project created:\n\n${formatProject(project)}` }],
-      };
+      return structuredResult(
+        ProjectSchema,
+        projectData(project),
+        `Project created:\n\n${formatProject(project)}`
+      );
     } catch (error) {
       return {
         content: [
@@ -154,13 +197,12 @@ export const getProjectTool = {
   inputSchema: z.object({
     id: z.number().describe('Project ID'),
   }),
+  outputSchema: ProjectSchema,
   handler: async (args: { id: number }) => {
     try {
       const project = await fetchAiquilaAPI<Project>(`/projects/${args.id}`);
 
-      return {
-        content: [{ type: 'text' as const, text: formatProject(project) }],
-      };
+      return structuredResult(ProjectSchema, projectData(project), formatProject(project));
     } catch (error) {
       return {
         content: [
@@ -515,15 +557,18 @@ export const createProjectFromTemplateTool = {
     templateId: z.number().describe('Template ID from list_project_templates'),
     title: z.string().optional().describe("Title for the new project (default: the template's)"),
   }),
+  outputSchema: ProjectSchema,
   handler: async (args: { templateId: number; title?: string }) => {
     try {
       const project = await fetchAiquilaAPI<Project>(
         `/project-templates/${args.templateId}/project`,
         { method: 'POST', body: args.title ? { title: args.title } : {} }
       );
-      return {
-        content: [{ type: 'text' as const, text: `Project created:\n\n${formatProject(project)}` }],
-      };
+      return structuredResult(
+        ProjectSchema,
+        projectData(project),
+        `Project created:\n\n${formatProject(project)}`
+      );
     } catch (error) {
       return errorResult('creating project from template', error);
     }
