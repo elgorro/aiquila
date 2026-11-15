@@ -107,7 +107,7 @@ class SequenceController extends Controller {
         $etag = SequenceService::etag($body);
         if (SequenceService::noneMatch($this->request->getHeader('if-none-match'), $etag)) {
             /** @var Response<Http::STATUS_NOT_MODIFIED, array{ETag?: string}> $response */
-            $response = new Response(Http::STATUS_NOT_MODIFIED);
+            $response = new Response(304);
             $response->setETag($etag);
             return $response;
         }

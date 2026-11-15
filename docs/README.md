@@ -13,7 +13,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 
 ## MCP Server
 
-- **[MCP Overview & Tools Reference](mcp/README.md)** — 402 tools across 47 categories
+- **[MCP Overview & Tools Reference](mcp/README.md)** — 404 tools across 48 categories
 - **[Setup Guide](mcp/setup.md)** — installation and MCP client configuration
 - **[OAuth 2.0](mcp/oauth.md)** — OAuth authentication for remote MCP clients
 - **[Standalone Docker](mcp/standalone-docker.md)** — run MCP server in Docker (external Nextcloud)
@@ -36,6 +36,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 | Tables (structured data) | 13 | [Tables](mcp/tools/apps/tables.md) |
 | Projects, templates & prompt library | 11 | [Projects](mcp/tools/apps/projects.md) |
 | Coworkers (scheduled AI jobs) | 15 | [Coworkers](mcp/tools/apps/cowork.md) |
+| Sequences (tool chains in one call) | 2 + `seq_*` | [Sequences](mcp/tools/apps/sequences.md) |
 | Folder workspaces and inline comments (Text) | 9 | [Text](mcp/tools/apps/text.md) |
 | File comments | 5 | [File Comments](mcp/tools/apps/comments.md) |
 | Trash | 3 | [Trash](mcp/tools/apps/trash.md) |
@@ -69,6 +70,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[AIquila App Setup](installation/aiquila-setup.md)** — installation, configuration, and troubleshooting
 - **[Internal API Guide](internal-api.md)** — integrate AIquila AI (ask/summarize/analyze) into your own Nextcloud apps
 - **[Cowork Management API](cowork-api.md)** — register, steer and verify scheduled cowork jobs from your own Nextcloud app
+- **[Sequences](sequences.md)** — write tool chains in the settings that an MCP client runs in one call
 - **[Monitoring](monitoring.md)** — OpenMetrics / Prometheus export for usage and task metrics
 - **[Nextcloud compatibility](nextcloud-compatibility.md)** — supported Nextcloud versions and the policy behind the declared window
 
@@ -114,6 +116,7 @@ docs/
 ├── connectivity.md                  # Network & connection troubleshooting
 ├── internal-api.md                  # Nextcloud app internal AI API
 ├── cowork-api.md                    # Cowork job management API (ICoworkManager)
+├── sequences.md                     # Sequences settings (personal and admin)
 │
 ├── installation/                    # Nextcloud app setup
 │   └── aiquila-setup.md            # Full installation & config guide

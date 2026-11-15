@@ -45,6 +45,15 @@ mcp-server/src/
 │   ├── lazy-auth.ts     # Which JSON-RPC methods and tools are served without a token
 │   ├── rate-limit.ts    # Per-user tool-call and per-address anonymous rate limits on /mcp
 │   └── tool-list-changes.ts # Per-user list_changed for subscriptions/listen streams
+├── sequences/
+│   ├── definition.ts    # Sequence format, limits, tool names (seq_*, seq_my_*)
+│   ├── template.ts      # {{inputs.x}}, {{today+7d}}, {{steps.<id>.result.<path>}}: single pass
+│   ├── runner.ts        # Runs the steps as the caller; stop/continue, caps, progress, dryRun
+│   ├── builtin.ts       # Built-in sequences
+│   ├── store.ts         # Organization and personal sequences from the app, ETag-revalidated
+│   ├── budget.ts        # Charges steps to the caller's tool-call rate limit
+│   ├── catalog.ts       # sequence-catalog.json for the Nextcloud app (npm run catalog)
+│   └── tools.ts         # list_sequences, run_sequence, the per-user seq_* tools
 ├── auth/
 │   ├── router.ts        # Authorization server: metadata, /authorize, /token, /register, /revoke
 │   ├── provider.ts      # NextcloudOAuthProvider — sign-in flows, JWT sign/verify, grants
@@ -122,11 +131,11 @@ Key points:
 - `createMcpHandler` (from `@modelcontextprotocol/server`) serves `2026-07-28` requests itself and passes legacy ones to its `legacy: 'stateless'` leg: a session-less streamable transport, so no `Mcp-Session-Id` is minted. `'reject'` would cut off every client that still opens with `initialize`
 - `toNodeHandler` (from `@modelcontextprotocol/node`) adapts it to Express and forwards `req.auth` (set by `requireBearerAuth`) and the already-parsed `req.body`
 - `GET` and `DELETE` on `/mcp` are answered `405` (once auth has passed): there is no standalone SSE stream and no session to end. Long-lived change notifications use `subscriptions/listen` under `2026-07-28`
-- **Tool list changes** (`src/transports/tool-list-changes.ts`). App detection runs per signed-in user and is cached for 10 minutes (`src/tool-registry.ts`), so enabling or disabling an app in Nextcloud changes that user's `tools/list`:
-  - `2026-07-28` requests are told `tools.listChanged: true`. When a re-detection finds a different tool list, `notifications/tools/list_changed` goes to that user's open `subscriptions/listen` streams that asked for `toolsListChanged`, and to no other user's. The handler uses its own event bus, which records each stream's identity when it subscribes
-  - While a user has a stream open, their tool list is re-detected every 5 minutes, so a client holding only the stream still hears of a change. The timer stops when the user's last stream closes
+- **Tool list changes** (`src/transports/tool-list-changes.ts`). App detection runs per signed-in user and is cached for 10 minutes (`src/tool-registry.ts`), so enabling or disabling an app in Nextcloud changes that user's `tools/list`. So does a change to the user's [sequences](#sequences), which are revalidated every 30 seconds:
+  - `2026-07-28` requests are told `tools.listChanged: true`. When a re-detection finds a different tool list, or the user's sequences come back with a new `ETag`, `notifications/tools/list_changed` goes to that user's open `subscriptions/listen` streams that asked for `toolsListChanged`, and to no other user's. The handler uses its own event bus, which records each stream's identity when it subscribes
+  - While a user has a stream open, their tool list and sequences are checked every minute, so a client holding only the stream still hears of a change. The caches decide whether that reaches Nextcloud. The timer stops when the user's last stream closes
   - The stateless 2025-era leg has no stream to notify on, so it advertises `tools.listChanged: false`. Those clients see changes on their next `tools/list`
-  - With `MCP_TOOLS` set, or for the environment account (stdio, no OAuth, `MCP_INTERNAL_TOKEN`), the list is fixed for the life of the process and nothing is sent
+  - Tool lists are keyed per account (`toolSetKey`) even with `MCP_TOOLS` set, because each user's sequences are their own. With `MCP_TOOLS` set, or for the environment account (stdio, no OAuth, `MCP_INTERNAL_TOKEN`), app detection does not change the list; sequences still can
 - No client affinity is required, so distributed clients (e.g. Claude.ai, Cursor) can connect from multiple IPs
 - **Rate limit** (MCP `2026-07-28`, Tools › Security Considerations: servers MUST rate limit tool invocations), in `src/transports/rate-limit.ts`. Two fixed one-minute windows, in memory per process:
   - **Tool calls**: `MCP_RATE_LIMIT` (default 300) `tools/call` messages per signed-in Nextcloud user, checked after the bearer token is verified. Each `tools/call` in a legacy JSON-RPC batch counts; other methods do not. All clients of one user share the budget, and other users are unaffected. `MCP_INTERNAL_TOKEN` calls share one budget, as they act as one account. Without OAuth, the key is the client address
@@ -421,6 +430,29 @@ export const myTool = {
   },
 };
 ```
+
+### Sequences
+
+`src/sequences/` turns predefined tool chains into tools; the behaviour is documented in
+[Sequences](../mcp/tools/apps/sequences.md). The `sequences` registry entry holds the two
+fixed tools, `list_sequences` and `run_sequence`. After the registry tools, `createServer()`
+registers the caller's pinned sequences as `seq_*` / `seq_my_*` tools, in a fixed order.
+`tool-registry.ts` hands the sequence module the caller's filtered tool set through
+`configureSequences()`, so `sequences/` imports nothing from the registry.
+
+- **Runner** (`runner.ts`). Only tools in the caller's own set run. Each step's arguments are
+  resolved from the templates, then parsed with that tool's Zod schema, and the handler is
+  called inside the request's identity context. Steps after the first are charged to the
+  caller's tool-call rate limit (`budget.ts`; the HTTP transport passes the limiter for the
+  request).
+- **Store** (`store.ts`). `GET /api/sequences/effective` of the AIquila app, per account,
+  revalidated with `If-None-Match` after 30 seconds. A changed `ETag` notifies
+  `onSequencesChange` listeners. Every row is parsed again (`SequenceDefinitionSchema`,
+  `checkTemplates`), so one the app should have refused is dropped, not run. Anonymous
+  callers, and accounts without the app, get the built-ins only.
+- **Catalog** (`catalog.ts`). `npm run catalog` writes `nextcloud-app/lib/Resources/sequence-catalog.json`,
+  which the app validates and edits against. `sequence-catalog.test.ts` fails when the
+  committed file is stale.
 
 ### 5. Auth Layer (`auth/`)
 

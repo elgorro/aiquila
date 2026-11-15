@@ -58,7 +58,7 @@ category to `TOOL_REGISTRY`; after a squash merge, that is the merge commit on `
 | `absence` | `apps/absence.ts` | `dav` | OCS | [Out-of-office API](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-out-of-office-api.html) | 0.2.8 · `bacc1f2` · 2026-03-24 | dav 2.0.0 · NC 35.0.2 · 2026-10-31 |
 | `trash` | `apps/trash.ts` | `files_trashbin` | WebDAV | [Trashbin](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/trashbin.html) | 0.2.8 · `bacc1f2` · 2026-03-24 | files_trashbin 2.0.0 · NC 35.0.2 · 2026-10-31 |
 | `versions` | `apps/versions.ts` | `files_versions` | WebDAV | [Versions](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/versions.html) | 0.2.8 · `bacc1f2` · 2026-03-24 | files_versions 2.0.0 · NC 35.0.2 · 2026-10-31 |
-| `sequences` | `../sequences/tools.ts` | core; `aiquila` for organization and personal sequences | App REST | [Sequences](tools/apps/sequences.md), [OpenAPI](../dev/openapi.md) | 0.6.0 · — · 2026-11-15 | — |
+| `sequences` | `../sequences/tools.ts` | core; `aiquila` for organization and personal sequences | App REST | [Sequences](tools/apps/sequences.md), [OpenAPI](../dev/openapi.md) | 0.6.0 · — · 2026-11-15 | aiquila 0.6.0 pre-release · NC 35.0.2 · 2026-11-15 |
 
 ### AIquila Nextcloud app
 

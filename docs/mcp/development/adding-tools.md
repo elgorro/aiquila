@@ -78,8 +78,12 @@ export const myAppTools = [
 ```bash
 cd mcp-server
 npm run build
+npm run catalog   # a new or changed tool changes nextcloud-app/lib/Resources/sequence-catalog.json
 npm test
 ```
+
+The [sequence catalog](../tools/apps/sequences.md#catalog) lists every tool's input schema
+for the Nextcloud app's sequence editor; `npm test` fails while the committed copy is stale.
 
 ### 5. Document the Tool
 

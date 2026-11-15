@@ -43,6 +43,7 @@ Nextcloud apps and administration:
 - **Tables** — Structured data: tables, views, rows, columns, relations, and structure import/export
 - **Projects** — AIquila projects (paths plus a system prompt), project templates and the prompt library
 - **Coworkers** — Create, run, pause and inspect the AIquila Coworkers (saved AI jobs) and their run history
+- **Sequences** — Predefined chains of AIquila tools that run in one call as the caller: built-in, organization and personal, each optionally its own `seq_*` tool
 - **Text** — Read, write and delete a folder's Text workspace (`Readme.md`), get a direct-edit URL, and work with the inline comments in Markdown documents
 - **File Comments** — Read, write and mark read the comments on files and folders
 - **Notifications** — Read, mark and dismiss Nextcloud notifications
@@ -66,7 +67,7 @@ Nextcloud apps and administration:
 - **Recommendations** — The files Nextcloud suggests for the current user
 - **AIquila** — Configure and test the AI provider integration
 
-**Total: 402 tools across 47 categories**
+**Total: 404 tools across 48 categories**, plus each user's own `seq_*` [sequence](tools/apps/sequences.md) tools
 
 ## Tools Reference
 
@@ -85,6 +86,11 @@ These are `create_folder`, `get_file_info`, `create_share`, `get_share`, `create
 identifiers are always present. Any other field is `null` when Nextcloud does not
 report it. A failed call carries no structured content, only the error text and
 `isError: true`.
+
+The [sequence](tools/apps/sequences.md) tools (`list_sequences`, `run_sequence` and each
+`seq_*`) return structured content as well. A sequence run reports every step there,
+including when a step failed and the result has `isError: true`. A sequence step can
+read an earlier step's structured result through `{{steps.<id>.result.<path>}}`.
 
 ### System Tools
 
@@ -525,6 +531,13 @@ report it. A failed call carries no structured content, only the error text and
 | `list_project_templates` | List organization and personal project templates | [Projects](tools/apps/projects.md#list_project_templates) |
 | `save_project_as_template` | Save a copy of a project, a team project included, as a personal template | [Projects](tools/apps/projects.md#save_project_as_template) |
 | `create_project_from_template` | Create a project as a copy of a template | [Projects](tools/apps/projects.md#create_project_from_template) |
+
+#### Sequences (2 tools, plus one per pinned sequence)
+| Tool | Description | Documentation |
+|------|-------------|---------------|
+| `list_sequences` | List the sequences you can run: built-in, your organization's and your own | [Sequences](tools/apps/sequences.md#list_sequences) |
+| `run_sequence` | Run a sequence by name, or resolve its plan with `dryRun` | [Sequences](tools/apps/sequences.md#run_sequence) |
+| `seq_<slug>`, `seq_my_<slug>` | A sequence marked "show as its own tool"; one per user's pinned sequence | [Sequences](tools/apps/sequences.md#seq_slug-and-seq_my_slug) |
 
 #### Coworkers (15 tools)
 | Tool | Description | Documentation |
