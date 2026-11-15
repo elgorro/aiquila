@@ -230,6 +230,13 @@ Subtitles ask for `timestamp_granularities=segment` and read the timed
 `segments[]` back. Mistral refuses that parameter together with `language`, so a
 timestamped request leaves the language out and Voxtral detects it.
 
+Speaker labels (`diarize`) send `diarize=true` and always add
+`timestamp_granularities=segment`, which Mistral requires with it. Each segment
+then carries a `speaker_id` such as `speaker_1`, read back as `speaker`.
+Vocabulary (`context_bias`) goes out as one repeated `context_bias` form field
+per term, at most 100. Mistral counts the terms against the model's context
+window together with the audio, and tunes biasing for English.
+
 ### Speech
 
 `POST /v1/audio/speech`, asking for `mp3`. Mistral documents a JSON body

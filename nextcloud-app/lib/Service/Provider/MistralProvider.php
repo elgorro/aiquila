@@ -51,6 +51,8 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
     private const AUDIO_TRANSCRIBE_CEILING = 3 * 3600;
 
     public const DEFAULT_TRANSCRIBE_MODEL = 'voxtral-mini-latest';
+    /** Voxtral's documented limit on `context_bias` entries. */
+    public const CONTEXT_BIAS_MAX = 100;
     public const DEFAULT_TTS_MODEL = 'voxtral-mini-tts-2603';
     /** The conversation model that drives the image_generation tool. */
     public const DEFAULT_IMAGE_MODEL = 'mistral-medium-latest';
@@ -1427,6 +1429,11 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
      *
      * Mistral refuses `timestamp_granularities` alongside `language`, so a
      * request for timestamps drops the language and lets Voxtral detect it.
+     *
+     * `diarize` labels each segment with a `speaker_id`; without streaming
+     * Mistral requires segment timestamps alongside it, so they are always
+     * asked for together. `context_bias` is one repeated form field per
+     * entry, capped at CONTEXT_BIAS_MAX.
      */
     public function transcribeAudio(mixed $audio, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array {
         if ($audio === '') {
@@ -1438,11 +1445,18 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
             ['name' => 'stream', 'contents' => 'true'],
         ];
         $language = $options['language'] ?? '';
-        $timestamps = ($options['timestamps'] ?? false) === true;
+        $diarize = ($options['diarize'] ?? false) === true;
+        $timestamps = $diarize || ($options['timestamps'] ?? false) === true;
         if ($timestamps) {
             $parts[] = ['name' => 'timestamp_granularities', 'contents' => 'segment'];
         } elseif (is_string($language) && $language !== '') {
             $parts[] = ['name' => 'language', 'contents' => $language];
+        }
+        if ($diarize) {
+            $parts[] = ['name' => 'diarize', 'contents' => 'true'];
+        }
+        foreach (array_slice(ContextBias::terms($options['contextBias'] ?? null), 0, self::CONTEXT_BIAS_MAX) as $term) {
+            $parts[] = ['name' => 'context_bias', 'contents' => $term];
         }
 
         $progress = TranscriptionProgress::from($options);

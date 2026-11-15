@@ -615,6 +615,40 @@ class LocalProviderTest extends TestCase {
         ], $result);
     }
 
+    public function testTranscriptionWithSpeakersAsksForDiarizationAndPromptsWithTheVocabulary(): void {
+        $provider = $this->provider(['local_audio_in' => 'yes']);
+        $options = null;
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$options): IResponse {
+                $options = $o;
+                // LocalAI's verbose_json, speakers numbered from "0".
+                return $this->jsonResponse([
+                    'text' => 'Hi. Hello.',
+                    'segments' => [
+                        ['id' => 0, 'start' => 0, 'end' => 0.5, 'text' => 'Hi.', 'speaker' => '0'],
+                        ['id' => 1, 'start' => 0.5, 'end' => 1, 'text' => 'Hello.', 'speaker' => ''],
+                    ],
+                ]);
+            }
+        );
+
+        $result = $provider->transcribeAudio('raw-bytes', 'audio/mpeg', 'memo.mp3', null, [
+            'diarize' => true,
+            'contextBias' => ['Northwind', 'Quillara'],
+        ]);
+
+        $this->assertSame([
+            ['name' => 'response_format', 'contents' => 'verbose_json'],
+            ['name' => 'timestamp_granularities[]', 'contents' => 'segment'],
+            ['name' => 'diarize', 'contents' => 'true'],
+            ['name' => 'prompt', 'contents' => 'Northwind, Quillara'],
+        ], array_slice($options['multipart'], 2));
+        $this->assertSame([
+            ['start' => 0.0, 'end' => 0.5, 'text' => 'Hi.', 'speaker' => '0'],
+            ['start' => 0.5, 'end' => 1.0, 'text' => 'Hello.'],
+        ], $result['segments']);
+    }
+
     public function testSpeechRefusedUnlessEnabled(): void {
         $this->client = $this->createMock(IClient::class);
 

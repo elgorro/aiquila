@@ -94,7 +94,12 @@ admin flag rather than a guess:
   server expose `/v1/audio/transcriptions`; plain Ollama and LM Studio do not.
   Subtitles additionally need segment timings: they request
   `response_format=verbose_json`, and a backend that answers without `segments`
-  gets a clear refusal rather than an empty file. The recording is streamed from
+  gets a clear refusal rather than an empty file. Speaker labels send
+  `diarize=true` on top of that. LocalAI reads it and labels segments with
+  `speaker` when its backend can (WhisperX, or parakeet with a diarization model).
+  Speaches ignores it, and the segments come back unlabelled. Vocabulary goes out
+  as Whisper's `prompt`, the terms joined with commas, because these servers have
+  no list field for it. The recording is streamed from
   storage, as it is for Mistral, so its size does not
   touch PHP's memory. The answer is not streamed, because the backends do not agree on
   an event format. `local_timeout` therefore caps the whole transcription,

@@ -216,6 +216,56 @@ class AudioProvidersTest extends TestCase {
         $this->audioToText()->process('alice', ['input' => $this->audioFile()], self::noop());
     }
 
+    public function testTranscriptionWithSpeakersReturnsLabelledSegmentsAsJson(): void {
+        $provider = $this->provider(['audio_in' => true], mock: true);
+        $provider->expects($this->once())
+            ->method('transcribeAudio')
+            ->with($this->theRecording(), 'audio/mpeg', 'memo.mp3', 'alice', $this->optionsWith([
+                'timestamps' => true,
+                'diarize' => true,
+                'contextBias' => ['Northwind', 'Alder Creek Design', 'Quillara'],
+            ]))
+            ->willReturn(['response' => 'Hi. Hello, Ana.', 'segments' => [
+                ['start' => 0.0, 'end' => 0.5, 'text' => ' Hi.', 'speaker' => 'speaker_1'],
+                ['start' => 0.5, 'end' => 1.75, 'text' => ' Hello, Ana.', 'speaker' => 'speaker_2'],
+            ]]);
+        $this->serve($provider);
+
+        $result = $this->audioToText()->process('alice', [
+            'input' => $this->audioFile(),
+            'diarize' => 'yes',
+            'context_bias' => "Northwind\nAlder Creek Design, Quillara\nNorthwind",
+        ], self::noop());
+
+        $this->assertSame('Hi. Hello, Ana.', $result['output']);
+        $this->assertSame([
+            ['start' => 0.0, 'end' => 0.5, 'text' => 'Hi.', 'speaker' => 'speaker_1'],
+            ['start' => 0.5, 'end' => 1.75, 'text' => 'Hello, Ana.', 'speaker' => 'speaker_2'],
+        ], json_decode($result['segments'], true));
+    }
+
+    /** A backend that cannot tell speakers apart still yields the timings. */
+    public function testTranscriptionWithTimestampsOnlyLeavesSpeakersOut(): void {
+        $provider = $this->provider(['audio_in' => true], mock: true);
+        $provider->expects($this->once())
+            ->method('transcribeAudio')
+            ->with($this->anything(), 'audio/mpeg', 'memo.mp3', 'alice', $this->optionsWith(['timestamps' => true]))
+            ->willReturn(['response' => 'Hello.', 'segments' => [['start' => 1.0, 'end' => 2.0, 'text' => 'Hello.']]]);
+        $this->serve($provider);
+
+        $result = $this->audioToText()->process('alice', ['input' => $this->audioFile(), 'timestamps' => 'yes', 'diarize' => 'no'], self::noop());
+
+        $this->assertSame('[{"start":1.0,"end":2.0,"text":"Hello."}]', $result['segments']);
+    }
+
+    public function testTranscriptionOffersTheSegmentsOutputAndOffToggles(): void {
+        $provider = $this->audioToText();
+        $this->assertSame(['segments'], array_keys($provider->getOptionalOutputShape()));
+        $this->assertSame(['timestamps' => 'no', 'diarize' => 'no'], $provider->getOptionalInputShapeDefaults());
+        $values = array_map(static fn ($v) => $v->getValue(), $provider->getOptionalInputShapeEnumValues()['diarize']);
+        $this->assertSame(['no', 'yes'], $values);
+    }
+
     /**
      * Transcription endpoints read the container from the filename, so a
      * recording stored without a usable extension gets one from its MIME type.

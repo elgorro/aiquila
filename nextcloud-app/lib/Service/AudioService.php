@@ -37,8 +37,8 @@ class AudioService {
      * Transcribe a recording without loading it into memory: the provider is
      * handed a stream of the file, which cURL reads from while uploading.
      *
-     * @param array{language?: string, timestamps?: bool, onProgress?: callable(float): mixed} $options
-     * @return array{text: string, segments: list<array{start: float, end: float, text: string}>}
+     * @param array{language?: string, timestamps?: bool, diarize?: bool, contextBias?: list<string>, onProgress?: callable(float): mixed} $options
+     * @return array{text: string, segments: list<array{start: float, end: float, text: string, speaker?: string}>}
      * @throws \RuntimeException when the recording is refused or the provider fails
      */
     public function transcribe(LLMProviderInterface $provider, File $file, ?string $userId, array $options = []): array {
@@ -138,7 +138,7 @@ class AudioService {
      * The recording's timed segments, for subtitles.
      *
      * @param array{onProgress?: callable(float): mixed} $options
-     * @return list<array{start: float, end: float, text: string}>
+     * @return list<array{start: float, end: float, text: string, speaker?: string}>
      * @throws \RuntimeException when the provider fails or returns no timings
      */
     public function segments(LLMProviderInterface $provider, File $file, ?string $userId, array $options = []): array {
@@ -172,7 +172,7 @@ class AudioService {
      * Segments as a SubRip or WebVTT file — the two formats Nextcloud's own
      * subtitles provider offers, SubRip being its default.
      *
-     * @param list<array{start: float, end: float, text: string}> $segments
+     * @param list<array{start: float, end: float, text: string, speaker?: string}> $segments
      */
     public static function subtitles(array $segments, string $format = self::SUBTITLES_SRT): string {
         $vtt = $format === self::SUBTITLES_VTT;
