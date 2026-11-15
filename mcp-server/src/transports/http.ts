@@ -33,7 +33,13 @@ import { fetchStatus } from '../client/ocs.js';
 
 const DEFAULT_PORT = 3339;
 const MCP_PATH = '/mcp';
-const SCOPES_SUPPORTED = ['mcp:tools', 'mcp:resources', 'mcp:prompts'];
+// Only scopes for features the server serves: it registers tools, no prompts or
+// resources. RFC 8414 §2 / RFC 9728 §2 let a server leave scopes out of
+// `scopes_supported`, and MCP 2026-07-28 (Authorization › Scope Selection
+// Strategy) reads it as the minimal set for basic functionality. Grants issued
+// with a wider scope keep it: refresh uses the scopes stored with the grant.
+// `offline_access` stays out (MCP 2026-07-28, Authorization › Refresh Tokens).
+const SCOPES_SUPPORTED = ['mcp:tools'];
 
 // Scope advertised in the WWW-Authenticate challenge. Clients request exactly
 // this on authorisation; omitting it makes them fall back to the full

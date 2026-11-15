@@ -78,6 +78,13 @@ describe('RFC 8414 — authorization server metadata', () => {
     expect(body.authorization_response_iss_parameter_supported).toBe(true);
   });
 
+  it('§2: scopes_supported lists only scopes for features the server serves', async () => {
+    const { body } = await getJson('/.well-known/oauth-authorization-server');
+    // The server registers tools only; MCP 2026-07-28 Authorization › Refresh
+    // Tokens: offline_access SHOULD NOT be in scopes_supported.
+    expect(body.scopes_supported).toEqual(['mcp:tools']);
+  });
+
   it('only advertises client authentication methods the token endpoint implements', async () => {
     const { body } = await getJson('/.well-known/oauth-authorization-server');
     for (const m of body.token_endpoint_auth_methods_supported) {
@@ -104,6 +111,12 @@ describe('RFC 9728 — protected resource metadata', () => {
     const root = await getJson('/.well-known/oauth-protected-resource');
     const scoped = await getJson('/.well-known/oauth-protected-resource/mcp');
     expect(root.body.resource).toBe(scoped.body.resource);
+    expect(root.body.scopes_supported).toEqual(scoped.body.scopes_supported);
+  });
+
+  it('§2: scopes_supported lists only scopes for features the server serves', async () => {
+    const { body } = await getJson('/.well-known/oauth-protected-resource/mcp');
+    expect(body.scopes_supported).toEqual(['mcp:tools']);
   });
 
   it('§5.1: a 401 from /mcp points at the metadata with resource_metadata', async () => {
