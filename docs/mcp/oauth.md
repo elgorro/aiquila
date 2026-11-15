@@ -79,6 +79,13 @@ The method is read from the JSON-RPC body. Under `2026-07-28` the client also mi
 into the `Mcp-Method` header, and the server rejects a request whose header and body
 disagree, so a header cannot get a protected call past the check.
 
+Requests served without a token are rate limited per client address
+(`MCP_RATE_LIMIT_ANONYMOUS`, default 60 per minute). Signed-in users have their own
+per-user budget for tool calls (`MCP_RATE_LIMIT`, default 300 per minute). Over either
+limit the server answers `429` with `Retry-After`. Behind a reverse proxy, set
+`MCP_TRUST_PROXY` so the address is the client's, not the proxy's. See
+[HTTP transport](../dev/mcp-server-architecture.md#http-createmcphandler--remotenetwork-mcp-clients).
+
 > **Behaviour change (v0.3.30).** Before this release, *every* `/mcp` request required a
 > token. Anyone who can reach your `/mcp` endpoint can now enumerate tool names,
 > descriptions and input schemas, and read the server's timezone. No Nextcloud data is
