@@ -226,7 +226,8 @@ export const updateProjectTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: 'Update an AIquila project. Only provided fields are updated.',
+  description:
+    'Update an AIquila project. Only provided fields are updated. teamId moves the project to another team, for example before its team is deleted (a team project is deleted with its team).',
   inputSchema: z.object({
     id: z.number().describe('Project ID'),
     title: z.string().optional().describe('New project title'),
@@ -235,18 +236,26 @@ export const updateProjectTool = {
       .string()
       .optional()
       .describe('New system prompt for conversations using this project'),
+    teamId: z
+      .string()
+      .optional()
+      .describe(
+        "Move the project to this team (circle id); '' makes it personal. Allowed for the creator, and for an owner or admin of the project's team, who can move it to another team but not make it personal. The caller must belong to the new team"
+      ),
   }),
   handler: async (args: {
     id: number;
     title?: string;
     description?: string;
     systemPrompt?: string;
+    teamId?: string;
   }) => {
     try {
       const body: Record<string, string> = {};
       if (args.title !== undefined) body.title = args.title;
       if (args.description !== undefined) body.description = args.description;
       if (args.systemPrompt !== undefined) body.systemPrompt = args.systemPrompt;
+      if (args.teamId !== undefined) body.teamId = args.teamId;
 
       const project = await fetchAiquilaAPI<Project>(`/projects/${args.id}`, {
         method: 'PUT',

@@ -157,7 +157,7 @@ class ProjectController extends Controller {
      * @param string|null $title New title (null keeps it)
      * @param string|null $description New description ('' clears, null keeps it)
      * @param string|null $systemPrompt New system prompt ('' clears, null keeps it)
-     * @param string|null $teamId Team that owns the project ('' makes it personal, null keeps it). Only its creator can change this
+     * @param string|null $teamId Team that owns the project ('' makes it personal, null keeps it). The creator can change this, and so can an owner or admin of the team that owns it, who can move it to another team but not make it personal. The new team must be one the caller belongs to
      *
      * 200: Updated project
      * 400: Empty title, a field is too long, or a team the user cannot assign
@@ -183,11 +183,9 @@ class ProjectController extends Controller {
         }
 
         if ($teamId !== null && $teamId !== ($project->getTeamId() ?? '')) {
-            if ($project->getUserId() !== $this->requireUserId()) {
-                return $this->clientError(400, 'Only the creator can change who owns a project');
-            }
-            if ($teamId !== '' && !in_array($teamId, $this->teamIds(), true)) {
-                return $this->clientError(400, 'You are not a member of that team');
+            $error = $this->ownerChangeError($project, $teamId);
+            if ($error !== null) {
+                return $this->clientError(400, $error);
             }
             $project->setTeamId($teamId === '' ? null : $teamId);
         }
@@ -323,6 +321,45 @@ class ProjectController extends Controller {
         return InstructionsService::tooLong($title, InstructionsService::MAX_TITLE_LENGTH, 'Title')
             ?? InstructionsService::tooLong($description, InstructionsService::MAX_DESCRIPTION_LENGTH, 'Description')
             ?? InstructionsService::tooLong($systemPrompt, InstructionsService::MAX_LENGTH, 'System prompt');
+    }
+
+    /**
+     * Why the caller may not give $project to $teamId ('' = personal), or null.
+     *
+     * The creator may move a project anywhere they belong. A team that is wound
+     * up or reorganised needs its owner and admins to hand projects over before
+     * deleting it, since the projects go with the team, so they may move the
+     * team's projects to another team. Making a project personal would make it
+     * the creator's, which only the creator decides.
+     */
+    private function ownerChangeError(Project $project, string $teamId): ?string {
+        $userId = $this->requireUserId();
+        if ($project->getUserId() !== $userId) {
+            $from = $project->getTeamId();
+            if ($from === null || !$this->isTeamAdministrator($from, $userId)) {
+                return 'Only the creator or an owner or admin of its team can move a project';
+            }
+            if ($teamId === '') {
+                return 'Only the creator can make a team project personal';
+            }
+        }
+        if ($teamId !== '' && !in_array($teamId, $this->teamIds(), true)) {
+            return 'You are not a member of that team';
+        }
+        return null;
+    }
+
+    private function isTeamAdministrator(string $teamId, string $userId): bool {
+        if ($this->teams === null) {
+            return false;
+        }
+        try {
+            return in_array($userId, $this->teams->administrators($teamId) ?? [], true);
+        } catch (\Throwable $e) {
+            // Circles disabled or failing: fall back to the creator-only rule.
+            $this->logger->warning('Could not read the administrators of team ' . $teamId, ['exception' => $e]);
+            return false;
+        }
     }
 
     /**

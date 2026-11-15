@@ -2286,7 +2286,7 @@
                                             "null"
                                         ],
                                         "default": null,
-                                        "description": "Team that owns the project ('' makes it personal, null keeps it). Only its creator can change this"
+                                        "description": "Team that owns the project ('' makes it personal, null keeps it). The creator can change this, and so can an owner or admin of the team that owns it, who can move it to another team but not make it personal. The new team must be one the caller belongs to"
                                     }
                                 }
                             }

@@ -139,6 +139,24 @@ describe('Project Tools', () => {
       });
     });
 
+    it('moves a project to another team, and makes it personal with an empty teamId', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue({ ...sampleProject, teamId: 'team-b' });
+      const { updateProjectTool } = await import('../tools/apps/projects.js');
+
+      const moved = await updateProjectTool.handler({ id: 1, teamId: 'team-b' });
+      expect(mockFetchAiquilaAPI).toHaveBeenLastCalledWith('/projects/1', {
+        method: 'PUT',
+        body: { teamId: 'team-b' },
+      });
+      expect(moved.content[0].text).toContain('Team: team-b');
+
+      await updateProjectTool.handler({ id: 1, teamId: '' });
+      expect(mockFetchAiquilaAPI).toHaveBeenLastCalledWith('/projects/1', {
+        method: 'PUT',
+        body: { teamId: '' },
+      });
+    });
+
     it('should handle errors', async () => {
       mockFetchAiquilaAPI.mockRejectedValue(new Error('Forbidden'));
 

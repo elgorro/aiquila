@@ -6,10 +6,11 @@
 		<div v-if="teams.length > 0" class="form-group">
 			<label>{{ t('aiquila', 'Owner') }}</label>
 			<select v-model="form.teamId">
-				<option value="">{{ t('aiquila', 'Just me') }}</option>
+				<option v-if="isCreator || !project.teamId" value="">{{ t('aiquila', 'Just me') }}</option>
 				<option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
 			</select>
 			<small v-if="form.teamId">{{ t('aiquila', 'All members can use it, and it is deleted with the team. Each member\'s conversations stay their own.') }}</small>
+			<small v-if="project.teamId">{{ t('aiquila', 'Its creator and the team\'s owner and admins can move it to another team, for example before the team is deleted. Its files and folders stay as they are, so members of the new team need access to them.') }}</small>
 		</div>
 
 		<div class="form-group">
@@ -114,6 +115,7 @@ import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import ChatIcon from 'vue-material-design-icons/Chat.vue'
 import PlusIcon from 'vue-material-design-icons/Plus.vue'
 import { getFilePickerBuilder, FilePickerClosed } from '@nextcloud/dialogs'
+import { getCurrentUser } from '@nextcloud/auth'
 
 import { addProjectPath, getTeams, removeProjectPath, updateProject } from '../api.js'
 import PromptPicker from './PromptPicker.vue'
@@ -157,6 +159,10 @@ export default {
 		}
 	},
 	computed: {
+		/** Only the creator can make a team project personal: it would become theirs. */
+		isCreator() {
+			return !!this.project && getCurrentUser()?.uid === this.project.userId
+		},
 		isDirty() {
 			if (!this.project) return false
 			return this.form.title !== this.project.title
