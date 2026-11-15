@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { expectStructured } from './helpers/structured.js';
 
 const mockFetchNotesAPI = vi.fn();
 vi.mock('../client/notes.js', () => ({
@@ -100,6 +101,47 @@ describe('Note Tools', () => {
     });
   });
 
+  describe('create_note', () => {
+    it('returns the new note, its id in structured content', async () => {
+      mockFetchNotesAPI.mockResolvedValue({
+        id: 12,
+        title: 'Plan',
+        content: '- one',
+        category: 'Work',
+        favorite: true,
+        readonly: false,
+        modified: 1734220800,
+        etag: 'e1',
+      });
+
+      const { createNoteTool } = await import('../tools/apps/notes.js');
+      const result = await createNoteTool.handler({ title: 'Plan', content: '- one' });
+
+      expect(mockFetchNotesAPI).toHaveBeenCalledWith('/notes', {
+        method: 'POST',
+        body: { title: 'Plan', content: '- one', category: '', favorite: false },
+      });
+      expect(expectStructured(result, createNoteTool)).toEqual({
+        id: 12,
+        title: 'Plan',
+        content: '- one',
+        category: 'Work',
+        favorite: true,
+        readonly: false,
+        modified: 1734220800,
+        etag: 'e1',
+      });
+      expect(result.content[0].text).toContain('Note created: [12] Plan');
+    });
+
+    it('a field the API leaves out becomes null, not a failure', async () => {
+      mockFetchNotesAPI.mockResolvedValue({ id: 13, title: 'Bare', modified: 1734220800 });
+      const { createNoteTool } = await import('../tools/apps/notes.js');
+      const result = await createNoteTool.handler({ title: 'Bare', content: '' });
+      expect(expectStructured(result, createNoteTool)).toMatchObject({ id: 13, etag: null });
+    });
+  });
+
   describe('get_note', () => {
     it('should return note content', async () => {
       mockFetchNotesAPI.mockResolvedValue({
@@ -115,6 +157,7 @@ describe('Note Tools', () => {
 
       const { getNoteTool } = await import('../tools/apps/notes.js');
       const result = await getNoteTool.handler({ id: 1 });
+      expectStructured(result, getNoteTool);
 
       expect(result.content[0].text).toContain('Meeting Notes');
       expect(result.content[0].text).toContain('Discussed project timeline');

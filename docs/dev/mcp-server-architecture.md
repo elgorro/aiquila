@@ -408,6 +408,8 @@ are parsed with namespace-prefix-tolerant patterns rather than an XML library, a
 
 Each tool module exports an array of tool definitions. Tools call client layer functions; they do not manage connections directly.
 
+A tool may declare an `outputSchema` (a `z.object`, never another root type, since the 2025-era revisions require an object). It then returns every success through `structuredResult(schema, data, text)` from `src/tools/structured.ts`. That helper parses `data` through the schema, so fields the schema does not know are dropped instead of failing `additionalProperties: false` in the client. It puts the prose first and the JSON last, and sets `structuredContent`. Keep only identifiers required, and fill the other fields through the `str`/`int`/`bool` coercers so an upstream gap becomes `null`, not an error. The SDK rejects a success without `structuredContent` and skips the check for `isError` results. `src/__tests__/structured-results.test.ts` pins the list of such tools, and `src/__tests__/helpers/structured.ts` checks a result against its schema. Which tools return structured content is listed in [Structured results](../mcp/README.md#structured-results).
+
 ```typescript
 export const myTool = {
   name: 'tool_name',
