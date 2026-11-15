@@ -283,11 +283,12 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
             if ($id === '' || isset($seen[$id])) {
                 continue;
             }
-            $aliases = array_values(array_filter(is_array($item['aliases'] ?? null) ? $item['aliases'] : [], 'is_string'));
             $verdict = self::assessModelCard($id, $item, $suggestion, $now);
             $seen[$id] = true;
-            foreach ($aliases as $alias) {
-                if ($alias !== $id && !isset($seen[$alias])) {
+            /** @var mixed $aliases */
+            $aliases = $item['aliases'] ?? [];
+            foreach (is_array($aliases) ? $aliases : [] as $alias) {
+                if (is_string($alias) && $alias !== $id && !isset($seen[$alias])) {
                     $seen[$alias] = true;
                     $hidden[] = self::assessModelCard($alias, $item, $suggestion, $now);
                 }
