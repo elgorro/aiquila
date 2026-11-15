@@ -266,8 +266,16 @@ A provider whose listing says what each model can do implements
 `ModelCatalogInterface` (`lib/Service/Provider/`). Its `fetchModelCatalog()`
 returns a `ModelCatalog`: one `ModelCompatibility` verdict per model, or the
 reason the listing failed. It never throws, because the card needs the reason.
-Providers without the interface keep the plain id list from `listModels()`, and
-their picker looks as before.
+
+A catalog also holds **hidden** models: ones the provider knows but the picker
+does not offer. Retired models are hidden, so a saved or conversation-pinned id
+still gets its retirement sentence, and so are the aliases of a listed model, so
+a saved alias still resolves.
+
+`fetchModelCatalog()` returns `null` when the platform, as configured, has no
+listing to ask. That is not a failure: the card shows no listing error, the
+model field stays free text, and `assessUnlistedModel()` gives the configured id
+the one check it can get, from the provider's static registry.
 
 "Compatible" means text chat in and text out through the provider's chat API.
 Tool calling is needed for MCP tools and Cowork, image input for vision tasks.
@@ -282,6 +290,7 @@ The verdict comes from the provider's own metadata, never from the model id.
 | `deprecated` | selectable, warns | Still served, retirement announced |
 | `retired` | disabled | No longer served |
 | `missing` | selectable, warns | Not in the list: typed in, not pulled, or removed |
+| `unavailable` | disabled | Served, but not under this id (a Bedrock model reachable only through an inference profile); the message names the ids to use |
 
 Free-typed ids stay allowed: a model often ships before the list knows it, so a
 missing id is marked, not refused.
@@ -296,7 +305,11 @@ only what is specific to them: a not-loaded note, the command that pulls a model
 **What `describe()` adds.** With a catalog, the model field also carries:
 
 - `option_details`: `{id → {status, message, selectable, label, tools, vision, loaded}}`.
-- `taggable: true`, so the picker accepts a typed id.
+  Hidden models and the model in use are included even when they are not
+  options, so the chat header can explain a pinned retired or missing model.
+- `taggable: true`, so the picker accepts a typed id. It is also set when the
+  listing failed, because the built-in list can be as short as the configured
+  model.
 - `warning`: the problem with the model in use, or images sent to a model that
   takes none.
 - `notice`: a remark, such as unverified, not loaded yet, or a vision model with
@@ -312,7 +325,13 @@ header reads it for a conversation that follows the user's default.
 | Provider | Source | Why |
 |---|---|---|
 | Local model | Ollama `/api/tags` and `/api/show`; LM Studio `/api/v1/models` (`/api/v0/models` on older servers); otherwise `/v1/models` | `/v1/models` has ids only. The backends' native APIs report chat, tool and vision support, and LM Studio also reports whether a model is loaded. llama.cpp, vLLM and the rest offer nothing more, so their models are `unverified`. See [Local model provider](local-provider.md#model-list-and-compatibility). |
-| Others | `listModels()` ids | No catalog yet; plain list without markings |
+| Claude API, Claude Platform on AWS, Claude on Google Cloud (Anthropic managed) | Models API `GET /v1/models`, paged by `has_more` / `last_id`, plus a second call with `lifecycle=retired` | `display_name` labels each model and `capabilities.image_input` says vision. `deprecated` models show `retires_at`; retired ones are hidden and explain a saved id. The replacement offered is the newest active model of the same `line`. There is no tool-use flag, and every Claude chat model has tools. A 404 on a Messages request asks the Models API about the id, then shows the retired or missing sentence. |
+| Claude in Amazon Bedrock, Claude on Amazon Bedrock (InvokeModel) | Control plane `ListFoundationModels` (`byProvider=Anthropic`, `byOutputModality=TEXT`) and `ListInferenceProfiles` (system-defined and application, paged by `nextToken`) | Neither data-plane endpoint has a models route. `inputModalities` says vision, and `LEGACY` or a past `endOfLifeTime` gives the lifecycle. A model without `ON_DEMAND` is `unavailable` and names its inference profiles, which are listed as their own entries; application profiles are called by ARN. A credential that cannot list (`bedrock:ListFoundationModels`, `bedrock:ListInferenceProfiles`) gets a card message saying so. See [Claude on cloud platforms](cloud-providers.md). |
+| Claude on Vertex AI | None (free-text model) | Model Garden's `publishers.models.list` is the global catalogue, not what the project enabled in its location. An id `ClaudeModels` does not know is `unverified`; a 404 names the project and location. |
+| Claude in Microsoft Foundry | None (free-text deployment name) | Deployments are only listable through the Azure management plane, which the resource key cannot reach. A deployment name that is not a model id, with no base model set, is `unverified`; a 404 names the missing deployment. |
+| Mistral | `GET /v1/models` model cards | `capabilities.completion_chat` decides chat, `function_calling` tools and `vision` images. A model that cannot chat is named for what it does (OCR, moderation, classification, FIM, audio). `deprecation` and `deprecation_replacement_model` give the lifecycle, and aliases fold into one entry. See [Mistral provider](mistral-provider.md). |
+| DeepSeek | `GET /models` | `name`, `input_modalities` and `output_modalities`. Every field but `id` may be omitted, so an entry without them falls back to `DeepSeekModels` or is `unverified`. The discontinued `deepseek-chat` / `deepseek-reasoner` are hidden as retired. |
+| Hetzner Inference | `GET /models` | Ids only. `HetznerModels` supplies the hints for the models it knows, and every other id is `unverified`. See [Hetzner provider](hetzner-provider.md). |
 
 ## Model list caching
 

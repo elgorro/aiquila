@@ -27,7 +27,7 @@ platform lacks, so a request never fails on a missing endpoint:
 | | Claude API | `claude_aws` | `claude_gcp` | `bedrock` | `bedrock_invoke` | `vertex` | `foundry` |
 |---|---|---|---|---|---|---|---|
 | Batch summaries and coworkers | ✓ | ✓ | ✓ | — | — | — | — |
-| Live model list | ✓ | ✓ | ✓ | — | — | — | — |
+| Live model list | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
 | Native MCP connector | ✓ | ✓ | ✓ | — | — | — | — |
 | Fast mode | ✓ | — | ✓ | — | — | — | — |
 | Files API uploads | ✓ | — | — | — | — | — | — |
@@ -42,8 +42,9 @@ Where a feature is off:
 
 - **Batches** — summaries and coworker runs use ordinary requests instead, at the
   normal price.
-- **Model list** — the card takes a free-text model ID, and per-model limits come
-  from the app's static registry (see [Model IDs](#model-ids)).
+- **Model list** — Vertex AI and Foundry have no list AIquila can use (see
+  [Model list](#model-list)), so their card takes a free-text model ID, and
+  per-model limits come from the app's static registry (see [Model IDs](#model-ids)).
 - **MCP connector** — conversations fall back to the app's own MCP client, as with
   the other non-Claude providers.
 - **Files API** — attachments are sent inline with each request. The Files API is
@@ -136,6 +137,37 @@ either.
 **Authentication** field on each card says the same, and the status light names
 the missing package when the selected mode needs it.
 
+## Model list
+
+Where a platform can list models, the model field is a picker that marks each
+model from the platform's own metadata. Typed IDs stay allowed. What each card
+shows, and why, is in
+[Provider settings](provider-settings.md#what-the-picker-shows-per-provider). In short:
+
+- **Claude Platform on AWS and on Google Cloud** use the Claude Models API, with
+  the same fields as the Claude API card. A 403 on the listing names the IAM
+  permission (`aws-external-anthropic:ListModels`) or role (`roles/claude.user`).
+- **Both Bedrock cards** ask the Bedrock control plane
+  (`bedrock.{region}.amazonaws.com`) with the card's credentials:
+  `ListFoundationModels` for the Anthropic models and `ListInferenceProfiles` for
+  the profiles that reach them. Neither the Mantle nor the runtime endpoint has a
+  models route. A model offered only through an inference profile is shown
+  disabled with its profile IDs, and the profiles are offered instead. Listing
+  needs `bedrock:ListFoundationModels` and `bedrock:ListInferenceProfiles`. A
+  credential without them, such as a key allowed only on the Mantle endpoint,
+  keeps the free-text field, and the card says why.
+- **Vertex AI** has no call that lists the models enabled for a project and
+  location: Model Garden's list is the global catalogue. The card keeps the
+  free-text field, an ID the registry does not know is marked "not verified", and
+  **Test connection** confirms the model with a one-token request.
+- **Foundry** deployments can only be listed through the Azure management plane,
+  which the resource key cannot reach. The deployment name stays free text, and a
+  name that is not a model ID asks for the **Base model**.
+
+A request that fails because of the model gets a sentence that says where to fix
+it: the model's retirement date, the Bedrock Region or console, the Vertex project
+and location, or the Foundry deployment.
+
 ## Model IDs
 
 The model field takes whatever the platform expects:
@@ -177,7 +209,8 @@ the model into a URL path (Vertex, InvokeModel), it URL-encodes it as well.
 The providers live in `nextcloud-app/lib/Service/Provider/Cloud/`. Each extends
 `ClaudeSDKService` through `AbstractCloudClaudeProvider` (with
 `AbstractAwsClaudeProvider` and `AbstractGoogleClaudeProvider` for the shared
-region, project and credential fields), so request building, streaming, the tool
+region, project and credential fields, and `AbstractBedrockClaudeProvider` with
+`BedrockModelCatalog` for the Bedrock control-plane listing), so request building, streaming, the tool
 loop and thinking are inherited unchanged. A platform supplies:
 
 - its SDK client, built in `buildClient()` from the `Anthropic\Bedrock`,

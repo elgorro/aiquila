@@ -86,13 +86,30 @@ back to the local agentic loop.
 
 For an OpenAI-compatible vendor, extend `AbstractOpenAiCompatibleProvider`
 instead of implementing the interface from scratch — see `DeepSeekProvider` and
-[`HetznerProvider`](hetzner-provider.md), which are ~60 lines each.
+[`HetznerProvider`](hetzner-provider.md). A vendor whose `/models` entries say
+what each model can do should also implement `ModelCatalogInterface`; see
+[Model compatibility](provider-settings.md#model-compatibility).
 
 ## Models & reasoning
 
 `nextcloud-app/lib/Service/MistralModels.php` is the static registry. It is only
 a **fallback**: `MistralProvider::listModels()` prefers the live `/v1/models`
 listing and the settings UI renders that when it is reachable.
+
+The live listing's model cards say what each model does, and the picker marks
+models from them (see [Model compatibility](provider-settings.md#what-the-picker-shows-per-provider)):
+
+- `capabilities.completion_chat` decides whether the model can chat. One that
+  cannot is disabled and named for what it does instead: OCR, moderation,
+  classification, code completion (FIM) or audio. No capability flag marks
+  embedding models, so `mistral-embed` is described only as unable to chat.
+- `function_calling` decides tool support, and `vision` image input.
+- `deprecation` and `deprecation_replacement_model` give the retirement date and
+  the replacement. After that date the model is retired. Mistral answers retired
+  ids with a 404, and a 404 on chat names the model.
+- Each alias is its own card in the listing. The aliases of one model fold into a
+  single picker entry, and a saved alias still resolves to its verdict.
+- An archived fine-tuned model is disabled until it is unarchived.
 
 ### Dated IDs, not `-latest` aliases
 
