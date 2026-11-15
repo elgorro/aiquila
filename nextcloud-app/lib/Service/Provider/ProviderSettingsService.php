@@ -87,7 +87,9 @@ class ProviderSettingsService {
         $scopeUser = $admin ? null : $userId;
         $currentModel = $provider->getModel($scopeUser);
         $catalog = $this->modelCatalog($provider, $scopeUser, $refreshModels);
-        $modelStatus = $catalog?->assess($currentModel);
+        $modelStatus = $catalog !== null
+            ? $catalog->assess($currentModel)
+            : ($provider instanceof ModelCatalogInterface ? $provider->assessUnlistedModel($currentModel) : null);
 
         $fields = [];
         foreach ($this->schemaFor($provider) as $field) {
@@ -95,7 +97,8 @@ class ProviderSettingsService {
                 continue;
             }
             $described = $this->describeField($field, $id, $userId, $admin, $provider, $refreshModels, $catalog);
-            if (($field['options'] ?? null) === ProviderSettingsSchema::OPTIONS_MODELS) {
+            if (($field['options'] ?? null) === ProviderSettingsSchema::OPTIONS_MODELS
+                || ($catalog === null && ($field['id'] ?? null) === 'model')) {
                 $described = $this->withModelStatus($described, $provider, $catalog, $modelStatus);
             }
             $fields[] = $described;
@@ -140,22 +143,34 @@ class ProviderSettingsService {
      * @return array<string, mixed>
      */
     private function withModelStatus(array $field, LLMProviderInterface $provider, ?ModelCatalog $catalog, ?ModelCompatibility $status): array {
-        if ($catalog === null) {
-            return $field;
-        }
-        if ($catalog->isFailure()) {
+        if ($catalog !== null && $catalog->isFailure()) {
             $field['listing_error'] = $catalog->failureMessage();
+            // The built-in list can be short (a cloud platform knows only the
+            // configured model), so typing an id must stay possible.
+            $field['taggable'] = true;
             return $field;
         }
 
-        $details = [];
-        foreach ($catalog->models as $model) {
-            $details[$model->id] = $model->toArray();
+        if ($catalog !== null) {
+            $details = [];
+            foreach ($catalog->models as $model) {
+                $details[$model->id] = $model->toArray();
+            }
+            // Retired models are not options, but a conversation pinned to one
+            // looks its verdict up here, so the chat can say why it fails.
+            foreach ($catalog->retired as $model) {
+                $details[$model->id] = $model->toArray();
+            }
+            // The model in use gets its verdict even when the picker does not
+            // list it (retired, missing), so its badge says why.
+            if ($status !== null && !isset($details[$status->id])) {
+                $details[$status->id] = $status->toArray();
+            }
+            $field['option_details'] = $details;
+            // Free-typed ids stay allowed: a model often ships before the list
+            // knows it. The value is only marked, never refused.
+            $field['taggable'] = true;
         }
-        $field['option_details'] = $details;
-        // Free-typed ids stay allowed: a model often ships before the list
-        // knows it. The value is only marked, never refused.
-        $field['taggable'] = true;
 
         if ($status === null) {
             return $field;
@@ -414,6 +429,11 @@ class ProviderSettingsService {
         }
 
         $catalog = $provider->fetchModelCatalog($userId);
+        if ($catalog === null) {
+            // Nothing to list on this platform or with this credential type;
+            // nothing was requested either, so there is nothing to cache.
+            return null;
+        }
         if ($catalog->isFailure()) {
             $this->logger->warning('AIquila: no live model list from ' . $provider->getId() . ', using the static registry: ' . $catalog->error, [
                 'provider' => $provider->getId(),

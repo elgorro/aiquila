@@ -15,11 +15,23 @@ namespace OCA\AIquila\Service\Provider;
  */
 interface ModelCatalogInterface {
     /**
-     * The live model list with a verdict per model.
+     * The live model list with a verdict per model, or null when this
+     * provider, as configured, has no listing to ask (a platform without a
+     * models API, a credential type that cannot list). Null is not a failure:
+     * the card says nothing about the list and keeps the plain model field.
      *
      * Never throws: a failed listing comes back as ModelCatalog::failed() with
      * the provider's own rendering of the error, so the card can say why it
      * fell back to the built-in list.
      */
-    public function fetchModelCatalog(?string $userId = null): ModelCatalog;
+    public function fetchModelCatalog(?string $userId = null): ?ModelCatalog;
+
+    /**
+     * What can be said about $model without a listing, for the providers whose
+     * fetchModelCatalog() returns null: the model id is free text there, so
+     * this is the only check it gets before a request. Built from what the
+     * provider knows statically (its registry), never from the id's shape.
+     * Null when there is nothing to say.
+     */
+    public function assessUnlistedModel(string $model): ?ModelCompatibility;
 }

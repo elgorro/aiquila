@@ -22,6 +22,9 @@ final class ModelCatalog {
      * @param string $error        user-facing reason the listing failed, '' on success
      * @param string $missingHint  what to do about an id that is not listed (pull it, load it, …);
      *                             `{model}` is replaced with the id
+     * @param list<ModelCompatibility> $retired models the provider still reports but no longer
+     *                             serves: kept out of the picker, and used only to explain why a
+     *                             saved or pinned id stopped working
      */
     private function __construct(
         public readonly array $models,
@@ -29,13 +32,19 @@ final class ModelCatalog {
         public readonly string $providerLabel,
         public readonly string $error,
         public readonly string $missingHint,
+        public readonly array $retired = [],
     ) {
     }
 
-    /** @param list<ModelCompatibility> $models */
-    public static function listed(array $models, string $source, string $providerLabel, string $missingHint = ''): self {
-        usort($models, static fn(ModelCompatibility $a, ModelCompatibility $b) => strcmp($a->id, $b->id));
-        return new self($models, $source, $providerLabel, '', $missingHint);
+    /**
+     * @param list<ModelCompatibility> $models
+     * @param list<ModelCompatibility> $retired see the constructor
+     */
+    public static function listed(array $models, string $source, string $providerLabel, string $missingHint = '', array $retired = []): self {
+        $byId = static fn(ModelCompatibility $a, ModelCompatibility $b) => strcmp($a->id, $b->id);
+        usort($models, $byId);
+        usort($retired, $byId);
+        return new self($models, $source, $providerLabel, '', $missingHint, $retired);
     }
 
     public static function failed(string $providerLabel, string $error): self {
@@ -56,8 +65,9 @@ final class ModelCatalog {
         return array_map(static fn(ModelCompatibility $m) => $m->id, $this->models);
     }
 
+    /** The listed entry for $id, or its retired entry; null when the provider knows neither. */
     public function find(string $id): ?ModelCompatibility {
-        foreach ($this->models as $model) {
+        foreach ([...$this->models, ...$this->retired] as $model) {
             if ($model->id === $id) {
                 return $model;
             }
@@ -78,7 +88,7 @@ final class ModelCatalog {
     }
 
     /**
-     * @return array{source: string, providerLabel: string, error: string, missingHint: string, models: list<array<string, mixed>>}
+     * @return array{source: string, providerLabel: string, error: string, missingHint: string, models: list<array<string, mixed>>, retired: list<array<string, mixed>>}
      */
     public function toArray(): array {
         return [
@@ -87,6 +97,7 @@ final class ModelCatalog {
             'error' => $this->error,
             'missingHint' => $this->missingHint,
             'models' => array_map(static fn(ModelCompatibility $m) => $m->toArray(), $this->models),
+            'retired' => array_map(static fn(ModelCompatibility $m) => $m->toArray(), $this->retired),
         ];
     }
 
@@ -100,13 +111,10 @@ final class ModelCatalog {
         ) {
             return null;
         }
-        $models = [];
-        foreach ($data['models'] as $entry) {
-            $model = ModelCompatibility::fromArray($entry);
-            if ($model === null) {
-                return null;
-            }
-            $models[] = $model;
+        $models = self::entriesFromArray($data['models']);
+        $retired = self::entriesFromArray(is_array($data['retired'] ?? null) ? $data['retired'] : []);
+        if ($models === null || $retired === null) {
+            return null;
         }
         return new self(
             $models,
@@ -114,6 +122,23 @@ final class ModelCatalog {
             $data['providerLabel'],
             $data['error'],
             is_string($data['missingHint'] ?? null) ? $data['missingHint'] : '',
+            $retired,
         );
+    }
+
+    /**
+     * @param array<array-key, mixed> $entries
+     * @return list<ModelCompatibility>|null null when any entry is malformed
+     */
+    private static function entriesFromArray(array $entries): ?array {
+        $out = [];
+        foreach ($entries as $entry) {
+            $model = ModelCompatibility::fromArray($entry);
+            if ($model === null) {
+                return null;
+            }
+            $out[] = $model;
+        }
+        return $out;
     }
 }

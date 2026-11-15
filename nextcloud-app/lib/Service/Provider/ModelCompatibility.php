@@ -36,9 +36,15 @@ final class ModelCompatibility {
     public const STATUS_RETIRED = 'retired';
     /** Not in the provider's list at all — typed in, or removed upstream. */
     public const STATUS_MISSING = 'missing';
+    /**
+     * A chat model that cannot be called by this id here — on Bedrock, one
+     * served only through an inference profile. Not selectable; the message
+     * names the id to use instead.
+     */
+    public const STATUS_UNAVAILABLE = 'unavailable';
 
     /** Statuses the picker refuses to offer. */
-    private const UNSELECTABLE = [self::STATUS_INCOMPATIBLE, self::STATUS_RETIRED];
+    private const UNSELECTABLE = [self::STATUS_INCOMPATIBLE, self::STATUS_RETIRED, self::STATUS_UNAVAILABLE];
 
     /** Statuses that are a problem rather than a remark — shown as a warning. */
     private const WARNING = [
@@ -47,6 +53,7 @@ final class ModelCompatibility {
         self::STATUS_DEPRECATED,
         self::STATUS_RETIRED,
         self::STATUS_MISSING,
+        self::STATUS_UNAVAILABLE,
     ];
 
     /**
@@ -138,6 +145,25 @@ final class ModelCompatibility {
             : sprintf('%s has been retired. Requests to it fail.', $name))
             . ($replacement !== '' ? sprintf(' Pick %s.', $replacement) : ' Pick another model.');
         return new self($id, $label, self::STATUS_RETIRED, $message, false, false);
+    }
+
+    /**
+     * A model that is served, but not under this id: $instead lists the ids
+     * that reach it (Bedrock inference profiles). $why says why the id itself
+     * does not work, in the provider's terms.
+     *
+     * @param list<string> $instead
+     */
+    public static function unavailable(string $id, string $label, string $why, array $instead = [], string $fallback = ''): self {
+        $name = self::name($id, $label);
+        $message = sprintf('%s %s', $name, $why);
+        if ($instead !== []) {
+            $last = array_pop($instead);
+            $message .= sprintf(' Use %s instead.', $instead === [] ? $last : implode(', ', $instead) . ' or ' . $last);
+        } elseif ($fallback !== '') {
+            $message = self::join($message, $fallback);
+        }
+        return new self($id, $label, self::STATUS_UNAVAILABLE, $message);
     }
 
     /**

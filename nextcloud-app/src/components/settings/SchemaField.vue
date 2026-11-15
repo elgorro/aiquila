@@ -254,6 +254,8 @@ export default {
 			case 'deprecated': return t('aiquila', 'deprecated')
 			case 'no_tools': return t('aiquila', 'no tools')
 			case 'unverified': return t('aiquila', 'not verified')
+			case 'unavailable': return t('aiquila', 'use another ID')
+			case 'missing': return t('aiquila', 'not listed')
 			default: return ''
 			}
 		},
