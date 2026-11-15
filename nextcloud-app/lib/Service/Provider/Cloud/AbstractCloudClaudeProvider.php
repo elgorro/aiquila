@@ -221,6 +221,15 @@ abstract class AbstractCloudClaudeProvider extends ClaudeSDKService {
         return parent::probe($userId);
     }
 
+    /**
+     * Whether this platform has a model listing to offer, which turns the
+     * model field into a picker. Platforms without one keep free text, since
+     * a picker that knows only the configured model is worse than a field.
+     */
+    protected function listsModels(): bool {
+        return $this->hasFeature(self::FEATURE_MODELS_API);
+    }
+
     protected function validateModel(string $model): string {
         return CloudEndpoints::requireModelId($model);
     }
@@ -305,7 +314,7 @@ abstract class AbstractCloudClaudeProvider extends ClaudeSDKService {
             $fields[] = $field;
         }
 
-        $fields[] = ProviderSettingsSchema::text(
+        $model = ProviderSettingsSchema::text(
             'model',
             $this->configKey('model'),
             'Model',
@@ -315,6 +324,13 @@ abstract class AbstractCloudClaudeProvider extends ClaudeSDKService {
             placeholder: $this->defaultModel(),
             format: ProviderSettingsSchema::FORMAT_MODEL_ID,
         );
+        if ($this->listsModels()) {
+            // A picker over the live list; typed ids stay allowed, and the
+            // id format is still checked on save.
+            $model['type'] = ProviderSettingsSchema::TYPE_SELECT;
+            $model['options'] = ProviderSettingsSchema::OPTIONS_MODELS;
+        }
+        $fields[] = $model;
 
         // Thinking, effort and the token cap mean exactly what they mean on the
         // Claude API card, so they are taken from there and only re-keyed.

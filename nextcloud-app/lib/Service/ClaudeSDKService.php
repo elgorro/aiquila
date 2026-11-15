@@ -14,6 +14,7 @@ use Anthropic\Core\Exceptions\APITimeoutException;
 use Anthropic\Core\Exceptions\APIStatusException;
 use Anthropic\Core\Exceptions\AuthenticationException;
 use Anthropic\Core\Exceptions\InternalServerException;
+use Anthropic\Core\Exceptions\NotFoundException;
 use Anthropic\Core\Exceptions\OverloadedException;
 use Anthropic\Core\Exceptions\PermissionDeniedException;
 use Anthropic\Core\Exceptions\RateLimitException;
@@ -31,9 +32,13 @@ use Anthropic\Messages\Message;
 use Anthropic\Messages\Metadata;
 use Anthropic\Messages\Usage;
 use Anthropic\Models\ModelInfo;
+use OCA\AIquila\Service\Exception\ModelUnavailableException;
 use OCA\AIquila\Service\Exception\RefusalException;
 use Anthropic\ServiceContracts\MessagesContract;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
+use OCA\AIquila\Service\Provider\ModelCatalog;
+use OCA\AIquila\Service\Provider\ModelCatalogInterface;
+use OCA\AIquila\Service\Provider\ModelCompatibility;
 use OCA\AIquila\Service\Provider\ProviderActionsInterface;
 use OCA\AIquila\Service\Provider\ProviderProbe;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
@@ -50,7 +55,7 @@ use Psr\Log\LoggerInterface;
  * This is the new implementation using the official SDK.
  * Provides better error handling, type safety, and streaming support.
  */
-class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface, ThinkingProfileInterface {
+class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface, ThinkingProfileInterface, ModelCatalogInterface {
     // Anthropic publishes no transcription, speech or image-generation endpoint.
     use UnsupportedModalities;
 
@@ -118,6 +123,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     public const MIN_TASK_BUDGET = 20000;
 
     private const CAPABILITY_CACHE_TTL = 3600; // 1 hour
+
+    /** Upper bound on models read from one listing, across pages. */
+    private const MODEL_LIST_CAP = 5000;
     /** Smallest budget the Messages API accepts for thinking type 'enabled'. */
     public const MIN_THINKING_BUDGET = 1024;
     /** Bumped whenever the cached capability array grows a key. */
@@ -1171,6 +1179,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         try {
             return $send($params);
         } catch (\Throwable $e) {
+            $this->throwIfModelUnavailable($e, (string)($params['model'] ?? ''));
             if (!SystemMessages::contains($params['messages'] ?? []) || !SystemMessages::isRejection($e)) {
                 throw $e;
             }
@@ -1335,7 +1344,20 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @return list<ModelInfo>
      */
     protected function callListModels(Client $client, array $params): array {
-        return $client->models->list(limit: $params['limit'] ?? 1000)->getItems();
+        $page = $client->models->list(
+            lifecycle: $params['lifecycle'] ?? null,
+            limit: $params['limit'] ?? 1000,
+        );
+        // Follows has_more / last_id; the cap only guards against a cursor
+        // that never ends.
+        $items = [];
+        foreach ($page->pagingEachItem() as $item) {
+            $items[] = $item;
+            if (count($items) >= self::MODEL_LIST_CAP) {
+                break;
+            }
+        }
+        return $items;
     }
 
     /**
@@ -1350,26 +1372,167 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * Returns array of model ID strings, or null on error (caller should fall back).
      */
     public function listModels(?string $userId = null): ?array {
-        if (!$this->hasFeature(self::FEATURE_MODELS_API)) {
-            // The settings service falls back to the configured model.
+        $catalog = $this->fetchModelCatalog($userId);
+        if ($catalog === null || $catalog->isFailure()) {
+            // The settings service falls back to the static registry, or to
+            // the configured model on a platform without one.
             return null;
+        }
+        return $catalog->ids();
+    }
+
+    /**
+     * The Models API listing with a verdict per model
+     * (https://platform.claude.com/docs/en/api/models/list):
+     *
+     *   - `lifecycle` active → chat; tool use has no flag because every
+     *     Claude chat model has it. `capabilities.image_input` says vision.
+     *   - `deprecated` → still selectable, with `retires_at`.
+     *   - `retired` models are absent from the default listing, so they are
+     *     asked for separately and kept out of the picker: they only explain
+     *     why a saved or conversation-pinned id stopped working.
+     *   - The replacement suggested is the newest active model of the same
+     *     `line` — the API's own grouping, never a guess from the id.
+     *
+     * Null on a platform without the Models API; those subclasses override.
+     */
+    public function fetchModelCatalog(?string $userId = null): ?ModelCatalog {
+        if (!$this->hasFeature(self::FEATURE_MODELS_API)) {
+            return null;
+        }
+        if (!$this->isConfigured($userId)) {
+            return ModelCatalog::failed($this->getLabel(), $this->unconfiguredMessage() . '.');
         }
         try {
             $client = $this->getFullClient($userId);
-            $items  = $this->callListModels($client, ['limit' => 1000]);
-
-            // Warm capability cache for each model
-            foreach ($items as $m) {
-                $this->cacheModelInfoCapabilities($m);
-            }
-
-            return array_map(fn(ModelInfo $m) => $m->id, $items);
+            $items = $this->callListModels($client, ['limit' => 1000]);
         } catch (\Throwable $e) {
-            $this->logger->warning('AIquila SDK: Could not list models', [
-                'error' => $e->getMessage(),
-            ]);
-            return null;
+            $this->logger->warning('AIquila SDK: Could not list models', ['provider' => $this->getId(), 'error' => $e->getMessage()]);
+            return ModelCatalog::failed($this->getLabel(), $this->listingErrorMessage($e));
         }
+        try {
+            $retired = $this->callListModels($client, ['limit' => 1000, 'lifecycle' => ['retired']]);
+        } catch (\Throwable $e) {
+            // Only explanations are lost: the picker is complete without them.
+            $this->logger->info('AIquila SDK: Could not list retired models', ['provider' => $this->getId(), 'error' => $e->getMessage()]);
+            $retired = [];
+        }
+        foreach ($items as $m) {
+            $this->cacheModelInfoCapabilities($m);
+        }
+        return self::claudeCatalog($items, $retired, $this->getLabel());
+    }
+
+    public function assessUnlistedModel(string $model): ?ModelCompatibility {
+        return null;
+    }
+
+    /**
+     * @param list<ModelInfo> $items   active and deprecated models
+     * @param list<ModelInfo> $retired retired models
+     */
+    public static function claudeCatalog(array $items, array $retired, string $providerLabel, string $source = 'models-api'): ModelCatalog {
+        $replacement = self::replacementsByLine($items);
+        $models = [];
+        foreach ($items as $m) {
+            $models[] = self::assessModelInfo($m, $replacement);
+        }
+        $gone = [];
+        foreach ($retired as $m) {
+            $gone[] = self::assessModelInfo($m, $replacement);
+        }
+        return ModelCatalog::listed($models, $source, $providerLabel, '', $gone);
+    }
+
+    /**
+     * @param array<string, string> $replacement line → display name of its newest active model
+     */
+    private static function assessModelInfo(ModelInfo $m, array $replacement): ModelCompatibility {
+        $date = $m->retiresAt?->format('Y-m-d') ?? '';
+        $instead = $m->line !== null ? ($replacement[$m->line] ?? '') : '';
+        return match ($m->lifecycle) {
+            'retired' => ModelCompatibility::retired($m->id, $m->displayName, $date, $instead),
+            'deprecated' => ModelCompatibility::deprecated($m->id, $m->displayName, $date, $instead),
+            default => ModelCompatibility::chat($m->id, $m->displayName, true, $m->capabilities?->imageInput->supported),
+        };
+    }
+
+    /**
+     * The newest active model per `line`, by `created_at`, as "Name (id)".
+     *
+     * @param list<ModelInfo> $items
+     * @return array<string, string>
+     */
+    private static function replacementsByLine(array $items): array {
+        $newest = [];
+        foreach ($items as $m) {
+            if ($m->lifecycle !== 'active' || $m->line === null) {
+                continue;
+            }
+            $current = $newest[$m->line] ?? null;
+            if ($current === null || $m->createdAt > $current->createdAt) {
+                $newest[$m->line] = $m;
+            }
+        }
+        return array_map(static fn(ModelInfo $m) => $m->displayName !== '' && $m->displayName !== $m->id
+            ? $m->displayName . ' (' . $m->id . ')'
+            : $m->id, $newest);
+    }
+
+    /**
+     * Why the Models API listing failed, for the card. The platform card
+     * names its own credential; the status light already says the same in
+     * more detail, so this stays one sentence.
+     */
+    protected function listingErrorMessage(\Throwable $e): string {
+        return match (true) {
+            $e instanceof AuthenticationException => 'the credentials were rejected.',
+            $e instanceof PermissionDeniedException => 'these credentials are not allowed to list models.',
+            $e instanceof APIConnectionException, $e instanceof APITimeoutException => 'the service could not be reached.',
+            default => self::probeDetail($e),
+        };
+    }
+
+    /**
+     * The sentence for a 403. On a cloud platform it is usually the model
+     * that is not enabled for the account rather than the key, so the
+     * platforms override this with where to enable it.
+     */
+    protected function permissionDeniedMessage(): string {
+        return 'Your API key does not have permission to use this resource.';
+    }
+
+    /**
+     * A 404 on a Messages request means the model: the path is fixed, so the
+     * model is the only resource the request names. Rethrown as a
+     * ModelUnavailableException carrying the sentence the picker would show.
+     */
+    private function throwIfModelUnavailable(\Throwable $e, string $model): void {
+        if (!$e instanceof NotFoundException || $model === '') {
+            return;
+        }
+        $this->logger->warning('AIquila SDK: model not found', ['provider' => $this->getId(), 'model' => $model] + $this->buildErrorLogContext($e));
+        throw new ModelUnavailableException($this->modelNotFoundMessage($model), $model, $e);
+    }
+
+    /**
+     * The sentence for a model the platform answered 404 for. With the
+     * Models API, ask it about the id: a retired model is still in its
+     * catalogue and gets its retirement date; anything else is missing.
+     * Platforms without the Models API override this with their own reasons.
+     */
+    protected function modelNotFoundMessage(string $model): string {
+        if ($this->hasFeature(self::FEATURE_MODELS_API)) {
+            try {
+                $info = $this->callRetrieveModel($this->getFullClient(), $model);
+                if ($info->lifecycle === 'retired') {
+                    return ModelCompatibility::retired($info->id, $info->displayName, $info->retiresAt?->format('Y-m-d') ?? '')->message;
+                }
+            } catch (\Throwable $e) {
+                // Unknown to the catalogue as well: missing, as below.
+            }
+        }
+        return ModelCompatibility::missingMessage($model, $this->getLabel(), 'Check the model name, or pick one from the list on the provider card.');
     }
 
     public function probe(?string $userId = null): array {
@@ -1414,7 +1577,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * body. Only the headline belongs in a tooltip; the full text is already in
      * the log line the status endpoint writes.
      */
-    private static function probeDetail(\Throwable $e): string {
+    protected static function probeDetail(\Throwable $e): string {
         if ($e instanceof APIStatusException && ($apiMessage = $e->getAPIMessage()) !== null && $apiMessage !== '') {
             return $apiMessage;
         }
@@ -1573,8 +1736,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      */
     private function describeSdkException(\Throwable $e): ?array {
         return match (true) {
+            $e instanceof ModelUnavailableException => ['Model unavailable', $e->getMessage()],
             $e instanceof AuthenticationException => ['Authentication error', 'Invalid API key. Please check your configuration.'],
-            $e instanceof PermissionDeniedException => ['Permission denied', 'Your API key does not have permission to use this resource.'],
+            $e instanceof PermissionDeniedException => ['Permission denied', $this->permissionDeniedMessage()],
             $e instanceof EnforcedSpendLimitReachedException => [
                 'Spend limit reached',
                 'Your Anthropic organization has reached the monthly spend limit of its API tier. Please ask an administrator to raise it.',

@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\Service\Provider\Cloud;
 
 use Anthropic\Core\BaseClient;
+use Anthropic\Core\Exceptions\PermissionDeniedException;
 use Anthropic\GoogleCloud\Client as GoogleCloudClient;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
@@ -93,5 +94,16 @@ class ClaudePlatformGoogleCloudProvider extends AbstractGoogleClaudeProvider {
             ),
             default => new GoogleCloudClient(project: $project, location: $location, workspaceId: $workspaceId, baseUrl: $baseUrl),
         };
+    }
+
+    /**
+     * Access on this platform is the IAM role roles/claude.user (or
+     * claude.admin) on the project, so a 403 names the role to grant.
+     */
+    protected function listingErrorMessage(\Throwable $e): string {
+        if ($e instanceof PermissionDeniedException) {
+            return 'the Google credentials lack the Claude User role (roles/claude.user) on the project.';
+        }
+        return parent::listingErrorMessage($e);
     }
 }

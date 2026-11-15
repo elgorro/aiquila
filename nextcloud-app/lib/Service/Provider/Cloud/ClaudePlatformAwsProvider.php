@@ -7,6 +7,7 @@ namespace OCA\AIquila\Service\Provider\Cloud;
 
 use Anthropic\Aws\Client as AwsClient;
 use Anthropic\Core\BaseClient;
+use Anthropic\Core\Exceptions\PermissionDeniedException;
 use OCA\AIquila\Service\ClaudeModels;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 
@@ -88,5 +89,19 @@ class ClaudePlatformAwsProvider extends AbstractAwsClaudeProvider {
             ),
             default => new AwsClient(awsRegion: $region, workspaceId: $workspaceId, baseUrl: $baseUrl),
         };
+    }
+
+    /**
+     * The Models API here is authorised by IAM (aws-external-anthropic:ListModels
+     * in the platform's example policy), so a 403 is a missing permission
+     * rather than a bad key, and a SigV4 principal needs it granted.
+     */
+    protected function listingErrorMessage(\Throwable $e): string {
+        if ($e instanceof PermissionDeniedException) {
+            return $this->authMode() === self::AUTH_API_KEY
+                ? 'this API key is not allowed to list models in the workspace. Check that the workspace ID belongs to the key\'s region.'
+                : 'the AWS principal lacks aws-external-anthropic:ListModels, or the workspace is in another region.';
+        }
+        return parent::listingErrorMessage($e);
     }
 }

@@ -281,6 +281,21 @@ class ClaudeModels {
         ];
     }
 
+    /**
+     * Whether the capability tables know a model, in any platform's spelling.
+     * Wider than getAllModels(): it includes the verification-gated Mythos
+     * models and still-served deprecated ones, which are known but not offered.
+     */
+    public static function isKnown(string $model): bool {
+        return in_array(self::canonicalId($model), [
+            ...self::getAllModels(),
+            self::MYTHOS_5_2,
+            self::MYTHOS_5_1,
+            self::MYTHOS_5,
+            self::SONNET_4_5,
+        ], true);
+    }
+
     // ── Per-model effort level (app-level policy) ────────────────────────
 
     public const EFFORT_LEVEL = [
