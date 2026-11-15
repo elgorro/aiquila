@@ -26,6 +26,17 @@ import { onUserToolFailure, requireIdentityContext, runAs } from '../nc-context.
 import { serviceAccountConfigured } from '../tools/types.js';
 import { LOGIN_STYLESHEET, LOGIN_STYLESHEET_PATH } from '../auth/login-page-css.js';
 import { isPublicRequest } from './lazy-auth.js';
+import {
+  DEFAULT_ANONYMOUS_LIMIT,
+  DEFAULT_TOOL_CALL_LIMIT,
+  clientAddress,
+  countMessages,
+  countToolCalls,
+  createRateLimiter,
+  limitFromEnv,
+  rateLimit,
+  rateLimitCheck,
+} from './rate-limit.js';
 import { IdentityScopedEventBus } from './tool-list-changes.js';
 import { internalNetworks, internalTokenAllowed, isInternalToken } from '../auth/internal-token.js';
 import { logger } from '../logger.js';
@@ -34,7 +45,13 @@ import { fetchStatus } from '../client/ocs.js';
 
 const DEFAULT_PORT = 3339;
 const MCP_PATH = '/mcp';
-const SCOPES_SUPPORTED = ['mcp:tools', 'mcp:resources', 'mcp:prompts'];
+// Only scopes for features the server serves: it registers tools, no prompts or
+// resources. RFC 8414 §2 / RFC 9728 §2 let a server leave scopes out of
+// `scopes_supported`, and MCP 2026-07-28 (Authorization › Scope Selection
+// Strategy) reads it as the minimal set for basic functionality. Grants issued
+// with a wider scope keep it: refresh uses the scopes stored with the grant.
+// `offline_access` stays out (MCP 2026-07-28, Authorization › Refresh Tokens).
+const SCOPES_SUPPORTED = ['mcp:tools'];
 
 // Scope advertised in the WWW-Authenticate challenge. Clients request exactly
 // this on authorisation; omitting it makes them fall back to the full
@@ -306,6 +323,19 @@ export async function createHttpApp(): Promise<express.Express> {
   );
   const handleMcpRequest = (req: Request, res: Response) => mcpHandler(req, res, req.body);
 
+  // MCP 2026-07-28, Tools › Security Considerations: rate limit tool
+  // invocations. See rate-limit.ts for the keys and what counts.
+  const toolCallLimit = limitFromEnv('MCP_RATE_LIMIT', DEFAULT_TOOL_CALL_LIMIT);
+  const anonymousLimit = limitFromEnv('MCP_RATE_LIMIT_ANONYMOUS', DEFAULT_ANONYMOUS_LIMIT);
+  const toolCallLimiter = toolCallLimit === null ? null : createRateLimiter(toolCallLimit);
+  const anonymousLimiter = anonymousLimit === null ? null : createRateLimiter(anonymousLimit);
+  const limitAnonymous = rateLimitCheck(
+    anonymousLimiter,
+    (req) => `ip:${clientAddress(req)}`,
+    (req) => countMessages(req.body),
+    'unauthenticated requests'
+  );
+
   // MCP 2026-07-28, Streamable HTTP, Security §1: the Origin header MUST be
   // validated on every request to the MCP endpoint, and one that is present
   // and not allowed is answered 403 (DNS rebinding). Requests without Origin
@@ -479,6 +509,7 @@ export async function createHttpApp(): Promise<express.Express> {
                   { rpcMethod: req.body?.method },
                   '[mcp] Public request (unauthenticated)'
                 );
+                if (!limitAnonymous(req, res)) return;
                 await runAs({ kind: 'anonymous' }, () => handleMcpRequest(req, res));
                 return;
               }
@@ -514,6 +545,19 @@ export async function createHttpApp(): Promise<express.Express> {
         verifier: provider,
         resourceMetadataUrl: new URL('/.well-known/oauth-protected-resource/mcp', issuerUrl).href,
       }),
+      // Keyed by the signed-in user, never by address: one user's clients
+      // share a budget, and other users are unaffected.
+      rateLimit(
+        rateLimitCheck(
+          toolCallLimiter,
+          (req) =>
+            req.auth?.extra?.service === true
+              ? 'service'
+              : `user:${String(req.auth?.extra?.userId)}`,
+          (req) => countToolCalls(req.body),
+          'tool calls'
+        )
+      ),
       async (req: Request, res: Response) => {
         logger.debug({ method: req.method, rpcMethod: req.body?.method }, '[mcp] Request received');
         if (req.auth?.extra?.service === true) {
@@ -560,8 +604,17 @@ export async function createHttpApp(): Promise<express.Express> {
     const mcpHandler = async (req: Request, res: Response) => {
       await handleMcpRequest(req, res);
     };
-    app.all(MCP_PATH, mcpHandler);
-    app.all('/', mcpHandler);
+    // Without OAuth every caller acts as NEXTCLOUD_USER; key by address.
+    const limitToolCalls = rateLimit(
+      rateLimitCheck(
+        toolCallLimiter,
+        (req) => `ip:${clientAddress(req)}`,
+        (req) => countToolCalls(req.body),
+        'tool calls'
+      )
+    );
+    app.all(MCP_PATH, limitToolCalls, mcpHandler);
+    app.all('/', limitToolCalls, mcpHandler);
   }
 
   return app;
