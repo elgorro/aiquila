@@ -373,10 +373,22 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider implements ModelCat
             $parts[] = ['name' => 'language', 'contents' => $language];
         }
         // The OpenAI shape: segment timings only come with verbose_json.
-        $timestamps = ($options['timestamps'] ?? false) === true;
+        $diarize = ($options['diarize'] ?? false) === true;
+        $timestamps = $diarize || ($options['timestamps'] ?? false) === true;
         if ($timestamps) {
             $parts[] = ['name' => 'response_format', 'contents' => 'verbose_json'];
             $parts[] = ['name' => 'timestamp_granularities[]', 'contents' => 'segment'];
+        }
+        // LocalAI reads `diarize` and labels segments with `speaker` when its
+        // backend can (WhisperX, parakeet); Speaches ignores the field.
+        if ($diarize) {
+            $parts[] = ['name' => 'diarize', 'contents' => 'true'];
+        }
+        // These servers have no vocabulary list; Whisper's `prompt` is the
+        // biasing hook they share, and names in it steer the spelling.
+        $bias = ContextBias::terms($options['contextBias'] ?? null);
+        if ($bias !== []) {
+            $parts[] = ['name' => 'prompt', 'contents' => implode(', ', $bias)];
         }
 
         try {

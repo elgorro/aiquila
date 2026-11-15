@@ -620,7 +620,7 @@ two serves the editor.
 | `core:generateemoji` | Suggest an emoji for a text |
 | `core:analyze-images` | Ask a question about one or more images |
 | `core:image2text:ocr` | Extract the text visible in images |
-| `core:audio2text` | Transcribe a recording |
+| `core:audio2text` | Transcribe a recording; optionally as timed segments, with speaker labels and a vocabulary of names to spell as given |
 | `core:audio2text:subtitles` | Subtitles for a recording or video, as SubRip (default) or WebVTT (Nextcloud 35+) |
 | `core:text2speech` | Read a text out as audio |
 | `core:text2image` | Generate images from a description |
@@ -649,6 +649,16 @@ matching capability, shown as a chip on the provider's card in the AIquila setti
 | Generated speech, voice chat, audio translation | `speech` | Mistral, Local (admin flag) |
 | Generated images | `image generation` | Mistral |
 | PDFs attached to a tool chat | `documents` | Claude |
+
+**Transcription options.** Beyond the optional `language`, `core:audio2text` takes
+optional `timestamps` and `diarize` toggles (`yes` / `no`, default `no`) and a free-text
+`context_bias`. When `timestamps` or `diarize` is on, the task returns a second
+output, `segments`. It is a JSON array of `{start, end, text, speaker?}`, with
+`start` and `end` in seconds. `diarize` labels each segment with an opaque `speaker`
+string, such as `speaker_1` from Mistral or `0` from LocalAI, and turns timestamps on.
+A backend that cannot tell speakers apart returns the segments without `speaker`.
+`context_bias` lists names and terms the transcript should spell as given, one per line
+or comma-separated. It is a hint, not a guarantee.
 
 Recordings for transcription, subtitles, voice chat and audio translation can be MP3,
 M4A, WAV, WebM, OGG or FLAC, or MP4 and WebM video, up to 512 MB.

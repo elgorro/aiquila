@@ -681,6 +681,60 @@ class MistralProviderTest extends TestCase {
         ], $result['segments']);
     }
 
+    public function testTranscribeAudioDiarizesWithSegmentsAndSendsEachBiasTermAsItsOwnPart(): void {
+        $options = null;
+        $recording = self::recording();
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$options): IResponse {
+                $options = $o;
+                return $this->writeToSink($o, [self::event([
+                    'type' => 'transcription.done',
+                    'text' => 'Hi. Hello.',
+                    'segments' => [
+                        ['type' => 'transcription_segment', 'text' => ' Hi.', 'start' => 0.0, 'end' => 0.5, 'speaker_id' => 'speaker_1'],
+                        ['type' => 'transcription_segment', 'text' => ' Hello.', 'start' => 0.5, 'end' => 1.0, 'speaker_id' => null],
+                    ],
+                    'usage' => [],
+                ])]);
+            }
+        );
+
+        $result = $this->provider->transcribeAudio($recording, 'audio/mpeg', 'memo.mp3', 'u', [
+            'diarize' => true,
+            'contextBias' => ['Northwind', 'Alder Creek Design'],
+        ]);
+
+        $this->assertSame([
+            ['name' => 'model', 'contents' => MistralProvider::DEFAULT_TRANSCRIBE_MODEL],
+            ['name' => 'file', 'contents' => $recording, 'filename' => 'memo.mp3'],
+            ['name' => 'stream', 'contents' => 'true'],
+            ['name' => 'timestamp_granularities', 'contents' => 'segment'],
+            ['name' => 'diarize', 'contents' => 'true'],
+            ['name' => 'context_bias', 'contents' => 'Northwind'],
+            ['name' => 'context_bias', 'contents' => 'Alder Creek Design'],
+        ], $options['multipart']);
+        $this->assertSame([
+            ['start' => 0.0, 'end' => 0.5, 'text' => ' Hi.', 'speaker' => 'speaker_1'],
+            ['start' => 0.5, 'end' => 1.0, 'text' => ' Hello.'],
+        ], $result['segments']);
+    }
+
+    public function testTranscribeAudioCapsTheContextBias(): void {
+        $options = null;
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$options): IResponse {
+                $options = $o;
+                return $this->writeToSink($o, [self::event(['type' => 'transcription.done', 'text' => 'x', 'usage' => []])]);
+            }
+        );
+
+        $terms = array_map(static fn (int $i): string => "term$i", range(1, 150));
+        $this->provider->transcribeAudio(self::recording(), 'audio/mpeg', 'memo.mp3', 'u', ['contextBias' => $terms]);
+
+        $bias = array_filter($options['multipart'], static fn (array $p): bool => $p['name'] === 'context_bias');
+        $this->assertCount(MistralProvider::CONTEXT_BIAS_MAX, $bias);
+    }
+
     /**
      * Should the final event leave its segments empty, the segment events
      * streamed before it are what there is.

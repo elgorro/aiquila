@@ -205,6 +205,14 @@ interface LLMProviderInterface {
      * segments as well — what subtitles are built from. A provider whose
      * backend has no timings leaves `segments` out rather than failing.
      *
+     * `diarize` asks for each segment to be labelled with who spoke it, and
+     * implies `timestamps`. Speaker labels are opaque per-recording strings.
+     * A backend that cannot tell speakers apart still returns the segments,
+     * without the `speaker` key, rather than failing.
+     *
+     * `contextBias` lists names and domain terms to steer spelling. It is a
+     * hint: a provider sends it the way its backend takes one, or drops it.
+     *
      * $audio is the recording itself or a stream of it. A stream is sent as
      * it is read, so a long recording never has to fit in memory; it must
      * report its size, which Guzzle needs for the part's length.
@@ -214,8 +222,8 @@ interface LLMProviderInterface {
      * TranscriptionProgress.
      *
      * @param string|resource|\Psr\Http\Message\StreamInterface $audio
-     * @param array{language?: string, timestamps?: bool, onProgress?: callable(float): mixed} $options
-     * @return array{response: string, segments?: list<array{start: float, end: float, text: string}>, usage?: array}|array{error: string}
+     * @param array{language?: string, timestamps?: bool, diarize?: bool, contextBias?: list<string>, onProgress?: callable(float): mixed} $options
+     * @return array{response: string, segments?: list<array{start: float, end: float, text: string, speaker?: string}>, usage?: array}|array{error: string}
      */
     public function transcribeAudio(mixed $audio, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array;
 
