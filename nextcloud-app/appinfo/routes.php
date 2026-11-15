@@ -49,6 +49,22 @@ return [
         ['name' => 'prompt#adminUpdate',  'url' => '/api/admin/prompts/{id}',  'verb' => 'PUT'],
         ['name' => 'prompt#adminDestroy', 'url' => '/api/admin/prompts/{id}',  'verb' => 'DELETE'],
 
+        // Sequences: tool chains the MCP server runs in one call. The caller's
+        // own, plus the organization's read-only; `effective` is what the MCP
+        // server reads (with an ETag). Admin routes for the organization's.
+        ['name' => 'sequence#index',        'url' => '/api/sequences',                  'verb' => 'GET'],
+        ['name' => 'sequence#catalog',      'url' => '/api/sequences/catalog',          'verb' => 'GET'],
+        ['name' => 'sequence#effective',    'url' => '/api/sequences/effective',        'verb' => 'GET'],
+        ['name' => 'sequence#create',       'url' => '/api/sequences',                  'verb' => 'POST'],
+        ['name' => 'sequence#setBuiltin',   'url' => '/api/sequences/builtins/{slug}',  'verb' => 'PUT'],
+        ['name' => 'sequence#update',       'url' => '/api/sequences/{id}',             'verb' => 'PUT'],
+        ['name' => 'sequence#destroy',      'url' => '/api/sequences/{id}',             'verb' => 'DELETE'],
+        ['name' => 'sequence#adminIndex',   'url' => '/api/admin/sequences',            'verb' => 'GET'],
+        ['name' => 'sequence#adminCreate',  'url' => '/api/admin/sequences',            'verb' => 'POST'],
+        ['name' => 'sequence#adminUpdate',  'url' => '/api/admin/sequences/{id}',       'verb' => 'PUT'],
+        ['name' => 'sequence#adminDestroy', 'url' => '/api/admin/sequences/{id}',       'verb' => 'DELETE'],
+        ['name' => 'sequence#adminPolicy',  'url' => '/api/admin/sequence-policy',      'verb' => 'PUT'],
+
         // Instance instructions, in front of every user's system prompt.
         ['name' => 'instructions#get',    'url' => '/api/admin/instructions',  'verb' => 'GET'],
         ['name' => 'instructions#update', 'url' => '/api/admin/instructions',  'verb' => 'PUT'],
