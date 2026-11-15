@@ -16,7 +16,8 @@ use Symfony\Component\Console\Output\OutputInterface;
  * occ aiquila:library export|import
  *
  * Moves the instance library (instructions, organization prompts, project and
- * coworker templates) between instances as JSON. Users' own entries stay put.
+ * coworker templates, organization sequences and the sequence policy) between
+ * instances as JSON. Users' own entries stay put.
  */
 class LibraryCommand extends Command {
     public function __construct(
@@ -27,7 +28,7 @@ class LibraryCommand extends Command {
 
     protected function configure(): void {
         $this->setName('aiquila:library')
-            ->setDescription('Export or import the instance prompt library, templates and instructions as JSON')
+            ->setDescription('Export or import the instance prompt library, templates, sequences and instructions as JSON')
             ->addArgument('action', InputArgument::REQUIRED, 'export or import')
             ->addArgument('file', InputArgument::OPTIONAL, 'File to write or read; "-" or none means stdout/stdin', '-')
             ->addOption('replace', null, InputOption::VALUE_NONE, 'import: delete the existing instance entries first')
@@ -70,10 +71,11 @@ class LibraryCommand extends Command {
                 return 1;
             }
             $output->writeln(sprintf(
-                '<info>✓ Imported %d prompt(s), %d project template(s), %d coworker template(s)%s</info>',
+                '<info>✓ Imported %d prompt(s), %d project template(s), %d coworker template(s), %d sequence(s)%s</info>',
                 $counts['prompts'],
                 $counts['projectTemplates'],
                 $counts['coworkerTemplates'],
+                $counts['sequences'],
                 $counts['instructions'] ? ' and the instance instructions' : '',
             ));
             return 0;

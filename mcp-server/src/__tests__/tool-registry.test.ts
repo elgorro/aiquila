@@ -331,8 +331,9 @@ describe('tool-registry', () => {
       expect(toolSetKey({ kind: 'anonymous' })).toBe('anonymous');
       expect(toolSetKey({ kind: 'service' })).toBe('env');
       expect(toolSetKey(undefined)).toBe('env');
+      // Per account under MCP_TOOLS too: each user's sequences are their own.
       process.env.MCP_TOOLS = 'files';
-      expect(toolSetKey(asUser('alice'))).toBe('mcp_tools');
+      expect(toolSetKey(asUser('alice'))).toBe('user:alice');
     });
 
     it('a request without a token gets every tool and asks Nextcloud nothing', async () => {

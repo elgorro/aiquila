@@ -9,15 +9,20 @@ use OCA\AIquila\Db\ProjectTemplate;
 use OCA\AIquila\Db\ProjectTemplateMapper;
 use OCA\AIquila\Db\Prompt;
 use OCA\AIquila\Db\PromptMapper;
+use OCA\AIquila\Db\Sequence;
+use OCA\AIquila\Db\SequenceMapper;
 
 /**
  * Exports and imports the instance library as JSON, so admins running several
  * instances can keep them in step: instance instructions and their scopes,
- * organization prompts, project templates and coworker templates. Users' own
- * entries are never exported or touched.
+ * organization prompts, project templates, coworker templates, and
+ * organization sequences with the sequence policy. Users' own entries are
+ * never exported or touched.
  *
- * Import upserts by title (prompts, project templates) and by id (coworker
- * templates). With `replace`, the existing instance entries are deleted first.
+ * Import upserts by title (prompts, project templates), by id (coworker
+ * templates) and by slug (sequences). With `replace`, the existing instance
+ * entries are deleted first. `sequences` and `sequencePolicy` are optional,
+ * so files exported before sequences existed still import.
  */
 class LibraryTransfer {
     public const FORMAT = 'aiquila-library';
@@ -28,11 +33,14 @@ class LibraryTransfer {
         private PromptMapper $prompts,
         private ProjectTemplateMapper $templates,
         private CoworkerTemplates $coworkerTemplates,
+        private SequenceMapper $sequences,
+        private SequenceValidator $sequenceValidator,
+        private SequencePolicy $sequencePolicy,
     ) {
     }
 
     /**
-     * @return array{format: string, version: int, instructions: array{text: string, scopes: array<string, bool>}, prompts: list<array{title: string, description: ?string, content: string}>, projectTemplates: list<array{title: string, description: ?string, systemPrompt: ?string, paths: list<array{path: string, pathType: string}>}>, coworkerTemplates: list<array<string, mixed>>}
+     * @return array{format: string, version: int, instructions: array{text: string, scopes: array<string, bool>}, prompts: list<array{title: string, description: ?string, content: string}>, projectTemplates: list<array{title: string, description: ?string, systemPrompt: ?string, paths: list<array{path: string, pathType: string}>}>, coworkerTemplates: list<array<string, mixed>>, sequences: list<array{slug: string, title: string, description: ?string, definition: array<string, mixed>, pinned: bool, enabled: bool}>, sequencePolicy: array{allowPersonal: bool, maxPerUser: int, maxSteps: int, maxPinned: int, disabledBuiltins: list<string>}}
      */
     public function export(): array {
         return [
@@ -57,13 +65,22 @@ class LibraryTransfer {
                 unset($t['scope']);
                 return $t;
             }, $this->coworkerTemplates->list()),
+            'sequences' => array_map(static fn (Sequence $s): array => [
+                'slug' => $s->getSlug(),
+                'title' => $s->getTitle(),
+                'description' => $s->getDescription(),
+                'definition' => $s->getDefinitionArray(),
+                'pinned' => $s->getPinned() === 1,
+                'enabled' => $s->getEnabled() === 1,
+            ], $this->sequences->findAllInstance()),
+            'sequencePolicy' => $this->sequencePolicy->get() + ['disabledBuiltins' => $this->sequencePolicy->disabledBuiltins()],
         ];
     }
 
     /**
      * @param array<array-key, mixed> $data a decoded export
      * @param string $author user id recorded as the author of imported rows
-     * @return array{instructions: bool, prompts: int, projectTemplates: int, coworkerTemplates: int}
+     * @return array{instructions: bool, prompts: int, projectTemplates: int, coworkerTemplates: int, sequences: int}
      * @throws \InvalidArgumentException when $data is not an export, or an entry is invalid
      */
     public function import(array $data, string $author, bool $replace = false): array {
@@ -73,7 +90,17 @@ class LibraryTransfer {
         $prompts = $this->listOf($data, 'prompts');
         $templates = $this->listOf($data, 'projectTemplates');
         $coworkers = $this->listOf($data, 'coworkerTemplates');
+        $sequences = $this->listOf($data, 'sequences');
         $this->validate($prompts, $templates);
+        $policy = is_array($data['sequencePolicy'] ?? null) ? $data['sequencePolicy'] : null;
+        if ($policy !== null) {
+            $this->sequencePolicy->validate(
+                is_int($policy['maxPerUser'] ?? null) ? $policy['maxPerUser'] : null,
+                is_int($policy['maxSteps'] ?? null) ? $policy['maxSteps'] : null,
+                is_int($policy['maxPinned'] ?? null) ? $policy['maxPinned'] : null,
+            );
+        }
+        $normalized = $this->validateSequences($sequences, $policy);
 
         if ($replace) {
             foreach ($this->prompts->findAllInstance() as $p) {
@@ -83,6 +110,9 @@ class LibraryTransfer {
                 $this->templates->delete($t);
             }
             $this->coworkerTemplates->clear();
+            foreach ($this->sequences->findAllInstance() as $sequence) {
+                $this->sequences->delete($sequence);
+            }
         }
 
         $instructions = false;
@@ -148,12 +178,93 @@ class LibraryTransfer {
 
         $this->coworkerTemplates->import($coworkers);
 
+        if ($policy !== null) {
+            $this->sequencePolicy->set(
+                is_bool($policy['allowPersonal'] ?? null) ? $policy['allowPersonal'] : null,
+                is_int($policy['maxPerUser'] ?? null) ? $policy['maxPerUser'] : null,
+                is_int($policy['maxSteps'] ?? null) ? $policy['maxSteps'] : null,
+                is_int($policy['maxPinned'] ?? null) ? $policy['maxPinned'] : null,
+            );
+            if (is_array($policy['disabledBuiltins'] ?? null)) {
+                $this->sequencePolicy->setDisabledBuiltins(array_values($policy['disabledBuiltins']));
+            }
+        }
+
+        $existingSequences = [];
+        foreach ($this->sequences->findAllInstance() as $sequence) {
+            $existingSequences[$sequence->getSlug()] = $sequence;
+        }
+        foreach ($normalized as $entry) {
+            $sequence = $existingSequences[$entry['slug']] ?? null;
+            $isNew = $sequence === null;
+            if ($sequence === null) {
+                $sequence = new Sequence();
+                $sequence->setScope(Sequence::SCOPE_INSTANCE);
+                $sequence->setUserId('');
+                $sequence->setAuthorId($author);
+                $sequence->setSlug($entry['slug']);
+                $sequence->setCreatedAt($now);
+            }
+            $sequence->setTitle($entry['title']);
+            $sequence->setDescription($entry['description']);
+            $sequence->setDefinitionArray($entry['definition']);
+            $sequence->setPinned($entry['pinned'] ? 1 : 0);
+            $sequence->setEnabled($entry['enabled'] ? 1 : 0);
+            $sequence->setUpdatedAt($now);
+            $isNew ? $this->sequences->insert($sequence) : $this->sequences->update($sequence);
+        }
+
         return [
             'instructions' => $instructions,
             'prompts' => count($prompts),
             'projectTemplates' => count($templates),
             'coworkerTemplates' => count($coworkers),
+            'sequences' => count($normalized),
         ];
+    }
+
+    /**
+     * Check every sequence before anything is written, against the steps the
+     * imported policy (or else the current one) allows.
+     *
+     * @param list<array<array-key, mixed>> $sequences
+     * @param array<array-key, mixed>|null $policy
+     * @return list<array{slug: string, title: string, description: ?string, definition: array{inputs: list<array<string, mixed>>, steps: list<array<string, mixed>>}, pinned: bool, enabled: bool}>
+     */
+    private function validateSequences(array $sequences, ?array $policy): array {
+        $imported = $policy['maxSteps'] ?? null;
+        $maxSteps = is_int($imported) ? $imported : $this->sequencePolicy->get()['maxSteps'];
+        $out = [];
+        $seen = [];
+        foreach ($sequences as $i => $s) {
+            $slug = $s['slug'] ?? null;
+            $title = $s['title'] ?? null;
+            $description = $s['description'] ?? null;
+            try {
+                $raw = $s['definition'] ?? null;
+                if (!is_string($slug) || !is_string($title) || !is_array($raw)) {
+                    throw new \InvalidArgumentException('needs a slug, a title and a definition');
+                }
+                if (isset($seen[$slug])) {
+                    throw new \InvalidArgumentException('slug ' . $slug . ' is listed twice');
+                }
+                $seen[$slug] = true;
+                $this->sequenceValidator->validateSlug($slug, Sequence::SCOPE_INSTANCE);
+                $this->sequenceValidator->validateText($title, is_string($description) ? $description : null);
+                $definition = $this->sequenceValidator->validateDefinition($raw, $maxSteps);
+            } catch (\InvalidArgumentException $e) {
+                throw new \InvalidArgumentException("sequences[$i]: " . $e->getMessage());
+            }
+            $out[] = [
+                'slug' => $slug,
+                'title' => trim($title),
+                'description' => self::nullableString($description),
+                'definition' => $definition,
+                'pinned' => ($s['pinned'] ?? false) === true,
+                'enabled' => ($s['enabled'] ?? true) !== false,
+            ];
+        }
+        return $out;
     }
 
     /**

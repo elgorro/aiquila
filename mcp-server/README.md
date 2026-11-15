@@ -1,6 +1,6 @@
 # AIquila MCP Server
 
-MCP (Model Context Protocol) server that gives any MCP client full access to your Nextcloud instance — files, calendar, tasks, contacts, mail, talk, maps, bookmarks, notes, polls, forms, and more. 384 tools across 47 categories.
+MCP (Model Context Protocol) server that gives any MCP client full access to your Nextcloud instance — files, calendar, tasks, contacts, mail, talk, maps, bookmarks, notes, polls, forms, and more. 404 tools across 48 categories.
 
 ## Quick Start
 
@@ -45,9 +45,9 @@ the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/in
 | ------------- | ----: |
 | Files         |    15 |
 | Shares        |    10 |
-| Comments      |     5 |
 | Apps          |     6 |
 | Tags          |     6 |
+| Comments      |     5 |
 | User Status   |     5 |
 | Users         |     4 |
 | Groups        |     4 |
@@ -58,18 +58,19 @@ the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/in
 | Search        |     2 |
 | Versions      |     2 |
 | Activity      |     2 |
-| **Subtotal**  | **74** |
+| Sequences     |     2 |
+| **Subtotal**  | **76** |
 
 ### AIquila app
 
 | Category     | Tools |
 | ------------ | ----: |
-| Projects     |    11 |
 | Cowork       |    15 |
+| Projects     |    12 |
 | AIquila      |     3 |
 | Security     |     2 |
 | OCC          |     1 |
-| **Subtotal** | **32** |
+| **Subtotal** | **33** |
 
 ### Optional Nextcloud apps
 
@@ -79,32 +80,32 @@ the [AIquila Nextcloud app](https://github.com/elgorro/aiquila/blob/main/docs/in
 | Social           |    26 |
 | Forms            |    25 |
 | Polls            |    21 |
+| Tables           |    21 |
 | News             |    17 |
+| Assistant        |    13 |
 | Bookmarks        |    13 |
 | Circles          |    13 |
-| Tables           |    13 |
 | Deck             |    12 |
 | Talk             |    12 |
 | Photos           |    11 |
 | Mail             |    10 |
 | Calendar         |     9 |
-| Tasks            |     6 |
+| Text             |     9 |
 | Contacts         |     6 |
 | Cookbook         |     6 |
+| Tasks            |     6 |
 | Notes            |     5 |
-| Text             |     9 |
 | Terms of Service |     5 |
-| Assistant        |     4 |
 | Announcements    |     3 |
 | Office           |     3 |
 | Passman          |     3 |
 | Registration     |     3 |
-| Translate        |     1 |
-| Social Sharing   |     1 |
 | Recommendations  |     1 |
-| **Subtotal**     | **278** |
+| Social Sharing   |     1 |
+| Translate        |     1 |
+| **Subtotal**     | **295** |
 
-**Total: 384 tools.**
+**Total: 404 tools**, plus each user's pinned `seq_*` sequence tools.
 
 ## Configuration
 

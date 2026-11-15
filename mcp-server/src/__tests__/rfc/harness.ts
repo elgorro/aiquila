@@ -49,6 +49,9 @@ export class FakeNextcloud {
   // Answer for the admin app list (/cloud/apps?filter=enabled), per uid. A uid
   // without an entry gets 404, so app detection falls back to every tool.
   readonly enabledApps = new Map<string, string[]>();
+  // Answer for the AIquila app's GET /api/sequences/effective, per uid, with
+  // its ETag. A uid without an entry gets 404, as without the app.
+  readonly sequences = new Map<string, { etag: string; body: unknown }>();
   // Every request's headers, newest last.
   readonly requests: { method: string; url: string; headers: IncomingMessage['headers'] }[] = [];
   private server?: Server;
@@ -167,6 +170,19 @@ export class FakeNextcloud {
       const apps = user ? this.enabledApps.get(user) : undefined;
       if (!apps) return json(404, 404, []);
       return json(200, 200, { apps });
+    }
+    if (url.pathname === '/index.php/apps/aiquila/api/sequences/effective') {
+      const user = this.basicUser(req);
+      if (!user) return json(401, 997, []);
+      const entry = this.sequences.get(user);
+      if (!entry) return json(404, 404, []);
+      if (req.headers['if-none-match'] === entry.etag) {
+        res.writeHead(304, { etag: entry.etag }).end();
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json', etag: entry.etag });
+      res.end(JSON.stringify(entry.body));
+      return;
     }
     if (req.method === 'MKCOL' && url.pathname.startsWith('/remote.php/dav/files/')) {
       if (!this.basicUser(req)) {
@@ -425,5 +441,48 @@ export function decodeJwt(token: string): { header: any; payload: any } {
   return {
     header: JSON.parse(Buffer.from(h, 'base64url').toString()),
     payload: JSON.parse(Buffer.from(p, 'base64url').toString()),
+  };
+}
+
+/** Reads SSE `data:` messages from a stream as they arrive. */
+export function sseMessages(res: Response) {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  const seen: any[] = [];
+  let buffer = '';
+  let waiting: (() => void) | undefined;
+  void (async () => {
+    for (;;) {
+      const { value, done } = await reader.read().catch(() => ({ value: undefined, done: true }));
+      if (done) return;
+      buffer += decoder.decode(value, { stream: true });
+      let i;
+      while ((i = buffer.indexOf('\n\n')) >= 0) {
+        const frame = buffer.slice(0, i);
+        buffer = buffer.slice(i + 2);
+        const data = frame
+          .split('\n')
+          .filter((l) => l.startsWith('data:'))
+          .map((l) => l.slice(5).trim())
+          .join('');
+        if (data) seen.push(JSON.parse(data));
+      }
+      waiting?.();
+    }
+  })();
+  return {
+    seen,
+    async waitFor(pred: (m: any) => boolean, ms = 2000): Promise<any | undefined> {
+      const deadline = Date.now() + ms;
+      for (;;) {
+        const hit = seen.find(pred);
+        if (hit || Date.now() >= deadline) return hit;
+        await new Promise<void>((r) => {
+          waiting = r;
+          setTimeout(r, 50);
+        });
+      }
+    },
+    cancel: () => reader.cancel().catch(() => {}),
   };
 }

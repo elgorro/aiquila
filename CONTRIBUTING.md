@@ -90,6 +90,7 @@ npm test                    # vitest unit tests
 npm run lint                # eslint (warnings ok, errors fail CI; `any` is an error outside tests)
 npm run format              # prettier --write src/
 npx prettier --check src/   # check only — run before committing
+npm run catalog             # regenerate nextcloud-app/lib/Resources/sequence-catalog.json after changing a tool
 ```
 
 **CI requires both `npm run lint` and `npx prettier --check src/` to pass.**

@@ -97,6 +97,13 @@
 				</NcSettingsSection>
 			</template>
 
+			<template #sequences>
+				<NcSettingsSection :name="t('aiquila', 'Sequences')"
+					:description="t('aiquila', 'Chains of AIquila tools an MCP client runs in one call. Organization sequences are listed for every user and always run as the user who calls them, never as you.')">
+					<SequenceList scope="admin" />
+				</NcSettingsSection>
+			</template>
+
 			<template #mcp>
 				<NcSettingsSection :name="t('aiquila', 'MCP servers')"
 					:description="t('aiquila', 'Model Context Protocol servers give the model tools. Tool calls are dispatched by this Nextcloud instance unless the native connector below is enabled.')">
@@ -180,6 +187,7 @@ import InstanceInstructions from '../components/settings/InstanceInstructions.vu
 import LibraryEditor from '../components/settings/LibraryEditor.vue'
 import McpServerList from '../components/settings/McpServerList.vue'
 import ProviderCard from '../components/settings/ProviderCard.vue'
+import SequenceList from '../components/settings/SequenceList.vue'
 import SettingsTabs from '../components/settings/SettingsTabs.vue'
 import {
 	adminLibrary,
@@ -205,6 +213,7 @@ export default {
 		NcSettingsSection,
 		NcTextField,
 		ProviderCard,
+		SequenceList,
 		SettingsTabs,
 	},
 	data() {
@@ -238,6 +247,7 @@ export default {
 				{ id: 'providers', label: t('aiquila', 'Providers') },
 				{ id: 'defaults', label: t('aiquila', 'Defaults') },
 				{ id: 'prompts', label: t('aiquila', 'Prompts') },
+				{ id: 'sequences', label: t('aiquila', 'Sequences') },
 				{ id: 'mcp', label: t('aiquila', 'MCP servers') },
 				{ id: 'advanced', label: t('aiquila', 'Advanced') },
 			]

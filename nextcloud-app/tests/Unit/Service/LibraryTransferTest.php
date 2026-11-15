@@ -11,9 +11,33 @@ use OCA\AIquila\Db\PromptMapper;
 use OCA\AIquila\Service\CoworkerTemplates;
 use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\LibraryTransfer;
+use OCA\AIquila\Db\Sequence;
+use OCA\AIquila\Db\SequenceMapper;
+use OCA\AIquila\Service\AppSettings;
+use OCA\AIquila\Service\SequenceCatalog;
+use OCA\AIquila\Service\SequencePolicy;
+use OCA\AIquila\Service\SequenceValidator;
 use PHPUnit\Framework\TestCase;
 
 class LibraryTransferTest extends TestCase {
+    /** @var array<string, string> */
+    private array $app = [];
+
+    /**
+     * The sequence collaborators: a mapper, the real validator, a policy on
+     * an in-memory app config.
+     *
+     * @return array{SequenceMapper, SequenceValidator, SequencePolicy}
+     */
+    private function sequenceDeps(?SequenceMapper $mapper = null): array {
+        $settings = $this->createStub(AppSettings::class);
+        $settings->method('getAppValue')->willReturnCallback(fn (string $a, string $k, string $d = ''): string => $this->app[$k] ?? $d);
+        $settings->method('setAppValue')->willReturnCallback(function (string $a, string $k, string $v): void {
+            $this->app[$k] = $v;
+        });
+        $catalog = new SequenceCatalog();
+        return [$mapper ?? $this->createStub(SequenceMapper::class), new SequenceValidator($catalog), new SequencePolicy($settings, $catalog)];
+    }
     private function prompt(string $title, string $content): Prompt {
         $p = new Prompt();
         $p->setScope('instance');
@@ -36,7 +60,7 @@ class LibraryTransferTest extends TestCase {
         $coworkers = $this->createStub(CoworkerTemplates::class);
         $coworkers->method('list')->willReturn([['scope' => 'instance', 'id' => 'org-1', 'title' => 'Tags']]);
 
-        $export = (new LibraryTransfer($instructions, $prompts, $templates, $coworkers))->export();
+        $export = (new LibraryTransfer($instructions, $prompts, $templates, $coworkers, ...$this->sequenceDeps()))->export();
 
         $this->assertSame('aiquila-library', $export['format']);
         $this->assertSame('We are ACME.', $export['instructions']['text']);
@@ -64,6 +88,7 @@ class LibraryTransferTest extends TestCase {
             $prompts,
             $this->createStub(ProjectTemplateMapper::class),
             $this->createStub(CoworkerTemplates::class),
+            ...$this->sequenceDeps(),
         ))->import([
             'format' => 'aiquila-library',
             'version' => 1,
@@ -71,7 +96,7 @@ class LibraryTransferTest extends TestCase {
             'prompts' => [['title' => 'Policy', 'content' => 'new'], ['title' => 'Fresh', 'content' => 'x']],
         ], 'boss');
 
-        $this->assertSame(['instructions' => true, 'prompts' => 2, 'projectTemplates' => 0, 'coworkerTemplates' => 0], $counts);
+        $this->assertSame(['instructions' => true, 'prompts' => 2, 'projectTemplates' => 0, 'coworkerTemplates' => 0, 'sequences' => 0], $counts);
     }
 
     public function testReplaceDeletesInstanceEntriesFirst(): void {
@@ -86,6 +111,7 @@ class LibraryTransferTest extends TestCase {
             $prompts,
             $this->createStub(ProjectTemplateMapper::class),
             $coworkers,
+            ...$this->sequenceDeps(),
         ))->import(['format' => 'aiquila-library', 'version' => 1], 'admin', true);
     }
 
@@ -98,6 +124,7 @@ class LibraryTransferTest extends TestCase {
             $prompts,
             $this->createStub(ProjectTemplateMapper::class),
             $this->createStub(CoworkerTemplates::class),
+            ...$this->sequenceDeps(),
         );
 
         foreach ([
@@ -105,6 +132,9 @@ class LibraryTransferTest extends TestCase {
             ['format' => 'aiquila-library', 'version' => 1, 'prompts' => [['title' => 'ok', 'content' => 'x'], ['title' => '', 'content' => 'x']]],
             ['format' => 'aiquila-library', 'version' => 1, 'prompts' => [['title' => 't', 'content' => str_repeat('x', InstructionsService::MAX_LENGTH + 1)]]],
             ['format' => 'aiquila-library', 'version' => 1, 'prompts' => 'nope'],
+            ['format' => 'aiquila-library', 'version' => 1, 'sequences' => [['slug' => 'x', 'title' => 'X', 'definition' => ['steps' => [['tool' => 'nope']]]]]],
+            ['format' => 'aiquila-library', 'version' => 1, 'sequences' => [['slug' => 'daily_briefing', 'title' => 'X', 'definition' => ['steps' => [['tool' => 'list_notifications']]]]]],
+            ['format' => 'aiquila-library', 'version' => 1, 'sequencePolicy' => ['maxSteps' => 99]],
         ] as $data) {
             try {
                 $transfer->import($data, 'admin', true);
@@ -112,5 +142,49 @@ class LibraryTransferTest extends TestCase {
             } catch (\InvalidArgumentException) {
             }
         }
+    }
+
+    public function testSequencesAndThePolicyRoundTrip(): void {
+        $org = new Sequence();
+        $org->setScope('instance');
+        $org->setSlug('standup');
+        $org->setTitle('Standup');
+        $org->setDefinitionArray(['inputs' => [], 'steps' => [['id' => 'n', 'tool' => 'list_notifications', 'arguments' => [], 'onFailure' => 'stop']]]);
+        $org->setPinned(1);
+        $mapper = $this->createStub(SequenceMapper::class);
+        $mapper->method('findAllInstance')->willReturn([$org]);
+        $this->app['sequences_max_steps'] = '5';
+        $this->app['sequences_disabled_builtins'] = '["back_at_work"]';
+        $export = (new LibraryTransfer(
+            $this->createStub(InstructionsService::class),
+            $this->createStub(PromptMapper::class),
+            $this->createStub(ProjectTemplateMapper::class),
+            $this->createStub(CoworkerTemplates::class),
+            ...$this->sequenceDeps($mapper),
+        ))->export();
+
+        $this->assertSame('standup', $export['sequences'][0]['slug']);
+        $this->assertTrue($export['sequences'][0]['pinned']);
+        $this->assertSame(5, $export['sequencePolicy']['maxSteps']);
+        $this->assertSame(['back_at_work'], $export['sequencePolicy']['disabledBuiltins']);
+
+        // Into an empty instance, as another admin.
+        $this->app = [];
+        $target = $this->createMock(SequenceMapper::class);
+        $target->method('findAllInstance')->willReturn([]);
+        $target->expects($this->once())->method('insert')->with($this->callback(
+            static fn (Sequence $s): bool => $s->getSlug() === 'standup' && $s->getScope() === 'instance' && $s->getUserId() === '' && $s->getAuthorId() === 'boss' && $s->getPinned() === 1,
+        ));
+        $counts = (new LibraryTransfer(
+            $this->createStub(InstructionsService::class),
+            $this->createStub(PromptMapper::class),
+            $this->createStub(ProjectTemplateMapper::class),
+            $this->createStub(CoworkerTemplates::class),
+            ...$this->sequenceDeps($target),
+        ))->import(json_decode(json_encode($export), true), 'boss');
+
+        $this->assertSame(1, $counts['sequences']);
+        $this->assertSame('5', $this->app['sequences_max_steps']);
+        $this->assertSame('["back_at_work"]', $this->app['sequences_disabled_builtins']);
     }
 }

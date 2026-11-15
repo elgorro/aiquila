@@ -12,6 +12,7 @@ use OCA\AIquila\Db\ProjectMapper;
 use OCA\AIquila\Db\ProjectPathMapper;
 use OCA\AIquila\Db\ProjectTemplateMapper;
 use OCA\AIquila\Db\PromptMapper;
+use OCA\AIquila\Db\SequenceMapper;
 use OCA\AIquila\Db\ProviderAccessRule;
 use OCA\AIquila\Db\ProviderAccessRuleMapper;
 use OCA\AIquila\Db\UsageStatMapper;
@@ -29,13 +30,14 @@ use Psr\Log\LoggerInterface;
  * Before the account goes, the runs in flight of their personal coworkers
  * are stopped: a pending batch is cancelled with the user's provider key,
  * which is gone afterwards. Once it is gone, their personal coworkers and run
- * history, conversations, personal projects, own prompts and project
- * templates, usage statistics and provider access rules are deleted.
+ * history, conversations, personal projects, own prompts, project
+ * templates and sequences, usage statistics and provider access rules are
+ * deleted.
  *
  * Team coworkers and team projects stay with the team: a team coworker moves
- * to someone who can act for the team on its next run. Instance prompts and
- * templates the user published stay too. Files uploaded to Anthropic expire
- * through CleanupAnthropicFilesJob.
+ * to someone who can act for the team on its next run. Instance prompts,
+ * templates and sequences the user published stay too. Files uploaded to
+ * Anthropic expire through CleanupAnthropicFilesJob.
  *
  * @template-implements IEventListener<Event>
  */
@@ -49,6 +51,7 @@ class UserDeletedListener implements IEventListener {
         private readonly ProjectPathMapper $paths,
         private readonly PromptMapper $prompts,
         private readonly ProjectTemplateMapper $templates,
+        private readonly SequenceMapper $sequences,
         private readonly UsageStatMapper $usage,
         private readonly ProviderAccessRuleMapper $accessRules,
         private readonly ContextChatService $contextChat,
@@ -81,6 +84,11 @@ class UserDeletedListener implements IEventListener {
             'project templates' => function () use ($userId): void {
                 foreach ($this->templates->findAllByUser($userId) as $template) {
                     $this->templates->delete($template);
+                }
+            },
+            'sequences' => function () use ($userId): void {
+                foreach ($this->sequences->findAllByUser($userId) as $sequence) {
+                    $this->sequences->delete($sequence);
                 }
             },
             'usage statistics' => fn () => $this->usage->deleteByUser($userId),

@@ -18,6 +18,8 @@ use OCA\AIquila\Db\ProjectTemplateMapper;
 use OCA\AIquila\Db\Prompt;
 use OCA\AIquila\Db\PromptMapper;
 use OCA\AIquila\Db\ProviderAccessRuleMapper;
+use OCA\AIquila\Db\Sequence;
+use OCA\AIquila\Db\SequenceMapper;
 use OCA\AIquila\Db\UsageStatMapper;
 use OCA\AIquila\Listener\UserDeletedListener;
 use OCA\AIquila\Service\ContextChatService;
@@ -41,6 +43,7 @@ class UserDeletedListenerTest extends TestCase {
     private ProjectPathMapper&MockObject $paths;
     private PromptMapper&MockObject $prompts;
     private ProjectTemplateMapper&MockObject $templates;
+    private SequenceMapper&MockObject $sequences;
     private UsageStatMapper&MockObject $usage;
     private ProviderAccessRuleMapper&MockObject $accessRules;
     private ContextChatService&MockObject $contextChat;
@@ -55,6 +58,7 @@ class UserDeletedListenerTest extends TestCase {
         $this->paths = $this->createMock(ProjectPathMapper::class);
         $this->prompts = $this->createMock(PromptMapper::class);
         $this->templates = $this->createMock(ProjectTemplateMapper::class);
+        $this->sequences = $this->createMock(SequenceMapper::class);
         $this->usage = $this->createMock(UsageStatMapper::class);
         $this->accessRules = $this->createMock(ProviderAccessRuleMapper::class);
         $this->contextChat = $this->createMock(ContextChatService::class);
@@ -71,6 +75,7 @@ class UserDeletedListenerTest extends TestCase {
             $this->paths,
             $this->prompts,
             $this->templates,
+            $this->sequences,
             $this->usage,
             $this->accessRules,
             $this->contextChat,
@@ -121,6 +126,9 @@ class UserDeletedListenerTest extends TestCase {
 
         $this->prompts->expects($this->once())->method('findAllByUser')->with('alice')->willReturn([$prompt]);
         $this->prompts->expects($this->once())->method('delete')->with($prompt);
+        $sequence = new Sequence();
+        $this->sequences->expects($this->once())->method('findAllByUser')->with('alice')->willReturn([$sequence]);
+        $this->sequences->expects($this->once())->method('delete')->with($sequence);
         $this->templates->expects($this->once())->method('findAllByUser')->with('alice')->willReturn([$template]);
         $this->templates->expects($this->once())->method('delete')->with($template);
         $this->usage->expects($this->once())->method('deleteByUser')->with('alice');

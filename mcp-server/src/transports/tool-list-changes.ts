@@ -13,20 +13,21 @@
  * listener belongs to: the SDK registers it while serving that user's
  * `subscriptions/listen` request, inside the request's identity context.
  *
- * App detection is cached per user and re-run only when a request needs it.
- * So that a client holding nothing but a listen stream still learns of a
- * change, each signed-in user with an open stream has their tool list
- * re-detected every half cache lifetime while the stream is open.
+ * A user's sequences are part of their tool list too (`seq_*` tools): when
+ * the tag of their sequences in Nextcloud changes, the same event goes out.
+ *
+ * App detection and sequences are cached per user and re-checked only when a
+ * request needs them. So that a client holding nothing but a listen stream
+ * still learns of a change, each signed-in user with an open stream has both
+ * checked every minute while the stream is open; the caches decide whether
+ * that reaches Nextcloud.
  */
 
 import type { ServerEvent, ServerEventBus } from '@modelcontextprotocol/server';
 import { currentIdentity, runAs, type RequestIdentity } from '../nc-context.js';
-import {
-  USER_CACHE_TTL_MS,
-  getFilteredToolSets,
-  onToolSetChange,
-  toolSetKey,
-} from '../tool-registry.js';
+import { getFilteredToolSets, onToolSetChange, toolSetKey } from '../tool-registry.js';
+import { onSequencesChange } from '../sequences/store.js';
+import { refreshSequences } from '../sequences/tools.js';
 import { logger } from '../logger.js';
 
 type Listener = (event: ServerEvent) => void;
@@ -39,12 +40,11 @@ interface Watched {
 
 export class IdentityScopedEventBus implements ServerEventBus {
   private readonly byKey = new Map<string, Watched>();
-  private readonly stopWatching: () => void;
+  private readonly stopWatching: (() => void)[];
 
-  constructor(private readonly refreshMs = USER_CACHE_TTL_MS / 2) {
-    this.stopWatching = onToolSetChange((key) =>
-      this.publishTo(key, { kind: 'tools_list_changed' })
-    );
+  constructor(private readonly refreshMs = 60_000) {
+    const changed = (key: string) => this.publishTo(key, { kind: 'tools_list_changed' });
+    this.stopWatching = [onToolSetChange(changed), onSequencesChange(changed)];
   }
 
   /** Every listener, whoever it belongs to. */
@@ -79,7 +79,10 @@ export class IdentityScopedEventBus implements ServerEventBus {
     if (identity?.kind === 'user' && !watched.timer) {
       const w = watched;
       w.timer = setInterval(() => {
-        void runAs(w.identity!, () => getFilteredToolSets()).catch((err: unknown) =>
+        void runAs(w.identity!, async () => {
+          await getFilteredToolSets();
+          await refreshSequences();
+        }).catch((err: unknown) =>
           logger.debug(
             { err: err instanceof Error ? err.message : String(err) },
             '[mcp] Tool list refresh failed'
@@ -109,7 +112,7 @@ export class IdentityScopedEventBus implements ServerEventBus {
   }
 
   close(): void {
-    this.stopWatching();
+    for (const stop of this.stopWatching) stop();
     for (const w of this.byKey.values()) if (w.timer) clearInterval(w.timer);
     this.byKey.clear();
   }

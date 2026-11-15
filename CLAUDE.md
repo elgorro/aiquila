@@ -20,6 +20,7 @@ npm run lint       # eslint (warnings ok, errors fail CI; `any` is an error outs
 npm run typecheck  # tsc --noEmit (build skips type checking; CI runs this)
 npm run format     # prettier --write src/  (auto-fix formatting)
 npx prettier --check src/   # check only — run before committing
+npm run catalog             # regenerate nextcloud-app/lib/Resources/sequence-catalog.json after changing a tool
 ```
 
 **CI requires `npm run lint`, `npm run typecheck` and `npx prettier --check src/` to pass.**

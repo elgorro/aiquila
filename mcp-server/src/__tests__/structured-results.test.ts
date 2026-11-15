@@ -12,6 +12,7 @@ import { structuredResult, str, int, bool } from '../tools/structured.js';
 const withOutput = TOOL_REGISTRY.flatMap((e) => e.tools).filter((t) => t.outputSchema);
 
 describe('tools with an outputSchema', () => {
+  // Plus the two sequence tools, whose result is a per-step report.
   it('are the ones that create or look up an object and return its identifier', () => {
     expect(withOutput.map((t) => t.name).sort()).toEqual([
       'create_event',
@@ -26,6 +27,8 @@ describe('tools with an outputSchema', () => {
       'get_note',
       'get_project',
       'get_share',
+      'list_sequences',
+      'run_sequence',
     ]);
   });
 

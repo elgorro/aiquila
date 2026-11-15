@@ -56,6 +56,8 @@ import { recommendationsTools } from './tools/apps/recommendations.js';
 import { socialSharingTools } from './tools/apps/social-sharing.js';
 import { socialTools } from './tools/apps/social.js';
 import { passmanTools } from './tools/apps/passman.js';
+import { configureSequences, sequenceTools } from './sequences/tools.js';
+import { _resetSequenceCache } from './sequences/store.js';
 
 type ToolArray = Tool[];
 
@@ -88,6 +90,9 @@ export const TOOL_REGISTRY: ToolSetEntry[] = [
   { category: 'absence', appIds: null, tools: absenceTools },
   { category: 'trash', appIds: null, tools: trashTools },
   { category: 'versions', appIds: null, tools: versionsTools },
+  // Built-in sequences need no app; the organization's and users' own come
+  // from the AIquila app when it is there (src/sequences/store.ts).
+  { category: 'sequences', appIds: null, tools: sequenceTools },
 
   // Requires AIquila Nextcloud app
   { category: 'aiquila', appIds: ['aiquila'], tools: aiquilaTools },
@@ -307,12 +312,11 @@ export function onToolSetChange(listener: (key: string) => void): () => void {
 
 /**
  * The key tool lists are cached and compared under for `identity`: one per
- * signed-in user, one for anonymous requests, one for the environment account
- * (stdio, HTTP without OAuth, MCP_INTERNAL_TOKEN), and a single one for all
- * when MCP_TOOLS fixes the list.
+ * signed-in user, one for anonymous requests, and one for the environment
+ * account (stdio, HTTP without OAuth, MCP_INTERNAL_TOKEN). Per account under
+ * MCP_TOOLS too: the list still differs by the user's own sequences.
  */
 export function toolSetKey(identity: RequestIdentity | undefined): string {
-  if (parseMcpTools()) return 'mcp_tools';
   if (identity?.kind === 'user') return `user:${identity.user.userId}`;
   if (identity?.kind === 'anonymous') return 'anonymous';
   return 'env';
@@ -411,6 +415,33 @@ export async function getFilteredToolSets(): Promise<ToolArray[]> {
   return toolSets;
 }
 
+/**
+ * Whether the AIquila app serves the account `toolSets` were filtered for:
+ * one of its categories made it through app detection. Under MCP_TOOLS no
+ * detection runs, so the app is assumed and a missing one answers 404.
+ */
+export function aiquilaAppAvailable(toolSets: ToolArray[]): boolean {
+  if (parseMcpTools()) return true;
+  const names = new Set(toolSets.flatMap((ts) => ts.map((t) => t.name)));
+  return TOOL_REGISTRY.some(
+    (e) =>
+      e.appIds?.length === 1 && e.appIds[0] === 'aiquila' && e.tools.some((t) => names.has(t.name))
+  );
+}
+
+// Sequences run the caller's own tools: the set this request's tools/list shows.
+configureSequences({
+  async callerTools() {
+    const toolSets = await getFilteredToolSets();
+    return {
+      tools: toolSets.flat(),
+      appAvailable: aiquilaAppAvailable(toolSets),
+      key: toolSetKey(currentIdentity()),
+    };
+  },
+  registryTools: () => TOOL_REGISTRY.flatMap((e) => e.tools),
+});
+
 /** Expire every cached tool list without forgetting it — for testing only. */
 export function _expireCache(): void {
   for (const entry of cachedToolSets.values()) entry.expiresAt = 0;
@@ -419,5 +450,6 @@ export function _expireCache(): void {
 /** Reset cached state — for testing only. */
 export function _resetCache(): void {
   cachedToolSets.clear();
+  _resetSequenceCache();
   _resetCapabilitiesCache();
 }

@@ -121,6 +121,13 @@
 				</NcSettingsSection>
 			</template>
 
+			<template #sequences>
+				<NcSettingsSection :name="t('aiquila', 'Sequences')"
+					:description="t('aiquila', 'Chains of AIquila tools an MCP client runs in one call, as you: as list_sequences and run_sequence, or as their own seq_ tool. Switch built-in ones on or off, copy one of your organization\'s, or write your own.')">
+					<SequenceList scope="user" />
+				</NcSettingsSection>
+			</template>
+
 			<template #connectors>
 				<NcSettingsSection :name="t('aiquila', 'Native MCP connector')"
 					:description="t('aiquila', 'When the connector is in use, the provider calls MCP servers directly over HTTPS instead of routing every tool call through this Nextcloud instance. Your administrator sets the default; you can override it for your own conversations.')">
@@ -153,6 +160,7 @@ import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 
 import LibraryEditor from '../components/settings/LibraryEditor.vue'
 import ProviderCard from '../components/settings/ProviderCard.vue'
+import SequenceList from '../components/settings/SequenceList.vue'
 import SettingsTabs from '../components/settings/SettingsTabs.vue'
 import {
 	getSettings,
@@ -172,6 +180,7 @@ export default {
 		NcSettingsSection,
 		LibraryEditor,
 		ProviderCard,
+		SequenceList,
 		SettingsTabs,
 	},
 	data() {
@@ -211,6 +220,7 @@ export default {
 				{ id: 'providers', label: t('aiquila', 'Providers') },
 				{ id: 'defaults', label: t('aiquila', 'Defaults') },
 				{ id: 'prompts', label: t('aiquila', 'Prompts') },
+				{ id: 'sequences', label: t('aiquila', 'Sequences') },
 				{ id: 'connectors', label: t('aiquila', 'Connectors') },
 			]
 		},

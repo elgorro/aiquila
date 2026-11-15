@@ -38,6 +38,7 @@ import {
   rateLimitCheck,
 } from './rate-limit.js';
 import { IdentityScopedEventBus } from './tool-list-changes.js';
+import { withToolCallCharge } from '../sequences/budget.js';
 import { internalNetworks, internalTokenAllowed, isInternalToken } from '../auth/internal-token.js';
 import { logger } from '../logger.js';
 import { SUPPORT_NOTICE } from '../support.js';
@@ -321,7 +322,15 @@ export async function createHttpApp(): Promise<express.Express> {
       onerror: (err) => logger.warn({ err: err.message }, '[mcp] Request error'),
     })
   );
-  const handleMcpRequest = (req: Request, res: Response) => mcpHandler(req, res, req.body);
+  // A sequence's steps after the first count against the same tool-call
+  // budget as the call that started it (sequences/budget.ts).
+  const handleMcpRequest = (req: Request, res: Response, budgetKey?: string) =>
+    budgetKey && toolCallLimiter
+      ? withToolCallCharge(
+          () => toolCallLimiter.hit(budgetKey, 1).allowed,
+          () => mcpHandler(req, res, req.body)
+        )
+      : mcpHandler(req, res, req.body);
 
   // MCP 2026-07-28, Tools › Security Considerations: rate limit tool
   // invocations. See rate-limit.ts for the keys and what counts.
@@ -561,7 +570,7 @@ export async function createHttpApp(): Promise<express.Express> {
       async (req: Request, res: Response) => {
         logger.debug({ method: req.method, rpcMethod: req.body?.method }, '[mcp] Request received');
         if (req.auth?.extra?.service === true) {
-          await runAs({ kind: 'service' }, () => handleMcpRequest(req, res));
+          await runAs({ kind: 'service' }, () => handleMcpRequest(req, res, 'service'));
           return;
         }
         // Tools act as the signed-in user, with the app password Nextcloud
@@ -595,14 +604,16 @@ export async function createHttpApp(): Promise<express.Express> {
             .json({ error: 'invalid_token', error_description: 'Sign in to Nextcloud again' });
           return;
         }
-        await runAs({ kind: 'user', user }, () => handleMcpRequest(req, res));
+        await runAs({ kind: 'user', user }, () =>
+          handleMcpRequest(req, res, `user:${String(req.auth?.extra?.userId)}`)
+        );
       },
     ];
     app.all(MCP_PATH, ...authMiddleware);
     app.all('/', ...authMiddleware);
   } else {
     const mcpHandler = async (req: Request, res: Response) => {
-      await handleMcpRequest(req, res);
+      await handleMcpRequest(req, res, `ip:${clientAddress(req)}`);
     };
     // Without OAuth every caller acts as NEXTCLOUD_USER; key by address.
     const limitToolCalls = rateLimit(

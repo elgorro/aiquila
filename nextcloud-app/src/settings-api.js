@@ -200,3 +200,29 @@ export function listCoworkerTemplatesAdmin() {
 export function deleteCoworkerTemplate(templateId) {
 	return axios.delete(url(`/api/admin/coworker-templates/${encodeURIComponent(templateId)}`))
 }
+
+// ── Sequences ───────────────────────────────────────────────────────────
+
+/**
+ * Sequences: tool chains the MCP server runs in one call.
+ *
+ * @param {'user'|'admin'} scope - the caller's own (personal page) or the organization's (admin page)
+ */
+export function sequencesApi(scope) {
+	const base = scope === 'admin' ? '/api/admin/sequences' : '/api/sequences'
+	return {
+		/** `{sequences, builtins, policy}` */
+		list: () => axios.get(url(base)),
+		create: (data) => axios.post(url(base), data),
+		update: (id, data) => axios.put(url(`${base}/${id}`), data),
+		remove: (id) => axios.delete(url(`${base}/${id}`)),
+		/** The tools a step may call, their schemas and the built-ins. */
+		catalog: () => axios.get(url('/api/sequences/catalog')),
+		/** Switch a built-in on or off: for the caller, or (admin) for everyone. */
+		setBuiltin: (slug, enabled) => scope === 'admin'
+			? axios.put(url('/api/admin/sequence-policy'), { builtins: { [slug]: enabled } })
+			: axios.put(url(`/api/sequences/builtins/${encodeURIComponent(slug)}`), { enabled }),
+		/** Admin only: `{allowPersonal, maxPerUser, maxSteps, maxPinned}`, partial. */
+		savePolicy: (policy) => axios.put(url('/api/admin/sequence-policy'), policy),
+	}
+}

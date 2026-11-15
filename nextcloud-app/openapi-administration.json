@@ -20,7 +20,202 @@
                 "scheme": "bearer"
             }
         },
-        "schemas": {}
+        "schemas": {
+            "Sequence": {
+                "type": "object",
+                "required": [
+                    "id",
+                    "scope",
+                    "slug",
+                    "title",
+                    "description",
+                    "definition",
+                    "pinned",
+                    "enabled",
+                    "createdAt",
+                    "updatedAt"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "scope": {
+                        "type": "string",
+                        "enum": [
+                            "user",
+                            "instance"
+                        ]
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "definition": {
+                        "$ref": "#/components/schemas/SequenceDefinition"
+                    },
+                    "pinned": {
+                        "type": "boolean"
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "createdAt": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "updatedAt": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                }
+            },
+            "SequenceBuiltin": {
+                "type": "object",
+                "required": [
+                    "slug",
+                    "title",
+                    "description",
+                    "adminEnabled",
+                    "enabled"
+                ],
+                "properties": {
+                    "slug": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "adminEnabled": {
+                        "type": "boolean"
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "SequenceDefinition": {
+                "type": "object",
+                "required": [
+                    "inputs",
+                    "steps"
+                ],
+                "properties": {
+                    "inputs": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SequenceInput"
+                        }
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SequenceStep"
+                        }
+                    }
+                }
+            },
+            "SequenceInput": {
+                "type": "object",
+                "required": [
+                    "name",
+                    "type",
+                    "required",
+                    "description"
+                ],
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "string",
+                            "integer",
+                            "number",
+                            "boolean",
+                            "array"
+                        ]
+                    },
+                    "required": {
+                        "type": "boolean"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "default": {
+                        "type": "object"
+                    }
+                }
+            },
+            "SequencePolicy": {
+                "type": "object",
+                "required": [
+                    "allowPersonal",
+                    "maxPerUser",
+                    "maxSteps",
+                    "maxPinned"
+                ],
+                "properties": {
+                    "allowPersonal": {
+                        "type": "boolean"
+                    },
+                    "maxPerUser": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "maxSteps": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "maxPinned": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                }
+            },
+            "SequenceStep": {
+                "type": "object",
+                "required": [
+                    "id",
+                    "tool",
+                    "arguments",
+                    "onFailure"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "tool": {
+                        "type": "string"
+                    },
+                    "arguments": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "object"
+                        }
+                    },
+                    "onFailure": {
+                        "type": "string",
+                        "enum": [
+                            "stop",
+                            "continue"
+                        ]
+                    }
+                }
+            }
+        }
     },
     "paths": {
         "/index.php/apps/aiquila/api/admin/project-templates": {
@@ -1345,6 +1540,823 @@
                     },
                     "404": {
                         "description": "Prompt not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/admin/sequences": {
+            "get": {
+                "operationId": "sequence-admin-index",
+                "summary": "List the organization's sequences, the built-ins and the policy",
+                "description": "This endpoint requires admin access",
+                "tags": [
+                    "sequence"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Organization sequences by tool name, the built-ins with their instance state, the policy",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "sequences",
+                                        "builtins",
+                                        "policy"
+                                    ],
+                                    "properties": {
+                                        "sequences": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/Sequence"
+                                            }
+                                        },
+                                        "builtins": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SequenceBuiltin"
+                                            }
+                                        },
+                                        "policy": {
+                                            "$ref": "#/components/schemas/SequencePolicy"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "operationId": "sequence-admin-create",
+                "summary": "Publish a sequence to every user",
+                "description": "This endpoint requires admin access",
+                "tags": [
+                    "sequence"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "slug",
+                                    "title",
+                                    "definition"
+                                ],
+                                "properties": {
+                                    "slug": {
+                                        "type": "string",
+                                        "description": "Tool name part: the sequence is `seq_<slug>`"
+                                    },
+                                    "title": {
+                                        "type": "string",
+                                        "description": "Title"
+                                    },
+                                    "definition": {
+                                        "type": "object",
+                                        "description": "`{inputs, steps}`",
+                                        "additionalProperties": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "description": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "What the model reads about it"
+                                    },
+                                    "pinned": {
+                                        "type": "boolean",
+                                        "default": false,
+                                        "description": "Also list it as its own tool"
+                                    },
+                                    "enabled": {
+                                        "type": "boolean",
+                                        "default": true,
+                                        "description": "List and run it at all"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The created sequence",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Sequence"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "A field is invalid",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "error",
+                                                "errorId"
+                                            ],
+                                            "properties": {
+                                                "error": {
+                                                    "type": "string"
+                                                },
+                                                "errorId": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "message"
+                                            ],
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/admin/sequences/{id}": {
+            "put": {
+                "operationId": "sequence-admin-update",
+                "summary": "Update an organization sequence",
+                "description": "This endpoint requires admin access",
+                "tags": [
+                    "sequence"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "slug": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "New tool name part"
+                                    },
+                                    "title": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "New title"
+                                    },
+                                    "definition": {
+                                        "type": [
+                                            "object",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "New `{inputs, steps}`",
+                                        "additionalProperties": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "description": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "New description ('' clears it)"
+                                    },
+                                    "pinned": {
+                                        "type": [
+                                            "boolean",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Also list it as its own tool"
+                                    },
+                                    "enabled": {
+                                        "type": [
+                                            "boolean",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "List and run it at all"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Sequence ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The updated sequence",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Sequence"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "A field is invalid",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "error",
+                                                "errorId"
+                                            ],
+                                            "properties": {
+                                                "error": {
+                                                    "type": "string"
+                                                },
+                                                "errorId": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "message"
+                                            ],
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Sequence not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "sequence-admin-destroy",
+                "summary": "Delete an organization sequence",
+                "description": "This endpoint requires admin access",
+                "tags": [
+                    "sequence"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Sequence ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deleted",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "deleted"
+                                    ],
+                                    "properties": {
+                                        "deleted": {
+                                            "type": "boolean",
+                                            "enum": [
+                                                true
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Sequence not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Logged in account must be an admin",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/admin/sequence-policy": {
+            "put": {
+                "operationId": "sequence-admin-policy",
+                "summary": "Set the sequence policy and switch built-ins on or off for everyone",
+                "description": "Omitted fields stay as they are.\nThis endpoint requires admin access",
+                "tags": [
+                    "sequence"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "allowPersonal": {
+                                        "type": [
+                                            "boolean",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Users may write their own sequences"
+                                    },
+                                    "maxPerUser": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ],
+                                        "format": "int64",
+                                        "default": null,
+                                        "description": "Sequences per user"
+                                    },
+                                    "maxSteps": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ],
+                                        "format": "int64",
+                                        "default": null,
+                                        "description": "Steps per sequence"
+                                    },
+                                    "maxPinned": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ],
+                                        "format": "int64",
+                                        "default": null,
+                                        "description": "Personal sequences per user shown as their own tool"
+                                    },
+                                    "builtins": {
+                                        "type": [
+                                            "object",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "Built-in slug → on or off",
+                                        "additionalProperties": {
+                                            "type": "boolean"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "OCS-APIRequest",
+                        "in": "header",
+                        "description": "Required to be true for the API request to pass",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The policy and the built-ins",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "policy",
+                                        "builtins"
+                                    ],
+                                    "properties": {
+                                        "policy": {
+                                            "$ref": "#/components/schemas/SequencePolicy"
+                                        },
+                                        "builtins": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SequenceBuiltin"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "A value is out of range, or a slug is not a built-in",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -4737,6 +5749,10 @@
         {
             "name": "prompt",
             "description": "The prompt library: reusable snippets a user inserts into a message or a project's system prompt. `/api/prompts` manages the caller's own prompts and lists the instance ones read-only. `/api/admin/prompts` is the admin side, for instance prompts only; the framework refuses those routes to non-admins."
+        },
+        {
+            "name": "sequence",
+            "description": "Sequences: named chains of MCP tool calls the AIquila MCP server runs in one call, as the calling user. `/api/sequences` manages the caller's own sequences, lists the organization's read-only, and switches built-ins on or off for the caller. `/api/sequences/effective` is what the MCP server reads, with an ETag. `/api/admin/sequences` and `/api/admin/sequence-policy` are the admin side; the framework refuses them to non-admins."
         },
         {
             "name": "instructions",

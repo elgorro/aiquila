@@ -587,6 +587,53 @@ else
   check_text "Task deleted successfully" && step_ok || step_fail "delete_task failed"
 fi
 
+# ── Sequences ────────────────────────────────────────────────────────────────
+# A personal sequence created in the AIquila app shows up as its own tool and
+# runs. Creating one needs the app and Basic auth with NC_USER / NC_PASS (an app
+# password; an account password with 2FA is refused, and the steps are skipped).
+NC_API="${NEXTCLOUD_PUBLIC_URL:-${NEXTCLOUD_URL:-}}/index.php/apps/aiquila/api"
+SEQ_SLUG="tooltest_$(echo "$TIMESTAMP" | tr '[:upper:]' '[:lower:]')"
+SEQ_TOOL="seq_my_$SEQ_SLUG"
+sep "Step 70 — create the personal sequence $SEQ_TOOL"
+SEQ_ID=$($CURL -u "$NC_USER:$NC_PASS" -H 'OCS-APIRequest: true' -H 'Content-Type: application/json' \
+  -X POST "$NC_API/sequences" \
+  -d "{\"slug\":\"$SEQ_SLUG\",\"title\":\"Tool test\",\"pinned\":true,\"definition\":{\"steps\":[{\"id\":\"time\",\"tool\":\"get_local_time\"},{\"id\":\"root\",\"tool\":\"list_files\",\"arguments\":{\"path\":\"/\"}}]}}" \
+  | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("id",""))
+except Exception: print("")')
+if [ -z "$SEQ_ID" ]; then
+  step_skip "could not create a sequence (AIquila app missing, or NC_PASS is not an app password)"
+else
+  step_ok
+  echo "  sequence_id: $SEQ_ID"
+
+  # The server revalidates a user's sequences every 30 s.
+  sep "Step 71 — list_sequences shows $SEQ_TOOL"
+  for _ in $(seq 1 8); do
+    mcp_tool $((RPC_ID++)) "list_sequences" '{}' >/dev/null
+    check_text "$SEQ_TOOL" && break
+    sleep 5
+  done
+  check_text "$SEQ_TOOL" && step_ok || step_fail "list_sequences: $SEQ_TOOL not found"
+
+  sep "Step 72 — tools/list has $SEQ_TOOL"
+  $CURL -X POST "$BASE/mcp" "${MCP_HEADERS[@]}" \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":$((RPC_ID++)),\"method\":\"tools/list\",\"params\":{}}" > "$TMPFILE"
+  grep -q "\"name\":\"$SEQ_TOOL\"" "$TMPFILE" && step_ok || step_fail "tools/list: $SEQ_TOOL not listed"
+
+  sep "Step 73 — run $SEQ_TOOL"
+  mcp_tool $((RPC_ID++)) "$SEQ_TOOL" '{}'
+  check_text '"status":"completed"' && step_ok || step_fail "$SEQ_TOOL did not complete"
+
+  sep "Step 74 — run_sequence seq_daily_briefing (dry run)"
+  mcp_tool $((RPC_ID++)) "run_sequence" '{"sequence":"seq_daily_briefing","dryRun":true}'
+  check_text '"status":"planned"' && step_ok || step_fail "dry run did not plan"
+
+  sep "Step 75 — delete the sequence"
+  $CURL -u "$NC_USER:$NC_PASS" -H 'OCS-APIRequest: true' -X DELETE "$NC_API/sequences/$SEQ_ID" > "$TMPFILE"
+  grep -q '"deleted":true' "$TMPFILE" && step_ok || step_fail "could not delete sequence $SEQ_ID"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
 echo "══════════════════════════════════════════"
