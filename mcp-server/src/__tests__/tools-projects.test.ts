@@ -307,6 +307,43 @@ describe('Project Tools', () => {
   });
 
   describe('project templates', () => {
+    it('saves a project, a team project included, as a template', async () => {
+      mockFetchAiquilaAPI.mockResolvedValue({
+        id: 21,
+        scope: 'user',
+        title: 'Tender copy',
+        description: null,
+        systemPrompt: 'Formal German.',
+        paths: [{ path: '/Bids/Acme', pathType: 'directory' }],
+        createdAt: 1,
+        updatedAt: 1,
+      });
+
+      const { saveProjectAsTemplateTool } = await import('../tools/apps/projects.js');
+      const result = await saveProjectAsTemplateTool.handler({
+        projectId: 5,
+        title: 'Tender copy',
+      });
+
+      expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/project-templates', {
+        method: 'POST',
+        body: { projectId: 5, title: 'Tender copy' },
+      });
+      expect(result.content[0].text).toContain('Template #21 saved: Tender copy');
+      expect(result.content[0].text).toContain('[directory] /Bids/Acme');
+    });
+
+    it('sends no title when none is given, and reports a missing project', async () => {
+      mockFetchAiquilaAPI.mockRejectedValue(new Error('404 Project not found'));
+      const { saveProjectAsTemplateTool } = await import('../tools/apps/projects.js');
+      const result = await saveProjectAsTemplateTool.handler({ projectId: 9 });
+      expect(mockFetchAiquilaAPI).toHaveBeenCalledWith('/project-templates', {
+        method: 'POST',
+        body: { projectId: 9 },
+      });
+      expect(result.isError).toBe(true);
+    });
+
     it('list_project_templates shows prompt and paths', async () => {
       mockFetchAiquilaAPI.mockResolvedValue([
         {

@@ -2874,7 +2874,7 @@
             "post": {
                 "operationId": "project_template-create",
                 "summary": "Create a personal template",
-                "description": "With `projectId`, the template starts as a copy of that project (one of the caller's own); the other parameters then override its fields.",
+                "description": "With `projectId`, the template starts as a copy of that project (one of the caller's own, or one of a team they belong to); the other parameters then override its fields. A team project is deleted with its team, so this is how a member keeps a copy.",
                 "tags": [
                     "project_template"
                 ],

@@ -126,6 +126,7 @@ import {
 	getProject,
 	createProject,
 	createProjectFromTemplate,
+	addProjectPath,
 	deleteProject,
 } from './api.js'
 
@@ -258,11 +259,19 @@ export default {
 			const original = this.projects.find(p => p.id === id)
 			if (!original) return
 			try {
+				// A personal copy, so a member can keep a team project that is
+				// deleted with its team. Paths are copied too.
 				const { data } = await createProject({
 					title: original.title + ' (copy)',
 					description: original.description || '',
 					systemPrompt: original.systemPrompt || '',
 				})
+				const paths = []
+				for (const p of original.paths || []) {
+					const { data: path } = await addProjectPath(data.id, p.path, p.pathType)
+					paths.push(path)
+				}
+				data.paths = paths
 				this.projects.unshift(data)
 				this.$router.push({ name: 'projects', params: { projectId: String(data.id) } })
 			} catch (err) {
