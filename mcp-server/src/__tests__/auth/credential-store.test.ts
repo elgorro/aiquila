@@ -185,16 +185,21 @@ describe('CredentialStore', () => {
   });
 
   it('persists only sealed values, in a file only its owner can read', async () => {
-    await new CredentialStore(cipher, file).put(CRED, LATER());
+    // Long and distinctive, so that it cannot turn up in the random
+    // base64url of the ciphertext by chance (a two-letter password did).
+    const appPassword = 'app-password-PLAINTEXT-7f3c9a1e5b';
+    const cred = { ...CRED, appPassword };
+    await new CredentialStore(cipher, file).put(cred, LATER());
     const [row] = rows();
-    expect(row.sealed).not.toContain('pw');
+    expect(row.sealed).not.toContain(appPassword);
     expect(row.sealed).not.toContain('alice@example.com');
     for (const f of [STATE_DB_FILE, `${STATE_DB_FILE}-wal`]) {
       const bytes = readFileSync(join(dir, f));
       expect(bytes.includes(Buffer.from('alice@example.com'))).toBe(false);
+      expect(bytes.includes(Buffer.from(appPassword))).toBe(false);
     }
     expect(statSync(join(dir, STATE_DB_FILE)).mode & 0o777).toBe(0o600);
-    await expect(new CredentialStore(cipher, file).get('g1', 'alice')).resolves.toEqual(CRED);
+    await expect(new CredentialStore(cipher, file).get('g1', 'alice')).resolves.toEqual(cred);
   });
 
   it('an entry moved to another grant does not decrypt', async () => {

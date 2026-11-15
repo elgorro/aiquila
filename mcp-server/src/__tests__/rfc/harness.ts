@@ -46,6 +46,9 @@ export class FakeNextcloud {
   // App passwords issued through Login Flow v2: the "devices" of each user.
   readonly appPasswords = new Map<string, FakeAppPassword>();
   readonly flows = new Map<string, FakeFlow>();
+  // Answer for the admin app list (/cloud/apps?filter=enabled), per uid. A uid
+  // without an entry gets 404, so app detection falls back to every tool.
+  readonly enabledApps = new Map<string, string[]>();
   // Every request's headers, newest last.
   readonly requests: { method: string; url: string; headers: IncomingMessage['headers'] }[] = [];
   private server?: Server;
@@ -158,6 +161,12 @@ export class FakeNextcloud {
         .join(':');
       this.appPasswords.delete(password);
       return json(200, 200, []);
+    }
+    if (url.pathname === '/ocs/v2.php/cloud/apps') {
+      const user = this.basicUser(req);
+      const apps = user ? this.enabledApps.get(user) : undefined;
+      if (!apps) return json(404, 404, []);
+      return json(200, 200, { apps });
     }
     if (req.method === 'MKCOL' && url.pathname.startsWith('/remote.php/dav/files/')) {
       if (!this.basicUser(req)) {
