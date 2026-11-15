@@ -17,6 +17,7 @@ import {
   unescapeICalValue,
 } from '../dav-utils.js';
 import { getNextcloudConfig } from '../types.js';
+import { structuredResult } from '../structured.js';
 import { parseCalendars, type ParsedCalendar } from './calendar.js';
 
 /**
@@ -590,6 +591,13 @@ export const listTasksTool = {
 /**
  * Create a new task in Nextcloud Tasks
  */
+const CreatedTaskSchema = z.object({
+  uid: z.string().describe('iCalendar UID (RFC 5545 §3.8.4.7)'),
+  calendarName: z.string().describe('Task list (calendar) slug'),
+  href: z.string().describe('CalDAV resource path (RFC 4791 §4.1)'),
+  summary: z.string(),
+});
+
 export const createTaskTool = {
   name: 'create_task',
   title: 'Create Task',
@@ -644,6 +652,7 @@ export const createTaskTool = {
       .describe('Task visibility classification'),
     url: z.string().optional().describe('Custom URL reference'),
   }),
+  outputSchema: CreatedTaskSchema,
   handler: async (args: {
     summary: string;
     calendarName?: string;
@@ -720,14 +729,16 @@ export const createTaskTool = {
         );
       }
 
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `Task created successfully: ${args.summary} (UID: ${taskUid})`,
-          },
-        ],
-      };
+      return structuredResult(
+        CreatedTaskSchema,
+        {
+          uid: taskUid,
+          calendarName,
+          href: davPath('calendars', config.user, calendarName, `${taskUid}.ics`),
+          summary: args.summary,
+        },
+        `Task created successfully: ${args.summary} (UID: ${taskUid})`
+      );
     } catch (error) {
       return {
         content: [

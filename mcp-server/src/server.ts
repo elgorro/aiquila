@@ -20,11 +20,25 @@ export const SERVER_VERSION: string = _require('../package.json').version;
  * which call it for every connection or request in either protocol era. It
  * must return a new instance each time: an instance serves one connection.
  */
-export async function createServer(): Promise<McpServer> {
-  const server = new McpServer({
-    name: SERVER_NAME,
-    version: SERVER_VERSION,
-  });
+export interface CreateServerOptions {
+  /**
+   * The `tools.listChanged` capability. Advertise it only where the caller can
+   * deliver `notifications/tools/list_changed` (MCP 2026-07-28, Tools); the
+   * SDK's default is true.
+   */
+  toolsListChanged?: boolean;
+}
+
+export async function createServer(options: CreateServerOptions = {}): Promise<McpServer> {
+  const server = new McpServer(
+    {
+      name: SERVER_NAME,
+      version: SERVER_VERSION,
+    },
+    options.toolsListChanged === undefined
+      ? undefined
+      : { capabilities: { tools: { listChanged: options.toolsListChanged } } }
+  );
 
   const toolSets = await getFilteredToolSets();
 
@@ -38,6 +52,7 @@ export async function createServer(): Promise<McpServer> {
           description: tool.description,
           annotations: tool.annotations,
           inputSchema: tool.inputSchema,
+          ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
         },
         async (...args: unknown[]) => {
           const start = Date.now();

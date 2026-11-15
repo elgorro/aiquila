@@ -3,7 +3,7 @@
 import { _resetCapabilitiesCache, getCapabilities } from './client/capabilities.js';
 import { fetchOCS } from './client/ocs.js';
 import { logger } from './logger.js';
-import { currentIdentity } from './nc-context.js';
+import { currentIdentity, type RequestIdentity } from './nc-context.js';
 import type { Tool } from './tools/types.js';
 
 // System tools (always available)
@@ -287,9 +287,43 @@ function filterByEnabledApps(enabledApps: Set<string> | null): ToolArray[] {
 // Cached results, keyed by the account they were detected for. The
 // environment account's never expires; a signed-in user's is refreshed after
 // USER_CACHE_TTL_MS, so an app enabled later shows up without a restart.
-const USER_CACHE_TTL_MS = 10 * 60 * 1000;
+export const USER_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_CACHED_USERS = 500;
-const cachedToolSets = new Map<string, { toolSets: ToolArray[]; expiresAt: number }>();
+const cachedToolSets = new Map<
+  string,
+  { toolSets: ToolArray[]; expiresAt: number; fingerprint: string }
+>();
+
+// Called with the cache key of an account whose tool list changed on
+// re-detection (an app enabled or disabled in Nextcloud). Not called for a
+// first detection, which has nothing to compare with.
+const toolSetChangeListeners = new Set<(key: string) => void>();
+
+/** Registers a listener for tool-list changes; returns an unsubscribe function. */
+export function onToolSetChange(listener: (key: string) => void): () => void {
+  toolSetChangeListeners.add(listener);
+  return () => toolSetChangeListeners.delete(listener);
+}
+
+/**
+ * The key tool lists are cached and compared under for `identity`: one per
+ * signed-in user, one for anonymous requests, one for the environment account
+ * (stdio, HTTP without OAuth, MCP_INTERNAL_TOKEN), and a single one for all
+ * when MCP_TOOLS fixes the list.
+ */
+export function toolSetKey(identity: RequestIdentity | undefined): string {
+  if (parseMcpTools()) return 'mcp_tools';
+  if (identity?.kind === 'user') return `user:${identity.user.userId}`;
+  if (identity?.kind === 'anonymous') return 'anonymous';
+  return 'env';
+}
+
+function fingerprint(toolSets: ToolArray[]): string {
+  return toolSets
+    .flatMap((ts) => ts.map((t) => t.name))
+    .sort()
+    .join(',');
+}
 
 /**
  * Tool count above which we warn. Not a protocol limit — no MCP client documents one —
@@ -312,13 +346,7 @@ function countTools(toolSets: ToolArray[]): number {
 export async function getFilteredToolSets(): Promise<ToolArray[]> {
   const mcpToolsFilter = parseMcpTools();
   const identity = currentIdentity();
-  const cacheKey = mcpToolsFilter
-    ? 'mcp_tools'
-    : identity?.kind === 'user'
-      ? `user:${identity.user.userId}`
-      : identity?.kind === 'anonymous'
-        ? 'anonymous'
-        : 'env';
+  const cacheKey = toolSetKey(identity);
   const cached = cachedToolSets.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     // Re-inserted, so the map's insertion order is least recently used first.
@@ -352,10 +380,22 @@ export async function getFilteredToolSets(): Promise<ToolArray[]> {
       if (oldest) cachedToolSets.delete(oldest);
     }
   }
+  const print = fingerprint(toolSets);
   cachedToolSets.set(cacheKey, {
     toolSets,
     expiresAt: isUser ? Date.now() + USER_CACHE_TTL_MS : Number.POSITIVE_INFINITY,
+    fingerprint: print,
   });
+  if (cached && cached.fingerprint !== print) {
+    logger.info({ key: cacheKey.split(':')[0] }, '[tools] Tool list changed');
+    for (const listener of toolSetChangeListeners) {
+      try {
+        listener(cacheKey);
+      } catch (err) {
+        logger.warn({ err: err instanceof Error ? err.message : String(err) }, '[tools] Listener');
+      }
+    }
+  }
 
   const toolCount = countTools(toolSets);
   logger.info({ tools: toolCount, source }, '[tools] Tool filtering applied');
@@ -369,6 +409,11 @@ export async function getFilteredToolSets(): Promise<ToolArray[]> {
   }
 
   return toolSets;
+}
+
+/** Expire every cached tool list without forgetting it — for testing only. */
+export function _expireCache(): void {
+  for (const entry of cachedToolSets.values()) entry.expiresAt = 0;
 }
 
 /** Reset cached state — for testing only. */

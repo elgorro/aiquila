@@ -70,6 +70,22 @@ Nextcloud apps and administration:
 
 ## Tools Reference
 
+### Structured results
+
+Tools that create or look up an object and return its identifier also return it as
+data: they declare an `outputSchema`, and their results carry `structuredContent`
+that conforms to it (MCP `2026-07-28`, Tools › Output Schema). A client or a script
+can read the id of a new project, a share URL or an event UID from there without
+parsing prose. The tool's usual text comes first, then the same data as serialized
+JSON in a second text block, for clients that ignore `structuredContent`.
+
+These are `create_folder`, `get_file_info`, `create_share`, `get_share`, `create_note`,
+`get_note`, `create_project`, `get_project`, `create_project_from_template`,
+`create_event`, `get_event` and `create_task`. Each tool's page lists its fields. The
+identifiers are always present. Any other field is `null` when Nextcloud does not
+report it. A failed call carries no structured content, only the error text and
+`isError: true`.
+
 ### System Tools
 
 #### File Operations (15 tools)

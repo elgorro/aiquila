@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { fetchOCS } from '../../client/ocs.js';
+import { int, str, structuredResult } from '../structured.js';
 
 /**
  * Nextcloud Share Management Tools
@@ -9,7 +10,8 @@ import { fetchOCS } from '../../client/ocs.js';
  */
 
 interface ShareEntry {
-  id: number;
+  // A string in the OCS response, e.g. "30".
+  id: string;
   share_type: number;
   uid_owner: string;
   displayname_owner: string;
@@ -27,6 +29,53 @@ interface ShareEntry {
   attributes?: string | null;
   send_password_by_talk?: boolean;
   password_expiration_time?: string | null;
+}
+
+/**
+ * A share, from the OCS Sharing API's share object (files_sharing
+ * ShareAPIController::formatShare), with camelCase names. `id` is a string
+ * there, and stays one.
+ */
+const ShareSchema = z.object({
+  id: z.string(),
+  shareType: z
+    .number()
+    .int()
+    .nullable()
+    .describe('0 user, 1 group, 3 public link, 4 email, 6 federated, 7 team'),
+  path: z.string().nullable(),
+  itemType: z.string().nullable().describe("'file' or 'folder'"),
+  permissions: z
+    .number()
+    .int()
+    .nullable()
+    .describe('Bitmask: 1 read, 2 update, 4 create, 8 delete, 16 share'),
+  owner: z.string().nullable(),
+  shareWith: z.string().nullable(),
+  shareWithDisplayName: z.string().nullable(),
+  token: z.string().nullable().describe('Link and email shares'),
+  url: z.string().nullable().describe('Public link URL'),
+  expiration: z.string().nullable(),
+  label: z.string().nullable(),
+  created: z.number().int().nullable().describe('Unix seconds'),
+});
+
+function shareData(share: ShareEntry): z.input<typeof ShareSchema> {
+  return {
+    id: String(share.id),
+    shareType: int(share.share_type),
+    path: str(share.path),
+    itemType: str(share.item_type),
+    permissions: int(share.permissions),
+    owner: str(share.uid_owner),
+    shareWith: str(share.share_with),
+    shareWithDisplayName: str(share.share_with_displayname) || null,
+    token: str(share.token),
+    url: str(share.url),
+    expiration: str(share.expiration),
+    label: str(share.label) || null,
+    created: int(share.stime),
+  };
 }
 
 const SHARE_TYPE_LABELS: Record<number, string> = {
@@ -182,6 +231,7 @@ export const createShareTool = {
       "Share attributes, e.g. [{scope: 'permissions', key: 'download', value: false}] to forbid downloads"
     ),
   }),
+  outputSchema: ShareSchema,
   handler: async (args: {
     path: string;
     shareType: number;
@@ -254,9 +304,7 @@ export const createShareTool = {
       if (share.url) parts.push(`URL: ${share.url}`);
       parts.push(...shareDetails(share));
 
-      return {
-        content: [{ type: 'text' as const, text: parts.join('\n') }],
-      };
+      return structuredResult(ShareSchema, shareData(share), parts.join('\n'));
     } catch (error) {
       return {
         content: [
@@ -417,15 +465,18 @@ export const getShareTool = {
   inputSchema: z.object({
     shareId: z.number().describe('The share ID to retrieve'),
   }),
+  outputSchema: ShareSchema,
   handler: async (args: { shareId: number }) => {
     try {
-      const result = await fetchOCS<ShareEntry>(
+      const result = await fetchOCS<ShareEntry[] | ShareEntry>(
         `/ocs/v2.php/apps/files_sharing/api/v1/shares/${args.shareId}`
       );
 
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result.ocs.data, null, 2) }],
-      };
+      // GET /shares/{id} answers with a one-element list (ShareAPIController::getShare).
+      const data = result.ocs.data;
+      const share = Array.isArray(data) ? data[0] : data;
+      if (!share) throw new Error('Share not found');
+      return structuredResult(ShareSchema, shareData(share), JSON.stringify(share, null, 2));
     } catch (error) {
       return {
         content: [

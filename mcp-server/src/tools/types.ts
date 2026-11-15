@@ -38,6 +38,12 @@ export interface Tool {
   annotations: ToolAnnotations;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inputSchema: any;
+  /**
+   * Shape of `structuredContent` on success, an object at the root. A tool
+   * that sets it returns every success through `structuredResult()`
+   * (`./structured.ts`); the SDK rejects a success without it.
+   */
+  outputSchema?: z.ZodObject;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: (...args: any[]) => any;
 }

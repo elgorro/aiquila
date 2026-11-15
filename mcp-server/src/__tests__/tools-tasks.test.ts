@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { expectStructured } from './helpers/structured.js';
 
 global.fetch = vi.fn();
 
@@ -334,6 +335,28 @@ END:VCALENDAR</c:calendar-data></d:prop></d:propstat></d:response>
       const [url] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
       expect(url).toBe('https://cloud.example.com/remote.php/dav/calendars/admin/my-todos/');
       expect(result.content[0].text).toContain('No tasks found in "my-todos"');
+    });
+
+    it('creates a task and returns its UID and resource in structured content', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        text: () => Promise.resolve(''),
+      });
+
+      const { createTaskTool } = await import('../tools/apps/tasks.js');
+      const result = await createTaskTool.handler({
+        summary: 'Buy milk',
+        calendarName: 'personal',
+      });
+
+      const created = expectStructured(result, createTaskTool);
+      expect(created).toMatchObject({ calendarName: 'personal', summary: 'Buy milk' });
+      expect(created.href).toBe(`/remote.php/dav/calendars/admin/personal/${created.uid}.ics`);
+      const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(url).toBe(`https://cloud.example.com${created.href}`);
+      expect(init.method).toBe('PUT');
+      expect(result.content[0].text).toContain(`(UID: ${created.uid})`);
     });
 
     it('should not create a task in a read-only Deck list', async () => {

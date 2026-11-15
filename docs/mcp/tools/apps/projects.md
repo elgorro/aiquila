@@ -11,6 +11,26 @@ Manage AIquila projects, project templates and the prompt library. A project bun
 
 Uses the AIquila app's REST API under `/index.php/apps/aiquila/api/`, described in its [OpenAPI spec](../../../dev/openapi.md).
 
+## Team projects
+
+A project with a `teamId` belongs to that team: every member can use and change it,
+and each member's conversations with it stay their own. It is deleted with the team.
+
+To keep it, move it to another team first (`update_project` with `teamId`, or the
+**Owner** field in the project editor). Nextcloud tells the app about a deleted team
+only after the team is gone, so the move cannot be offered at that point.
+
+| Who | Move to another team | Make it personal (`''`) |
+|---|---|---|
+| The creator | yes | yes, it becomes theirs |
+| An owner or admin of the project's team | yes | no |
+| Any other member | no | no |
+
+Whoever moves it must belong to the new team. The creator stays the creator. The
+project's files and folders stay as they are: they are references that every user
+reads with their own permissions, so members of the new team need access to them,
+for example through a share or the new team's workspace.
+
 ## Available Tools
 
 ### Projects
@@ -23,9 +43,11 @@ List the projects the user can use: their own, and those of the teams they belon
 - `title` (string, required)
 - `description` (string, optional)
 - `systemPrompt` (string, optional) — added to every conversation that uses the project.
-- `teamId` (string, optional) — a team you belong to. Every member can then use and change the project, and it is deleted with the team.
+- `teamId` (string, optional) — a team you belong to. Every member can then use and change the project, and it is deleted with the team. See [Team projects](#team-projects).
 
 **Example:** "Make a project for the Acme tender with the tender folder and a prompt to answer in formal German."
+
+[**Structured result**](../../README.md#structured-results): the project as for `get_project`.
 
 #### `get_project`
 Get a project with its paths and their IDs.
@@ -33,12 +55,17 @@ Get a project with its paths and their IDs.
 **Parameters:**
 - `id` (number, required)
 
+[**Structured result**](../../README.md#structured-results): `id`, `title`, `userId`, `teamId`, `description`, `systemPrompt`, `isActive`, `createdAt`, `updatedAt` and `paths` (`id`, `path`, `pathType`).
+
 #### `update_project`
 Change a project. Only the fields passed change.
 
 **Parameters:**
 - `id` (number, required)
 - `title`, `description`, `systemPrompt` (string, optional)
+- `teamId` (string, optional) — move the project to this team, or `''` to make it personal. See [Team projects](#team-projects) for who may.
+
+**Example:** "Move the Acme tender project to the Sales team before we delete the Bids team."
 
 #### `delete_project`
 Delete a project with its paths. Conversations that used it are kept, without the project.
@@ -79,6 +106,8 @@ Create a project as a copy of a template. Later changes to the template do not r
 **Parameters:**
 - `templateId` (number, required)
 - `title` (string, optional) — default: the template's title.
+
+[**Structured result**](../../README.md#structured-results): the new project, as for `get_project`.
 
 ### Prompt library
 
