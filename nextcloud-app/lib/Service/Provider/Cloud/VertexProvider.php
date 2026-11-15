@@ -7,6 +7,8 @@ namespace OCA\AIquila\Service\Provider\Cloud;
 
 use Anthropic\Core\BaseClient;
 use Anthropic\Vertex\Client as VertexClient;
+use OCA\AIquila\Service\ClaudeModels;
+use OCA\AIquila\Service\Provider\ModelCompatibility;
 
 /**
  * Claude Models on Google Cloud (Google managed), the Vertex AI / Agent
@@ -61,5 +63,36 @@ class VertexProvider extends AbstractGoogleClaudeProvider {
             self::FEATURE_TASK_BUDGET => true,
             self::FEATURE_MID_CONVERSATION_TOOL_CHANGES => true,
         ] + parent::platformFeatures();
+    }
+
+    // ── Models ──────────────────────────────────────────────────────────────
+    //
+    // No listing: Model Garden's publishers.models.list (v1beta1) is the
+    // global catalogue, not what this project has enabled in this location,
+    // so a picker built from it would offer models that then fail. The id
+    // stays free text and the probe confirms it with a one-token request.
+
+    public function assessUnlistedModel(string $model): ?ModelCompatibility {
+        if ($model === '' || ClaudeModels::isKnown($model)) {
+            return null;
+        }
+        return ModelCompatibility::unverified(
+            $model,
+            '',
+            'Vertex AI has no list of the models enabled in a project, and AIquila does not know this model, so its limits, thinking and effort are not checked. Test the connection to confirm it answers.',
+        );
+    }
+
+    protected function modelNotFoundMessage(string $model): string {
+        return sprintf(
+            '%s isn\'t available in project %s at location %s. Enable it from its Model Garden card, or pick a location that offers it, such as global.',
+            $model,
+            $this->appValue('project'),
+            $this->appValue('location', 'global'),
+        );
+    }
+
+    protected function permissionDeniedMessage(): string {
+        return 'Vertex AI refused the request (403). Check that the credentials may call Vertex AI on the project (for example with the Vertex AI User role) and that the model is enabled in Model Garden.';
     }
 }

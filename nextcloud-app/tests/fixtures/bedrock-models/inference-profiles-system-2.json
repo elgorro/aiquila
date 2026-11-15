@@ -1,0 +1,22 @@
+{
+  "inferenceProfileSummaries": [
+    {
+      "inferenceProfileId": "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "inferenceProfileName": "EU Claude Haiku 4.5",
+      "inferenceProfileArn": "arn:aws:bedrock:eu-central-1:123456789012:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "models": [
+        {
+          "modelArn": "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0"
+        },
+        {
+          "modelArn": "arn:aws:bedrock:eu-west-3::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0"
+        }
+      ],
+      "status": "ACTIVE",
+      "type": "SYSTEM_DEFINED",
+      "createdAt": "2026-10-01T00:00:00Z",
+      "updatedAt": "2026-10-01T00:00:00Z",
+      "description": "EU Claude Haiku 4.5"
+    }
+  ]
+}

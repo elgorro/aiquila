@@ -17,7 +17,7 @@ use Anthropic\Core\BaseClient;
  * no MCP connector, no fast mode — so attachments are always inlined and
  * summaries take the synchronous path.
  */
-class BedrockProvider extends AbstractAwsClaudeProvider {
+class BedrockProvider extends AbstractBedrockClaudeProvider {
     public function getId(): string {
         return 'bedrock';
     }

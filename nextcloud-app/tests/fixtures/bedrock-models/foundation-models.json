@@ -1,0 +1,118 @@
+{
+  "modelSummaries": [
+    {
+      "modelArn": "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-opus-5-5",
+      "modelId": "anthropic.claude-opus-5-5",
+      "modelName": "Claude Opus 5.5",
+      "providerName": "Anthropic",
+      "inputModalities": [
+        "TEXT",
+        "IMAGE"
+      ],
+      "outputModalities": [
+        "TEXT"
+      ],
+      "responseStreamingSupported": true,
+      "customizationsSupported": [],
+      "inferenceTypesSupported": [
+        "INFERENCE_PROFILE"
+      ],
+      "modelLifecycle": {
+        "status": "ACTIVE",
+        "startOfLifeTime": "2025-10-01T00:00:00Z"
+      }
+    },
+    {
+      "modelArn": "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "modelId": "anthropic.claude-haiku-4-5-20251001-v1:0",
+      "modelName": "Claude Haiku 4.5",
+      "providerName": "Anthropic",
+      "inputModalities": [
+        "TEXT",
+        "IMAGE"
+      ],
+      "outputModalities": [
+        "TEXT"
+      ],
+      "responseStreamingSupported": true,
+      "customizationsSupported": [],
+      "inferenceTypesSupported": [
+        "ON_DEMAND",
+        "INFERENCE_PROFILE"
+      ],
+      "modelLifecycle": {
+        "status": "ACTIVE",
+        "startOfLifeTime": "2025-10-01T00:00:00Z"
+      }
+    },
+    {
+      "modelArn": "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "modelId": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+      "modelName": "Claude Sonnet 4.5",
+      "providerName": "Anthropic",
+      "inputModalities": [
+        "TEXT",
+        "IMAGE"
+      ],
+      "outputModalities": [
+        "TEXT"
+      ],
+      "responseStreamingSupported": true,
+      "customizationsSupported": [],
+      "inferenceTypesSupported": [
+        "ON_DEMAND"
+      ],
+      "modelLifecycle": {
+        "status": "LEGACY",
+        "startOfLifeTime": "2025-10-01T00:00:00Z",
+        "legacyTime": "2026-09-30T00:00:00Z",
+        "endOfLifeTime": "2027-03-01T00:00:00Z"
+      }
+    },
+    {
+      "modelArn": "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0",
+      "modelId": "anthropic.claude-3-haiku-20240307-v1:0",
+      "modelName": "Claude 3 Haiku",
+      "providerName": "Anthropic",
+      "inputModalities": [
+        "TEXT",
+        "IMAGE"
+      ],
+      "outputModalities": [
+        "TEXT"
+      ],
+      "responseStreamingSupported": true,
+      "customizationsSupported": [],
+      "inferenceTypesSupported": [
+        "ON_DEMAND"
+      ],
+      "modelLifecycle": {
+        "status": "LEGACY",
+        "startOfLifeTime": "2025-10-01T00:00:00Z",
+        "legacyTime": "2026-02-19T00:00:00Z",
+        "endOfLifeTime": "2026-04-20T00:00:00Z"
+      }
+    },
+    {
+      "modelArn": "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-text-only-v1",
+      "modelId": "anthropic.claude-text-only-v1",
+      "modelName": "Claude Text",
+      "providerName": "Anthropic",
+      "inputModalities": [
+        "TEXT"
+      ],
+      "outputModalities": [
+        "TEXT"
+      ],
+      "responseStreamingSupported": false,
+      "customizationsSupported": [],
+      "inferenceTypesSupported": [
+        "ON_DEMAND"
+      ],
+      "modelLifecycle": {
+        "status": "ACTIVE",
+        "startOfLifeTime": "2025-10-01T00:00:00Z"
+      }
+    }
+  ]
+}

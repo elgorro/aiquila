@@ -1,0 +1,41 @@
+{
+  "inferenceProfileSummaries": [
+    {
+      "inferenceProfileId": "eu.anthropic.claude-opus-5-5",
+      "inferenceProfileName": "EU Claude Opus 5.5",
+      "inferenceProfileArn": "arn:aws:bedrock:eu-central-1:123456789012:inference-profile/eu.anthropic.claude-opus-5-5",
+      "models": [
+        {
+          "modelArn": "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-opus-5-5"
+        },
+        {
+          "modelArn": "arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-opus-5-5"
+        }
+      ],
+      "status": "ACTIVE",
+      "type": "SYSTEM_DEFINED",
+      "createdAt": "2026-10-01T00:00:00Z",
+      "updatedAt": "2026-10-01T00:00:00Z",
+      "description": "EU Claude Opus 5.5"
+    },
+    {
+      "inferenceProfileId": "global.anthropic.claude-opus-5-5",
+      "inferenceProfileName": "Global Claude Opus 5.5",
+      "inferenceProfileArn": "arn:aws:bedrock:eu-central-1:123456789012:inference-profile/global.anthropic.claude-opus-5-5",
+      "models": [
+        {
+          "modelArn": "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-opus-5-5"
+        },
+        {
+          "modelArn": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-opus-5-5"
+        }
+      ],
+      "status": "ACTIVE",
+      "type": "SYSTEM_DEFINED",
+      "createdAt": "2026-10-01T00:00:00Z",
+      "updatedAt": "2026-10-01T00:00:00Z",
+      "description": "Global Claude Opus 5.5"
+    }
+  ],
+  "nextToken": "page-2"
+}

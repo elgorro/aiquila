@@ -21,7 +21,7 @@ use Psr\Http\Message\ResponseInterface;
  * not accept the top-level automatic `cache_control`, so only the explicit
  * cache breakpoints are sent.
  */
-class BedrockInvokeProvider extends AbstractAwsClaudeProvider {
+class BedrockInvokeProvider extends AbstractBedrockClaudeProvider {
     /**
      * The SDK sends `anthropic_version: 2026-10-21`, which Bedrock accepts only
      * for Claude 4.7 and later — exactly the models this route does not serve.
