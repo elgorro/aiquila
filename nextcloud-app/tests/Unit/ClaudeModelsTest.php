@@ -13,18 +13,19 @@ class ClaudeModelsTest extends TestCase {
 
     public function testGetAllModelsReturnsCurrentModelsOnly(): void {
         $models = ClaudeModels::getAllModels();
-        $this->assertCount(13, $models);
+        $this->assertCount(14, $models);
         $this->assertContains(ClaudeModels::FABLE_5_2,  $models);
         $this->assertContains(ClaudeModels::FABLE_5_1,  $models);
         $this->assertContains(ClaudeModels::FABLE_5,    $models);
         $this->assertContains(ClaudeModels::OPUS_5_5,   $models);
         $this->assertContains(ClaudeModels::OPUS_5,     $models);
+        $this->assertContains(ClaudeModels::SONNET_5_5, $models);
         $this->assertContains(ClaudeModels::SONNET_5,   $models);
+        $this->assertContains(ClaudeModels::HAIKU_5_5,  $models);
         $this->assertContains(ClaudeModels::OPUS_4_8,   $models);
         $this->assertContains(ClaudeModels::OPUS_4_7,   $models);
         $this->assertContains(ClaudeModels::OPUS_4_6,   $models);
         $this->assertContains(ClaudeModels::SONNET_4_6, $models);
-        $this->assertContains(ClaudeModels::SONNET_4_5, $models);
         $this->assertContains(ClaudeModels::HAIKU_4_5,  $models);
         $this->assertContains(ClaudeModels::OPUS_4_5,   $models);
         // Sonnet 4 and Opus 4 are deprecated upstream (SDK 0.15.0 dropped
@@ -34,8 +35,52 @@ class ClaudeModelsTest extends TestCase {
         $this->assertNotContains(ClaudeModels::OPUS_4,   $models);
         // Verification-gated: known to the capability tables, not offered.
         $this->assertNotContains(ClaudeModels::MYTHOS_5_2, $models);
+        $this->assertNotContains(ClaudeModels::MYTHOS_5_1, $models);
+        $this->assertNotContains(ClaudeModels::MYTHOS_5,   $models);
+        // Deprecated (retires 2026-11-30): closed to new adopters, so not offered.
+        $this->assertNotContains(ClaudeModels::SONNET_4_5, $models);
         // Most capable first
         $this->assertSame(ClaudeModels::FABLE_5_2, $models[0]);
+    }
+
+    /**
+     * Sonnet 5.5 and Haiku 5.5 per the model and thinking docs: 128K output,
+     * 1M context, adaptive by default, all five efforts, no fast mode,
+     * mid-conversation system messages, task budgets and 300K batch output.
+     * Sonnet 5.5 rejects `{type: disabled}` at every effort; Haiku 5.5 takes
+     * it up to `high`.
+     */
+    public function testSonnet55AndHaiku55Registry(): void {
+        foreach ([ClaudeModels::SONNET_5_5, ClaudeModels::HAIKU_5_5] as $model) {
+            $this->assertSame(128000, ClaudeModels::getMaxTokenCeiling($model), $model);
+            $this->assertSame(1000000, ClaudeModels::getContextWindow($model), $model);
+            $this->assertSame('adaptive', ClaudeModels::thinkingDefault($model), $model);
+            $this->assertTrue(ClaudeModels::thinkingSummaryNeedsOptIn($model), $model);
+            $this->assertSame(ClaudeModels::ALL_EFFORTS, ClaudeModels::getAllowedEfforts($model), $model);
+            $this->assertFalse(ClaudeModels::supportsFastMode($model), $model);
+            $this->assertTrue(ClaudeModels::supportsMidConversationSystem($model), $model);
+            $this->assertTrue(ClaudeModels::supportsTaskBudget($model), $model);
+            $this->assertTrue(ClaudeModels::supportsExtendedOutput($model), $model);
+        }
+        $this->assertFalse(ClaudeModels::canDisableThinking(ClaudeModels::SONNET_5_5));
+        $this->assertTrue(ClaudeModels::canDisableThinking(ClaudeModels::HAIKU_5_5));
+        $this->assertSame('high', ClaudeModels::maxEffortWithThinkingDisabled(ClaudeModels::HAIKU_5_5));
+    }
+
+    /** Mythos 5.1 and Mythos 5: like Mythos 5.2 but without fast mode. */
+    public function testMythos51AndMythos5Registry(): void {
+        foreach ([ClaudeModels::MYTHOS_5_1, ClaudeModels::MYTHOS_5] as $model) {
+            $this->assertSame(128000, ClaudeModels::getMaxTokenCeiling($model), $model);
+            $this->assertFalse(ClaudeModels::canDisableThinking($model), $model);
+            $this->assertFalse(ClaudeModels::supportsFastMode($model), $model);
+            $this->assertTrue(ClaudeModels::supportsMidConversationSystem($model), $model);
+            $this->assertTrue(ClaudeModels::supportsTaskBudget($model), $model);
+            $this->assertFalse(ClaudeModels::supportsExtendedOutput($model), $model);
+        }
+    }
+
+    public function testRetiredOpus4ResolvesToDocumentedReplacement(): void {
+        $this->assertSame(ClaudeModels::OPUS_4_8, ClaudeModels::resolveModel(ClaudeModels::OPUS_4));
     }
 
     /**
