@@ -57,7 +57,7 @@ d = json.loads(raw)
 if 'error' in d:
     print('ERROR: ' + json.dumps(d['error']), file=sys.stderr); sys.exit(1)
 if d.get('result', {}).get('isError'):
-    text = ''.join(c.get('text','') for c in d['result'].get('content',[]))
+    text = '\n'.join(c.get('text','') for c in d['result'].get('content',[]))
     print('TOOL ERROR: ' + text, file=sys.stderr); sys.exit(1)
 "
 }
@@ -73,7 +73,7 @@ if 'data:' in raw:
 d = json.loads(raw)
 if 'error' in d or d.get('result',{}).get('isError'):
     sys.exit(1)
-text = ''.join(c.get('text','') for c in d.get('result',{}).get('content',[]))
+text = '\n'.join(c.get('text','') for c in d.get('result',{}).get('content',[]))
 needle = sys.argv[1]
 if needle not in text:
     print(f'ERROR: {needle!r} not found in output:\n{text[:400]}', file=sys.stderr)
@@ -96,7 +96,7 @@ if 'data:' in raw:
     lines = [l[5:].strip() for l in raw.splitlines() if l.startswith('data:')]
     raw = lines[-1] if lines else raw
 d = json.loads(raw)
-text = ''.join(c.get('text','') for c in d.get('result',{}).get('content',[]))
+text = '\n'.join(c.get('text','') for c in d.get('result',{}).get('content',[]))
 m = re.search(sys.argv[1], text)
 print(m.group(1) if m else '')
 " "$pattern"
@@ -314,7 +314,7 @@ if 'data:' in raw:
     lines = [l[5:].strip() for l in raw.splitlines() if l.startswith('data:')]
     raw = lines[-1] if lines else raw
 d = json.loads(raw)
-text = ''.join(c.get('text','') for c in d.get('result',{}).get('content',[]))
+text = '\n'.join(c.get('text','') for c in d.get('result',{}).get('content',[]))
 m = re.search(r'ID: (\d+)', text)
 print(m.group(1) if m else '')
 ")
