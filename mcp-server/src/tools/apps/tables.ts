@@ -918,6 +918,473 @@ export const deleteTableRowTool = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Sharing
+// ---------------------------------------------------------------------------
+
+// Tables API v1 share object (ShareService::formatForOutput).
+interface TableShare {
+  id: number;
+  sender?: string;
+  receiver: string;
+  receiverDisplayName?: string;
+  receiverType: string;
+  nodeId: number;
+  nodeType: string;
+  permissionRead?: boolean;
+  permissionCreate?: boolean;
+  permissionUpdate?: boolean;
+  permissionDelete?: boolean;
+  permissionManage?: boolean;
+}
+
+// The names PUT /shares/{id} takes as permissionType (ShareService::applyPermissions),
+// and the share fields they set.
+const SHARE_PERMISSIONS = {
+  read: 'permissionRead',
+  create: 'permissionCreate',
+  update: 'permissionUpdate',
+  delete: 'permissionDelete',
+  manage: 'permissionManage',
+} as const;
+type SharePermission = keyof typeof SHARE_PERMISSIONS;
+type SharePermissions = Partial<Record<SharePermission, boolean>>;
+
+const sharePermissionsSchema = z
+  .object({
+    read: z.boolean().optional().describe('See the rows'),
+    create: z.boolean().optional().describe('Add rows'),
+    update: z.boolean().optional().describe('Change rows'),
+    delete: z.boolean().optional().describe('Delete rows'),
+    manage: z.boolean().optional().describe('Change columns, views and shares'),
+  })
+  .describe('What the receiver may do. Leaving a permission out means no');
+
+const RECEIVER_TYPES = ['user', 'group', 'circle', 'remote'] as const;
+
+function sharedNode(args: { tableId?: number; viewId?: number; contextId?: number }): {
+  nodeType: 'table' | 'view' | 'context';
+  nodeId: number;
+} {
+  const given = [args.tableId, args.viewId, args.contextId].filter((v) => v !== undefined);
+  if (given.length !== 1)
+    throw new InputError('Pass exactly one of tableId, viewId and contextId.');
+  if (args.tableId !== undefined) return { nodeType: 'table', nodeId: args.tableId };
+  if (args.viewId !== undefined) return { nodeType: 'view', nodeId: args.viewId };
+  return { nodeType: 'context', nodeId: args.contextId! };
+}
+
+function formatShare(share: TableShare): string {
+  const allowed = (Object.keys(SHARE_PERMISSIONS) as SharePermission[]).filter(
+    (p) => share[SHARE_PERMISSIONS[p]]
+  );
+  const who = share.receiverDisplayName || share.receiver;
+  const perms = share.nodeType === 'context' ? '' : ` — ${allowed.join(', ') || 'no permissions'}`;
+  return `[share ${share.id}] ${share.nodeType} ${share.nodeId} → ${share.receiverType} ${who}${perms}`;
+}
+
+export const listTableSharesTool = {
+  name: 'list_table_shares',
+  title: 'List Table Shares',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    'List who a table or view is shared with, and their permissions. Needs manage permission. The shares of an application (context) are in get_table_context.',
+  inputSchema: z.object({
+    tableId: z.number().optional().describe('Table ID'),
+    viewId: z.number().optional().describe('View ID'),
+  }),
+  handler: async (args: Node) => {
+    try {
+      const shares = await fetchTablesAPI<TableShare[]>(`${nodePath(args)}/shares`);
+      if (shares.length === 0) return text('Not shared with anyone.');
+      return text(`Shares (${shares.length}):\n${shares.map(formatShare).join('\n')}`);
+    } catch (err) {
+      return report('listing shares', err);
+    }
+  },
+};
+
+export const shareTableTool = {
+  name: 'share_table',
+  title: 'Share Table',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
+  description:
+    'Share a table, a view or an application (context) with a user, group, team or federated user. ' +
+    "receiverType 'remote' shares a table or view with an account on another Nextcloud, by its Federated Cloud ID (user@cloud.example.com); Tables must allow federation on both sides. " +
+    'An application share gives access to the application with the permissions set on its tables and views, so permissions do not apply to it.',
+  inputSchema: z.object({
+    tableId: z.number().optional().describe('Table to share'),
+    viewId: z.number().optional().describe('View to share'),
+    contextId: z.number().optional().describe('Application (context) to share'),
+    receiver: z
+      .string()
+      .min(1)
+      .describe('User ID, group ID, team (circle) ID, or Federated Cloud ID for remote'),
+    receiverType: z.enum(RECEIVER_TYPES).describe("'circle' is a team"),
+    permissions: sharePermissionsSchema
+      .optional()
+      .describe('For tables and views. Default: read only'),
+    displayMode: z
+      .number()
+      .int()
+      .min(0)
+      .max(2)
+      .optional()
+      .describe(
+        'Applications only: show it in the navigation bar 0 for nobody, 1 for the receivers, 2 for everyone (default)'
+      ),
+  }),
+  handler: async (args: {
+    tableId?: number;
+    viewId?: number;
+    contextId?: number;
+    receiver: string;
+    receiverType: (typeof RECEIVER_TYPES)[number];
+    permissions?: SharePermissions;
+    displayMode?: number;
+  }) => {
+    try {
+      const { nodeType, nodeId } = sharedNode(args);
+      if (args.receiverType === 'remote') {
+        if (nodeType === 'context') {
+          throw new InputError('Applications cannot be shared with a remote account.');
+        }
+        // A Federated Cloud ID is <user>@<host>, and the user part may hold an @ itself.
+        if (!/^\S+@[^@\s]+$/.test(args.receiver)) {
+          throw new InputError(
+            'A remote receiver is a Federated Cloud ID, e.g. user@cloud.example.com.'
+          );
+        }
+      }
+      if (nodeType !== 'context' && args.displayMode !== undefined) {
+        throw new InputError('displayMode applies to applications only.');
+      }
+      const perms = args.permissions ?? { read: true };
+      const body: Record<string, unknown> = {
+        nodeId,
+        nodeType,
+        receiver: args.receiver,
+        receiverType: args.receiverType,
+      };
+      if (nodeType === 'context') {
+        if (args.displayMode !== undefined) body.displayMode = args.displayMode;
+      } else {
+        for (const [p, field] of Object.entries(SHARE_PERMISSIONS)) {
+          body[field] = perms[p as SharePermission] === true;
+        }
+      }
+      try {
+        const share = await fetchTablesAPI<TableShare>('/shares', { method: 'POST', body });
+        return text(`Shared: ${formatShare(share)}`);
+      } catch (err) {
+        // Tables stores a remote share before telling the remote, and keeps it
+        // when that fails.
+        if (args.receiverType === 'remote') {
+          return wrapError(
+            'sharing',
+            new Error(
+              `${err instanceof Error ? err.message : String(err)}. Tables may have kept the share although the remote was not told: check list_table_shares and remove it with delete_table_share.`
+            )
+          );
+        }
+        throw err;
+      }
+    } catch (err) {
+      return report('sharing', err);
+    }
+  },
+};
+
+export const updateTableShareTool = {
+  name: 'update_table_share',
+  title: 'Update Table Share',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  description:
+    "Change the permissions of a table or view share. Only the permissions passed change. Application shares have none of their own. A remote share's receiver is told of the change.",
+  inputSchema: z.object({
+    shareId: z.number().describe('Share ID from list_table_shares'),
+    permissions: sharePermissionsSchema,
+  }),
+  handler: async (args: { shareId: number; permissions: SharePermissions }) => {
+    const changes = Object.entries(args.permissions).filter(([, v]) => v !== undefined);
+    if (changes.length === 0) return error('Pass at least one permission to change.');
+    try {
+      // The API changes one permission per request.
+      let share: TableShare | undefined;
+      for (const [permissionType, permissionValue] of changes) {
+        share = await fetchTablesAPI<TableShare>(`/shares/${args.shareId}`, {
+          method: 'PUT',
+          body: { permissionType, permissionValue },
+        });
+      }
+      return text(`Share updated: ${formatShare(share!)}`);
+    } catch (err) {
+      return wrapError('updating share', err);
+    }
+  },
+};
+
+export const deleteTableShareTool = {
+  name: 'delete_table_share',
+  title: 'Delete Table Share',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+  description: 'Stop sharing a table, view or application with that receiver.',
+  inputSchema: z.object({ shareId: z.number().describe('Share ID') }),
+  handler: async (args: { shareId: number }) => {
+    try {
+      await fetchTablesAPI(`/shares/${args.shareId}`, { method: 'DELETE' });
+      return text(`Share ${args.shareId} deleted.`);
+    } catch (err) {
+      return wrapError('deleting share', err);
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Applications (contexts)
+// ---------------------------------------------------------------------------
+
+// Node types and permission bits of the Tables API (AppInfo\Application).
+const NODE_TYPE = { table: 0, view: 1 } as const;
+const PERMISSION_BITS: Record<SharePermission, number> = {
+  read: 1,
+  create: 2,
+  update: 4,
+  delete: 8,
+  manage: 16,
+};
+
+// GET /contexts/{id} sends nodes keyed by relation id, in snake_case; the
+// create and update responses send a list in camelCase. Both are read.
+interface ContextNode {
+  id?: number;
+  node_id?: number;
+  node_type?: number;
+  nodeId?: number;
+  nodeType?: number;
+  permissions?: number;
+}
+
+interface ContextShare {
+  share_id: number;
+  receiver: string;
+  receiver_type: string;
+  receiver_display_name?: string;
+  display_mode?: number;
+}
+
+const DISPLAY_MODES = ['hidden', 'shown to the receivers', 'shown to everyone'];
+
+interface Context {
+  id: number;
+  name: string;
+  iconName: string;
+  description: string;
+  owner: string;
+  ownerType: number;
+  nodes?: Record<string, ContextNode> | ContextNode[];
+  sharing?: Record<string, ContextShare> | ContextShare[];
+  pages?: unknown;
+}
+
+function permissionBits(p: SharePermissions | undefined): number {
+  const perms = p ?? { read: true };
+  return (Object.keys(PERMISSION_BITS) as SharePermission[]).reduce(
+    (bits, k) => (perms[k] ? bits | PERMISSION_BITS[k] : bits),
+    0
+  );
+}
+
+function permissionNames(bits: number | undefined): string {
+  const names = (Object.keys(PERMISSION_BITS) as SharePermission[]).filter(
+    (k) => ((bits ?? 0) & PERMISSION_BITS[k]) !== 0
+  );
+  return names.join(', ') || 'no permissions';
+}
+
+function formatContext(c: Context, detail = false): string {
+  const lines = [`[${c.id}] ${c.name} (icon: ${c.iconName}, owner: ${c.owner})`];
+  if (c.description) lines.push(`  ${c.description}`);
+  if (detail) {
+    const nodes = Object.values(c.nodes ?? {});
+    for (const n of nodes) {
+      const kind = (n.node_type ?? n.nodeType) === NODE_TYPE.view ? 'view' : 'table';
+      lines.push(`  - ${kind} ${n.node_id ?? n.nodeId}: ${permissionNames(n.permissions)}`);
+    }
+    for (const sh of Object.values(c.sharing ?? {})) {
+      const who = sh.receiver_display_name || sh.receiver;
+      const nav = DISPLAY_MODES[sh.display_mode ?? 2] ?? `display mode ${sh.display_mode}`;
+      lines.push(
+        `  shared: [share ${sh.share_id}] → ${sh.receiver_type} ${who}, navigation ${nav}`
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+const contextNodesSchema = z
+  .array(
+    z.object({
+      tableId: z.number().optional(),
+      viewId: z.number().optional(),
+      permissions: sharePermissionsSchema
+        .optional()
+        .describe('What users of the application may do here. Default: read only'),
+    })
+  )
+  .describe('The tables and views the application shows, one of tableId and viewId each');
+
+export const listTableContextsTool = {
+  name: 'list_table_contexts',
+  title: 'List Table Applications',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    'List the Tables applications (contexts) you own or that are shared with you. An application bundles tables and views behind its own navigation entry.',
+  inputSchema: z.object({}),
+  handler: async () => {
+    try {
+      const data = await fetchOCS<Context[]>(`${OCS_API}/contexts`);
+      const contexts = data.ocs.data;
+      if (contexts.length === 0) return text('No applications found.');
+      return text(
+        `Applications (${contexts.length}):\n${contexts.map((c) => formatContext(c)).join('\n')}`
+      );
+    } catch (err) {
+      return wrapError('listing applications', err);
+    }
+  },
+};
+
+export const getTableContextTool = {
+  name: 'get_table_context',
+  title: 'Get Table Application',
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description:
+    'Get a Tables application (context): its tables and views with their permissions, and who it is shared with.',
+  inputSchema: z.object({ contextId: z.number().describe('Application ID') }),
+  handler: async (args: { contextId: number }) => {
+    try {
+      const data = await fetchOCS<Context>(`${OCS_API}/contexts/${args.contextId}`);
+      return text(formatContext(data.ocs.data, true));
+    } catch (err) {
+      return wrapError('getting application', err);
+    }
+  },
+};
+
+export const saveTableContextTool = {
+  name: 'save_table_context',
+  title: 'Save Table Application',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false,
+  },
+  description:
+    'Create a Tables application (context), or change one when contextId is given. Passing nodes replaces its tables and views. Share it with share_table and contextId.',
+  inputSchema: z.object({
+    contextId: z.number().optional().describe('Application to change. Omit to create one'),
+    name: z.string().optional().describe('Name (required to create)'),
+    iconName: z
+      .string()
+      .optional()
+      .describe("Material Design icon name bundled with Tables, e.g. 'briefcase'. Default 'apps'"),
+    description: z.string().optional(),
+    nodes: contextNodesSchema.optional(),
+  }),
+  handler: async (args: {
+    contextId?: number;
+    name?: string;
+    iconName?: string;
+    description?: string;
+    nodes?: { tableId?: number; viewId?: number; permissions?: SharePermissions }[];
+  }) => {
+    if (args.contextId === undefined && !args.name) {
+      return error('name is required to create an application.');
+    }
+    try {
+      const nodes = args.nodes?.map((n, order) => {
+        if ((n.tableId === undefined) === (n.viewId === undefined)) {
+          throw new InputError('Each node needs exactly one of tableId and viewId.');
+        }
+        return {
+          id: n.viewId ?? n.tableId!,
+          type: n.viewId !== undefined ? NODE_TYPE.view : NODE_TYPE.table,
+          permissions: permissionBits(n.permissions),
+          order,
+        };
+      });
+      const create = args.contextId === undefined;
+      const body: Record<string, unknown> = {};
+      if (args.name !== undefined) body.name = args.name;
+      if (args.iconName !== undefined || create) body.iconName = args.iconName ?? 'apps';
+      if (args.description !== undefined) body.description = args.description;
+      if (nodes !== undefined) body.nodes = nodes;
+      const data = await fetchOCS<Context>(
+        create ? `${OCS_API}/contexts` : `${OCS_API}/contexts/${args.contextId}`,
+        { method: create ? 'POST' : 'PUT', jsonBody: body }
+      );
+      return text(
+        `Application ${create ? 'created' : 'updated'}: ${formatContext(data.ocs.data, true)}`
+      );
+    } catch (err) {
+      return report('saving application', err);
+    }
+  },
+};
+
+export const deleteTableContextTool = {
+  name: 'delete_table_context',
+  title: 'Delete Table Application',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  description: 'Delete a Tables application (context). Its tables and views are kept.',
+  inputSchema: z.object({ contextId: z.number().describe('Application ID') }),
+  handler: async (args: { contextId: number }) => {
+    try {
+      await fetchOCS(`${OCS_API}/contexts/${args.contextId}`, { method: 'DELETE' });
+      return text(`Application ${args.contextId} deleted.`);
+    } catch (err) {
+      return wrapError('deleting application', err);
+    }
+  },
+};
+
 export const tablesTools = [
   listTablesTool,
   getTableTool,
@@ -932,4 +1399,12 @@ export const tablesTools = [
   listTableRowsTool,
   saveTableRowTool,
   deleteTableRowTool,
+  listTableSharesTool,
+  shareTableTool,
+  updateTableShareTool,
+  deleteTableShareTool,
+  listTableContextsTool,
+  getTableContextTool,
+  saveTableContextTool,
+  deleteTableContextTool,
 ];
