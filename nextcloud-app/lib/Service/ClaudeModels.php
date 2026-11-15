@@ -24,6 +24,12 @@ class ClaudeModels {
      */
     public const MYTHOS_5_2 = 'claude-mythos-5-2';
 
+    /** Mythos 5.1 – Fable 5.1's verified-organisation counterpart; like MYTHOS_5_2 not in getAllModels(). */
+    public const MYTHOS_5_1 = 'claude-mythos-5-1';
+
+    /** Mythos 5 – Fable 5's verified-organisation counterpart; like MYTHOS_5_2 not in getAllModels(). */
+    public const MYTHOS_5   = 'claude-mythos-5';
+
     /** Fable 5.1 – previous Fable; successor to Fable 5 (thinking always on, 128K output, 1M context) */
     public const FABLE_5_1  = 'claude-fable-5-1';
 
@@ -36,7 +42,13 @@ class ClaudeModels {
     /** Opus 5 – for complex agentic coding and enterprise work (adaptive thinking, 128K output, 1M context, xhigh effort) */
     public const OPUS_5     = 'claude-opus-5';
 
-    /** Sonnet 5 – best combination of speed and intelligence (adaptive thinking, 128K output, 1M context) */
+    /** Sonnet 5.5 – successor to Sonnet 5 (thinking always on, lowest setting between_tools; 128K output, 1M context) */
+    public const SONNET_5_5 = 'claude-sonnet-5-5';
+
+    /** Haiku 5.5 – fastest, most economical current model (adaptive thinking, 128K output, 1M context) */
+    public const HAIKU_5_5  = 'claude-haiku-5-5';
+
+    /** Sonnet 5 – previous Sonnet (adaptive thinking, 128K output, 1M context) */
     public const SONNET_5   = 'claude-sonnet-5';
 
     /** Opus 4.8 – previous most capable Opus-tier model (adaptive thinking, 128K output, 1M context, xhigh effort) */
@@ -51,7 +63,7 @@ class ClaudeModels {
     /** Sonnet 4.6 – adaptive thinking, 64K output */
     public const SONNET_4_6 = 'claude-sonnet-4-6';
 
-    /** Sonnet 4.5 – recommended default: fast, capable, cost-effective */
+    /** Sonnet 4.5 – deprecated, retires 2026-11-30 (replacement SONNET_5_5); kept for its limits only. */
     public const SONNET_4_5 = 'claude-sonnet-4-5-20250929';
 
     /** Haiku 4.5 – fastest, most economical */
@@ -63,14 +75,14 @@ class ClaudeModels {
     /** Sonnet 4 — retired June 15 2026; resolveModel() transparently maps this to SONNET_4_6. */
     public const SONNET_4   = 'claude-sonnet-4-20250514';
 
-    /** Opus 4 — retired June 15 2026; resolveModel() transparently maps this to OPUS_4_7. */
+    /** Opus 4 — retired June 15 2026; resolveModel() transparently maps this to OPUS_4_8. */
     public const OPUS_4     = 'claude-opus-4-20250514';
 
     // ── Deprecated-model migration map ────────────────────────────────────
 
     private const DEPRECATED_MAP = [
         self::SONNET_4 => self::SONNET_4_6,
-        self::OPUS_4   => self::OPUS_4_7,
+        self::OPUS_4   => self::OPUS_4_8,
     ];
 
     /**
@@ -139,10 +151,14 @@ class ClaudeModels {
     private const MAX_TOKENS_CEILING = [
         self::FABLE_5_2  => 128000,
         self::MYTHOS_5_2 => 128000,
+        self::MYTHOS_5_1 => 128000,
+        self::MYTHOS_5   => 128000,
         self::FABLE_5_1  => 128000,
         self::FABLE_5    => 128000,
         self::OPUS_5_5   => 128000,
         self::OPUS_5     => 128000,
+        self::SONNET_5_5 => 128000,
+        self::HAIKU_5_5  => 128000,
         self::SONNET_5   => 128000,
         self::OPUS_4_8   => 128000,
         self::OPUS_4_7   => 128000,
@@ -158,10 +174,14 @@ class ClaudeModels {
     private const CONTEXT_WINDOW = [
         self::FABLE_5_2  => 1000000,
         self::MYTHOS_5_2 => 1000000,
+        self::MYTHOS_5_1 => 1000000,
+        self::MYTHOS_5   => 1000000,
         self::FABLE_5_1  => 1000000,
         self::FABLE_5    => 1000000,
         self::OPUS_5_5   => 1000000,
         self::OPUS_5     => 1000000,
+        self::SONNET_5_5 => 1000000,
+        self::HAIKU_5_5  => 1000000,
         self::SONNET_5   => 1000000,
         self::OPUS_4_8   => 1000000,
         self::OPUS_4_7   => 1000000,
@@ -174,10 +194,14 @@ class ClaudeModels {
     private const SUPPORTS_THINKING = [
         self::FABLE_5_2  => true,
         self::MYTHOS_5_2 => true,
+        self::MYTHOS_5_1 => true,
+        self::MYTHOS_5   => true,
         self::FABLE_5_1  => true,
         self::FABLE_5    => true,
         self::OPUS_5_5   => true,
         self::OPUS_5     => true,
+        self::SONNET_5_5 => true,
+        self::HAIKU_5_5  => true,
         self::SONNET_5   => true,
         self::OPUS_4_8   => true,
         self::OPUS_4_7   => true,
@@ -188,10 +212,14 @@ class ClaudeModels {
     private const SUPPORTS_EFFORT = [
         self::FABLE_5_2  => true,
         self::MYTHOS_5_2 => true,
+        self::MYTHOS_5_1 => true,
+        self::MYTHOS_5   => true,
         self::FABLE_5_1  => true,
         self::FABLE_5    => true,
         self::OPUS_5_5   => true,
         self::OPUS_5     => true,
+        self::SONNET_5_5 => true,
+        self::HAIKU_5_5  => true,
         self::SONNET_5   => true,
         self::OPUS_4_8   => true,
         self::OPUS_4_7   => true,
@@ -226,9 +254,11 @@ class ClaudeModels {
     }
 
     /**
-     * Ordered model list for the admin UI datalist (most capable first).
-     * SONNET_4 / OPUS_4 are intentionally omitted — Anthropic deprecated them
-     * and the SDK removed them from its typed Model enum in 0.15.0.
+     * Ordered model list for the admin UI datalist (most capable first): the
+     * fallback when the Models API listing is unavailable. Deprecated models
+     * (SONNET_4_5) are omitted, since the API closes them to new adopters, as
+     * are the retired SONNET_4 / OPUS_4 and the Mythos models, which need a
+     * verified organisation.
      *
      * @return list<string>
      */
@@ -239,15 +269,31 @@ class ClaudeModels {
             self::FABLE_5,
             self::OPUS_5_5,
             self::OPUS_5,
+            self::SONNET_5_5,
             self::SONNET_5,
+            self::HAIKU_5_5,
             self::OPUS_4_8,
             self::OPUS_4_7,
             self::OPUS_4_6,
             self::SONNET_4_6,
-            self::SONNET_4_5,
             self::HAIKU_4_5,
             self::OPUS_4_5,
         ];
+    }
+
+    /**
+     * Whether the capability tables know a model, in any platform's spelling.
+     * Wider than getAllModels(): it includes the verification-gated Mythos
+     * models and still-served deprecated ones, which are known but not offered.
+     */
+    public static function isKnown(string $model): bool {
+        return in_array(self::canonicalId($model), [
+            ...self::getAllModels(),
+            self::MYTHOS_5_2,
+            self::MYTHOS_5_1,
+            self::MYTHOS_5,
+            self::SONNET_4_5,
+        ], true);
     }
 
     // ── Per-model effort level (app-level policy) ────────────────────────
@@ -255,10 +301,14 @@ class ClaudeModels {
     public const EFFORT_LEVEL = [
         self::FABLE_5_2  => 'xhigh',
         self::MYTHOS_5_2 => 'xhigh',
+        self::MYTHOS_5_1 => 'xhigh',
+        self::MYTHOS_5   => 'xhigh',
         self::FABLE_5_1  => 'xhigh',
         self::FABLE_5    => 'xhigh',
         self::OPUS_5_5   => 'xhigh',
         self::OPUS_5     => 'xhigh',
+        self::SONNET_5_5 => 'medium',
+        self::HAIKU_5_5  => 'medium',
         self::SONNET_5   => 'medium',
         self::OPUS_4_8   => 'xhigh',
         self::OPUS_4_7   => 'xhigh',
@@ -282,10 +332,14 @@ class ClaudeModels {
     private const ALLOWED_EFFORTS = [
         self::FABLE_5_2  => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::MYTHOS_5_2 => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::MYTHOS_5_1 => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::MYTHOS_5   => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::FABLE_5_1  => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::FABLE_5    => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::OPUS_5_5   => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::OPUS_5     => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::SONNET_5_5 => ['low', 'medium', 'high', 'xhigh', 'max'],
+        self::HAIKU_5_5  => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::SONNET_5   => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::OPUS_4_8   => ['low', 'medium', 'high', 'xhigh', 'max'],
         self::OPUS_4_7   => ['low', 'medium', 'high', 'xhigh', 'max'],
@@ -333,10 +387,15 @@ class ClaudeModels {
     private const THINKING_POLICY = [
         self::FABLE_5_2  => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
         self::MYTHOS_5_2 => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
+        self::MYTHOS_5_1 => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
+        self::MYTHOS_5   => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
         self::FABLE_5_1  => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
         self::FABLE_5    => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
         self::OPUS_5_5   => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
         self::OPUS_5     => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_DISABLED, 'off_max_effort' => 'high'],
+        // Sonnet 5.5 rejects {type: disabled} at every effort; Haiku 5.5 takes it up to high.
+        self::SONNET_5_5 => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_NEVER],
+        self::HAIKU_5_5  => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_DISABLED, 'off_max_effort' => 'high'],
         self::SONNET_5   => ['default' => self::THINKING_DEFAULT_ADAPTIVE, 'off' => self::THINKING_OFF_DISABLED],
         self::OPUS_4_8   => ['default' => self::THINKING_DEFAULT_OFF, 'off' => self::THINKING_OFF_OMIT],
         self::OPUS_4_7   => ['default' => self::THINKING_DEFAULT_OFF, 'off' => self::THINKING_OFF_OMIT],
@@ -382,10 +441,14 @@ class ClaudeModels {
     private const THINKING_SUMMARY_OPT_IN = [
         self::FABLE_5_2  => true,
         self::MYTHOS_5_2 => true,
+        self::MYTHOS_5_1 => true,
+        self::MYTHOS_5   => true,
         self::FABLE_5_1  => true,
         self::FABLE_5    => true,
         self::OPUS_5_5   => true,
         self::OPUS_5     => true,
+        self::SONNET_5_5 => true,
+        self::HAIKU_5_5  => true,
         self::SONNET_5   => true,
         self::OPUS_4_8   => true,
         self::OPUS_4_7   => true,
@@ -447,10 +510,14 @@ class ClaudeModels {
     private const SUPPORTS_MID_CONVERSATION_SYSTEM = [
         self::FABLE_5_2  => true,
         self::MYTHOS_5_2 => true,
+        self::MYTHOS_5_1 => true,
+        self::MYTHOS_5   => true,
         self::FABLE_5_1  => true,
         self::FABLE_5    => true,
         self::OPUS_5_5   => true,
         self::OPUS_5     => true,
+        self::SONNET_5_5 => true,
+        self::HAIKU_5_5  => true,
         self::OPUS_4_8   => true,
     ];
 
@@ -485,14 +552,15 @@ class ClaudeModels {
         self::OPUS_4_7   => true,
         self::OPUS_4_6   => true,
         self::SONNET_5   => true,
+        self::SONNET_5_5 => true,
+        self::HAIKU_5_5  => true,
         self::SONNET_4_6 => true,
     ];
 
     /**
      * Models that accept a task budget (`output_config.task_budget`, beta
      * task-budgets-2026-03-13). Not Sonnet 5, and nothing before Opus 4.7;
-     * hand-maintained, as the Models API reports no flag for it. Sonnet 5.5
-     * and Haiku 5.5 are listed by id until the registry carries them.
+     * hand-maintained, as the Models API reports no flag for it.
      */
     private const SUPPORTS_TASK_BUDGET = [
         self::FABLE_5_2    => true,
@@ -501,8 +569,10 @@ class ClaudeModels {
         self::FABLE_5      => true,
         self::OPUS_5_5     => true,
         self::OPUS_5       => true,
-        'claude-sonnet-5-5' => true,
-        'claude-haiku-5-5'  => true,
+        self::MYTHOS_5_1   => true,
+        self::MYTHOS_5     => true,
+        self::SONNET_5_5   => true,
+        self::HAIKU_5_5    => true,
         self::OPUS_4_8     => true,
         self::OPUS_4_7     => true,
     ];

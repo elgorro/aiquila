@@ -46,7 +46,13 @@ Qwen models above remain. `GET /models` also lists each one under a second id
 
 The line-up changes as the experiment evolves, so the settings UI lists whatever
 `GET /models` currently returns and falls back to `HetznerModels` only when that
-call fails. Model ids can also be typed freely. Keep
+call fails. Model ids can also be typed freely.
+
+`GET /models` answers with ids only, so the picker cannot read capabilities from
+it. A model `HetznerModels` knows is shown as a chat model with its vision hint.
+Every other id, the second-id aliases included, is marked *not verified* but
+stays selectable. A saved model that is no longer in the list gets a warning
+that it was probably dropped from the line-up. Keep
 `nextcloud-app/lib/Service/HetznerModels.php` in step with the table above: it
 carries the fallback list, the per-model output-token ceilings and the
 text-only set.

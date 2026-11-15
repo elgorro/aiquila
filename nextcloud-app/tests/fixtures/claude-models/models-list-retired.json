@@ -1,0 +1,95 @@
+{
+  "data": [
+    {
+      "type": "model",
+      "id": "claude-sonnet-4-20250514",
+      "display_name": "Claude Sonnet 4",
+      "created_at": "2025-05-14T00:00:00Z",
+      "deprecated_at": "2026-04-14T00:00:00Z",
+      "retires_at": "2026-06-15T00:00:00Z",
+      "lifecycle": "retired",
+      "line": "sonnet",
+      "max_input_tokens": 200000,
+      "max_tokens": 64000,
+      "capabilities": {
+        "batch": {
+          "supported": true
+        },
+        "citations": {
+          "supported": true
+        },
+        "code_execution": {
+          "supported": true
+        },
+        "image_input": {
+          "supported": true
+        },
+        "pdf_input": {
+          "supported": true
+        },
+        "structured_outputs": {
+          "supported": true
+        },
+        "effort": {
+          "supported": true,
+          "low": {
+            "supported": true
+          },
+          "medium": {
+            "supported": true
+          },
+          "high": {
+            "supported": true
+          },
+          "xhigh": {
+            "supported": true
+          },
+          "max": {
+            "supported": true
+          }
+        },
+        "context_management": {
+          "supported": true,
+          "clear_thinking_20251015": {
+            "supported": true
+          },
+          "clear_tool_uses_20250919": {
+            "supported": true
+          },
+          "compact_20260112": {
+            "supported": true
+          }
+        },
+        "server_tools": {
+          "supported": true,
+          "code_execution": {
+            "supported": true
+          },
+          "web_search": {
+            "supported": true
+          }
+        },
+        "thinking": {
+          "supported": true,
+          "types": {
+            "adaptive": {
+              "supported": true
+            },
+            "between_tools": {
+              "supported": false
+            },
+            "disabled": {
+              "supported": true
+            },
+            "enabled": {
+              "supported": false
+            }
+          }
+        }
+      }
+    }
+  ],
+  "first_id": "claude-sonnet-4-20250514",
+  "last_id": "claude-sonnet-4-20250514",
+  "has_more": false
+}

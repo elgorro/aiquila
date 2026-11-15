@@ -741,6 +741,46 @@ class ProviderSettingsServiceTest extends TestCase {
             $field['listing_error'],
         );
         $this->assertArrayNotHasKey('option_details', $field);
+        $this->assertTrue($field['taggable'], 'with only the built-in list, typing an id must stay possible');
+    }
+
+    public function testARetiredModelInUseIsExplainedAndBadgedButNotOffered(): void {
+        $catalog = ModelCatalog::listed(
+            [ModelCompatibility::chat('new-model')],
+            'test',
+            'Test provider',
+            '',
+            [ModelCompatibility::retired('old-model', 'Old Model', '2026-06-15', 'New Model')],
+        );
+        $field = $this->modelField($this->catalogProvider($catalog, 'old-model'));
+        $this->assertSame(['new-model'], $field['options']);
+        $this->assertSame('Old Model (old-model) was retired on 2026-06-15. Requests to it fail. Pick New Model.', $field['warning']);
+        $this->assertSame(ModelCompatibility::STATUS_RETIRED, $field['option_details']['old-model']['status']);
+    }
+
+    public function testRetiredModelsSurviveTheCacheRoundTrip(): void {
+        $catalog = ModelCatalog::listed([ModelCompatibility::chat('a')], 'test', 'P', '', [ModelCompatibility::retired('b')]);
+        $back = ModelCatalog::fromArray($catalog->toArray());
+        $this->assertNotNull($back);
+        $this->assertSame(['a'], $back->ids());
+        $this->assertSame(ModelCompatibility::STATUS_RETIRED, $back->find('b')?->status);
+    }
+
+    public function testAProviderWithoutAListingGetsTheStaticVerdictOnItsTextField(): void {
+        $provider = $this->createStubForIntersectionOfInterfaces([LLMProviderInterface::class, ModelCatalogInterface::class]);
+        $provider->method('getId')->willReturn('testprovider');
+        $provider->method('getLabel')->willReturn('Test provider');
+        $provider->method('getSettingsSchema')->willReturn([ProviderSettingsSchema::text('model', 'model_test', 'Model', '')]);
+        $provider->method('getModel')->willReturn('odd-model');
+        $provider->method('getCapabilities')->willReturn(ProviderSettingsSchema::capabilities(['vision' => true, 'tools' => true, 'streaming' => true]));
+        $provider->method('fetchModelCatalog')->willReturn(null);
+        $provider->method('assessUnlistedModel')->willReturn(ModelCompatibility::unverified('odd-model', '', 'nothing lists it.'));
+
+        $field = $this->modelField($provider);
+        $this->assertSame('odd-model is not verified: nothing lists it.', $field['notice']);
+        $this->assertArrayNotHasKey('option_details', $field);
+        $this->assertArrayNotHasKey('listing_error', $field, 'no listing is not a failed listing');
+        $this->assertNull($this->service->modelCatalog($provider, null));
     }
 
     public function testACachedCatalogIsServedWithoutAskingTheProvider(): void {

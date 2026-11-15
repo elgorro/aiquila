@@ -276,6 +276,76 @@ class MistralProviderTest extends TestCase {
         $this->assertContains(MistralModels::SMALL, $models);
     }
 
+    // ── Model catalog ──────────────────────────────────────────────────────
+
+    private function mistralCatalog(): \OCA\AIquila\Service\Provider\ModelCatalog {
+        return MistralProvider::mistralCatalog(
+            json_decode((string)file_get_contents(__DIR__ . '/../fixtures/mistral-models/models.json'), true)['data'],
+            'Mistral',
+            new \DateTimeImmutable('2026-11-15T00:00:00Z'),
+        );
+    }
+
+    public function testCatalogFoldsAliasesIntoOneEntryButStillResolvesThem(): void {
+        $catalog = $this->mistralCatalog();
+        $this->assertContains('mistral-small-2603', $catalog->ids());
+        $this->assertNotContains('mistral-small-latest', $catalog->ids());
+        $alias = $catalog->assess('mistral-small-latest');
+        $this->assertSame('ok', $alias?->status);
+        $this->assertTrue($alias?->vision);
+        $this->assertSame('Mistral Small 4', $alias?->label);
+    }
+
+    public function testCatalogMarksChatModelsWithoutFunctionCalling(): void {
+        $nemo = $this->mistralCatalog()->find('open-mistral-nemo');
+        $this->assertSame('no_tools', $nemo?->status);
+        $this->assertSame('Mistral Nemo (open-mistral-nemo) doesn\'t support tool calling. Plain chat works, but Nextcloud tools and Cowork need a model with tool support.', $nemo?->message);
+    }
+
+    public function testCatalogNamesWhatAModelThatCannotChatDoesInstead(): void {
+        $catalog = $this->mistralCatalog();
+        $this->assertSame('Mistral OCR (mistral-ocr-2512) can\'t chat: it is an OCR model. Pick a chat model, for example mistral-small-2603.', $catalog->find('mistral-ocr-2512')?->message);
+        $this->assertSame('Codestral (codestral-2508) can\'t chat: it is a code-completion (FIM) model. Pick a chat model, for example mistral-small-2603.', $catalog->find('codestral-2508')?->message);
+        $this->assertSame('Voxtral Mini (voxtral-mini-2602) can\'t chat: it is a transcription model. Pick a chat model, for example mistral-small-2603.', $catalog->find('voxtral-mini-2602')?->message);
+        // No flag says "embeddings", so the sentence does not claim it.
+        $this->assertSame('Mistral Embed (mistral-embed) can\'t chat. Pick a chat model, for example mistral-small-2603.', $catalog->find('mistral-embed')?->message);
+        $this->assertFalse($catalog->find('mistral-embed')?->isSelectable());
+    }
+
+    public function testCatalogUsesTheDocumentedReplacementForDeprecatedAndRetiredModels(): void {
+        $catalog = $this->mistralCatalog();
+        $this->assertSame(
+            'Mistral Large 3 (mistral-large-2512) is deprecated and will be retired on 2027-04-30. Switch to mistral-medium-latest before then.',
+            $catalog->find('mistral-large-2512')?->message,
+        );
+        $this->assertNotContains('mistral-large-2411', $catalog->ids());
+        $this->assertSame(
+            'Mistral Large 2.1 (mistral-large-2411) was retired on 2026-05-31. Requests to it fail. Pick mistral-medium-latest.',
+            $catalog->assess('mistral-large-2411')?->message,
+        );
+    }
+
+    public function testCatalogRefusesAnArchivedFineTune(): void {
+        $ft = $this->mistralCatalog()->find('ft:open-mistral-7b:abc:20260101:x1');
+        $this->assertFalse($ft?->isSelectable());
+        $this->assertSame('my-ft (ft:open-mistral-7b:abc:20260101:x1) is archived, so Mistral will not serve it. Unarchive it in the Mistral console, or pick another model.', $ft?->message);
+    }
+
+    public function testCardsWithoutCapabilitiesAreNotVerifiedRatherThanGuessed(): void {
+        $this->client->method('get')->willReturn($this->jsonResponse(['data' => [['id' => 'mystery-model']]]));
+        $verdict = $this->provider->fetchModelCatalog('u')->find('mystery-model');
+        $this->assertSame('unverified', $verdict?->status);
+    }
+
+    public function testA404OnChatNamesTheModel(): void {
+        $this->client->method('post')->willThrowException(new \RuntimeException('Client error: `POST https://api.mistral.ai/v1/chat/completions` resulted in a `404 Not Found` response'));
+        $result = $this->provider->chat([['role' => 'user', 'content' => 'hi']], null, null, ['model' => 'mistral-large-2411']);
+        $this->assertSame(
+            'mistral-large-2411 isn\'t in the model list from Mistral. Mistral answers 404 for a model ID that is retired or does not exist; pick a current one from the list on the provider card.',
+            $result['error'],
+        );
+    }
+
     public function testVisionFallbackTargetsACurrentModel(): void {
         $captured = null;
         $this->client->method('post')->willReturnCallback(function (string $url, array $opts) use (&$captured) {

@@ -38,6 +38,10 @@ class TestableClaudeSDKService extends ClaudeSDKService {
     private ?\Exception $streamException = null;
 
     private ?array      $listModelsItems     = null;
+    /** What a `lifecycle=retired` listing returns; empty by default. */
+    private array       $retiredModelsItems  = [];
+    /** `lifecycle` params of every callListModels() call, in order. */
+    public array        $listModelsCalls     = [];
     private ?\Exception $listModelsException = null;
     private ?ModelInfo  $retrieveModelInfo   = null;
     private ?\Exception $retrieveModelException = null;
@@ -80,6 +84,7 @@ class TestableClaudeSDKService extends ClaudeSDKService {
     }
 
     public function setListModelsItems(array $items): void      { $this->listModelsItems = $items; }
+    public function setRetiredModelsItems(array $items): void   { $this->retiredModelsItems = $items; }
     public function throwOnListModels(\Exception $e): void      { $this->listModelsException = $e; }
     public function setRetrieveModelInfo(ModelInfo $info): void { $this->retrieveModelInfo = $info; }
     public function throwOnRetrieveModel(\Exception $e): void   { $this->retrieveModelException = $e; }
@@ -133,7 +138,11 @@ class TestableClaudeSDKService extends ClaudeSDKService {
     }
 
     protected function callListModels(Client $client, array $params): array {
+        $this->listModelsCalls[] = $params['lifecycle'] ?? null;
         if ($this->listModelsException !== null) throw $this->listModelsException;
+        if (($params['lifecycle'] ?? null) === ['retired']) {
+            return $this->retiredModelsItems;
+        }
         return $this->listModelsItems ?? [];
     }
 
@@ -1486,7 +1495,116 @@ class ClaudeServiceTest extends TestCase {
 
         $result = $this->testable->listModels('testuser');
 
-        $this->assertSame([ClaudeModels::SONNET_4_6, ClaudeModels::HAIKU_4_5], $result);
+        // The catalog orders by id, which groups each model line together.
+        $this->assertSame([ClaudeModels::HAIKU_4_5, ClaudeModels::SONNET_4_6], $result);
+    }
+
+    // ── fetchModelCatalog() ───────────────────────────────────────────────
+
+    /**
+     * @return list<ModelInfo> the `data` of a Models API page, in the
+     *                         documented shape (fixtures/claude-models/)
+     */
+    private static function modelPage(string $fixture): array {
+        $page = json_decode((string)file_get_contents(__DIR__ . '/../fixtures/claude-models/' . $fixture), true);
+        return array_map(static fn(array $m) => ModelInfo::fromArray($m), $page['data']);
+    }
+
+    private function claudeCatalog(): \OCA\AIquila\Service\Provider\ModelCatalog {
+        $this->configWithApiKey();
+        $this->testable->setListModelsItems(self::modelPage('models-list.json'));
+        $this->testable->setRetiredModelsItems(self::modelPage('models-list-retired.json'));
+        $catalog = $this->testable->fetchModelCatalog('testuser');
+        $this->assertNotNull($catalog);
+        $this->assertFalse($catalog->isFailure());
+        return $catalog;
+    }
+
+    public function testCatalogAsksForRetiredModelsSeparately(): void {
+        $this->claudeCatalog();
+        $this->assertSame([null, ['retired']], $this->testable->listModelsCalls);
+    }
+
+    public function testCatalogMarksActiveModelsWithDisplayNameAndVision(): void {
+        $sonnet = $this->claudeCatalog()->find('claude-sonnet-5-5');
+        $this->assertNotNull($sonnet);
+        $this->assertSame('ok', $sonnet->status);
+        $this->assertSame('Claude Sonnet 5.5', $sonnet->label);
+        $this->assertTrue($sonnet->tools);
+        $this->assertTrue($sonnet->vision);
+        $this->assertSame('', $sonnet->message);
+    }
+
+    public function testCatalogExplainsDeprecatedModelWithRetirementDateAndSameLineReplacement(): void {
+        $old = $this->claudeCatalog()->assess('claude-sonnet-4-5-20250929');
+        $this->assertNotNull($old);
+        $this->assertSame('deprecated', $old->status);
+        $this->assertTrue($old->isSelectable());
+        $this->assertSame(
+            'Claude Sonnet 4.5 (claude-sonnet-4-5-20250929) is deprecated and will be retired on 2026-11-30. Switch to Claude Sonnet 5.5 (claude-sonnet-5-5) before then.',
+            $old->message,
+        );
+    }
+
+    public function testCatalogKeepsRetiredModelsOutOfThePickerButExplainsThem(): void {
+        $catalog = $this->claudeCatalog();
+        $this->assertNotContains('claude-sonnet-4-20250514', $catalog->ids());
+        $gone = $catalog->assess('claude-sonnet-4-20250514');
+        $this->assertNotNull($gone);
+        $this->assertSame('retired', $gone->status);
+        $this->assertFalse($gone->isSelectable());
+        $this->assertSame(
+            'Claude Sonnet 4 (claude-sonnet-4-20250514) was retired on 2026-06-15. Requests to it fail. Pick Claude Sonnet 5.5 (claude-sonnet-5-5).',
+            $gone->message,
+        );
+    }
+
+    public function testCatalogCallsAnUnlistedIdMissing(): void {
+        $typo = $this->claudeCatalog()->assess('claude-sonet-5');
+        $this->assertNotNull($typo);
+        $this->assertSame('missing', $typo->status);
+        $this->assertSame('claude-sonet-5 isn\'t in the model list from Claude (Anthropic). Check the model name, or pick one from the list.', $typo->message);
+    }
+
+    public function testCatalogSurvivesAFailedRetiredListing(): void {
+        $this->configWithApiKey();
+        $this->testable->setListModelsItems(self::modelPage('models-list.json'));
+        $catalog = $this->testable->fetchModelCatalog('testuser');
+        $this->assertNotNull($catalog);
+        $this->assertFalse($catalog->isFailure());
+        $this->assertSame('missing', $catalog->assess('claude-sonnet-4-20250514')?->status);
+    }
+
+    public function testCatalogFailureSaysWhyInOneSentence(): void {
+        $this->configWithApiKey();
+        $this->testable->throwOnListModels($this->makeApiError(401, ['type' => 'authentication_error', 'message' => 'invalid x-api-key']));
+        $catalog = $this->testable->fetchModelCatalog('testuser');
+        $this->assertNotNull($catalog);
+        $this->assertSame(
+            'Couldn\'t load the model list from Claude (Anthropic): the credentials were rejected. Showing the built-in list.',
+            $catalog->failureMessage(),
+        );
+    }
+
+    // ── Runtime: a 404 names the model ────────────────────────────────────
+
+    public function testNotFoundOnMessagesExplainsARetiredModel(): void {
+        $this->configWithApiKey('claude-sonnet-4-20250514-typo');
+        $this->testable->throwOnCreate($this->makeApiError(404, ['type' => 'not_found_error', 'message' => 'model: claude-sonnet-4-20250514-typo']));
+        $retired = self::modelPage('models-list-retired.json')[0];
+        $this->testable->setRetrieveModelInfo($retired);
+
+        $result = $this->testable->ask('Hi', '', 'testuser');
+        $this->assertSame('Claude Sonnet 4 (claude-sonnet-4-20250514) was retired on 2026-06-15. Requests to it fail. Pick another model.', $result['error']);
+    }
+
+    public function testNotFoundOnMessagesCallsAnUnknownModelMissing(): void {
+        $this->configWithApiKey('claude-nope');
+        $this->testable->throwOnCreate($this->makeApiError(404, ['type' => 'not_found_error', 'message' => 'model: claude-nope']));
+        $this->testable->throwOnRetrieveModel($this->makeApiError(404, ['type' => 'not_found_error', 'message' => 'model: claude-nope']));
+
+        $result = $this->testable->ask('Hi', '', 'testuser');
+        $this->assertSame('claude-nope isn\'t in the model list from Claude (Anthropic). Check the model name, or pick one from the list on the provider card.', $result['error']);
     }
 
     public function testListModelsNoApiKeyReturnsNull(): void {

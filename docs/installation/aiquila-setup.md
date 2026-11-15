@@ -221,21 +221,25 @@ these:
 - `claude-fable-5` - Older Fable; thinking always on, xhigh effort
 - `claude-opus-5-5` - Newest Opus; thinking always on, xhigh effort
 - `claude-opus-5` - Complex agentic coding and enterprise work; adaptive thinking (can be turned off up to effort high), xhigh effort
+- `claude-sonnet-5-5` - Newest Sonnet; thinking always on, medium effort
 - `claude-sonnet-5` - Best speed/intelligence balance; adaptive thinking, medium effort (**default**)
+- `claude-haiku-5-5` - Newest Haiku; adaptive thinking (can be turned off up to effort high), medium effort
 - `claude-opus-4-8` - Previous-generation Opus; adaptive thinking, xhigh effort
 - `claude-opus-4-7` - Adaptive thinking, xhigh effort
 - `claude-opus-4-6` - Adaptive thinking, high effort
 - `claude-sonnet-4-6` - Adaptive thinking, medium effort
-- `claude-sonnet-4-5-20250929` - Fast, cost-effective
 - `claude-haiku-4-5-20251001` - Fastest, most economical
 - `claude-opus-4-5-20251101` - Older Opus generation
 
 The retired `claude-sonnet-4-20250514` and `claude-opus-4-20250514` are mapped
-to `claude-sonnet-4-6` and `claude-opus-4-7`.
+to `claude-sonnet-4-6` and `claude-opus-4-8`. Deprecated models, such as
+`claude-sonnet-4-5-20250929`, are not suggested; the live list marks them with their
+retirement date.
 
-`claude-mythos-5-2` has Fable 5.2's limits but is open only to organisations verified
-through Anthropic's verification programs, so it is not suggested in the model list.
-Enter it by hand if your key has access.
+`claude-mythos-5-2`, `claude-mythos-5-1` and `claude-mythos-5` have the limits of the
+matching Fable but are open only to organisations verified through Anthropic's
+verification programs, so they are not suggested in the built-in list. The live list
+shows them when your key has access, or enter one by hand.
 
 The Claude API rejects the `temperature` / `top_p` / `top_k` sampling parameters on every
 model, so AIquila never sends them to Claude, on any provider. The OpenAI-compatible providers

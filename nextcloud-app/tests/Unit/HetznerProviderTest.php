@@ -265,6 +265,28 @@ class HetznerProviderTest extends TestCase {
         $this->assertContains('Qwen3.8-27B', $models);
     }
 
+    /** The ids-only answer recorded on 2026-11-05 (see #859). */
+    private const LIVE_IDS = ['Qwen/Qwen3.6-35B-A3B', 'Qwen/Qwen3.6-35B-A3B-FP8', 'Qwen/Qwen3.8-27B', 'Qwen3.8-27B'];
+
+    public function testCatalogTrustsOnlyTheRegistryForCapabilities(): void {
+        $catalog = HetznerProvider::hetznerCatalog(self::LIVE_IDS, 'Hetzner Inference (EU)');
+        $this->assertSame('ok', $catalog->find(HetznerModels::QWEN3_6_35B)?->status);
+        $this->assertSame('ok', $catalog->find(HetznerModels::QWEN3_8_27B)?->status);
+        $this->assertSame(
+            'Qwen/Qwen3.8-27B is not verified: Hetzner Inference reports model IDs only, and AIquila does not know this one, so it cannot check that it chats or calls tools.',
+            $catalog->find('Qwen/Qwen3.8-27B')?->message,
+        );
+        $this->assertTrue($catalog->find('Qwen/Qwen3.8-27B')?->isSelectable());
+    }
+
+    public function testASavedModelThatDroppedOutOfTheLineUpSaysSo(): void {
+        $catalog = HetznerProvider::hetznerCatalog(self::LIVE_IDS, 'Hetzner Inference (EU)');
+        $this->assertSame(
+            'Kimi-K2.7-Code isn\'t in the model list from Hetzner Inference (EU). Hetzner Inference changes its line-up often, so it is probably no longer offered. Pick another model.',
+            $catalog->assess('Kimi-K2.7-Code')?->message,
+        );
+    }
+
     public function testStaticRegistryCoversTheFullLineUp(): void {
         // The fallback is what the settings UI shows when the live listing
         // fails, so a registry that has gone stale silently narrows the picker.

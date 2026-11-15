@@ -27,7 +27,7 @@ use OCA\AIquila\Service\HetznerModels;
  * never user-settable: the server makes outbound requests to whatever is
  * configured, so letting users set it would be an SSRF vector.
  */
-class HetznerProvider extends AbstractOpenAiCompatibleProvider {
+class HetznerProvider extends AbstractOpenAiCompatibleProvider implements ModelCatalogInterface {
     private const PROVIDER_ID = 'hetzner';
 
     /** Default endpoint; overridable via the `hetzner_base_url` app config key. */
@@ -121,6 +121,59 @@ class HetznerProvider extends AbstractOpenAiCompatibleProvider {
     /** Image input depends on the selected model; unknown ids are assumed capable. */
     protected function supportsVisionInput(?string $userId = null): bool {
         return HetznerModels::supportsVision($this->getModel($userId));
+    }
+
+    // ── Models ──────────────────────────────────────────────────────────────
+
+    public function listModels(?string $userId = null): ?array {
+        if (!$this->isConfigured($userId)) {
+            return null;
+        }
+        $catalog = $this->fetchModelCatalog($userId);
+        $ids = $catalog->isFailure() ? [] : $catalog->ids();
+        return $ids !== [] ? $ids : null;
+    }
+
+    public function fetchModelCatalog(?string $userId = null): ModelCatalog {
+        if (!$this->isConfigured($userId)) {
+            return ModelCatalog::failed($this->getLabel(), $this->notConfiguredMessage());
+        }
+        try {
+            $ids = $this->fetchModelIds($userId);
+        } catch (\Throwable $e) {
+            $this->logger->warning('AIquila Hetzner: Could not list models', ['error' => $e->getMessage()]);
+            return ModelCatalog::failed($this->getLabel(), $this->errorMessage($e));
+        }
+        return self::hetznerCatalog($ids, $this->getLabel());
+    }
+
+    public function assessUnlistedModel(string $model): ?ModelCompatibility {
+        return null;
+    }
+
+    /**
+     * `GET /models` answers with ids only (no modalities, type or context
+     * length), so the only capability source is HetznerModels: a model it
+     * knows is a chat model with its vision hint, anything else is "not
+     * verified". The line-up changes often, which is why a saved model that
+     * dropped out of the list gets its own hint.
+     *
+     * @param list<string> $ids
+     */
+    public static function hetznerCatalog(array $ids, string $providerLabel): ModelCatalog {
+        $known = HetznerModels::getAllModels();
+        $models = [];
+        foreach ($ids as $id) {
+            $models[] = in_array($id, $known, true)
+                ? ModelCompatibility::chat($id, '', true, HetznerModels::supportsVision($id))
+                : ModelCompatibility::unverified($id, '', 'Hetzner Inference reports model IDs only, and AIquila does not know this one, so it cannot check that it chats or calls tools.');
+        }
+        return ModelCatalog::listed(
+            $models,
+            'hetzner-models',
+            $providerLabel,
+            'Hetzner Inference changes its line-up often, so it is probably no longer offered. Pick another model.',
+        );
     }
 
     // ── Errors ──────────────────────────────────────────────────────────────

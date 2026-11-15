@@ -95,6 +95,15 @@ final class CloudEndpoints {
         return 'https://bedrock-runtime.' . self::requireAwsRegion($region) . '.amazonaws.com';
     }
 
+    /**
+     * The control plane, for ListFoundationModels and ListInferenceProfiles.
+     *
+     * @return non-empty-string
+     */
+    public static function bedrockControlPlaneUrl(string $region): string {
+        return 'https://bedrock.' . self::requireAwsRegion($region) . '.amazonaws.com';
+    }
+
     /** @return non-empty-string */
     public static function bedrockMantleUrl(string $region): string {
         return 'https://bedrock-mantle.' . self::requireAwsRegion($region) . '.api.aws/anthropic';

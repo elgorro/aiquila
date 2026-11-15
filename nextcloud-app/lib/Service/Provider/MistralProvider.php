@@ -28,7 +28,7 @@ use Psr\Log\LoggerInterface;
  * the `stream => true` option, under which Response::getBody() yields a raw PHP
  * stream resource we read incrementally for Server-Sent Events.
  */
-class MistralProvider implements LLMProviderInterface {
+class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
     use SseStreaming;
 
     private const PROVIDER_ID = 'mistral';
@@ -54,6 +54,9 @@ class MistralProvider implements LLMProviderInterface {
     public const DEFAULT_TTS_MODEL = 'voxtral-mini-tts-2603';
     /** The conversation model that drives the image_generation tool. */
     public const DEFAULT_IMAGE_MODEL = 'mistral-medium-latest';
+
+    /** The chat model of the request in flight, for naming it in an error. */
+    private string $lastModel = '';
 
     public function __construct(
         private readonly IClientService $clientService,
@@ -218,13 +221,140 @@ class MistralProvider implements LLMProviderInterface {
         if ($this->getApiKey($userId) === '') {
             return null;
         }
-        try {
-            $ids = $this->fetchModelIds($userId);
-            return $ids !== [] ? $ids : null;
-        } catch (\Throwable $e) {
-            $this->logger->warning('AIquila Mistral: Could not list models', ['error' => $e->getMessage()]);
+        $catalog = $this->fetchModelCatalog($userId);
+        if ($catalog->isFailure()) {
             return null;
         }
+        $ids = $catalog->ids();
+        return $ids !== [] ? $ids : null;
+    }
+
+    public function fetchModelCatalog(?string $userId = null): ModelCatalog {
+        if ($this->getApiKey($userId) === '') {
+            return ModelCatalog::failed($this->getLabel(), 'No Mistral API key configured.');
+        }
+        try {
+            $items = $this->fetchModelItems($userId);
+        } catch (\Throwable $e) {
+            $this->logger->warning('AIquila Mistral: Could not list models', ['error' => $e->getMessage()]);
+            return ModelCatalog::failed($this->getLabel(), $this->errorMessage($e));
+        }
+        return self::mistralCatalog($items, $this->getLabel(), new \DateTimeImmutable());
+    }
+
+    /** Mistral lists every model it serves, so there is no unlisted case. */
+    public function assessUnlistedModel(string $model): ?ModelCompatibility {
+        return null;
+    }
+
+    /**
+     * Verdicts from the model cards of `GET /v1/models`
+     * (https://docs.mistral.ai/api/endpoint/models; schema BaseModelCard /
+     * FTModelCard in https://docs.mistral.ai/openapi.yaml):
+     *
+     *   - `capabilities.completion_chat` decides whether it chats at all; a
+     *     model without it is named for what it does instead (OCR,
+     *     moderation, classification, FIM, audio) from its other flags.
+     *   - `function_calling` decides tools, `vision` image input.
+     *   - `deprecation` (a date-time) with `deprecation_replacement_model`
+     *     feeds the lifecycle messages: deprecated until that date, retired
+     *     after it — Mistral answers retired ids with a 404.
+     *   - `archived` fine-tuned models cannot be called until unarchived.
+     *   - Each alias is listed as its own card. The aliases of one model are
+     *     folded into a single picker entry; the others stay findable, so a
+     *     saved alias still resolves.
+     *
+     * @param list<array<array-key, mixed>> $items
+     */
+    public static function mistralCatalog(array $items, string $providerLabel, \DateTimeImmutable $now): ModelCatalog {
+        $chatIds = [];
+        foreach ($items as $item) {
+            if (is_string($item['id'] ?? null) && (($item['capabilities'] ?? [])['completion_chat'] ?? false) === true) {
+                $chatIds[$item['id']] = true;
+            }
+        }
+        $suggestion = isset($chatIds[MistralModels::DEFAULT_MODEL]) ? MistralModels::DEFAULT_MODEL : '';
+
+        $listed = [];
+        $hidden = [];
+        $seen = [];
+        foreach ($items as $item) {
+            $id = is_string($item['id'] ?? null) ? $item['id'] : '';
+            if ($id === '' || isset($seen[$id])) {
+                continue;
+            }
+            $verdict = self::assessModelCard($id, $item, $suggestion, $now);
+            $seen[$id] = true;
+            /** @var mixed $aliases */
+            $aliases = $item['aliases'] ?? [];
+            foreach (is_array($aliases) ? $aliases : [] as $alias) {
+                if (is_string($alias) && $alias !== $id && !isset($seen[$alias])) {
+                    $seen[$alias] = true;
+                    $hidden[] = self::assessModelCard($alias, $item, $suggestion, $now);
+                }
+            }
+            if ($verdict->status === ModelCompatibility::STATUS_RETIRED) {
+                $hidden[] = $verdict;
+            } else {
+                $listed[] = $verdict;
+            }
+        }
+        return ModelCatalog::listed($listed, 'mistral-models', $providerLabel, '', $hidden);
+    }
+
+    /** @param array<array-key, mixed> $card */
+    private static function assessModelCard(string $id, array $card, string $suggestion, \DateTimeImmutable $now): ModelCompatibility {
+        $label = is_string($card['name'] ?? null) && $card['name'] !== $id ? $card['name'] : '';
+        $caps = is_array($card['capabilities'] ?? null) ? $card['capabilities'] : null;
+        if ($caps === null) {
+            return ModelCompatibility::unverified($id, $label, 'Mistral listed it without its capabilities, so AIquila cannot check that it supports chat and tool calling.');
+        }
+        if (($card['archived'] ?? false) === true) {
+            return ModelCompatibility::unavailable($id, $label, 'is archived, so Mistral will not serve it.', [], 'Unarchive it in the Mistral console, or pick another model.');
+        }
+        $replacement = is_string($card['deprecation_replacement_model'] ?? null) ? $card['deprecation_replacement_model'] : '';
+        $deprecation = null;
+        if (is_string($card['deprecation'] ?? null) && $card['deprecation'] !== '') {
+            try {
+                $deprecation = new \DateTimeImmutable($card['deprecation']);
+            } catch (\Exception $e) {
+                $deprecation = null;
+            }
+        }
+        if ($deprecation !== null && $deprecation <= $now) {
+            return ModelCompatibility::retired($id, $label, $deprecation->format('Y-m-d'), $replacement);
+        }
+        if (($caps['completion_chat'] ?? false) !== true) {
+            return ModelCompatibility::cannotChat($id, $label, self::mistralKind($caps), $suggestion);
+        }
+        if ($deprecation !== null) {
+            return ModelCompatibility::deprecated($id, $label, $deprecation->format('Y-m-d'), $replacement);
+        }
+        return ModelCompatibility::chat($id, $label, ($caps['function_calling'] ?? false) === true, ($caps['vision'] ?? false) === true);
+    }
+
+    /**
+     * What a model that cannot chat does instead, from its capability flags,
+     * in the order a model is most likely to be known for.
+     *
+     * @param array<array-key, mixed> $caps
+     */
+    private static function mistralKind(array $caps): string {
+        $kinds = [
+            'ocr' => 'an OCR model',
+            'moderation' => 'a moderation model',
+            'classification' => 'a classification model',
+            'completion_fim' => 'a code-completion (FIM) model',
+            'audio_transcription' => 'a transcription model',
+            'audio_transcription_realtime' => 'a transcription model',
+            'audio_speech' => 'a text-to-speech model',
+        ];
+        foreach ($kinds as $flag => $kind) {
+            if (($caps[$flag] ?? false) === true) {
+                return $kind;
+            }
+        }
+        return '';
     }
 
     public function probe(?string $userId = null): array {
@@ -246,21 +376,31 @@ class MistralProvider implements LLMProviderInterface {
      * @return list<string>
      */
     private function fetchModelIds(?string $userId): array {
-        $client = $this->clientService->newClient();
-        $response = $client->get(self::API_BASE . '/models', [
-            'headers' => $this->headers($this->getApiKey($userId)),
-            'timeout' => 15,
-        ]);
-        $data = json_decode((string)$response->getBody(), true);
-        $items = is_array($data) ? ($data['data'] ?? []) : [];
         $ids = [];
-        foreach ($items as $m) {
+        foreach ($this->fetchModelItems($userId) as $m) {
             if (isset($m['id']) && is_string($m['id'])) {
                 $ids[] = $m['id'];
             }
         }
         sort($ids);
         return $ids;
+    }
+
+    /**
+     * The raw model cards. The API wraps them as `{"object": "list", "data":
+     * [...]}`; the OpenAPI schema describes a bare array, so both are read.
+     *
+     * @return list<array<array-key, mixed>>
+     */
+    private function fetchModelItems(?string $userId): array {
+        $client = $this->clientService->newClient();
+        $response = $client->get(self::API_BASE . '/models', [
+            'headers' => $this->headers($this->getApiKey($userId)),
+            'timeout' => 15,
+        ]);
+        $data = json_decode((string)$response->getBody(), true);
+        $items = is_array($data) ? ($data['data'] ?? (array_is_list($data) ? $data : [])) : [];
+        return array_values(array_filter(is_array($items) ? $items : [], 'is_array'));
     }
 
     // ── Non-streaming entry points ──────────────────────────────────────────
@@ -324,7 +464,7 @@ class MistralProvider implements LLMProviderInterface {
             $body = $this->buildBody($messages, $system, $userId, $options);
             $data = $this->requestJson($body, $userId);
         } catch (\Throwable $e) {
-            return $this->handleException($e, 'chat');
+            return $this->handleException($e, 'chat', $this->lastModel);
         }
 
         $choice = $data['choices'][0] ?? null;
@@ -350,7 +490,7 @@ class MistralProvider implements LLMProviderInterface {
                 $body = $this->buildBody($messages, $system, $userId, $options);
                 $data = $this->requestJson($body, $userId);
             } catch (\Throwable $e) {
-                return $this->handleException($e, 'chatWithTools');
+                return $this->handleException($e, 'chatWithTools', $this->lastModel);
             }
 
             $this->accumulateUsage($total, $data['usage'] ?? []);
@@ -380,7 +520,7 @@ class MistralProvider implements LLMProviderInterface {
             $body = $this->buildBody($messages, $system, $userId, $options);
             $data = $this->requestJson($body, $userId);
         } catch (\Throwable $e) {
-            return $this->handleException($e, 'chatToolsTurn');
+            return $this->handleException($e, 'chatToolsTurn', $this->lastModel);
         }
 
         $total = $this->newUsage();
@@ -498,7 +638,7 @@ class MistralProvider implements LLMProviderInterface {
                 }
             } catch (\Throwable $e) {
                 $this->logger->error('AIquila Mistral: chatWithToolsStream failed', ['error' => $e->getMessage()]);
-                yield ['type' => 'error', 'error' => $this->errorMessage($e), 'usage' => $this->finalizeUsage($total)];
+                yield ['type' => 'error', 'error' => $this->errorMessage($e, $this->lastModel), 'usage' => $this->finalizeUsage($total)];
                 return;
             }
 
@@ -656,7 +796,7 @@ class MistralProvider implements LLMProviderInterface {
             }
         } catch (\Throwable $e) {
             $this->logger->error('AIquila Mistral: chatWithNativeMcp stream failed', ['error' => $e->getMessage()]);
-            yield ['type' => 'error', 'error' => $this->errorMessage($e), 'usage' => $this->finalizeUsage($total)];
+            yield ['type' => 'error', 'error' => $this->errorMessage($e, $this->lastModel), 'usage' => $this->finalizeUsage($total)];
             return;
         }
 
@@ -716,6 +856,7 @@ class MistralProvider implements LLMProviderInterface {
      */
     private function buildConversationBody(array $messages, ?string $system, array $tools, ?string $userId, array $options, bool $stream, ?string $modelOverride = null): array {
         $model = $modelOverride ?? $this->getModel($userId);
+        $this->lastModel = $model;
         $body = [
             'model' => $model,
             'inputs' => $this->toConversationInputs($messages),
@@ -909,6 +1050,7 @@ class MistralProvider implements LLMProviderInterface {
         $model = isset($options['model']) && is_string($options['model']) && $options['model'] !== ''
             ? $options['model']
             : $this->getModel($userId);
+        $this->lastModel = $model;
         $body = [
             'model' => $model,
             'max_tokens' => $this->getMaxTokens($userId),
@@ -1548,13 +1690,25 @@ class MistralProvider implements LLMProviderInterface {
 
     // ── Errors ──────────────────────────────────────────────────────────────
 
-    private function handleException(\Throwable $e, string $context): array {
+    private function handleException(\Throwable $e, string $context, string $model = ''): array {
         $this->logger->error("AIquila Mistral: $context error", ['error' => $e->getMessage()]);
-        return ['error' => $this->errorMessage($e)];
+        return ['error' => $this->errorMessage($e, $model)];
     }
 
-    private function errorMessage(\Throwable $e): string {
+    /** @param string $model the chat model the failed request named, '' for anything else */
+    private function errorMessage(\Throwable $e, string $model = ''): string {
         $msg = $e->getMessage();
+        // Mistral answers a retired or unknown model id with a 404
+        // (https://docs.mistral.ai/inference/model-lifecycle); the endpoints
+        // themselves are fixed, so a 404 on a request that named a model is
+        // about that model.
+        if ($model !== '' && preg_match('/\b404\b/', $msg) === 1) {
+            return ModelCompatibility::missingMessage(
+                $model,
+                $this->getLabel(),
+                'Mistral answers 404 for a model ID that is retired or does not exist; pick a current one from the list on the provider card.',
+            );
+        }
         if (stripos($msg, '401') !== false || stripos($msg, 'unauthorized') !== false) {
             return 'Invalid Mistral API key. Please check your configuration.';
         }

@@ -514,6 +514,11 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider implements ModelCat
         }
     }
 
+    /** Every local backend has some listing, so there is no unlisted case. */
+    public function assessUnlistedModel(string $model): ?ModelCompatibility {
+        return null;
+    }
+
     /**
      * GET a backend-native listing. An HTTP error status means "not this
      * backend" and yields null; a failure without a response is rethrown.

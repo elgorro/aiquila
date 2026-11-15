@@ -8,6 +8,7 @@ namespace OCA\AIquila\Service\Provider\Cloud;
 use Anthropic\Core\BaseClient;
 use Anthropic\Foundry\Client as FoundryClient;
 use OCA\AIquila\Service\ClaudeModels;
+use OCA\AIquila\Service\Provider\ModelCompatibility;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 
 /**
@@ -97,5 +98,35 @@ class FoundryProvider extends AbstractCloudClaudeProvider {
         return $authMode === self::AUTH_ACCESS_TOKEN
             ? FoundryClient::withCredentials(authToken: $this->requiredSecret('access_token'), baseUrl: $baseUrl, resource: '')
             : FoundryClient::withCredentials(apiKey: $this->requiredApiKey(), baseUrl: $baseUrl, resource: '');
+    }
+
+    // ── Models ──────────────────────────────────────────────────────────────
+    //
+    // No listing: deployments can only be listed through the Azure management
+    // plane, which needs a management-scoped Entra token plus subscription and
+    // resource group. The resource key cannot list them, so the deployment
+    // name stays free text and the probe confirms it.
+
+    public function assessUnlistedModel(string $model): ?ModelCompatibility {
+        if ($model === '' || $this->capabilityModel($model) !== $model || ClaudeModels::isKnown($model)) {
+            return null;
+        }
+        return ModelCompatibility::unverified(
+            $model,
+            '',
+            'the deployment name is not a Claude model ID, so AIquila cannot tell which model it serves and does not check thinking and effort against it. Set the base model below.',
+        );
+    }
+
+    protected function modelNotFoundMessage(string $model): string {
+        return sprintf(
+            'Foundry has no deployment named %s on resource %s. Check the name on the resource\'s Deployments page; it is the deployment name, not the model ID, when you chose another one.',
+            $model,
+            $this->appValue('resource'),
+        );
+    }
+
+    protected function permissionDeniedMessage(): string {
+        return 'Foundry refused the request (403). Check that the key belongs to this resource, or that the Entra identity has the Cognitive Services User role on it.';
     }
 }
