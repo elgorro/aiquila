@@ -94,8 +94,12 @@ class DeepSeekProviderTest extends TestCase {
         $this->assertArrayHasKey('error', $result);
     }
 
-    public function testChatTranslatesSystemAndDropsImageBlocks(): void {
+    public function testChatTranslatesSystemAndDropsImageBlocksForATextOnlyModel(): void {
         $captured = null;
+        $this->config = $this->createStub(AppSettings::class);
+        $this->config->method('getUserValue')->willReturn('');
+        $this->config->method('getAppValue')->willReturnCallback(fn($app, $key, $default) => $key === 'model_deepseek' ? 'deepseek-v4-pro' : $default);
+        $this->provider = new DeepSeekProvider($this->clientService, $this->config, $this->credentials, $this->logger);
         $this->client->method('post')->willReturnCallback(function (string $url, array $opts) use (&$captured) {
             $captured = json_decode($opts['body'], true);
             return $this->jsonResponse(['choices' => [['message' => ['content' => 'ok']]]]);
@@ -121,7 +125,7 @@ class DeepSeekProviderTest extends TestCase {
         $this->config = $this->createStub(AppSettings::class);
         $this->config->method('getUserValue')->willReturn('');
         $this->config->method('getAppValue')->willReturnCallback(
-            fn($app, $key, $default) => $key === 'model_deepseek' ? 'deepseek-reasoner' : $default
+            fn($app, $key, $default) => $key === 'model_deepseek' ? 'deepseek-v4-pro' : $default
         );
         $provider = new DeepSeekProvider($this->clientService, $this->config, $this->credentials, $this->logger);
         $this->client->method('post')->willReturnCallback(function (string $url, array $opts) use (&$captured) {
@@ -131,13 +135,17 @@ class DeepSeekProviderTest extends TestCase {
 
         $provider->chat([['role' => 'user', 'content' => 'hi']], null, 'u', ['temperature' => 0.5, 'top_p' => 0.9]);
 
-        $this->assertSame('deepseek-reasoner', $captured['model']);
+        $this->assertSame('deepseek-v4-pro', $captured['model']);
         $this->assertArrayNotHasKey('temperature', $captured);
         $this->assertArrayNotHasKey('top_p', $captured);
     }
 
-    public function testChatModelForwardsSamplingParams(): void {
+    public function testNonThinkingModelForwardsSamplingParams(): void {
         $captured = null;
+        $this->config = $this->createStub(AppSettings::class);
+        $this->config->method('getUserValue')->willReturn('');
+        $this->config->method('getAppValue')->willReturnCallback(fn($app, $key, $default) => $key === 'model_deepseek' ? 'some-other-model' : $default);
+        $this->provider = new DeepSeekProvider($this->clientService, $this->config, $this->credentials, $this->logger);
         $this->client->method('post')->willReturnCallback(function (string $url, array $opts) use (&$captured) {
             $captured = json_decode($opts['body'], true);
             return $this->jsonResponse(['choices' => [['message' => ['content' => 'ok'], 'finish_reason' => 'stop']]]);
@@ -307,13 +315,55 @@ class DeepSeekProviderTest extends TestCase {
     }
 
     public function testListModels(): void {
-        $this->client->method('get')->willReturn($this->jsonResponse([
-            'data' => [['id' => 'deepseek-chat'], ['id' => 'deepseek-reasoner']],
-        ]));
+        $this->client->method('get')->willReturn($this->jsonResponse(self::listing()));
 
-        $models = $this->provider->listModels('u');
-        $this->assertContains('deepseek-chat', $models);
-        $this->assertContains('deepseek-reasoner', $models);
+        $this->assertSame(['deepseek-flash', 'deepseek-v4-pro'], $this->provider->listModels('u'));
+    }
+
+    /** The documented example response (fixtures/deepseek-models/). */
+    private static function listing(): array {
+        return json_decode((string)file_get_contents(__DIR__ . '/../fixtures/deepseek-models/models.json'), true);
+    }
+
+    public function testCatalogLabelsModelsAndReadsVisionFromInputModalities(): void {
+        $catalog = DeepSeekProvider::deepSeekCatalog(self::listing()['data'], 'DeepSeek');
+        $flash = $catalog->find('deepseek-flash');
+        $this->assertSame('ok', $flash?->status);
+        $this->assertSame('DeepSeek-V4.1-Flash', $flash?->label);
+        $this->assertTrue($flash?->vision);
+        $this->assertFalse($catalog->find('deepseek-v4-pro')?->vision);
+    }
+
+    public function testCatalogExplainsTheDiscontinuedNames(): void {
+        $catalog = DeepSeekProvider::deepSeekCatalog(self::listing()['data'], 'DeepSeek');
+        $this->assertNotContains('deepseek-chat', $catalog->ids());
+        $this->assertSame(
+            'deepseek-chat was retired on 2026-07-24. Requests to it fail. Pick deepseek-flash.',
+            $catalog->assess('deepseek-chat')?->message,
+        );
+    }
+
+    public function testCatalogDoesNotGuessAtAnEntryWithoutMetadata(): void {
+        $catalog = DeepSeekProvider::deepSeekCatalog([['id' => 'deepseek-next']], 'DeepSeek');
+        $this->assertSame(
+            'deepseek-next is not verified: DeepSeek listed it without its modalities, and AIquila does not know it.',
+            $catalog->find('deepseek-next')?->message,
+        );
+    }
+
+    public function testCatalogRefusesAModelWithoutTextOutput(): void {
+        $catalog = DeepSeekProvider::deepSeekCatalog([['id' => 'deepseek-ocr', 'output_modalities' => ['json']]], 'DeepSeek');
+        $this->assertFalse($catalog->find('deepseek-ocr')?->isSelectable());
+        $this->assertSame('deepseek-ocr can\'t chat. Pick a chat model, for example deepseek-flash.', $catalog->find('deepseek-ocr')?->message);
+    }
+
+    public function testDiscontinuedStoredModelResolvesToFlash(): void {
+        $config = $this->createStub(AppSettings::class);
+        $config->method('getUserValue')->willReturn('');
+        $config->method('getAppValue')->willReturnCallback(fn($app, $key, $default) => $key === 'model_deepseek' ? 'deepseek-chat' : $default);
+        $provider = new DeepSeekProvider($this->clientService, $config, $this->credentials, $this->logger);
+        $this->assertSame('deepseek-flash', $provider->getModel());
+        $this->assertTrue($provider->getCapabilities()['vision']);
     }
 
     /**

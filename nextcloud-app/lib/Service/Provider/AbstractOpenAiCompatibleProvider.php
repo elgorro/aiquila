@@ -218,12 +218,7 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
      * @return list<string>
      */
     protected function fetchModelIds(?string $userId): array {
-        $client = $this->clientService->newClient();
-        $response = $client->get($this->apiBase() . '/models', $this->requestOptions($userId, [
-            'timeout' => 15,
-        ]));
-        $data = json_decode((string)$response->getBody(), true);
-        $items = is_array($data) ? ($data['data'] ?? []) : [];
+        $items = $this->fetchModelItems($userId);
         $ids = [];
         foreach ($items as $m) {
             if (isset($m['id']) && is_string($m['id'])) {
@@ -232,6 +227,22 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
         }
         sort($ids);
         return $ids;
+    }
+
+    /**
+     * The raw `data` entries of the /models listing, for subclasses whose
+     * backend documents more than the id. Failures are let out, as above.
+     *
+     * @return list<array<array-key, mixed>>
+     */
+    protected function fetchModelItems(?string $userId): array {
+        $client = $this->clientService->newClient();
+        $response = $client->get($this->apiBase() . '/models', $this->requestOptions($userId, [
+            'timeout' => 15,
+        ]));
+        $data = json_decode((string)$response->getBody(), true);
+        $items = is_array($data) ? ($data['data'] ?? []) : [];
+        return array_values(array_filter(is_array($items) ? $items : [], 'is_array'));
     }
 
     // ── Non-streaming entry points ──────────────────────────────────────────
