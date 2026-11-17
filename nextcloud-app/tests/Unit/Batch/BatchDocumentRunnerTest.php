@@ -35,6 +35,8 @@ class BatchDocumentRunnerTest extends TestCase {
     private array $usageRecorded = [];
     /** @var array<string, string> */
     private array $written = [];
+    /** @var array<string, list<string>> file id => system tag ids */
+    private array $tags = [];
 
     protected function setUp(): void {
         $this->provider = $this->createStub(ClaudeSDKService::class);
@@ -58,11 +60,44 @@ class BatchDocumentRunnerTest extends TestCase {
         $this->runner = new BatchDocumentRunner(
             $root,
             $factory,
-            $this->createStub(ISystemTagManager::class),
-            $this->createStub(ISystemTagObjectMapper::class),
+            $this->tagManager(),
+            $this->tagMapper(),
             $this->createStub(LoggerInterface::class),
             $usage,
         );
+    }
+
+    /** One system tag per name, created on first use, id = "t:<name>". */
+    private function tagManager(): ISystemTagManager {
+        $created = [];
+        $manager = $this->createStub(ISystemTagManager::class);
+        $tag = function (string $name): \OCP\SystemTag\ISystemTag {
+            $t = $this->createStub(\OCP\SystemTag\ISystemTag::class);
+            $t->method('getId')->willReturn('t:' . $name);
+            return $t;
+        };
+        $manager->method('getTag')->willReturnCallback(function (string $name) use (&$created, $tag) {
+            if (!isset($created[$name])) {
+                throw new \OCP\SystemTag\TagNotFoundException();
+            }
+            return $tag($name);
+        });
+        $manager->method('createTag')->willReturnCallback(function (string $name) use (&$created, $tag) {
+            $created[$name] = true;
+            return $tag($name);
+        });
+        return $manager;
+    }
+
+    private function tagMapper(): ISystemTagObjectMapper {
+        $mapper = $this->createStub(ISystemTagObjectMapper::class);
+        $mapper->method('assignTags')->willReturnCallback(function (string $id, string $type, $tagIds): void {
+            $this->tags[$id] = array_merge($this->tags[$id] ?? [], (array)$tagIds);
+        });
+        $mapper->method('getTagIdsForObjects')->willReturnCallback(
+            fn (array $ids): array => array_intersect_key($this->tags, array_flip($ids))
+        );
+        return $mapper;
     }
 
     private function ctx(array $options = [], string $outputFolder = '', ?string $providerId = null, ?\Closure $requestOptions = null): BatchContext {
@@ -82,7 +117,9 @@ class BatchDocumentRunnerTest extends TestCase {
         $parent->method('nodeExists')->willReturnCallback(fn (string $n): bool => isset($this->written[$n]));
         $parent->method('newFile')->willReturnCallback(function (string $n, $c = null) {
             $this->written[$n] = (string)$c;
-            return $this->createStub(File::class);
+            $out = $this->createStub(File::class);
+            $out->method('getId')->willReturn(900 + count($this->written));
+            return $out;
         });
         return $parent;
     }
@@ -170,6 +207,27 @@ class BatchDocumentRunnerTest extends TestCase {
         $this->assertSame('flow', $this->usageRecorded[0][3]);
         $this->assertSame('Translated', $run->getDecodedLog()[0]['message']);
         $this->assertSame('/In/a.txt', $run->getDecodedLog()[0]['item']);
+    }
+
+    /**
+     * Every output carries the hidden output tag, and a walk skips it, so a
+     * translation run over a folder never translates its summaries.
+     */
+    public function testOutputsAreTaggedAndNeverCollectedByAnotherOperation(): void {
+        $this->provider = $this->createStub(ClaudeSDKService::class);
+        $this->provider->method('supportsBatch')->willReturn(false);
+        $this->provider->method('ask')->willReturn(['response' => 'a summary', 'usage' => []]);
+        $this->runner->process($this->ctx([], '', null), new CoworkerRun(), [$this->file(7, 'a.txt', 'body')], $this->noProgress());
+        $this->assertSame(['901' => ['t:' . BatchDocumentRunner::OUTPUT_TAG]], array_intersect_key($this->tags, ['901' => 1]));
+
+        $summary = $this->file(901, 'a.summary.md', 'a summary', 'text/markdown');
+        $source = $this->file(8, 'b.txt', 'body');
+        $folder = $this->createStub(Folder::class);
+        $folder->method('getDirectoryListing')->willReturn([$summary, $source]);
+
+        $collected = $this->runner->collect($this->ctx(['targetLanguage' => 'German']), $folder);
+
+        $this->assertSame([$source], $collected);
     }
 
     public function testSharedOptionsAreValidatedWithoutAnOperation(): void {

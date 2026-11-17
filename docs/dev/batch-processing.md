@@ -192,9 +192,13 @@ decided during the walk rather than after it:
 
 - A source whose output is at least as new as itself is skipped, so a nightly
   coworker does not re-bill the whole folder every night. `force` overrides it.
-- A file whose name already ends in the task's own output suffix is never a
-  source. Otherwise each run would summarise the last run's summaries and grow
-  another `.summary.summary.md` generation every night.
+- An output is never a source. Every output file carries the hidden system tag
+  `aiquila:output`, and the walk skips files that have it, checked in one query
+  per folder. Otherwise each run would summarise the last run's summaries and
+  grow another `.summary.summary.md` generation every night, and translating a
+  folder would translate its summaries too. A file whose name ends in the
+  task's own output suffix is skipped as well, which covers outputs written
+  before the tag existed.
 - The configured output folder is skipped during the walk, since it is normally
   nested inside the input path.
 
@@ -253,7 +257,7 @@ their files, so a file shared with them works like one they own:
 - An id the user cannot see or read is a `404` that names it. Both cases get
   the same answer, so ids cannot be probed.
 - Folders are walked recursively unless `recursive` is false, by the coworker
-  rules: up-to-date sources (unless `force`), the operation's own outputs and
+  rules: up-to-date sources (unless `force`), outputs of any operation and
   the output folder are skipped.
 - Files picked one by one are always processed, since the user asked for them.
   Only the text-only mime filter applies, and a picked file that fails it is

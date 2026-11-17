@@ -66,6 +66,18 @@ class BatchDocumentRunner {
      */
     public const DEFAULT_MIME_TYPES = ['text/', 'application/json'];
 
+    /**
+     * Hidden system tag on every output file. A folder walk skips files that
+     * carry it, so one operation's output is never another's input: without
+     * it, translating a folder that holds `a.summary.md` writes
+     * `a.summary.german.md`, and the next summary run summarises both.
+     * The own-suffix check still covers outputs written before this tag.
+     */
+    public const OUTPUT_TAG = 'aiquila:output';
+
+    /** The output tag's id once looked up; '' when it does not exist yet. */
+    private ?string $outputTagId = null;
+
     public function __construct(
         private readonly IRootFolder $rootFolder,
         private readonly LLMProviderFactory $providerFactory,
@@ -281,12 +293,14 @@ class BatchDocumentRunner {
      * @param array<int, true> $seen file ids already taken, by id
      */
     private function gather(BatchContext $ctx, Folder $folder, ?int $excludeFolderId, array &$matches, int $limit = self::MAX_ITEMS_PER_RUN, array &$seen = []): void {
-        foreach ($folder->getDirectoryListing() as $child) {
+        $listing = $folder->getDirectoryListing();
+        $outputs = $this->outputIds($listing);
+        foreach ($listing as $child) {
             if (count($matches) >= $limit) {
                 return;
             }
             if ($child instanceof File) {
-                if (!isset($seen[$child->getId()]) && $this->isCandidate($ctx, $child)) {
+                if (!isset($seen[$child->getId()]) && !isset($outputs[$child->getId()]) && $this->isCandidate($ctx, $child)) {
                     $seen[$child->getId()] = true;
                     $matches[] = $child;
                 }
@@ -676,14 +690,91 @@ class BatchDocumentRunner {
         $folder = $this->outputFolder($ctx, $source);
         $name = self::outputName($ctx->operation, $source, $ctx->options);
 
+        $output = null;
         if ($folder->nodeExists($name)) {
             $existing = $folder->get($name);
             if ($existing instanceof File) {
                 $existing->putContent($response);
-                return UserPath::of($existing);
+                $output = $existing;
             }
         }
-        return UserPath::of($folder->newFile($name, $response));
+        $output ??= $folder->newFile($name, $response);
+        $this->markOutput($output);
+        return UserPath::of($output);
+    }
+
+    /**
+     * Tag a written output so later walks leave it alone. Best effort, like
+     * the done-tag: the output exists either way.
+     */
+    private function markOutput(File $output): void {
+        try {
+            $tagId = $this->outputTagId(true);
+            if ($tagId !== '') {
+                $this->tagObjectMapper->assignTags((string)$output->getId(), 'files', [$tagId]);
+            }
+        } catch (\Throwable $e) {
+            $this->logger->warning('AIquila batch: could not tag an output file', [
+                'file' => $output->getPath(),
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * The ids among a folder listing's files that are outputs, in one query
+     * per folder rather than one per file.
+     *
+     * @param array<array-key, Node> $listing
+     * @return array<int, true>
+     */
+    private function outputIds(array $listing): array {
+        $tagId = $this->outputTagId(false);
+        if ($tagId === '') {
+            return [];
+        }
+        $ids = [];
+        foreach ($listing as $node) {
+            if ($node instanceof File) {
+                $ids[] = (string)$node->getId();
+            }
+        }
+        if ($ids === []) {
+            return [];
+        }
+        try {
+            $tags = $this->tagObjectMapper->getTagIdsForObjects($ids, 'files');
+        } catch (\Throwable) {
+            return [];
+        }
+        $outputs = [];
+        foreach ($tags as $objectId => $tagIds) {
+            if (in_array($tagId, array_map('strval', $tagIds), true)) {
+                $outputs[(int)$objectId] = true;
+            }
+        }
+        return $outputs;
+    }
+
+    /**
+     * The output tag's id. Hidden and not assignable: it is bookkeeping, not
+     * something to show in Files or let users set.
+     *
+     * @param bool $create create the tag when it does not exist yet
+     * @return string '' when it does not exist (and $create is false)
+     */
+    private function outputTagId(bool $create): string {
+        if ($this->outputTagId !== null && ($this->outputTagId !== '' || !$create)) {
+            return $this->outputTagId;
+        }
+        try {
+            $this->outputTagId = $this->tagManager->getTag(self::OUTPUT_TAG, false, false)->getId();
+        } catch (TagNotFoundException) {
+            $this->outputTagId = $create
+                ? $this->tagManager->createTag(self::OUTPUT_TAG, false, false)->getId()
+                : '';
+        }
+        return $this->outputTagId;
     }
 
     /** The folder a source's output goes to. */
