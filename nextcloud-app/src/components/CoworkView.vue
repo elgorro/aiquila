@@ -73,6 +73,10 @@
 			</div>
 		</div>
 
+		<!-- Focused only once the list above has loaded, so scrolling to the
+			run is not undone by the coworkers rendering above it. -->
+		<BatchRunList v-if="!editing" :focus-run-id="loading ? null : focusRunId" />
+
 		<p v-if="error" class="form-error">{{ error }}</p>
 	</div>
 </template>
@@ -82,6 +86,7 @@ import { translate as t } from '@nextcloud/l10n'
 import { getCurrentUser } from '@nextcloud/auth'
 import CoworkerForm from './CoworkerForm.vue'
 import CoworkerRunHistory from './CoworkerRunHistory.vue'
+import BatchRunList from './BatchRunList.vue'
 import {
 	listCoworkers, listCoworkerTemplates, createCoworkerFromTemplate, publishCoworkerTemplate,
 	deleteCoworker, pauseCoworker, resumeCoworker, runCoworker,
@@ -89,7 +94,7 @@ import {
 
 export default {
 	name: 'CoworkView',
-	components: { CoworkerForm, CoworkerRunHistory },
+	components: { CoworkerForm, CoworkerRunHistory, BatchRunList },
 	data() {
 		return {
 			coworkers: [],
@@ -104,6 +109,13 @@ export default {
 			// The server enforces this too; it only decides whether to show the button.
 			isAdmin: !!getCurrentUser()?.isAdmin,
 		}
+	},
+	computed: {
+		// `#/cowork?run=<id>`: where the toast after starting a run from Files links.
+		focusRunId() {
+			const id = Number.parseInt(this.$route?.query?.run, 10)
+			return Number.isInteger(id) && id > 0 ? id : null
+		},
 	},
 	mounted() {
 		this.load()
