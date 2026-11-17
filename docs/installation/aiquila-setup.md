@@ -746,8 +746,8 @@ or build a **Custom coworker**. Each coworker has:
 | Task | What it does | Options |
 |---|---|---|
 | `vision:classify` | Labels each image and stores the labels as collaborative tags, so they can be searched and filtered in Files | `maxTags` (1–30, default 8), `recursive` |
-| `docs:summarize` | Writes `<name>.summary.md` beside each text document (`text/*` and JSON by default; PDFs are not read) | `recursive`, `force`, `outputFolder`, `mimeTypes`, `maxBytesPerFile` (default 1 MiB) |
-| `docs:translate` | Writes `<name>.<language>.md` beside each document | `targetLanguage`, plus the options of `docs:summarize` |
+| `docs:summarize` | Writes `<name>.summary.md` beside each text document (`text/*` and JSON by default; PDFs are not read) | `style` (`brief` (default), `detailed`, `bullets`), `recursive`, `force`, `outputFolder`, `mimeTypes`, `maxBytesPerFile` (default 1 MiB) |
+| `docs:translate` | Writes `<name>.<language>.md` beside each document | `targetLanguage`, plus the options of `docs:summarize` except `style` |
 | `agent:run` | Runs a prompt, optionally with MCP tools, and keeps the answer as the run summary or writes it to one file | `tools` (allowlist of MCP tool names), `taskBudget` (tokens, at least 20,000) |
 
 An `agent:run` coworker has a **prompt** instead of a source folder: its own text,

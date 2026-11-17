@@ -18,7 +18,7 @@ rather than putting a batch method on `LLMProviderInterface`.
 | Path | Entry point | Shape |
 |---|---|---|
 | Assistant "Summarize" task | `SummaryProvider` → `summarizeViaBatch()` | one request, blocking poll |
-| Cowork `docs:summarize` / `docs:translate` | `AbstractBatchTextTaskType` | N requests, submit now, collect later |
+| Cowork `docs:summarize` / `docs:translate` | `BatchDocumentRunner` via `AbstractBatchTextTaskType` | N requests, submit now, collect later |
 
 Everything else — chat, the agentic tool loop, the other Assistant task types —
 is synchronous. A person is waiting.
@@ -142,6 +142,39 @@ has not ended 26 hours after submission is failed — Anthropic expires a batch 
 A coworker with an open `pending` run will not start another. Two batches over
 the same folder would bill it twice and race two runs onto the same output files.
 
+## The document pipeline
+
+`BatchDocumentRunner` (`lib/Batch/`) is the pipeline: walk the files, build one
+request per document, submit them as a batch or work through them synchronously,
+and later collect the results into output files. It knows nothing about
+coworkers. Everything about one run comes in a `BatchContext`:
+
+| Field | Carries |
+|---|---|
+| `userId` | whose files are read and written, and who is billed |
+| `operation` | a `BatchOperation`: the per-file prompt, output suffix, done-tag and summary verb |
+| `options` | the shared options (`recursive`, `force`, `maxBytesPerFile`, `outputFolder`, `mimeTypes`) plus the operation's own |
+| `requestOptions` | a closure building the per-request provider options for whichever provider the run ends up on |
+| `providerId` | the provider to ask for; null is the user's default |
+| `outputFolder` | where outputs go; empty writes each beside its source |
+| `logContext`, `usageType` | server log context and the usage-stat type |
+
+It has three steps, and the caller owns the run row in between:
+
+| Method | Does |
+|---|---|
+| `collect($ctx, $root)` | the files under a node that still need work, capped |
+| `process($ctx, $run, $files, $progress)` | submits one batch (`pending` + state) or runs the synchronous loop to the end |
+| `resume($ctx, $run, $state, $progress)` | polls the batch, and collects the results once it has ended |
+
+The operations are `SummarizeOperation` and `TranslateOperation`. A coworker
+task type is a thin adapter: `AbstractBatchTextTaskType` builds the context from
+the coworker row (its provider, its output path, its model, effort and thinking,
+and the admin's instance instructions), and `DocsSummarizeFolderTaskType` /
+`DocsTranslateFolderTaskType` only name their operation. On resume, the context
+is built from the options stored in the run's state, so a coworker edited while
+its batch was in flight still writes where the run said it would.
+
 ## The bulk cowork tasks
 
 `docs:summarize` and `docs:translate` walk the coworker's input folder and write
@@ -198,7 +231,10 @@ synchronous cost comparison with the discount applied.
 
 - `nextcloud-app/lib/Service/ClaudeSDKService.php` — the transport, `toBatchParams()`, the extended-output switch, `convertBatchResult()`
 - `nextcloud-app/lib/Service/ClaudeModels.php` — which models accept the extended-output beta
-- `nextcloud-app/lib/Cowork/AbstractBatchTextTaskType.php` — folder walk, submission, resumption, output files
+- `nextcloud-app/lib/Batch/BatchDocumentRunner.php` — folder walk, submission, resumption, output files
+- `nextcloud-app/lib/Batch/BatchContext.php`, `BatchOperation.php` — what one run needs, and the per-file question
+- `nextcloud-app/lib/Batch/SummarizeOperation.php`, `TranslateOperation.php` — the two operations
+- `nextcloud-app/lib/Cowork/AbstractBatchTextTaskType.php` — the coworker adapter over the runner
 - `nextcloud-app/lib/Cowork/DocsSummarizeFolderTaskType.php`, `DocsTranslateFolderTaskType.php` — the two tasks
 - `nextcloud-app/lib/Cowork/ResumableCoworkerTaskType.php` — the `resume()` contract
 - `nextcloud-app/lib/Service/CoworkerService.php` — the `pending` branch and `resumePending()`

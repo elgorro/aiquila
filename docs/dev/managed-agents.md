@@ -107,7 +107,7 @@ Only memory is genuinely missing, and it does not need a hosted loop to exist. T
 rest is built, and built provider-agnostically.
 
 Cowork deserves its own note, because it looks like the obvious candidate and is not
-one. Coworker task types never touch the tool loop: `AbstractBatchTextTaskType` calls
+one. Coworker task types never touch the tool loop: `BatchDocumentRunner` calls
 `$provider->ask()` and goes out over the Message Batches transport at half price (see
 [Batch processing](batch-processing.md)). They are deterministic pipelines over
 Nextcloud files, not open-ended agent runs. Moving them to hosted sessions would cost
