@@ -20,6 +20,10 @@ final class SummarizeOperation implements BatchOperation {
         return 'Summarize';
     }
 
+    public function optionNames(): array {
+        return ['style'];
+    }
+
     public function validateOptions(array $options): void {
         if (isset($options['style']) && !in_array($options['style'], self::STYLES, true)) {
             throw new \InvalidArgumentException('style must be one of: ' . implode(', ', self::STYLES));

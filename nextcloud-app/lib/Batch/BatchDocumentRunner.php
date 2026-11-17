@@ -36,7 +36,8 @@ use Psr\Log\LoggerInterface;
  * It knows nothing about coworkers or schedules. The caller owns the run row,
  * passes a {@see BatchContext}, and persists whatever comes back.
  *
- * @psalm-type BatchRunResult = array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string, pending?: bool, state?: array<string, mixed>}
+ * @psalm-type BatchRunResult = array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}
+ * @psalm-type BatchSelection = array{files: list<File>, skipped: list<array{item: string, reason: string}>, capped: bool}
  */
 class BatchDocumentRunner {
 
@@ -145,6 +146,81 @@ class BatchDocumentRunner {
     }
 
     /**
+     * The work for a manual run over files and folders picked by the user,
+     * at most MAX_ITEMS_PER_RUN files.
+     *
+     * Files picked one by one are what the user asked for, so they skip only
+     * the mime filter: they are processed even when their output is fresh or
+     * they look like an earlier output. Folders are walked with the same
+     * rules as a coworker's input folder. A file reached twice counts once.
+     *
+     * @param list<File> $files
+     * @param list<Folder> $folders
+     * @return BatchSelection
+     */
+    public function collectSelection(BatchContext $ctx, array $files, array $folders): array {
+        $matches = [];
+        $skipped = [];
+        $seen = [];
+
+        foreach ($files as $file) {
+            if (isset($seen[$file->getId()])) {
+                continue;
+            }
+            $seen[$file->getId()] = true;
+            if (!$this->matchesMime($file, $ctx->mimeTypes())) {
+                $skipped[] = ['item' => UserPath::of($file), 'reason' => 'Not a text document'];
+                continue;
+            }
+            $matches[] = $file;
+        }
+
+        $exclude = $this->configuredOutputFolderId($ctx);
+        foreach ($folders as $folder) {
+            if (count($matches) >= self::MAX_ITEMS_PER_RUN) {
+                break;
+            }
+            $found = [];
+            $this->gather($ctx, $folder, $exclude, $found, self::MAX_ITEMS_PER_RUN - count($matches), $seen);
+            array_push($matches, ...$found);
+        }
+
+        $capped = count($matches) >= self::MAX_ITEMS_PER_RUN;
+        $matches = array_slice($matches, 0, self::MAX_ITEMS_PER_RUN);
+
+        if ($ctx->requireWritableOutput) {
+            $writable = [];
+            foreach ($matches as $file) {
+                if ($this->canWriteOutput($ctx, $file)) {
+                    $writable[] = $file;
+                } else {
+                    $skipped[] = ['item' => UserPath::of($file), 'reason' => 'Its folder is read-only; choose an output folder'];
+                }
+            }
+            $matches = $writable;
+        }
+
+        return ['files' => $matches, 'skipped' => $skipped, 'capped' => $capped];
+    }
+
+    /**
+     * Whether the output of a source can be created where it would go. Only
+     * the folder beside the source is checked here; a configured output
+     * folder is checked once, when the run is started.
+     */
+    private function canWriteOutput(BatchContext $ctx, File $file): bool {
+        if ($ctx->outputFolder !== '') {
+            return true;
+        }
+        try {
+            $parent = $file->getParent();
+        } catch (\Throwable) {
+            return false;
+        }
+        return $parent instanceof Folder && $parent->isCreatable();
+    }
+
+    /**
      * Whether one file found by the walk is work this run should do.
      *
      * Three separate reasons to say no, and they have to be asked here rather
@@ -200,21 +276,25 @@ class BatchDocumentRunner {
         return $node instanceof Folder ? $node->getId() : null;
     }
 
-    /** @param list<File> $matches */
-    private function gather(BatchContext $ctx, Folder $folder, ?int $excludeFolderId, array &$matches): void {
+    /**
+     * @param list<File> $matches
+     * @param array<int, true> $seen file ids already taken, by id
+     */
+    private function gather(BatchContext $ctx, Folder $folder, ?int $excludeFolderId, array &$matches, int $limit = self::MAX_ITEMS_PER_RUN, array &$seen = []): void {
         foreach ($folder->getDirectoryListing() as $child) {
-            if (count($matches) >= self::MAX_ITEMS_PER_RUN) {
+            if (count($matches) >= $limit) {
                 return;
             }
             if ($child instanceof File) {
-                if ($this->isCandidate($ctx, $child)) {
+                if (!isset($seen[$child->getId()]) && $this->isCandidate($ctx, $child)) {
+                    $seen[$child->getId()] = true;
                     $matches[] = $child;
                 }
             } elseif ($ctx->recursive() && $child instanceof Folder) {
                 if ($excludeFolderId !== null && $child->getId() === $excludeFolderId) {
                     continue;
                 }
-                $this->gather($ctx, $child, $excludeFolderId, $matches);
+                $this->gather($ctx, $child, $excludeFolderId, $matches, $limit, $seen);
             }
         }
     }
@@ -248,7 +328,7 @@ class BatchDocumentRunner {
     public function process(BatchContext $ctx, CoworkerRun $run, array $files, callable $progress): array {
         $provider = $this->providerFactory->getProviderForUser($ctx->userId, $ctx->providerId);
 
-        if (!$provider instanceof ClaudeSDKService || !$provider->supportsBatch()) {
+        if (!$ctx->allowBatch || !$provider instanceof ClaudeSDKService || !$provider->supportsBatch()) {
             return $this->runSynchronously($ctx, $run, $provider, $files, $progress);
         }
 
@@ -373,6 +453,7 @@ class BatchDocumentRunner {
         $verb = $ctx->operation->summaryVerb();
 
         $written = 0;
+        $outputs = [];
         $failures = self::emptyFailures();
 
         $progress(0, $total);
@@ -405,7 +486,7 @@ class BatchDocumentRunner {
                     continue;
                 }
 
-                $this->writeOutput($ctx, $file, (string)($result['response'] ?? ''));
+                $outputs[] = $this->writeOutput($ctx, $file, (string)($result['response'] ?? ''));
                 $this->markDone($ctx, $file);
                 $written++;
                 $run->appendLog(CoworkerRun::LOG_INFO, $verb, $item);
@@ -428,6 +509,7 @@ class BatchDocumentRunner {
             'itemsProcessed' => $written,
             'itemsFailed' => array_sum(array_map('count', $failures)),
             'summary' => $this->buildSummary($verb, $written, $total, 'anthropic (batch, 50% discount)', $failures, $skipped),
+            'outputs' => $outputs,
         ];
     }
 
@@ -450,6 +532,7 @@ class BatchDocumentRunner {
         $verb = $ctx->operation->summaryVerb();
         $total = count($files);
         $written = 0;
+        $outputs = [];
         $failures = self::emptyFailures();
         $skipped = [];
 
@@ -479,7 +562,7 @@ class BatchDocumentRunner {
                     continue;
                 }
 
-                $this->writeOutput($ctx, $file, (string)($result['response'] ?? ''));
+                $outputs[] = $this->writeOutput($ctx, $file, (string)($result['response'] ?? ''));
                 $this->markDone($ctx, $file);
                 $written++;
                 $run->appendLog(CoworkerRun::LOG_INFO, $verb, UserPath::of($file));
@@ -501,7 +584,8 @@ class BatchDocumentRunner {
             'itemsTotal' => $total,
             'itemsProcessed' => $written,
             'itemsFailed' => array_sum(array_map('count', $failures)),
-            'summary' => $this->buildSummary($verb, $written, $total, $label . ' (no batch API — full price)', $failures, $skipped),
+            'summary' => $this->buildSummary($verb, $written, $total, $label . ($ctx->allowBatch ? ' (no batch API — full price)' : ' (immediate — full price)'), $failures, $skipped),
+            'outputs' => $outputs,
         ];
     }
 
@@ -585,8 +669,10 @@ class BatchDocumentRunner {
     /**
      * Write the model's answer beside the source (or into the configured
      * output folder), creating the folder if it does not exist.
+     *
+     * @return string the output's path in the user's Files
      */
-    private function writeOutput(BatchContext $ctx, File $source, string $response): void {
+    private function writeOutput(BatchContext $ctx, File $source, string $response): string {
         $folder = $this->outputFolder($ctx, $source);
         $name = self::outputName($ctx->operation, $source, $ctx->options);
 
@@ -594,10 +680,10 @@ class BatchDocumentRunner {
             $existing = $folder->get($name);
             if ($existing instanceof File) {
                 $existing->putContent($response);
-                return;
+                return UserPath::of($existing);
             }
         }
-        $folder->newFile($name, $response);
+        return UserPath::of($folder->newFile($name, $response));
     }
 
     /** The folder a source's output goes to. */

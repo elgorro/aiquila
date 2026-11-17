@@ -113,6 +113,8 @@ builds the array, so Psalm fails when the code and the spec drift apart.
 - **Typed parameters** — use PHP type hints; NC dependency injection resolves them from the request automatically.
 - **Request headers** an endpoint reads are declared with `#[RequestHeader(name: '…', description: '…')]`, the name in lowercase, and read with that same name (`sequence#effective` reads `if-none-match` to answer `304`).
 - **`@return` PHPDoc** — use the `JSONResponse<Http::STATUS_*, array{...}, array{}>` union form so the extractor can infer response schemas.
+- **Queued work** answers `202` with the queued resource, and the resource says when to poll again (`pollIntervalSeconds` on `batch_run#show`, null once it has ended).
+- **A limit in a 4xx** is named in the message and returned as `limit`, so a client can report it without parsing text (`batch_run#create`: `400` over the item cap, `429` over the hourly cap).
 - **Status-code description lines** (`200: ...`, `400: ...`) are required for every response code below 500.
 - **`Http::STATUS_*` constants** belong only in the PHPDoc `@return` — not in the method body (avoids needing an OCP import in unit tests).
 - The `download()` method is intentionally excluded — it returns `DataDownloadResponse` (binary), which has no JSON schema.

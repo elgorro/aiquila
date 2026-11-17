@@ -49,8 +49,10 @@ interface CoworkerTaskType {
      * whose items all failed is recorded as an error, one where some failed
      * as a success with the failures in its error.
      *
+     * `outputs` may list the files the run wrote; coworker runs do not keep it.
+     *
      * @param callable(int, int): void $progress
-     * @return array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string, pending?: bool, state?: array<string, mixed>}
+     * @return array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}
      */
     public function run(Coworker $coworker, CoworkerRun $run, callable $progress): array;
 }

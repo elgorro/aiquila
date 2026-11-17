@@ -79,6 +79,39 @@ namespace OCA\AIquila;
  *     definition: AIquilaSequenceDefinition,
  *     pinned: bool,
  * }
+ *
+ * @psalm-type AIquilaBatchRun = array{
+ *     id: int,
+ *     operation: string,
+ *     status: 'queued'|'running'|'pending'|'success'|'error'|'cancelled',
+ *     itemsTotal: int,
+ *     itemsProcessed: int,
+ *     itemsFailed: int,
+ *     summary: ?string,
+ *     error: ?string,
+ *     startedAt: int,
+ *     finishedAt: ?int,
+ *     pendingBatchId: ?string,
+ *     outputs: list<string>,
+ *     pollIntervalSeconds: ?int,
+ * }
+ *
+ * @psalm-type AIquilaBatchRunLogEntry = array{
+ *     ts: int,
+ *     level: string,
+ *     message: string,
+ *     item: ?string,
+ * }
+ *
+ * @psalm-type AIquilaBatchRunDetail = AIquilaBatchRun&array{
+ *     log: list<AIquilaBatchRunLogEntry>,
+ * }
+ *
+ * @psalm-type AIquilaBatchOperation = array{
+ *     id: string,
+ *     label: string,
+ *     options: list<string>,
+ * }
  */
 class ResponseDefinitions {
 }

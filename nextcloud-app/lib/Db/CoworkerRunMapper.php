@@ -13,6 +13,12 @@ use OCP\IDBConnection;
  * @template-extends ChangeTrackingMapper<CoworkerRun>
  */
 class CoworkerRunMapper extends ChangeTrackingMapper {
+    /**
+     * Everything but `log`, for run lists: a list never shows the log, and a
+     * full log is the largest thing a run row carries.
+     */
+    private const LIST_COLUMNS = ['id', 'coworker_id', 'user_id', 'status', 'items_total', 'items_processed', 'items_failed', 'summary', 'error', 'started_at', 'finished_at', 'state', 'started_by', 'task_type', 'outputs'];
+
     public function __construct(IDBConnection $db) {
         parent::__construct($db, 'aiquila_coworker_runs', CoworkerRun::class);
     }
@@ -37,9 +43,7 @@ class CoworkerRunMapper extends ChangeTrackingMapper {
      */
     public function findByCoworker(int $coworkerId, ?string $userId, int $limit = 20): array {
         $qb = $this->db->getQueryBuilder();
-        // Everything but `log`: the list never shows it, and a full log is
-        // the largest thing a run row carries.
-        $qb->select('id', 'coworker_id', 'user_id', 'status', 'items_total', 'items_processed', 'items_failed', 'summary', 'error', 'started_at', 'finished_at', 'state', 'started_by')
+        $qb->select(...self::LIST_COLUMNS)
             ->from($this->getTableName())
             ->where($qb->expr()->eq('coworker_id', $qb->createNamedParameter($coworkerId, IQueryBuilder::PARAM_INT)));
         // A team coworker's runs are the team's, whoever each one ran as.
@@ -192,6 +196,101 @@ class CoworkerRunMapper extends ChangeTrackingMapper {
         $qb = $this->db->getQueryBuilder();
         $qb->delete($this->getTableName())
             ->where($qb->expr()->eq('coworker_id', $qb->createNamedParameter($coworkerId, IQueryBuilder::PARAM_INT)));
+        $qb->executeStatement();
+    }
+
+    // ── Manual runs (coworker_id 0, started_by 'selection') ──────────────
+
+    /**
+     * A user's manual runs, newest first.
+     *
+     * @return list<CoworkerRun>
+     */
+    public function findManualByUser(string $userId, int $limit = 20): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select(...self::LIST_COLUMNS)
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->eq('started_by', $qb->createNamedParameter(CoworkerRun::STARTED_BY_SELECTION, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->eq('coworker_id', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
+            ->orderBy('started_at', 'DESC')
+            ->addOrderBy('id', 'DESC')
+            ->setMaxResults(max(1, min($limit, 100)));
+
+        return $this->findEntities($qb);
+    }
+
+    /**
+     * One of a user's manual runs.
+     *
+     * @throws DoesNotExistException when it is not theirs or not a manual run
+     */
+    public function findManual(int $id, string $userId): CoworkerRun {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->eq('started_by', $qb->createNamedParameter(CoworkerRun::STARTED_BY_SELECTION, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->eq('coworker_id', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)));
+
+        return $this->findEntity($qb);
+    }
+
+    /** How many manual runs a user started since $since, for the hourly cap. */
+    public function countManualSince(string $userId, int $since): int {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select($qb->func()->count('id', 'run_count'))
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->eq('started_by', $qb->createNamedParameter(CoworkerRun::STARTED_BY_SELECTION, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->gte('started_at', $qb->createNamedParameter($since, IQueryBuilder::PARAM_INT)));
+        $result = $qb->executeQuery();
+        $count = (int)$result->fetchOne();
+        $result->closeCursor();
+        return $count;
+    }
+
+    /**
+     * Move a queued run to `running`, if it is still queued. Returns whether
+     * this caller got it: a run cancelled meanwhile, or claimed by another
+     * worker, is left alone.
+     */
+    public function claimQueued(int $id): bool {
+        $qb = $this->db->getQueryBuilder();
+        $qb->update($this->getTableName())
+            ->set('status', $qb->createNamedParameter(CoworkerRun::STATUS_RUNNING, IQueryBuilder::PARAM_STR))
+            ->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->eq('status', $qb->createNamedParameter(CoworkerRun::STATUS_QUEUED, IQueryBuilder::PARAM_STR)));
+        return $qb->executeStatement() === 1;
+    }
+
+    /**
+     * A user's manual runs that have not ended: queued, running or pending.
+     *
+     * @return list<CoworkerRun>
+     */
+    public function findOpenManualByUser(string $userId): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->eq('started_by', $qb->createNamedParameter(CoworkerRun::STARTED_BY_SELECTION, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->in('status', $qb->createNamedParameter(
+                [CoworkerRun::STATUS_QUEUED, CoworkerRun::STATUS_RUNNING, CoworkerRun::STATUS_PENDING],
+                IQueryBuilder::PARAM_STR_ARRAY,
+            )));
+
+        return $this->findEntities($qb);
+    }
+
+    /** Delete a user's manual runs, when the user is deleted. */
+    public function deleteManualByUser(string $userId): void {
+        $qb = $this->db->getQueryBuilder();
+        $qb->delete($this->getTableName())
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->eq('started_by', $qb->createNamedParameter(CoworkerRun::STARTED_BY_SELECTION, IQueryBuilder::PARAM_STR)))
+            ->andWhere($qb->expr()->eq('coworker_id', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)));
         $qb->executeStatement();
     }
 }

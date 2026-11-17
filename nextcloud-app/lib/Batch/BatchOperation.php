@@ -21,6 +21,14 @@ interface BatchOperation {
     public function getLabel(): string;
 
     /**
+     * The names of the options only this operation reads, for a UI or a
+     * client to offer.
+     *
+     * @return list<string>
+     */
+    public function optionNames(): array;
+
+    /**
      * Validate the options only this operation reads. The options every
      * operation shares are checked by {@see BatchDocumentRunner::validateOptions()}.
      *

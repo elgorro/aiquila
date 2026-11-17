@@ -709,7 +709,7 @@ class CoworkerService {
      * no next-run recomputation — because the work has not happened yet and
      * the coworker has nothing to report.
      *
-     * @param array{itemsTotal?: int, itemsProcessed?: int, itemsFailed?: int, summary?: string, pending?: bool, state?: array<string, mixed>}|null $result
+     * @param array{itemsTotal?: int, itemsProcessed?: int, itemsFailed?: int, summary?: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}|null $result
      */
     private function finishRun(
         Coworker $coworker,
@@ -778,7 +778,7 @@ class CoworkerService {
     /**
      * Copy a task type's counts and summary onto the run.
      *
-     * @param array{itemsTotal?: int, itemsProcessed?: int, itemsFailed?: int, summary?: string, pending?: bool, state?: array<string, mixed>}|null $result
+     * @param array{itemsTotal?: int, itemsProcessed?: int, itemsFailed?: int, summary?: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}|null $result
      */
     private function recordCounts(CoworkerRun $run, ?array $result): void {
         $run->setItemsTotal((int)($result['itemsTotal'] ?? 0));
