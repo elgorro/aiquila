@@ -17,6 +17,10 @@ final class TranslateOperation implements BatchOperation {
         return 'Translate';
     }
 
+    public function optionNames(): array {
+        return ['targetLanguage'];
+    }
+
     public function validateOptions(array $options): void {
         $language = $options['targetLanguage'] ?? null;
         if (!is_string($language) || preg_match('/^[A-Za-z][A-Za-z \-]{1,31}$/', $language) !== 1) {

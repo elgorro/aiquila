@@ -5763,6 +5763,10 @@
             "description": "Schema-driven read/write of provider configuration for the settings pages. Both the admin and the personal page render whatever LLMProviderInterface::getSettingsSchema() describes, so this controller never names a provider or a config key — adding a provider requires no change here. The admin/user split is enforced twice over: the admin routes carry no #[NoAdminRequired] (so Nextcloud requires an admin), and ProviderSettingsService::writeUser() additionally drops any field whose scope is not user-writable. That second check is what keeps endpoint URLs — which decide where the server sends outbound requests — out of reach of the personal page even if a route were ever mis-annotated. Provider *access* is enforced on top of that: index() only describes providers the current user is permitted to use, and update() refuses one they are not, so the personal page can neither see nor select a provider an admin blocked."
         },
         {
+            "name": "batch_run",
+            "description": "Manual batch runs: one operation over files and folders the user picked. Used by the \"Process with AIquila…\" action in Files and by the MCP server (app password, hence NoCSRFRequired alongside NoAdminRequired)."
+        },
+        {
             "name": "coworker",
             "description": "REST API for cowork tasks — persistent scheduled AI jobs. Consumed by the Cowork UI and by the MCP server (Basic Auth), hence NoCSRFRequired alongside NoAdminRequired."
         },

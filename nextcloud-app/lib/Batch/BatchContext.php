@@ -26,6 +26,10 @@ final class BatchContext {
      * @param string $outputFolder where outputs go, as a path in the user's
      *        Files; empty writes each one beside its source
      * @param array<string, mixed> $logContext added to every server log line
+     * @param bool $allowBatch false runs synchronously even on a provider with
+     *        a batch API: full price, but done in one go
+     * @param bool $requireWritableOutput skip a source whose output could not
+     *        be saved, before anything is billed for it
      */
     public function __construct(
         public readonly string $userId,
@@ -36,6 +40,8 @@ final class BatchContext {
         public readonly string $outputFolder = '',
         public readonly array $logContext = [],
         public readonly string $usageType = UsageStatService::TYPE_COWORKER,
+        public readonly bool $allowBatch = true,
+        public readonly bool $requireWritableOutput = false,
     ) {
     }
 

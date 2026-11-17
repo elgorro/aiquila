@@ -36,7 +36,8 @@ use Psr\Log\LoggerInterface;
  * It knows nothing about coworkers or schedules. The caller owns the run row,
  * passes a {@see BatchContext}, and persists whatever comes back.
  *
- * @psalm-type BatchRunResult = array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string, pending?: bool, state?: array<string, mixed>}
+ * @psalm-type BatchRunResult = array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}
+ * @psalm-type BatchSelection = array{files: list<File>, skipped: list<array{item: string, reason: string}>, capped: bool}
  */
 class BatchDocumentRunner {
 
@@ -64,6 +65,18 @@ class BatchDocumentRunner {
      * @var list<string>
      */
     public const DEFAULT_MIME_TYPES = ['text/', 'application/json'];
+
+    /**
+     * Hidden system tag on every output file. A folder walk skips files that
+     * carry it, so one operation's output is never another's input: without
+     * it, translating a folder that holds `a.summary.md` writes
+     * `a.summary.german.md`, and the next summary run summarises both.
+     * The own-suffix check still covers outputs written before this tag.
+     */
+    public const OUTPUT_TAG = 'aiquila:output';
+
+    /** The output tag's id once looked up; '' when it does not exist yet. */
+    private ?string $outputTagId = null;
 
     public function __construct(
         private readonly IRootFolder $rootFolder,
@@ -145,6 +158,81 @@ class BatchDocumentRunner {
     }
 
     /**
+     * The work for a manual run over files and folders picked by the user,
+     * at most MAX_ITEMS_PER_RUN files.
+     *
+     * Files picked one by one are what the user asked for, so they skip only
+     * the mime filter: they are processed even when their output is fresh or
+     * they look like an earlier output. Folders are walked with the same
+     * rules as a coworker's input folder. A file reached twice counts once.
+     *
+     * @param list<File> $files
+     * @param list<Folder> $folders
+     * @return BatchSelection
+     */
+    public function collectSelection(BatchContext $ctx, array $files, array $folders): array {
+        $matches = [];
+        $skipped = [];
+        $seen = [];
+
+        foreach ($files as $file) {
+            if (isset($seen[$file->getId()])) {
+                continue;
+            }
+            $seen[$file->getId()] = true;
+            if (!$this->matchesMime($file, $ctx->mimeTypes())) {
+                $skipped[] = ['item' => UserPath::of($file), 'reason' => 'Not a text document'];
+                continue;
+            }
+            $matches[] = $file;
+        }
+
+        $exclude = $this->configuredOutputFolderId($ctx);
+        foreach ($folders as $folder) {
+            if (count($matches) >= self::MAX_ITEMS_PER_RUN) {
+                break;
+            }
+            $found = [];
+            $this->gather($ctx, $folder, $exclude, $found, self::MAX_ITEMS_PER_RUN - count($matches), $seen);
+            array_push($matches, ...$found);
+        }
+
+        $capped = count($matches) >= self::MAX_ITEMS_PER_RUN;
+        $matches = array_slice($matches, 0, self::MAX_ITEMS_PER_RUN);
+
+        if ($ctx->requireWritableOutput) {
+            $writable = [];
+            foreach ($matches as $file) {
+                if ($this->canWriteOutput($ctx, $file)) {
+                    $writable[] = $file;
+                } else {
+                    $skipped[] = ['item' => UserPath::of($file), 'reason' => 'Its folder is read-only; choose an output folder'];
+                }
+            }
+            $matches = $writable;
+        }
+
+        return ['files' => $matches, 'skipped' => $skipped, 'capped' => $capped];
+    }
+
+    /**
+     * Whether the output of a source can be created where it would go. Only
+     * the folder beside the source is checked here; a configured output
+     * folder is checked once, when the run is started.
+     */
+    private function canWriteOutput(BatchContext $ctx, File $file): bool {
+        if ($ctx->outputFolder !== '') {
+            return true;
+        }
+        try {
+            $parent = $file->getParent();
+        } catch (\Throwable) {
+            return false;
+        }
+        return $parent instanceof Folder && $parent->isCreatable();
+    }
+
+    /**
      * Whether one file found by the walk is work this run should do.
      *
      * Three separate reasons to say no, and they have to be asked here rather
@@ -200,21 +288,27 @@ class BatchDocumentRunner {
         return $node instanceof Folder ? $node->getId() : null;
     }
 
-    /** @param list<File> $matches */
-    private function gather(BatchContext $ctx, Folder $folder, ?int $excludeFolderId, array &$matches): void {
-        foreach ($folder->getDirectoryListing() as $child) {
-            if (count($matches) >= self::MAX_ITEMS_PER_RUN) {
+    /**
+     * @param list<File> $matches
+     * @param array<int, true> $seen file ids already taken, by id
+     */
+    private function gather(BatchContext $ctx, Folder $folder, ?int $excludeFolderId, array &$matches, int $limit = self::MAX_ITEMS_PER_RUN, array &$seen = []): void {
+        $listing = $folder->getDirectoryListing();
+        $outputs = $this->outputIds($listing);
+        foreach ($listing as $child) {
+            if (count($matches) >= $limit) {
                 return;
             }
             if ($child instanceof File) {
-                if ($this->isCandidate($ctx, $child)) {
+                if (!isset($seen[$child->getId()]) && !isset($outputs[$child->getId()]) && $this->isCandidate($ctx, $child)) {
+                    $seen[$child->getId()] = true;
                     $matches[] = $child;
                 }
             } elseif ($ctx->recursive() && $child instanceof Folder) {
                 if ($excludeFolderId !== null && $child->getId() === $excludeFolderId) {
                     continue;
                 }
-                $this->gather($ctx, $child, $excludeFolderId, $matches);
+                $this->gather($ctx, $child, $excludeFolderId, $matches, $limit, $seen);
             }
         }
     }
@@ -248,7 +342,7 @@ class BatchDocumentRunner {
     public function process(BatchContext $ctx, CoworkerRun $run, array $files, callable $progress): array {
         $provider = $this->providerFactory->getProviderForUser($ctx->userId, $ctx->providerId);
 
-        if (!$provider instanceof ClaudeSDKService || !$provider->supportsBatch()) {
+        if (!$ctx->allowBatch || !$provider instanceof ClaudeSDKService || !$provider->supportsBatch()) {
             return $this->runSynchronously($ctx, $run, $provider, $files, $progress);
         }
 
@@ -373,6 +467,7 @@ class BatchDocumentRunner {
         $verb = $ctx->operation->summaryVerb();
 
         $written = 0;
+        $outputs = [];
         $failures = self::emptyFailures();
 
         $progress(0, $total);
@@ -405,7 +500,7 @@ class BatchDocumentRunner {
                     continue;
                 }
 
-                $this->writeOutput($ctx, $file, (string)($result['response'] ?? ''));
+                $outputs[] = $this->writeOutput($ctx, $file, (string)($result['response'] ?? ''));
                 $this->markDone($ctx, $file);
                 $written++;
                 $run->appendLog(CoworkerRun::LOG_INFO, $verb, $item);
@@ -428,6 +523,7 @@ class BatchDocumentRunner {
             'itemsProcessed' => $written,
             'itemsFailed' => array_sum(array_map('count', $failures)),
             'summary' => $this->buildSummary($verb, $written, $total, 'anthropic (batch, 50% discount)', $failures, $skipped),
+            'outputs' => $outputs,
         ];
     }
 
@@ -450,6 +546,7 @@ class BatchDocumentRunner {
         $verb = $ctx->operation->summaryVerb();
         $total = count($files);
         $written = 0;
+        $outputs = [];
         $failures = self::emptyFailures();
         $skipped = [];
 
@@ -479,7 +576,7 @@ class BatchDocumentRunner {
                     continue;
                 }
 
-                $this->writeOutput($ctx, $file, (string)($result['response'] ?? ''));
+                $outputs[] = $this->writeOutput($ctx, $file, (string)($result['response'] ?? ''));
                 $this->markDone($ctx, $file);
                 $written++;
                 $run->appendLog(CoworkerRun::LOG_INFO, $verb, UserPath::of($file));
@@ -501,7 +598,8 @@ class BatchDocumentRunner {
             'itemsTotal' => $total,
             'itemsProcessed' => $written,
             'itemsFailed' => array_sum(array_map('count', $failures)),
-            'summary' => $this->buildSummary($verb, $written, $total, $label . ' (no batch API — full price)', $failures, $skipped),
+            'summary' => $this->buildSummary($verb, $written, $total, $label . ($ctx->allowBatch ? ' (no batch API — full price)' : ' (immediate — full price)'), $failures, $skipped),
+            'outputs' => $outputs,
         ];
     }
 
@@ -585,19 +683,98 @@ class BatchDocumentRunner {
     /**
      * Write the model's answer beside the source (or into the configured
      * output folder), creating the folder if it does not exist.
+     *
+     * @return string the output's path in the user's Files
      */
-    private function writeOutput(BatchContext $ctx, File $source, string $response): void {
+    private function writeOutput(BatchContext $ctx, File $source, string $response): string {
         $folder = $this->outputFolder($ctx, $source);
         $name = self::outputName($ctx->operation, $source, $ctx->options);
 
+        $output = null;
         if ($folder->nodeExists($name)) {
             $existing = $folder->get($name);
             if ($existing instanceof File) {
                 $existing->putContent($response);
-                return;
+                $output = $existing;
             }
         }
-        $folder->newFile($name, $response);
+        $output ??= $folder->newFile($name, $response);
+        $this->markOutput($output);
+        return UserPath::of($output);
+    }
+
+    /**
+     * Tag a written output so later walks leave it alone. Best effort, like
+     * the done-tag: the output exists either way.
+     */
+    private function markOutput(File $output): void {
+        try {
+            $tagId = $this->outputTagId(true);
+            if ($tagId !== '') {
+                $this->tagObjectMapper->assignTags((string)$output->getId(), 'files', [$tagId]);
+            }
+        } catch (\Throwable $e) {
+            $this->logger->warning('AIquila batch: could not tag an output file', [
+                'file' => $output->getPath(),
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * The ids among a folder listing's files that are outputs, in one query
+     * per folder rather than one per file.
+     *
+     * @param array<array-key, Node> $listing
+     * @return array<int, true>
+     */
+    private function outputIds(array $listing): array {
+        $tagId = $this->outputTagId(false);
+        if ($tagId === '') {
+            return [];
+        }
+        $ids = [];
+        foreach ($listing as $node) {
+            if ($node instanceof File) {
+                $ids[] = (string)$node->getId();
+            }
+        }
+        if ($ids === []) {
+            return [];
+        }
+        try {
+            $tags = $this->tagObjectMapper->getTagIdsForObjects($ids, 'files');
+        } catch (\Throwable) {
+            return [];
+        }
+        $outputs = [];
+        foreach ($tags as $objectId => $tagIds) {
+            if (in_array($tagId, array_map('strval', $tagIds), true)) {
+                $outputs[(int)$objectId] = true;
+            }
+        }
+        return $outputs;
+    }
+
+    /**
+     * The output tag's id. Hidden and not assignable: it is bookkeeping, not
+     * something to show in Files or let users set.
+     *
+     * @param bool $create create the tag when it does not exist yet
+     * @return string '' when it does not exist (and $create is false)
+     */
+    private function outputTagId(bool $create): string {
+        if ($this->outputTagId !== null && ($this->outputTagId !== '' || !$create)) {
+            return $this->outputTagId;
+        }
+        try {
+            $this->outputTagId = $this->tagManager->getTag(self::OUTPUT_TAG, false, false)->getId();
+        } catch (TagNotFoundException) {
+            $this->outputTagId = $create
+                ? $this->tagManager->createTag(self::OUTPUT_TAG, false, false)->getId()
+                : '';
+        }
+        return $this->outputTagId;
     }
 
     /** The folder a source's output goes to. */

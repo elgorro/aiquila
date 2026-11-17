@@ -34,12 +34,18 @@ use OCP\AppFramework\Db\Entity;
  * @method void setLog(?string $log)
  * @method string|null getStartedBy()
  * @method void setStartedBy(?string $startedBy)
+ * @method string|null getTaskType()
+ * @method void setTaskType(?string $taskType)
+ * @method string|null getOutputs()
+ * @method void setOutputs(?string $outputs)
  *
  * @psalm-type CoworkerRunLogEntry = array{ts: int, level: string, message: string, item: string|null}
  */
 class CoworkerRun extends Entity implements \JsonSerializable {
     use InsertsFullRow;
 
+    /** A manual run accepted but not started yet; see BatchRunService. */
+    public const STATUS_QUEUED = 'queued';
     public const STATUS_RUNNING = 'running';
     /** Submitted, waiting on work that finishes outside this process. */
     public const STATUS_PENDING = 'pending';
@@ -53,6 +59,8 @@ class CoworkerRun extends Entity implements \JsonSerializable {
     public const STARTED_BY_MANUAL = 'manual';
     public const STARTED_BY_FILES = 'files';
     public const STARTED_BY_URL = 'url';
+    /** A manual run over files and folders picked in Files; it has no coworker. */
+    public const STARTED_BY_SELECTION = 'selection';
 
     public const LOG_INFO = 'info';
     public const LOG_WARN = 'warn';
@@ -84,6 +92,10 @@ class CoworkerRun extends Entity implements \JsonSerializable {
     protected ?string $log = null;
     /** What started the run: one of the STARTED_BY_* values; null before triggers existed. */
     protected ?string $startedBy = null;
+    /** The operation a manual run performs; null on coworker runs. */
+    protected ?string $taskType = null;
+    /** JSON list of the files a manual run wrote, as user paths. */
+    protected ?string $outputs = null;
 
     public function __construct() {
         $this->addType('coworkerId', 'integer');
@@ -99,6 +111,8 @@ class CoworkerRun extends Entity implements \JsonSerializable {
         $this->addType('state', 'string');
         $this->addType('log', 'string');
         $this->addType('startedBy', 'string');
+        $this->addType('taskType', 'string');
+        $this->addType('outputs', 'string');
         $this->markFieldsForInsert();
     }
 
@@ -181,6 +195,19 @@ class CoworkerRun extends Entity implements \JsonSerializable {
      */
     public function jsonSerializeDetail(): array {
         return $this->jsonSerialize() + ['log' => $this->getDecodedLog()];
+    }
+
+    /** @return list<string> */
+    public function getDecodedOutputs(): array {
+        $raw = $this->getOutputs();
+        $decoded = $raw === null || $raw === '' ? null : json_decode($raw, true);
+        return is_array($decoded) ? array_values(array_filter($decoded, 'is_string')) : [];
+    }
+
+    /** @param list<string> $outputs */
+    public function setDecodedOutputs(array $outputs): void {
+        $encoded = $outputs === [] ? false : json_encode($outputs);
+        $this->setOutputs($encoded === false ? null : $encoded);
     }
 
     /** The batch this run is waiting on, if it is waiting on one. */

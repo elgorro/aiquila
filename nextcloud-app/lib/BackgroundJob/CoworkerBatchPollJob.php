@@ -5,7 +5,9 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\BackgroundJob;
 
+use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Db\CoworkerRunMapper;
+use OCA\AIquila\Service\BatchRunService;
 use OCA\AIquila\Service\CoworkerService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
@@ -23,6 +25,9 @@ use Psr\Log\LoggerInterface;
  * to dispatch schedules, and folding an API poll into it would turn a cheap
  * local query into a minute-by-minute round trip to Anthropic. Five minutes is
  * a fine granularity for work measured in minutes to hours.
+ *
+ * Manual runs started from Files (no coworker, `started_by` `selection`) wait
+ * on batches the same way and go to {@see BatchRunService} instead.
  */
 class CoworkerBatchPollJob extends TimedJob {
 
@@ -31,6 +36,7 @@ class CoworkerBatchPollJob extends TimedJob {
         private readonly CoworkerRunMapper $runMapper,
         private readonly CoworkerService $service,
         private readonly LoggerInterface $logger,
+        private readonly BatchRunService $batchRuns,
     ) {
         parent::__construct($time);
         $this->setInterval(300);
@@ -48,7 +54,11 @@ class CoworkerBatchPollJob extends TimedJob {
 
         foreach ($pending as $run) {
             try {
-                $this->service->resumePending($run);
+                if ($run->getCoworkerId() === 0 && $run->getStartedBy() === CoworkerRun::STARTED_BY_SELECTION) {
+                    $this->batchRuns->resume($run);
+                } else {
+                    $this->service->resumePending($run);
+                }
             } catch (\Throwable $e) {
                 // resumePending() captures its own failures; this guards
                 // mapper issues so one bad row cannot stall the rest.

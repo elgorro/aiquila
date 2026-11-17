@@ -113,6 +113,13 @@ return [
         ['name' => 'mcp_server#clientMetadata',      'url' => '/oauth/mcp-client',                    'verb' => 'GET'],
 
         // Cowork API (persistent scheduled AI tasks)
+        // Manual batch runs: one operation over files and folders picked in Files.
+        ['name' => 'batch_run#operations',        'url' => '/api/batch-runs/operations',           'verb' => 'GET'],
+        ['name' => 'batch_run#index',             'url' => '/api/batch-runs',                      'verb' => 'GET'],
+        ['name' => 'batch_run#create',            'url' => '/api/batch-runs',                      'verb' => 'POST'],
+        ['name' => 'batch_run#show',              'url' => '/api/batch-runs/{id}',                 'verb' => 'GET'],
+        ['name' => 'batch_run#cancel',            'url' => '/api/batch-runs/{id}/cancel',          'verb' => 'POST'],
+
         ['name' => 'coworker#index',              'url' => '/api/coworkers',                       'verb' => 'GET'],
         ['name' => 'coworker#create',             'url' => '/api/coworkers',                       'verb' => 'POST'],
         ['name' => 'coworker#templates',          'url' => '/api/coworkers/templates',             'verb' => 'GET'],

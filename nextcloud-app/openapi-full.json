@@ -21,6 +21,168 @@
             }
         },
         "schemas": {
+            "BatchOperation": {
+                "type": "object",
+                "required": [
+                    "id",
+                    "label",
+                    "options"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": "string"
+                    },
+                    "options": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "BatchRun": {
+                "type": "object",
+                "required": [
+                    "id",
+                    "operation",
+                    "status",
+                    "itemsTotal",
+                    "itemsProcessed",
+                    "itemsFailed",
+                    "summary",
+                    "error",
+                    "startedAt",
+                    "finishedAt",
+                    "pendingBatchId",
+                    "outputs",
+                    "pollIntervalSeconds"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "operation": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "queued",
+                            "running",
+                            "pending",
+                            "success",
+                            "error",
+                            "cancelled"
+                        ]
+                    },
+                    "itemsTotal": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "itemsProcessed": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "itemsFailed": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "summary": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "error": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "startedAt": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "finishedAt": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64"
+                    },
+                    "pendingBatchId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "outputs": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "pollIntervalSeconds": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "format": "int64"
+                    }
+                }
+            },
+            "BatchRunDetail": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/BatchRun"
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "log"
+                        ],
+                        "properties": {
+                            "log": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/components/schemas/BatchRunLogEntry"
+                                }
+                            }
+                        }
+                    }
+                ]
+            },
+            "BatchRunLogEntry": {
+                "type": "object",
+                "required": [
+                    "ts",
+                    "level",
+                    "message",
+                    "item"
+                ],
+                "properties": {
+                    "ts": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "level": {
+                        "type": "string"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "item": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
             "EffectiveSequence": {
                 "type": "object",
                 "required": [
@@ -6943,6 +7105,511 @@
                                             "items": {
                                                 "type": "string"
                                             }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/batch-runs/operations": {
+            "get": {
+                "operationId": "batch_run-operations",
+                "summary": "What a manual run can do, and its limits",
+                "description": "`batchAvailable` is whether the user's provider has a batch API: only then does `batch` mode cost half and take up to 24 hours. Without one, every run is immediate.",
+                "tags": [
+                    "batch_run"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Operations, modes and limits",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "operations",
+                                        "modes",
+                                        "defaultMode",
+                                        "batchAvailable",
+                                        "maxItems",
+                                        "maxRunsPerHour"
+                                    ],
+                                    "properties": {
+                                        "operations": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/BatchOperation"
+                                            }
+                                        },
+                                        "modes": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "defaultMode": {
+                                            "type": "string"
+                                        },
+                                        "batchAvailable": {
+                                            "type": "boolean"
+                                        },
+                                        "maxItems": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "maxRunsPerHour": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/batch-runs": {
+            "get": {
+                "operationId": "batch_run-index",
+                "summary": "List the user's manual runs",
+                "tags": [
+                    "batch_run"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Maximum number of runs, 1–100",
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64",
+                            "default": 20
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Runs, newest first",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/BatchRun"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "operationId": "batch_run-create",
+                "summary": "Start a manual run over files and folders",
+                "description": "Checks that every id is readable by the user and queues the run; the work starts on the next background-job tick. Folders are walked recursively unless `options.recursive` is false. Files picked one by one are always processed; files found in a folder are skipped when their output is already up to date, unless `options.force` is true. Outputs go beside each source, or into `options.outputFolder`.",
+                "tags": [
+                    "batch_run"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "operation"
+                                ],
+                                "properties": {
+                                    "operation": {
+                                        "type": "string",
+                                        "description": "`summarize` or `translate`"
+                                    },
+                                    "options": {
+                                        "type": "object",
+                                        "default": {},
+                                        "description": "Shared options (`recursive`, `force`, `outputFolder`, `maxBytesPerFile`, `mimeTypes`) plus the operation's own (`style` for summarize, `targetLanguage` for translate)",
+                                        "additionalProperties": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "mode": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ],
+                                        "default": null,
+                                        "description": "`batch` (half price, up to 24 hours) or `immediate` (full price); defaults to `batch` when the provider supports it"
+                                    },
+                                    "fileIds": {
+                                        "type": "array",
+                                        "default": [],
+                                        "description": "Files to process",
+                                        "items": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        }
+                                    },
+                                    "folderIds": {
+                                        "type": "array",
+                                        "default": [],
+                                        "description": "Folders whose text documents to process",
+                                        "items": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "202": {
+                        "description": "The queued run",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BatchRun"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid input, or more ids than a run takes (`limit` names the cap)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        },
+                                        "limit": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Too many runs started in the last hour (`limit` names the cap)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        },
+                                        "limit": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "A file or folder is not found or not readable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/batch-runs/{id}": {
+            "get": {
+                "operationId": "batch_run-show",
+                "summary": "Get one manual run, with its log",
+                "description": "`pollIntervalSeconds` suggests when to ask again; it is null once the run has ended. `outputs` lists the files written, as paths in the user's Files. Log entries are oldest first, at most the newest 500.",
+                "tags": [
+                    "batch_run"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Run ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The run with its log",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BatchRunDetail"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Run not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/index.php/apps/aiquila/api/batch-runs/{id}/cancel": {
+            "post": {
+                "operationId": "batch_run-cancel",
+                "summary": "Cancel a manual run",
+                "description": "A queued run never starts, a running one stops at its next file, and a pending one has its batch cancelled with the provider. Files already written stay; requests the provider already finished are billed.",
+                "tags": [
+                    "batch_run"
+                ],
+                "security": [
+                    {
+                        "bearer_auth": []
+                    },
+                    {
+                        "basic_auth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Run ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The cancelled run",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BatchRun"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Run not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "The run has already ended",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "error",
+                                        "errorId"
+                                    ],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        },
+                                        "errorId": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Current user is not logged in",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": [
+                                        "message"
+                                    ],
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
                                         }
                                     }
                                 }
@@ -15834,6 +16501,10 @@
         {
             "name": "provider_settings",
             "description": "Schema-driven read/write of provider configuration for the settings pages. Both the admin and the personal page render whatever LLMProviderInterface::getSettingsSchema() describes, so this controller never names a provider or a config key — adding a provider requires no change here. The admin/user split is enforced twice over: the admin routes carry no #[NoAdminRequired] (so Nextcloud requires an admin), and ProviderSettingsService::writeUser() additionally drops any field whose scope is not user-writable. That second check is what keeps endpoint URLs — which decide where the server sends outbound requests — out of reach of the personal page even if a route were ever mis-annotated. Provider *access* is enforced on top of that: index() only describes providers the current user is permitted to use, and update() refuses one they are not, so the personal page can neither see nor select a provider an admin blocked."
+        },
+        {
+            "name": "batch_run",
+            "description": "Manual batch runs: one operation over files and folders the user picked. Used by the \"Process with AIquila…\" action in Files and by the MCP server (app password, hence NoCSRFRequired alongside NoAdminRequired)."
         },
         {
             "name": "coworker",

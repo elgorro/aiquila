@@ -14,7 +14,8 @@ use OCP\Files\Node;
  */
 final class UserPath {
     public static function of(Node $node): string {
-        $path = $node->getPath();
+        // OCP declares no return type; a test double can hand back null.
+        $path = (string)$node->getPath();
         return preg_match('#^/[^/]+/files(/.*)$#', $path, $m) === 1 ? $m[1] : $path;
     }
 }

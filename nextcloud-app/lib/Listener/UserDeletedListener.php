@@ -16,6 +16,7 @@ use OCA\AIquila\Db\SequenceMapper;
 use OCA\AIquila\Db\ProviderAccessRule;
 use OCA\AIquila\Db\ProviderAccessRuleMapper;
 use OCA\AIquila\Db\UsageStatMapper;
+use OCA\AIquila\Service\BatchRunService;
 use OCA\AIquila\Service\ContextChatService;
 use OCA\AIquila\Service\CoworkerService;
 use OCP\EventDispatcher\Event;
@@ -28,9 +29,9 @@ use Psr\Log\LoggerInterface;
  * Removes what a deleted user owned.
  *
  * Before the account goes, the runs in flight of their personal coworkers
- * are stopped: a pending batch is cancelled with the user's provider key,
- * which is gone afterwards. Once it is gone, their personal coworkers and run
- * history, conversations, personal projects, own prompts, project
+ * and their manual batch runs are stopped: a pending batch is cancelled with
+ * the user's provider key, which is gone afterwards. Once it is gone, their
+ * personal coworkers and run history, manual batch runs, conversations, personal projects, own prompts, project
  * templates and sequences, usage statistics and provider access rules are
  * deleted.
  *
@@ -56,12 +57,18 @@ class UserDeletedListener implements IEventListener {
         private readonly ProviderAccessRuleMapper $accessRules,
         private readonly ContextChatService $contextChat,
         private readonly LoggerInterface $logger,
+        private readonly ?BatchRunService $batchRuns = null,
     ) {
     }
 
     public function handle(Event $event): void {
         if ($event instanceof BeforeUserDeletedEvent) {
             $this->coworkers->stopForUser($event->getUser()->getUID());
+            try {
+                $this->batchRuns?->stopForUser($event->getUser()->getUID());
+            } catch (\Throwable $e) {
+                $this->logger->error('AIquila: could not stop a deleted user\'s batch runs', ['error' => $e->getMessage()]);
+            }
         } elseif ($event instanceof UserDeletedEvent) {
             $this->removeUserData($event->getUser()->getUID());
         }
@@ -74,6 +81,7 @@ class UserDeletedListener implements IEventListener {
     private function removeUserData(string $userId): void {
         $steps = [
             'coworkers' => fn () => $this->coworkers->removeForUser($userId),
+            'manual batch runs' => fn () => $this->batchRuns?->removeForUser($userId),
             'conversations' => fn () => $this->removeConversations($userId),
             'projects' => fn () => $this->removeProjects($userId),
             'prompts' => function () use ($userId): void {

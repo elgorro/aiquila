@@ -19,6 +19,7 @@ rather than putting a batch method on `LLMProviderInterface`.
 |---|---|---|
 | Assistant "Summarize" task | `SummaryProvider` → `summarizeViaBatch()` | one request, blocking poll |
 | Cowork `docs:summarize` / `docs:translate` | `BatchDocumentRunner` via `AbstractBatchTextTaskType` | N requests, submit now, collect later |
+| Manual runs over files and folders | `BatchDocumentRunner` via `BatchRunService` | the same, started once from Files or the API |
 
 Everything else — chat, the agentic tool loop, the other Assistant task types —
 is synchronous. A person is waiting.
@@ -191,9 +192,13 @@ decided during the walk rather than after it:
 
 - A source whose output is at least as new as itself is skipped, so a nightly
   coworker does not re-bill the whole folder every night. `force` overrides it.
-- A file whose name already ends in the task's own output suffix is never a
-  source. Otherwise each run would summarise the last run's summaries and grow
-  another `.summary.summary.md` generation every night.
+- An output is never a source. Every output file carries the hidden system tag
+  `aiquila:output`, and the walk skips files that have it, checked in one query
+  per folder. Otherwise each run would summarise the last run's summaries and
+  grow another `.summary.summary.md` generation every night, and translating a
+  folder would translate its summaries too. A file whose name ends in the
+  task's own output suffix is skipped as well, which covers outputs written
+  before the tag existed.
 - The configured output folder is skipped during the walk, since it is normally
   nested inside the input path.
 
@@ -216,6 +221,83 @@ rather than just itself.
 On a non-Anthropic provider the same tasks fall back to a synchronous per-file
 loop at full price, and the run summary says which path it took.
 
+## Manual runs
+
+A user can run an operation once over files and folders they pick, with no
+coworker: the **Process with AIquila…** action in Files, or the API below. It
+reuses the pipeline through `BatchRunService`.
+
+**Run model.** A manual run is a row on `aiquila_coworker_runs` with
+`coworker_id` 0 and `started_by` `selection`. `task_type` names its operation
+and `outputs` lists the files it wrote. It shares the run log, the resume state
+and the cancel semantics with coworker runs. `CoworkerBatchPollJob` sends a
+pending manual run to `BatchRunService::resume()` and every other pending run
+to `CoworkerService`. Manual runs are cancelled before their user is deleted,
+and removed after.
+
+**Lifecycle.** Starting a run never does the work in the HTTP request:
+
+| Step | Status | What happens |
+|---|---|---|
+| `POST /api/batch-runs` | `queued` | input checked, run inserted, `BatchRunJob` queued |
+| `BatchRunJob` | `running` | inputs resolved again, files collected, then `immediate` works through them, `batch` submits |
+| `CoworkerBatchPollJob` | `pending` | as for a coworker, until the batch has ended |
+| end | `success` / `error` / `cancelled` | outputs, counts and summary on the run |
+
+The job claims the run with a conditional update from `queued` to `running`,
+so a run cancelled before it started, or picked up twice, is left alone.
+
+**Mode.** `batch` costs half and may take up to 24 hours. `immediate` is one
+synchronous request per file at full price. The default is `batch` when the
+user's provider has a batch API, and otherwise every run is immediate.
+
+**Input.** `fileIds` and `folderIds`, resolved through the user's own view of
+their files, so a file shared with them works like one they own:
+
+- An id the user cannot see or read is a `404` that names it. Both cases get
+  the same answer, so ids cannot be probed.
+- Folders are walked recursively unless `recursive` is false, by the coworker
+  rules: up-to-date sources (unless `force`), outputs of any operation and
+  the output folder are skipped.
+- Files picked one by one are always processed, since the user asked for them.
+  Only the text-only mime filter applies, and a picked file that fails it is
+  logged as skipped.
+- A file reached twice counts once.
+
+**Output.** Each output goes beside its source, or into `outputFolder`, which
+must be a folder the user can create files in (it is created if missing). A
+source whose own folder is read-only is skipped before anything is billed,
+with a log line saying to choose an output folder.
+
+**Limits.**
+
+| Limit | Value | Over it |
+|---|---|---|
+| Files per run | 200 (`MAX_ITEMS_PER_RUN`, as for a coworker) | more ids is a `400` with `limit`; a folder walk stops there, and the run log says so. Running it again picks up the rest, since finished files are skipped |
+| Runs per user per hour | 12 (the coworker trigger cap) | `429` with `limit` |
+| Requests to start or cancel | 20 per minute | Nextcloud's rate limiter |
+
+**API.** Plain app routes, like the coworker API, so the MCP server reaches
+them with the user's app password. All of them are `NoAdminRequired` and
+`NoCSRFRequired`, and described in `openapi.json`.
+
+| Route | Returns |
+|---|---|
+| `GET /api/batch-runs/operations` | operations and their option names, `modes`, `defaultMode`, `batchAvailable`, `maxItems`, `maxRunsPerHour` |
+| `POST /api/batch-runs` | `{operation, options, mode, fileIds, folderIds}` → `202` with the queued run |
+| `GET /api/batch-runs` | the user's manual runs, newest first |
+| `GET /api/batch-runs/{id}` | the run with its log |
+| `POST /api/batch-runs/{id}/cancel` | the cancelled run; `409` once it has ended |
+
+A run carries `status`, the item counts, `summary`, `error`, `outputs` (paths
+in the user's Files) and `pollIntervalSeconds`. That interval is 30 while
+queued, 10 while running and 300 while pending (the poll job's interval), and
+null once the run has ended. Clients should wait that long between polls.
+
+The request options carry the admin's instance instructions when they are
+enabled for coworkers, since this is the same kind of background work. Usage
+is recorded as `coworker`.
+
 ## Measuring it
 
 ```bash
@@ -235,10 +317,12 @@ synchronous cost comparison with the discount applied.
 - `nextcloud-app/lib/Batch/BatchContext.php`, `BatchOperation.php` — what one run needs, and the per-file question
 - `nextcloud-app/lib/Batch/SummarizeOperation.php`, `TranslateOperation.php` — the two operations
 - `nextcloud-app/lib/Cowork/AbstractBatchTextTaskType.php` — the coworker adapter over the runner
+- `nextcloud-app/lib/Service/BatchRunService.php`, `lib/Controller/BatchRunController.php` — manual runs and their API
+- `nextcloud-app/lib/BackgroundJob/BatchRunJob.php` — starts a queued manual run
 - `nextcloud-app/lib/Cowork/DocsSummarizeFolderTaskType.php`, `DocsTranslateFolderTaskType.php` — the two tasks
 - `nextcloud-app/lib/Cowork/ResumableCoworkerTaskType.php` — the `resume()` contract
 - `nextcloud-app/lib/Service/CoworkerService.php` — the `pending` branch and `resumePending()`
-- `nextcloud-app/lib/BackgroundJob/CoworkerBatchPollJob.php` — the five-minute poll
+- `nextcloud-app/lib/BackgroundJob/CoworkerBatchPollJob.php` — the five-minute poll, for coworker and manual runs
 - `nextcloud-app/lib/Command/BenchmarkBatchCommand.php` — `occ aiquila:benchmark-batch`
 - `nextcloud-app/lib/TaskProcessing/SummaryProvider.php` — the single-request blocking path
 
