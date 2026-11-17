@@ -576,6 +576,38 @@ An attached file stays in context for the rest of the conversation, so you can a
 
 In the Files app, open a file's **⋯** menu and choose **Ask AIquila**. This starts a conversation with the file attached, and you can keep asking follow-ups in the dialog. **Open in AIquila** continues the same conversation in the chat.
 
+#### Summarizing or translating files and folders from the Files app
+
+To process several documents at once, select files, folders or both in the Files
+app and choose **Process with AIquila…** from the selection's actions, or from one
+file's or folder's **⋯** menu. In the dialog, choose:
+
+- **Summarize** (brief, detailed or bullet points) or **Translate** (into the
+  language you name);
+- **When**: *Batch* costs half and delivers within 24 hours, *Now* costs the normal
+  price and is done within minutes. The choice appears only on the Claude API.
+  Every other provider processes the files right away;
+- for folders, whether to **include subfolders**, and whether to **redo documents
+  whose output is already up to date**;
+- where to **save results**: beside each document (the default), or in a folder you
+  pick. Choose a folder when the documents are in a share you can only read.
+
+Results are Markdown files named like the coworker outputs, `<name>.summary.md` or
+`<name>.<language>.md`, and each processed document gets the `aiquila:summarized`
+or `aiquila:translated` tag. Only text documents (`text/*` and JSON) are read. Other
+files in the selection are skipped and listed in the run's log. Results from an
+earlier run are never processed again, so summarizing a folder and then translating
+it translates only the documents.
+
+The run starts with the next background job, so cron must be running (see
+[How it runs](#4-cowork-scheduled-jobs)). The confirmation links to the run, and
+**Cowork → Runs from Files** in AIquila lists your runs with their progress, log
+and results. **Cancel** stops a run that is still going.
+
+A run takes up to 200 files. A larger folder is processed in part, and running it
+again picks up the rest, because finished documents are skipped. You can start 12
+runs per hour.
+
 ### 2. Nextcloud Assistant Integration
 
 AIquila registers itself against Nextcloud's TaskProcessing framework, so it shows up
@@ -760,7 +792,7 @@ each tool call. With **Save the answer to** set, the answer replaces that file o
 every run.
 
 The document tasks only redo a file when it changed since its result was written,
-unless `force` is set, and never process their own output. A run handles up to 200
+unless `force` is set, and never process a result that a document task wrote. A run handles up to 200
 documents; the rest wait for the next run. `vision:classify` needs a `vision` provider.
 
 Each coworker can be paused, run immediately with **Run now**, and keeps a run

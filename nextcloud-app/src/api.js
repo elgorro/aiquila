@@ -229,6 +229,33 @@ export function listDirectory(path) {
 	return axios.get(url('/api/files/list'), { params: { path } })
 }
 
+// Manual batch runs: one operation over files and folders picked in Files.
+export function getBatchRunOperations() {
+	return axios.get(url('/api/batch-runs/operations'))
+}
+
+export function startBatchRun({ operation, options = {}, mode = null, fileIds = [], folderIds = [] }) {
+	return axios.post(url('/api/batch-runs'), { operation, options, mode, fileIds, folderIds })
+}
+
+export function listBatchRuns(limit = 20) {
+	return axios.get(url('/api/batch-runs'), { params: { limit } })
+}
+
+// One run with its log, outputs and pollIntervalSeconds.
+export function getBatchRun(id) {
+	return axios.get(url(`/api/batch-runs/${id}`))
+}
+
+export function cancelBatchRun(id) {
+	return axios.post(url(`/api/batch-runs/${id}/cancel`))
+}
+
+// Where the AIquila app shows a manual run.
+export function batchRunUrl(id) {
+	return generateUrl('/apps/aiquila/') + '#/cowork?run=' + id
+}
+
 // Cowork API (persistent scheduled AI tasks)
 export function listCoworkers() {
 	return axios.get(url('/api/coworkers'))

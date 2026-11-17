@@ -165,6 +165,12 @@ with the app bundle. Keep its static imports to `@nextcloud/files` and
 `@nextcloud/l10n`, and `import()` anything heavier, such as Vue components, from
 `exec`.
 
+The Files selection bar lists only actions that define `execBatch`, which receives
+all selected nodes in one call and returns one result per node. An action without
+it is offered per file only. **Process with AIquila…** defines both, and opens one
+dialog for the whole selection from either. Returning `null` for a node tells Files
+to show no toast of its own, because the dialog reports the outcome itself.
+
 ### Code highlighting in rendered Markdown
 
 Chat replies and Coworker summaries are rendered by `renderMarkdown()` in
