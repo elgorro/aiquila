@@ -245,6 +245,8 @@ What happens next is up to the client: one that handles embedded resources can s
 the model or save it where the model can open it, and one that does not shows only the text
 block.
 
+The same URI answers `resources/read`: see [Resources](../README.md#resources).
+
 `MCP_MAX_EMBEDDED_FILE_SIZE` (bytes, default `20971520` = 20 MB) caps the files sent this way.
 A larger binary file is described, not sent. Base64 makes the message a third larger than the
 file, so lower the limit if a proxy in front of the server restricts response sizes.

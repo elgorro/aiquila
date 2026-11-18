@@ -170,6 +170,40 @@ function dispositionFileName(header: string | null): string | undefined {
   return clean || undefined;
 }
 
+/** The URI a mail attachment is embedded under and can be read back from. */
+export function attachmentUri(messageId: number, attachmentId: string): string {
+  return `nextcloud-mail:///messages/${messageId}/attachments/${encodeURIComponent(attachmentId)}`;
+}
+
+/** The `fetchAttachment` failure, with the status Mail answered. */
+export class AttachmentError extends Error {
+  readonly status: number;
+  constructor(status: number, body: string) {
+    super(`HTTP ${status}: ${body}`);
+    this.name = 'AttachmentError';
+    this.status = status;
+  }
+}
+
+/** Download one attachment of a message: its bytes, declared type and name. */
+export async function fetchAttachment(
+  messageId: number,
+  attachmentId: string
+): Promise<{ name: string; bytes: Uint8Array; mimeType: string }> {
+  const response = await fetchMailAPI(
+    `/messages/${messageId}/attachment/${encodeURIComponent(attachmentId)}`
+  );
+  if (!response.ok) throw new AttachmentError(response.status, await response.text());
+  const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
+  return {
+    name:
+      dispositionFileName(response.headers.get('content-disposition')) ??
+      `attachment-${attachmentId}`,
+    bytes: new Uint8Array(await response.arrayBuffer()),
+    mimeType: contentType.split(';')[0].trim(),
+  };
+}
+
 // ── Tools ────────────────────────────────────────────────────────────
 
 const listMailAccountsTool = {
@@ -474,7 +508,7 @@ const getAttachmentTool = {
         name,
         bytes,
         mimeType,
-        uri: `nextcloud-mail:///messages/${args.messageId}/attachments/${encodeURIComponent(args.attachmentId)}`,
+        uri: attachmentUri(args.messageId, args.attachmentId),
       };
       const content: ContentBlock[] = [];
 

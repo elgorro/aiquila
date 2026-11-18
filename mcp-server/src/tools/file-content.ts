@@ -118,6 +118,19 @@ export function fileUri(path: string): string {
   return `nextcloud:///${path.split('/').filter(Boolean).map(encodeURIComponent).join('/')}`;
 }
 
+/** The contents of a resource: text, or the bytes in base64 (MCP, Resources › Resource Contents). */
+export type ResourceContents =
+  { uri: string; mimeType: string; text: string } | { uri: string; mimeType: string; blob: string };
+
+/** A file as resource contents: `text` for a text file, `blob` for anything else. */
+export function resourceContents(file: FileBytes): ResourceContents {
+  const mimeType = fileMimeType(file);
+  const image = mimeType.startsWith('image/') && mimeType !== 'image/svg+xml';
+  return !image && isText(file.bytes)
+    ? { uri: file.uri, mimeType, text: decodeText(file.bytes) }
+    : { uri: file.uri, mimeType, blob: base64(file.bytes) };
+}
+
 /**
  * The blocks that hand a binary file to the client: a line of text naming it,
  * then the embedded resource. `label` starts the line, e.g. `File: a.pdf`.

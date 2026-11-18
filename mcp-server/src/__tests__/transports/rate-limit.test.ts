@@ -49,6 +49,8 @@ describe('message counting', () => {
   it('counts tools/call in a single message and in a batch', () => {
     expect(countToolCalls(callMsg)).toBe(1);
     expect(countToolCalls({ method: 'tools/list' })).toBe(0);
+    expect(countToolCalls({ method: 'resources/read' })).toBe(1);
+    expect(countToolCalls({ method: 'resources/list' })).toBe(0);
     expect(countToolCalls([callMsg, { method: 'ping' }, callMsg])).toBe(2);
     expect(countToolCalls(undefined)).toBe(0);
   });
