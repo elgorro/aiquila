@@ -109,9 +109,10 @@ read the same file again from the URI alone.
 
 `resources/list` is empty: files are not enumerated, the templates say what can be read.
 `resources/read` needs a signed-in user, counts against `MCP_RATE_LIMIT` like a tool call,
-and is held to `MCP_MAX_EMBEDDED_FILE_SIZE`. A path segment that is `..`, or that hides a
-slash behind percent-encoding, is refused. The server declares the `resources` capability
-only when one of the tools above is registered.
+and is held to `MCP_MAX_EMBEDDED_FILE_SIZE`. Dot-segments in the path resolve inside the
+account's Files, and a segment that hides a slash behind percent-encoding is refused, so a
+URI cannot name anything outside them. The server declares the `resources` capability only
+when one of the tools above is registered.
 
 ### System Tools
 
