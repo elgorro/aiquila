@@ -45,6 +45,7 @@ acts as them, so `NEXTCLOUD_USER` and `NEXTCLOUD_PASSWORD` are not needed; set
 Optional:
 
 - `MCP_MAX_FILE_SIZE` - Maximum `write_file` content length in bytes (default `1073741824` = 1 GB)
+- `MCP_MAX_EMBEDDED_FILE_SIZE` - Largest binary file `read_file`, `get_file_content` and `mail_get_attachment` return as an [embedded resource](tools/system-tools.md#binary-files), in bytes (default `20971520` = 20 MB)
 - `LOG_LEVEL` - Log verbosity sent to stderr: `trace`, `debug`, `info` (default), `warn`, `error`, `fatal`
 - `MCP_RATE_LIMIT` - HTTP only: `tools/call` messages per minute per signed-in user, or per client address without OAuth (default `300`; `0` disables). Over the limit the server answers `429` with `Retry-After`
 - `MCP_RATE_LIMIT_ANONYMOUS` - HTTP only: unauthenticated requests per minute per client address, for the methods [lazy authentication](oauth.md#lazy-authentication) serves without a token (default `60`; `0` disables)

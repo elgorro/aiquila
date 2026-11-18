@@ -13,6 +13,7 @@ const mockClient = {
   deleteFile: vi.fn(),
   moveFile: vi.fn(),
   copyFile: vi.fn(),
+  stat: vi.fn(),
 };
 
 vi.mock('../client/webdav.js', () => ({ getWebDAVClient: () => mockClient }));
@@ -59,13 +60,61 @@ describe('MCP Tools', () => {
 
   describe('read_file', () => {
     it('should return file contents', async () => {
-      mockClient.getFileContents.mockResolvedValue('Hello, World!');
+      mockClient.getFileContents.mockResolvedValue(new TextEncoder().encode('Hello, World!'));
 
       const { readFileTool } = await import('../tools/system/files.js');
       const result = await readFileTool.handler({ path: '/test.txt' });
 
-      expect(result.content[0].text).toBe('Hello, World!');
-      expect(mockClient.getFileContents).toHaveBeenCalledWith('/test.txt', { format: 'text' });
+      expect(result.content).toEqual([{ type: 'text', text: 'Hello, World!' }]);
+      expect(mockClient.getFileContents).toHaveBeenCalledWith('/test.txt', { format: 'binary' });
+      expect(mockClient.stat).not.toHaveBeenCalled();
+    });
+
+    it('should return a binary file whole, as an embedded resource', async () => {
+      const pdf = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.from([0, 1, 2, 3, 255])]);
+      mockClient.getFileContents.mockResolvedValue(new Uint8Array(pdf));
+      mockClient.stat.mockResolvedValue({ basename: 'Report 1.pdf', mime: 'application/pdf' });
+
+      const { readFileTool } = await import('../tools/system/files.js');
+      const result = await readFileTool.handler({ path: '/Documents/Report 1.pdf' });
+
+      expect(result.content).toHaveLength(2);
+      expect(result.content[0].text).toContain('Report 1.pdf (application/pdf, 14 bytes)');
+      expect(result.content[1]).toEqual({
+        type: 'resource',
+        resource: {
+          uri: 'nextcloud:///Documents/Report%201.pdf',
+          mimeType: 'application/pdf',
+          blob: pdf.toString('base64'),
+        },
+      });
+    });
+
+    it('should return a binary image as image content', async () => {
+      const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
+      mockClient.getFileContents.mockResolvedValue(new Uint8Array(png));
+      mockClient.stat.mockResolvedValue({ basename: 'a.png', mime: 'image/png' });
+
+      const { readFileTool } = await import('../tools/system/files.js');
+      const result = await readFileTool.handler({ path: '/a.png' });
+
+      expect(result.content[1]).toEqual({
+        type: 'image',
+        data: png.toString('base64'),
+        mimeType: 'image/png',
+      });
+    });
+
+    it('should name the type from the extension when Nextcloud cannot be asked', async () => {
+      mockClient.getFileContents.mockResolvedValue(new Uint8Array([0x50, 0x4b, 3, 4, 0, 0]));
+      mockClient.stat.mockRejectedValue(new Error('Invalid response: 500'));
+
+      const { readFileTool } = await import('../tools/system/files.js');
+      const result = await readFileTool.handler({ path: '/Notes/minutes.docx' });
+
+      expect(result.content[1].resource.mimeType).toBe(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      );
     });
   });
 

@@ -2,7 +2,8 @@
 
 import { z } from 'zod';
 import { getWebDAVClient } from '../../client/webdav.js';
-import { fetchAiquilaAPI } from '../../client/aiquila.js';
+import { ApiError, fetchAiquilaAPI } from '../../client/aiquila.js';
+import { decodeText, fileContent, fileUri, isText, maxEmbeddedFileSize } from '../file-content.js';
 import { PathSchema, FilePathSchema, FileContentSchema, FolderPathSchema } from '../types.js';
 import { bool, int, str, structuredResult } from '../structured.js';
 
@@ -53,20 +54,23 @@ export const readFileTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: 'Read the contents of a file from Nextcloud',
+  description:
+    'Read a file from Nextcloud. A text file is returned as text and an image as image content. Any other file (PDF, Word, Excel, PowerPoint, OpenDocument, archive, audio) is returned whole as an embedded resource holding its bytes.',
   inputSchema: FilePathSchema,
   handler: async (args: { path: string }) => {
     const client = getWebDAVClient();
-    const content = await client.getFileContents(args.path, {
-      format: 'text',
-    });
+    const bytes = await client.getFileContents(args.path, { format: 'binary' });
+    if (isText(bytes)) {
+      return { content: [{ type: 'text' as const, text: decodeText(bytes) }] };
+    }
+    // A binary file: its media type decides between an image and a resource.
+    const stat = await client.stat(args.path).catch(() => undefined);
+    const name = stat?.basename || args.path.split('/').filter(Boolean).pop() || args.path;
     return {
-      content: [
-        {
-          type: 'text',
-          text: content,
-        },
-      ],
+      content: fileContent(
+        { name, bytes, mimeType: stat?.mime, uri: fileUri(args.path) },
+        { header: false }
+      ),
     };
   },
 };
@@ -285,8 +289,50 @@ export const searchFilesTool = {
   },
 };
 
+/** A file's content: `text` when the AIquila app decoded it, else its bytes. */
+type LoadedFile = { name: string; mimeType: string; size: number } & (
+  { text: string; bytes?: undefined } | { text?: undefined; bytes: Uint8Array }
+);
+
 /**
- * Read file content with proper encoding (text or base64 for binary/images)
+ * Fetch a file's content through the AIquila app, or over WebDAV when the app
+ * answers 404: it is not installed on this Nextcloud, or the file is one it
+ * does not see. WebDAV needs no app, and reports a missing file itself.
+ */
+async function loadFile(path: string): Promise<LoadedFile> {
+  try {
+    const result = await fetchAiquilaAPI<{
+      name: string;
+      mimeType: string;
+      size: number;
+      encoding: string;
+      content: string;
+    }>('/files/content', { queryParams: { path } });
+    const { name, mimeType, size } = result;
+    return result.encoding === 'text'
+      ? { name, mimeType, size, text: result.content }
+      : { name, mimeType, size, bytes: Buffer.from(result.content, 'base64') };
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.statusCode !== 404) throw error;
+  }
+
+  const client = getWebDAVClient();
+  const stat = await client.stat(path);
+  if (stat.type === 'directory') throw new Error(`'${path}' is a folder, not a file`);
+  // The app refuses larger files with 413; keep one limit whichever way the file is read.
+  const limit = maxEmbeddedFileSize();
+  if (stat.size > limit) throw new Error(`File too large: ${stat.size} bytes (max ${limit})`);
+  const bytes = await client.getFileContents(path, { format: 'binary' });
+  return {
+    name: stat.basename,
+    mimeType: stat.mime || 'application/octet-stream',
+    size: bytes.byteLength,
+    bytes,
+  };
+}
+
+/**
+ * Read file content: text, an image block, or the file itself as an embedded resource
  */
 export const getFileContentTool = {
   name: 'get_file_content',
@@ -298,56 +344,30 @@ export const getFileContentTool = {
     openWorldHint: false,
   },
   description:
-    'Read file content from Nextcloud with mime type info. Returns text for text files, base64 for binary files (images, PDFs, etc.). Images are returned as MCP image content for Claude vision.',
+    'Read file content from Nextcloud with mime type info. Returns text for text files and MCP image content for images (Claude vision). Any other file (PDF, Word, Excel, PowerPoint, OpenDocument, archive, audio) is returned whole as an embedded resource holding its bytes.',
   inputSchema: z.object({
     path: z.string().describe('The file path in Nextcloud'),
   }),
   handler: async (args: { path: string }) => {
     try {
-      const result = await fetchAiquilaAPI<{
-        name: string;
-        mimeType: string;
-        size: number;
-        encoding: string;
-        content: string;
-      }>('/files/content', { queryParams: { path: args.path } });
+      const file = await loadFile(args.path);
 
-      if (result.encoding === 'text') {
+      if (file.text !== undefined) {
         return {
           content: [
             {
               type: 'text' as const,
-              text: `File: ${result.name} (${result.mimeType}, ${result.size} bytes)\n\n${result.content}`,
+              text: `File: ${file.name} (${file.mimeType}, ${file.size} bytes)\n\n${file.text}`,
             },
           ],
         };
       }
 
-      // For images, return as MCP image content type for Claude vision
-      if (result.mimeType.startsWith('image/')) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `File: ${result.name} (${result.mimeType}, ${result.size} bytes)`,
-            },
-            {
-              type: 'image' as const,
-              data: result.content,
-              mimeType: result.mimeType,
-            },
-          ],
-        };
-      }
-
-      // Other binary types: return base64 as text
       return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `File: ${result.name} (${result.mimeType}, ${result.size} bytes)\nEncoding: base64\n\n${result.content}`,
-          },
-        ],
+        content: fileContent(
+          { name: file.name, bytes: file.bytes, mimeType: file.mimeType, uri: fileUri(args.path) },
+          { header: true }
+        ),
       };
     } catch (error) {
       return {
@@ -418,17 +438,7 @@ export const analyzeImageTool = {
 
     try {
       // Fetch all images in parallel
-      const results = await Promise.all(
-        imagePaths.map((p) =>
-          fetchAiquilaAPI<{
-            name: string;
-            mimeType: string;
-            size: number;
-            encoding: string;
-            content: string;
-          }>('/files/content', { queryParams: { path: p } })
-        )
-      );
+      const results = await Promise.all(imagePaths.map((p) => loadFile(p)));
 
       // Validate all files are images
       const nonImages = results
@@ -464,7 +474,7 @@ export const analyzeImageTool = {
         },
         ...results.map((r) => ({
           type: 'image' as const,
-          data: r.content,
+          data: Buffer.from(r.bytes ?? Buffer.from(r.text, 'utf8')).toString('base64'),
           mimeType: r.mimeType,
         })),
       ];

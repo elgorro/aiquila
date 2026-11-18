@@ -466,6 +466,7 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_RATE_LIMIT_ANONYMOUS` | No | Unauthenticated (lazy-auth) requests per minute per client address. Default `60`, `0` disables |
 | `MCP_LOCALE` | No | BCP 47 locale tag for `localTime` in `get_local_time` (e.g. `sv-SE`); defaults to system locale |
 | `MCP_MAX_FILE_SIZE` | No | Max `write_file` content length in bytes (default `1073741824` = 1 GB) |
+| `MCP_MAX_EMBEDDED_FILE_SIZE` | No | Largest binary file returned as an embedded resource by `read_file`, `get_file_content` and `mail_get_attachment`, in bytes (default `20971520` = 20 MB) |
 | `MCP_ALLOWED_HOSTS` | No | Comma-separated extra hostnames for DNS rebinding protection (e.g. `mcp` for Docker service name) |
 | `MCP_CORS_ORIGINS` | No | Comma-separated extra origins allowed to make browser requests. The `MCP_AUTH_ISSUER` origin is always allowed when auth is on. Any other `Origin` on `/mcp` gets `403` |
 | `MCP_OCC_ALLOWLIST` | No | Comma-separated allowlist entries for `run_occ` (`cmd` = no arguments, `cmd *` = any); replaces the read-only default |

@@ -98,8 +98,8 @@ read an earlier step's structured result through `{{steps.<id>.result.<path>}}`.
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_files` | List files and folders | [System Tools](tools/system-tools.md#list_files) |
-| `read_file` | Read file contents (text) | [System Tools](tools/system-tools.md#read_file) |
-| `get_file_content` | Read file with mime type (text/base64/image) | [System Tools](tools/system-tools.md#get_file_content) |
+| `read_file` | Read a file: text, image, or the file itself as an embedded resource | [System Tools](tools/system-tools.md#read_file) |
+| `get_file_content` | Read file with mime type (text, image, or the file itself as an embedded resource) | [System Tools](tools/system-tools.md#get_file_content) |
 | `write_file` | Create or update files | [System Tools](tools/system-tools.md#write_file) |
 | `create_folder` | Create folders | [System Tools](tools/system-tools.md#create_folder) |
 | `delete` | Delete files or folders | [System Tools](tools/system-tools.md#delete) |

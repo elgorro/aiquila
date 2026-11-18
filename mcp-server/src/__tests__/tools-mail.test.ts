@@ -443,11 +443,17 @@ describe('Mail Tools', () => {
       );
     });
 
-    it('should return type + size for other binary attachments', async () => {
+    it('should return other binary attachments whole, as an embedded resource', async () => {
       const bytes = Buffer.alloc(2048);
+      const headers: Record<string, string> = {
+        'content-type': 'application/octet-stream',
+        // What Nextcloud sends: an ASCII fallback, then the RFC 8187 form.
+        'content-disposition':
+          'attachment; filename="Budget ete 2026.xlsx"; filename*=utf-8\'\'Budget%20%C3%A9t%C3%A9%202026.xlsx',
+      };
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
-        headers: { get: () => 'application/octet-stream' },
+        headers: { get: (name: string) => headers[name] ?? null },
         arrayBuffer: () => Promise.resolve(bytes.buffer.slice(0, bytes.length)),
       });
 
@@ -455,9 +461,38 @@ describe('Mail Tools', () => {
       const tool = mailTools.find((t) => t.name === 'mail_get_attachment')!;
       const result = await tool.handler({ messageId: 100, attachmentId: '5' });
 
-      expect(result.content[0].text).toContain('application/octet-stream');
-      expect(result.content[0].text).toContain('2.0 KB');
-      expect(result.content[0].text).toContain('Cannot be read inline');
+      const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain(
+        `Attachment: Budget été 2026.xlsx (${XLSX}, 2048 bytes)`
+      );
+      expect(result.content[1]).toEqual({
+        type: 'resource',
+        resource: {
+          uri: 'nextcloud-mail:///messages/100/attachments/5',
+          mimeType: XLSX,
+          blob: bytes.toString('base64'),
+        },
+      });
+    });
+
+    it('should return a PDF attachment itself, with or without its text', async () => {
+      const bytes = Buffer.from('%PDF-1.4 not-real');
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        headers: { get: (name: string) => (name === 'content-type' ? 'application/pdf' : null) },
+        // A small Buffer is a view of a shared pool: copy it into its own ArrayBuffer.
+        arrayBuffer: () => Promise.resolve(new Uint8Array(bytes).buffer),
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_get_attachment')!;
+      const result = await tool.handler({ messageId: 100, attachmentId: '4' });
+
+      const resource = result.content[result.content.length - 1];
+      expect(resource.type).toBe('resource');
+      expect(resource.resource.mimeType).toBe('application/pdf');
+      expect(resource.resource.blob).toBe(bytes.toString('base64'));
     });
 
     it('should handle errors', async () => {

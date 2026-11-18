@@ -45,7 +45,7 @@
    "name": "read_file",
    "title": "Read File",
    "category": "files",
-   "description": "Read the contents of a file from Nextcloud",
+   "description": "Read a file from Nextcloud. A text file is returned as text and an image as image content. Any other file (PDF, Word, Excel, PowerPoint, OpenDocument, archive, audio) is returned whole as an embedded resource holding its bytes.",
    "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -272,7 +272,7 @@
    "name": "get_file_content",
    "title": "Get File Content",
    "category": "files",
-   "description": "Read file content from Nextcloud with mime type info. Returns text for text files, base64 for binary files (images, PDFs, etc.). Images are returned as MCP image content for Claude vision.",
+   "description": "Read file content from Nextcloud with mime type info. Returns text for text files and MCP image content for images (Claude vision). Any other file (PDF, Word, Excel, PowerPoint, OpenDocument, archive, audio) is returned whole as an embedded resource holding its bytes.",
    "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
@@ -4813,7 +4813,7 @@
    "name": "mail_get_attachment",
    "title": "Get Mail Attachment",
    "category": "mail",
-   "description": "Download an email attachment by message ID and attachment ID. Returns text for text files and calendar invites (ICS), image data for images, extracted text for PDFs (requires pdftotext). Attachment IDs are shown in mail_read_message output.",
+   "description": "Download an email attachment by message ID and attachment ID. Returns text for text files and calendar invites (ICS) and image data for images. Any other attachment (PDF, Word, Excel, archive) is returned whole as an embedded resource holding its bytes; a PDF also comes with its extracted text when…",
    "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,

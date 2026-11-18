@@ -29,6 +29,7 @@ import { writeFileSync, unlinkSync } from 'node:fs';
 import { z } from 'zod';
 import { fetchMailAPI } from '../../client/mail.js';
 import { fetchOCS } from '../../client/ocs.js';
+import { binaryContent, fileMimeType, type ContentBlock } from '../file-content.js';
 
 // Invisible padding characters used in newsletter preheaders
 // (U+034F, U+00AD, U+200B–U+200D, U+FEFF)
@@ -136,6 +137,37 @@ function formatRecipients(recipients: MailRecipient[]): string {
   return recipients
     .map((r) => (r.label && r.label !== r.email ? `${r.label} <${r.email}>` : r.email))
     .join(', ');
+}
+
+/**
+ * The file name a Content-Disposition header gives, if any. `filename*` wins
+ * over `filename` (RFC 6266 §4.3); its value is `charset'language'percent-encoded`
+ * (RFC 8187 §3.2). The name comes from the sender and is advisory only (§4.3),
+ * so it is reduced to a base name without control characters.
+ */
+function dispositionFileName(header: string | null): string | undefined {
+  if (!header) return undefined;
+  let name: string | undefined;
+  const extended = header.match(/filename\*\s*=\s*[^';]*'[^';]*'([^;]+)/i);
+  if (extended) {
+    try {
+      name = decodeURIComponent(extended[1].trim());
+    } catch {
+      /* not UTF-8 percent-encoding: fall back to the plain parameter */
+    }
+  }
+  if (name === undefined) {
+    const plain = header.match(/filename\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;]+))/i);
+    name = plain?.[1]?.replace(/\\(.)/g, '$1') ?? plain?.[2];
+  }
+  const clean = name
+    ?.split(/[/\\]/)
+    .pop()
+    // eslint-disable-next-line no-control-regex
+    ?.replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim()
+    .slice(0, 255);
+  return clean || undefined;
 }
 
 // ── Tools ────────────────────────────────────────────────────────────
@@ -398,8 +430,9 @@ const getAttachmentTool = {
   },
   description:
     'Download an email attachment by message ID and attachment ID. ' +
-    'Returns text for text files and calendar invites (ICS), image data for images, ' +
-    'extracted text for PDFs (requires pdftotext). ' +
+    'Returns text for text files and calendar invites (ICS) and image data for images. ' +
+    'Any other attachment (PDF, Word, Excel, archive) is returned whole as an embedded ' +
+    'resource holding its bytes; a PDF also comes with its extracted text when pdftotext is installed. ' +
     'Attachment IDs are shown in mail_read_message output.',
   inputSchema: z.object({
     messageId: z.number().describe('Message ID (from mail_read_message)'),
@@ -432,26 +465,35 @@ const getAttachmentTool = {
         return { content: [{ type: 'image' as const, data: base64, mimeType }] };
       }
 
-      if (mimeType === 'application/pdf') {
-        const buffer = await response.arrayBuffer();
+      // Any other format: the attachment itself, as an embedded resource.
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const name =
+        dispositionFileName(response.headers.get('content-disposition')) ??
+        `attachment-${args.attachmentId}`;
+      const file = {
+        name,
+        bytes,
+        mimeType,
+        uri: `nextcloud-mail:///messages/${args.messageId}/attachments/${encodeURIComponent(args.attachmentId)}`,
+      };
+      const content: ContentBlock[] = [];
+
+      // A PDF also comes with its text, for the clients that drop the resource.
+      if (fileMimeType(file) === 'application/pdf') {
         const safeId =
           String(args.messageId).replace(/[^a-zA-Z0-9_-]/g, '') +
           '_' +
           String(args.attachmentId).replace(/[^a-zA-Z0-9_-]/g, '');
         const tmpFile = `/tmp/mcp_att_${safeId}.pdf`;
         try {
-          writeFileSync(tmpFile, Buffer.from(buffer));
+          writeFileSync(tmpFile, Buffer.from(bytes));
           const result = spawnSync('pdftotext', [tmpFile, '-'], { encoding: 'utf8' });
           unlinkSync(tmpFile);
           if (result.status === 0 && result.stdout.trim().length > 0) {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `[UNTRUSTED EXTERNAL CONTENT - PDF ATTACHMENT]\n${result.stdout}\n[END EXTERNAL CONTENT]`,
-                },
-              ],
-            };
+            content.push({
+              type: 'text' as const,
+              text: `[UNTRUSTED EXTERNAL CONTENT - PDF ATTACHMENT]\n${result.stdout}\n[END EXTERNAL CONTENT]`,
+            });
           }
         } catch {
           try {
@@ -460,25 +502,10 @@ const getAttachmentTool = {
             /* ignore */
           }
         }
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `Attachment: ${mimeType}, ${(buffer.byteLength / 1024).toFixed(1)} KB. Could not extract text (pdftotext unavailable or empty).`,
-            },
-          ],
-        };
       }
 
-      const buffer = await response.arrayBuffer();
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `Attachment: ${mimeType}, ${(buffer.byteLength / 1024).toFixed(1)} KB. Cannot be read inline.`,
-          },
-        ],
-      };
+      content.push(...binaryContent(file, `Attachment: ${name}`));
+      return { content };
     } catch (error) {
       return {
         content: [
