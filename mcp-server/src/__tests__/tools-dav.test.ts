@@ -131,6 +131,63 @@ describe('MCP Tools', () => {
       });
     });
 
+    it('should write the decoded bytes of base64 content', async () => {
+      mockClient.putFileContents.mockResolvedValue(undefined);
+      const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x00, 0xff, 0xfe]);
+
+      const { writeFileTool } = await import('../tools/system/files.js');
+      const result = await writeFileTool.handler({
+        path: '/a.pdf',
+        content: Buffer.from(bytes).toString('base64'),
+        encoding: 'base64',
+      });
+
+      expect(result).not.toHaveProperty('isError');
+      expect(result.content[0].text).toContain('/a.pdf (8 bytes, decoded from base64)');
+      expect(mockClient.putFileContents).toHaveBeenCalledWith('/a.pdf', bytes, {
+        overwrite: true,
+      });
+    });
+
+    it('should store content as text when encoding is "text" or absent', async () => {
+      mockClient.putFileContents.mockResolvedValue(undefined);
+
+      const { writeFileTool } = await import('../tools/system/files.js');
+      await writeFileTool.handler({ path: '/a.txt', content: 'JVBERi0A//4=', encoding: 'text' });
+
+      expect(mockClient.putFileContents).toHaveBeenCalledWith('/a.txt', 'JVBERi0A//4=', {
+        overwrite: true,
+      });
+    });
+
+    it.each([
+      ['a character outside the alphabet', 'JVBE Ri0='],
+      ['a line break', 'JVBERi0A\n//4='],
+      ['the URL-safe alphabet', 'JVBERi0A__4='],
+      ['missing padding', 'JVBERi0A//4'],
+      ['pad bits that are not zero', 'JVBERi0A//5='],
+    ])('should refuse base64 with %s and write nothing (RFC 4648 §3)', async (_, content) => {
+      const { writeFileTool } = await import('../tools/system/files.js');
+      const result = await writeFileTool.handler({ path: '/a.pdf', content, encoding: 'base64' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not valid base64');
+      expect(mockClient.putFileContents).not.toHaveBeenCalled();
+    });
+
+    it('should accept an empty base64 content as an empty file', async () => {
+      mockClient.putFileContents.mockResolvedValue(undefined);
+
+      const { writeFileTool } = await import('../tools/system/files.js');
+      const result = await writeFileTool.handler({
+        path: '/empty',
+        content: '',
+        encoding: 'base64',
+      });
+
+      expect(result.content[0].text).toContain('(0 bytes, decoded from base64)');
+    });
+
     it('should reject content exceeding MCP_MAX_FILE_SIZE', async () => {
       // Set a small limit for testing
       process.env.MCP_MAX_FILE_SIZE = '10';

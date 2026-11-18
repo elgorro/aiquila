@@ -69,7 +69,7 @@
    "name": "write_file",
    "title": "Write File",
    "category": "files",
-   "description": "Create or update a file in Nextcloud. File size is limited (default 1 GB, configurable via MCP_MAX_FILE_SIZE).",
+   "description": "Create or update a file in Nextcloud. Give text as it is; for a binary file (PDF, image, office document) give its bytes in base64 and set encoding to \"base64\". File size is limited (default 1 GB, configurable via MCP_MAX_FILE_SIZE).",
    "annotations": {
     "readOnlyHint": false,
     "destructiveHint": true,
@@ -86,7 +86,15 @@
      "content": {
       "type": "string",
       "maxLength": 1073741824,
-      "description": "The content to write to the file"
+      "description": "The content to write to the file: its text, or its bytes in base64 when encoding is \"base64\""
+     },
+     "encoding": {
+      "description": "How content is given. \"text\" (default) stores it as it is. \"base64\" decodes it first, to write a binary file such as a PDF, an image or an office document",
+      "type": "string",
+      "enum": [
+       "text",
+       "base64"
+      ]
      }
     },
     "required": [

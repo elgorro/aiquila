@@ -76,6 +76,20 @@ export const readFileTool = {
 };
 
 /**
+ * The bytes a base64 string stands for, or undefined when it is not base64.
+ * RFC 4648 §3.3: encoded data with characters outside the alphabet (§4) MUST
+ * be rejected, line feeds included (§3.1); §3.2: padding MUST be present.
+ * Buffer.from() skips what it cannot decode, so the check is made here, and
+ * the round trip rejects pad bits that are not zero (§3.5).
+ */
+export function decodeBase64(value: string): Uint8Array<ArrayBuffer> | undefined {
+  if (value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return undefined;
+  const bytes = Buffer.from(value, 'base64');
+  if (bytes.toString('base64') !== value) return undefined;
+  return new Uint8Array(bytes);
+}
+
+/**
  * Create or update a file in Nextcloud
  */
 export const writeFileTool = {
@@ -88,18 +102,35 @@ export const writeFileTool = {
     openWorldHint: false,
   },
   description:
-    'Create or update a file in Nextcloud. File size is limited (default 1 GB, configurable via MCP_MAX_FILE_SIZE).',
+    'Create or update a file in Nextcloud. Give text as it is; for a binary file (PDF, image, office document) give its bytes in base64 and set encoding to "base64". File size is limited (default 1 GB, configurable via MCP_MAX_FILE_SIZE).',
   inputSchema: FileContentSchema,
-  handler: async (args: { path: string; content: string }) => {
+  handler: async (args: { path: string; content: string; encoding?: 'text' | 'base64' }) => {
     const client = getWebDAVClient();
-    await client.putFileContents(args.path, args.content, {
-      overwrite: true,
-    });
+    if (args.encoding !== 'base64') {
+      await client.putFileContents(args.path, args.content, { overwrite: true });
+      return {
+        content: [{ type: 'text' as const, text: `File written successfully to ${args.path}` }],
+      };
+    }
+
+    const bytes = decodeBase64(args.content);
+    if (!bytes) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Error writing file: content is not valid base64. Use the standard alphabet (A-Z, a-z, 0-9, +, /) with = padding and no line breaks, or omit encoding to write text.',
+          },
+        ],
+        isError: true,
+      };
+    }
+    await client.putFileContents(args.path, bytes, { overwrite: true });
     return {
       content: [
         {
-          type: 'text',
-          text: `File written successfully to ${args.path}`,
+          type: 'text' as const,
+          text: `File written successfully to ${args.path} (${bytes.byteLength} bytes, decoded from base64)`,
         },
       ],
     };

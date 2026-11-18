@@ -100,10 +100,17 @@ Create a file or replace its contents.
 
 **Parameters:**
 - `path` (string, required): file to write
-- `content` (string, required): text to store. Limited to `MCP_MAX_FILE_SIZE` characters
-  (default 1 GB)
+- `content` (string, required): the text to store, or the file's bytes in base64 when
+  `encoding` is `base64`. Limited to `MCP_MAX_FILE_SIZE` characters (default 1 GB)
+- `encoding` (string, optional): `text` (default) stores `content` as it is; `base64` decodes
+  it first, to write a binary file such as a PDF, an image or an office document
 
-**Returns:** `File written successfully to <path>`.
+Base64 is the standard alphabet with `=` padding and no line breaks; anything else is refused
+and nothing is written. The caller has to produce the whole file as base64 in the tool call,
+which suits small files. A model writes it out character by character, so a file of more than
+a few tens of kilobytes is slow and costly to send this way.
+
+**Returns:** `File written successfully to <path>`, followed by the decoded size for base64 content.
 
 The parent folder must exist; Nextcloud answers `409 Conflict` otherwise (RFC 4918 §9.7.1).
 Create it first with [`create_folder`](#create_folder). An existing file is overwritten, and
