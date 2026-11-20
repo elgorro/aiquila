@@ -15,6 +15,14 @@ vi.mock('node:child_process', async (importOriginal) => {
 
 const hasPdftotext = !childProcess.spawnSync('pdftotext', ['-v'], { encoding: 'utf8' }).error;
 
+/**
+ * The bytes of a Buffer as a standalone ArrayBuffer. Small Buffers are views into
+ * a shared pool, so `bytes.buffer` alone holds unrelated data around them.
+ */
+function toArrayBuffer(bytes: Buffer): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) as ArrayBuffer;
+}
+
 /** A one-page PDF whose only content is the given ASCII text. */
 function minimalPdf(text: string): Buffer {
   const stream = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
@@ -445,7 +453,7 @@ describe('Mail Tools', () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
         headers: { get: () => 'image/png' },
-        arrayBuffer: () => Promise.resolve(bytes.buffer.slice(0, bytes.length)),
+        arrayBuffer: () => Promise.resolve(toArrayBuffer(bytes)),
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
@@ -454,8 +462,7 @@ describe('Mail Tools', () => {
 
       expect(result.content[0].type).toBe('image');
       expect(result.content[0]).toHaveProperty('mimeType', 'image/png');
-      expect(result.content[0]).toHaveProperty('data');
-      expect((result.content[0] as { data: string }).data.length).toBeGreaterThan(0);
+      expect(result.content[0]).toHaveProperty('data', bytes.toString('base64'));
     });
 
     it('should fall back gracefully for PDFs when pdftotext yields no text', async () => {
@@ -463,7 +470,7 @@ describe('Mail Tools', () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
         headers: { get: () => 'application/pdf' },
-        arrayBuffer: () => Promise.resolve(bytes.buffer.slice(0, bytes.length)),
+        arrayBuffer: () => Promise.resolve(toArrayBuffer(bytes)),
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
@@ -484,8 +491,7 @@ describe('Mail Tools', () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
         headers: { get: () => 'application/pdf' },
-        arrayBuffer: () =>
-          Promise.resolve(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length)),
+        arrayBuffer: () => Promise.resolve(toArrayBuffer(bytes)),
       });
       mockSpawnSync.mockImplementationOnce(() => ({ status: 0, stdout: 'Invoice 42', stderr: '' }));
 
@@ -508,8 +514,7 @@ describe('Mail Tools', () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
         headers: { get: () => 'application/pdf' },
-        arrayBuffer: () =>
-          Promise.resolve(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length)),
+        arrayBuffer: () => Promise.resolve(toArrayBuffer(bytes)),
       });
       mockSpawnSync.mockImplementationOnce(() => ({
         status: null,
@@ -531,8 +536,7 @@ describe('Mail Tools', () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
         headers: { get: () => 'application/pdf' },
-        arrayBuffer: () =>
-          Promise.resolve(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length)),
+        arrayBuffer: () => Promise.resolve(toArrayBuffer(bytes)),
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
@@ -548,7 +552,7 @@ describe('Mail Tools', () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
         headers: { get: () => 'application/octet-stream' },
-        arrayBuffer: () => Promise.resolve(bytes.buffer.slice(0, bytes.length)),
+        arrayBuffer: () => Promise.resolve(toArrayBuffer(bytes)),
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
