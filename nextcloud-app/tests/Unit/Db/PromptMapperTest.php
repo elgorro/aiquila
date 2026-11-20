@@ -42,28 +42,15 @@ class PromptMapperTest extends MapperTestCase {
         $mapper->findAllByUser('carol');
     }
 
-    public function testFindAllByUserWithoutActiveOnlyFiltersOnlyScope(): void {
+    public function testFindAllByUserFiltersOnlyScope(): void {
         $this->mockQueryBuilder();
 
-        // One andWhere(): the user scope. No is_active filter.
+        // One andWhere(): the user scope.
         $this->qb->expects($this->once())->method('andWhere')->willReturnSelf();
 
         $mapper = $this->makeMapper();
         $mapper->method('findEntities')->willReturn([]);
-        $mapper->findAllByUser('carol', false);
-    }
-
-    public function testFindAllByUserWithActiveOnlyAddsAndWhere(): void {
-        $this->mockQueryBuilder();
-
-        // Scope plus is_active.
-        $this->qb->expects($this->exactly(2))
-            ->method('andWhere')
-            ->willReturnSelf();
-
-        $mapper = $this->makeMapper();
-        $mapper->method('findEntities')->willReturn([]);
-        $mapper->findAllByUser('carol', true);
+        $mapper->findAllByUser('carol');
     }
 
     public function testFindAllByUserExcludesInstancePrompts(): void {
