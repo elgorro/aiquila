@@ -1,6 +1,50 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as childProcess from 'node:child_process';
+
+// Wrap spawnSync so tests can inspect how pdftotext is invoked; it still runs
+// the real binary unless a test overrides the implementation.
+const mockSpawnSync = vi.hoisted(() => vi.fn());
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  mockSpawnSync.mockImplementation(actual.spawnSync);
+  return { ...actual, spawnSync: mockSpawnSync };
+});
+
+const hasPdftotext = !childProcess.spawnSync('pdftotext', ['-v'], { encoding: 'utf8' }).error;
+
+/**
+ * The bytes of a Buffer as a standalone ArrayBuffer. Small Buffers are views into
+ * a shared pool, so `bytes.buffer` alone holds unrelated data around them.
+ */
+function toArrayBuffer(bytes: Buffer): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) as ArrayBuffer;
+}
+
+/** A one-page PDF whose only content is the given ASCII text. */
+function minimalPdf(text: string): Buffer {
+  const stream = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let body = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  objects.forEach((obj, i) => {
+    offsets.push(body.length);
+    body += `${i + 1} 0 obj\n${obj}\nendobj\n`;
+  });
+  const xref = body.length;
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const off of offsets) body += `${String(off).padStart(10, '0')} 00000 n \n`;
+  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(body, 'latin1');
+}
 
 // Mock the OCS client module (needed for list_messages, read_message)
 const mockFetchOCS = vi.fn();
@@ -409,7 +453,7 @@ describe('Mail Tools', () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
         headers: { get: () => 'image/png' },
-        arrayBuffer: () => Promise.resolve(bytes.buffer.slice(0, bytes.length)),
+        arrayBuffer: () => Promise.resolve(toArrayBuffer(bytes)),
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
@@ -418,8 +462,7 @@ describe('Mail Tools', () => {
 
       expect(result.content[0].type).toBe('image');
       expect(result.content[0]).toHaveProperty('mimeType', 'image/png');
-      expect(result.content[0]).toHaveProperty('data');
-      expect((result.content[0] as { data: string }).data.length).toBeGreaterThan(0);
+      expect(result.content[0]).toHaveProperty('data', bytes.toString('base64'));
     });
 
     it('should fall back gracefully for PDFs when pdftotext yields no text', async () => {
@@ -427,7 +470,7 @@ describe('Mail Tools', () => {
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
         headers: { get: () => 'application/pdf' },
-        arrayBuffer: () => Promise.resolve(bytes.buffer.slice(0, bytes.length)),
+        arrayBuffer: () => Promise.resolve(toArrayBuffer(bytes)),
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');
@@ -443,12 +486,73 @@ describe('Mail Tools', () => {
       );
     });
 
+    it('pipes PDF bytes to pdftotext over stdin instead of a temp file', async () => {
+      const bytes = Buffer.from('%PDF-1.4 fake');
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'application/pdf' },
+        arrayBuffer: () => Promise.resolve(toArrayBuffer(bytes)),
+      });
+      mockSpawnSync.mockImplementationOnce(() => ({ status: 0, stdout: 'Invoice 42', stderr: '' }));
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_get_attachment')!;
+      const result = await tool.handler({ messageId: 100, attachmentId: '4' });
+
+      expect(mockSpawnSync).toHaveBeenCalledTimes(1);
+      const [cmd, argv, opts] = mockSpawnSync.mock.calls[0];
+      expect(cmd).toBe('pdftotext');
+      expect(argv).toEqual(['-', '-']);
+      expect(Buffer.from(opts.input).equals(bytes)).toBe(true);
+      expect(result.content[0].text).toBe(
+        '[UNTRUSTED EXTERNAL CONTENT - PDF ATTACHMENT]\nInvoice 42\n[END EXTERNAL CONTENT]'
+      );
+    });
+
+    it('falls back when pdftotext is not installed', async () => {
+      const bytes = Buffer.from('%PDF-1.4 fake');
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'application/pdf' },
+        arrayBuffer: () => Promise.resolve(toArrayBuffer(bytes)),
+      });
+      mockSpawnSync.mockImplementationOnce(() => ({
+        status: null,
+        stdout: '',
+        stderr: '',
+        error: Object.assign(new Error('spawnSync pdftotext ENOENT'), { code: 'ENOENT' }),
+      }));
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_get_attachment')!;
+      const result = await tool.handler({ messageId: 100, attachmentId: '4' });
+
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain('Could not extract text');
+    });
+
+    it.skipIf(!hasPdftotext)('extracts text from a real PDF read on stdin', async () => {
+      const bytes = minimalPdf('Hello from stdin');
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'application/pdf' },
+        arrayBuffer: () => Promise.resolve(toArrayBuffer(bytes)),
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_get_attachment')!;
+      const result = await tool.handler({ messageId: 100, attachmentId: '4' });
+
+      expect(result.content[0].text).toContain('[UNTRUSTED EXTERNAL CONTENT - PDF ATTACHMENT]');
+      expect(result.content[0].text).toContain('Hello from stdin');
+    });
+
     it('should return type + size for other binary attachments', async () => {
       const bytes = Buffer.alloc(2048);
       mockFetchMailAPI.mockResolvedValue({
         ok: true,
         headers: { get: () => 'application/octet-stream' },
-        arrayBuffer: () => Promise.resolve(bytes.buffer.slice(0, bytes.length)),
+        arrayBuffer: () => Promise.resolve(toArrayBuffer(bytes)),
       });
 
       const { mailTools } = await import('../tools/apps/mail.js');

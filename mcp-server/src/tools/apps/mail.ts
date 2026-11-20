@@ -25,7 +25,6 @@ async function syncedUncachedMailbox(
 // SPDX-License-Identifier: MIT
 
 import { spawnSync } from 'node:child_process';
-import { writeFileSync, unlinkSync } from 'node:fs';
 import { z } from 'zod';
 import { fetchMailAPI } from '../../client/mail.js';
 import { fetchOCS } from '../../client/ocs.js';
@@ -434,31 +433,22 @@ const getAttachmentTool = {
 
       if (mimeType === 'application/pdf') {
         const buffer = await response.arrayBuffer();
-        const safeId =
-          String(args.messageId).replace(/[^a-zA-Z0-9_-]/g, '') +
-          '_' +
-          String(args.attachmentId).replace(/[^a-zA-Z0-9_-]/g, '');
-        const tmpFile = `/tmp/mcp_att_${safeId}.pdf`;
-        try {
-          writeFileSync(tmpFile, Buffer.from(buffer));
-          const result = spawnSync('pdftotext', [tmpFile, '-'], { encoding: 'utf8' });
-          unlinkSync(tmpFile);
-          if (result.status === 0 && result.stdout.trim().length > 0) {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `[UNTRUSTED EXTERNAL CONTENT - PDF ATTACHMENT]\n${result.stdout}\n[END EXTERNAL CONTENT]`,
-                },
-              ],
-            };
-          }
-        } catch {
-          try {
-            unlinkSync(tmpFile);
-          } catch {
-            /* ignore */
-          }
+        // Pipe the bytes over stdin (`pdftotext - -`) rather than staging them in a
+        // temp file: a fixed path in a shared /tmp is open to symlink pre-creation
+        // and races between concurrent calls for the same attachment.
+        const result = spawnSync('pdftotext', ['-', '-'], {
+          input: Buffer.from(buffer),
+          encoding: 'utf8',
+        });
+        if (!result.error && result.status === 0 && result.stdout.trim().length > 0) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `[UNTRUSTED EXTERNAL CONTENT - PDF ATTACHMENT]\n${result.stdout}\n[END EXTERNAL CONTENT]`,
+              },
+            ],
+          };
         }
         return {
           content: [
