@@ -465,7 +465,7 @@ start it: do steps 1 and 2 before the next `docker compose up -d`, which would.
 
 ## Upgrading PostgreSQL to 18
 
-The Nextcloud and full stacks ship **`postgres:18`**. A PostgreSQL *major* upgrade does
+The Nextcloud and full stacks ship **PostgreSQL 18** (`postgres:18.7`). A PostgreSQL *major* upgrade does
 not happen automatically — the on-disk data format changes between majors, so starting the
 new image against a data volume created by an older major (e.g. `postgres:16`) will fail.
 
