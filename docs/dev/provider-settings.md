@@ -175,7 +175,7 @@ card, and the guards that refuse work a provider cannot do.
 | `documents` | documents | Accepts PDFs as a document block | Claude, on every platform |
 | `audio_in` | transcription | Transcribes audio | Mistral; Local per admin flag |
 | `audio_out` | speech | Generates speech | Mistral; Local per admin flag |
-| `image_out` | image generation | Generates images | Mistral |
+| `image_out` | image generation | Generates images | Mistral; Local per admin flag |
 | `fast_mode` | — | Has a premium fast-inference mode (no chip; it depends on the model, not the provider) | Claude API, Claude on Google Cloud (Anthropic managed) |
 
 Adding a key means four edits that have to land together: the defaults in
