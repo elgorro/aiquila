@@ -1,4 +1,4 @@
-.PHONY: help up down restart logs logs-follow status shell build clean test test-oauth test-tools test-mcp-connector test-mistral
+.PHONY: help up down restart logs logs-follow status shell update build clean test test-oauth test-tools test-mcp-connector test-mistral
 
 COMPOSE := docker compose
 
@@ -22,7 +22,7 @@ help:
 	@echo "  make logs-follow  - Follow logs in real time"
 	@echo "  make status       - Show service status"
 	@echo "  make shell        - Open shell in MCP server container"
-	@echo "  make build        - Rebuild MCP server container"
+	@echo "  make update       - Pull the latest images and recreate changed containers"
 	@echo "  make clean        - Stop and remove containers and volumes"
 	@echo "  make test         - Test MCP server connectivity"
 	@echo "  make test-oauth   - Full OAuth PKCE flow test (auth enabled)"
@@ -77,11 +77,16 @@ status:
 shell:
 	$(COMPOSE) exec mcp-server sh
 
-# Rebuild containers
-build:
-	@echo "🔨 Building MCP server container..."
-	$(COMPOSE) build
-	@echo "✅ Build complete"
+# Pull the latest images (the MCP server runs the published :latest image,
+# Caddy a pinned tag) and recreate the containers whose image changed.
+update:
+	@echo "⬇️  Pulling the latest images..."
+	$(COMPOSE) pull
+	$(COMPOSE) up -d
+	@echo "✅ Update complete"
+
+# Kept for muscle memory: nothing here is built locally, so this is update.
+build: update
 
 # Clean up (stop + remove volumes)
 clean:
