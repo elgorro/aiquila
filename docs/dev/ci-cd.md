@@ -227,7 +227,7 @@ AIquila uses automated release workflows that trigger when you bump the version 
 4. Packages: `dist/`, `package.json`, `README.md`
 5. Creates GitHub release with `aiquila-mcp-vX.X.X.tar.gz`
 6. In parallel (after release):
-   - Pushes Docker image to GHCR (`ghcr.io/elgorro/aiquila-mcp`)
+   - Pushes Docker image to GHCR (`ghcr.io/elgorro/aiquila-mcp`), pulling `node:26-alpine` afresh so each release ships the latest Node.js patch
    - Publishes npm package (`aiquila-mcp` on npmjs.com)
    - Publishes to MCP Registry (`io.github.elgorro/aiquila-mcp`)
 
