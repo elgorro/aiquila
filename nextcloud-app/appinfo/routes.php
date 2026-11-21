@@ -97,6 +97,10 @@ return [
         ['name' => 'provider_settings#principals',  'url' => '/api/admin/principals',                 'verb' => 'GET'],
         ['name' => 'occ#execute', 'url' => '/api/occ', 'verb' => 'POST'],
 
+        // Token usage as a CSV / JSON download: the caller's own, or (admin) anyone's.
+        ['name' => 'usage_export#export',      'url' => '/api/usage/export',       'verb' => 'GET'],
+        ['name' => 'usage_export#adminExport', 'url' => '/api/admin/usage/export', 'verb' => 'GET'],
+
         // MCP Server Admin API
         ['name' => 'mcp_server#index',   'url' => '/api/admin/mcp-servers',           'verb' => 'GET'],
         ['name' => 'mcp_server#create',  'url' => '/api/admin/mcp-servers',           'verb' => 'POST'],
