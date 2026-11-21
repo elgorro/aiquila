@@ -107,7 +107,7 @@ services:
         max-file: "3"
 
   nc-db:
-    image: postgres:18
+    image: postgres:18.7
     container_name: aiq-nc-db
     restart: unless-stopped
     environment:
@@ -140,7 +140,7 @@ services:
         max-file: "3"
 
   nc-redis:
-    image: redis:8-alpine
+    image: redis:8.10.3-alpine
     container_name: aiq-nc-redis
     restart: unless-stopped
     volumes:
@@ -162,7 +162,7 @@ services:
         max-file: "3"
 
   socket-proxy:
-    image: tecnativa/docker-socket-proxy:v0.5.0
+    image: tecnativa/docker-socket-proxy:3.4
     container_name: aiq-socket-proxy
     restart: unless-stopped
     environment:
@@ -187,7 +187,7 @@ services:
         max-file: "3"
 
   traefik:
-    image: traefik:v3
+    image: traefik:v3.7.19
     container_name: aiq-traefik
     restart: unless-stopped
     depends_on:
@@ -217,7 +217,7 @@ services:
         max-file: "3"
 
   crowdsec:
-    image: crowdsecurity/crowdsec:v1.8.1
+    image: crowdsecurity/crowdsec:v1.8.2
     container_name: aiq-crowdsec
     restart: unless-stopped
     environment:

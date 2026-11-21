@@ -66,11 +66,29 @@ updates:
           - minor
           - patch
 
+  # Dockerfile FROM lines. The tagging policy (docs/dev/ci-cd.md#docker-image-tags)
+  # keeps these on floating majors, so this only raises major bumps.
   - package-ecosystem: docker
     directories:
       - /docker/installation
       - /mcp-server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+    groups:
+      docker-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # image: lines in compose files. The docker ecosystem above does not read them.
+  - package-ecosystem: docker-compose
+    directories:
+      - /docker/installation
       - /docker/standalone
+      - /docker/e2e
       - /hetzner/docker/mcp
       - /hetzner/docker/nextcloud
       - /hetzner/docker/full
@@ -79,8 +97,13 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore
+    ignore:
+      # A PostgreSQL major needs a dump and restore; see docs/dev/docker-setup.md.
+      - dependency-name: postgres
+        update-types:
+          - version-update:semver-major
     groups:
-      docker-minor-and-patch:
+      compose-minor-and-patch:
         update-types:
           - minor
           - patch

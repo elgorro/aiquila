@@ -11,7 +11,7 @@ The Docker environment provides a complete, isolated development setup with:
 - **Nextcloud 35** - Test instance with AIquila pre-installed from tarball
 - **Redis 8** - Caching and performance
 - **MCP Server** - Development container with hot reload (HTTP transport on port 3339)
-- **MailHog** - Email testing and debugging
+- **Mailpit** - Email testing and debugging
 - **Adminer** - Database management UI (opt-in, `make up-tools`)
 - **Collabora Online** - Document conversion and templates for the Office tools (opt-in, `make up-office`)
 
@@ -65,7 +65,7 @@ make logs-follow
 |---------|-------------------|-------------|-------------|
 | **Nextcloud** | https://localhost | http://localhost:8080 | admin / admin123 |
 | **MCP Server** | https://localhost:3340/mcp | http://localhost:3339/mcp | — |
-| **MailHog UI** | — | http://localhost:8025 | — |
+| **Mailpit UI** | — | http://localhost:8025 | — |
 | **Adminer** | — | http://localhost:8081 (after `make up-tools`) | See below |
 
 Caddy uses self-signed certificates — expect a browser warning on first visit.
@@ -147,7 +147,7 @@ SELECT * FROM oc_appconfig WHERE appid='aiquila';
 
 ### Email Testing
 
-All Nextcloud emails are caught by MailHog. View them at http://localhost:8025.
+All Nextcloud emails are caught by Mailpit. View them at http://localhost:8025.
 
 ## Configuration
 
@@ -274,7 +274,7 @@ cat backup.sql | docker compose exec -T db psql -U nextcloud nextcloud
 make reset
 ```
 
-> **Upgrading PostgreSQL major versions:** the stack ships `postgres:18`. A major upgrade
+> **Upgrading PostgreSQL major versions:** the stack ships PostgreSQL 18 (`postgres:18.7`). A major upgrade
 > won't read an older major's data volume automatically — dump before bumping the image and
 > restore afterwards. See [Upgrading PostgreSQL to 18](../hetzner/advanced.md#upgrading-postgresql-to-18).
 >
@@ -307,7 +307,7 @@ make reset
 │  └──────────────┘    └──────────────┘                     │
 │                                                           │
 │  ┌──────────────┐    ┌──────────────┐                     │
-│  │   MailHog    │    │   Adminer    │                     │
+│  │   Mailpit    │    │   Adminer    │                     │
 │  │   :8025      │    │   :8081 opt  │                     │
 │  └──────────────┘    └──────────────┘                     │
 └───────────────────────────────────────────────────────────┘
