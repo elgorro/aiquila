@@ -44,6 +44,7 @@ The same shape applies to PHP, for the same reason.
 
 | PHP | Status | What this means |
 |---|---|---|
+| 8.6 | Unsupported, tested ahead | Nextcloud 35 refuses to boot on it (see below). CI runs the unit tests and Psalm on 8.6 in a non-blocking job, so deprecations show up before the server supports it. |
 | **8.5** | **Supported** | What CI runs, what the `nextcloud:35-apache` image ships, and what the development stack installs. |
 | 8.4 | Permitted, untested | The declared floor in `appinfo/info.xml` and `composer.json`. Installs and is expected to work; no targeted testing. |
 | ≤ 8.3 | Unsupported | Below the declared floor, even though Nextcloud 35 itself runs on 8.3+ (and 33 and 34 on 8.2+). |

@@ -189,10 +189,10 @@ class ImageOptimizer {
                     'resized' => true,
                 ];
             } finally {
-                imagedestroy($dst);
+                unset($dst); // GdImage objects are freed with their last reference (imagedestroy() is a no-op since PHP 8.0, deprecated in 8.5)
             }
         } finally {
-            imagedestroy($src);
+            unset($src);
         }
     }
 }
