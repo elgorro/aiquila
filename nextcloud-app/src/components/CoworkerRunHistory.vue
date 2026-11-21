@@ -20,6 +20,7 @@
 					</button>
 					<span class="progress">{{ run.itemsProcessed }}/{{ run.itemsTotal }}</span>
 					<span v-if="run.itemsFailed > 0" class="failed">{{ n('aiquila', '%n failed', '%n failed', run.itemsFailed) }}</span>
+					<span v-if="run.itemsSkipped > 0" class="skipped">{{ n('aiquila', '%n skipped', '%n skipped', run.itemsSkipped) }}</span>
 					<span class="when">{{ formatTime(run.startedAt) }}</span>
 					<span class="who">{{ t('aiquila', 'as {user}', { user: run.userId }) }}</span>
 					<span v-if="run.startedBy" class="origin">{{ originLabel(run.startedBy) }}</span>
@@ -219,6 +220,7 @@ export default {
 .status.success { color: var(--color-success); }
 .status.error { color: var(--color-error); }
 .failed { color: var(--color-error); }
+.skipped { color: var(--color-warning-text); }
 .status.running { color: var(--color-warning); }
 /* Neutral rather than warning: a pending run is healthy, just slow — its
    batch is with Anthropic and may take hours. */

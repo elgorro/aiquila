@@ -114,7 +114,8 @@ interface CoworkerTaskType {
     // run() returns ['itemsTotal' => int, 'itemsProcessed' => int, 'itemsFailed' => int,
     // 'summary' => string] and should call $progress(int $processed, int $total) as it goes.
     // itemsProcessed counts the items that succeeded, itemsFailed (optional, default 0)
-    // the ones that failed; a skipped item counts as neither. Catch per-item errors and
+    // the ones that failed; a skipped item counts as neither, and itemsSkipped
+    // (optional, default 0) may count it. Catch per-item errors and
     // count them rather than throwing, so one bad item does not stop the rest.
     // $progress throws RunCancelledException once the run is stopped; let it
     // propagate (don't catch \Throwable around the call).
@@ -163,7 +164,7 @@ Enable (`true`) or disable (`false`). Returns the updated coworker.
 ### `runNow(string $appId, int $id): array`
 
 Run the coworker immediately (synchronous). Returns the completed run record
-(`status`, `itemsTotal`, `itemsProcessed`, `itemsFailed`, `summary`, `error`,
+(`status`, `itemsTotal`, `itemsProcessed`, `itemsFailed`, `itemsSkipped`, `summary`, `error`,
 `startedAt`, `finishedAt`).
 
 A run whose task type returns normally ends as `success`, unless items failed:

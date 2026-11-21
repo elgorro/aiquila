@@ -36,8 +36,9 @@ use Psr\Log\LoggerInterface;
  * It knows nothing about coworkers or schedules. The caller owns the run row,
  * passes a {@see BatchContext}, and persists whatever comes back.
  *
- * @psalm-type BatchRunResult = array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}
- * @psalm-type BatchSelection = array{files: list<File>, skipped: list<array{item: string, reason: string}>, capped: bool}
+ * @psalm-type BatchSkip = array{item: string, reason: string}
+ * @psalm-type BatchRunResult = array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, itemsSkipped?: int, summary: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}
+ * @psalm-type BatchSelection = array{files: list<File>, skipped: list<BatchSkip>, capped: bool}
  */
 class BatchDocumentRunner {
 
@@ -166,6 +167,11 @@ class BatchDocumentRunner {
      * they look like an earlier output. Folders are walked with the same
      * rules as a coworker's input folder. A file reached twice counts once.
      *
+     * Unlike a coworker's nightly walk, every file the walk passes over for
+     * its type is reported in `skipped`: the user picked that folder and
+     * should hear that its images were left alone. Finished files and earlier
+     * outputs are not: leaving those is the walk doing its job.
+     *
      * @param list<File> $files
      * @param list<Folder> $folders
      * @return BatchSelection
@@ -181,7 +187,7 @@ class BatchDocumentRunner {
             }
             $seen[$file->getId()] = true;
             if (!$this->matchesMime($file, $ctx->mimeTypes())) {
-                $skipped[] = ['item' => UserPath::of($file), 'reason' => 'Not a text document'];
+                $skipped[] = ['item' => UserPath::of($file), 'reason' => self::unsupportedType($file)];
                 continue;
             }
             $matches[] = $file;
@@ -193,7 +199,7 @@ class BatchDocumentRunner {
                 break;
             }
             $found = [];
-            $this->gather($ctx, $folder, $exclude, $found, self::MAX_ITEMS_PER_RUN - count($matches), $seen);
+            $this->gather($ctx, $folder, $exclude, $found, self::MAX_ITEMS_PER_RUN - count($matches), $seen, true, $skipped);
             array_push($matches, ...$found);
         }
 
@@ -291,8 +297,10 @@ class BatchDocumentRunner {
     /**
      * @param list<File> $matches
      * @param array<int, true> $seen file ids already taken, by id
+     * @param list<BatchSkip> $skipped collects the files passed over for their type, when $report
+     * @param-out list<BatchSkip> $skipped
      */
-    private function gather(BatchContext $ctx, Folder $folder, ?int $excludeFolderId, array &$matches, int $limit = self::MAX_ITEMS_PER_RUN, array &$seen = []): void {
+    private function gather(BatchContext $ctx, Folder $folder, ?int $excludeFolderId, array &$matches, int $limit = self::MAX_ITEMS_PER_RUN, array &$seen = [], bool $report = false, array &$skipped = []): void {
         $listing = $folder->getDirectoryListing();
         $outputs = $this->outputIds($listing);
         foreach ($listing as $child) {
@@ -300,7 +308,15 @@ class BatchDocumentRunner {
                 return;
             }
             if ($child instanceof File) {
-                if (!isset($seen[$child->getId()]) && !isset($outputs[$child->getId()]) && $this->isCandidate($ctx, $child)) {
+                if (isset($seen[$child->getId()]) || isset($outputs[$child->getId()])) {
+                    continue;
+                }
+                if ($report && !$this->matchesMime($child, $ctx->mimeTypes())) {
+                    $seen[$child->getId()] = true;
+                    $skipped[] = ['item' => UserPath::of($child), 'reason' => self::unsupportedType($child)];
+                    continue;
+                }
+                if ($this->isCandidate($ctx, $child)) {
                     $seen[$child->getId()] = true;
                     $matches[] = $child;
                 }
@@ -308,9 +324,13 @@ class BatchDocumentRunner {
                 if ($excludeFolderId !== null && $child->getId() === $excludeFolderId) {
                     continue;
                 }
-                $this->gather($ctx, $child, $excludeFolderId, $matches, $limit, $seen);
+                $this->gather($ctx, $child, $excludeFolderId, $matches, $limit, $seen, $report, $skipped);
             }
         }
+    }
+
+    private static function unsupportedType(File $file): string {
+        return 'Not a text document (' . $file->getMimetype() . ')';
     }
 
     private function alreadyDone(BatchContext $ctx, File $file): bool {
@@ -337,26 +357,26 @@ class BatchDocumentRunner {
      *
      * @param list<File> $files at least one
      * @param callable(int, int): void $progress
+     * @param list<BatchSkip> $skipped files the caller already passed over
+     *        (and logged), so the summary and `itemsSkipped` account for them
      * @return BatchRunResult
      */
-    public function process(BatchContext $ctx, CoworkerRun $run, array $files, callable $progress): array {
+    public function process(BatchContext $ctx, CoworkerRun $run, array $files, callable $progress, array $skipped = []): array {
         $provider = $this->providerFactory->getProviderForUser($ctx->userId, $ctx->providerId);
 
         if (!$ctx->allowBatch || !$provider instanceof ClaudeSDKService || !$provider->supportsBatch()) {
-            return $this->runSynchronously($ctx, $run, $provider, $files, $progress);
+            return $this->runSynchronously($ctx, $run, $provider, $files, $progress, $skipped);
         }
 
         // One batch for the whole set. custom_id is the file id, which is
         // what results come back keyed by — the API returns them in any order.
         $requests = [];
         $fileIds = [];
-        $skipped = [];
         $total = count($files);
         foreach ($files as $file) {
-            $content = $this->readContent($ctx, $file);
+            $content = $this->readContent($ctx, $file, $reason);
             if ($content === null) {
-                $skipped[] = $file->getName();
-                $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: unreadable or too large', UserPath::of($file));
+                $skipped[] = $this->skip($run, $file, $reason);
                 continue;
             }
             $customId = 'f' . $file->getId();
@@ -372,7 +392,8 @@ class BatchDocumentRunner {
             return [
                 'itemsTotal' => $total,
                 'itemsProcessed' => 0,
-                'summary' => sprintf('Read none of the %d document(s): %s.', $total, implode(', ', array_slice($skipped, 0, 20))),
+                'itemsSkipped' => count($skipped),
+                'summary' => sprintf('Read none of the %d document(s).', $total) . self::describeSkips($skipped),
             ];
         }
 
@@ -382,6 +403,7 @@ class BatchDocumentRunner {
         return [
             'itemsTotal' => count($requests),
             'itemsProcessed' => 0,
+            'itemsSkipped' => count($skipped),
             'summary' => sprintf(
                 'Submitted %d document(s) to batch %s. Results arrive within 24 hours.',
                 count($requests),
@@ -434,6 +456,7 @@ class BatchDocumentRunner {
             return [
                 'itemsTotal' => $total,
                 'itemsProcessed' => 0,
+                'itemsSkipped' => count(self::skipsFromState($state)),
                 'summary' => sprintf('Waiting for batch %s (%s).', $batchId, $status['status']),
                 'pending' => true,
                 'state' => $state,
@@ -516,12 +539,13 @@ class BatchDocumentRunner {
             }
         }
 
-        $skipped = is_array($state['skipped'] ?? null) ? $state['skipped'] : [];
+        $skipped = self::skipsFromState($state);
 
         return [
             'itemsTotal' => $total,
             'itemsProcessed' => $written,
             'itemsFailed' => array_sum(array_map('count', $failures)),
+            'itemsSkipped' => count($skipped),
             'summary' => $this->buildSummary($verb, $written, $total, 'anthropic (batch, 50% discount)', $failures, $skipped),
             'outputs' => $outputs,
         ];
@@ -533,6 +557,7 @@ class BatchDocumentRunner {
      *
      * @param list<File> $files
      * @param callable(int, int): void $progress
+     * @param list<BatchSkip> $skipped
      * @return BatchRunResult
      */
     private function runSynchronously(
@@ -541,6 +566,7 @@ class BatchDocumentRunner {
         LLMProviderInterface $provider,
         array $files,
         callable $progress,
+        array $skipped,
     ): array {
         $userId = $ctx->userId;
         $verb = $ctx->operation->summaryVerb();
@@ -548,16 +574,15 @@ class BatchDocumentRunner {
         $written = 0;
         $outputs = [];
         $failures = self::emptyFailures();
-        $skipped = [];
+        $skippedBefore = count($skipped);
 
         $progress(0, $total);
 
         foreach ($files as $file) {
             try {
-                $content = $this->readContent($ctx, $file);
+                $content = $this->readContent($ctx, $file, $reason);
                 if ($content === null) {
-                    $skipped[] = $file->getName();
-                    $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: unreadable or too large', UserPath::of($file));
+                    $skipped[] = $this->skip($run, $file, $reason);
                     continue;
                 }
 
@@ -593,11 +618,15 @@ class BatchDocumentRunner {
         }
 
         $label = method_exists($provider, 'getId') ? $provider->getId() : 'provider';
+        // As on the batch path, the total is what was sent to the model: a
+        // file skipped on reading counts in itemsSkipped, not here as well.
+        $total -= count($skipped) - $skippedBefore;
 
         return [
             'itemsTotal' => $total,
             'itemsProcessed' => $written,
             'itemsFailed' => array_sum(array_map('count', $failures)),
+            'itemsSkipped' => count($skipped),
             'summary' => $this->buildSummary($verb, $written, $total, $label . ($ctx->allowBatch ? ' (no batch API — full price)' : ' (immediate — full price)'), $failures, $skipped),
             'outputs' => $outputs,
         ];
@@ -620,7 +649,7 @@ class BatchDocumentRunner {
 
     /**
      * @param array<string, list<string>> $failures
-     * @param list<string> $skipped
+     * @param list<BatchSkip> $skipped
      */
     private function buildSummary(string $verb, int $written, int $total, string $via, array $failures, array $skipped): string {
         $summary = sprintf('%s %d/%d document(s) via %s.', $verb, $written, $total, $via);
@@ -632,7 +661,7 @@ class BatchDocumentRunner {
             }
         }
         if ($skipped !== []) {
-            $counts[] = count($skipped) . ' unreadable';
+            $counts[] = count($skipped) . ' skipped';
         }
         if ($counts !== []) {
             $summary .= "\n" . implode(', ', $counts) . '.';
@@ -644,40 +673,121 @@ class BatchDocumentRunner {
                 $lines[] = ucfirst($kind) . ': ' . $entry;
             }
         }
-        foreach ($skipped as $name) {
-            $lines[] = 'Unreadable: ' . $name;
+        foreach ($skipped as $skip) {
+            $lines[] = self::skipLine($skip);
         }
         if ($lines !== []) {
-            $summary .= "\n" . implode("\n", array_slice($lines, 0, 50));
+            $summary .= "\n" . implode("\n", array_slice($lines, 0, self::SUMMARY_LINES));
+            if (count($lines) > self::SUMMARY_LINES) {
+                $summary .= "\n" . sprintf('… and %d more; the run log has them.', count($lines) - self::SUMMARY_LINES);
+            }
         }
 
         return $summary;
     }
 
+    /** Most per-file lines a summary lists; the run log keeps more. */
+    private const SUMMARY_LINES = 50;
+
+    /**
+     * The skip lines a summary ends with, for a caller that has no other
+     * summary to append them to. Empty when nothing was skipped.
+     *
+     * @param list<BatchSkip> $skipped
+     */
+    public static function describeSkips(array $skipped): string {
+        if ($skipped === []) {
+            return '';
+        }
+        $lines = array_map(self::skipLine(...), array_slice($skipped, 0, self::SUMMARY_LINES));
+        $text = "\n" . count($skipped) . ' skipped.' . "\n" . implode("\n", $lines);
+        if (count($skipped) > self::SUMMARY_LINES) {
+            $text .= "\n" . sprintf('… and %d more; the run log has them.', count($skipped) - self::SUMMARY_LINES);
+        }
+        return $text;
+    }
+
+    /** @param BatchSkip $skip */
+    private static function skipLine(array $skip): string {
+        return 'Skipped: ' . basename($skip['item']) . ' — ' . $skip['reason'];
+    }
+
+    /**
+     * Log one file the run passes over and return it for the summary.
+     *
+     * @return BatchSkip
+     */
+    private function skip(CoworkerRun $run, File $file, ?string $reason): array {
+        $skip = ['item' => UserPath::of($file), 'reason' => $reason ?? 'Could not be read'];
+        $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: ' . $skip['reason'], $skip['item']);
+        return $skip;
+    }
+
+    /**
+     * The skips a pending run carried over from submission. Runs submitted
+     * before skips had reasons stored bare file names.
+     *
+     * @param array<string, mixed> $state
+     * @return list<BatchSkip>
+     */
+    private static function skipsFromState(array $state): array {
+        $skips = [];
+        foreach (is_array($state['skipped'] ?? null) ? $state['skipped'] : [] as $entry) {
+            if (is_string($entry)) {
+                $skips[] = ['item' => $entry, 'reason' => 'Unreadable or too large'];
+            } elseif (is_array($entry) && is_string($entry['item'] ?? null) && is_string($entry['reason'] ?? null)) {
+                $skips[] = ['item' => $entry['item'], 'reason' => $entry['reason']];
+            }
+        }
+        return $skips;
+    }
+
     // ── Files ─────────────────────────────────────────────────────────────
 
     /**
-     * Read a document's text, or null when it is too large or not text at all.
+     * Read a document's text, or null when it is too large, unreadable, not
+     * UTF-8 or empty; $reason then says which, for the run log.
      *
      * Oversized files are skipped rather than truncated: half a contract
      * summarised as if it were the whole thing is worse than no summary.
+     *
+     * @param-out string|null $reason
      */
-    private function readContent(BatchContext $ctx, File $file): ?string {
-        if ($file->getSize() > $ctx->maxBytes()) {
+    private function readContent(BatchContext $ctx, File $file, ?string &$reason = null): ?string {
+        $reason = null;
+        $size = (int)$file->getSize();
+        if ($size > $ctx->maxBytes()) {
+            $reason = sprintf('Too large (%s; the limit is %s)', self::humanBytes($size), self::humanBytes($ctx->maxBytes()));
             return null;
         }
         try {
             $content = $file->getContent();
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            $reason = 'Could not be read: ' . $e->getMessage();
             return null;
         }
         // A batch is submitted as one request for the whole set, outside any
         // per-file guard, so one binary file reaching the payload would take
         // the entire run down rather than just itself.
         if (!mb_check_encoding($content, 'UTF-8')) {
+            $reason = 'Not UTF-8 text';
             return null;
         }
-        return trim($content) === '' ? null : $content;
+        if (trim($content) === '') {
+            $reason = 'Empty';
+            return null;
+        }
+        return $content;
+    }
+
+    private static function humanBytes(int $bytes): string {
+        if ($bytes >= 1048576) {
+            return rtrim(rtrim(number_format($bytes / 1048576, 1, '.', ''), '0'), '.') . ' MB';
+        }
+        if ($bytes >= 1024) {
+            return rtrim(rtrim(number_format($bytes / 1024, 1, '.', ''), '0'), '.') . ' KB';
+        }
+        return $bytes . ' B';
     }
 
     /**

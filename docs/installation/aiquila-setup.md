@@ -201,7 +201,9 @@ e.g. `Settings → Administration → AIquila#mcp`.
    Endpoint URLs are administrator-only.
 3. **Defaults** sets verbose mode for new conversations and holds the two
    notification toggles: completed AI tasks are silent unless you switch them
-   on, failed ones are reported by default.
+   on, failed ones are reported by default. They also govern the notification
+   for a run started from Files (see
+   [Summarizing or translating files and folders](#summarizing-or-translating-files-and-folders-from-the-files-app)).
    **Prompts** holds your default instructions, your prompt library and your
    project templates; see
    [Prompts, project templates and instructions](#6-prompts-project-templates-and-instructions).
@@ -594,15 +596,25 @@ file's or folder's **⋯** menu. In the dialog, choose:
 
 Results are Markdown files named like the coworker outputs, `<name>.summary.md` or
 `<name>.<language>.md`, and each processed document gets the `aiquila:summarized`
-or `aiquila:translated` tag. Only text documents (`text/*` and JSON) are read. Other
-files in the selection are skipped and listed in the run's log. Results from an
-earlier run are never processed again, so summarizing a folder and then translating
-it translates only the documents.
+or `aiquila:translated` tag. Only text documents (`text/*` and JSON) are read.
+Every file the run passes over is counted as *skipped* and listed with its reason
+in the run's summary and log: not a text document, too large (over 1 MB), not
+UTF-8 text, empty, or no longer available. A document the model declines to
+process is reported as *refused*. Results from an earlier run are never processed
+again, so summarizing a folder and then translating it translates only the
+documents; those, and documents whose result is already up to date, are not
+reported.
 
 The run starts with the next background job, so cron must be running (see
 [How it runs](#4-cowork-scheduled-jobs)). The confirmation links to the run, and
 **Cowork → Runs from Files** in AIquila lists your runs with their progress, log
 and results. **Cancel** stops a run that is still going.
+
+When a run ends you get a Nextcloud notification with its counts. **Show results**
+opens the folder the results were written to, or the result itself when there is
+one, and **View run** opens the run. A failed run is announced by default, a
+finished one only once you turn on *Notify me when an AI task completes* under
+**Settings → Personal → AIquila → Defaults**. A cancelled run is not announced.
 
 A run takes up to 200 files. A larger folder is processed in part, and running it
 again picks up the rest, because finished documents are skipped. You can start 12
@@ -862,7 +874,7 @@ Every run that ends is announced as the Nextcloud event
 [Webhook listeners](https://docs.nextcloud.com/server/latest/admin_manual/webhook_listeners/index.html)
 app (`webhook_listeners`), an administrator can forward it to another system, such
 as an orchestrator, with the coworker, the run's status, counts (`itemsTotal`,
-`itemsProcessed` for the items that succeeded, `itemsFailed`), summary and error, and
+`itemsProcessed` for the items that succeeded, `itemsFailed`, `itemsSkipped`), summary and error, and
 what started it. A run in which every item failed ends as `error`, and one in which
 some failed is a `success` whose error says how many. Runs end in a background job without a signed-in user, so
 filter on `userId` in the event data rather than with the webhook's user filter.

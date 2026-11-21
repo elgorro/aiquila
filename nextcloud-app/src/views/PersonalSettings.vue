@@ -50,7 +50,7 @@
 				</NcSettingsSection>
 
 				<NcSettingsSection :name="t('aiquila', 'Notifications')"
-					:description="t('aiquila', 'AIquila answers AI tasks that other apps start, and those apps normally show you the result themselves. Successful tasks stay quiet unless you ask for them; failures are reported because they usually point at your AIquila configuration.')">
+					:description="t('aiquila', 'AIquila answers AI tasks that other apps start, and those apps normally show you the result themselves. Successful tasks stay quiet unless you ask for them; failures are reported because they usually point at your AIquila configuration. The same switches apply to runs you start with “Process with AIquila…” in Files.')">
 					<NcCheckboxRadioSwitch :model-value="taskSuccessNotifications"
 						@update:model-value="v => { taskSuccessNotifications = v; dirty = true }">
 						{{ t('aiquila', 'Notify me when an AI task completes') }}

@@ -27,6 +27,7 @@
 					</button>
 					<span class="progress">{{ run.itemsProcessed }}/{{ run.itemsTotal }}</span>
 					<span v-if="run.itemsFailed > 0" class="failed">{{ n('aiquila', '%n failed', '%n failed', run.itemsFailed) }}</span>
+					<span v-if="run.itemsSkipped > 0" class="skipped">{{ n('aiquila', '%n skipped', '%n skipped', run.itemsSkipped) }}</span>
 					<span class="when">{{ formatTime(run.startedAt) }}</span>
 					<span v-if="run.error" class="err" :title="run.error">{{ run.error }}</span>
 					<span v-else-if="run.summary" class="summary" :title="run.summary">{{ firstLine(run.summary) }}</span>
@@ -232,6 +233,7 @@ export default {
 .status.running, .status.queued { color: var(--color-warning-text); }
 /* Neutral: a pending run is healthy, its batch may take hours. */
 .status.pending, .status.cancelled { color: var(--color-text-maxcontrast); }
+.skipped { color: var(--color-warning-text); }
 .failed, .err { color: var(--color-error-text); }
 .when { color: var(--color-text-maxcontrast); }
 .summary, .err { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px; }

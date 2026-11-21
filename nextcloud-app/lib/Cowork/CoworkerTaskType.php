@@ -45,14 +45,15 @@ interface CoworkerTaskType {
      * on a later tick. See {@see ResumableCoworkerTaskType}.
      *
      * `itemsProcessed` counts the items that succeeded and `itemsFailed` the
-     * ones that failed; an item skipped on purpose counts as neither. A run
-     * whose items all failed is recorded as an error, one where some failed
-     * as a success with the failures in its error.
+     * ones that failed; an item skipped on purpose counts as neither, and
+     * `itemsSkipped` may count it. A run whose items all failed is recorded
+     * as an error, one where some failed as a success with the failures in
+     * its error.
      *
      * `outputs` may list the files the run wrote; coworker runs do not keep it.
      *
      * @param callable(int, int): void $progress
-     * @return array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}
+     * @return array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, itemsSkipped?: int, summary: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}
      */
     public function run(Coworker $coworker, CoworkerRun $run, callable $progress): array;
 }

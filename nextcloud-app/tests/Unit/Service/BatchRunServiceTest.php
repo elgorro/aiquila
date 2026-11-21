@@ -8,6 +8,7 @@ use OCA\AIquila\BackgroundJob\BatchRunJob;
 use OCA\AIquila\Batch\BatchDocumentRunner;
 use OCA\AIquila\Db\CoworkerRun;
 use OCA\AIquila\Db\CoworkerRunMapper;
+use OCA\AIquila\Service\BatchRunNotifications;
 use OCA\AIquila\Service\BatchRunService;
 use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\Exception\BatchRunLimitException;
@@ -46,6 +47,8 @@ class BatchRunServiceTest extends TestCase {
     private int $recentRuns = 0;
     /** @var list<array{0: string, 1: mixed}> */
     private array $jobAdds = [];
+    /** @var list<string> the status of each run announced, in order */
+    private array $notified = [];
 
     protected function setUp(): void {
         $this->provider = $this->createStub(ClaudeSDKService::class);
@@ -97,7 +100,12 @@ class BatchRunServiceTest extends TestCase {
             $this->createStub(UsageStatService::class),
         );
 
-        $this->service = new BatchRunService($this->mapper, $runner, $root, $factory, $this->jobs, $time, $logger);
+        $notifications = $this->createStub(BatchRunNotifications::class);
+        $notifications->method('runFinished')->willReturnCallback(function (CoworkerRun $run): void {
+            $this->notified[] = $run->getStatus();
+        });
+
+        $this->service = new BatchRunService($this->mapper, $runner, $root, $factory, $this->jobs, $time, $logger, null, $notifications);
     }
 
     // ── Fixtures ──────────────────────────────────────────────────────────
@@ -271,7 +279,7 @@ class BatchRunServiceTest extends TestCase {
         $this->assertSame('batch_M', $run->getPendingBatchId());
         $this->assertSame(2, $run->getItemsTotal());
         $log = $run->getDecodedLog();
-        $this->assertContains(['Skipped: Not a text document', '/Docs/photo.jpg'], array_map(fn ($e) => [$e['message'], $e['item']], $log));
+        $this->assertContains(['Skipped: Not a text document (image/jpeg)', '/Docs/photo.jpg'], array_map(fn ($e) => [$e['message'], $e['item']], $log));
         $this->assertSame(300, BatchRunService::serialize($run)['pollIntervalSeconds']);
     }
 
@@ -316,6 +324,8 @@ class BatchRunServiceTest extends TestCase {
 
         $this->assertSame(CoworkerRun::STATUS_SUCCESS, $run->getStatus());
         $this->assertSame('file 11', $run->getDecodedLog()[1]['item']);
+        $this->assertSame('Skipped: No longer available', $run->getDecodedLog()[1]['message']);
+        $this->assertSame(1, $run->getItemsSkipped());
     }
 
     public function testACancelledQueuedRunNeverStarts(): void {
@@ -358,6 +368,141 @@ class BatchRunServiceTest extends TestCase {
         $this->assertSame('1 of 2 item(s) failed', $run->getError());
         $this->assertSame(['/Docs/b.summary.md'], $run->getDecodedOutputs());
         $this->assertSame(['b.summary.md' => 'sum b'], $this->written);
+        // Announced once, when it ended; not while it was pending.
+        $this->assertSame([CoworkerRun::STATUS_SUCCESS], $this->notified);
+    }
+
+    // ── Skips ─────────────────────────────────────────────────────────────
+
+    /**
+     * Every file the run passes over is reported with its reason: picked
+     * files and files in a picked folder that are not text, files that are
+     * too large, not UTF-8 or empty. A finished file in the folder is not:
+     * leaving it is the walk doing its job.
+     */
+    public function testSkippedFilesAreCountedAndReportedWithTheirReason(): void {
+        $this->file(11, 'a.txt', 'alpha');
+        $this->file(12, 'huge.txt', str_repeat('x', 3000));
+        $binary = $this->file(13, 'weird.txt', "\xff\xfe\x00");
+        $empty = $this->file(14, 'empty.txt', "  \n");
+        $photo = $this->file(15, 'photo.jpg', 'x', 'image/jpeg');
+        $this->written['done.summary.md'] = 'fresh';
+        $done = $this->file(16, 'done.txt');
+        $this->folder(20, [$binary, $empty, $photo, $done]);
+        $this->file(17, 'clip.mp4', 'x', 'video/mp4');
+        $this->provider->method('ask')->willReturn(['response' => 'S', 'usage' => []]);
+
+        $run = $this->start([11, 12, 17], [20], 'immediate', 'summarize', ['maxBytesPerFile' => 2048]);
+        $this->service->execute($run->getId());
+
+        $this->assertSame(CoworkerRun::STATUS_SUCCESS, $run->getStatus());
+        $this->assertSame(1, $run->getItemsProcessed());
+        $this->assertSame(0, $run->getItemsFailed());
+        $this->assertSame(5, $run->getItemsSkipped());
+        // Only what reached the model, as on the batch path: a skip is not also in the total.
+        $this->assertSame(1, $run->getItemsTotal());
+        $this->assertSame(5, BatchRunService::serialize($run)['itemsSkipped']);
+
+        $skips = [];
+        foreach ($run->getDecodedLog() as $entry) {
+            if (str_starts_with($entry['message'], 'Skipped: ')) {
+                $skips[$entry['item']] = substr($entry['message'], 9);
+            }
+        }
+        $this->assertSame([
+            '/Docs/clip.mp4' => 'Not a text document (video/mp4)',
+            '/Docs/photo.jpg' => 'Not a text document (image/jpeg)',
+            '/Docs/huge.txt' => 'Too large (2.9 KB; the limit is 2 KB)',
+            '/Docs/weird.txt' => 'Not UTF-8 text',
+            '/Docs/empty.txt' => 'Empty',
+        ], $skips);
+
+        $summary = (string)$run->getSummary();
+        $this->assertStringContainsString('5 skipped', $summary);
+        $this->assertStringContainsString('Skipped: photo.jpg — Not a text document (image/jpeg)', $summary);
+        $this->assertStringContainsString('Skipped: huge.txt — Too large', $summary);
+        $this->assertStringNotContainsString('done.txt', $summary);
+    }
+
+    /** Skips found before a batch is submitted survive until it ends. */
+    public function testSkipsAreCarriedThroughAPendingBatch(): void {
+        $this->file(11, 'a.txt');
+        $this->file(12, 'photo.jpg', 'x', 'image/jpeg');
+        $this->file(13, 'empty.txt', '');
+        $this->provider->method('submitBatch')->willReturn('batch_S');
+        $this->provider->method('getBatchStatus')->willReturn(['status' => 'ended', 'ended' => true, 'counts' => []]);
+        $this->provider->method('fetchBatchResults')->willReturn(['f11' => ['response' => 'sum', 'usage' => []]]);
+
+        $run = $this->start([11, 12, 13]);
+        $this->service->execute($run->getId());
+        $this->assertSame(CoworkerRun::STATUS_PENDING, $run->getStatus());
+        $this->assertSame(2, $run->getItemsSkipped());
+        $this->assertSame([], $this->notified);
+
+        $this->service->resume($run);
+
+        $this->assertSame(CoworkerRun::STATUS_SUCCESS, $run->getStatus());
+        $this->assertSame(1, $run->getItemsProcessed());
+        $this->assertSame(2, $run->getItemsSkipped());
+        $this->assertStringContainsString('Skipped: photo.jpg — Not a text document (image/jpeg)', (string)$run->getSummary());
+        $this->assertStringContainsString('Skipped: empty.txt — Empty', (string)$run->getSummary());
+    }
+
+    /** A selection where nothing is left still says what was skipped and why. */
+    public function testNothingToDoNamesTheSkippedFiles(): void {
+        $this->file(11, 'photo.jpg', 'x', 'image/jpeg');
+
+        $run = $this->start([11]);
+        $this->service->execute($run->getId());
+
+        $this->assertSame(CoworkerRun::STATUS_SUCCESS, $run->getStatus());
+        $this->assertSame(1, $run->getItemsSkipped());
+        $this->assertStringStartsWith('Nothing to do', (string)$run->getSummary());
+        $this->assertStringContainsString('Skipped: photo.jpg — Not a text document (image/jpeg)', (string)$run->getSummary());
+        $this->assertSame([CoworkerRun::STATUS_SUCCESS], $this->notified);
+    }
+
+    /** A huge folder of photos must not flood the bounded run log. */
+    public function testSkipLoggingIsBounded(): void {
+        $photos = [];
+        for ($i = 0; $i < 150; $i++) {
+            $photos[] = $this->file(100 + $i, "p$i.jpg", 'x', 'image/jpeg');
+        }
+        $this->folder(20, $photos);
+
+        $run = $this->start([], [20]);
+        $this->service->execute($run->getId());
+
+        $this->assertSame(150, $run->getItemsSkipped());
+        $skipEntries = array_filter($run->getDecodedLog(), fn ($e) => str_starts_with($e['message'], 'Skipped: '));
+        $this->assertCount(100, $skipEntries);
+        $this->assertContains('Skipped 50 more file(s) that are not text documents or cannot be written beside', array_column($run->getDecodedLog(), 'message'));
+        $this->assertStringContainsString('… and 100 more; the run log has them.', (string)$run->getSummary());
+    }
+
+    // ── Notifications ─────────────────────────────────────────────────────
+
+    public function testAFailedRunIsAnnounced(): void {
+        $this->file(11, 'a.txt');
+        $this->provider->method('submitBatch')->willThrowException(new \RuntimeException('API down'));
+
+        $run = $this->start([11]);
+        $this->service->execute($run->getId());
+
+        $this->assertSame(CoworkerRun::STATUS_ERROR, $run->getStatus());
+        $this->assertSame([CoworkerRun::STATUS_ERROR], $this->notified);
+    }
+
+    public function testACancelledRunIsNotAnnounced(): void {
+        $this->file(11, 'a.txt');
+        $this->provider->method('submitBatch')->willReturn('batch_C');
+        $this->provider->method('cancelBatch')->willReturn(true);
+
+        $run = $this->start([11]);
+        $this->service->execute($run->getId());
+        $this->service->cancel($run->getId(), 'alice');
+
+        $this->assertSame([], $this->notified);
     }
 
     // ── Cancel ────────────────────────────────────────────────────────────
