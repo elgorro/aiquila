@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { logger } from './logger.js';
 import { getFilteredToolSets } from './tool-registry.js';
+import { registerResources, servesResources } from './resources.js';
 import { reportToolFailure } from './nc-context.js';
 import { pinnedSequenceTools } from './sequences/tools.js';
 import type { Tool } from './tools/types.js';
@@ -67,20 +68,31 @@ function register(server: McpServer, tool: Tool): void {
 }
 
 export async function createServer(options: CreateServerOptions = {}): Promise<McpServer> {
+  const toolSets = await getFilteredToolSets();
+  const toolNames = new Set(toolSets.flat().map((tool) => tool.name));
+
   const server = new McpServer(
     {
       name: SERVER_NAME,
       version: SERVER_VERSION,
     },
-    options.toolsListChanged === undefined
-      ? undefined
-      : { capabilities: { tools: { listChanged: options.toolsListChanged } } }
+    {
+      capabilities: {
+        ...(options.toolsListChanged === undefined
+          ? {}
+          : { tools: { listChanged: options.toolsListChanged } }),
+        // Declared here so that `listChanged` is false: the SDK would default it
+        // to true, and the resource templates never change (MCP 2026-07-28,
+        // Resources › Capabilities).
+        ...(servesResources(toolNames) ? { resources: { listChanged: false } } : {}),
+      },
+    }
   );
 
-  const toolSets = await getFilteredToolSets();
   for (const toolSet of toolSets) {
     for (const tool of toolSet) register(server, tool);
   }
+  registerResources(server, toolNames);
 
   // The caller's sequences shown as their own tools, after the fixed ones and
   // in a fixed order. Only where the sequences category is in the tool set.

@@ -2,7 +2,17 @@
 
 import { z } from 'zod';
 import { getWebDAVClient } from '../../client/webdav.js';
-import { fetchAiquilaAPI } from '../../client/aiquila.js';
+import { ApiError, fetchAiquilaAPI } from '../../client/aiquila.js';
+import {
+  fileContent,
+  fileMimeType,
+  fileUri,
+  isBinaryType,
+  isEmbedded,
+  maxEmbeddedFileSize,
+  oversizedContent,
+  TEXT_PROBE_LENGTH,
+} from '../file-content.js';
 import { PathSchema, FilePathSchema, FileContentSchema, FolderPathSchema } from '../types.js';
 import { bool, int, str, structuredResult } from '../structured.js';
 
@@ -53,23 +63,52 @@ export const readFileTool = {
     idempotentHint: true,
     openWorldHint: false,
   },
-  description: 'Read the contents of a file from Nextcloud',
+  description:
+    'Read a file from Nextcloud. A text file is returned as text and an image as image content. Any other file (PDF, Word, Excel, PowerPoint, OpenDocument, archive, audio) is returned whole as an embedded resource holding its bytes.',
   inputSchema: FilePathSchema,
   handler: async (args: { path: string }) => {
     const client = getWebDAVClient();
-    const content = await client.getFileContents(args.path, {
-      format: 'text',
-    });
+    // Ask first: a binary file over the limit is refused without being
+    // downloaded. The media type Nextcloud reports tells whether it is one;
+    // where it does not, the first bytes do, fetched alone.
+    const stat = await client.stat(args.path).catch(() => undefined);
+    const name = stat?.basename || args.path.split('/').filter(Boolean).pop() || args.path;
+    if (stat && stat.size > maxEmbeddedFileSize()) {
+      const declared = { name, bytes: new Uint8Array(), mimeType: stat.mime };
+      const known = fileMimeType(declared);
+      const start =
+        isBinaryType(known) || known.startsWith('image/')
+          ? declared.bytes
+          : await client.getFileStart(args.path, TEXT_PROBE_LENGTH);
+      const probe = { ...declared, bytes: start };
+      if (isEmbedded(probe)) {
+        const refused = oversizedContent(`File: ${name}`, fileMimeType(probe), stat.size);
+        if (refused) return { content: refused };
+      }
+    }
+    const bytes = await client.getFileContents(args.path, { format: 'binary' });
     return {
-      content: [
-        {
-          type: 'text',
-          text: content,
-        },
-      ],
+      content: fileContent(
+        { name, bytes, mimeType: stat?.mime, uri: fileUri(args.path) },
+        { header: false }
+      ),
     };
   },
 };
+
+/**
+ * The bytes a base64 string stands for, or undefined when it is not base64.
+ * RFC 4648 §3.3: encoded data with characters outside the alphabet (§4) MUST
+ * be rejected, line feeds included (§3.1); §3.2: padding MUST be present.
+ * Buffer.from() skips what it cannot decode, so the check is made here, and
+ * the round trip rejects pad bits that are not zero (§3.5).
+ */
+export function decodeBase64(value: string): Uint8Array<ArrayBuffer> | undefined {
+  if (value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return undefined;
+  const bytes = Buffer.from(value, 'base64');
+  if (bytes.toString('base64') !== value) return undefined;
+  return new Uint8Array(bytes);
+}
 
 /**
  * Create or update a file in Nextcloud
@@ -84,18 +123,35 @@ export const writeFileTool = {
     openWorldHint: false,
   },
   description:
-    'Create or update a file in Nextcloud. File size is limited (default 1 GB, configurable via MCP_MAX_FILE_SIZE).',
+    'Create or update a file in Nextcloud. Give text as it is; for a binary file (PDF, image, office document) give its bytes in base64 and set encoding to "base64". File size is limited (default 1 GB, configurable via MCP_MAX_FILE_SIZE). The limit counts the characters of content, so a base64 file can be about three quarters of it.',
   inputSchema: FileContentSchema,
-  handler: async (args: { path: string; content: string }) => {
+  handler: async (args: { path: string; content: string; encoding?: 'text' | 'base64' }) => {
     const client = getWebDAVClient();
-    await client.putFileContents(args.path, args.content, {
-      overwrite: true,
-    });
+    if (args.encoding !== 'base64') {
+      await client.putFileContents(args.path, args.content, { overwrite: true });
+      return {
+        content: [{ type: 'text' as const, text: `File written successfully to ${args.path}` }],
+      };
+    }
+
+    const bytes = decodeBase64(args.content);
+    if (!bytes) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Error writing file: content is not valid base64. Use the standard alphabet (A-Z, a-z, 0-9, +, /) with = padding and no line breaks, or omit encoding to write text.',
+          },
+        ],
+        isError: true,
+      };
+    }
+    await client.putFileContents(args.path, bytes, { overwrite: true });
     return {
       content: [
         {
-          type: 'text',
-          text: `File written successfully to ${args.path}`,
+          type: 'text' as const,
+          text: `File written successfully to ${args.path} (${bytes.byteLength} bytes, decoded from base64)`,
         },
       ],
     };
@@ -285,8 +341,50 @@ export const searchFilesTool = {
   },
 };
 
+/** A file's content: `text` when the AIquila app decoded it, else its bytes. */
+type LoadedFile = { name: string; mimeType: string; size: number } & (
+  { text: string; bytes?: undefined } | { text?: undefined; bytes: Uint8Array }
+);
+
 /**
- * Read file content with proper encoding (text or base64 for binary/images)
+ * Fetch a file's content through the AIquila app, or over WebDAV when the app
+ * answers 404: it is not installed on this Nextcloud, or the file is one it
+ * does not see. WebDAV needs no app, and reports a missing file itself.
+ */
+async function loadFile(path: string): Promise<LoadedFile> {
+  try {
+    const result = await fetchAiquilaAPI<{
+      name: string;
+      mimeType: string;
+      size: number;
+      encoding: string;
+      content: string;
+    }>('/files/content', { queryParams: { path } });
+    const { name, mimeType, size } = result;
+    return result.encoding === 'text'
+      ? { name, mimeType, size, text: result.content }
+      : { name, mimeType, size, bytes: Buffer.from(result.content, 'base64') };
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.statusCode !== 404) throw error;
+  }
+
+  const client = getWebDAVClient();
+  const stat = await client.stat(path);
+  if (stat.type === 'directory') throw new Error(`'${path}' is a folder, not a file`);
+  // The app refuses larger files with 413; keep one limit whichever way the file is read.
+  const limit = maxEmbeddedFileSize();
+  if (stat.size > limit) throw new Error(`File too large: ${stat.size} bytes (max ${limit})`);
+  const bytes = await client.getFileContents(path, { format: 'binary' });
+  return {
+    name: stat.basename,
+    mimeType: stat.mime || 'application/octet-stream',
+    size: bytes.byteLength,
+    bytes,
+  };
+}
+
+/**
+ * Read file content: text, an image block, or the file itself as an embedded resource
  */
 export const getFileContentTool = {
   name: 'get_file_content',
@@ -298,56 +396,30 @@ export const getFileContentTool = {
     openWorldHint: false,
   },
   description:
-    'Read file content from Nextcloud with mime type info. Returns text for text files, base64 for binary files (images, PDFs, etc.). Images are returned as MCP image content for Claude vision.',
+    'Read file content from Nextcloud with mime type info. Returns text for text files and MCP image content for images (Claude vision). Any other file (PDF, Word, Excel, PowerPoint, OpenDocument, archive, audio) is returned whole as an embedded resource holding its bytes.',
   inputSchema: z.object({
     path: z.string().describe('The file path in Nextcloud'),
   }),
   handler: async (args: { path: string }) => {
     try {
-      const result = await fetchAiquilaAPI<{
-        name: string;
-        mimeType: string;
-        size: number;
-        encoding: string;
-        content: string;
-      }>('/files/content', { queryParams: { path: args.path } });
+      const file = await loadFile(args.path);
 
-      if (result.encoding === 'text') {
+      if (file.text !== undefined) {
         return {
           content: [
             {
               type: 'text' as const,
-              text: `File: ${result.name} (${result.mimeType}, ${result.size} bytes)\n\n${result.content}`,
+              text: `File: ${file.name} (${file.mimeType}, ${file.size} bytes)\n\n${file.text}`,
             },
           ],
         };
       }
 
-      // For images, return as MCP image content type for Claude vision
-      if (result.mimeType.startsWith('image/')) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `File: ${result.name} (${result.mimeType}, ${result.size} bytes)`,
-            },
-            {
-              type: 'image' as const,
-              data: result.content,
-              mimeType: result.mimeType,
-            },
-          ],
-        };
-      }
-
-      // Other binary types: return base64 as text
       return {
-        content: [
-          {
-            type: 'text' as const,
-            text: `File: ${result.name} (${result.mimeType}, ${result.size} bytes)\nEncoding: base64\n\n${result.content}`,
-          },
-        ],
+        content: fileContent(
+          { name: file.name, bytes: file.bytes, mimeType: file.mimeType, uri: fileUri(args.path) },
+          { header: true }
+        ),
       };
     } catch (error) {
       return {
@@ -418,17 +490,7 @@ export const analyzeImageTool = {
 
     try {
       // Fetch all images in parallel
-      const results = await Promise.all(
-        imagePaths.map((p) =>
-          fetchAiquilaAPI<{
-            name: string;
-            mimeType: string;
-            size: number;
-            encoding: string;
-            content: string;
-          }>('/files/content', { queryParams: { path: p } })
-        )
-      );
+      const results = await Promise.all(imagePaths.map((p) => loadFile(p)));
 
       // Validate all files are images
       const nonImages = results
@@ -464,7 +526,7 @@ export const analyzeImageTool = {
         },
         ...results.map((r) => ({
           type: 'image' as const,
-          data: r.content,
+          data: Buffer.from(r.bytes ?? Buffer.from(r.text, 'utf8')).toString('base64'),
           mimeType: r.mimeType,
         })),
       ];

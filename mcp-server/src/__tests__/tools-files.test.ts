@@ -15,6 +15,9 @@ vi.mock('../client/aiquila.js', async () => {
   };
 });
 
+const mockWebDAV = { stat: vi.fn(), getFileContents: vi.fn() };
+vi.mock('../client/webdav.js', () => ({ getWebDAVClient: () => mockWebDAV }));
+
 describe('File Tools (AIquila API)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -133,11 +136,11 @@ describe('File Tools (AIquila API)', () => {
       expect(result.content[1]).toHaveProperty('mimeType', 'image/jpeg');
     });
 
-    it('should return base64 text for other binary files', async () => {
+    it('should return other binary files whole, as an embedded resource', async () => {
       mockFetchAiquilaAPI.mockResolvedValue({
         name: 'archive.zip',
         mimeType: 'application/zip',
-        size: 1024,
+        size: 8,
         encoding: 'base64',
         content: 'UEsDBBQAAAA=',
       });
@@ -145,9 +148,128 @@ describe('File Tools (AIquila API)', () => {
       const { getFileContentTool } = await import('../tools/system/files.js');
       const result = await getFileContentTool.handler({ path: '/archive.zip' });
 
+      expect(result.content).toHaveLength(2);
+      expect(result.content[0].text).toContain('archive.zip (application/zip, 8 bytes)');
+      expect(result.content[1]).toEqual({
+        type: 'resource',
+        resource: {
+          uri: 'nextcloud:///archive.zip',
+          mimeType: 'application/zip',
+          blob: 'UEsDBBQAAAA=',
+        },
+      });
+    });
+
+    it('should describe a binary file over MCP_MAX_EMBEDDED_FILE_SIZE instead', async () => {
+      process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '4';
+      mockFetchAiquilaAPI.mockResolvedValue({
+        name: 'archive.zip',
+        mimeType: 'application/zip',
+        size: 8,
+        encoding: 'base64',
+        content: 'UEsDBBQAAAA=',
+      });
+
+      const { getFileContentTool } = await import('../tools/system/files.js');
+      const result = await getFileContentTool.handler({ path: '/archive.zip' });
+      delete process.env.MCP_MAX_EMBEDDED_FILE_SIZE;
+
       expect(result.content).toHaveLength(1);
-      expect(result.content[0].text).toContain('base64');
-      expect(result.content[0].text).toContain('UEsDBBQAAAA=');
+      expect(result.content[0].text).toContain('MCP_MAX_EMBEDDED_FILE_SIZE');
+    });
+
+    describe('without the AIquila app (404)', () => {
+      const docx = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00]);
+      const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+      beforeEach(async () => {
+        const { ApiError } = await import('../client/aiquila.js');
+        mockFetchAiquilaAPI.mockRejectedValue(new ApiError(404, 'Not Found', ''));
+      });
+
+      it('should read a binary file over WebDAV', async () => {
+        mockWebDAV.stat.mockResolvedValue({
+          basename: 'Lettre.docx',
+          type: 'file',
+          size: 8,
+          mime: DOCX,
+        });
+        mockWebDAV.getFileContents.mockResolvedValue(new Uint8Array(docx));
+
+        const { getFileContentTool } = await import('../tools/system/files.js');
+        const result = await getFileContentTool.handler({ path: '/Courrier/Lettre.docx' });
+
+        expect(mockWebDAV.getFileContents).toHaveBeenCalledWith('/Courrier/Lettre.docx', {
+          format: 'binary',
+        });
+        expect(result).not.toHaveProperty('isError');
+        expect(result.content[1]).toEqual({
+          type: 'resource',
+          resource: {
+            uri: 'nextcloud:///Courrier/Lettre.docx',
+            mimeType: DOCX,
+            blob: docx.toString('base64'),
+          },
+        });
+      });
+
+      it('should read a text file over WebDAV', async () => {
+        mockWebDAV.stat.mockResolvedValue({
+          basename: 'notes.md',
+          type: 'file',
+          size: 7,
+          mime: 'text/markdown',
+        });
+        mockWebDAV.getFileContents.mockResolvedValue(new TextEncoder().encode('# Notes'));
+
+        const { getFileContentTool } = await import('../tools/system/files.js');
+        const result = await getFileContentTool.handler({ path: '/notes.md' });
+
+        expect(result.content).toEqual([
+          { type: 'text', text: 'File: notes.md (text/markdown, 7 bytes)\n\n# Notes' },
+        ]);
+      });
+
+      it('should report a file WebDAV does not find either', async () => {
+        mockWebDAV.stat.mockRejectedValue(new Error('Invalid response: 404 Not Found'));
+
+        const { getFileContentTool } = await import('../tools/system/files.js');
+        const result = await getFileContentTool.handler({ path: '/absent.pdf' });
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain('404 Not Found');
+      });
+
+      it('should refuse a folder', async () => {
+        mockWebDAV.stat.mockResolvedValue({ basename: 'Photos', type: 'directory', size: 0 });
+
+        const { getFileContentTool } = await import('../tools/system/files.js');
+        const result = await getFileContentTool.handler({ path: '/Photos' });
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain('is a folder');
+        expect(mockWebDAV.getFileContents).not.toHaveBeenCalled();
+      });
+
+      it('should let analyze_image read the image over WebDAV', async () => {
+        const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+        mockWebDAV.stat.mockResolvedValue({
+          basename: 'ticket.jpg',
+          type: 'file',
+          size: 6,
+          mime: 'image/jpeg',
+        });
+        mockWebDAV.getFileContents.mockResolvedValue(new Uint8Array(jpeg));
+
+        const { analyzeImageTool } = await import('../tools/system/files.js');
+        const result = await analyzeImageTool.handler({ path: '/ticket.jpg', prompt: 'Total?' });
+
+        expect(result.content[1]).toEqual({
+          type: 'image',
+          data: jpeg.toString('base64'),
+          mimeType: 'image/jpeg',
+        });
+      });
     });
 
     it('should handle errors', async () => {

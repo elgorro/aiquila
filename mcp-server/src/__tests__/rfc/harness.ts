@@ -52,6 +52,8 @@ export class FakeNextcloud {
   // Answer for the AIquila app's GET /api/sequences/effective, per uid, with
   // its ETag. A uid without an entry gets 404, as without the app.
   readonly sequences = new Map<string, { etag: string; body: unknown }>();
+  // Files served over WebDAV, keyed by `<uid>/<path>` (no leading slash).
+  readonly files = new Map<string, { body: Buffer; mime: string }>();
   // Every request's headers, newest last.
   readonly requests: { method: string; url: string; headers: IncomingMessage['headers'] }[] = [];
   private server?: Server;
@@ -182,6 +184,38 @@ export class FakeNextcloud {
       }
       res.writeHead(200, { 'content-type': 'application/json', etag: entry.etag });
       res.end(JSON.stringify(entry.body));
+      return;
+    }
+    if (
+      (req.method === 'PROPFIND' || req.method === 'GET') &&
+      url.pathname.startsWith('/remote.php/dav/files/')
+    ) {
+      const user = this.basicUser(req);
+      if (!user) {
+        res.writeHead(401).end();
+        return;
+      }
+      const key = decodeURIComponent(url.pathname.slice('/remote.php/dav/files/'.length));
+      const file = key.startsWith(`${user}/`) ? this.files.get(key) : undefined;
+      if (!file) {
+        res.writeHead(404).end();
+        return;
+      }
+      if (req.method === 'GET') {
+        res.writeHead(200, { 'content-type': file.mime });
+        res.end(file.body);
+        return;
+      }
+      // RFC 4918 §9.1: a Depth 0 PROPFIND answers 207 with one response.
+      res.writeHead(207, { 'content-type': 'application/xml; charset=utf-8' });
+      res.end(
+        `<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"><d:response>` +
+          `<d:href>${url.pathname}</d:href><d:propstat><d:prop>` +
+          `<d:getcontentlength>${file.body.length}</d:getcontentlength>` +
+          `<d:getcontenttype>${file.mime}</d:getcontenttype><d:resourcetype/>` +
+          `</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>` +
+          `</d:response></d:multistatus>`
+      );
       return;
     }
     if (req.method === 'MKCOL' && url.pathname.startsWith('/remote.php/dav/files/')) {

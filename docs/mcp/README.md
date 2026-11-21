@@ -92,15 +92,37 @@ The [sequence](tools/apps/sequences.md) tools (`list_sequences`, `run_sequence` 
 including when a step failed and the result has `isError: true`. A sequence step can
 read an earlier step's structured result through `{{steps.<id>.result.<path>}}`.
 
+### Resources
+
+The server also offers MCP resources (MCP `2026-07-28`, Resources), so a file can be read
+by its URI with `resources/read`, without a tool call:
+
+| URI template | Reads | Offered with |
+|---|---|---|
+| `nextcloud:///{+path}` | A file in the signed-in account's Files, e.g. `nextcloud:///Documents/report.pdf` | `read_file` or `get_file_content` |
+| `nextcloud-mail:///messages/{messageId}/attachments/{attachmentId}` | An attachment of a message in Nextcloud Mail | `mail_get_attachment` |
+
+A text file comes back as `text`, any other file as `blob` (its bytes in base64), with its
+media type. These are the URIs under which the file tools and `mail_get_attachment`
+[embed binary files](tools/system-tools.md#binary-files) in their results, so a client can
+read the same file again from the URI alone.
+
+`resources/list` is empty: files are not enumerated, the templates say what can be read.
+`resources/read` needs a signed-in user, counts against `MCP_RATE_LIMIT` like a tool call,
+and is held to `MCP_MAX_EMBEDDED_FILE_SIZE`. Dot-segments in the path resolve inside the
+account's Files, and a segment that hides a slash behind percent-encoding is refused, so a
+URI cannot name anything outside them. The server declares the `resources` capability only
+when one of the tools above is registered.
+
 ### System Tools
 
 #### File Operations (15 tools)
 | Tool | Description | Documentation |
 |------|-------------|---------------|
 | `list_files` | List files and folders | [System Tools](tools/system-tools.md#list_files) |
-| `read_file` | Read file contents (text) | [System Tools](tools/system-tools.md#read_file) |
-| `get_file_content` | Read file with mime type (text/base64/image) | [System Tools](tools/system-tools.md#get_file_content) |
-| `write_file` | Create or update files | [System Tools](tools/system-tools.md#write_file) |
+| `read_file` | Read a file: text, image, or the file itself as an embedded resource | [System Tools](tools/system-tools.md#read_file) |
+| `get_file_content` | Read file with mime type (text, image, or the file itself as an embedded resource) | [System Tools](tools/system-tools.md#get_file_content) |
+| `write_file` | Create or update files, text or binary (base64) | [System Tools](tools/system-tools.md#write_file) |
 | `create_folder` | Create folders | [System Tools](tools/system-tools.md#create_folder) |
 | `delete` | Delete files or folders | [System Tools](tools/system-tools.md#delete) |
 | `move_file` | Move or rename files/folders | [System Tools](tools/system-tools.md#move_file) |

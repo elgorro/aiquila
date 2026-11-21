@@ -11,7 +11,8 @@ marked **Admin** fails with `403` for anyone else.
 | Category | Tools | Calls | Needs |
 |---|---|---|---|
 | [Files](#file-tools) | `list_files`, `read_file`, `write_file`, `create_folder`, `delete`, `move_file`, `copy_file`, `bulk_file_operations` | WebDAV | — |
-| [Files](#file-tools) | `get_file_info`, `search_files`, `get_file_content`, `analyze_image`, `create_archive`, `extract_archive`, `list_archive` | AIquila app `/api/files/*` | AIquila app |
+| [Files](#file-tools) | `get_file_content`, `analyze_image` | AIquila app `/api/files/content`, else WebDAV | — |
+| [Files](#file-tools) | `get_file_info`, `search_files`, `create_archive`, `extract_archive`, `list_archive` | AIquila app `/api/files/*` | AIquila app |
 | [Tags](#tag-tools) | `get_file_tags`, `set_file_tags`, `list_system_tags`, `create_system_tag`, `assign_system_tag`, `remove_system_tag` | WebDAV (`systemtags`) | — |
 | [Search](#search-tools) | `unified_search`, `list_search_providers` | OCS Unified Search | — |
 | [Status](#status-tools) | `system_status`, `get_local_time` | `status.php`, OCS capabilities | — |
@@ -80,13 +81,16 @@ List the entries of a folder.
 
 ### read_file
 
-Read a file as text over WebDAV.
+Read a file over WebDAV.
 
 **Parameters:**
 - `path` (string, required): file to read
 
-**Returns:** the file body as text. Binary files come back garbled; use
-[`get_file_content`](#get_file_content) for those.
+**Returns:**
+- text files: the file body as text
+- images: a header line `File: <name> (<mimeType>, <size> bytes)` and an MCP image block
+- other binary files (PDF, office documents, archives, audio): the header line and the file
+  itself as an [embedded resource](#binary-files)
 
 ---
 
@@ -96,10 +100,19 @@ Create a file or replace its contents.
 
 **Parameters:**
 - `path` (string, required): file to write
-- `content` (string, required): text to store. Limited to `MCP_MAX_FILE_SIZE` characters
-  (default 1 GB)
+- `content` (string, required): the text to store, or the file's bytes in base64 when
+  `encoding` is `base64`. Limited to `MCP_MAX_FILE_SIZE` characters (default 1 GB). The limit
+  counts characters, not decoded bytes, so the largest file that fits as base64 is about
+  three quarters of it
+- `encoding` (string, optional): `text` (default) stores `content` as it is; `base64` decodes
+  it first, to write a binary file such as a PDF, an image or an office document
 
-**Returns:** `File written successfully to <path>`.
+Base64 is the standard alphabet with `=` padding and no line breaks; anything else is refused
+and nothing is written. The caller has to produce the whole file as base64 in the tool call,
+which suits small files. A model writes it out character by character, so a file of more than
+a few tens of kilobytes is slow and costly to send this way.
+
+**Returns:** `File written successfully to <path>`, followed by the decoded size for base64 content.
 
 The parent folder must exist; Nextcloud answers `409 Conflict` otherwise (RFC 4918 §9.7.1).
 Create it first with [`create_folder`](#create_folder). An existing file is overwritten, and
@@ -216,7 +229,9 @@ same fields as `get_file_info`.
 
 ### get_file_content
 
-Read a file of any type (`GET /api/files/content`). Files over 20 MB are refused with `413`.
+Read a file of any type (`GET /api/files/content`). Where the AIquila app is not installed, or
+answers `404` for the path, the file is read over WebDAV instead. Files over 20 MB are refused
+either way.
 
 **Parameters:**
 - `path` (string, required)
@@ -224,14 +239,36 @@ Read a file of any type (`GET /api/files/content`). Files over 20 MB are refused
 **Returns:** a header line `File: <name> (<mimeType>, <size> bytes)`, then:
 - text files: the text
 - images: an MCP image block, so the model can look at it
-- other binary files: `Encoding: base64` and the base64 body
+- other binary files: the file itself as an [embedded resource](#binary-files)
+
+#### Binary files
+
+`read_file`, `get_file_content` and [`mail_get_attachment`](apps/mail.md#mail_get_attachment)
+return a file that is neither text nor an image as an MCP
+[embedded resource](https://modelcontextprotocol.io/specification/2026-07-28/server/tools#embedded-resources):
+a content block of type `resource` whose `blob` is the base64 of the file, with its media type
+and a `nextcloud:///<path>` URI. The bytes are not converted or summarised. A text block ahead of
+it names the file, its type and its size.
+
+What happens next is up to the client: one that handles embedded resources can show the file to
+the model or save it where the model can open it, and one that does not shows only the text
+block.
+
+The same URI answers `resources/read`: see [Resources](../README.md#resources).
+
+`MCP_MAX_EMBEDDED_FILE_SIZE` (bytes, default `20971520` = 20 MB) caps the files sent this way.
+A larger binary file is described, not sent, and `read_file` does not download it: it asks
+for the size and type first, and where the type does not say whether the file is text, reads
+only its first 8 KB to find out. The value is a positive integer: anything else,
+`0` included, is ignored for the default, with a warning in the log. Base64 makes the message a third larger than the
+file, so lower the limit if a proxy in front of the server restricts response sizes.
 
 ---
 
 ### analyze_image
 
 Hand one or more images to the model together with a question about them. The images are read
-through `GET /api/files/content`, so the 20 MB per-file limit applies.
+like [`get_file_content`](#get_file_content) reads them, so the 20 MB per-file limit applies.
 
 **Parameters:**
 - `path` (string, optional): one image
