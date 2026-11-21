@@ -43,7 +43,7 @@ help:
 	@echo "Access points (HTTPS via Caddy):"
 	@echo "  Nextcloud:  https://localhost"
 	@echo "  MCP Server: https://localhost:3340/mcp"
-	@echo "  MailHog:    http://localhost:8025"
+	@echo "  Mailpit:    http://localhost:8025"
 	@echo "  Adminer:    http://localhost:8081  (make up-tools)"
 	@echo ""
 	@echo "Direct HTTP (no TLS, localhost only):"
@@ -90,7 +90,7 @@ up: check-buildx aiquila.tar.gz
 	@echo "Follow logs:  make logs-follow"
 	@echo "Nextcloud:    http://localhost:8080"
 	@echo "MCP Server:   http://localhost:3339"
-	@echo "MailHog:      http://localhost:8025"
+	@echo "Mailpit:      http://localhost:8025"
 	@echo "Adminer:      make up-tools"
 
 # Start everything plus the opt-in tools (Adminer)
