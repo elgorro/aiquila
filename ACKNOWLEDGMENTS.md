@@ -77,7 +77,7 @@ No supporters are listed yet.
 |---------|------|
 | [Git](https://git-scm.com) | Version control |
 | [GitHub Actions](https://github.com/features/actions) | CI/CD — lint, test, release, and integration test workflows |
-| [MailHog](https://github.com/mailhog/MailHog) | Local email testing in the dev Docker stack |
+| [Mailpit](https://github.com/axllent/mailpit) | Local email testing in the dev Docker stack |
 | [Adminer](https://www.adminer.org) | Database UI in the dev Docker stack |
 | [Markdown](https://commonmark.org) | Documentation format |
 | [SVG](https://www.w3.org/Graphics/SVG/) | App icon format |

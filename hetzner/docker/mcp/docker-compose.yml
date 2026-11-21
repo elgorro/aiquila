@@ -82,7 +82,7 @@ services:
         max-file: "3"
 
   socket-proxy:
-    image: tecnativa/docker-socket-proxy:v0.5.0
+    image: tecnativa/docker-socket-proxy:3.4
     container_name: aiq-socket-proxy
     restart: unless-stopped
     environment:
@@ -108,7 +108,7 @@ services:
         max-file: "3"
 
   traefik:
-    image: traefik:v3
+    image: traefik:v3.7.19
     container_name: aiq-traefik
     restart: unless-stopped
     depends_on:
@@ -138,7 +138,7 @@ services:
         max-file: "3"
 
   crowdsec:
-    image: crowdsecurity/crowdsec:v1.8.1
+    image: crowdsecurity/crowdsec:v1.8.2
     container_name: aiq-crowdsec
     restart: unless-stopped
     environment:
@@ -169,7 +169,7 @@ services:
 
   node-exporter:
     profiles: [monitoring]
-    image: prom/node-exporter:v1
+    image: prom/node-exporter:v1.13.1
     container_name: aiq-node-exporter
     restart: unless-stopped
     command:
@@ -198,7 +198,7 @@ services:
 
   cadvisor:
     profiles: [monitoring]
-    image: gcr.io/cadvisor/cadvisor:v0.55.1
+    image: ghcr.io/google/cadvisor:v0.61.1
     container_name: aiq-cadvisor
     restart: unless-stopped
     command:
@@ -231,7 +231,7 @@ services:
 
   prometheus:
     profiles: [monitoring]
-    image: prom/prometheus:v3
+    image: prom/prometheus:v3.16.0
     container_name: aiq-prometheus
     restart: unless-stopped
     volumes:
@@ -255,7 +255,7 @@ services:
 
   grafana:
     profiles: [monitoring]
-    image: grafana/grafana-oss:13.0.2
+    image: grafana/grafana:13.3.1
     container_name: aiq-grafana
     restart: unless-stopped
     environment:
