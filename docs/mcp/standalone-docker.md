@@ -141,7 +141,7 @@ Run from `docker/standalone/`:
 | `make logs-follow` | Stream logs in real time |
 | `make status` | Service status |
 | `make shell` | Shell in MCP container |
-| `make build` | Rebuild container |
+| `make update` | Pull the latest images and recreate changed containers |
 | `make clean` | Stop and remove everything |
 | `make test` | Test connectivity |
 | `make test-oauth` | Full OAuth 2.1 flow test, including refresh, revocation and reuse detection (defaults to `https://localhost:3340`) |
@@ -154,6 +154,18 @@ Or from `docker/`:
 | `make standalone-down` | Stop standalone MCP server |
 | `make standalone-logs` | Stream standalone logs |
 | `make standalone-test` | Test standalone connectivity |
+
+## Updating
+
+The stack runs the published `ghcr.io/elgorro/aiquila-mcp:latest` image and builds
+nothing locally. A running container keeps the image it started with, so new
+releases, and rebuilds that pick up a Node.js security release, only take effect
+after a pull:
+
+```bash
+make update
+docker compose exec mcp-server node -v
+```
 
 ## Verification
 

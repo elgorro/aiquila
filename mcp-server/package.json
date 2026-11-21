@@ -43,7 +43,7 @@
     "self-hosted"
   ],
   "engines": {
-    "node": ">=26.0.0",
+    "node": ">=26.13.1",
     "npm": ">=11.0.0"
   },
   "author": "sirgorro",

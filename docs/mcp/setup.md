@@ -207,7 +207,7 @@ npm run build
 
 **Problem**: Module not found errors
 
-**Solution**: Ensure you're using Node.js 26 or higher:
+**Solution**: Ensure you're using Node.js 26.13.1 or higher:
 ```bash
 node --version
 ```
