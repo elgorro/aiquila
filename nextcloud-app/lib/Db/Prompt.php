@@ -24,8 +24,6 @@ use OCP\AppFramework\Db\Entity;
  * @method void setDescription(?string $description)
  * @method string getContent()
  * @method void setContent(string $content)
- * @method int getIsActive()
- * @method void setIsActive(int $isActive)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
  * @method int getUpdatedAt()
@@ -42,7 +40,6 @@ class Prompt extends Entity implements \JsonSerializable {
     protected string $title = '';
     protected ?string $description = null;
     protected string $content = '';
-    protected int $isActive = 1;
     protected int $createdAt = 0;
     protected int $updatedAt = 0;
 
@@ -52,7 +49,6 @@ class Prompt extends Entity implements \JsonSerializable {
         $this->addType('title', 'string');
         $this->addType('description', 'string');
         $this->addType('content', 'string');
-        $this->addType('isActive', 'integer');
         $this->addType('createdAt', 'integer');
         $this->addType('updatedAt', 'integer');
         $this->markFieldsForInsert();

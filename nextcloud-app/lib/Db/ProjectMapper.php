@@ -34,17 +34,12 @@ class ProjectMapper extends ChangeTrackingMapper {
     /**
      * @return list<Project>
      */
-    public function findAllByUser(string $userId, bool $activeOnly = false): array {
+    public function findAllByUser(string $userId): array {
         $qb = $this->db->getQueryBuilder();
         $qb->select('*')
             ->from($this->getTableName())
-            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)));
-
-        if ($activeOnly) {
-            $qb->andWhere($qb->expr()->eq('is_active', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)));
-        }
-
-        $qb->orderBy('updated_at', 'DESC');
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
+            ->orderBy('updated_at', 'DESC');
 
         return $this->findEntities($qb);
     }
