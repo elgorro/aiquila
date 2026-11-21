@@ -57,7 +57,6 @@ class ImageOptimizerTest extends TestCase {
         ob_start();
         imagepng($img);
         $rawBytes = ob_get_clean();
-        imagedestroy($img);
 
         $result = $this->optimizer->optimize($rawBytes, 'image/png');
 
@@ -76,7 +75,6 @@ class ImageOptimizerTest extends TestCase {
         ob_start();
         imagejpeg($img, null, 90);
         $rawBytes = ob_get_clean();
-        imagedestroy($img);
 
         $result = $this->optimizer->optimize($rawBytes, 'image/jpeg');
 
@@ -101,7 +99,6 @@ class ImageOptimizerTest extends TestCase {
         ob_start();
         imagepng($img);
         $rawBytes = ob_get_clean();
-        imagedestroy($img);
 
         $result = $this->optimizer->optimize($rawBytes, 'image/png');
 
@@ -119,7 +116,6 @@ class ImageOptimizerTest extends TestCase {
         ob_start();
         imagegif($img);
         $rawBytes = ob_get_clean();
-        imagedestroy($img);
 
         $result = $this->optimizer->optimize($rawBytes, 'image/gif');
 

@@ -152,6 +152,51 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: echo "No Nextcloud app changes — nothing to test." >> "$GITHUB_STEP_SUMMARY"
 
+  # Not a required check. It runs the same suite on the next PHP minor before
+  # Nextcloud supports it, so deprecations surface early; a failure does not
+  # fail the workflow. See docs/nextcloud-compatibility.md#php.
+  nextcloud-app-php-next:
+    name: Nextcloud App Tests (PHP 8.6, experimental)
+    runs-on: ubuntu-latest
+    needs: changes
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: nextcloud-app
+
+    steps:
+      - uses: actions/checkout@v7
+        if: needs.changes.outputs.nextcloud == 'true'
+
+      - name: Setup PHP
+        if: needs.changes.outputs.nextcloud == 'true'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.6'
+          tools: composer
+
+      # Dependencies may not declare the next minor yet (psalm 6 caps at
+      # ~8.5.0); install anyway so the suite runs.
+      - name: Install dependencies
+        if: needs.changes.outputs.nextcloud == 'true'
+        run: composer install --no-progress --prefer-dist --ignore-platform-req=php+
+
+      - name: Run tests (fail on PHP deprecations)
+        if: needs.changes.outputs.nextcloud == 'true'
+        run: composer test -- --display-deprecations --fail-on-deprecation
+
+      # Psalm 6 cannot target 8.6 (--php-version), so this checks that it runs
+      # on 8.6 and analyses at the composer.json floor. Runs even when the
+      # tests fail, so one run reports both.
+      - name: Static analysis (psalm)
+        if: ${{ !cancelled() && needs.changes.outputs.nextcloud == 'true' }}
+        run: composer psalm
+
+      - name: No Nextcloud app changes
+        if: needs.changes.outputs.nextcloud != 'true'
+        working-directory: ${{ github.workspace }}
+        run: echo "No Nextcloud app changes — nothing to test." >> "$GITHUB_STEP_SUMMARY"
+
   hetzner-cli:
     name: Hetzner CLI Tests
     runs-on: ubuntu-latest
