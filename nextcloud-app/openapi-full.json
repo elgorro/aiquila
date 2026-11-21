@@ -52,6 +52,7 @@
                     "itemsTotal",
                     "itemsProcessed",
                     "itemsFailed",
+                    "itemsSkipped",
                     "summary",
                     "error",
                     "startedAt",
@@ -88,6 +89,10 @@
                         "format": "int64"
                     },
                     "itemsFailed": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "itemsSkipped": {
                         "type": "integer",
                         "format": "int64"
                     },
@@ -9090,6 +9095,7 @@
                                         "itemsTotal",
                                         "itemsProcessed",
                                         "itemsFailed",
+                                        "itemsSkipped",
                                         "summary",
                                         "error",
                                         "startedAt",
@@ -9121,6 +9127,10 @@
                                             "format": "int64"
                                         },
                                         "itemsFailed": {
+                                            "type": "integer",
+                                            "format": "int64"
+                                        },
+                                        "itemsSkipped": {
                                             "type": "integer",
                                             "format": "int64"
                                         },

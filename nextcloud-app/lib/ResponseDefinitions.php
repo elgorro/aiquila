@@ -87,6 +87,7 @@ namespace OCA\AIquila;
  *     itemsTotal: int,
  *     itemsProcessed: int,
  *     itemsFailed: int,
+ *     itemsSkipped: int,
  *     summary: ?string,
  *     error: ?string,
  *     startedAt: int,

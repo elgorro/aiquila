@@ -32,7 +32,7 @@ interface ResumableCoworkerTaskType extends CoworkerTaskType {
      *
      * @param array<string, mixed> $state the state the previous call returned
      * @param callable(int, int): void $progress
-     * @return array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}
+     * @return array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, itemsSkipped?: int, summary: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}
      */
     public function resume(Coworker $coworker, CoworkerRun $run, array $state, callable $progress): array;
 }

@@ -260,8 +260,9 @@ their files, so a file shared with them works like one they own:
   rules: up-to-date sources (unless `force`), outputs of any operation and
   the output folder are skipped.
 - Files picked one by one are always processed, since the user asked for them.
-  Only the text-only mime filter applies, and a picked file that fails it is
-  logged as skipped.
+  Only the text-only mime filter applies.
+- A file that fails the mime filter, picked or found in a folder, is skipped
+  and reported. Up-to-date sources and earlier outputs are left out silently.
 - A file reached twice counts once.
 
 **Output.** Each output goes beside its source, or into `outputFolder`, which
@@ -288,6 +289,39 @@ them with the user's app password. All of them are `NoAdminRequired` and
 | `GET /api/batch-runs` | the user's manual runs, newest first |
 | `GET /api/batch-runs/{id}` | the run with its log |
 | `POST /api/batch-runs/{id}/cancel` | the cancelled run; `409` once it has ended |
+
+**Skips.** A file the run passes over without asking the model counts in
+`itemsSkipped`, neither processed nor failed. Each one gets a `warn` log entry,
+`Skipped: <reason>`, with the file as its item, and a `Skipped: <name> — <reason>`
+line in the summary:
+
+| Reason | When |
+|---|---|
+| `Not a text document (<mime>)` | it fails the mime filter |
+| `Its folder is read-only; choose an output folder` | its output cannot be written beside it |
+| `No longer available` | it was deleted or unshared after the run was started |
+| `Too large (<size>; the limit is <limit>)` | over `maxBytesPerFile` |
+| `Could not be read: <error>` | reading it threw |
+| `Not UTF-8 text` | its content is not valid UTF-8 |
+| `Empty` | only whitespace |
+
+The first 100 skips found while collecting are logged one by one, then a single
+entry gives the count of the rest, so a folder full of photos does not push
+everything else out of the 500-entry log. The summary lists at most 50 per-file
+lines. Skips found before a batch is submitted are kept in the resume state and
+reported when it ends. A model refusal is a failure (`refused`), not a skip.
+Coworker runs over the docs task types count `itemsSkipped` too, for the read
+reasons above. Their nightly walk still passes over other file types silently.
+
+**Notification.** When a manual run ends as `success` or `error`,
+`BatchRunNotifications` sends a Nextcloud notification (`batch_run_success` or
+`batch_run_error`, object `batch_run` / run id) with the counts and, for a
+failure, the error. Its link opens the run in **Cowork → Runs from Files**. A
+**Show results** action opens the outputs' folder when all of them are in one
+folder, and otherwise the first output. The personal task notification switches
+apply: `task_success_notifications` (off by default) for a finished run,
+`task_failure_notifications` (on by default) for a failed one. A cancelled run
+is not announced, and neither is a `pending` one.
 
 A run carries `status`, the item counts, `summary`, `error`, `outputs` (paths
 in the user's Files) and `pollIntervalSeconds`. That interval is 30 while

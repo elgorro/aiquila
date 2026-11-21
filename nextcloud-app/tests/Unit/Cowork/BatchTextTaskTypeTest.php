@@ -248,7 +248,8 @@ class BatchTextTaskTypeTest extends TestCase {
         $result = $this->task->run($this->coworker(['maxBytesPerFile' => 2048]), $this->newRun(), $this->progress());
 
         $this->assertSame(['f11' => 11], $result['state']['file_ids']);
-        $this->assertSame(['huge.txt'], $result['state']['skipped']);
+        $this->assertSame([['item' => '/Documents/huge.txt', 'reason' => 'Too large (4.9 KB; the limit is 2 KB)']], $result['state']['skipped']);
+        $this->assertSame(1, $result['itemsSkipped']);
     }
 
     /**
@@ -559,7 +560,7 @@ class BatchTextTaskTypeTest extends TestCase {
         $result = $this->task->run($this->coworker(), $this->newRun(), $this->progress());
 
         $this->assertSame(['f11' => 11], $result['state']['file_ids']);
-        $this->assertSame(['weird.txt'], $result['state']['skipped']);
+        $this->assertSame([['item' => '/Documents/weird.txt', 'reason' => 'Not UTF-8 text']], $result['state']['skipped']);
     }
 
     /** PDF bytes are not text; nothing here builds a document content block. */
