@@ -5,7 +5,7 @@
 services:
   # PostgreSQL Database
   db:
-    image: postgres:18-alpine
+    image: postgres:18.7-alpine
     container_name: aiquila-db
     restart: unless-stopped
     environment:
@@ -32,7 +32,7 @@ services:
 
   # Redis Cache
   redis:
-    image: redis:8-alpine
+    image: redis:8.10.3-alpine
     container_name: aiquila-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
@@ -86,8 +86,8 @@ services:
       NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD:-admin123}
       NEXTCLOUD_TRUSTED_DOMAINS: ${NEXTCLOUD_TRUSTED_DOMAINS:-localhost localhost:8080 nextcloud}
 
-      # SMTP (MailHog)
-      SMTP_HOST: mailhog
+      # SMTP (Mailpit)
+      SMTP_HOST: mailpit
       SMTP_PORT: 1025
       SMTP_AUTHTYPE: PLAIN
       MAIL_FROM_ADDRESS: noreply
@@ -177,7 +177,7 @@ services:
 
   # Caddy Reverse Proxy (HTTPS)
   caddy:
-    image: caddy:2.11.2-alpine
+    image: caddy:2.11.9-alpine
     container_name: aiquila-caddy
     restart: unless-stopped
     depends_on:
@@ -199,10 +199,10 @@ services:
           cpus: '1.0'
           pids: 100
 
-  # MailHog (Email Testing)
-  mailhog:
-    image: mailhog/mailhog:v1.0.1
-    container_name: aiquila-mailhog
+  # Mailpit (Email Testing)
+  mailpit:
+    image: axllent/mailpit:v1.34.0
+    container_name: aiquila-mailpit
     restart: unless-stopped
     ports:
       - "127.0.0.1:8025:8025"  # Web UI
@@ -242,7 +242,7 @@ services:
   # connects Nextcloud to it. Only reachable inside the stack, so it serves
   # conversion and templates, not editing in a browser.
   collabora:
-    image: collabora/code:26.04.5.2.1
+    image: collabora/code:26.04.6.2.1
     container_name: aiquila-collabora
     profiles: ["office"]
     restart: unless-stopped
