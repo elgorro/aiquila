@@ -67,7 +67,7 @@ php occ aiquila:configure --model claude-sonnet-4-6
 
 - Nextcloud 35 — see [Nextcloud compatibility](../nextcloud-compatibility.md) for the supported version window
 - PHP 8.4 or higher with Composer
-- Node.js 26 or higher (for building frontend)
+- Node.js 26.13.1 or higher (for building frontend)
 - npm 10 or higher
 - An API key for one of the supported providers — e.g. Claude from [console.anthropic.com](https://console.anthropic.com), or Mistral. Hetzner Inference issues no new tokens while it moves to an [official product](../dev/hetzner-provider.md). A local model (Ollama, LM Studio, llama.cpp) needs no key.
 
