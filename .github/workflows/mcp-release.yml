@@ -275,6 +275,9 @@ jobs:
           context: ./mcp-server
           file: ./mcp-server/Dockerfile
           platforms: linux/amd64,linux/arm64
+          # Always resolve node:26-alpine afresh, so a release ships the
+          # latest Node.js security patch rather than a cached base.
+          pull: true
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
