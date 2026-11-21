@@ -27,6 +27,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setCacheCreationTokens(?int $cacheCreationTokens)
  * @method int|null getCacheReadTokens()
  * @method void setCacheReadTokens(?int $cacheReadTokens)
+ * @method string|null getProvider()
+ * @method void setProvider(?string $provider)
  */
 class UsageStat extends Entity {
     use InsertsFullRow;
@@ -40,6 +42,8 @@ class UsageStat extends Entity {
     protected int $createdAt = 0;
     protected ?int $cacheCreationTokens = null;
     protected ?int $cacheReadTokens = null;
+    /** Provider id (LLMProviderInterface::getId()); null on rows written before it was stored. */
+    protected ?string $provider = null;
 
     public function __construct() {
         $this->addType('userId', 'string');
@@ -51,6 +55,7 @@ class UsageStat extends Entity {
         $this->addType('createdAt', 'integer');
         $this->addType('cacheCreationTokens', 'integer');
         $this->addType('cacheReadTokens', 'integer');
+        $this->addType('provider', 'string');
         $this->markFieldsForInsert();
     }
 }
