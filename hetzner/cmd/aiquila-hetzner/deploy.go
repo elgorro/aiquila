@@ -33,8 +33,12 @@ var (
 func buildDeployCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deploy",
-		Short: "Pull latest image and restart services on a running server",
-		Long: `Pull the latest aiquila-mcp image and restart all services in-place.
+		Short: "Pull the latest images and restart services on a running server",
+		Long: `Pull the latest image of every service and restart the stack in place.
+
+This also picks up upstream rebuilds of floating tags such as
+nextcloud:35-apache, which is how PHP and Nextcloud security releases reach
+a running server. To move to a new AIquila release, use upgrade.
 
 Monitoring services (Prometheus, Grafana) are auto-detected: if they are
 already running they will be included in the pull and restart.`,
