@@ -383,6 +383,9 @@ docker compose up -d nc
 docker compose exec nc php -v
 ```
 
+To pull every service of the stack at once, run
+[`aiquila-hetzner deploy`](commands.md#deploy) from your workstation instead.
+
 The Compose service is `nc`; `aiq-nc` is the container name, which `docker exec`
 accepts but `docker compose` does not. If you run extra compose files (`-f`) or
 profiles on top of the stack, pass the same flags — and leave out `--remove-orphans`,
