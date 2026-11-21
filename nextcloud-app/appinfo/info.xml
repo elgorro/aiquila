@@ -98,6 +98,7 @@ Built on the [Nextcloud](https://nextcloud.com) open-source community, the [Mode
         <command>OCA\AIquila\Command\BenchmarkBatchCommand</command>
         <command>OCA\AIquila\Command\TalkBotCommand</command>
         <command>OCA\AIquila\Command\LibraryCommand</command>
+        <command>OCA\AIquila\Command\UsageExportCommand</command>
     </commands>
     <openmetrics>
         <exporter>OCA\AIquila\OpenMetrics\TokensUsedExporter</exporter>

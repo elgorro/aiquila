@@ -33,9 +33,10 @@ class UsageStatServiceTest extends TestCase {
         return new UsageStatService($mapper, $time, $this->createStub(LoggerInterface::class));
     }
 
-    private function provider(string $model = 'configured-model'): LLMProviderInterface {
+    private function provider(string $model = 'configured-model', string $id = 'anthropic'): LLMProviderInterface {
         $provider = $this->createStub(LLMProviderInterface::class);
         $provider->method('getModel')->willReturn($model);
+        $provider->method('getId')->willReturn($id);
         return $provider;
     }
 
@@ -57,6 +58,16 @@ class UsageStatServiceTest extends TestCase {
         $this->assertSame('chat', $row->getRequestType());
         $this->assertSame(7, $row->getConversationId());
         $this->assertSame(self::NOW, $row->getCreatedAt());
+        $this->assertSame('anthropic', $row->getProvider());
+    }
+
+    /** The same model id can be billed by several providers; the row says which. */
+    public function testRecordsTheProviderThatServedTheCall(): void {
+        $this->service()->record('alice', $this->provider('claude-opus-5', 'bedrock'), [
+            'usage' => ['input_tokens' => 1, 'output_tokens' => 1],
+        ], UsageStatService::TYPE_TASK);
+
+        $this->assertSame('bedrock', $this->inserted[0]->getProvider());
     }
 
     public function testFallsBackToTheProvidersModelAndLeavesUnreportedCacheNull(): void {

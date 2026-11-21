@@ -6,6 +6,9 @@ namespace OCA\AIquila\Tests\Unit\Db;
 
 use OCA\AIquila\Db\UsageStat;
 use OCA\AIquila\Db\UsageStatMapper;
+use OCA\AIquila\Service\UsageExport\UsageExportFilter;
+use OCP\IDBConnection;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class UsageStatMapperTest extends MapperTestCase {
 
@@ -139,5 +142,72 @@ class UsageStatMapperTest extends MapperTestCase {
         $mapper = $this->makeMapper();
         $mapper->method('findEntities')->willReturn([]);
         $mapper->findByUser('eve');
+    }
+
+    /**
+     * The SQL bucket expressions exportAggregates() groups on.
+     *
+     * @return list<string>
+     */
+    private function bucketExpressions(string $platform, string $bucket, array $rows = []): array {
+        $this->db->method('getDatabaseProvider')->willReturn($platform);
+        $functions = [];
+        $this->qb->method('getColumnName')->willReturnCallback(static fn (string $c): string => '`' . $c . '`');
+        $this->qb->method('createFunction')->willReturnCallback(function (string $sql) use (&$functions) {
+            $functions[] = $sql;
+            return $this->queryFunction($sql);
+        });
+        $this->qb->method('executeQuery')->willReturn($this->result);
+        $this->result->method('fetch')->willReturnOnConsecutiveCalls(...[...$rows, false]);
+
+        $mapper = new UsageStatMapper($this->db);
+        iterator_to_array($mapper->exportAggregates('alice', UsageExportFilter::fromInput(granularity: $bucket), $bucket));
+        return $functions;
+    }
+
+    /** @return array<string, array{string, string, string}> */
+    public static function bucketSql(): array {
+        return [
+            'day, postgres' => [IDBConnection::PLATFORM_POSTGRES, 'day', '(`created_at` - ((`created_at`) % 86400))'],
+            'day, sqlite' => [IDBConnection::PLATFORM_SQLITE, 'day', '(`created_at` - ((`created_at`) % 86400))'],
+            'day, oracle' => [IDBConnection::PLATFORM_ORACLE, 'day', '(`created_at` - MOD(`created_at`, 86400))'],
+            // Monday 00:00 UTC: the epoch was a Thursday, three days later in the week.
+            'week, mysql' => [IDBConnection::PLATFORM_MYSQL, 'week', '(`created_at` - ((`created_at` + 259200) % 604800))'],
+            'week, oracle' => [IDBConnection::PLATFORM_ORACLE, 'week', '(`created_at` - MOD(`created_at` + 259200, 604800))'],
+        ];
+    }
+
+    /** The bucket goes in both the SELECT and the GROUP BY (Oracle rejects aliases there). */
+    #[DataProvider('bucketSql')]
+    public function testExportBucketsUseTheDatabasesModulo(string $platform, string $bucket, string $expected): void {
+        $this->assertSame([$expected, $expected], $this->bucketExpressions($platform, $bucket));
+    }
+
+    public function testExportBucketArithmeticLandsOnDayAndMondayStarts(): void {
+        // The same arithmetic as the SQL, on a Sunday afternoon.
+        $t = gmmktime(15, 30, 0, 11, 22, 2026);
+        $this->assertSame('2026-11-22 00:00', gmdate('Y-m-d H:i', $t - $t % 86400));
+        $this->assertSame('2026-11-16 00:00 Mon', gmdate('Y-m-d H:i D', $t - ($t + 259200) % 604800));
+        $monday = gmmktime(0, 0, 0, 11, 23, 2026);
+        $this->assertSame($monday, $monday - ($monday + 259200) % 604800);
+    }
+
+    public function testExportAggregatesCastsTheRow(): void {
+        $this->db->method('getDatabaseProvider')->willReturn(IDBConnection::PLATFORM_POSTGRES);
+        $this->qb->method('getColumnName')->willReturnArgument(0);
+        $this->qb->method('createFunction')->willReturnCallback(fn (string $sql) => $this->queryFunction($sql));
+        $this->qb->method('executeQuery')->willReturn($this->result);
+        $this->result->method('fetch')->willReturnOnConsecutiveCalls(
+            ['bucket' => '1767225600', 'provider' => '', 'model' => 'm', 'request_type' => 'chat', 'requests' => '3',
+                'input_tokens' => '30', 'output_tokens' => '3', 'cache_creation_tokens' => null, 'cache_read_tokens' => '9'],
+            false,
+        );
+
+        $rows = iterator_to_array((new UsageStatMapper($this->db))->exportAggregates('alice', UsageExportFilter::fromInput(), 'day'), false);
+
+        $this->assertSame([[
+            'bucket' => 1767225600, 'provider' => null, 'model' => 'm', 'request_type' => 'chat', 'requests' => 3,
+            'input_tokens' => 30, 'output_tokens' => 3, 'cache_creation_tokens' => null, 'cache_read_tokens' => 9,
+        ]], $rows);
     }
 }

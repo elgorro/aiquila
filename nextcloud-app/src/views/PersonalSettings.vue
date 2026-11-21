@@ -146,6 +146,13 @@
 					</p>
 				</NcSettingsSection>
 			</template>
+
+			<template #usage>
+				<NcSettingsSection :name="t('aiquila', 'Usage export')"
+					:description="t('aiquila', 'Download the tokens your AIquila requests used, as CSV or JSON: one row per request, or summed per day, week or month.')">
+					<UsageExport />
+				</NcSettingsSection>
+			</template>
 		</SettingsTabs>
 	</div>
 </template>
@@ -162,6 +169,7 @@ import LibraryEditor from '../components/settings/LibraryEditor.vue'
 import ProviderCard from '../components/settings/ProviderCard.vue'
 import SequenceList from '../components/settings/SequenceList.vue'
 import SettingsTabs from '../components/settings/SettingsTabs.vue'
+import UsageExport from '../components/settings/UsageExport.vue'
 import {
 	getSettings,
 	getUserProviders,
@@ -182,6 +190,7 @@ export default {
 		ProviderCard,
 		SequenceList,
 		SettingsTabs,
+		UsageExport,
 	},
 	data() {
 		return {
@@ -222,6 +231,7 @@ export default {
 				{ id: 'prompts', label: t('aiquila', 'Prompts') },
 				{ id: 'sequences', label: t('aiquila', 'Sequences') },
 				{ id: 'connectors', label: t('aiquila', 'Connectors') },
+				{ id: 'usage', label: t('aiquila', 'Usage') },
 			]
 		},
 		inheritNote() {

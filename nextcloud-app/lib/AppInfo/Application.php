@@ -53,6 +53,9 @@ class Application extends App implements IBootstrap {
         $context->registerDashboardWidget(\OCA\AIquila\Dashboard\UsageWidget::class);
         $context->registerDashboardWidget(\OCA\AIquila\Dashboard\CoworkerOutputWidget::class);
 
+        // A user's token usage travels with their account in the user_migration export.
+        $context->registerUserMigrator(\OCA\AIquila\UserMigration\UsageMigrator::class);
+
         // Cowork task-type registry — the set of jobs coworkers can run
         $context->registerService(CoworkerTaskRegistry::class, function (ContainerInterface $c) {
             $visionClassify = $c->get(VisionClassifyImagesTaskType::class);

@@ -17,7 +17,8 @@ use Psr\Log\LoggerInterface;
  *
  * Callers hand over the provider's result array as it came back: its `usage`
  * block (input, output and cache tokens) and `model` are read from there, with
- * the provider's configured model as the fallback. A result that reports no
+ * the provider's configured model as the fallback. The provider's id is stored
+ * next to the model, since one model id can be served by several providers. A result that reports no
  * tokens, failed calls included, writes nothing.
  *
  * Best-effort: a failure here is logged and never fails the request that
@@ -34,6 +35,11 @@ class UsageStatService {
     // Column widths in Version0001Date20260218000000.
     private const MAX_USER_ID = 64;
     private const MAX_MODEL = 100;
+    // Version0031Date20261121000000.
+    private const MAX_PROVIDER = 32;
+
+    /** Every request type, in the order the export documents them. */
+    public const TYPES = [self::TYPE_CHAT, self::TYPE_API, self::TYPE_TASK, self::TYPE_COWORKER, self::TYPE_TALK, self::TYPE_FLOW];
 
     public function __construct(
         private UsageStatMapper $mapper,
@@ -64,6 +70,7 @@ class UsageStatService {
             $row = new UsageStat();
             $row->setUserId(mb_substr($userId ?? '', 0, self::MAX_USER_ID));
             $row->setModel(mb_substr($model, 0, self::MAX_MODEL));
+            $row->setProvider(mb_substr($provider->getId(), 0, self::MAX_PROVIDER));
             $row->setInputTokens($input);
             $row->setOutputTokens($output);
             $row->setCacheCreationTokens(isset($usage['cache_creation_tokens']) ? $cacheCreation : null);

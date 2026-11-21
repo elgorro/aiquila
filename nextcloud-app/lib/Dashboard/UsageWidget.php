@@ -8,6 +8,8 @@ namespace OCA\AIquila\Dashboard;
 use OCA\AIquila\Db\UsageStatMapper;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Dashboard\IAPIWidgetV2;
+use OCP\Dashboard\IButtonWidget;
+use OCP\Dashboard\Model\WidgetButton;
 use OCP\Dashboard\Model\WidgetItem;
 use OCP\Dashboard\Model\WidgetItems;
 use OCP\IL10N;
@@ -16,9 +18,10 @@ use OCP\IUserSession;
 
 /**
  * Dashboard widget summarising token usage for the current user
- * (today / this week / all time).
+ * (today / this week / all time), with a link to the usage export in the
+ * personal settings.
  */
-class UsageWidget extends AbstractAIquilaWidget implements IAPIWidgetV2 {
+class UsageWidget extends AbstractAIquilaWidget implements IAPIWidgetV2, IButtonWidget {
     private const DAY = 86400;
     private const WEEK = 604800;
 
@@ -69,5 +72,13 @@ class UsageWidget extends AbstractAIquilaWidget implements IAPIWidgetV2 {
             $this->getIconUrl(),
             $sinceId,
         );
+    }
+
+    /** @return list<WidgetButton> */
+    public function getWidgetButtons(string $userId): array {
+        $settings = $this->urlGenerator->linkToRouteAbsolute('settings.PersonalSettings.index', ['section' => self::APP_ID]);
+        return [
+            new WidgetButton(WidgetButton::TYPE_MORE, $settings . '#usage', $this->l10n->t('Export usage')),
+        ];
     }
 }
