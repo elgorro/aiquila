@@ -101,7 +101,9 @@ Create a file or replace its contents.
 **Parameters:**
 - `path` (string, required): file to write
 - `content` (string, required): the text to store, or the file's bytes in base64 when
-  `encoding` is `base64`. Limited to `MCP_MAX_FILE_SIZE` characters (default 1 GB)
+  `encoding` is `base64`. Limited to `MCP_MAX_FILE_SIZE` characters (default 1 GB). The limit
+  counts characters, not decoded bytes, so the largest file that fits as base64 is about
+  three quarters of it
 - `encoding` (string, optional): `text` (default) stores `content` as it is; `base64` decodes
   it first, to write a binary file such as a PDF, an image or an office document
 
@@ -255,7 +257,10 @@ block.
 The same URI answers `resources/read`: see [Resources](../README.md#resources).
 
 `MCP_MAX_EMBEDDED_FILE_SIZE` (bytes, default `20971520` = 20 MB) caps the files sent this way.
-A larger binary file is described, not sent. Base64 makes the message a third larger than the
+A larger binary file is described, not sent, and `read_file` does not download it: it asks
+for the size and type first, and where the type does not say whether the file is text, reads
+only its first 8 KB to find out. The value is a positive integer: anything else,
+`0` included, is ignored for the default, with a warning in the log. Base64 makes the message a third larger than the
 file, so lower the limit if a proxy in front of the server restricts response sizes.
 
 ---

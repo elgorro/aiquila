@@ -242,6 +242,42 @@ describe('GET, PUT, DELETE', () => {
     );
   });
 
+  it('RFC 9110 §14.1.2: the start of a file is asked for as a byte range', async () => {
+    const client = getWebDAVClient();
+    replies = [new Response(new Uint8Array([1, 2, 3, 4]), { status: 206 })];
+    expect(await client.getFileStart('/b.bin', 4)).toEqual(new Uint8Array([1, 2, 3, 4]));
+    expect(calls[0].method).toBe('GET');
+    expect(calls[0].headers.Range).toBe('bytes=0-3');
+  });
+
+  it('RFC 9110 §14.2: a server may ignore Range; the whole file it sends is cut short', async () => {
+    const client = getWebDAVClient();
+    let pulled = 0;
+    let cancelled = false;
+    const whole = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          pulled += 1;
+          controller.enqueue(new Uint8Array(3).fill(pulled));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      },
+      { highWaterMark: 0 }
+    );
+    replies = [new Response(whole, { status: 200 })];
+    expect(await client.getFileStart('/huge.bin', 4)).toEqual(new Uint8Array([1, 1, 1, 2]));
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThanOrEqual(3);
+  });
+
+  it('a file shorter than the range comes back whole', async () => {
+    const client = getWebDAVClient();
+    replies = [new Response(new Uint8Array([7, 8]), { status: 206 })];
+    expect(await client.getFileStart('/small.bin', 8192)).toEqual(new Uint8Array([7, 8]));
+  });
+
   it('RFC 9110 §13.1.2: overwrite: false sends If-None-Match: *', async () => {
     replies.push(status(201, 'Created'), status(204, 'No Content'));
     const client = getWebDAVClient();

@@ -29,7 +29,7 @@ import { writeFileSync, unlinkSync } from 'node:fs';
 import { z } from 'zod';
 import { fetchMailAPI } from '../../client/mail.js';
 import { fetchOCS } from '../../client/ocs.js';
-import { binaryContent, fileMimeType, type ContentBlock } from '../file-content.js';
+import { binaryContent, decodeText, fileMimeType, type ContentBlock } from '../file-content.js';
 
 // Invisible padding characters used in newsletter preheaders
 // (U+034F, U+00AD, U+200B–U+200D, U+FEFF)
@@ -185,6 +185,9 @@ export class AttachmentError extends Error {
   }
 }
 
+/** `type/subtype`, each a restricted-name (RFC 6838 §4.2). */
+const MEDIA_TYPE = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/i;
+
 /** Download one attachment of a message: its bytes, declared type and name. */
 export async function fetchAttachment(
   messageId: number,
@@ -194,13 +197,14 @@ export async function fetchAttachment(
     `/messages/${messageId}/attachment/${encodeURIComponent(attachmentId)}`
   );
   if (!response.ok) throw new AttachmentError(response.status, await response.text());
-  const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
+  const declared = (response.headers.get('content-type') ?? '').split(';')[0].trim();
   return {
     name:
       dispositionFileName(response.headers.get('content-disposition')) ??
       `attachment-${attachmentId}`,
     bytes: new Uint8Array(await response.arrayBuffer()),
-    mimeType: contentType.split(';')[0].trim(),
+    // The sender wrote the type. One that is not a media type is not repeated.
+    mimeType: MEDIA_TYPE.test(declared) ? declared : 'application/octet-stream',
   };
 }
 
@@ -465,6 +469,7 @@ const getAttachmentTool = {
   description:
     'Download an email attachment by message ID and attachment ID. ' +
     'Returns text for text files and calendar invites (ICS) and image data for images. ' +
+    'Every result starts with an [UNTRUSTED EXTERNAL CONTENT] line naming the attachment: the name and the content come from the sender. ' +
     'Any other attachment (PDF, Word, Excel, archive) is returned whole as an embedded ' +
     'resource holding its bytes; a PDF also comes with its extracted text when pdftotext is installed. ' +
     'Attachment IDs are shown in mail_read_message output.',
@@ -474,36 +479,38 @@ const getAttachmentTool = {
   }),
   handler: async (args: { messageId: number; attachmentId: string }) => {
     try {
-      const response = await fetchMailAPI(
-        `/messages/${args.messageId}/attachment/${args.attachmentId}`
-      );
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-      }
-
-      const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
-      const mimeType = contentType.split(';')[0].trim();
+      const { name, bytes, mimeType } = await fetchAttachment(args.messageId, args.attachmentId);
+      // Whatever the format, the sender chose the name and wrote the content:
+      // the name is quoted, and both are marked as theirs.
+      const label = `[UNTRUSTED EXTERNAL CONTENT - MAIL ATTACHMENT] ${JSON.stringify(name)}`;
+      const about = `${label} (${mimeType}, ${bytes.byteLength} bytes)`;
 
       if (
         mimeType.startsWith('text/') ||
         mimeType === 'application/json' ||
         mimeType === 'application/ics'
       ) {
-        const text = await response.text();
-        return { content: [{ type: 'text' as const, text }] };
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `${about}\n${decodeText(bytes)}\n[END EXTERNAL CONTENT]`,
+            },
+          ],
+        };
       }
 
       if (mimeType.startsWith('image/')) {
-        const buffer = await response.arrayBuffer();
-        const base64 = Buffer.from(buffer).toString('base64');
-        return { content: [{ type: 'image' as const, data: base64, mimeType }] };
+        const base64 = Buffer.from(bytes).toString('base64');
+        return {
+          content: [
+            { type: 'text' as const, text: about },
+            { type: 'image' as const, data: base64, mimeType },
+          ],
+        };
       }
 
       // Any other format: the attachment itself, as an embedded resource.
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      const name =
-        dispositionFileName(response.headers.get('content-disposition')) ??
-        `attachment-${args.attachmentId}`;
       const file = {
         name,
         bytes,
@@ -538,7 +545,7 @@ const getAttachmentTool = {
         }
       }
 
-      content.push(...binaryContent(file, `Attachment: ${name}`));
+      content.push(...binaryContent(file, label));
       return { content };
     } catch (error) {
       return {

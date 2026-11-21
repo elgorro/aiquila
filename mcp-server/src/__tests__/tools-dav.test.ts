@@ -8,6 +8,7 @@ import type { FileStat } from '../client/webdav.js';
 const mockClient = {
   getDirectoryContents: vi.fn(),
   getFileContents: vi.fn(),
+  getFileStart: vi.fn(),
   putFileContents: vi.fn(),
   createDirectory: vi.fn(),
   deleteFile: vi.fn(),
@@ -60,6 +61,7 @@ describe('MCP Tools', () => {
 
   describe('read_file', () => {
     it('should return file contents', async () => {
+      mockClient.stat.mockResolvedValue({ basename: 'test.txt', mime: 'text/plain', size: 13 });
       mockClient.getFileContents.mockResolvedValue(new TextEncoder().encode('Hello, World!'));
 
       const { readFileTool } = await import('../tools/system/files.js');
@@ -67,13 +69,117 @@ describe('MCP Tools', () => {
 
       expect(result.content).toEqual([{ type: 'text', text: 'Hello, World!' }]);
       expect(mockClient.getFileContents).toHaveBeenCalledWith('/test.txt', { format: 'binary' });
-      expect(mockClient.stat).not.toHaveBeenCalled();
+    });
+
+    it('should refuse a binary file over MCP_MAX_EMBEDDED_FILE_SIZE without downloading it', async () => {
+      process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '10';
+      mockClient.stat.mockResolvedValue({ basename: 'big.pdf', mime: 'application/pdf', size: 11 });
+
+      const { readFileTool } = await import('../tools/system/files.js');
+      const result = await readFileTool.handler({ path: '/big.pdf' });
+      delete process.env.MCP_MAX_EMBEDDED_FILE_SIZE;
+
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].text).toContain('File: big.pdf (application/pdf, 11 bytes)');
+      expect(result.content[0].text).toContain('MCP_MAX_EMBEDDED_FILE_SIZE');
+      expect(mockClient.getFileContents).not.toHaveBeenCalled();
+    });
+
+    it('should tell an oversized file of unknown type by its first bytes alone', async () => {
+      process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '10';
+      mockClient.stat.mockResolvedValue({
+        basename: 'disk.img',
+        mime: 'application/octet-stream',
+        size: 5_000_000_000,
+      });
+      mockClient.getFileStart.mockResolvedValue(new Uint8Array([0xeb, 0x3c, 0x90, 0, 0, 0]));
+
+      const { readFileTool } = await import('../tools/system/files.js');
+      const result = await readFileTool.handler({ path: '/disk.img' });
+      delete process.env.MCP_MAX_EMBEDDED_FILE_SIZE;
+
+      expect(mockClient.getFileStart).toHaveBeenCalledWith('/disk.img', 8192);
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].text).toContain(
+        'File: disk.img (application/octet-stream, 5000000000 bytes)'
+      );
+      expect(mockClient.getFileContents).not.toHaveBeenCalled();
+    });
+
+    it('should name an oversized file by the signature in its first bytes', async () => {
+      process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '10';
+      mockClient.stat.mockResolvedValue({ basename: 'scan', mime: undefined, size: 4096 });
+      mockClient.getFileStart.mockResolvedValue(new TextEncoder().encode('%PDF-1.4\n1 0 obj\n'));
+
+      const { readFileTool } = await import('../tools/system/files.js');
+      const result = await readFileTool.handler({ path: '/scan' });
+      delete process.env.MCP_MAX_EMBEDDED_FILE_SIZE;
+
+      expect(result.content[0].text).toContain('File: scan (application/pdf, 4096 bytes)');
+      expect(mockClient.getFileContents).not.toHaveBeenCalled();
+    });
+
+    it('should download an oversized file of unknown type whose first bytes are text', async () => {
+      process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '4';
+      const log = new TextEncoder().encode('line 1\nline 2\n');
+      mockClient.stat.mockResolvedValue({
+        basename: 'server.log',
+        mime: 'application/octet-stream',
+        size: log.length,
+      });
+      mockClient.getFileStart.mockResolvedValue(log);
+      mockClient.getFileContents.mockResolvedValue(log);
+
+      const { readFileTool } = await import('../tools/system/files.js');
+      const result = await readFileTool.handler({ path: '/server.log' });
+      delete process.env.MCP_MAX_EMBEDDED_FILE_SIZE;
+
+      expect(result.content).toEqual([{ type: 'text', text: 'line 1\nline 2\n' }]);
+    });
+
+    it('should still return a text file over MCP_MAX_EMBEDDED_FILE_SIZE', async () => {
+      process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '4';
+      mockClient.stat.mockResolvedValue({ basename: 'a.txt', mime: 'text/plain', size: 13 });
+      mockClient.getFileStart.mockResolvedValue(new TextEncoder().encode('Hello, World!'));
+      mockClient.getFileContents.mockResolvedValue(new TextEncoder().encode('Hello, World!'));
+
+      const { readFileTool } = await import('../tools/system/files.js');
+      const result = await readFileTool.handler({ path: '/a.txt' });
+      delete process.env.MCP_MAX_EMBEDDED_FILE_SIZE;
+
+      expect(result.content).toEqual([{ type: 'text', text: 'Hello, World!' }]);
+    });
+
+    it('should return a PDF with no NUL in its first bytes as a file, not as text', async () => {
+      const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n');
+      mockClient.stat.mockResolvedValue({
+        basename: 'plain.pdf',
+        mime: 'application/pdf',
+        size: pdf.length,
+      });
+      mockClient.getFileContents.mockResolvedValue(new Uint8Array(pdf));
+
+      const { readFileTool } = await import('../tools/system/files.js');
+      const result = await readFileTool.handler({ path: '/plain.pdf' });
+
+      expect(result.content[1]).toEqual({
+        type: 'resource',
+        resource: {
+          uri: 'nextcloud:///plain.pdf',
+          mimeType: 'application/pdf',
+          blob: pdf.toString('base64'),
+        },
+      });
     });
 
     it('should return a binary file whole, as an embedded resource', async () => {
       const pdf = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.from([0, 1, 2, 3, 255])]);
       mockClient.getFileContents.mockResolvedValue(new Uint8Array(pdf));
-      mockClient.stat.mockResolvedValue({ basename: 'Report 1.pdf', mime: 'application/pdf' });
+      mockClient.stat.mockResolvedValue({
+        basename: 'Report 1.pdf',
+        mime: 'application/pdf',
+        size: pdf.length,
+      });
 
       const { readFileTool } = await import('../tools/system/files.js');
       const result = await readFileTool.handler({ path: '/Documents/Report 1.pdf' });

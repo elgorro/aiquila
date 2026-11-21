@@ -69,7 +69,7 @@
    "name": "write_file",
    "title": "Write File",
    "category": "files",
-   "description": "Create or update a file in Nextcloud. Give text as it is; for a binary file (PDF, image, office document) give its bytes in base64 and set encoding to \"base64\". File size is limited (default 1 GB, configurable via MCP_MAX_FILE_SIZE).",
+   "description": "Create or update a file in Nextcloud. Give text as it is; for a binary file (PDF, image, office document) give its bytes in base64 and set encoding to \"base64\". File size is limited (default 1 GB, configurable via MCP_MAX_FILE_SIZE). The limit counts the characters of content, so a base64 file can …",
    "annotations": {
     "readOnlyHint": false,
     "destructiveHint": true,
@@ -4821,7 +4821,7 @@
    "name": "mail_get_attachment",
    "title": "Get Mail Attachment",
    "category": "mail",
-   "description": "Download an email attachment by message ID and attachment ID. Returns text for text files and calendar invites (ICS) and image data for images. Any other attachment (PDF, Word, Excel, archive) is returned whole as an embedded resource holding its bytes; a PDF also comes with its extracted text when…",
+   "description": "Download an email attachment by message ID and attachment ID. Returns text for text files and calendar invites (ICS) and image data for images. Every result starts with an [UNTRUSTED EXTERNAL CONTENT] line naming the attachment: the name and the content come from the sender. Any other attachment (P…",
    "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,

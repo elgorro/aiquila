@@ -3,7 +3,16 @@
 import { z } from 'zod';
 import { getWebDAVClient } from '../../client/webdav.js';
 import { ApiError, fetchAiquilaAPI } from '../../client/aiquila.js';
-import { decodeText, fileContent, fileUri, isText, maxEmbeddedFileSize } from '../file-content.js';
+import {
+  fileContent,
+  fileMimeType,
+  fileUri,
+  isBinaryType,
+  isEmbedded,
+  maxEmbeddedFileSize,
+  oversizedContent,
+  TEXT_PROBE_LENGTH,
+} from '../file-content.js';
 import { PathSchema, FilePathSchema, FileContentSchema, FolderPathSchema } from '../types.js';
 import { bool, int, str, structuredResult } from '../structured.js';
 
@@ -59,13 +68,25 @@ export const readFileTool = {
   inputSchema: FilePathSchema,
   handler: async (args: { path: string }) => {
     const client = getWebDAVClient();
-    const bytes = await client.getFileContents(args.path, { format: 'binary' });
-    if (isText(bytes)) {
-      return { content: [{ type: 'text' as const, text: decodeText(bytes) }] };
-    }
-    // A binary file: its media type decides between an image and a resource.
+    // Ask first: a binary file over the limit is refused without being
+    // downloaded. The media type Nextcloud reports tells whether it is one;
+    // where it does not, the first bytes do, fetched alone.
     const stat = await client.stat(args.path).catch(() => undefined);
     const name = stat?.basename || args.path.split('/').filter(Boolean).pop() || args.path;
+    if (stat && stat.size > maxEmbeddedFileSize()) {
+      const declared = { name, bytes: new Uint8Array(), mimeType: stat.mime };
+      const known = fileMimeType(declared);
+      const start =
+        isBinaryType(known) || known.startsWith('image/')
+          ? declared.bytes
+          : await client.getFileStart(args.path, TEXT_PROBE_LENGTH);
+      const probe = { ...declared, bytes: start };
+      if (isEmbedded(probe)) {
+        const refused = oversizedContent(`File: ${name}`, fileMimeType(probe), stat.size);
+        if (refused) return { content: refused };
+      }
+    }
+    const bytes = await client.getFileContents(args.path, { format: 'binary' });
     return {
       content: fileContent(
         { name, bytes, mimeType: stat?.mime, uri: fileUri(args.path) },
@@ -102,7 +123,7 @@ export const writeFileTool = {
     openWorldHint: false,
   },
   description:
-    'Create or update a file in Nextcloud. Give text as it is; for a binary file (PDF, image, office document) give its bytes in base64 and set encoding to "base64". File size is limited (default 1 GB, configurable via MCP_MAX_FILE_SIZE).',
+    'Create or update a file in Nextcloud. Give text as it is; for a binary file (PDF, image, office document) give its bytes in base64 and set encoding to "base64". File size is limited (default 1 GB, configurable via MCP_MAX_FILE_SIZE). The limit counts the characters of content, so a base64 file can be about three quarters of it.',
   inputSchema: FileContentSchema,
   handler: async (args: { path: string; content: string; encoding?: 'text' | 'base64' }) => {
     const client = getWebDAVClient();

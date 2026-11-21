@@ -13,6 +13,8 @@
  * clients that drop the block.
  */
 
+import { logger } from '../logger.js';
+
 export type ContentBlock =
   | { type: 'text'; text: string }
   | { type: 'image'; data: string; mimeType: string }
@@ -28,13 +30,30 @@ export interface FileBytes {
   uri: string;
 }
 
+const DEFAULT_MAX_EMBEDDED_FILE_SIZE = 20 * 1024 * 1024;
+let warnedAbout: string | undefined;
+
 /**
  * Largest file embedded in a tool result, in bytes (`MCP_MAX_EMBEDDED_FILE_SIZE`).
  * The default is the AIquila app's own limit on `/api/files/content`. Base64
  * makes the JSON-RPC message a third larger than the file.
+ *
+ * The value has to be a positive integer. Anything else (`0`, a negative
+ * number, `20MB`) is ignored for the default, with a warning in the log.
  */
 export function maxEmbeddedFileSize(): number {
-  return parseInt(process.env.MCP_MAX_EMBEDDED_FILE_SIZE || '', 10) || 20 * 1024 * 1024;
+  const raw = process.env.MCP_MAX_EMBEDDED_FILE_SIZE?.trim();
+  if (!raw) return DEFAULT_MAX_EMBEDDED_FILE_SIZE;
+  const value = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (Number.isSafeInteger(value) && value > 0) return value;
+  if (warnedAbout !== raw) {
+    warnedAbout = raw;
+    logger.warn(
+      { value: raw, default: DEFAULT_MAX_EMBEDDED_FILE_SIZE },
+      '[config] MCP_MAX_EMBEDDED_FILE_SIZE is not a positive integer; using the default'
+    );
+  }
+  return DEFAULT_MAX_EMBEDDED_FILE_SIZE;
 }
 
 /** Media types by extension, for when Nextcloud or a mail gives none of use. */
@@ -84,13 +103,54 @@ export function fileMimeType(file: Pick<FileBytes, 'name' | 'bytes' | 'mimeType'
   return signature?.[1] ?? 'application/octet-stream';
 }
 
+/**
+ * Formats that are binary by definition. A file of one of these types is sent
+ * as a file whatever its first bytes look like: a small uncompressed PDF can
+ * go 8 KB without a NUL.
+ */
+const BINARY_TYPES = new Set([
+  'application/pdf',
+  'application/zip',
+  'application/epub+zip',
+  'application/msword',
+  'application/vnd.ms-excel',
+  'application/vnd.ms-powerpoint',
+]);
+
+/** Whether a media type names a format that is never text. */
+export function isBinaryType(mimeType: string): boolean {
+  return (
+    BINARY_TYPES.has(mimeType) ||
+    mimeType.startsWith('application/vnd.openxmlformats-officedocument.') ||
+    mimeType.startsWith('application/vnd.oasis.opendocument.')
+  );
+}
+
+/** How many bytes from the start of a file `isText` looks at. */
+export const TEXT_PROBE_LENGTH = 8192;
+
 /** Whether the bytes are text: no NUL in the first block, as git and grep decide it. */
 export function isText(bytes: Uint8Array): boolean {
   // UTF-16 text is full of NULs; its byte order mark tells it apart.
   if ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff)) {
     return true;
   }
-  return !bytes.subarray(0, 8192).includes(0);
+  return !bytes.subarray(0, TEXT_PROBE_LENGTH).includes(0);
+}
+
+/** Whether a media type is one sent as an image block. SVG is text by nature. */
+function isImageType(mimeType: string): boolean {
+  return mimeType.startsWith('image/') && mimeType !== 'image/svg+xml';
+}
+
+/**
+ * Whether a file goes out as an embedded resource, held to the size limit,
+ * and not as text or an image. The first `TEXT_PROBE_LENGTH` bytes are enough
+ * to tell.
+ */
+export function isEmbedded(file: Pick<FileBytes, 'name' | 'bytes' | 'mimeType'>): boolean {
+  const mimeType = fileMimeType(file);
+  return !isImageType(mimeType) && (isBinaryType(mimeType) || !isText(file.bytes));
 }
 
 export function decodeText(bytes: Uint8Array): string {
@@ -126,9 +186,29 @@ export type ResourceContents =
 export function resourceContents(file: FileBytes): ResourceContents {
   const mimeType = fileMimeType(file);
   const image = mimeType.startsWith('image/') && mimeType !== 'image/svg+xml';
-  return !image && isText(file.bytes)
+  return !image && !isBinaryType(mimeType) && isText(file.bytes)
     ? { uri: file.uri, mimeType, text: decodeText(file.bytes) }
     : { uri: file.uri, mimeType, blob: base64(file.bytes) };
+}
+
+/**
+ * The block that stands for a binary file too large to send, or undefined when
+ * it fits. It takes the size alone, so a caller that knows it beforehand can
+ * refuse the file without downloading it.
+ */
+export function oversizedContent(
+  label: string,
+  mimeType: string,
+  size: number
+): ContentBlock[] | undefined {
+  const limit = maxEmbeddedFileSize();
+  if (size <= limit) return undefined;
+  return [
+    {
+      type: 'text',
+      text: `${label} (${mimeType}, ${size} bytes)\nBinary file of ${formatSize(size)}, over the ${formatSize(limit)} this server sends to a client (MCP_MAX_EMBEDDED_FILE_SIZE).`,
+    },
+  ];
 }
 
 /**
@@ -139,20 +219,15 @@ export function resourceContents(file: FileBytes): ResourceContents {
 export function binaryContent(file: FileBytes, label: string): ContentBlock[] {
   const mimeType = fileMimeType(file);
   const size = file.bytes.byteLength;
-  const about = `${label} (${mimeType}, ${size} bytes)`;
-  const limit = maxEmbeddedFileSize();
-  if (size > limit) {
-    return [
+  return (
+    oversizedContent(label, mimeType, size) ?? [
       {
         type: 'text',
-        text: `${about}\nBinary file of ${formatSize(size)}, over the ${formatSize(limit)} this server sends to a client (MCP_MAX_EMBEDDED_FILE_SIZE).`,
+        text: `${label} (${mimeType}, ${size} bytes)\nThe file itself follows as an embedded resource.`,
       },
-    ];
-  }
-  return [
-    { type: 'text', text: `${about}\nThe file itself follows as an embedded resource.` },
-    { type: 'resource', resource: { uri: file.uri, mimeType, blob: base64(file.bytes) } },
-  ];
+      { type: 'resource', resource: { uri: file.uri, mimeType, blob: base64(file.bytes) } },
+    ]
+  );
 }
 
 /**
@@ -170,7 +245,7 @@ export function fileContent(file: FileBytes, options: { header: boolean }): Cont
       { type: 'image', data: base64(file.bytes), mimeType },
     ];
   }
-  if (isText(file.bytes)) {
+  if (!isBinaryType(mimeType) && isText(file.bytes)) {
     const text = decodeText(file.bytes);
     return [{ type: 'text', text: options.header ? `${about}\n\n${text}` : text }];
   }

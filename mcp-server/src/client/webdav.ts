@@ -53,6 +53,12 @@ export interface WebDAVClient {
   exists(path: string): Promise<boolean>;
   getFileContents(path: string, options?: { format?: 'text' }): Promise<string>;
   getFileContents(path: string, options: { format: 'binary' }): Promise<Uint8Array<ArrayBuffer>>;
+  /**
+   * The first `length` bytes of a file, asked for with a Range header (RFC 9110
+   * §14.1.2). A server MAY ignore Range (§14.2) and send the whole file: the
+   * transfer is then dropped once `length` bytes are in.
+   */
+  getFileStart(path: string, length: number): Promise<Uint8Array<ArrayBuffer>>;
   /** `overwrite: false` fails with 412 when the file exists (RFC 9110 §13.1.2). */
   putFileContents(
     path: string,
@@ -294,6 +300,25 @@ export function getWebDAVClient(): WebDAVClient {
         ? new Uint8Array(await response.arrayBuffer())
         : response.text();
     }) as WebDAVClient['getFileContents'],
+
+    async getFileStart(path, length) {
+      const response = await send('GET', url(path), {
+        headers: { Range: `bytes=0-${length - 1}` },
+      });
+      const start = new Uint8Array(length);
+      let filled = 0;
+      const reader = response.body?.getReader();
+      while (reader && filled < length) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const part = value.subarray(0, length - filled);
+        start.set(part, filled);
+        filled += part.byteLength;
+      }
+      // 206 ends here by itself; a 200 with the whole file is cut short.
+      await reader?.cancel().catch(() => undefined);
+      return start.slice(0, filled);
+    },
 
     async putFileContents(path, data, options = {}) {
       await send('PUT', url(path), {

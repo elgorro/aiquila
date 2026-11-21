@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   binaryContent,
   decodeText,
@@ -8,6 +8,8 @@ import {
   fileMimeType,
   fileUri,
   isText,
+  maxEmbeddedFileSize,
+  resourceContents,
 } from '../tools/file-content.js';
 
 const bytes = (...values: number[]) => new Uint8Array(values);
@@ -55,6 +57,54 @@ describe('isText and decodeText', () => {
 
   it('drops a UTF-8 byte order mark, as Response.text() does', () => {
     expect(decodeText(bytes(0xef, 0xbb, 0xbf, 0x61))).toBe('a');
+  });
+});
+
+describe('maxEmbeddedFileSize', () => {
+  afterEach(() => {
+    delete process.env.MCP_MAX_EMBEDDED_FILE_SIZE;
+    vi.restoreAllMocks();
+  });
+
+  const DEFAULT = 20 * 1024 * 1024;
+
+  it('defaults to 20 MB and takes a positive integer', () => {
+    expect(maxEmbeddedFileSize()).toBe(DEFAULT);
+    process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '1048576';
+    expect(maxEmbeddedFileSize()).toBe(1048576);
+  });
+
+  it.each(['0', '-5', '20MB', '1.5', 'abc'])(
+    'ignores %s for the default, with one warning',
+    async (value) => {
+      const { logger } = await import('../logger.js');
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      process.env.MCP_MAX_EMBEDDED_FILE_SIZE = value;
+
+      expect(maxEmbeddedFileSize()).toBe(DEFAULT);
+      expect(maxEmbeddedFileSize()).toBe(DEFAULT);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toMatchObject({ value });
+    }
+  );
+});
+
+describe('a format that is binary by definition', () => {
+  // An uncompressed PDF can hold no NUL in its first 8 KB.
+  const pdf = text('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n');
+  const uri = 'nextcloud:///plain.pdf';
+
+  it('is embedded, not decoded as text', () => {
+    const blocks = fileContent({ name: 'plain.pdf', bytes: pdf, uri }, { header: false });
+    expect(blocks[1]).toMatchObject({
+      type: 'resource',
+      resource: { mimeType: 'application/pdf' },
+    });
+  });
+
+  it('is a blob in resource contents', () => {
+    expect(resourceContents({ name: 'attachment-2', bytes: pdf, uri })).toHaveProperty('blob');
+    expect(resourceContents({ name: 'a.json', bytes: text('{}'), uri })).toHaveProperty('text');
   });
 });
 
