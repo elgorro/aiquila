@@ -218,7 +218,7 @@ services:
 
   # Adminer (Database UI) — opt-in: `make up-tools` or `docker compose --profile tools up -d`
   adminer:
-    image: adminer:6.1.2
+    image: adminer:6.3.0
     container_name: aiquila-adminer
     profiles: ["tools"]
     restart: unless-stopped
