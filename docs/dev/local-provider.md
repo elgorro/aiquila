@@ -77,6 +77,9 @@ occ aiquila:test --provider local
 | Generates speech | `local_audio_out` | `no` | Only enable when the backend serves `/v1/audio/speech`. |
 | Speech model | `local_tts_model` | `tts-1` | The text-to-speech tag as the backend reports it. |
 | Speech voice | `local_tts_voice` | *(empty)* | Blank sends no voice and lets the backend choose. |
+| Generates images | `local_image_out` | `no` | Only enable when the backend serves `/v1/images/generations`. |
+| Image model | `local_image_model` | *(empty)* | The image model name as the backend reports it. Blank sends none and lets the backend choose. |
+| Image size | `local_image_size` | *(empty)* | `WIDTHxHEIGHT`, e.g. `512x512` or `1024x1024`. Blank or malformed sends none. |
 | Allow local addresses | `local_allow_local_address` | `yes` | See below. |
 
 Setting **Local model** as the default provider (or a user picking it in personal
@@ -108,13 +111,20 @@ admin flag rather than a guess:
   longest recording you expect.
 - **Generated speech** needs `local_audio_out`, and a backend serving
   `/v1/audio/speech`.
-- **Generated images** are not offered locally at all: there is no route the
-  OpenAI-compatible backends agree on, so `image_out` stays false and the
-  Assistant's image-generation action never lands here.
+- **Generated images** need `local_image_out`, and a backend serving OpenAI's
+  `/v1/images/generations`. LocalAI does. Ollama, LM Studio and llama.cpp have no
+  image route, and Automatic1111 and ComfyUI speak their own protocols, so they
+  need an OpenAI-compatible shim in front. The request asks for
+  `response_format=b64_json` with `n` set to the number of images, so the bytes
+  come back in the answer. A backend that returns a `url` instead has it fetched
+  only from the configured endpoint's own scheme, host and port. A URL anywhere
+  else is ignored, because the fetch carries the endpoint's credentials. The
+  image type is read from the bytes (PNG, JPEG or WebP). `local_timeout` caps
+  the whole generation, which on CPU can take minutes.
 
 Voice chat and audio translation need both audio flags on, since one provider
 has to hold both halves of the chain. An action whose flag is off refuses with a message naming the
-providers that do offer it. The audio calls reuse the same request options as
+providers that do offer it. The audio and image calls reuse the same request options as
 chat, so the local-address allowance, the TLS settings and the auth mode all
 apply to them unchanged.
 

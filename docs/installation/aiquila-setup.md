@@ -679,7 +679,7 @@ matching capability, shown as a chip on the provider's card in the AIquila setti
 | Image questions and OCR, images attached to a tool chat | `vision` | Claude, Mistral, Hetzner (model-dependent), Local (admin flag) |
 | Transcription, subtitles, voice chat, audio translation | `transcription` | Mistral, Local (admin flag) |
 | Generated speech, voice chat, audio translation | `speech` | Mistral, Local (admin flag) |
-| Generated images | `image generation` | Mistral |
+| Generated images | `image generation` | Mistral, Local (admin flag) |
 | PDFs attached to a tool chat | `documents` | Claude |
 
 **Transcription options.** Beyond the optional `language`, `core:audio2text` takes

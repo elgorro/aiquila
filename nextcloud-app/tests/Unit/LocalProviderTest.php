@@ -517,7 +517,6 @@ class LocalProviderTest extends TestCase {
         $capabilities = $this->provider()->getCapabilities();
         $this->assertFalse($capabilities['audio_in']);
         $this->assertFalse($capabilities['audio_out']);
-        // No OpenAI-compatible server exposes a portable image route.
         $this->assertFalse($capabilities['image_out']);
     }
 
@@ -686,5 +685,137 @@ class LocalProviderTest extends TestCase {
         $this->assertSame('af_sky', $body['voice']);
         $this->assertSame('Read this out.', $body['input']);
         $this->assertSame('mp3', $body['response_format']);
+    }
+
+    // ── Image generation (opt-in, OpenAI images route) ──────────────────
+
+    private const PNG = "\x89PNG\r\n\x1a\nfake-png";
+
+    public function testImageCapabilityFollowsTheAdminFlag(): void {
+        $this->assertTrue($this->provider(['local_image_out' => 'yes'])->getCapabilities()['image_out']);
+    }
+
+    public function testImagesRefusedUnlessEnabled(): void {
+        $this->client = $this->createMock(IClient::class);
+
+        $this->client->expects($this->never())->method('post');
+
+        $this->assertSame(
+            ['error' => 'Local model is not configured to generate images. Enable it in the AIquila admin settings.'],
+            $this->provider()->generateImages('A lighthouse'),
+        );
+    }
+
+    public function testImagesPostTheOpenAiBodyAndDecodeB64Json(): void {
+        $provider = $this->provider([
+            'local_image_out' => 'yes',
+            'local_image_model' => 'sd-1.5',
+            'local_image_size' => '768x512',
+        ]);
+        $url = null;
+        $body = null;
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$url, &$body): IResponse {
+                $url = $u;
+                $body = json_decode($o['body'], true);
+                return $this->jsonResponse(['data' => [
+                    ['b64_json' => base64_encode(self::PNG)],
+                    ['b64_json' => base64_encode(self::PNG)],
+                ]]);
+            }
+        );
+
+        $result = $provider->generateImages('A lighthouse at dusk', 2);
+
+        $this->assertSame(['images' => [self::PNG, self::PNG], 'mimeType' => 'image/png'], $result);
+        $this->assertSame('http://localhost:11434/v1/images/generations', $url);
+        $this->assertSame([
+            'prompt' => 'A lighthouse at dusk',
+            'n' => 2,
+            'response_format' => 'b64_json',
+            'model' => 'sd-1.5',
+            'size' => '768x512',
+        ], $body);
+    }
+
+    public function testImagesOmitBlankModelAndMalformedSize(): void {
+        $provider = $this->provider(['local_image_out' => 'yes', 'local_image_size' => 'big']);
+        $body = null;
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$body): IResponse {
+                $body = json_decode($o['body'], true);
+                return $this->jsonResponse(['data' => [['b64_json' => base64_encode("\xFF\xD8\xFFjpeg")]]]);
+            }
+        );
+
+        $result = $provider->generateImages('A lighthouse');
+
+        $this->assertSame('image/jpeg', $result['mimeType']);
+        $this->assertArrayNotHasKey('model', $body);
+        $this->assertArrayNotHasKey('size', $body);
+    }
+
+    public function testImagesAreCappedAtTheRequestedCount(): void {
+        $provider = $this->provider(['local_image_out' => 'yes']);
+        $this->client->method('post')->willReturn($this->jsonResponse(['data' => [
+            ['b64_json' => base64_encode(self::PNG)],
+            ['b64_json' => base64_encode(self::PNG)],
+        ]]));
+
+        $this->assertCount(1, $provider->generateImages('A lighthouse', 1)['images']);
+    }
+
+    public function testImageUrlOnTheEndpointOriginIsFetchedWithTheSameOptions(): void {
+        $provider = $this->provider(['local_image_out' => 'yes'], 'secret');
+        $this->client->method('post')->willReturn($this->jsonResponse(['data' => [
+            ['url' => 'http://LOCALHOST:11434/generated-images/b64123.png'],
+        ]]));
+        $fetched = null;
+        $fetchOptions = null;
+        $this->client->method('get')->willReturnCallback(
+            function (string $u, array $o) use (&$fetched, &$fetchOptions): IResponse {
+                $fetched = $u;
+                $fetchOptions = $o;
+                $response = $this->createStub(IResponse::class);
+                $response->method('getBody')->willReturn(self::PNG);
+                return $response;
+            }
+        );
+
+        $result = $provider->generateImages('A lighthouse');
+
+        $this->assertSame(['images' => [self::PNG], 'mimeType' => 'image/png'], $result);
+        $this->assertSame('http://LOCALHOST:11434/generated-images/b64123.png', $fetched);
+        $this->assertSame('Bearer secret', $fetchOptions['headers']['Authorization']);
+        $this->assertTrue($fetchOptions['nextcloud']['allow_local_address']);
+    }
+
+    public function testImageUrlOffTheEndpointOriginIsNotFetched(): void {
+        $this->client = $this->createMock(IClient::class);
+        $provider = $this->provider(['local_image_out' => 'yes'], 'secret');
+        $this->client->method('post')->willReturn($this->jsonResponse(['data' => [
+            ['url' => 'http://169.254.169.254/latest/meta-data'],
+            ['url' => 'https://localhost:11434/generated-images/x.png'],
+        ]]));
+
+        $this->client->expects($this->never())->method('get');
+
+        $this->assertSame(['error' => 'Local model returned no images.'], $provider->generateImages('A lighthouse', 2));
+    }
+
+    public function testImageResponseWithoutDataIsAnError(): void {
+        $provider = $this->provider(['local_image_out' => 'yes']);
+        $this->client->method('post')->willReturn($this->jsonResponse(['error' => ['message' => 'no backend']]));
+
+        $this->assertSame(['error' => 'Local model returned no images.'], $provider->generateImages('A lighthouse'));
+    }
+
+    public function testImageRouteMissingIsReportedAsAnEndpointError(): void {
+        $provider = $this->provider(['local_image_out' => 'yes']);
+        $this->client->method('post')->willThrowException(new \RuntimeException('Client error: 404 Not Found'));
+
+        $result = $provider->generateImages('A lighthouse');
+
+        $this->assertStringContainsString('404', $result['error']);
     }
 }

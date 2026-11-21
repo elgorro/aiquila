@@ -28,7 +28,7 @@ namespace OCA\AIquila\Service\Provider;
  *   - Requests may target a local/private address (localhost, the Docker
  *     network, a LAN box), which Nextcloud's HTTP client blocks by default.
  *   - Vision is opt-in per deployment: an admin toggle decides whether images
- *     are sent. Where the backend reports capabilities (Ollama, LM Studio) the
+ *     are sent. Audio and image generation are opt-in the same way. Where the backend reports capabilities (Ollama, LM Studio) the
  *     settings card says when the toggle disagrees with the model.
  *   - The model list comes from the backend's own API when one is detected —
  *     see fetchModelCatalog() — because `/v1/models` carries ids only.
@@ -52,6 +52,7 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider implements ModelCat
     /** Offered as a placeholder only; the admin names whatever their backend loaded. */
     public const DEFAULT_STT_MODEL = 'whisper-1';
     public const DEFAULT_TTS_MODEL = 'tts-1';
+    public const DEFAULT_IMAGE_MODEL = 'stablediffusion';
 
     /** Local inference is slow; well above the 30s shared `api_timeout`. */
     public const DEFAULT_TIMEOUT = 300;
@@ -249,6 +250,31 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider implements ModelCat
                 visibleIf: ['field' => 'local_audio_out', 'in' => [true]],
             ),
             ProviderSettingsSchema::checkbox(
+                'local_image_out',
+                'local_image_out',
+                'Generate images with this endpoint',
+                'Only enable when the backend serves /v1/images/generations — LocalAI does; Ollama, LM Studio and llama.cpp do not.',
+                group: ProviderSettingsSchema::GROUP_ADVANCED,
+            ),
+            ProviderSettingsSchema::text(
+                'local_image_model',
+                'local_image_model',
+                'Image model',
+                'The image model name as the backend reports it. Left blank, none is sent and the backend picks its default.',
+                group: ProviderSettingsSchema::GROUP_ADVANCED,
+                placeholder: self::DEFAULT_IMAGE_MODEL,
+                visibleIf: ['field' => 'local_image_out', 'in' => [true]],
+            ),
+            ProviderSettingsSchema::text(
+                'local_image_size',
+                'local_image_size',
+                'Image size',
+                'WIDTHxHEIGHT in pixels, e.g. 512x512 for Stable Diffusion 1.5 or 1024x1024 for SDXL and Flux. Left blank, the backend picks its default.',
+                group: ProviderSettingsSchema::GROUP_ADVANCED,
+                placeholder: '512x512',
+                visibleIf: ['field' => 'local_image_out', 'in' => [true]],
+            ),
+            ProviderSettingsSchema::checkbox(
                 'local_allow_local_address',
                 'local_allow_local_address',
                 'Allow local and private addresses',
@@ -360,6 +386,14 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider implements ModelCat
         return $this->config->getAppValue(self::APP_NAME, 'local_audio_out', 'no') === 'yes';
     }
 
+    /**
+     * LocalAI serves the OpenAI images route; Ollama, LM Studio and llama.cpp
+     * do not, and Automatic1111 and ComfyUI speak protocols of their own.
+     */
+    protected function supportsImageOutput(?string $userId = null): bool {
+        return $this->config->getAppValue(self::APP_NAME, 'local_image_out', 'no') === 'yes';
+    }
+
     public function transcribeAudio(mixed $audio, string $mimeType, string $filename = 'audio', ?string $userId = null, array $options = []): array {
         if (!$this->supportsAudioInput($userId)) {
             return ['error' => $this->getLabel() . ' is not configured to transcribe audio. Enable it in the AIquila admin settings.'];
@@ -432,6 +466,126 @@ class LocalProvider extends AbstractOpenAiCompatibleProvider implements ModelCat
             $this->logger->error('AIquila Local: speech synthesis failed', ['error' => $e->getMessage()]);
             return ['error' => $this->errorMessage($e)];
         }
+    }
+
+    /**
+     * Image generation through the OpenAI images route, `POST /v1/images/generations`.
+     *
+     * `b64_json` is asked for so the bytes arrive in the answer. A backend that
+     * returns a `url` anyway (LocalAI's default is a link under
+     * `/generated-images/`) has it fetched — but only from the configured
+     * endpoint's own origin, because the request carries the endpoint's
+     * credentials and runs with the SSRF guard off.
+     */
+    public function generateImages(string $prompt, int $count = 1, ?string $userId = null, array $options = []): array {
+        if (!$this->supportsImageOutput($userId)) {
+            return ['error' => $this->getLabel() . ' is not configured to generate images. Enable it in the AIquila admin settings.'];
+        }
+        if (trim($prompt) === '') {
+            return ['error' => 'No prompt to generate from.'];
+        }
+        $count = max(1, $count);
+        $body = [
+            'prompt' => $prompt,
+            'n' => $count,
+            'response_format' => 'b64_json',
+        ];
+        $model = trim($this->config->getAppValue(self::APP_NAME, 'local_image_model', ''));
+        if ($model !== '') {
+            $body['model'] = $model;
+        }
+        $size = strtolower(trim($this->config->getAppValue(self::APP_NAME, 'local_image_size', '')));
+        if (preg_match('/^[1-9]\d{1,4}x[1-9]\d{1,4}$/', $size) === 1) {
+            $body['size'] = $size;
+        }
+
+        try {
+            $response = $this->postJsonTo('/images/generations', $body, $userId);
+            $decoded = json_decode((string)$response->getBody(), true);
+            if (!is_array($decoded) || !is_array($decoded['data'] ?? null)) {
+                return ['error' => $this->getLabel() . ' returned no images.'];
+            }
+
+            $images = [];
+            foreach ($decoded['data'] as $item) {
+                if (count($images) >= $count) {
+                    break;
+                }
+                $bytes = is_array($item) ? $this->imageBytes($item, $userId) : '';
+                if ($bytes !== '') {
+                    $images[] = $bytes;
+                }
+            }
+            if ($images === []) {
+                return ['error' => $this->getLabel() . ' returned no images.'];
+            }
+
+            $result = ['images' => $images, 'mimeType' => self::imageMimeType($images[0])];
+            $usage = $decoded['usage'] ?? null;
+            if (is_array($usage)) {
+                // gpt-image's shape; LocalAI sends none.
+                $result['usage'] = [
+                    'input_tokens' => (int)($usage['input_tokens'] ?? 0),
+                    'output_tokens' => (int)($usage['output_tokens'] ?? 0),
+                ];
+            }
+            return $result;
+        } catch (\Throwable $e) {
+            $this->logger->error('AIquila Local: image generation failed', ['error' => $e->getMessage()]);
+            return ['error' => $this->errorMessage($e)];
+        }
+    }
+
+    /**
+     * Bytes of one `data[]` entry: decoded `b64_json`, or the `url` fetched
+     * when it is on the endpoint's own origin. '' when neither yields any.
+     *
+     * @param array<array-key, mixed> $item
+     */
+    private function imageBytes(array $item, ?string $userId): string {
+        $b64 = $item['b64_json'] ?? null;
+        if (is_string($b64) && $b64 !== '') {
+            $bytes = base64_decode($b64, true);
+            return $bytes === false ? '' : $bytes;
+        }
+        $url = $item['url'] ?? null;
+        if (!is_string($url) || $url === '') {
+            return '';
+        }
+        if (!$this->sameOrigin($url, $this->apiBase())) {
+            $this->logger->warning('AIquila Local: ignoring an image URL off the configured endpoint', ['url' => $url]);
+            return '';
+        }
+        $response = $this->clientService->newClient()->get($url, $this->requestOptions($userId, [
+            'timeout' => $this->audioTimeout(),
+        ]));
+        return (string)$response->getBody();
+    }
+
+    /** Scheme, host and port all match, with the scheme's default port filled in. */
+    private function sameOrigin(string $a, string $b): bool {
+        $origin = static function (string $url): ?string {
+            $parts = parse_url($url);
+            if (!is_array($parts) || !isset($parts['scheme'], $parts['host'])) {
+                return null;
+            }
+            $scheme = strtolower($parts['scheme']);
+            $port = $parts['port'] ?? ($scheme === 'https' ? 443 : 80);
+            return $scheme . '://' . strtolower($parts['host']) . ':' . $port;
+        };
+        $left = $origin($a);
+        return $left !== null && $left === $origin($b);
+    }
+
+    /** Sniffed from the magic bytes; the OpenAI shape does not say. PNG otherwise. */
+    private static function imageMimeType(string $bytes): string {
+        if (str_starts_with($bytes, "\xFF\xD8\xFF")) {
+            return 'image/jpeg';
+        }
+        if (str_starts_with($bytes, 'RIFF') && substr($bytes, 8, 4) === 'WEBP') {
+            return 'image/webp';
+        }
+        return 'image/png';
     }
 
     /** Remember the model, so a failure can name it in errorMessage(). */
