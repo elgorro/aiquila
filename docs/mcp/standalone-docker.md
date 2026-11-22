@@ -146,7 +146,7 @@ Run from `docker/standalone/`:
 | `make test` | Test connectivity |
 | `make test-oauth` | Full OAuth 2.1 flow test, including refresh, revocation and reuse detection (defaults to `https://localhost:3340`) |
 
-Or from `docker/`:
+Or from `docker/installation/`:
 
 | Command | Action |
 |---------|--------|
@@ -173,7 +173,8 @@ docker compose exec mcp-server node -v
 # Test MCP endpoint
 curl -X POST http://localhost:3339/mcp \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
 
 # Or use the built-in test
 make test
