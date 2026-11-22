@@ -245,7 +245,7 @@ class AIquilaNotifierTest extends TestCase {
             'failed' => 0, 'skipped' => 0, 'error' => '',
         ]);
         $this->notifier->prepare($n, 'en');
-        $this->assertSame('Nothing to do: no text documents that still need work.', $seen['message']);
+        $this->assertSame('Nothing to do: no documents that still need work.', $seen['message']);
 
         [$n, $seen] = $this->batchRunNotification('batch_run_error', [
             'runId' => 3, 'operation' => 'summarize', 'processed' => 0, 'total' => 0,

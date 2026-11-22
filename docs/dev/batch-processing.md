@@ -210,13 +210,35 @@ A run is capped at `MAX_ITEMS_PER_RUN` (200) files, and a file larger than
 `maxBytesPerFile` (1 MiB by default) is skipped rather than truncated — half a
 contract summarised as if it were the whole thing is worse than no summary.
 
-**Text only.** The default mime types are the `text/` family and
-`application/json`; PDFs are deliberately excluded, because their bytes are not
-text and nothing on this path builds the base64 `document` block the Messages
-API wants for them. Content that is not valid UTF-8 is skipped for the same
-reason, and because a batch goes out as one request for the whole folder —
-outside any per-file guard — so one binary file would take the entire run down
-rather than just itself.
+**Text and PDFs.** The default mime types are the `text/` family,
+`application/json` and `application/pdf`. Text goes into the prompt, and content
+that is not valid UTF-8 is skipped: a batch goes out as one request for the whole
+folder, outside any per-file guard, so one binary file would take the entire run
+down rather than just itself.
+
+A PDF travels as its own `document` block, followed by the operation's
+`buildDocumentPrompt()` (a translation comes back as Markdown, not as a PDF):
+
+- **Anthropic provider only.** No other provider builds the block. There, a
+  coworker's walk leaves PDFs out, so they do not take the run's quota every
+  night, and a manual run lists each one as skipped with the reason.
+- **Batch, Files API allowed:** each PDF is uploaded with an expiry of 30 hours
+  and referenced by `file_id`, so the batch stays small whatever the PDFs weigh.
+  The run deletes its uploads once it has collected the results, when the
+  submission fails, when the batch is lost, and when the run is cancelled. The
+  expiry covers a run that never comes back. A PDF whose upload fails is
+  skipped on its own.
+- **Batch, Files API off** (switched off, or zero data retention): the PDF goes
+  inline as base64. A batch holds at most 256 MB, so inline PDFs are capped at
+  192 MB of base64 per batch, and the rest is left for the next run.
+- **Immediate:** one request per PDF, inline.
+- **Limits:** a PDF over 32 MB is skipped (`maxBytesPerFile` applies to text
+  only), as is a file named `.pdf` that does not start with `%PDF-`. The API reads
+  at most 600 pages (100 under a 1M-token context) and 128 MB per request. A PDF
+  over that fails as its own request, reported as *errored*.
+- **Cost:** each page is billed as text (typically 1,500–3,000 tokens) plus an
+  image of the page (at most 1,568 tokens). A PDF costs far more than the same
+  text would.
 
 On a non-Anthropic provider the same tasks fall back to a synchronous per-file
 loop at full price, and the run summary says which path it took.
@@ -260,7 +282,7 @@ their files, so a file shared with them works like one they own:
   rules: up-to-date sources (unless `force`), outputs of any operation and
   the output folder are skipped.
 - Files picked one by one are always processed, since the user asked for them.
-  Only the text-only mime filter applies.
+  Only the mime filter applies, and on a non-Anthropic provider the PDF check.
 - A file that fails the mime filter, picked or found in a folder, is skipped
   and reported. Up-to-date sources and earlier outputs are left out silently.
 - A file reached twice counts once.

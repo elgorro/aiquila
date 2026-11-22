@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Service;
 
+use OCA\AIquila\Batch\BatchDocumentRunner;
 use OCA\AIquila\Service\Exception\NoActiveRunException;
 use OCA\AIquila\Service\Exception\RunCancelledException;
 use OCA\AIquila\Service\Exception\ValidationException;
@@ -250,6 +251,7 @@ class CoworkerService {
         }
         $wasPending = $run->getStatus() === CoworkerRun::STATUS_PENDING;
         $batchId = $run->getPendingBatchId();
+        $uploads = BatchDocumentRunner::uploadsFromState($run->getDecodedState());
         $now = $this->timeFactory->getTime();
 
         $run->setStatus(CoworkerRun::STATUS_CANCELLED);
@@ -257,7 +259,7 @@ class CoworkerService {
         $run->setState(null);
         $run->appendLog(CoworkerRun::LOG_WARN, sprintf('Cancelled after %d/%d item(s)', $run->getItemsProcessed(), $run->getItemsTotal()));
         if ($wasPending && $batchId !== null) {
-            [$level, $message] = $this->cancelBatch($coworker, $batchId);
+            [$level, $message] = $this->cancelBatch($coworker, $batchId, $uploads);
             $run->appendLog($level, $message);
         }
         $this->runMapper->update($run);
@@ -280,11 +282,16 @@ class CoworkerService {
      *
      * @return array{0: 'info'|'warn', 1: string} a log level and message for the run
      */
-    private function cancelBatch(Coworker $coworker, string $batchId): array {
+    /** @param list<string> $uploads the PDFs the run uploaded, deleted either way */
+    private function cancelBatch(Coworker $coworker, string $batchId, array $uploads = []): array {
         try {
             $provider = $this->providerFactory->getProviderForUser($coworker->getUserId(), $coworker->getProvider());
-            if ($provider instanceof ClaudeSDKService && $provider->cancelBatch($batchId, $coworker->getUserId())) {
-                return [CoworkerRun::LOG_INFO, 'Batch ' . $batchId . ' cancelled'];
+            if ($provider instanceof ClaudeSDKService) {
+                $cancelled = $provider->cancelBatch($batchId, $coworker->getUserId());
+                BatchDocumentRunner::deleteUploadsWith($provider, $uploads, $coworker->getUserId(), $this->logger);
+                if ($cancelled) {
+                    return [CoworkerRun::LOG_INFO, 'Batch ' . $batchId . ' cancelled'];
+                }
             }
         } catch (\Throwable $e) {
             $this->logger->warning('AIquila Cowork: could not cancel batch', ['batch' => $batchId, 'error' => $e->getMessage()]);

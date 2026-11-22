@@ -7501,7 +7501,7 @@
                                     "folderIds": {
                                         "type": "array",
                                         "default": [],
-                                        "description": "Folders whose text documents to process",
+                                        "description": "Folders whose text and PDF documents to process",
                                         "items": {
                                             "type": "integer",
                                             "format": "int64"

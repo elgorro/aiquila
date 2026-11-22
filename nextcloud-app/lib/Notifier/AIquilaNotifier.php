@@ -130,7 +130,7 @@ class AIquilaNotifier implements INotifier {
         if ($counts !== []) {
             $lines[] = implode(', ', $counts);
         } elseif (!$failed) {
-            $lines[] = $this->l10n->t('Nothing to do: no text documents that still need work.');
+            $lines[] = $this->l10n->t('Nothing to do: no documents that still need work.');
         }
         // Nextcloud rejects an empty parsed message.
         $notification->setParsedMessage($lines === [] ? $this->l10n->t('The run ended without a result.') : implode("\n", $lines));

@@ -232,13 +232,14 @@ class BatchRunService {
             throw new NoActiveRunException('Run ' . $run->getId() . ' has already ended');
         }
         $batchId = $status === CoworkerRun::STATUS_PENDING ? $run->getPendingBatchId() : null;
+        $uploads = $batchId !== null ? BatchDocumentRunner::uploadsFromState($run->getDecodedState()) : [];
 
         $run->setStatus(CoworkerRun::STATUS_CANCELLED);
         $run->setFinishedAt($this->timeFactory->getTime());
         $run->setState(null);
         $run->appendLog(CoworkerRun::LOG_WARN, sprintf('Cancelled after %d/%d item(s)', $run->getItemsProcessed(), $run->getItemsTotal()));
         if ($batchId !== null) {
-            [$level, $message] = $this->cancelBatch($run->getUserId(), $batchId);
+            [$level, $message] = $this->cancelBatch($run->getUserId(), $batchId, $uploads);
             $run->appendLog($level, $message);
         }
         $this->runMapper->update($run);
@@ -247,11 +248,18 @@ class BatchRunService {
     /**
      * @return array{0: 'info'|'warn', 1: string}
      */
-    private function cancelBatch(string $userId, string $batchId): array {
+    /**
+     * @param list<string> $uploads the PDFs the run uploaded, deleted either way
+     */
+    private function cancelBatch(string $userId, string $batchId, array $uploads = []): array {
         try {
             $provider = $this->providerFactory->getProviderForUser($userId, null);
-            if ($provider instanceof ClaudeSDKService && $provider->cancelBatch($batchId, $userId)) {
-                return [CoworkerRun::LOG_INFO, 'Batch ' . $batchId . ' cancelled'];
+            if ($provider instanceof ClaudeSDKService) {
+                $cancelled = $provider->cancelBatch($batchId, $userId);
+                BatchDocumentRunner::deleteUploadsWith($provider, $uploads, $userId, $this->logger);
+                if ($cancelled) {
+                    return [CoworkerRun::LOG_INFO, 'Batch ' . $batchId . ' cancelled'];
+                }
             }
         } catch (\Throwable $e) {
             $this->logger->warning('AIquila batch run: could not cancel batch', ['batch' => $batchId, 'error' => $e->getMessage()]);
@@ -292,7 +300,7 @@ class BatchRunService {
             }
             if (count($selection['skipped']) > self::SKIP_LOG_LIMIT) {
                 $run->appendLog(CoworkerRun::LOG_WARN, sprintf(
-                    'Skipped %d more file(s) that are not text documents or cannot be written beside',
+                    'Skipped %d more file(s) that are not text or PDF documents or cannot be written beside',
                     count($selection['skipped']) - self::SKIP_LOG_LIMIT,
                 ));
             }
@@ -310,7 +318,7 @@ class BatchRunService {
                     'itemsTotal' => 0,
                     'itemsProcessed' => 0,
                     'itemsSkipped' => count($skipped),
-                    'summary' => 'Nothing to do: no text documents that still need work in the selection.'
+                    'summary' => 'Nothing to do: no documents that still need work in the selection.'
                         . BatchDocumentRunner::describeSkips($skipped),
                 ];
             } else {
