@@ -49,6 +49,20 @@
 					:error="targetLanguage !== '' && !languageValid"
 					:helper-text="targetLanguage !== '' && !languageValid ? t('aiquila', 'A language name in letters, such as Brazilian Portuguese') : ''" />
 
+				<template v-if="operation === 'ask'">
+					<NcTextArea v-model="prompt"
+						:label="t('aiquila', 'Question for each document')"
+						:placeholder="t('aiquila', 'For example: List every deadline and who it applies to.')"
+						:maxlength="maxPromptLength"
+						resize="vertical"
+						rows="3" />
+					<NcTextField v-model="outputSuffix"
+						:label="t('aiquila', 'Name for the answers')"
+						:placeholder="t('aiquila', 'For example deadlines')"
+						:error="outputSuffix !== '' && !suffixValid"
+						:helper-text="outputSuffix !== '' && !suffixValid ? t('aiquila', 'Lowercase letters, digits and hyphens, such as deadlines') : ''" />
+				</template>
+
 				<fieldset v-if="limits.batchAvailable" class="group">
 					<legend>{{ t('aiquila', 'When') }}</legend>
 					<NcCheckboxRadioSwitch v-model="mode"
@@ -118,6 +132,7 @@ import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 
 import { FilePickerClosed, getFilePickerBuilder, showSuccess } from '@nextcloud/dialogs'
@@ -132,6 +147,9 @@ const OFFICE = /^application\/(msword|vnd\.ms-(excel|powerpoint)|vnd\.openxmlfor
 const isText = (mime) => typeof mime === 'string' && (mime.startsWith('text/') || mime === 'application/json' || mime === 'application/pdf' || OFFICE.test(mime))
 
 const LANGUAGE = /^[A-Za-z][A-Za-z \-]{1,31}$/
+// Mirrors AskOperation::validateOptions(); the server decides.
+const SUFFIX = /^[a-z0-9][a-z0-9-]{0,31}$/
+const RESERVED_SUFFIXES = ['summary', 'md', 'markdown', 'txt', 'text', 'json', 'csv', 'xml', 'html', 'htm', 'pdf', 'doc', 'docx', 'odt', 'rtf', 'xls', 'xlsx', 'ods', 'ppt', 'pptx', 'odp', 'jpg', 'jpeg', 'png']
 
 export default {
 	name: 'ProcessWithAIquilaModal',
@@ -142,6 +160,7 @@ export default {
 		NcCheckboxRadioSwitch,
 		NcLoadingIcon,
 		NcNoteCard,
+		NcTextArea,
 		NcTextField,
 	},
 
@@ -167,6 +186,9 @@ export default {
 			operation: 'summarize',
 			style: 'brief',
 			targetLanguage: '',
+			prompt: '',
+			outputSuffix: '',
+			maxPromptLength: 4000,
 			mode: 'immediate',
 			recursive: true,
 			force: false,
@@ -211,7 +233,16 @@ export default {
 		languageValid() {
 			return LANGUAGE.test(this.targetLanguage.trim())
 		},
+		suffixValid() {
+			return SUFFIX.test(this.outputSuffix) && !RESERVED_SUFFIXES.includes(this.outputSuffix)
+		},
+		promptValid() {
+			return this.prompt.trim() !== '' && this.prompt.length <= this.maxPromptLength
+		},
 		outputExample() {
+			if (this.operation === 'ask') {
+				return `report.${this.suffixValid ? this.outputSuffix : 'answer'}.md`
+			}
 			if (this.operation === 'translate') {
 				const lang = this.languageValid ? this.targetLanguage.trim().toLowerCase().replace(/ /g, '-') : 'german'
 				return `report.${lang}.md`
@@ -221,6 +252,9 @@ export default {
 		canStart() {
 			if (this.loading || this.starting || this.overCap || this.operations.length === 0) {
 				return false
+			}
+			if (this.operation === 'ask') {
+				return this.promptValid && this.suffixValid
 			}
 			return this.operation !== 'translate' || this.languageValid
 		},
@@ -246,6 +280,7 @@ export default {
 			return {
 				summarize: t('aiquila', 'Summarize'),
 				translate: t('aiquila', 'Translate'),
+				ask: t('aiquila', 'Ask a question'),
 			}[op.id] || op.label
 		},
 		onSubmit(event) {
@@ -276,6 +311,9 @@ export default {
 			const options = {}
 			if (this.operation === 'summarize') {
 				options.style = this.style
+			} else if (this.operation === 'ask') {
+				options.prompt = this.prompt.trim()
+				options.outputSuffix = this.outputSuffix
 			} else {
 				options.targetLanguage = this.targetLanguage.trim()
 			}

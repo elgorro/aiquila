@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\Service;
 
 use OCA\AIquila\BackgroundJob\BatchRunJob;
+use OCA\AIquila\Batch\AskOperation;
 use OCA\AIquila\Batch\BatchContext;
 use OCA\AIquila\Batch\BatchDocumentRunner;
 use OCA\AIquila\Batch\BatchOperation;
@@ -92,7 +93,7 @@ class BatchRunService {
     /** @return array<string, BatchOperation> id => operation */
     public function operations(): array {
         $ops = [];
-        foreach ([new SummarizeOperation(), new TranslateOperation()] as $op) {
+        foreach ([new SummarizeOperation(), new TranslateOperation(), new AskOperation()] as $op) {
             $ops[$op->getId()] = $op;
         }
         return $ops;

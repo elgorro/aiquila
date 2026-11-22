@@ -18,7 +18,7 @@ rather than putting a batch method on `LLMProviderInterface`.
 | Path | Entry point | Shape |
 |---|---|---|
 | Assistant "Summarize" task | `SummaryProvider` → `summarizeViaBatch()` | one request, blocking poll |
-| Cowork `docs:summarize` / `docs:translate` | `BatchDocumentRunner` via `AbstractBatchTextTaskType` | N requests, submit now, collect later |
+| Cowork `docs:summarize` / `docs:translate` / `docs:ask` | `BatchDocumentRunner` via `AbstractBatchTextTaskType` | N requests, submit now, collect later |
 | Manual runs over files and folders | `BatchDocumentRunner` via `BatchRunService` | the same, started once from Files or the API |
 
 Everything else — chat, the agentic tool loop, the other Assistant task types —
@@ -178,11 +178,26 @@ its batch was in flight still writes where the run said it would.
 
 ## The bulk cowork tasks
 
-`docs:summarize` and `docs:translate` walk the coworker's input folder and write
-one output file per document — `<name>.summary.md`, `<name>.<language>.md` —
-into the configured output folder, or beside the source when none is set. The
-source is tagged `aiquila:summarized` / `aiquila:translated` so processed files
-can be filtered in the Files UI.
+`docs:summarize`, `docs:translate` and `docs:ask` walk the coworker's input
+folder and write one output file per document — `<name>.summary.md`,
+`<name>.<language>.md`, `<name>.<outputSuffix>.md` — into the configured output
+folder, or beside the source when none is set. The source is tagged
+`aiquila:summarized` / `aiquila:translated` / `aiquila:asked-<hash>` so
+processed files can be filtered in the Files UI.
+
+`docs:ask` (`AskOperation`) asks a question the user wrote of every document.
+Its options are `prompt` (required, at most 4,000 characters) and
+`outputSuffix` (required: 1–32 lowercase letters, digits or hyphens, and not a
+file type such as `pdf` or another operation's `summary`, so the output is always
+one `.md` file beside its source). The admin's instance instructions are still
+the system prompt.
+
+Its done-tag is **per question**: `aiquila:asked-` and the first 8 hex digits of
+a SHA-256 of the prompt and the suffix. It implements `PromptScopedOperation`, so
+a source counts as done only while its output is fresh *and* it carries the
+current question's tag. Editing the prompt therefore answers every document
+again, where a fresh output alone would leave them. Two coworkers that ask the
+same question share the tag. The fixed operations keep the fresh-output rule.
 
 Files, rather than tags or comments, because a summary or a translation is prose
 that a system tag cannot hold and a Nextcloud comment truncates.

@@ -154,6 +154,22 @@
 			<input v-model="form.targetLanguage" type="text" :placeholder="t('aiquila', 'German')">
 		</label>
 
+		<template v-if="isAsk">
+			<label class="field">
+				<span>{{ t('aiquila', 'Question for each document') }}</span>
+				<textarea v-model="form.askPrompt"
+					rows="4"
+					maxlength="4000"
+					:placeholder="t('aiquila', 'For example: List every deadline and who it applies to.')" />
+				<small>{{ t('aiquila', 'Changing the question answers every document again.') }}</small>
+			</label>
+			<label class="field">
+				<span>{{ t('aiquila', 'Name for the answers') }}</span>
+				<input v-model="form.outputSuffix" type="text" :placeholder="t('aiquila', 'deadlines')">
+				<small>{{ t('aiquila', 'Answers are saved beside each document, as report.{suffix}.md for report.pdf. Use lowercase letters, digits and hyphens.', { suffix: form.outputSuffix || 'deadlines' }) }}</small>
+			</label>
+		</template>
+
 		<label v-if="isSummarize" class="field">
 			<span>{{ t('aiquila', 'Summary style') }}</span>
 			<select v-model="form.style">
@@ -215,6 +231,8 @@ export default {
 				cron_schedule: m.cronSchedule || '0 3 * * *',
 				maxTags: options.maxTags || 8,
 				targetLanguage: options.targetLanguage || '',
+				askPrompt: typeof options.prompt === 'string' ? options.prompt : '',
+				outputSuffix: options.outputSuffix || '',
 				style: options.style || 'brief',
 				recursive: options.recursive !== false,
 				model: m.model || '',
@@ -249,6 +267,9 @@ export default {
 		},
 		isTranslate() {
 			return this.form.task_type === 'docs:translate'
+		},
+		isAsk() {
+			return this.form.task_type === 'docs:ask'
 		},
 		isAgent() {
 			return this.form.task_type === 'agent:run'
@@ -384,6 +405,10 @@ export default {
 			}
 			if (this.isTranslate) {
 				options.targetLanguage = this.form.targetLanguage
+			}
+			if (this.isAsk) {
+				options.prompt = this.form.askPrompt.trim()
+				options.outputSuffix = this.form.outputSuffix.trim()
 			}
 			if (this.isClaude && this.form.effort) {
 				options.effort = this.form.effort

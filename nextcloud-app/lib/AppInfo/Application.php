@@ -4,6 +4,7 @@
 namespace OCA\AIquila\AppInfo;
 
 use OCA\AIquila\Cowork\CoworkerTaskRegistry;
+use OCA\AIquila\Cowork\DocsAskFolderTaskType;
 use OCA\AIquila\Cowork\DocsSummarizeFolderTaskType;
 use OCA\AIquila\Cowork\DocsTranslateFolderTaskType;
 use OCA\AIquila\Cowork\AgentRunTaskType;
@@ -64,11 +65,13 @@ class Application extends App implements IBootstrap {
             assert($docsSummarize instanceof DocsSummarizeFolderTaskType);
             $docsTranslate = $c->get(DocsTranslateFolderTaskType::class);
             assert($docsTranslate instanceof DocsTranslateFolderTaskType);
+            $docsAsk = $c->get(DocsAskFolderTaskType::class);
+            assert($docsAsk instanceof DocsAskFolderTaskType);
 
             $agentRun = $c->get(AgentRunTaskType::class);
             assert($agentRun instanceof AgentRunTaskType);
 
-            return new CoworkerTaskRegistry([$visionClassify, $docsSummarize, $docsTranslate, $agentRun]);
+            return new CoworkerTaskRegistry([$visionClassify, $docsSummarize, $docsTranslate, $docsAsk, $agentRun]);
         });
 
         // Register AIquila TaskProcessing Providers for Nextcloud Assistant integration
