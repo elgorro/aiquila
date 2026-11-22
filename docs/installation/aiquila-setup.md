@@ -714,7 +714,10 @@ A backend that cannot tell speakers apart returns the segments without `speaker`
 or comma-separated. It is a hint, not a guarantee.
 
 Recordings for transcription, subtitles, voice chat and audio translation can be MP3,
-M4A, WAV, WebM, OGG or FLAC, or MP4 and WebM video, up to 512 MB.
+M4A, WAV, WebM, OGG or FLAC, or MP4 and WebM video, up to 512 MB. With Mistral, a
+recording of more than about an hour can fail when Mistral is short of capacity: the
+task then fails and asks for a shorter recording rather than returning part of the
+transcript. Split long recordings to be safe ([details](../dev/mistral-provider.md#transcription)).
 
 Picking a provider without the capability an action needs is an error rather than a
 silent hand-off to a different one — the point of choosing a provider is that the data
