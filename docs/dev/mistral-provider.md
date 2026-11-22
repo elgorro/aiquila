@@ -200,19 +200,43 @@ accepts `file_url` and a `file_id` from `/v1/files`, but neither is used: a
 streamed inline part already keeps memory flat, and an uploaded file would
 need its own upload, a purpose and a cleanup.
 
-The answer is requested with `stream=true` and arrives as Server-Sent Events:
-`transcription.text.delta` while the model writes, segment events when
-timestamps were asked for, and a final `transcription.done` with the same fields
-as an unstreamed response (`text`, `segments`, `usage`). The stream changes two
-things.
+The answer is requested with `stream=true` and arrives as Server-Sent Events,
+each named in both the `event:` field and the payload's `type`:
+
+| Event | Carries |
+|---|---|
+| `transcription.text.delta` | `text`. Without timestamps the transcript arrives here. With them, a single empty delta is sent |
+| `transcription.segment` | `text`, `start`, `end`, `speaker_id`, one event per segment, only when timestamps were asked for |
+| `transcription.done` | the same fields as an unstreamed response: `text`, `segments` (filled when timestamps were asked for), `language`, `usage` |
+
+The code prefers the segments on `transcription.done` and falls back to the
+streamed segment events. It also accepts `transcription.segment.delta`, the name
+Mistral's guide uses, though the API sends `transcription.segment`.
+
+Mistral splits a recording into pieces of about 90 seconds and transcribes them
+in parallel (`usage.request_count` is the number of pieces). The streamed events
+come only after every piece is done, close together. So between the end of the
+upload and the first event the connection is silent for a while: about 20s for an
+hour of audio, about 90s for four hours.
 
 - **Timeout.** The request has a three-hour backstop, and what actually ends it
   is cURL's low-speed limit: less than one byte in 300s. A long recording is not
   cut off for taking long, only for going quiet.
 - **Progress.** The upload counts for the first half of the task's progress,
   measured in bytes sent. The second half moves with the transcript as it
-  arrives. No event says how long the recording is, so that half approaches its
-  end without reaching it; the task reports completion itself.
+  arrives, counted from the text deltas and the segment events together. No
+  event says how long the recording is, so that half approaches its end without
+  reaching it; the task reports completion itself. While Mistral works and sends
+  nothing, the bar holds at the halfway mark.
+
+**Recordings over an hour can fail on capacity.** When Mistral is short of
+capacity for some pieces of a recording, an unstreamed request fails with `429`
+`backend_out_of_capacity`. A streamed one instead ends with `200` after the
+pieces that finished, and sends no `transcription.done`. Such a stream is treated
+as an error, not returned as a transcript, because the text covers only part of
+the recording. The user is told the input is too large and to split it. How much
+fits depends on Mistral's load at the time, not on a fixed duration. Recordings
+of about an hour have come back whole, and longer ones sometimes do too.
 
 Guzzle's usual way of streaming a response (`stream => true`, see
 `SseStreaming`) goes through its StreamHandler. That handler reads the whole
@@ -222,13 +246,15 @@ filter on that sink (`StreamTap`) passes each piece to `SseDecoder` as cURL
 writes it. A response that is plain JSON, from an endpoint that ignores
 `stream`, is still read from the sink.
 
-`AudioLimits::MAX_BYTES` is 512 MB. It is sized from the longest recording
-Mistral names, three hours: about 430 MB as 320 kbit/s MP3 and about 350 MB as
-16 kHz mono WAV. Mistral documents no size limit for an inline part.
+`AudioLimits::MAX_BYTES` is 512 MB. Mistral documents no size limit for an
+inline part and accepts one of 300 MB. The figure is sized from the three hours
+Mistral's legacy page names as the longest recording: about 430 MB as 320 kbit/s
+MP3 and about 350 MB as 16 kHz mono WAV. In practice capacity, described above,
+limits a long recording before size does.
 
 Subtitles ask for `timestamp_granularities=segment` and read the timed
-`segments[]` back. Mistral refuses that parameter together with `language`, so a
-timestamped request leaves the language out and Voxtral detects it.
+`segments[]` back. `language` is sent alongside it when the task gives one;
+Mistral accepts the two together, and with `diarize` as well.
 
 Speaker labels (`diarize`) send `diarize=true` and always add
 `timestamp_granularities=segment`, which Mistral requires with it. Each segment
