@@ -89,3 +89,100 @@ func TestRollbackKeepsTheStateTheNewVersionNeverTouched(t *testing.T) {
 		t.Errorf("rollback does not restart mcp on the restored .env:\n%s", out)
 	}
 }
+
+func imagePlanFixture(apply bool) *upgradePlan {
+	return &upgradePlan{
+		stack:       upgrade.StackFull,
+		applyImages: apply,
+		running:     map[string]bool{"traefik": true, "nc": true},
+		images: []upgrade.ImageChange{
+			{Service: "grafana", From: "grafana/grafana:13.0.0", To: "grafana/grafana:13.3.1"},
+			{Service: "nc", From: "nextcloud:33-apache", To: "nextcloud:35-apache", Held: "Nextcloud core is upgraded on its own"},
+			{Service: "traefik", From: "traefik:v3", To: "traefik:v3.7.19"},
+		},
+	}
+}
+
+func TestImagePlanWithoutImagesKeepsEverything(t *testing.T) {
+	out := imagePlan(imagePlanFixture(false))
+	for _, want := range []string{
+		"traefik: traefik:v3 → traefik:v3.7.19 (kept (--images applies it))",
+		"nc: nextcloud:33-apache → nextcloud:35-apache (kept: Nextcloud core is upgraded on its own)",
+		"Run again with --images",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("plan lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestImagePlanWithImagesRecreatesOnlyRunningServices(t *testing.T) {
+	out := imagePlan(imagePlanFixture(true))
+	for _, want := range []string{
+		"traefik: traefik:v3 → traefik:v3.7.19 (recreated)",
+		"grafana: grafana/grafana:13.0.0 → grafana/grafana:13.3.1 (pinned; the service is not running)",
+		"(kept: Nextcloud core is upgraded on its own)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("plan lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Run again with --images") {
+		t.Errorf("plan suggests --images although it was given:\n%s", out)
+	}
+}
+
+func TestRollbackRecreatesTheChangedServices(t *testing.T) {
+	p := imagePlanFixture(true)
+	p.recreate = []string{"traefik"}
+	if out := rollbackSteps(p, "/opt/aiquila/backups/x"); !strings.Contains(out, "docker compose up -d --no-deps traefik") {
+		t.Errorf("rollback does not recreate traefik:\n%s", out)
+	}
+}
+
+func TestPendingServices(t *testing.T) {
+	ps := "traefik running \ncrowdsec running healthy\nnc-redis running starting\n"
+	got := pendingServices(ps, []string{"traefik", "crowdsec", "nc-redis", "socket-proxy"})
+	if strings.Join(got, ",") != "nc-redis,socket-proxy" {
+		t.Errorf("pending = %v", got)
+	}
+}
+
+// Without --images the rendered file names exactly the deployed third-party
+// images; with it, the appliable ones move and only running ones are recreated.
+func TestSelectImages(t *testing.T) {
+	tmpl := upgrade.RenderCompose(upgrade.StackFull, "0.5.5")
+	tmplImages, _ := upgrade.ServiceImages(tmpl)
+	old := strings.Replace(tmpl, "image: "+tmplImages["traefik"], "image: traefik:v3", 1)
+	old = strings.Replace(old, "image: "+tmplImages["nc"]+"\n", "image: nextcloud:33-apache\n", 1)
+	old = strings.Replace(old, "image: "+tmplImages["nc-db"], "image: postgres:16", 1)
+	old = strings.Replace(old, "image: "+tmplImages["crowdsec"], "image: crowdsecurity/crowdsec:v1.7.0", 1)
+
+	for _, apply := range []bool{false, true} {
+		images, err := upgrade.ImageDrift(old, tmpl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := &upgradePlan{applyImages: apply, images: images, running: map[string]bool{"traefik": true, "nc": true, "nc-db": true}}
+		pull, err := p.selectImages(tmpl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _ := upgrade.ServiceImages(p.newCompose)
+		if got["nc"] != "nextcloud:33-apache" || got["nc-db"] != "postgres:16" {
+			t.Errorf("apply=%v: held images moved: nc=%s nc-db=%s", apply, got["nc"], got["nc-db"])
+		}
+		if !apply {
+			if got["traefik"] != "traefik:v3" || got["crowdsec"] != "crowdsecurity/crowdsec:v1.7.0" || len(p.recreate)+len(pull) != 0 {
+				t.Errorf("without --images: traefik=%s crowdsec=%s recreate=%v pull=%v", got["traefik"], got["crowdsec"], p.recreate, pull)
+			}
+			continue
+		}
+		if got["traefik"] != tmplImages["traefik"] || got["crowdsec"] != tmplImages["crowdsec"] {
+			t.Errorf("with --images: traefik=%s crowdsec=%s", got["traefik"], got["crowdsec"])
+		}
+		if strings.Join(p.recreate, ",") != "traefik" || strings.Join(pull, ",") != tmplImages["traefik"] {
+			t.Errorf("with --images: recreate=%v pull=%v (crowdsec is not running)", p.recreate, pull)
+		}
+	}
+}
