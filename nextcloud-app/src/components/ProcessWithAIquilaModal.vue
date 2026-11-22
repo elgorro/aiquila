@@ -49,6 +49,15 @@
 					:error="targetLanguage !== '' && !languageValid"
 					:helper-text="targetLanguage !== '' && !languageValid ? t('aiquila', 'A language name in letters, such as Brazilian Portuguese') : ''" />
 
+				<template v-if="operation === 'extract'">
+					<ExtractFieldsEditor v-model="fields" />
+					<NcTextField v-model="tableName"
+						:label="t('aiquila', 'Table name')"
+						:placeholder="t('aiquila', 'For example invoices')"
+						:error="tableName !== '' && !tableNameValid"
+						:helper-text="tableName !== '' && !tableNameValid ? t('aiquila', 'Lowercase letters, digits and hyphens, such as invoices') : t('aiquila', 'One table per folder, with a row per document; a rerun updates a document\'s row.')" />
+				</template>
+
 				<template v-if="operation === 'ask'">
 					<NcTextArea v-model="prompt"
 						:label="t('aiquila', 'Question for each document')"
@@ -135,6 +144,8 @@ import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 
+import ExtractFieldsEditor, { fieldsValid } from './ExtractFieldsEditor.vue'
+
 import { FilePickerClosed, getFilePickerBuilder, showSuccess } from '@nextcloud/dialogs'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 
@@ -162,6 +173,7 @@ export default {
 		NcNoteCard,
 		NcTextArea,
 		NcTextField,
+		ExtractFieldsEditor,
 	},
 
 	props: {
@@ -188,6 +200,8 @@ export default {
 			targetLanguage: '',
 			prompt: '',
 			outputSuffix: '',
+			fields: [{ name: '', type: 'string', description: '' }],
+			tableName: '',
 			maxPromptLength: 4000,
 			mode: 'immediate',
 			recursive: true,
@@ -236,10 +250,16 @@ export default {
 		suffixValid() {
 			return SUFFIX.test(this.outputSuffix) && !RESERVED_SUFFIXES.includes(this.outputSuffix)
 		},
+		tableNameValid() {
+			return SUFFIX.test(this.tableName)
+		},
 		promptValid() {
 			return this.prompt.trim() !== '' && this.prompt.length <= this.maxPromptLength
 		},
 		outputExample() {
+			if (this.operation === 'extract') {
+				return `${this.tableNameValid ? this.tableName : 'extracted'}.csv`
+			}
 			if (this.operation === 'ask') {
 				return `report.${this.suffixValid ? this.outputSuffix : 'answer'}.md`
 			}
@@ -255,6 +275,9 @@ export default {
 			}
 			if (this.operation === 'ask') {
 				return this.promptValid && this.suffixValid
+			}
+			if (this.operation === 'extract') {
+				return fieldsValid(this.fields) && (this.tableName === '' || this.tableNameValid)
 			}
 			return this.operation !== 'translate' || this.languageValid
 		},
@@ -281,6 +304,7 @@ export default {
 				summarize: t('aiquila', 'Summarize'),
 				translate: t('aiquila', 'Translate'),
 				ask: t('aiquila', 'Ask a question'),
+				extract: t('aiquila', 'Extract fields into a table'),
 			}[op.id] || op.label
 		},
 		onSubmit(event) {
@@ -311,6 +335,11 @@ export default {
 			const options = {}
 			if (this.operation === 'summarize') {
 				options.style = this.style
+			} else if (this.operation === 'extract') {
+				options.fields = this.fields.map(f => ({ name: f.name, type: f.type, description: f.description.trim() }))
+				if (this.tableName) {
+					options.tableName = this.tableName
+				}
 			} else if (this.operation === 'ask') {
 				options.prompt = this.prompt.trim()
 				options.outputSuffix = this.outputSuffix

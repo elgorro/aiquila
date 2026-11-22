@@ -518,6 +518,15 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
         if ($plan['effort'] !== null) {
             $params['outputConfig'] = ['effort' => $plan['effort']];
         }
+        // JSON outputs: the answer is constrained to the caller's schema. Only
+        // where the model takes it; elsewhere the caller checks a prompted
+        // answer itself. Citations are incompatible with it (400), and no
+        // caller asks for both.
+        if (is_array($options['json_schema'] ?? null) && ClaudeModels::supportsStructuredOutputs($model)) {
+            $params['outputConfig'] = ($params['outputConfig'] ?? []) + [
+                'format' => ['type' => 'json_schema', 'schema' => $options['json_schema']],
+            ];
+        }
         if ($plan['adjustments'] !== []) {
             $this->logger->debug('AIquila SDK: Adjusted thinking/effort for model', [
                 'model' => $model,

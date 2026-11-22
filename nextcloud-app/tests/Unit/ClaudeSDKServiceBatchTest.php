@@ -283,6 +283,24 @@ class ClaudeSDKServiceBatchTest extends TestCase {
         $this->assertArrayNotHasKey('speed_fast', $params);
     }
 
+    /** A caller's JSON Schema goes out as output_config.format, next to the effort, where the model takes it. */
+    public function testBatchParamsCarryTheJsonSchemaOnModelsWithStructuredOutputs(): void {
+        $schema = ['type' => 'object', 'properties' => ['amount' => ['type' => ['number', 'null']]], 'required' => ['amount'], 'additionalProperties' => false];
+        $svc = $this->makeService(['model' => 'claude-opus-5-5']);
+        $svc->submitBatch([['custom_id' => 'f1', 'messages' => [['role' => 'user', 'content' => 'q']], 'options' => ['json_schema' => $schema]]]);
+
+        $format = $svc->lastBatchRequests[0]['params']['outputConfig']['format'] ?? null;
+        $this->assertSame(['type' => 'json_schema', 'schema' => $schema], $format);
+    }
+
+    /** Opus 4.6 is not documented to take JSON outputs: the answer is prompted and checked instead. */
+    public function testBatchParamsLeaveTheSchemaOutWhereTheModelLacksStructuredOutputs(): void {
+        $svc = $this->makeService(['model' => 'claude-opus-4-6']);
+        $svc->submitBatch([['custom_id' => 'f1', 'messages' => [['role' => 'user', 'content' => 'q']], 'options' => ['json_schema' => ['type' => 'object']]]]);
+
+        $this->assertArrayNotHasKey('format', $svc->lastBatchRequests[0]['params']['outputConfig'] ?? []);
+    }
+
     // ── Multi-request transport ───────────────────────────────────────────
 
     public function testSubmitBatchBuildsOneEntryPerRequest(): void {

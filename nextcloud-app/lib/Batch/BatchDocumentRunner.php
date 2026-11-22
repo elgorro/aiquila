@@ -486,6 +486,9 @@ class BatchDocumentRunner {
     }
 
     private function alreadyDone(BatchContext $ctx, File $file): bool {
+        if ($ctx->operation instanceof TableOperation) {
+            return $this->rowIsCurrent($ctx, $file);
+        }
         try {
             $folder = $this->outputFolder($ctx, $file);
             $name = self::outputName($ctx->operation, $file, $ctx->options);
@@ -569,7 +572,7 @@ class BatchDocumentRunner {
             $requests[] = [
                 'custom_id' => $customId,
                 'messages' => [['role' => 'user', 'content' => self::userContent($ctx, $document, $source)]],
-                'options' => ($ctx->requestOptions)($provider),
+                'options' => $this->requestOptionsFor($ctx, $provider),
             ];
             $fileIds[$customId] = $file->getId();
         }
@@ -735,6 +738,7 @@ class BatchDocumentRunner {
         $written = 0;
         $outputs = [];
         $failures = self::emptyFailures();
+        $tables = [];
 
         $progress(0, $total);
 
@@ -766,10 +770,12 @@ class BatchDocumentRunner {
                     continue;
                 }
 
-                $outputs[] = $this->writeOutput($ctx, $file, (string)($result['response'] ?? ''));
-                $this->markDone($ctx, $file);
+                $this->accept($ctx, $file, (string)($result['response'] ?? ''), $outputs, $tables);
                 $written++;
                 $run->appendLog(CoworkerRun::LOG_INFO, $verb, $item);
+            } catch (InvalidAnswerException $e) {
+                $failures['invalid'][] = $name . ' — ' . $e->getMessage();
+                $run->appendLog(CoworkerRun::LOG_ERROR, 'Invalid answer: ' . $e->getMessage(), $item ?? $name);
             } catch (\Throwable $e) {
                 $failures['unsaved'][] = $name . ' — ' . $e->getMessage();
                 $run->appendLog(CoworkerRun::LOG_ERROR, 'Not saved: ' . $e->getMessage(), $item ?? $name);
@@ -782,6 +788,7 @@ class BatchDocumentRunner {
             }
         }
 
+        $written -= $this->writeTables($ctx, $run, $tables, $outputs, $failures);
         $skipped = self::skipsFromState($state);
 
         return [
@@ -817,6 +824,7 @@ class BatchDocumentRunner {
         $written = 0;
         $outputs = [];
         $failures = self::emptyFailures();
+        $tables = [];
         $skippedBefore = count($skipped);
 
         $progress(0, $total);
@@ -843,14 +851,14 @@ class BatchDocumentRunner {
                         ])]],
                         null,
                         $userId,
-                        ($ctx->requestOptions)($provider),
+                        $this->requestOptionsFor($ctx, $provider),
                     );
                 } else {
                     $result = $provider->ask(
                         $ctx->operation->buildPrompt($document['data'], $ctx->options),
                         '',
                         $userId,
-                        ($ctx->requestOptions)($provider),
+                        $this->requestOptionsFor($ctx, $provider),
                     );
                 }
                 $this->usageStats->record($userId, $provider, $result, $ctx->usageType);
@@ -862,10 +870,12 @@ class BatchDocumentRunner {
                     continue;
                 }
 
-                $outputs[] = $this->writeOutput($ctx, $file, (string)($result['response'] ?? ''));
-                $this->markDone($ctx, $file);
+                $this->accept($ctx, $file, (string)($result['response'] ?? ''), $outputs, $tables);
                 $written++;
                 $run->appendLog(CoworkerRun::LOG_INFO, $verb, UserPath::of($file));
+            } catch (InvalidAnswerException $e) {
+                $failures['invalid'][] = $file->getName() . ' — ' . $e->getMessage();
+                $run->appendLog(CoworkerRun::LOG_ERROR, 'Invalid answer: ' . $e->getMessage(), UserPath::of($file));
             } catch (\Throwable $e) {
                 $failures['unsaved'][] = $file->getName() . ' — ' . $e->getMessage();
                 $run->appendLog(CoworkerRun::LOG_ERROR, 'Not saved: ' . $e->getMessage(), UserPath::of($file));
@@ -878,6 +888,7 @@ class BatchDocumentRunner {
             }
         }
 
+        $written -= $this->writeTables($ctx, $run, $tables, $outputs, $failures);
         $label = method_exists($provider, 'getId') ? $provider->getId() : 'provider';
         // As on the batch path, the total is what was sent to the model: a
         // file skipped on reading counts in itemsSkipped, not here as well.
@@ -895,7 +906,7 @@ class BatchDocumentRunner {
 
     /** @return array<string, list<string>> */
     private static function emptyFailures(): array {
-        return ['refused' => [], 'errored' => [], 'expired' => [], 'canceled' => [], 'unsaved' => [], 'missing' => []];
+        return ['refused' => [], 'errored' => [], 'invalid' => [], 'expired' => [], 'canceled' => [], 'unsaved' => [], 'missing' => []];
     }
 
     /**
@@ -1302,6 +1313,238 @@ class BatchDocumentRunner {
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    // ── Tables ────────────────────────────────────────────────────────────
+
+    /** Header columns around a table operation's fields. */
+    private const TABLE_KEY = 'file_id';
+
+    /** @var array<string, array<array-key, int>> table path => file id => extracted-at (unix), read once per run */
+    private array $tableIndex = [];
+
+    /**
+     * The request options of one call, with the table's JSON Schema for a
+     * provider that constrains answers to one.
+     *
+     * @return array<string, mixed>
+     */
+    private function requestOptionsFor(BatchContext $ctx, LLMProviderInterface $provider): array {
+        $options = ($ctx->requestOptions)($provider);
+        if ($ctx->operation instanceof TableOperation && $provider instanceof ClaudeSDKService) {
+            $options['json_schema'] = $ctx->operation->jsonSchema($ctx->options);
+        }
+        return $options;
+    }
+
+    /**
+     * Take one answer: write its output file, or, for a table operation,
+     * check it and hold its row until the run writes the tables.
+     *
+     * @param list<string> $outputs
+     * @param array<string, array{folder: Folder, rows: array<int, array{file: File, row: array<string, string|int|float|bool|null>}>}> $tables
+     * @param-out list<string> $outputs
+     * @throws InvalidAnswerException when a table operation's answer is not a valid row
+     */
+    private function accept(BatchContext $ctx, File $file, string $response, array &$outputs, array &$tables): void {
+        $op = $ctx->operation;
+        if (!$op instanceof TableOperation) {
+            $outputs[] = $this->writeOutput($ctx, $file, $response);
+            $this->markDone($ctx, $file);
+            return;
+        }
+        try {
+            $row = $op->parseRow($response, $ctx->options);
+        } catch (\InvalidArgumentException $e) {
+            throw new InvalidAnswerException($e->getMessage(), 0, $e);
+        }
+        $folder = $this->outputFolder($ctx, $file);
+        $key = $folder->getPath();
+        $tables[$key] ??= ['folder' => $folder, 'rows' => []];
+        $tables[$key]['rows'][$file->getId()] = ['file' => $file, 'row' => $row];
+    }
+
+    /**
+     * Upsert the held rows into each folder's table, then tag their sources.
+     * A table that cannot be written loses its rows for this run: they are
+     * reported as unsaved, and the number of them is returned.
+     *
+     * @param array<string, array{folder: Folder, rows: array<int, array{file: File, row: array<string, string|int|float|bool|null>}>}> $tables
+     * @param list<string> $outputs
+     * @param array<string, list<string>> $failures
+     * @param-out list<string> $outputs
+     */
+    private function writeTables(BatchContext $ctx, CoworkerRun $run, array $tables, array &$outputs, array &$failures): int {
+        $op = $ctx->operation;
+        if (!$op instanceof TableOperation || $tables === []) {
+            return 0;
+        }
+        $lost = 0;
+        $name = $op->tableFileName($ctx->options);
+        $header = [self::TABLE_KEY, 'file', ...$op->columns($ctx->options), 'extracted_at'];
+        foreach ($tables as $table) {
+            $folder = $table['folder'];
+            try {
+                $existing = null;
+                if ($folder->nodeExists($name)) {
+                    $node = $folder->get($name);
+                    if (!$node instanceof File) {
+                        throw new \RuntimeException("$name in " . UserPath::of($folder) . ' is not a file');
+                    }
+                    $existing = $node;
+                }
+                $rows = $existing !== null ? self::csvRows($existing->getContent()) : [];
+                $now = gmdate('Y-m-d\TH:i:s\Z');
+                foreach ($table['rows'] as $fileId => $entry) {
+                    $cells = [self::TABLE_KEY => (string)$fileId, 'file' => UserPath::of($entry['file']), 'extracted_at' => $now];
+                    foreach ($entry['row'] as $column => $value) {
+                        $cells[$column] = self::cell($value);
+                    }
+                    $rows[(string)$fileId] = $cells;
+                }
+                $csv = self::csvEncode($header, $rows);
+                if ($existing !== null) {
+                    $existing->putContent($csv);
+                    $output = $existing;
+                } else {
+                    $output = $folder->newFile($name, $csv);
+                }
+                $this->markOutput($output);
+                $outputs[] = UserPath::of($output);
+                unset($this->tableIndex[$output->getPath()]);
+                foreach ($table['rows'] as $entry) {
+                    $this->markDone($ctx, $entry['file']);
+                }
+            } catch (\Throwable $e) {
+                foreach ($table['rows'] as $entry) {
+                    $failures['unsaved'][] = $entry['file']->getName() . ' — ' . $e->getMessage();
+                    $lost++;
+                }
+                $run->appendLog(CoworkerRun::LOG_ERROR, 'Table not saved: ' . $e->getMessage(), UserPath::of($folder) . '/' . $name);
+                $this->logger->warning('AIquila batch: could not write a table', $ctx->logContext + ['error' => $e->getMessage()]);
+            }
+        }
+        return $lost;
+    }
+
+    /**
+     * Whether a source's row is in its table, newer than the source, and from
+     * the current schema (the done-tag).
+     */
+    private function rowIsCurrent(BatchContext $ctx, File $file): bool {
+        $op = $ctx->operation;
+        if (!$op instanceof TableOperation || !$this->hasDoneTag($ctx, $file)) {
+            return false;
+        }
+        try {
+            $folder = $this->outputFolder($ctx, $file);
+            $path = $folder->getPath() . '/' . $op->tableFileName($ctx->options);
+            if (!isset($this->tableIndex[$path])) {
+                $index = [];
+                $name = $op->tableFileName($ctx->options);
+                $node = $folder->nodeExists($name) ? $folder->get($name) : null;
+                if ($node instanceof File) {
+                    foreach (self::csvRows($node->getContent()) as $id => $cells) {
+                        $at = strtotime($cells['extracted_at'] ?? '');
+                        if ($at !== false) {
+                            $index[$id] = $at;
+                        }
+                    }
+                }
+                $this->tableIndex[$path] = $index;
+            }
+            $at = $this->tableIndex[$path][(string)$file->getId()] ?? null;
+            return $at !== null && $at >= $file->getMTime();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * A value as a CSV cell. Text that a spreadsheet would run as a formula
+     * (starting with =, +, -, @, tab or carriage return) gets a leading
+     * apostrophe: the documents are not trusted, and the table is opened in
+     * spreadsheets. Numbers are left alone.
+     */
+    public static function cell(string|int|float|bool|null $value): string {
+        if ($value === null) {
+            return '';
+        }
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+        if (is_int($value) || is_float($value)) {
+            return (string)$value;
+        }
+        return self::neutralize($value);
+    }
+
+    private static function neutralize(string $text): string {
+        return $text !== '' && strpbrk($text[0], "=+-@\t\r") !== false ? "'" . $text : $text;
+    }
+
+    /**
+     * A table's rows by file id, each keyed by its header's column names.
+     * Rows without a file id are dropped.
+     *
+     * @return array<array-key, array<string, string>>
+     */
+    public static function csvRows(string $csv): array {
+        $stream = fopen('php://temp', 'r+');
+        if ($stream === false) {
+            return [];
+        }
+        fwrite($stream, $csv);
+        rewind($stream);
+        $header = null;
+        $rows = [];
+        while (is_array($line = fgetcsv($stream, null, ',', '"', ''))) {
+            if ($line === [null]) {
+                continue;
+            }
+            $line = array_map(static fn ($c): string => (string)$c, $line);
+            if ($header === null) {
+                $header = $line;
+                continue;
+            }
+            $cells = [];
+            foreach ($header as $i => $column) {
+                $cells[$column] = $line[$i] ?? '';
+            }
+            if (($cells[self::TABLE_KEY] ?? '') !== '') {
+                $rows[$cells[self::TABLE_KEY]] = $cells;
+            }
+        }
+        fclose($stream);
+        return $rows;
+    }
+
+    /**
+     * RFC 4180 CSV: CRLF line ends, fields with commas, quotes or line breaks
+     * quoted, quotes doubled. Rows are written under the header given; a
+     * column a row lacks (from an older schema) stays empty, and one the
+     * header no longer has is dropped.
+     *
+     * @param list<string> $header
+     * @param array<array-key, array<string, string>> $rows
+     */
+    public static function csvEncode(array $header, array $rows): string {
+        $stream = fopen('php://temp', 'r+');
+        if ($stream === false) {
+            throw new \RuntimeException('Could not open a buffer for the table');
+        }
+        fputcsv($stream, $header, ',', '"', '', "\r\n");
+        foreach ($rows as $cells) {
+            $line = [];
+            foreach ($header as $column) {
+                $line[] = $cells[$column] ?? '';
+            }
+            fputcsv($stream, $line, ',', '"', '', "\r\n");
+        }
+        rewind($stream);
+        $csv = (string)stream_get_contents($stream);
+        fclose($stream);
+        return $csv;
     }
 
     /** Whether the source carries the operation's current done-tag. */

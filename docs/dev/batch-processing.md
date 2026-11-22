@@ -18,7 +18,7 @@ rather than putting a batch method on `LLMProviderInterface`.
 | Path | Entry point | Shape |
 |---|---|---|
 | Assistant "Summarize" task | `SummaryProvider` → `summarizeViaBatch()` | one request, blocking poll |
-| Cowork `docs:summarize` / `docs:translate` / `docs:ask` | `BatchDocumentRunner` via `AbstractBatchTextTaskType` | N requests, submit now, collect later |
+| Cowork `docs:summarize` / `docs:translate` / `docs:ask` / `docs:extract` | `BatchDocumentRunner` via `AbstractBatchTextTaskType` | N requests, submit now, collect later |
 | Manual runs over files and folders | `BatchDocumentRunner` via `BatchRunService` | the same, started once from Files or the API |
 
 Everything else — chat, the agentic tool loop, the other Assistant task types —
@@ -198,6 +198,42 @@ a source counts as done only while its output is fresh *and* it carries the
 current question's tag. Editing the prompt therefore answers every document
 again, where a fresh output alone would leave them. Two coworkers that ask the
 same question share the tag. The fixed operations keep the fresh-output rule.
+
+### Structured extraction (`docs:extract`)
+
+`ExtractOperation` pulls the same fields out of every document into one table.
+It is a `TableOperation`: instead of a file per source, the runner holds one row
+per document and, once the run has its answers, upserts them into
+`<tableName>.csv` (default `extracted.csv`) in the output folder, or in each
+source's folder when none is set. So there is one table per folder.
+
+- **Fields** are a list, not raw JSON Schema: `{name, type, description}`, 1 to
+  30 of them. Names are lowercase `[a-z][a-z0-9_]{0,39}`, unique, and not
+  `file_id`, `file` or `extracted_at`. Types are `string`, `number`, `integer`,
+  `boolean` and `date`. The JSON Schema is built from the list, every property
+  nullable and required, with `additionalProperties: false`.
+- **Structured outputs:** on the Anthropic provider, for models documented to
+  support JSON outputs (`ClaudeModels::supportsStructuredOutputs()`), the schema
+  goes out as `output_config.format`, in batches too. Every other model and
+  provider gets the same prompt asking for JSON only. On every path the answer is
+  then checked in code (`parseRow()`): the outermost object is taken, a value is
+  coerced to its type (`"12.50"` → `12.5`, a real `YYYY-MM-DD` date), and a missing
+  field is empty. An answer that holds no object, or a value of the wrong type,
+  fails that file as *invalid*. It gets no row and is tried again on the next run.
+- **The table** is RFC 4180 CSV (CRLF, fields quoted when needed) with the
+  columns `file_id`, `file`, the fields, and `extracted_at` (UTC). Rows are keyed
+  by file id: a rerun replaces a document's row and keeps the others. After a
+  schema change, older rows keep their values for the columns that remain, and
+  new columns stay empty until the document is extracted again.
+- **Formula injection:** the documents are untrusted, and the table is meant to
+  be opened in a spreadsheet. A text cell starting with `=`, `+`, `-`, `@`, a tab
+  or a carriage return gets a leading `'`. Numbers are written as numbers.
+- **Incremental runs:** a source is done while its row is at least as new as the
+  source *and* it carries the schema's done-tag, `aiquila:extracted-<hash>` (a
+  hash of the field list and the table name). An edited document is extracted
+  again, and a changed field list extracts every document again.
+- **Partial failures:** if the table cannot be written, its rows are reported as
+  *unsaved*, and their sources stay untagged, so the next run does them again.
 
 Files, rather than tags or comments, because a summary or a translation is prose
 that a system tag cannot hold and a Nextcloud comment truncates.

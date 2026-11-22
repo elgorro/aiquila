@@ -581,6 +581,33 @@ class ClaudeModels {
         return self::SUPPORTS_TASK_BUDGET[self::canonicalId($model)] ?? false;
     }
 
+    /**
+     * Models documented to take JSON outputs (`output_config.format`), per
+     * the structured outputs guide. Opus 4.7 / 4.6 and Sonnet 4.6 / 4.5 are
+     * not listed there, so they get a prompted answer that is checked in code
+     * like every other one.
+     */
+    private const SUPPORTS_STRUCTURED_OUTPUTS = [
+        self::FABLE_5_2  => true,
+        self::FABLE_5_1  => true,
+        self::FABLE_5    => true,
+        self::MYTHOS_5_2 => true,
+        self::MYTHOS_5_1 => true,
+        self::MYTHOS_5   => true,
+        self::OPUS_5_5   => true,
+        self::OPUS_5     => true,
+        self::OPUS_4_8   => true,
+        self::SONNET_5_5 => true,
+        self::SONNET_5   => true,
+        self::HAIKU_5_5  => true,
+        self::HAIKU_4_5  => true,
+        self::OPUS_4_5   => true,
+    ];
+
+    public static function supportsStructuredOutputs(string $model): bool {
+        return self::SUPPORTS_STRUCTURED_OUTPUTS[self::canonicalId($model)] ?? false;
+    }
+
     public static function supportsExtendedOutput(string $model): bool {
         return self::SUPPORTS_EXTENDED_OUTPUT[self::canonicalId($model)] ?? false;
     }
