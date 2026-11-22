@@ -123,11 +123,12 @@ test:
 	@echo "--- MCP endpoint (HTTPS via Caddy) ---"
 	@curl -sfk -X POST https://localhost:3340/mcp \
 		-H "Content-Type: application/json" \
-		-d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}' \
+		-H "Accept: application/json, text/event-stream" \
+		-d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}' \
 		| head -c 200 && echo "" \
 		|| echo "❌ FAIL: MCP server not responding on https://localhost:3340"
 	@echo ""
 	@echo "--- Nextcloud connectivity (from container) ---"
-	@$(COMPOSE) exec mcp-server sh -c 'curl -sf -o /dev/null -w "HTTP %{http_code}" "$$NEXTCLOUD_URL/status.php"' \
+	@$(COMPOSE) exec -T mcp-server node -e 'fetch(process.env.NEXTCLOUD_URL + "/status.php").then(r => { process.stdout.write("HTTP " + r.status); process.exit(r.ok ? 0 : 1) }).catch(e => { process.stdout.write(String(e.cause?.code || e.message)); process.exit(1) })' \
 		&& echo " ✅" \
 		|| echo "❌ FAIL: Cannot reach Nextcloud from MCP container"

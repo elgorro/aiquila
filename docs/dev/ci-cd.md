@@ -117,6 +117,10 @@ Minor and patch updates are grouped into a single PR per ecosystem; majors
 arrive as individual PRs so they can be evaluated on their own. Each ecosystem
 is capped at 5 open PRs.
 
+What Dependabot does not see (floating tags, toolchain lines, CI runtime versions),
+and how an update round or a security release is run, is in
+[Updates and security releases](update-plan.md).
+
 The `docker` ecosystem reads only Dockerfiles; compose files need the separate
 `docker-compose` ecosystem. PostgreSQL majors are ignored there, because they need a
 dump and restore ([Upgrading PostgreSQL to 18](../hetzner/advanced.md#upgrading-postgresql-to-18)).
@@ -148,8 +152,10 @@ Every compose and Dockerfile image follows one rule:
 - **First-party images** (`aiquila-mcp:latest`, `aiquila-nextcloud`) are the exception.
   Releases version them, and `aiquila-hetzner upgrade` pins the MCP tag on servers.
 
-Exact pins in a Hetzner server's rendered `docker-compose.yml` change only when the
-stack is rebuilt; `upgrade` rewrites the MCP image line alone.
+Exact pins in a Hetzner server's rendered `docker-compose.yml` change when the stack is
+rebuilt, or through `aiquila-hetzner upgrade --images`, which moves the third-party
+images to the release's pins. Without `--images`, `upgrade` pins only the MCP image and
+lists the rest as drift ([`upgrade` › Third-party images](../hetzner/commands.md#third-party-images)).
 
 ## Code Review Workflows
 
