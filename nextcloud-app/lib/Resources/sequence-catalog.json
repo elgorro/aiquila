@@ -4821,7 +4821,7 @@
    "name": "mail_get_attachment",
    "title": "Get Mail Attachment",
    "category": "mail",
-   "description": "Download an email attachment by message ID and attachment ID. Returns text for text files and calendar invites (ICS) and image data for images. Every result starts with an [UNTRUSTED EXTERNAL CONTENT] line naming the attachment: the name and the content come from the sender. Any other attachment (P…",
+   "description": "Download an email attachment by message ID and attachment ID. Returns text for text files and calendar invites (ICS) and image data for images. Every result starts with an [UNTRUSTED EXTERNAL CONTENT] line naming the attachment: the name and the content come from the sender. Text is closed by an [E…",
    "annotations": {
     "readOnlyHint": true,
     "destructiveHint": false,
