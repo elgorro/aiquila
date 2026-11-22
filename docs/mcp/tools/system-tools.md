@@ -88,7 +88,8 @@ Read a file over WebDAV.
 
 **Returns:**
 - text files: the file body as text
-- images: a header line `File: <name> (<mimeType>, <size> bytes)` and an MCP image block
+- images: a header line `File: <name> (<mimeType>, <size> bytes)` and an MCP image block, up
+  to [`MCP_MAX_EMBEDDED_FILE_SIZE`](#binary-files)
 - other binary files (PDF, office documents, archives, audio): the header line and the file
   itself as an [embedded resource](#binary-files)
 
@@ -230,8 +231,9 @@ same fields as `get_file_info`.
 ### get_file_content
 
 Read a file of any type (`GET /api/files/content`). Where the AIquila app is not installed, or
-answers `404` for the path, the file is read over WebDAV instead. Files over 20 MB are refused
-either way.
+answers `404` for the path, the file is read over WebDAV instead. Files over
+[`MCP_MAX_EMBEDDED_FILE_SIZE`](#binary-files) are refused either way. The app also refuses files
+over 20 MB itself, so a limit set higher takes effect only where the app is not installed.
 
 **Parameters:**
 - `path` (string, required)
@@ -256,8 +258,9 @@ block.
 
 The same URI answers `resources/read`: see [Resources](../README.md#resources).
 
-`MCP_MAX_EMBEDDED_FILE_SIZE` (bytes, default `20971520` = 20 MB) caps the files sent this way.
-A larger binary file is described, not sent, and `read_file` does not download it: it asks
+`MCP_MAX_EMBEDDED_FILE_SIZE` (bytes, default `20971520` = 20 MB) caps the files sent this way,
+and images sent as image blocks. A larger binary file or image is described, not sent, and
+`read_file` does not download it: it asks
 for the size and type first, and where the type does not say whether the file is text, reads
 only its first 8 KB to find out. The value is a positive integer: anything else,
 `0` included, is ignored for the default, with a warning in the log. Base64 makes the message a third larger than the
@@ -268,7 +271,7 @@ file, so lower the limit if a proxy in front of the server restricts response si
 ### analyze_image
 
 Hand one or more images to the model together with a question about them. The images are read
-like [`get_file_content`](#get_file_content) reads them, so the 20 MB per-file limit applies.
+like [`get_file_content`](#get_file_content) reads them, so its per-file limit applies.
 
 **Parameters:**
 - `path` (string, optional): one image

@@ -8,7 +8,8 @@ import {
   fileMimeType,
   fileUri,
   isBinaryType,
-  isEmbedded,
+  isImageType,
+  isSizeLimited,
   maxEmbeddedFileSize,
   oversizedContent,
   TEXT_PROBE_LENGTH,
@@ -68,8 +69,8 @@ export const readFileTool = {
   inputSchema: FilePathSchema,
   handler: async (args: { path: string }) => {
     const client = getWebDAVClient();
-    // Ask first: a binary file over the limit is refused without being
-    // downloaded. The media type Nextcloud reports tells whether it is one;
+    // Ask first: a binary file or an image over the limit is refused without
+    // being downloaded. The media type Nextcloud reports tells whether it is one;
     // where it does not, the first bytes do, fetched alone.
     const stat = await client.stat(args.path).catch(() => undefined);
     const name = stat?.basename || args.path.split('/').filter(Boolean).pop() || args.path;
@@ -77,11 +78,11 @@ export const readFileTool = {
       const declared = { name, bytes: new Uint8Array(), mimeType: stat.mime };
       const known = fileMimeType(declared);
       const start =
-        isBinaryType(known) || known.startsWith('image/')
+        isBinaryType(known) || isImageType(known)
           ? declared.bytes
           : await client.getFileStart(args.path, TEXT_PROBE_LENGTH);
       const probe = { ...declared, bytes: start };
-      if (isEmbedded(probe)) {
+      if (isSizeLimited(probe)) {
         const refused = oversizedContent(`File: ${name}`, fileMimeType(probe), stat.size);
         if (refused) return { content: refused };
       }
@@ -352,6 +353,11 @@ type LoadedFile = { name: string; mimeType: string; size: number } & (
  * does not see. WebDAV needs no app, and reports a missing file itself.
  */
 async function loadFile(path: string): Promise<LoadedFile> {
+  // The app refuses files over its own 20 MB with 413; this server's limit
+  // holds whichever way the file is read, and whatever it is set to.
+  const limit = maxEmbeddedFileSize();
+  const tooLarge = (size: number) =>
+    new Error(`File too large: ${size} bytes (max ${limit}, MCP_MAX_EMBEDDED_FILE_SIZE)`);
   try {
     const result = await fetchAiquilaAPI<{
       name: string;
@@ -361,6 +367,7 @@ async function loadFile(path: string): Promise<LoadedFile> {
       content: string;
     }>('/files/content', { queryParams: { path } });
     const { name, mimeType, size } = result;
+    if (size > limit) throw tooLarge(size);
     return result.encoding === 'text'
       ? { name, mimeType, size, text: result.content }
       : { name, mimeType, size, bytes: Buffer.from(result.content, 'base64') };
@@ -371,9 +378,7 @@ async function loadFile(path: string): Promise<LoadedFile> {
   const client = getWebDAVClient();
   const stat = await client.stat(path);
   if (stat.type === 'directory') throw new Error(`'${path}' is a folder, not a file`);
-  // The app refuses larger files with 413; keep one limit whichever way the file is read.
-  const limit = maxEmbeddedFileSize();
-  if (stat.size > limit) throw new Error(`File too large: ${stat.size} bytes (max ${limit})`);
+  if (stat.size > limit) throw tooLarge(stat.size);
   const bytes = await client.getFileContents(path, { format: 'binary' });
   return {
     name: stat.basename,

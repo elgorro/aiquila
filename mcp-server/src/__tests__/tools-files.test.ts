@@ -136,6 +136,27 @@ describe('File Tools (AIquila API)', () => {
       expect(result.content[1]).toHaveProperty('mimeType', 'image/jpeg');
     });
 
+    it('should hold a file the app returns to MCP_MAX_EMBEDDED_FILE_SIZE', async () => {
+      process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '1000';
+      mockFetchAiquilaAPI.mockResolvedValue({
+        name: 'photo.jpg',
+        mimeType: 'image/jpeg',
+        size: 50000,
+        encoding: 'base64',
+        content: '/9j/4AAQSkZJRg==',
+      });
+
+      const { getFileContentTool } = await import('../tools/system/files.js');
+      const result = await getFileContentTool.handler({ path: '/Photos/photo.jpg' });
+      delete process.env.MCP_MAX_EMBEDDED_FILE_SIZE;
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].text).toContain(
+        'File too large: 50000 bytes (max 1000, MCP_MAX_EMBEDDED_FILE_SIZE)'
+      );
+    });
+
     it('should return other binary files whole, as an embedded resource', async () => {
       mockFetchAiquilaAPI.mockResolvedValue({
         name: 'archive.zip',
@@ -305,6 +326,27 @@ describe('File Tools (AIquila API)', () => {
       expect(result.content[0].text).toContain('receipt.jpg');
       expect(result.content[0].text).toContain('What text is in this image?');
       expect(result.content[1].type).toBe('image');
+    });
+
+    it('should refuse an image over MCP_MAX_EMBEDDED_FILE_SIZE', async () => {
+      process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '1000';
+      mockFetchAiquilaAPI.mockResolvedValue({
+        name: 'receipt.jpg',
+        mimeType: 'image/jpeg',
+        size: 30000,
+        encoding: 'base64',
+        content: '/9j/base64data',
+      });
+
+      const { analyzeImageTool } = await import('../tools/system/files.js');
+      const result = await analyzeImageTool.handler({ path: '/Photos/receipt.jpg', prompt: 'x' });
+      delete process.env.MCP_MAX_EMBEDDED_FILE_SIZE;
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].text).toContain(
+        'File too large: 30000 bytes (max 1000, MCP_MAX_EMBEDDED_FILE_SIZE)'
+      );
     });
 
     it('should analyze multiple images', async () => {
