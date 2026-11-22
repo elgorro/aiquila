@@ -117,6 +117,10 @@ Minor and patch updates are grouped into a single PR per ecosystem; majors
 arrive as individual PRs so they can be evaluated on their own. Each ecosystem
 is capped at 5 open PRs.
 
+What Dependabot does not see (floating tags, toolchain lines, CI runtime versions),
+and how an update round or a security release is run, is in
+[Updates and security releases](update-plan.md).
+
 The `docker` ecosystem reads only Dockerfiles; compose files need the separate
 `docker-compose` ecosystem. PostgreSQL majors are ignored there, because they need a
 dump and restore ([Upgrading PostgreSQL to 18](../hetzner/advanced.md#upgrading-postgresql-to-18)).

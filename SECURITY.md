@@ -33,7 +33,9 @@ Useful details:
   applies, and credit you unless you prefer to stay anonymous.
 
 Please give us a reasonable chance to release a fix before disclosing the issue
-publicly.
+publicly. How we triage, how fast we aim to release a fix by severity, and how
+fixes reach deployments is described in
+[Updates and security releases](docs/dev/update-plan.md#emergency-plan).
 
 ## Scope
 
