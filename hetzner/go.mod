@@ -1,6 +1,6 @@
 module github.com/elgorro/aiquila/hetzner
 
-go 1.26.11
+go 1.27.4
 
 require (
 	github.com/hetznercloud/hcloud-go/v2 v2.53.0
