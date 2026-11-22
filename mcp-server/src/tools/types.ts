@@ -71,7 +71,15 @@ export const FileContentSchema = z.object({
   content: z
     .string()
     .max(MAX_FILE_SIZE, `File content exceeds maximum size of ${MAX_FILE_SIZE} bytes`)
-    .describe('The content to write to the file'),
+    .describe(
+      'The content to write to the file: its text, or its bytes in base64 when encoding is "base64"'
+    ),
+  encoding: z
+    .enum(['text', 'base64'])
+    .optional()
+    .describe(
+      'How content is given. "text" (default) stores it as it is. "base64" decodes it first, to write a binary file such as a PDF, an image or an office document'
+    ),
 });
 
 /**

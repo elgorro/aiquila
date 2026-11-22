@@ -109,15 +109,24 @@ inline. Attachment IDs are listed in `mail_read_message` output (shown as `[id: 
 - `attachmentId` (string, required): The attachment ID shown in `mail_read_message` (e.g. `"2"`)
 
 **Returns (depends on the attachment's content type):**
-- **Text / ICS / JSON** — the raw text
+Every result starts with a line `[UNTRUSTED EXTERNAL CONTENT - MAIL ATTACHMENT] "<name>"
+(<type>, <size> bytes)`: the sender chose the name and wrote the content, so the name is
+quoted and both are marked as theirs. Then:
+
+- **Text / ICS / JSON** — the text, closed by `[END EXTERNAL CONTENT]`
 - **Images** — a base64 image block, usable directly by vision-capable models
-- **PDFs** — plain text extracted with `pdftotext`, wrapped in
-  `[UNTRUSTED EXTERNAL CONTENT]` markers
-- **Other binary** — a short note with the MIME type and size (cannot be read inline)
+- **Anything else** (PDF, office documents, archives) — the attachment itself as an
+  [embedded resource](../system-tools.md#binary-files). Up to `MCP_MAX_EMBEDDED_FILE_SIZE`;
+  a larger attachment is described, not sent
+- **PDFs** — also, ahead of that line, the plain text extracted with `pdftotext`, wrapped
+  in its own `[UNTRUSTED EXTERNAL CONTENT - PDF ATTACHMENT]` markers
+
+An attachment declared as `application/octet-stream` gets its type from its file name, then
+from its first bytes.
 
 **Dependency:** PDF text extraction requires `pdftotext` from `poppler-utils`. It is
-included in the official Docker image. If it is unavailable, the tool degrades gracefully
-and returns the type + size fallback instead of failing.
+included in the official Docker image. If it is unavailable, the PDF is still returned as an
+embedded resource, without the extracted text.
 
 **Example Usage:**
 ```

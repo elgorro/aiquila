@@ -9,7 +9,8 @@
  * - **Tool calls**, keyed by the signed-in Nextcloud user (or by client
  *   address when OAuth is off). Every `tools/call` message counts, including
  *   each one in a legacy JSON-RPC batch, since each becomes a request to
- *   Nextcloud. Other methods do not count.
+ *   Nextcloud. So does every `resources/read`, for the same reason. Other
+ *   methods do not count.
  * - **Anonymous requests** (lazy auth), keyed by client address. Every message
  *   counts. Distributed clients reach the server from several addresses, so
  *   signed-in users are never keyed by address.
@@ -92,10 +93,16 @@ function messages(body: unknown): unknown[] {
   return Array.isArray(body) ? body : [body];
 }
 
-/** Number of `tools/call` messages in a JSON-RPC body (a single message or a batch). */
+/** The methods that reach Nextcloud on the caller's behalf. */
+const COUNTED_METHODS: ReadonlySet<unknown> = new Set(['tools/call', 'resources/read']);
+
+/**
+ * Number of `tools/call` and `resources/read` messages in a JSON-RPC body (a
+ * single message or a batch).
+ */
 export function countToolCalls(body: unknown): number {
   return messages(body).filter(
-    (m) => !!m && typeof m === 'object' && (m as { method?: unknown }).method === 'tools/call'
+    (m) => !!m && typeof m === 'object' && COUNTED_METHODS.has((m as { method?: unknown }).method)
   ).length;
 }
 

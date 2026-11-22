@@ -47,7 +47,7 @@ category to `TOOL_REGISTRY`; after a squash merge, that is the merge commit on `
 
 | Category | Source | Upstream | API | Reference | Introduced | Last verified |
 |---|---|---|---|---|---|---|
-| `files` | `system/files.ts` | `dav`, `aiquila` | WebDAV, App REST | [WebDAV basics](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/basic.html), [OpenAPI](../dev/openapi.md) | 0.1.2 · `33a6ce8` · 2025-11-21 | dav 2.0.0 · NC 35.0.2 · 2026-11-14; aiquila 0.5.3 · 2026-11-14 |
+| `files` | `system/files.ts` | `dav`, `aiquila` | WebDAV, App REST | [WebDAV basics](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/basic.html), [OpenAPI](../dev/openapi.md) | 0.1.2 · `33a6ce8` · 2025-11-21 | dav 2.0.1 · NC 35.0.3 · 2026-11-18; aiquila 0.5.3 · 2026-11-14 |
 | `status` | `system/status.ts` | core | OCS, OCC | [OCS API overview](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-api-overview.html) | 0.1.5 · `8f5df8b` · 2026-02-07 | core, aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
 | `apps` | `system/apps.ts` | `provisioning_api` | OCS, OCC | [Apps provisioning](https://docs.nextcloud.com/server/latest/admin_manual/configuration_user/instruction_set_for_apps.html) | 0.1.5 · `8f5df8b` · 2026-02-07 | provisioning_api 2.0.0, aiquila 0.5.1 · NC 35.0.2 · 2026-10-31 |
 | `tags` | `system/tags.ts` | `systemtags` | WebDAV | [WebDAV](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/WebDAV/index.html) | 0.1.12 · `ab9c5aa` · 2026-02-10 | systemtags 2.0.0, dav 2.0.0 · NC 35.0.2 · 2026-10-31 |
@@ -83,7 +83,7 @@ this repository ([OpenAPI](../dev/openapi.md)) rather than an external reference
 | `contacts` | `apps/contacts.ts` | `contacts` | CardDAV | [RFC 6352](https://www.rfc-editor.org/rfc/rfc6352), [RFC 6350](https://www.rfc-editor.org/rfc/rfc6350) | 0.1.7 · `b98bd51` · 2026-02-08 | contacts 8.9.3, dav 2.0.0 · NC 35.0.2 · 2026-10-31 |
 | `notes` | `apps/notes.ts` | `notes` | App REST v1 | [Notes API v1](https://github.com/nextcloud/notes/blob/main/docs/api/v1.md) | 0.1.2 · `33a6ce8` · 2025-11-21 | notes 6.1.0 · NC 35.0.2 · 2026-11-14 |
 | `news` | `apps/news.ts` | `news` | App REST v1-3 | [News API v1-3](https://github.com/nextcloud/news/blob/master/docs/development/api/api-v1-3.md) | 0.3.18 · `0a6ce5e` · 2026-06-12 | news 29.0.0 · NC 35.0.2 · 2026-10-31 |
-| `mail` | `apps/mail.ts` | `mail` | App REST, OCS (send) | [nextcloud/mail](https://github.com/nextcloud/mail) | 0.1.7 · `b98bd51` · 2026-02-08 | mail 5.12.6 · NC 35.0.2 · 2026-10-31 |
+| `mail` | `apps/mail.ts` | `mail` | App REST, OCS (send) | [nextcloud/mail](https://github.com/nextcloud/mail) | 0.1.7 · `b98bd51` · 2026-02-08 | mail 5.13.3 · NC 35.0.3 · 2026-11-18 |
 | `deck` | `apps/deck.ts` | `deck` | App REST v1.0 | [Deck API](https://deck.readthedocs.io/en/latest/API/) | 0.2.10 · `5ac75d0` · 2026-03-28 | deck 1.19.2 · NC 35.0.2 · 2026-11-06 |
 | `passman` | `apps/passman.ts` | `passman` | App REST v2 | [Passman API](https://github.com/nextcloud/passman/blob/master/docs/api.md) | 0.3.24 · `a1c8f7e` · 2026-06-27 | passman 2.6.5 · NC 35.0.2 · 2026-10-31 |
 | `cookbook` | `apps/cookbook.ts` | `cookbook` | WebDAV (recipe files), App REST (config, reindex) | [nextcloud/cookbook](https://github.com/nextcloud/cookbook) | 0.1.2 · `33a6ce8` · 2025-11-21 | cookbook 0.11.12 · NC 35.0.2 · 2026-10-31 |
