@@ -113,14 +113,21 @@ Every result starts with a line `[UNTRUSTED EXTERNAL CONTENT - MAIL ATTACHMENT] 
 (<type>, <size> bytes)`: the sender chose the name and wrote the content, so the name is
 quoted and both are marked as theirs. Then:
 
-- **Text / ICS / JSON** — the text, closed by `[END EXTERNAL CONTENT]`
+- **Text / ICS / JSON** — the text, closed by `[END EXTERNAL CONTENT boundary=<hex>]`
 - **Images** — a base64 image block, usable directly by vision-capable models. Up to
   `MCP_MAX_EMBEDDED_FILE_SIZE`; a larger image is described, not sent
 - **Anything else** (PDF, office documents, archives) — the attachment itself as an
   [embedded resource](../system-tools.md#binary-files). Up to `MCP_MAX_EMBEDDED_FILE_SIZE`;
   a larger attachment is described, not sent
 - **PDFs** — also, ahead of that line, the plain text extracted with `pdftotext`, wrapped
-  in its own `[UNTRUSTED EXTERNAL CONTENT - PDF ATTACHMENT]` markers
+  in its own `[UNTRUSTED EXTERNAL CONTENT - PDF ATTACHMENT boundary=<hex>] "<name>"` markers
+
+Wrapped text carries a random `boundary=` value, new on every call, in both its start
+line and its end line (`[UNTRUSTED EXTERNAL CONTENT - MAIL ATTACHMENT boundary=<hex>]
+"<name>" (<type>, <size> bytes)`). Only the end line with the same boundary closes it, so
+the sender cannot close the marker from inside the attachment. Any marker phrase in the
+content itself (`END EXTERNAL CONTENT` or `UNTRUSTED EXTERNAL CONTENT`, in any case and
+spacing) is replaced with `(marker text removed)`.
 
 An attachment declared as `application/octet-stream` gets its type from its file name, then
 from its first bytes.
