@@ -39,6 +39,7 @@ use Psr\Log\LoggerInterface;
  * @psalm-type BatchSkip = array{item: string, reason: string}
  * @psalm-type BatchRunResult = array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, itemsSkipped?: int, summary: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}
  * @psalm-type BatchSelection = array{files: list<File>, skipped: list<BatchSkip>, capped: bool}
+ * @psalm-type BatchDocument = array{kind: 'text'|'pdf', data: string}
  */
 class BatchDocumentRunner {
 
@@ -58,14 +59,40 @@ class BatchDocumentRunner {
     /**
      * Mime prefixes and exact types read by default.
      *
-     * Text only. A PDF's bytes are not text, and inlining them into a prompt
-     * would send the model binary rather than a document — the Messages API
-     * wants a base64 `document` block for that, which a batch request here
-     * does not build. `application/pdf` is therefore deliberately absent.
+     * Text goes into the prompt. A PDF goes as its own `document` block, which
+     * only the Anthropic provider builds; on any other provider a walk passes
+     * PDFs over ({@see pdfUnsupportedReason()}).
      *
      * @var list<string>
      */
-    public const DEFAULT_MIME_TYPES = ['text/', 'application/json'];
+    public const DEFAULT_MIME_TYPES = ['text/', 'application/json', self::PDF_MIME];
+
+    public const PDF_MIME = 'application/pdf';
+
+    /**
+     * Largest PDF read. A PDF is sent whole, and the API reads at most 600
+     * pages of it (100 under a 1M-token context); past this size a PDF is
+     * almost always longer than that, or mostly images.
+     */
+    public const MAX_PDF_BYTES = 32 * 1048576;
+
+    /**
+     * Most base64 PDF bytes one batch carries inline, when PDFs cannot go
+     * through the Files API. A batch is limited to 256 MB in all, and this
+     * leaves room for the prompts and the request envelopes.
+     */
+    public const MAX_INLINE_PDF_BYTES_PER_BATCH = 192 * 1048576;
+
+    /**
+     * Lifetime of a PDF uploaded for a batch. A batch ends or expires within
+     * 24 hours, and the run deletes its uploads once it collects the results
+     * (or is cancelled); the expiry only covers a run that never comes back.
+     * The Files API accepts 3600 – 7776000 seconds.
+     */
+    public const UPLOAD_TTL_SECONDS = 30 * 3600;
+
+    /** Why a PDF was passed over, per user and provider; null when PDFs are read. */
+    private array $pdfReasons = [];
 
     /**
      * Hidden system tag on every output file. A folder walk skips files that
@@ -190,6 +217,10 @@ class BatchDocumentRunner {
                 $skipped[] = ['item' => UserPath::of($file), 'reason' => self::unsupportedType($file)];
                 continue;
             }
+            if (self::isPdf($file) && ($reason = $this->pdfUnsupportedReason($ctx)) !== null) {
+                $skipped[] = ['item' => UserPath::of($file), 'reason' => $reason];
+                continue;
+            }
             $matches[] = $file;
         }
 
@@ -248,6 +279,11 @@ class BatchDocumentRunner {
      */
     private function isCandidate(BatchContext $ctx, File $file): bool {
         if (!$this->matchesMime($file, $ctx->mimeTypes())) {
+            return false;
+        }
+        // A nightly walk that kept listing PDFs it cannot send would spend the
+        // run's quota on them every time; they wait for a provider that can.
+        if (self::isPdf($file) && $this->pdfUnsupportedReason($ctx) !== null) {
             return false;
         }
         // Our own output is text too, and it lands in the tree we are walking.
@@ -316,6 +352,11 @@ class BatchDocumentRunner {
                     $skipped[] = ['item' => UserPath::of($child), 'reason' => self::unsupportedType($child)];
                     continue;
                 }
+                if ($report && self::isPdf($child) && ($reason = $this->pdfUnsupportedReason($ctx)) !== null) {
+                    $seen[$child->getId()] = true;
+                    $skipped[] = ['item' => UserPath::of($child), 'reason' => $reason];
+                    continue;
+                }
                 if ($this->isCandidate($ctx, $child)) {
                     $seen[$child->getId()] = true;
                     $matches[] = $child;
@@ -330,7 +371,31 @@ class BatchDocumentRunner {
     }
 
     private static function unsupportedType(File $file): string {
-        return 'Not a text document (' . $file->getMimetype() . ')';
+        return 'Not a text or PDF document (' . $file->getMimetype() . ')';
+    }
+
+    private static function isPdf(File $file): bool {
+        return $file->getMimetype() === self::PDF_MIME;
+    }
+
+    /**
+     * Why this run cannot send PDFs, or null when it can: the run's provider
+     * must be the Anthropic one, which takes a PDF as a `document` block.
+     * Asked once per user and provider.
+     */
+    public function pdfUnsupportedReason(BatchContext $ctx): ?string {
+        $key = $ctx->userId . "\0" . ($ctx->providerId ?? '');
+        if (!array_key_exists($key, $this->pdfReasons)) {
+            try {
+                $provider = $this->providerFactory->getProviderForUser($ctx->userId, $ctx->providerId);
+                $this->pdfReasons[$key] = $provider instanceof ClaudeSDKService
+                    ? null
+                    : 'PDF input needs the Anthropic provider; ' . $provider->getLabel() . ' is configured';
+            } catch (\Throwable) {
+                $this->pdfReasons[$key] = 'PDF input needs the Anthropic provider';
+            }
+        }
+        return $this->pdfReasons[$key];
     }
 
     private function alreadyDone(BatchContext $ctx, File $file): bool {
@@ -372,17 +437,47 @@ class BatchDocumentRunner {
         // what results come back keyed by — the API returns them in any order.
         $requests = [];
         $fileIds = [];
+        $uploaded = [];
+        $inlineBytes = 0;
         $total = count($files);
+        $useFilesApi = $provider->supportsFilesApi();
         foreach ($files as $file) {
-            $content = $this->readContent($ctx, $file, $reason);
-            if ($content === null) {
+            $document = $this->readDocument($ctx, $file, $reason);
+            if ($document === null) {
                 $skipped[] = $this->skip($run, $file, $reason);
                 continue;
+            }
+            $source = null;
+            if ($document['kind'] === 'pdf') {
+                if ($useFilesApi) {
+                    // A file_id keeps the batch small whatever the PDFs weigh.
+                    try {
+                        $source = ['type' => 'file', 'file_id' => $provider->uploadFile(
+                            $document['data'],
+                            $file->getName(),
+                            self::PDF_MIME,
+                            $ctx->userId,
+                            self::UPLOAD_TTL_SECONDS,
+                        )['id']];
+                    } catch (\Throwable $e) {
+                        $skipped[] = $this->skip($run, $file, 'Could not be uploaded: ' . $e->getMessage());
+                        continue;
+                    }
+                    $uploaded[] = $source['file_id'];
+                } else {
+                    $encoded = base64_encode($document['data']);
+                    if ($inlineBytes + strlen($encoded) > self::MAX_INLINE_PDF_BYTES_PER_BATCH) {
+                        $skipped[] = $this->skip($run, $file, 'Left for the next run: this batch is at its size limit');
+                        continue;
+                    }
+                    $inlineBytes += strlen($encoded);
+                    $source = ['type' => 'base64', 'media_type' => self::PDF_MIME, 'data' => $encoded];
+                }
             }
             $customId = 'f' . $file->getId();
             $requests[] = [
                 'custom_id' => $customId,
-                'messages' => [['role' => 'user', 'content' => $ctx->operation->buildPrompt($content, $ctx->options)]],
+                'messages' => [['role' => 'user', 'content' => self::userContent($ctx, $document, $source)]],
                 'options' => ($ctx->requestOptions)($provider),
             ];
             $fileIds[$customId] = $file->getId();
@@ -397,7 +492,12 @@ class BatchDocumentRunner {
             ];
         }
 
-        $batchId = $provider->submitBatch($requests, $ctx->userId);
+        try {
+            $batchId = $provider->submitBatch($requests, $ctx->userId);
+        } catch (\Throwable $e) {
+            $this->deleteUploads($provider, $uploaded, $ctx->userId);
+            throw $e;
+        }
         $run->appendLog(CoworkerRun::LOG_INFO, sprintf('Submitted %d document(s) to batch %s', count($requests), $batchId));
 
         return [
@@ -416,6 +516,7 @@ class BatchDocumentRunner {
                 'submitted_at' => time(),
                 'skipped' => $skipped,
                 'options' => $ctx->options,
+                'uploaded_files' => $uploaded,
             ],
         ];
     }
@@ -451,6 +552,7 @@ class BatchDocumentRunner {
             // Anthropic expires a batch at 24 h, so past the deadline the
             // record itself is gone and nothing will ever end this run.
             if ($submittedAt > 0 && (time() - $submittedAt) > self::BATCH_DEADLINE_SECONDS) {
+                $this->deleteUploads($provider, self::uploadsFromState($state), $ctx->userId);
                 throw new \RuntimeException("Batch $batchId did not end within 26 hours");
             }
             return [
@@ -463,7 +565,57 @@ class BatchDocumentRunner {
             ];
         }
 
-        return $this->collectResults($ctx, $run, $provider, $batchId, $fileIds, $state, $progress);
+        try {
+            return $this->collectResults($ctx, $run, $provider, $batchId, $fileIds, $state, $progress);
+        } finally {
+            // The batch has ended, so nothing reads the uploads any more.
+            $this->deleteUploads($provider, self::uploadsFromState($state), $ctx->userId);
+        }
+    }
+
+    /**
+     * The Files API ids a pending run uploaded its PDFs as.
+     *
+     * @param array<string, mixed> $state
+     * @return list<string>
+     */
+    public static function uploadsFromState(array $state): array {
+        $ids = [];
+        foreach (is_array($state['uploaded_files'] ?? null) ? $state['uploaded_files'] : [] as $id) {
+            if (is_string($id) && $id !== '') {
+                $ids[] = $id;
+            }
+        }
+        return $ids;
+    }
+
+    /**
+     * Delete a run's uploads from the Files API. Best effort: a file left
+     * behind expires by itself ({@see UPLOAD_TTL_SECONDS}).
+     *
+     * @param list<string> $fileIds
+     */
+    public function deleteUploads(ClaudeSDKService $provider, array $fileIds, string $userId): void {
+        self::deleteUploadsWith($provider, $fileIds, $userId, $this->logger);
+    }
+
+    /**
+     * {@see deleteUploads()} for a caller that holds no runner, such as a
+     * cancel.
+     *
+     * @param list<string> $fileIds
+     */
+    public static function deleteUploadsWith(ClaudeSDKService $provider, array $fileIds, string $userId, LoggerInterface $logger): void {
+        foreach ($fileIds as $fileId) {
+            try {
+                $provider->deleteFile($fileId, $userId);
+            } catch (\Throwable $e) {
+                $logger->warning('AIquila batch: could not delete an uploaded PDF; it expires by itself', [
+                    'file_id' => $fileId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
     /**
@@ -580,18 +732,36 @@ class BatchDocumentRunner {
 
         foreach ($files as $file) {
             try {
-                $content = $this->readContent($ctx, $file, $reason);
-                if ($content === null) {
+                $document = $this->readDocument($ctx, $file, $reason);
+                if ($document === null) {
                     $skipped[] = $this->skip($run, $file, $reason);
                     continue;
                 }
 
-                $result = $provider->ask(
-                    $ctx->operation->buildPrompt($content, $ctx->options),
-                    '',
-                    $userId,
-                    ($ctx->requestOptions)($provider),
-                );
+                if ($document['kind'] === 'pdf') {
+                    if (!$provider instanceof ClaudeSDKService) {
+                        $skipped[] = $this->skip($run, $file, $this->pdfUnsupportedReason($ctx));
+                        continue;
+                    }
+                    // One request carries one PDF, so it goes inline.
+                    $result = $provider->chat(
+                        [['role' => 'user', 'content' => self::userContent($ctx, $document, [
+                            'type' => 'base64',
+                            'media_type' => self::PDF_MIME,
+                            'data' => base64_encode($document['data']),
+                        ])]],
+                        null,
+                        $userId,
+                        ($ctx->requestOptions)($provider),
+                    );
+                } else {
+                    $result = $provider->ask(
+                        $ctx->operation->buildPrompt($document['data'], $ctx->options),
+                        '',
+                        $userId,
+                        ($ctx->requestOptions)($provider),
+                    );
+                }
                 $this->usageStats->record($userId, $provider, $result, $ctx->usageType);
                 if (isset($result['error'])) {
                     // A refusal is reported as such, as on the batch path.
@@ -745,19 +915,23 @@ class BatchDocumentRunner {
     // ── Files ─────────────────────────────────────────────────────────────
 
     /**
-     * Read a document's text, or null when it is too large, unreadable, not
-     * UTF-8 or empty; $reason then says which, for the run log.
+     * Read a document: a PDF's bytes, or a text document's text. Null when it
+     * is too large, unreadable, not what its type says or empty; $reason then
+     * says which, for the run log.
      *
      * Oversized files are skipped rather than truncated: half a contract
      * summarised as if it were the whole thing is worse than no summary.
      *
+     * @return BatchDocument|null
      * @param-out string|null $reason
      */
-    private function readContent(BatchContext $ctx, File $file, ?string &$reason = null): ?string {
+    private function readDocument(BatchContext $ctx, File $file, ?string &$reason = null): ?array {
         $reason = null;
+        $pdf = self::isPdf($file);
+        $limit = $pdf ? self::MAX_PDF_BYTES : $ctx->maxBytes();
         $size = (int)$file->getSize();
-        if ($size > $ctx->maxBytes()) {
-            $reason = sprintf('Too large (%s; the limit is %s)', self::humanBytes($size), self::humanBytes($ctx->maxBytes()));
+        if ($size > $limit) {
+            $reason = sprintf('Too large (%s; the limit is %s)', self::humanBytes($size), self::humanBytes($limit));
             return null;
         }
         try {
@@ -765,6 +939,16 @@ class BatchDocumentRunner {
         } catch (\Throwable $e) {
             $reason = 'Could not be read: ' . $e->getMessage();
             return null;
+        }
+        if ($pdf) {
+            // The type comes from the name. A file that is not a PDF would be
+            // rejected by the API, and in a batch it would fail on its own,
+            // but there is no reason to upload or bill for it.
+            if (!str_starts_with(ltrim(substr($content, 0, 1024)), '%PDF-')) {
+                $reason = 'Not a PDF, although its name says so';
+                return null;
+            }
+            return ['kind' => 'pdf', 'data' => $content];
         }
         // A batch is submitted as one request for the whole set, outside any
         // per-file guard, so one binary file reaching the payload would take
@@ -777,7 +961,26 @@ class BatchDocumentRunner {
             $reason = 'Empty';
             return null;
         }
-        return $content;
+        return ['kind' => 'text', 'data' => $content];
+    }
+
+    /**
+     * The user message for one document: the prompt with the text in it, or
+     * a PDF's `document` block followed by the question about it. The block
+     * comes first, as the PDF guide recommends.
+     *
+     * @param BatchDocument $document
+     * @param array<string, string>|null $source the PDF's `source`
+     * @return string|list<array<string, mixed>>
+     */
+    private static function userContent(BatchContext $ctx, array $document, ?array $source): string|array {
+        if ($document['kind'] === 'text') {
+            return $ctx->operation->buildPrompt($document['data'], $ctx->options);
+        }
+        return [
+            ['type' => 'document', 'source' => $source],
+            ['type' => 'text', 'text' => $ctx->operation->buildDocumentPrompt($ctx->options)],
+        ];
     }
 
     private static function humanBytes(int $bytes): string {

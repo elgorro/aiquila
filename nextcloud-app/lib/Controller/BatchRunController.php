@@ -108,7 +108,7 @@ class BatchRunController extends Controller {
      * @param array<string, mixed> $options Shared options (`recursive`, `force`, `outputFolder`, `maxBytesPerFile`, `mimeTypes`) plus the operation's own (`style` for summarize, `targetLanguage` for translate)
      * @param string|null $mode `batch` (half price, up to 24 hours) or `immediate` (full price); defaults to `batch` when the provider supports it
      * @param list<int> $fileIds Files to process
-     * @param list<int> $folderIds Folders whose text documents to process
+     * @param list<int> $folderIds Folders whose text and PDF documents to process
      *
      * 202: The queued run
      * 400: Invalid input, or more ids than a run takes (`limit` names the cap)

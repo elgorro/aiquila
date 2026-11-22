@@ -564,15 +564,16 @@ class BatchTextTaskTypeTest extends TestCase {
     }
 
     /** PDF bytes are not text; nothing here builds a document content block. */
-    public function testPdfsAreNotCollectedByDefault(): void {
+    public function testPdfsAreCollectedByDefault(): void {
         $this->inputFolder([
             $this->file(11, 'a.txt', 'text/plain', 'body'),
             $this->file(12, 'report.pdf', 'application/pdf', '%PDF-1.4 binary'),
         ]);
+        $this->provider->method('supportsFilesApi')->willReturn(false);
         $this->provider->method('submitBatch')->willReturn('batch_01ABC');
 
         $result = $this->task->run($this->coworker(), $this->newRun(), $this->progress());
 
-        $this->assertSame(['f11' => 11], $result['state']['file_ids']);
+        $this->assertSame(['f11' => 11, 'f12' => 12], $result['state']['file_ids']);
     }
 }

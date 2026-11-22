@@ -31,6 +31,15 @@ final class SummarizeOperation implements BatchOperation {
     }
 
     public function buildPrompt(string $content, array $options): string {
+        return $this->instruction('the document below', $options) . "\n\nDocument:\n$content";
+    }
+
+    public function buildDocumentPrompt(array $options): string {
+        return $this->instruction('the attached document', $options);
+    }
+
+    /** @param array<string, mixed> $options */
+    private function instruction(string $document, array $options): string {
         $style = (string)($options['style'] ?? self::DEFAULT_STYLE);
         $instruction = match ($style) {
             'detailed' => 'Write a thorough summary covering every substantive point, in several paragraphs.',
@@ -38,9 +47,9 @@ final class SummarizeOperation implements BatchOperation {
             default    => 'Write a concise summary of a few sentences.',
         };
 
-        return "Summarize the document below. $instruction "
+        return "Summarize $document. $instruction "
             . 'Respond with the summary alone in Markdown — no preamble, no title, no commentary '
-            . "about the document or the task.\n\nDocument:\n$content";
+            . 'about the document or the task.';
     }
 
     public function outputSuffix(array $options): string {
