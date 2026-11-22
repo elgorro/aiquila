@@ -87,7 +87,8 @@ Use `--dry-run` to preview what would be created without making any API calls.
 
 To move an existing deployment to a new release, run
 `aiquila-hetzner upgrade --name <server>`: it backs up, adds the configuration the release
-needs, and upgrades only the MCP server and the AIquila app. See [`upgrade`](commands.md#upgrade).
+needs, and upgrades only the MCP server and the AIquila app (with `--images`, also the
+third-party images). See [`upgrade`](commands.md#upgrade).
 
 The CLI prints a cost warning and asks for confirmation before the first
 billable API call. Use `--noconfirm` to skip the prompt in CI/CD pipelines.

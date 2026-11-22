@@ -148,8 +148,10 @@ Every compose and Dockerfile image follows one rule:
 - **First-party images** (`aiquila-mcp:latest`, `aiquila-nextcloud`) are the exception.
   Releases version them, and `aiquila-hetzner upgrade` pins the MCP tag on servers.
 
-Exact pins in a Hetzner server's rendered `docker-compose.yml` change only when the
-stack is rebuilt; `upgrade` rewrites the MCP image line alone.
+Exact pins in a Hetzner server's rendered `docker-compose.yml` change when the stack is
+rebuilt, or through `aiquila-hetzner upgrade --images`, which moves the third-party
+images to the release's pins. Without `--images`, `upgrade` pins only the MCP image and
+lists the rest as drift ([`upgrade` › Third-party images](../hetzner/commands.md#third-party-images)).
 
 ## Code Review Workflows
 
