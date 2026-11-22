@@ -171,6 +171,15 @@ describe('fileContent', () => {
     expect([...Buffer.from(resource.resource.blob, 'base64')]).toEqual([0, 1, 2]);
   });
 
+  it('describes an image over the limit instead of sending it', () => {
+    process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '4';
+    const file = { name: 'a.gif', bytes: bytes(0x47, 0x49, 0x46, 0x38, 0), uri };
+    const blocks = fileContent(file, { header: false });
+    expect(blocks).toHaveLength(1);
+    expect((blocks[0] as { text: string }).text).toContain('File: a.gif (image/gif, 5 bytes)');
+    expect((blocks[0] as { text: string }).text).toContain('MCP_MAX_EMBEDDED_FILE_SIZE');
+  });
+
   it('describes a file over the limit instead of embedding it', () => {
     process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '2';
     const blocks = binaryContent({ name: 'x.bin', bytes: bytes(0, 1, 2), uri }, 'File: x.bin');

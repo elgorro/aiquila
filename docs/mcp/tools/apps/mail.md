@@ -114,7 +114,8 @@ Every result starts with a line `[UNTRUSTED EXTERNAL CONTENT - MAIL ATTACHMENT] 
 quoted and both are marked as theirs. Then:
 
 - **Text / ICS / JSON** — the text, closed by `[END EXTERNAL CONTENT]`
-- **Images** — a base64 image block, usable directly by vision-capable models
+- **Images** — a base64 image block, usable directly by vision-capable models. Up to
+  `MCP_MAX_EMBEDDED_FILE_SIZE`; a larger image is described, not sent
 - **Anything else** (PDF, office documents, archives) — the attachment itself as an
   [embedded resource](../system-tools.md#binary-files). Up to `MCP_MAX_EMBEDDED_FILE_SIZE`;
   a larger attachment is described, not sent

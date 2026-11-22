@@ -474,6 +474,26 @@ describe('Mail Tools', () => {
       expect(result.content[1]).toHaveProperty('data', bytes.toString('base64'));
     });
 
+    it('should describe an image attachment over MCP_MAX_EMBEDDED_FILE_SIZE, not send it', async () => {
+      process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '4';
+      mockFetchMailAPI.mockResolvedValue({
+        ok: true,
+        headers: { get: (name: string) => (name === 'content-type' ? 'image/png' : null) },
+        arrayBuffer: () => Promise.resolve(new Uint8Array(Buffer.from('fakepng')).buffer),
+      });
+
+      const { mailTools } = await import('../tools/apps/mail.js');
+      const tool = mailTools.find((t) => t.name === 'mail_get_attachment')!;
+      const result = await tool.handler({ messageId: 100, attachmentId: '3' });
+      delete process.env.MCP_MAX_EMBEDDED_FILE_SIZE;
+
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].text).toContain(
+        '[UNTRUSTED EXTERNAL CONTENT - MAIL ATTACHMENT] "attachment-3" (image/png, 7 bytes)'
+      );
+      expect(result.content[0].text).toContain('MCP_MAX_EMBEDDED_FILE_SIZE');
+    });
+
     it('should fall back gracefully for PDFs when pdftotext yields no text', async () => {
       const bytes = Buffer.from('%PDF-1.4 not-real');
       mockFetchMailAPI.mockResolvedValue({

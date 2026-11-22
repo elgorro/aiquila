@@ -139,18 +139,18 @@ export function isText(bytes: Uint8Array): boolean {
 }
 
 /** Whether a media type is one sent as an image block. SVG is text by nature. */
-function isImageType(mimeType: string): boolean {
+export function isImageType(mimeType: string): boolean {
   return mimeType.startsWith('image/') && mimeType !== 'image/svg+xml';
 }
 
 /**
- * Whether a file goes out as an embedded resource, held to the size limit,
- * and not as text or an image. The first `TEXT_PROBE_LENGTH` bytes are enough
- * to tell.
+ * Whether a file goes out as an image block or an embedded resource, and so
+ * is held to the size limit; text is not. The first `TEXT_PROBE_LENGTH` bytes
+ * are enough to tell.
  */
-export function isEmbedded(file: Pick<FileBytes, 'name' | 'bytes' | 'mimeType'>): boolean {
+export function isSizeLimited(file: Pick<FileBytes, 'name' | 'bytes' | 'mimeType'>): boolean {
   const mimeType = fileMimeType(file);
-  return !isImageType(mimeType) && (isBinaryType(mimeType) || !isText(file.bytes));
+  return isImageType(mimeType) || isBinaryType(mimeType) || !isText(file.bytes);
 }
 
 export function decodeText(bytes: Uint8Array): string {
@@ -185,14 +185,13 @@ export type ResourceContents =
 /** A file as resource contents: `text` for a text file, `blob` for anything else. */
 export function resourceContents(file: FileBytes): ResourceContents {
   const mimeType = fileMimeType(file);
-  const image = mimeType.startsWith('image/') && mimeType !== 'image/svg+xml';
-  return !image && !isBinaryType(mimeType) && isText(file.bytes)
+  return !isImageType(mimeType) && !isBinaryType(mimeType) && isText(file.bytes)
     ? { uri: file.uri, mimeType, text: decodeText(file.bytes) }
     : { uri: file.uri, mimeType, blob: base64(file.bytes) };
 }
 
 /**
- * The block that stands for a binary file too large to send, or undefined when
+ * The block that stands for a binary file or an image too large to send, or undefined when
  * it fits. It takes the size alone, so a caller that knows it beforehand can
  * refuse the file without downloading it.
  */
@@ -231,6 +230,20 @@ export function binaryContent(file: FileBytes, label: string): ContentBlock[] {
 }
 
 /**
+ * The blocks that hand an image to the client: `label (type, size)`, then the
+ * image block. An image over the size limit is described instead.
+ */
+export function imageContent(bytes: Uint8Array, mimeType: string, label: string): ContentBlock[] {
+  const size = bytes.byteLength;
+  return (
+    oversizedContent(label, mimeType, size) ?? [
+      { type: 'text', text: `${label} (${mimeType}, ${size} bytes)` },
+      { type: 'image', data: base64(bytes), mimeType },
+    ]
+  );
+}
+
+/**
  * MCP content for a file. With `header`, text and images are introduced by a
  * `File: name (type, size)` line, as binary files always are.
  */
@@ -239,12 +252,7 @@ export function fileContent(file: FileBytes, options: { header: boolean }): Cont
   const about = `File: ${file.name} (${mimeType}, ${file.bytes.byteLength} bytes)`;
 
   // SVG is an image by type and text by nature; models read it as text.
-  if (mimeType.startsWith('image/') && mimeType !== 'image/svg+xml') {
-    return [
-      { type: 'text', text: about },
-      { type: 'image', data: base64(file.bytes), mimeType },
-    ];
-  }
+  if (isImageType(mimeType)) return imageContent(file.bytes, mimeType, `File: ${file.name}`);
   if (!isBinaryType(mimeType) && isText(file.bytes)) {
     const text = decodeText(file.bytes);
     return [{ type: 'text', text: options.header ? `${about}\n\n${text}` : text }];

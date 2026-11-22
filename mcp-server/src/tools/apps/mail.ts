@@ -28,7 +28,13 @@ import { spawnSync } from 'node:child_process';
 import { z } from 'zod';
 import { fetchMailAPI } from '../../client/mail.js';
 import { fetchOCS } from '../../client/ocs.js';
-import { binaryContent, decodeText, fileMimeType, type ContentBlock } from '../file-content.js';
+import {
+  binaryContent,
+  decodeText,
+  fileMimeType,
+  imageContent,
+  type ContentBlock,
+} from '../file-content.js';
 
 // Invisible padding characters used in newsletter preheaders
 // (U+034F, U+00AD, U+200B–U+200D, U+FEFF)
@@ -500,13 +506,7 @@ const getAttachmentTool = {
       }
 
       if (mimeType.startsWith('image/')) {
-        const base64 = Buffer.from(bytes).toString('base64');
-        return {
-          content: [
-            { type: 'text' as const, text: about },
-            { type: 'image' as const, data: base64, mimeType },
-          ],
-        };
+        return { content: imageContent(bytes, mimeType, label) };
       }
 
       // Any other format: the attachment itself, as an embedded resource.

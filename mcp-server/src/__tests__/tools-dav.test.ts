@@ -85,6 +85,41 @@ describe('MCP Tools', () => {
       expect(mockClient.getFileContents).not.toHaveBeenCalled();
     });
 
+    it('should refuse an image over MCP_MAX_EMBEDDED_FILE_SIZE without downloading it', async () => {
+      process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '10';
+      mockClient.stat.mockResolvedValue({ basename: 'big.jpg', mime: 'image/jpeg', size: 11 });
+
+      const { readFileTool } = await import('../tools/system/files.js');
+      const result = await readFileTool.handler({ path: '/big.jpg' });
+      delete process.env.MCP_MAX_EMBEDDED_FILE_SIZE;
+
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].text).toContain('File: big.jpg (image/jpeg, 11 bytes)');
+      expect(result.content[0].text).toContain('MCP_MAX_EMBEDDED_FILE_SIZE');
+      expect(mockClient.getFileStart).not.toHaveBeenCalled();
+      expect(mockClient.getFileContents).not.toHaveBeenCalled();
+    });
+
+    it('should refuse an oversized image of unknown type by its signature', async () => {
+      process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '10';
+      mockClient.stat.mockResolvedValue({
+        basename: 'photo',
+        mime: 'application/octet-stream',
+        size: 500_000_000,
+      });
+      mockClient.getFileStart.mockResolvedValue(
+        new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      );
+
+      const { readFileTool } = await import('../tools/system/files.js');
+      const result = await readFileTool.handler({ path: '/photo' });
+      delete process.env.MCP_MAX_EMBEDDED_FILE_SIZE;
+
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].text).toContain('File: photo (image/png, 500000000 bytes)');
+      expect(mockClient.getFileContents).not.toHaveBeenCalled();
+    });
+
     it('should tell an oversized file of unknown type by its first bytes alone', async () => {
       process.env.MCP_MAX_EMBEDDED_FILE_SIZE = '10';
       mockClient.stat.mockResolvedValue({
