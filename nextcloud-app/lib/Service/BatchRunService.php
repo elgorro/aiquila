@@ -10,6 +10,7 @@ use OCA\AIquila\Batch\AskOperation;
 use OCA\AIquila\Batch\BatchContext;
 use OCA\AIquila\Batch\BatchDocumentRunner;
 use OCA\AIquila\Batch\BatchOperation;
+use OCA\AIquila\Batch\ExtractOperation;
 use OCA\AIquila\Batch\SummarizeOperation;
 use OCA\AIquila\Batch\TranslateOperation;
 use OCA\AIquila\Cowork\UserPath;
@@ -93,7 +94,7 @@ class BatchRunService {
     /** @return array<string, BatchOperation> id => operation */
     public function operations(): array {
         $ops = [];
-        foreach ([new SummarizeOperation(), new TranslateOperation(), new AskOperation()] as $op) {
+        foreach ([new SummarizeOperation(), new TranslateOperation(), new AskOperation(), new ExtractOperation()] as $op) {
             $ops[$op->getId()] = $op;
         }
         return $ops;

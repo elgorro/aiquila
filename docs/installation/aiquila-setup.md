@@ -585,8 +585,10 @@ app and choose **Process with AIquila…** from the selection's actions, or from
 file's or folder's **⋯** menu. In the dialog, choose:
 
 - **Summarize** (brief, detailed or bullet points), **Translate** (into the
-  language you name), or **Ask a question** of every document, with a short name
-  for the answers (`deadlines` saves `report.deadlines.md`);
+  language you name), **Ask a question** of every document, with a short name
+  for the answers (`deadlines` saves `report.deadlines.md`), or **Extract fields
+  into a table**: name the fields and their types (text, number, whole number,
+  date, yes/no), and each folder gets one CSV table with a row per document;
 - **When**: *Batch* costs half and delivers within 24 hours, *Now* costs the normal
   price and is done within minutes. The choice appears only on the Claude API.
   Every other provider processes the files right away;
@@ -799,6 +801,7 @@ or build a **Custom coworker**. Each coworker has:
 | `vision:classify` | Labels each image and stores the labels as collaborative tags, so they can be searched and filtered in Files | `maxTags` (1–30, default 8), `recursive` |
 | `docs:summarize` | Writes `<name>.summary.md` beside each document (`text/*`, JSON, PDF and Office by default; PDFs and Office documents need the Claude API provider, Office documents also Nextcloud Office) | `style` (`brief` (default), `detailed`, `bullets`), `recursive`, `force`, `outputFolder`, `mimeTypes`, `maxBytesPerFile` (text files, default 1 MiB; PDFs up to 32 MB) |
 | `docs:translate` | Writes `<name>.<language>.md` beside each document | `targetLanguage`, plus the options of `docs:summarize` except `style` |
+| `docs:extract` | Extracts the fields you list into one table, `<tableName>.csv` (default `extracted.csv`), with a row per document, in the output folder or in each document's folder. A rerun updates the rows of documents that changed; changing the fields extracts every document again. A document whose answer does not fit the fields is reported as invalid and tried again next run | `fields` (1–30 of `{name, type, description}`; type `string`, `number`, `integer`, `boolean` or `date`), `tableName`, plus the options of `docs:summarize` except `style` |
 | `docs:ask` | Asks your question of each document and writes the answer to `<name>.<outputSuffix>.md`. Changing the question answers every document again | `prompt` (up to 4,000 characters), `outputSuffix` (lowercase letters, digits and hyphens, e.g. `deadlines`), plus the options of `docs:summarize` except `style` |
 | `agent:run` | Runs a prompt, optionally with MCP tools, and keeps the answer as the run summary or writes it to one file | `tools` (allowlist of MCP tool names), `taskBudget` (tokens, at least 20,000) |
 
