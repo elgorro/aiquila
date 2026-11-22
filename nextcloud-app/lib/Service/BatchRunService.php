@@ -300,7 +300,7 @@ class BatchRunService {
             }
             if (count($selection['skipped']) > self::SKIP_LOG_LIMIT) {
                 $run->appendLog(CoworkerRun::LOG_WARN, sprintf(
-                    'Skipped %d more file(s) that are not text or PDF documents or cannot be written beside',
+                    'Skipped %d more file(s) that are not text, PDF or Office documents or cannot be written beside',
                     count($selection['skipped']) - self::SKIP_LOG_LIMIT,
                 ));
             }

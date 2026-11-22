@@ -11,6 +11,7 @@ use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\UsageStatService;
+use OCP\Files\Conversion\IConversionManager;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
@@ -65,9 +66,46 @@ class BatchDocumentRunner {
      *
      * @var list<string>
      */
-    public const DEFAULT_MIME_TYPES = ['text/', 'application/json', self::PDF_MIME];
+    public const DEFAULT_MIME_TYPES = ['text/', 'application/json', self::PDF_MIME, ...self::OFFICE_MIME_TYPES];
 
     public const PDF_MIME = 'application/pdf';
+
+    /**
+     * Office documents, read by converting them to PDF through Nextcloud's
+     * file conversion API ({@see IConversionManager}), which Nextcloud Office
+     * (richdocuments, backed by Collabora) provides. The PDF then takes the
+     * PDF path, so the model sees the layout, tables and images as well.
+     *
+     * @var list<string>
+     */
+    public const OFFICE_MIME_TYPES = [
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.template',
+        'application/vnd.oasis.opendocument.text',
+        'application/vnd.oasis.opendocument.text-template',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.template',
+        'application/vnd.oasis.opendocument.spreadsheet',
+        'application/vnd.oasis.opendocument.spreadsheet-template',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.openxmlformats-officedocument.presentationml.template',
+        'application/vnd.oasis.opendocument.presentation',
+        'application/vnd.oasis.opendocument.presentation-template',
+    ];
+
+    /**
+     * Where a conversion's PDF is written, under the app's appdata, and read
+     * back and deleted straight away. The conversion API always writes its
+     * result as a file; the default place, beside the source, would leave a
+     * PDF in the user's folder.
+     */
+    private const CONVERSION_FOLDER = 'aiquila/conversions';
+
+    /** A conversion left behind by a worker that died is removed after this. */
+    private const CONVERSION_STALE_SECONDS = 3600;
 
     /**
      * Largest PDF read. A PDF is sent whole, and the API reads at most 600
@@ -94,6 +132,9 @@ class BatchDocumentRunner {
     /** Why a PDF was passed over, per user and provider; null when PDFs are read. */
     private array $pdfReasons = [];
 
+    /** @var array<string, true>|null source mime types a converter turns into PDF */
+    private ?array $convertible = null;
+
     /**
      * Hidden system tag on every output file. A folder walk skips files that
      * carry it, so one operation's output is never another's input: without
@@ -113,6 +154,7 @@ class BatchDocumentRunner {
         private readonly ISystemTagObjectMapper $tagObjectMapper,
         private readonly LoggerInterface $logger,
         private readonly UsageStatService $usageStats,
+        private readonly ?IConversionManager $conversions = null,
     ) {
     }
 
@@ -217,7 +259,7 @@ class BatchDocumentRunner {
                 $skipped[] = ['item' => UserPath::of($file), 'reason' => self::unsupportedType($file)];
                 continue;
             }
-            if (self::isPdf($file) && ($reason = $this->pdfUnsupportedReason($ctx)) !== null) {
+            if (($reason = $this->unreadableReason($ctx, $file)) !== null) {
                 $skipped[] = ['item' => UserPath::of($file), 'reason' => $reason];
                 continue;
             }
@@ -283,7 +325,7 @@ class BatchDocumentRunner {
         }
         // A nightly walk that kept listing PDFs it cannot send would spend the
         // run's quota on them every time; they wait for a provider that can.
-        if (self::isPdf($file) && $this->pdfUnsupportedReason($ctx) !== null) {
+        if ($this->unreadableReason($ctx, $file) !== null) {
             return false;
         }
         // Our own output is text too, and it lands in the tree we are walking.
@@ -352,7 +394,7 @@ class BatchDocumentRunner {
                     $skipped[] = ['item' => UserPath::of($child), 'reason' => self::unsupportedType($child)];
                     continue;
                 }
-                if ($report && self::isPdf($child) && ($reason = $this->pdfUnsupportedReason($ctx)) !== null) {
+                if ($report && ($reason = $this->unreadableReason($ctx, $child)) !== null) {
                     $seen[$child->getId()] = true;
                     $skipped[] = ['item' => UserPath::of($child), 'reason' => $reason];
                     continue;
@@ -371,11 +413,56 @@ class BatchDocumentRunner {
     }
 
     private static function unsupportedType(File $file): string {
-        return 'Not a text or PDF document (' . $file->getMimetype() . ')';
+        return 'Not a text, PDF or Office document (' . $file->getMimetype() . ')';
     }
 
     private static function isPdf(File $file): bool {
         return $file->getMimetype() === self::PDF_MIME;
+    }
+
+    private static function isOffice(File $file): bool {
+        return in_array($file->getMimetype(), self::OFFICE_MIME_TYPES, true);
+    }
+
+    /**
+     * Why this run cannot read a file that passed the mime filter, or null
+     * when it can: a PDF needs the Anthropic provider, and an Office document
+     * that as well as a converter for its type.
+     */
+    private function unreadableReason(BatchContext $ctx, File $file): ?string {
+        $office = self::isOffice($file);
+        if (!$office && !self::isPdf($file)) {
+            return null;
+        }
+        $reason = $this->pdfUnsupportedReason($ctx);
+        if ($reason !== null) {
+            return $office ? 'Office documents are read as PDF, which needs the Anthropic provider' : $reason;
+        }
+        return $office ? $this->conversionUnavailableReason($file) : null;
+    }
+
+    /** Why an Office document cannot be converted to PDF here, or null when it can. */
+    private function conversionUnavailableReason(File $file): ?string {
+        if ($this->convertible === null) {
+            $this->convertible = [];
+            try {
+                if ($this->conversions?->hasProviders()) {
+                    foreach ($this->conversions->getProviders() as $pair) {
+                        if ($pair->getTo() === self::PDF_MIME) {
+                            $this->convertible[$pair->getFrom()] = true;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                $this->logger->warning('AIquila batch: could not list the file converters', ['error' => $e->getMessage()]);
+            }
+        }
+        if ($this->convertible === []) {
+            return 'Office documents need a file converter; install Nextcloud Office (richdocuments)';
+        }
+        return isset($this->convertible[$file->getMimetype()])
+            ? null
+            : 'No installed converter turns ' . $file->getMimetype() . ' into PDF';
     }
 
     /**
@@ -454,7 +541,7 @@ class BatchDocumentRunner {
                     try {
                         $source = ['type' => 'file', 'file_id' => $provider->uploadFile(
                             $document['data'],
-                            $file->getName(),
+                            self::isPdf($file) ? $file->getName() : pathinfo($file->getName(), PATHINFO_FILENAME) . '.pdf',
                             self::PDF_MIME,
                             $ctx->userId,
                             self::UPLOAD_TTL_SECONDS,
@@ -927,6 +1014,9 @@ class BatchDocumentRunner {
      */
     private function readDocument(BatchContext $ctx, File $file, ?string &$reason = null): ?array {
         $reason = null;
+        if (self::isOffice($file)) {
+            return $this->readOffice($ctx, $file, $reason);
+        }
         $pdf = self::isPdf($file);
         $limit = $pdf ? self::MAX_PDF_BYTES : $ctx->maxBytes();
         $size = (int)$file->getSize();
@@ -962,6 +1052,89 @@ class BatchDocumentRunner {
             return null;
         }
         return ['kind' => 'text', 'data' => $content];
+    }
+
+    /**
+     * An Office document as the PDF a converter makes of it.
+     *
+     * @return BatchDocument|null
+     * @param-out string|null $reason
+     */
+    private function readOffice(BatchContext $ctx, File $file, ?string &$reason = null): ?array {
+        $reason = $this->unreadableReason($ctx, $file);
+        if ($reason !== null) {
+            return null;
+        }
+        $size = (int)$file->getSize();
+        if ($size > self::MAX_PDF_BYTES) {
+            $reason = sprintf('Too large (%s; the limit is %s)', self::humanBytes($size), self::humanBytes(self::MAX_PDF_BYTES));
+            return null;
+        }
+        try {
+            $pdf = $this->convertToPdf($file);
+        } catch (\Throwable $e) {
+            $reason = 'Could not be converted to PDF: ' . $e->getMessage();
+            return null;
+        }
+        if (strlen($pdf) > self::MAX_PDF_BYTES) {
+            $reason = sprintf('Too large as PDF (%s; the limit is %s)', self::humanBytes(strlen($pdf)), self::humanBytes(self::MAX_PDF_BYTES));
+            return null;
+        }
+        if (!str_starts_with(ltrim(substr($pdf, 0, 1024)), '%PDF-')) {
+            $reason = 'The converter did not return a PDF';
+            return null;
+        }
+        return ['kind' => 'pdf', 'data' => $pdf];
+    }
+
+    /**
+     * Convert a file to PDF and return the PDF's bytes. The conversion API
+     * writes its result as a file, so it goes to the app's appdata, is read
+     * back, and is deleted whether or not that works.
+     */
+    private function convertToPdf(File $file): string {
+        if ($this->conversions === null) {
+            throw new \RuntimeException('No file converter');
+        }
+        $folder = $this->conversionFolder();
+        $name = 'c' . $file->getId() . '-' . bin2hex(random_bytes(6)) . '.pdf';
+        $path = $this->conversions->convert($file, self::PDF_MIME, $folder->getPath() . '/' . $name);
+        try {
+            $converted = $this->rootFolder->get($path);
+            if (!$converted instanceof File) {
+                throw new \RuntimeException('The converter wrote no file');
+            }
+            return $converted->getContent();
+        } finally {
+            try {
+                $this->rootFolder->get($path)->delete();
+            } catch (\Throwable $e) {
+                $this->logger->warning('AIquila batch: could not delete a converted PDF', ['path' => $path, 'error' => $e->getMessage()]);
+            }
+        }
+    }
+
+    /** The appdata folder conversions are written to, with stale leftovers removed. */
+    private function conversionFolder(): Folder {
+        $path = '/' . $this->rootFolder->getAppDataDirectoryName() . '/' . self::CONVERSION_FOLDER;
+        try {
+            $folder = $this->rootFolder->get($path);
+        } catch (NotFoundException) {
+            $folder = $this->rootFolder->newFolder($path);
+        }
+        if (!$folder instanceof Folder) {
+            throw new \RuntimeException('The conversion folder is not a folder');
+        }
+        $cutoff = time() - self::CONVERSION_STALE_SECONDS;
+        foreach ($folder->getDirectoryListing() as $node) {
+            if ($node->getMTime() < $cutoff) {
+                try {
+                    $node->delete();
+                } catch (\Throwable) {
+                }
+            }
+        }
+        return $folder;
     }
 
     /**

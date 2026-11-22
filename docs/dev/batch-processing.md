@@ -210,8 +210,10 @@ A run is capped at `MAX_ITEMS_PER_RUN` (200) files, and a file larger than
 `maxBytesPerFile` (1 MiB by default) is skipped rather than truncated — half a
 contract summarised as if it were the whole thing is worse than no summary.
 
-**Text and PDFs.** The default mime types are the `text/` family,
-`application/json` and `application/pdf`. Text goes into the prompt, and content
+**Text, PDFs and Office documents.** The default mime types are the `text/`
+family, `application/json`, `application/pdf` and the Office types
+(`OFFICE_MIME_TYPES`: Word, Excel, PowerPoint and their OpenDocument
+counterparts, documents and templates). Text goes into the prompt, and content
 that is not valid UTF-8 is skipped: a batch goes out as one request for the whole
 folder, outside any per-file guard, so one binary file would take the entire run
 down rather than just itself.
@@ -239,6 +241,25 @@ A PDF travels as its own `document` block, followed by the operation's
 - **Cost:** each page is billed as text (typically 1,500–3,000 tokens) plus an
   image of the page (at most 1,568 tokens). A PDF costs far more than the same
   text would.
+
+An Office document is converted to PDF and then takes the PDF path, so the
+model sees its layout, tables and charts too:
+
+- **Converter:** Nextcloud's file conversion API (`IConversionManager`), which
+  Nextcloud Office (`richdocuments`, backed by Collabora) provides for every type
+  above. Without a provider, or for a type no provider turns into PDF, a walk
+  leaves the file out and a manual run lists it as skipped with the reason
+  (*install Nextcloud Office*). AIquila ships no converter of its own: an
+  in-process OOXML/ODF parser would add a dependency and attack surface, and
+  plain text would lose the tables.
+- **Where the PDF goes:** the conversion API always writes its result as a file.
+  It goes to `appdata_<instance>/aiquila/conversions/`, is read back and deleted
+  straight away, and never appears in the user's Files. Leftovers of a worker
+  that died are removed after an hour.
+- **Limits:** the source and the PDF are each held to the 32 MB PDF limit, and
+  Nextcloud's own `max_file_conversion_filesize` (100 MB by default) applies
+  first. A conversion that fails, for example because Collabora is unreachable,
+  skips that file with the converter's message.
 
 On a non-Anthropic provider the same tasks fall back to a synchronous per-file
 loop at full price, and the run summary says which path it took.
@@ -282,7 +303,7 @@ their files, so a file shared with them works like one they own:
   rules: up-to-date sources (unless `force`), outputs of any operation and
   the output folder are skipped.
 - Files picked one by one are always processed, since the user asked for them.
-  Only the mime filter applies, and on a non-Anthropic provider the PDF check.
+  Only the mime filter applies, plus the PDF and converter checks.
 - A file that fails the mime filter, picked or found in a folder, is skipped
   and reported. Up-to-date sources and earlier outputs are left out silently.
 - A file reached twice counts once.

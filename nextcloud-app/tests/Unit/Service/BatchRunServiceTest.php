@@ -279,7 +279,7 @@ class BatchRunServiceTest extends TestCase {
         $this->assertSame('batch_M', $run->getPendingBatchId());
         $this->assertSame(2, $run->getItemsTotal());
         $log = $run->getDecodedLog();
-        $this->assertContains(['Skipped: Not a text or PDF document (image/jpeg)', '/Docs/photo.jpg'], array_map(fn ($e) => [$e['message'], $e['item']], $log));
+        $this->assertContains(['Skipped: Not a text, PDF or Office document (image/jpeg)', '/Docs/photo.jpg'], array_map(fn ($e) => [$e['message'], $e['item']], $log));
         $this->assertSame(300, BatchRunService::serialize($run)['pollIntervalSeconds']);
     }
 
@@ -410,8 +410,8 @@ class BatchRunServiceTest extends TestCase {
             }
         }
         $this->assertSame([
-            '/Docs/clip.mp4' => 'Not a text or PDF document (video/mp4)',
-            '/Docs/photo.jpg' => 'Not a text or PDF document (image/jpeg)',
+            '/Docs/clip.mp4' => 'Not a text, PDF or Office document (video/mp4)',
+            '/Docs/photo.jpg' => 'Not a text, PDF or Office document (image/jpeg)',
             '/Docs/huge.txt' => 'Too large (2.9 KB; the limit is 2 KB)',
             '/Docs/weird.txt' => 'Not UTF-8 text',
             '/Docs/empty.txt' => 'Empty',
@@ -419,7 +419,7 @@ class BatchRunServiceTest extends TestCase {
 
         $summary = (string)$run->getSummary();
         $this->assertStringContainsString('5 skipped', $summary);
-        $this->assertStringContainsString('Skipped: photo.jpg — Not a text or PDF document (image/jpeg)', $summary);
+        $this->assertStringContainsString('Skipped: photo.jpg — Not a text, PDF or Office document (image/jpeg)', $summary);
         $this->assertStringContainsString('Skipped: huge.txt — Too large', $summary);
         $this->assertStringNotContainsString('done.txt', $summary);
     }
@@ -444,7 +444,7 @@ class BatchRunServiceTest extends TestCase {
         $this->assertSame(CoworkerRun::STATUS_SUCCESS, $run->getStatus());
         $this->assertSame(1, $run->getItemsProcessed());
         $this->assertSame(2, $run->getItemsSkipped());
-        $this->assertStringContainsString('Skipped: photo.jpg — Not a text or PDF document (image/jpeg)', (string)$run->getSummary());
+        $this->assertStringContainsString('Skipped: photo.jpg — Not a text, PDF or Office document (image/jpeg)', (string)$run->getSummary());
         $this->assertStringContainsString('Skipped: empty.txt — Empty', (string)$run->getSummary());
     }
 
@@ -458,7 +458,7 @@ class BatchRunServiceTest extends TestCase {
         $this->assertSame(CoworkerRun::STATUS_SUCCESS, $run->getStatus());
         $this->assertSame(1, $run->getItemsSkipped());
         $this->assertStringStartsWith('Nothing to do', (string)$run->getSummary());
-        $this->assertStringContainsString('Skipped: photo.jpg — Not a text or PDF document (image/jpeg)', (string)$run->getSummary());
+        $this->assertStringContainsString('Skipped: photo.jpg — Not a text, PDF or Office document (image/jpeg)', (string)$run->getSummary());
         $this->assertSame([CoworkerRun::STATUS_SUCCESS], $this->notified);
     }
 
@@ -476,7 +476,7 @@ class BatchRunServiceTest extends TestCase {
         $this->assertSame(150, $run->getItemsSkipped());
         $skipEntries = array_filter($run->getDecodedLog(), fn ($e) => str_starts_with($e['message'], 'Skipped: '));
         $this->assertCount(100, $skipEntries);
-        $this->assertContains('Skipped 50 more file(s) that are not text or PDF documents or cannot be written beside', array_column($run->getDecodedLog(), 'message'));
+        $this->assertContains('Skipped 50 more file(s) that are not text, PDF or Office documents or cannot be written beside', array_column($run->getDecodedLog(), 'message'));
         $this->assertStringContainsString('… and 100 more; the run log has them.', (string)$run->getSummary());
     }
 
