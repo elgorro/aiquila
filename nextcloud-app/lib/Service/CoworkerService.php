@@ -930,7 +930,13 @@ class CoworkerService {
             // Validate against the resolved task type when known.
             $taskTypeId = $coworker->getTaskType();
             if ($this->registry->has($taskTypeId)) {
-                $this->registry->get($taskTypeId)->validateOptions($options);
+                // Task types reject bad options with InvalidArgumentException;
+                // that is the caller's input, so a 400, not a server error.
+                try {
+                    $this->registry->get($taskTypeId)->validateOptions($options);
+                } catch (\InvalidArgumentException $e) {
+                    throw new ValidationException($e->getMessage());
+                }
             }
             $coworker->setOptions(json_encode($options) ?: null);
         }

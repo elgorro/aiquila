@@ -59,7 +59,7 @@ final class TranslateOperation implements BatchOperation {
         return '.' . $language . '.md';
     }
 
-    public function doneTag(): string {
+    public function doneTag(array $options = []): string {
         return 'aiquila:translated';
     }
 

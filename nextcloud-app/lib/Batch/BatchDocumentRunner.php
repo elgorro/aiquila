@@ -495,7 +495,11 @@ class BatchDocumentRunner {
             $existing = $folder->get($name);
             // The source is what the output describes, so an output older than
             // its source is stale and the file is worth doing again.
-            return $existing->getMTime() >= $file->getMTime();
+            if ($existing->getMTime() < $file->getMTime()) {
+                return false;
+            }
+            // An answer to an earlier question is not an answer to this one.
+            return !$ctx->operation instanceof PromptScopedOperation || $this->hasDoneTag($ctx, $file);
         } catch (\Throwable) {
             return false;
         }
@@ -1291,12 +1295,22 @@ class BatchDocumentRunner {
      */
     private function markDone(BatchContext $ctx, File $file): void {
         try {
-            $this->tagObjectMapper->assignTags((string)$file->getId(), 'files', [$this->resolveTag($ctx->operation->doneTag())->getId()]);
+            $this->tagObjectMapper->assignTags((string)$file->getId(), 'files', [$this->resolveTag($ctx->operation->doneTag($ctx->options))->getId()]);
         } catch (\Throwable $e) {
             $this->logger->warning('AIquila batch: could not tag a source file', [
                 'file' => $file->getPath(),
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    /** Whether the source carries the operation's current done-tag. */
+    private function hasDoneTag(BatchContext $ctx, File $file): bool {
+        try {
+            $tag = $this->tagManager->getTag($ctx->operation->doneTag($ctx->options), true, true);
+            return $this->tagObjectMapper->haveTag([(string)$file->getId()], 'files', $tag->getId());
+        } catch (\Throwable) {
+            return false;
         }
     }
 

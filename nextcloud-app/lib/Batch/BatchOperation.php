@@ -59,8 +59,12 @@ interface BatchOperation {
      */
     public function outputSuffix(array $options): string;
 
-    /** System tag applied to a source once its output exists. */
-    public function doneTag(): string;
+    /**
+     * System tag applied to a source once its output exists.
+     *
+     * @param array<string, mixed> $options
+     */
+    public function doneTag(array $options = []): string;
 
     /** Verb used in the run summary and log, e.g. "Summarized". */
     public function summaryVerb(): string;

@@ -56,7 +56,7 @@ final class SummarizeOperation implements BatchOperation {
         return '.summary.md';
     }
 
-    public function doneTag(): string {
+    public function doneTag(array $options = []): string {
         return 'aiquila:summarized';
     }
 

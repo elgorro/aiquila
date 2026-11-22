@@ -584,8 +584,9 @@ To process several documents at once, select files, folders or both in the Files
 app and choose **Process with AIquila…** from the selection's actions, or from one
 file's or folder's **⋯** menu. In the dialog, choose:
 
-- **Summarize** (brief, detailed or bullet points) or **Translate** (into the
-  language you name);
+- **Summarize** (brief, detailed or bullet points), **Translate** (into the
+  language you name), or **Ask a question** of every document, with a short name
+  for the answers (`deadlines` saves `report.deadlines.md`);
 - **When**: *Batch* costs half and delivers within 24 hours, *Now* costs the normal
   price and is done within minutes. The choice appears only on the Claude API.
   Every other provider processes the files right away;
@@ -594,9 +595,10 @@ file's or folder's **⋯** menu. In the dialog, choose:
 - where to **save results**: beside each document (the default), or in a folder you
   pick. Choose a folder when the documents are in a share you can only read.
 
-Results are Markdown files named like the coworker outputs, `<name>.summary.md` or
-`<name>.<language>.md`, and each processed document gets the `aiquila:summarized`
-or `aiquila:translated` tag. Text documents (`text/*` and JSON), PDFs and Office
+Results are Markdown files named like the coworker outputs, `<name>.summary.md`,
+`<name>.<language>.md` or `<name>.<name for the answers>.md`, and each processed
+document gets the `aiquila:summarized`, `aiquila:translated` or
+`aiquila:asked-<code>` tag (one code per question). Text documents (`text/*` and JSON), PDFs and Office
 documents (Word, Excel, PowerPoint, OpenDocument) are read. PDFs need the Claude
 API provider, and Office documents additionally need
 [Nextcloud Office](https://apps.nextcloud.com/apps/richdocuments), which converts
@@ -797,6 +799,7 @@ or build a **Custom coworker**. Each coworker has:
 | `vision:classify` | Labels each image and stores the labels as collaborative tags, so they can be searched and filtered in Files | `maxTags` (1–30, default 8), `recursive` |
 | `docs:summarize` | Writes `<name>.summary.md` beside each document (`text/*`, JSON, PDF and Office by default; PDFs and Office documents need the Claude API provider, Office documents also Nextcloud Office) | `style` (`brief` (default), `detailed`, `bullets`), `recursive`, `force`, `outputFolder`, `mimeTypes`, `maxBytesPerFile` (text files, default 1 MiB; PDFs up to 32 MB) |
 | `docs:translate` | Writes `<name>.<language>.md` beside each document | `targetLanguage`, plus the options of `docs:summarize` except `style` |
+| `docs:ask` | Asks your question of each document and writes the answer to `<name>.<outputSuffix>.md`. Changing the question answers every document again | `prompt` (up to 4,000 characters), `outputSuffix` (lowercase letters, digits and hyphens, e.g. `deadlines`), plus the options of `docs:summarize` except `style` |
 | `agent:run` | Runs a prompt, optionally with MCP tools, and keeps the answer as the run summary or writes it to one file | `tools` (allowlist of MCP tool names), `taskBudget` (tokens, at least 20,000) |
 
 An `agent:run` coworker has a **prompt** instead of a source folder: its own text,
