@@ -23,12 +23,17 @@ final class AudioLimits {
      *
      * Memory is not what sets it: the recording is streamed from storage to
      * the provider, never loaded whole. What sets it is the far end. Mistral
-     * names three hours as the longest recording it transcribes, but no size
-     * for an inline upload, so this is sized from that duration. Three hours
-     * is about 430 MB as 320 kbit/s MP3 and about 350 MB as 16 kHz mono WAV,
-     * the usual rate for speech. A file above this is either longer than any
-     * provider in use will take or uncompressed studio audio. Refusing it
-     * here saves an upload of several minutes that ends in a rejection.
+     * documents no size for an inline upload and accepts one of 300 MB. Its
+     * legacy page names three hours as the longest recording, so this is sized
+     * from that duration: about 430 MB as 320 kbit/s MP3 and about 350 MB as
+     * 16 kHz mono WAV, the usual rate for speech. A file above this is either
+     * longer than any provider in use will take or uncompressed studio audio.
+     * Refusing it here saves an upload of several minutes that ends in a
+     * rejection.
+     *
+     * Duration is not checked here: nothing Nextcloud stores says how long a
+     * recording is, and how much Mistral finishes depends on its load (see
+     * MistralProvider::transcribeAudio()).
      */
     public const MAX_BYTES = 512 * 1024 * 1024;
 

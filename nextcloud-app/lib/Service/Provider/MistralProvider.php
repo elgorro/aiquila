@@ -51,6 +51,12 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
     private const AUDIO_TRANSCRIBE_CEILING = 3 * 3600;
 
     public const DEFAULT_TRANSCRIBE_MODEL = 'voxtral-mini-latest';
+    /**
+     * A transcription stream that ended without `transcription.done`. Worded
+     * so TaskFailure files it as too large: splitting the recording is what
+     * reliably helps.
+     */
+    public const TRANSCRIPTION_CUT_OFF = 'Mistral ended the transcript before the end of the recording: the recording is too long for the capacity Mistral has right now.';
     /** Voxtral's documented limit on `context_bias` entries. */
     public const CONTEXT_BIAS_MAX = 100;
     public const DEFAULT_TTS_MODEL = 'voxtral-mini-tts-2603';
@@ -1427,8 +1433,15 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
      * unstreamed answer, and an endpoint that ignores `stream` and answers
      * with JSON is still read.
      *
-     * Mistral refuses `timestamp_granularities` alongside `language`, so a
-     * request for timestamps drops the language and lets Voxtral detect it.
+     * A stream that ends without `transcription.done` is an error, even when
+     * text arrived before it. Mistral splits a recording into pieces and
+     * transcribes them in parallel. When it runs short of capacity for some of
+     * them, an unstreamed request fails with 429 `backend_out_of_capacity`, but
+     * a streamed one ends with 200 after the pieces that did finish. Returning
+     * that text would pass off part of a recording as all of it.
+     *
+     * `language` is sent whenever it is given, timestamps or not. Mistral
+     * once refused it alongside `timestamp_granularities` and now takes both.
      *
      * `diarize` labels each segment with a `speaker_id`; without streaming
      * Mistral requires segment timestamps alongside it, so they are always
@@ -1447,10 +1460,11 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
         $language = $options['language'] ?? '';
         $diarize = ($options['diarize'] ?? false) === true;
         $timestamps = $diarize || ($options['timestamps'] ?? false) === true;
+        if (is_string($language) && $language !== '') {
+            $parts[] = ['name' => 'language', 'contents' => $language];
+        }
         if ($timestamps) {
             $parts[] = ['name' => 'timestamp_granularities', 'contents' => 'segment'];
-        } elseif (is_string($language) && $language !== '') {
-            $parts[] = ['name' => 'language', 'contents' => $language];
         }
         if ($diarize) {
             $parts[] = ['name' => 'diarize', 'contents' => 'true'];
@@ -1466,19 +1480,33 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
         $segments = [];
         /** @var array<array-key, mixed>|null $done */
         $done = null;
-        $onChunk = function (string $chunk) use ($decoder, $progress, &$text, &$segments, &$done): void {
+        $streamed = false;
+        // Characters received in text deltas and segments together. With
+        // timestamps, the text arrives in the segment events and the deltas
+        // are empty.
+        $received = 0;
+        $onChunk = function (string $chunk) use ($decoder, $progress, &$text, &$segments, &$done, &$streamed, &$received): void {
             foreach ($decoder->feed($chunk) as $event) {
                 $payload = json_decode($event['data'], true);
                 if (!is_array($payload)) {
                     continue;
                 }
                 $type = $payload['type'] ?? $event['event'];
+                if (is_string($type) && str_starts_with($type, 'transcription.')) {
+                    $streamed = true;
+                }
                 if ($type === 'transcription.text.delta' && is_string($payload['text'] ?? null)) {
                     $text .= $payload['text'];
-                    $progress->answered(strlen($text));
+                    $received += strlen($payload['text']);
+                    $progress->answered($received);
                 } elseif ($type === 'transcription.segment' || $type === 'transcription.segment.delta') {
-                    // The SDK and the guide disagree on the name; both are segments.
+                    // Mistral sends `transcription.segment`; the guide's
+                    // `.segment.delta` is accepted in case it ever does.
                     $segments[] = $payload;
+                    if (is_string($payload['text'] ?? null)) {
+                        $received += strlen($payload['text']);
+                        $progress->answered($received);
+                    }
                 } elseif ($type === 'transcription.done') {
                     $done = $payload;
                 }
@@ -1505,6 +1533,9 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
                 ],
             ] + $progress->requestOptions());
 
+            if ($done === null && $streamed) {
+                return ['error' => self::TRANSCRIPTION_CUT_OFF];
+            }
             if ($done === null) {
                 // Not an event stream: an endpoint that answered in one piece.
                 rewind($sink);

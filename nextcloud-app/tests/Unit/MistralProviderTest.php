@@ -5,6 +5,7 @@ namespace OCA\AIquila\Tests\Unit;
 use OCA\AIquila\Service\CredentialService;
 use OCA\AIquila\Service\MistralModels;
 use OCA\AIquila\Service\Provider\MistralProvider;
+use OCA\AIquila\TaskProcessing\TaskFailure;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -647,7 +648,7 @@ class MistralProviderTest extends TestCase {
         $this->assertLessThan(1.0, end($reported));
     }
 
-    public function testTranscribeAudioWithTimestampsAsksForSegmentsInsteadOfTheLanguage(): void {
+    public function testTranscribeAudioWithTimestampsAsksForSegmentsAndKeepsTheLanguage(): void {
         $options = null;
         $recording = self::recording();
         $this->client->method('post')->willReturnCallback(
@@ -668,11 +669,11 @@ class MistralProviderTest extends TestCase {
 
         $result = $this->provider->transcribeAudio($recording, 'audio/mpeg', 'memo.mp3', 'u', ['language' => 'de', 'timestamps' => true]);
 
-        // Mistral refuses timestamp_granularities together with language.
         $this->assertSame([
             ['name' => 'model', 'contents' => MistralProvider::DEFAULT_TRANSCRIBE_MODEL],
             ['name' => 'file', 'contents' => $recording, 'filename' => 'memo.mp3'],
             ['name' => 'stream', 'contents' => 'true'],
+            ['name' => 'language', 'contents' => 'de'],
             ['name' => 'timestamp_granularities', 'contents' => 'segment'],
         ], $options['multipart']);
         $this->assertSame([
@@ -772,12 +773,59 @@ class MistralProviderTest extends TestCase {
         $this->assertSame(['error' => 'Mistral returned no transcript.'], $this->provider->transcribeAudio('raw', 'audio/mpeg', 'a.mp3', 'u'));
     }
 
-    public function testTranscribeAudioReportsAStreamThatNeverFinished(): void {
+    /**
+     * Short of capacity, Mistral ends the stream with 200 after the pieces of
+     * the recording it did transcribe, and sends no `transcription.done`. The
+     * text that arrived is only part of the recording and is not returned.
+     */
+    public function testTranscribeAudioRefusesAStreamThatEndedBeforeTheRecordingDid(): void {
         $this->client->method('post')->willReturnCallback(fn (string $u, array $o): IResponse => $this->writeToSink($o, [
-            self::event(['type' => 'transcription.text.delta', 'text' => 'Hallo']),
+            self::event(['type' => 'transcription.text.delta', 'text' => 'Dies ist eine LibriVox-Aufnahme.']),
+            self::event(['type' => 'transcription.text.delta', 'text' => ' und unerfahren im lande ist']),
         ]));
 
-        $this->assertSame(['error' => 'Mistral returned no transcript.'], $this->provider->transcribeAudio('raw', 'audio/mpeg', 'a.mp3', 'u'));
+        $result = $this->provider->transcribeAudio('raw', 'audio/mpeg', 'a.mp3', 'u');
+
+        $this->assertSame(['error' => MistralProvider::TRANSCRIPTION_CUT_OFF], $result);
+        // The user is told to shorten or split the recording.
+        $this->assertStringContainsString('split it', (string)TaskFailure::classify($result['error']));
+    }
+
+    public function testTranscribeAudioRefusesACutOffStreamOfSegmentsToo(): void {
+        $this->client->method('post')->willReturnCallback(fn (string $u, array $o): IResponse => $this->writeToSink($o, [
+            self::event(['type' => 'transcription.segment', 'text' => 'Hallo', 'start' => 0.0, 'end' => 0.8, 'speaker_id' => null]),
+        ]));
+
+        $this->assertSame(
+            ['error' => MistralProvider::TRANSCRIPTION_CUT_OFF],
+            $this->provider->transcribeAudio('raw', 'audio/mpeg', 'a.mp3', 'u', ['timestamps' => true]),
+        );
+    }
+
+    /**
+     * With timestamps, Mistral puts the text into the segment events and
+     * sends one empty delta, so the segments are what move the bar.
+     */
+    public function testTranscribeAudioReportsProgressFromTheSegmentsWhenTheDeltasAreEmpty(): void {
+        $reported = [];
+        $this->client->method('post')->willReturnCallback(fn (string $u, array $o): IResponse => $this->writeToSink($o, [
+            self::event(['type' => 'transcription.segment', 'text' => str_repeat('a', 1000), 'start' => 0.0, 'end' => 60.0, 'speaker_id' => null]),
+            self::event(['type' => 'transcription.segment', 'text' => str_repeat('b', 1000), 'start' => 60.0, 'end' => 120.0, 'speaker_id' => null]),
+            self::event(['type' => 'transcription.text.delta', 'text' => '']),
+            self::event(['type' => 'transcription.done', 'text' => 'ab', 'segments' => [], 'usage' => []]),
+        ]));
+
+        $this->provider->transcribeAudio(self::recording(), 'audio/mpeg', 'memo.mp3', 'u', [
+            'timestamps' => true,
+            'onProgress' => function (float $fraction) use (&$reported): void {
+                $reported[] = $fraction;
+            },
+        ]);
+
+        $this->assertCount(2, $reported);
+        $this->assertGreaterThan(0.5, $reported[0]);
+        $this->assertGreaterThan($reported[0], $reported[1]);
+        $this->assertLessThan(1.0, $reported[1]);
     }
 
     public function testTranscribeAudioRejectsAnEmptyRecordingWithoutCallingTheApi(): void {
