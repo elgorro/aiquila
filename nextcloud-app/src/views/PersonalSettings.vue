@@ -50,7 +50,7 @@
 				</NcSettingsSection>
 
 				<NcSettingsSection :name="t('aiquila', 'Notifications')"
-					:description="t('aiquila', 'AIquila answers AI tasks that other apps start, and those apps normally show you the result themselves. Successful tasks stay quiet unless you ask for them; failures are reported because they usually point at your AIquila configuration.')">
+					:description="t('aiquila', 'AIquila answers AI tasks that other apps start, and those apps normally show you the result themselves. Successful tasks stay quiet unless you ask for them; failures are reported because they usually point at your AIquila configuration. The same switches apply to runs you start with “Process with AIquila…” in Files.')">
 					<NcCheckboxRadioSwitch :model-value="taskSuccessNotifications"
 						@update:model-value="v => { taskSuccessNotifications = v; dirty = true }">
 						{{ t('aiquila', 'Notify me when an AI task completes') }}
@@ -146,6 +146,13 @@
 					</p>
 				</NcSettingsSection>
 			</template>
+
+			<template #usage>
+				<NcSettingsSection :name="t('aiquila', 'Usage export')"
+					:description="t('aiquila', 'Download the tokens your AIquila requests used, as CSV or JSON: one row per request, or summed per day, week or month.')">
+					<UsageExport />
+				</NcSettingsSection>
+			</template>
 		</SettingsTabs>
 	</div>
 </template>
@@ -162,6 +169,7 @@ import LibraryEditor from '../components/settings/LibraryEditor.vue'
 import ProviderCard from '../components/settings/ProviderCard.vue'
 import SequenceList from '../components/settings/SequenceList.vue'
 import SettingsTabs from '../components/settings/SettingsTabs.vue'
+import UsageExport from '../components/settings/UsageExport.vue'
 import {
 	getSettings,
 	getUserProviders,
@@ -182,6 +190,7 @@ export default {
 		ProviderCard,
 		SequenceList,
 		SettingsTabs,
+		UsageExport,
 	},
 	data() {
 		return {
@@ -222,6 +231,7 @@ export default {
 				{ id: 'prompts', label: t('aiquila', 'Prompts') },
 				{ id: 'sequences', label: t('aiquila', 'Sequences') },
 				{ id: 'connectors', label: t('aiquila', 'Connectors') },
+				{ id: 'usage', label: t('aiquila', 'Usage') },
 			]
 		},
 		inheritNote() {

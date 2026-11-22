@@ -383,6 +383,9 @@ docker compose up -d nc
 docker compose exec nc php -v
 ```
 
+To pull every service of the stack at once, run
+[`aiquila-hetzner deploy`](commands.md#deploy) from your workstation instead.
+
 The Compose service is `nc`; `aiq-nc` is the container name, which `docker exec`
 accepts but `docker compose` does not. If you run extra compose files (`-f`) or
 profiles on top of the stack, pass the same flags — and leave out `--remove-orphans`,
@@ -462,7 +465,7 @@ start it: do steps 1 and 2 before the next `docker compose up -d`, which would.
 
 ## Upgrading PostgreSQL to 18
 
-The Nextcloud and full stacks ship **`postgres:18`**. A PostgreSQL *major* upgrade does
+The Nextcloud and full stacks ship **PostgreSQL 18** (`postgres:18.7`). A PostgreSQL *major* upgrade does
 not happen automatically — the on-disk data format changes between majors, so starting the
 new image against a data volume created by an older major (e.g. `postgres:16`) will fail.
 

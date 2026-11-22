@@ -6,9 +6,11 @@ declare(strict_types=1);
 namespace OCA\AIquila\Service;
 
 use OCA\AIquila\BackgroundJob\BatchRunJob;
+use OCA\AIquila\Batch\AskOperation;
 use OCA\AIquila\Batch\BatchContext;
 use OCA\AIquila\Batch\BatchDocumentRunner;
 use OCA\AIquila\Batch\BatchOperation;
+use OCA\AIquila\Batch\ExtractOperation;
 use OCA\AIquila\Batch\SummarizeOperation;
 use OCA\AIquila\Batch\TranslateOperation;
 use OCA\AIquila\Cowork\UserPath;
@@ -46,6 +48,7 @@ use Psr\Log\LoggerInterface;
  * until the batch has ended.
  *
  * @psalm-import-type BatchRunResult from BatchDocumentRunner
+ * @psalm-import-type BatchSkip from BatchDocumentRunner
  * @psalm-import-type AIquilaBatchRun from \OCA\AIquila\ResponseDefinitions
  */
 class BatchRunService {
@@ -58,6 +61,13 @@ class BatchRunService {
     public const MODE_BATCH = 'batch';
     public const MODE_IMMEDIATE = 'immediate';
     public const MODES = [self::MODE_BATCH, self::MODE_IMMEDIATE];
+
+    /**
+     * Skipped files logged one by one; past this the log gets one line with
+     * the rest of the count, so a folder of 5,000 photos does not push every
+     * other entry out of the bounded run log.
+     */
+    private const SKIP_LOG_LIMIT = 100;
 
     /** Suggested seconds between status polls, per status; null once a run has ended. */
     private const POLL_INTERVALS = [
@@ -77,13 +87,14 @@ class BatchRunService {
         private readonly ITimeFactory $timeFactory,
         private readonly LoggerInterface $logger,
         private readonly ?InstructionsService $instructions = null,
+        private readonly ?BatchRunNotifications $notifications = null,
     ) {
     }
 
     /** @return array<string, BatchOperation> id => operation */
     public function operations(): array {
         $ops = [];
-        foreach ([new SummarizeOperation(), new TranslateOperation()] as $op) {
+        foreach ([new SummarizeOperation(), new TranslateOperation(), new AskOperation(), new ExtractOperation()] as $op) {
             $ops[$op->getId()] = $op;
         }
         return $ops;
@@ -223,13 +234,14 @@ class BatchRunService {
             throw new NoActiveRunException('Run ' . $run->getId() . ' has already ended');
         }
         $batchId = $status === CoworkerRun::STATUS_PENDING ? $run->getPendingBatchId() : null;
+        $uploads = $batchId !== null ? BatchDocumentRunner::uploadsFromState($run->getDecodedState()) : [];
 
         $run->setStatus(CoworkerRun::STATUS_CANCELLED);
         $run->setFinishedAt($this->timeFactory->getTime());
         $run->setState(null);
         $run->appendLog(CoworkerRun::LOG_WARN, sprintf('Cancelled after %d/%d item(s)', $run->getItemsProcessed(), $run->getItemsTotal()));
         if ($batchId !== null) {
-            [$level, $message] = $this->cancelBatch($run->getUserId(), $batchId);
+            [$level, $message] = $this->cancelBatch($run->getUserId(), $batchId, $uploads);
             $run->appendLog($level, $message);
         }
         $this->runMapper->update($run);
@@ -238,11 +250,18 @@ class BatchRunService {
     /**
      * @return array{0: 'info'|'warn', 1: string}
      */
-    private function cancelBatch(string $userId, string $batchId): array {
+    /**
+     * @param list<string> $uploads the PDFs the run uploaded, deleted either way
+     */
+    private function cancelBatch(string $userId, string $batchId, array $uploads = []): array {
         try {
             $provider = $this->providerFactory->getProviderForUser($userId, null);
-            if ($provider instanceof ClaudeSDKService && $provider->cancelBatch($batchId, $userId)) {
-                return [CoworkerRun::LOG_INFO, 'Batch ' . $batchId . ' cancelled'];
+            if ($provider instanceof ClaudeSDKService) {
+                $cancelled = $provider->cancelBatch($batchId, $userId);
+                BatchDocumentRunner::deleteUploadsWith($provider, $uploads, $userId, $this->logger);
+                if ($cancelled) {
+                    return [CoworkerRun::LOG_INFO, 'Batch ' . $batchId . ' cancelled'];
+                }
             }
         } catch (\Throwable $e) {
             $this->logger->warning('AIquila batch run: could not cancel batch', ['batch' => $batchId, 'error' => $e->getMessage()]);
@@ -273,10 +292,19 @@ class BatchRunService {
             $mode = ($queued['mode'] ?? self::MODE_BATCH) === self::MODE_IMMEDIATE ? self::MODE_IMMEDIATE : self::MODE_BATCH;
             $ctx = $this->context($run->getUserId(), $op, $options, $mode === self::MODE_BATCH);
 
-            [$files, $folders] = $this->resolveInputs($run, $queued);
+            [$files, $folders, $skipped] = $this->resolveInputs($run, $queued);
             $selection = $this->runner->collectSelection($ctx, $files, $folders);
-            foreach ($selection['skipped'] as $skip) {
-                $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: ' . $skip['reason'], $skip['item']);
+            foreach ($selection['skipped'] as $i => $skip) {
+                if ($i < self::SKIP_LOG_LIMIT) {
+                    $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: ' . $skip['reason'], $skip['item']);
+                }
+                $skipped[] = $skip;
+            }
+            if (count($selection['skipped']) > self::SKIP_LOG_LIMIT) {
+                $run->appendLog(CoworkerRun::LOG_WARN, sprintf(
+                    'Skipped %d more file(s) that are not text, PDF or Office documents or cannot be written beside',
+                    count($selection['skipped']) - self::SKIP_LOG_LIMIT,
+                ));
             }
             if ($selection['capped']) {
                 $run->appendLog(CoworkerRun::LOG_WARN, sprintf(
@@ -291,10 +319,12 @@ class BatchRunService {
                 $result = [
                     'itemsTotal' => 0,
                     'itemsProcessed' => 0,
-                    'summary' => 'Nothing to do: no text documents that still need work in the selection.',
+                    'itemsSkipped' => count($skipped),
+                    'summary' => 'Nothing to do: no documents that still need work in the selection.'
+                        . BatchDocumentRunner::describeSkips($skipped),
                 ];
             } else {
-                $result = $this->runner->process($ctx, $run, $selection['files'], $progress);
+                $result = $this->runner->process($ctx, $run, $selection['files'], $progress, $skipped);
             }
         } catch (RunCancelledException) {
             $this->finishCancelled($run);
@@ -360,6 +390,7 @@ class BatchRunService {
             'itemsTotal' => $run->getItemsTotal(),
             'itemsProcessed' => $run->getItemsProcessed(),
             'itemsFailed' => $run->getItemsFailed(),
+            'itemsSkipped' => $run->getItemsSkipped(),
             'summary' => $run->getSummary(),
             'error' => $run->getError(),
             'startedAt' => $run->getStartedAt(),
@@ -440,14 +471,16 @@ class BatchRunService {
 
     /**
      * The queued input, resolved again: a file can have been deleted or
-     * unshared since the run was started. Each one that is gone is logged.
+     * unshared since the run was started. Each one that is gone is logged
+     * and returned as a skip.
      *
      * @param array<array-key, mixed> $queued
-     * @return array{0: list<File>, 1: list<Folder>}
+     * @return array{0: list<File>, 1: list<Folder>, 2: list<BatchSkip>}
      */
     private function resolveInputs(CoworkerRun $run, array $queued): array {
         $files = [];
         $folders = [];
+        $gone = [];
         foreach (['fileIds' => File::class, 'folderIds' => Folder::class] as $field => $kind) {
             $ids = is_array($queued[$field] ?? null) ? $queued[$field] : [];
             foreach ($ids as $id) {
@@ -457,11 +490,13 @@ class BatchRunService {
                 } elseif ($node instanceof Folder && $kind === Folder::class && $node->isReadable()) {
                     $folders[] = $node;
                 } else {
-                    $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: no longer available', ($kind === File::class ? 'file ' : 'folder ') . (int)$id);
+                    $skip = ['item' => ($kind === File::class ? 'file ' : 'folder ') . (int)$id, 'reason' => 'No longer available'];
+                    $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: ' . $skip['reason'], $skip['item']);
+                    $gone[] = $skip;
                 }
             }
         }
-        return [$files, $folders];
+        return [$files, $folders, $gone];
     }
 
     private function operationOf(CoworkerRun $run): BatchOperation {
@@ -566,6 +601,7 @@ class BatchRunService {
 
         $run->setFinishedAt($this->timeFactory->getTime());
         $this->runMapper->update($run);
+        $this->notifications?->runFinished($run);
         return $run;
     }
 
@@ -574,6 +610,7 @@ class BatchRunService {
         $run->setItemsTotal((int)($result['itemsTotal'] ?? 0));
         $run->setItemsProcessed((int)($result['itemsProcessed'] ?? 0));
         $run->setItemsFailed((int)($result['itemsFailed'] ?? 0));
+        $run->setItemsSkipped((int)($result['itemsSkipped'] ?? 0));
         $run->setSummary((string)($result['summary'] ?? ''));
         if (isset($result['outputs']) && $result['outputs'] !== []) {
             $run->setDecodedOutputs($result['outputs']);

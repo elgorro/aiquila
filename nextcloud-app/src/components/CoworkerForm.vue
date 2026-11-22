@@ -154,6 +154,31 @@
 			<input v-model="form.targetLanguage" type="text" :placeholder="t('aiquila', 'German')">
 		</label>
 
+		<template v-if="isExtract">
+			<ExtractFieldsEditor v-model="form.fields" />
+			<label class="field">
+				<span>{{ t('aiquila', 'Table name') }}</span>
+				<input v-model="form.tableName" type="text" :placeholder="t('aiquila', 'invoices')">
+				<small>{{ t('aiquila', 'Rows are saved in {name}.csv, one table per folder. Changing the fields extracts every document again.', { name: form.tableName || 'extracted' }) }}</small>
+			</label>
+		</template>
+
+		<template v-if="isAsk">
+			<label class="field">
+				<span>{{ t('aiquila', 'Question for each document') }}</span>
+				<textarea v-model="form.askPrompt"
+					rows="4"
+					maxlength="4000"
+					:placeholder="t('aiquila', 'For example: List every deadline and who it applies to.')" />
+				<small>{{ t('aiquila', 'Changing the question answers every document again.') }}</small>
+			</label>
+			<label class="field">
+				<span>{{ t('aiquila', 'Name for the answers') }}</span>
+				<input v-model="form.outputSuffix" type="text" :placeholder="t('aiquila', 'deadlines')">
+				<small>{{ t('aiquila', 'Answers are saved beside each document, as report.{suffix}.md for report.pdf. Use lowercase letters, digits and hyphens.', { suffix: form.outputSuffix || 'deadlines' }) }}</small>
+			</label>
+		</template>
+
 		<label v-if="isSummarize" class="field">
 			<span>{{ t('aiquila', 'Summary style') }}</span>
 			<select v-model="form.style">
@@ -185,9 +210,11 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import { createCoworker, createCoworkerTriggerUrl, deleteCoworkerTriggerUrl, getCoworkerTriggerPolicy, getTeams, getTeamWorkspace, listCoworkerTools, updateCoworker } from '../api.js'
+import ExtractFieldsEditor from './ExtractFieldsEditor.vue'
 
 export default {
 	name: 'CoworkerForm',
+	components: { ExtractFieldsEditor },
 	props: {
 		model: { type: Object, default: () => ({}) },
 		taskTypes: { type: Array, default: () => [] },
@@ -215,6 +242,12 @@ export default {
 				cron_schedule: m.cronSchedule || '0 3 * * *',
 				maxTags: options.maxTags || 8,
 				targetLanguage: options.targetLanguage || '',
+				askPrompt: typeof options.prompt === 'string' ? options.prompt : '',
+				fields: Array.isArray(options.fields) && options.fields.length > 0
+					? options.fields.map(f => ({ name: f.name || '', type: f.type || 'string', description: f.description || '' }))
+					: [{ name: '', type: 'string', description: '' }],
+				tableName: options.tableName || '',
+				outputSuffix: options.outputSuffix || '',
 				style: options.style || 'brief',
 				recursive: options.recursive !== false,
 				model: m.model || '',
@@ -249,6 +282,12 @@ export default {
 		},
 		isTranslate() {
 			return this.form.task_type === 'docs:translate'
+		},
+		isAsk() {
+			return this.form.task_type === 'docs:ask'
+		},
+		isExtract() {
+			return this.form.task_type === 'docs:extract'
 		},
 		isAgent() {
 			return this.form.task_type === 'agent:run'
@@ -384,6 +423,16 @@ export default {
 			}
 			if (this.isTranslate) {
 				options.targetLanguage = this.form.targetLanguage
+			}
+			if (this.isAsk) {
+				options.prompt = this.form.askPrompt.trim()
+				options.outputSuffix = this.form.outputSuffix.trim()
+			}
+			if (this.isExtract) {
+				options.fields = this.form.fields.map(f => ({ name: f.name.trim(), type: f.type, description: f.description.trim() }))
+				if (this.form.tableName.trim()) {
+					options.tableName = this.form.tableName.trim()
+				}
 			}
 			if (this.isClaude && this.form.effort) {
 				options.effort = this.form.effort

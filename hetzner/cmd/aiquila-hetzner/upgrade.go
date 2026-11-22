@@ -29,6 +29,7 @@ var (
 	upgradeKeepBackups int
 	upgradeDryRun      bool
 	upgradeNoConfirm   bool
+	upgradeImages      bool
 )
 
 const (
@@ -49,6 +50,12 @@ the release needs (keeping every existing value), then upgrades only the MCP
 server and the AIquila app. Nextcloud core, PostgreSQL, Redis and the proxy
 containers are left running as they are.
 
+The plan lists every third-party image (Traefik, CrowdSec, Redis, the socket
+proxy, PostgreSQL, monitoring) the release pins differently from the server.
+Without --images they keep their deployed pins. With --images they move to the
+release's pins and only the changed services are recreated. Nextcloud core and
+a PostgreSQL major are never changed by upgrade.
+
 Running it again when the deployment is current changes nothing.`,
 		RunE: runUpgrade,
 	}
@@ -57,6 +64,7 @@ Running it again when the deployment is current changes nothing.`,
 	cmd.Flags().IntVar(&upgradeKeepBackups, "keep-backups", 5, "Number of backups to keep in /opt/aiquila/backups")
 	cmd.Flags().BoolVar(&upgradeDryRun, "dry-run", false, "Check the server and show the planned changes without making any")
 	cmd.Flags().BoolVar(&upgradeNoConfirm, "noconfirm", false, "Do not ask before applying the plan")
+	cmd.Flags().BoolVar(&upgradeImages, "images", false, "Also bring third-party images to this release's pins (never Nextcloud core or a PostgreSQL major)")
 	cmd.Flags().StringVar(&upgradeToken, "token", "", "Hetzner API token (default: $HCLOUD_TOKEN)")
 	cmd.Flags().StringVar(&upgradeSSHKey, "ssh-key", "", "SSH private key path (default: ~/.ssh/aiquila_ed25519)")
 	_ = cmd.MarkFlagRequired("name")
@@ -93,12 +101,21 @@ type upgradePlan struct {
 	addedKeys   []string
 	oldCompose  string
 	newCompose  string
-	appFrom     string // installed AIquila app version, "" without Nextcloud
-	appTo       string // "" when the app stays
-	mcpFrom     string // running MCP version
-	mcpImageID  string // image the MCP container runs now
-	mcpPulledID string // image the target tag resolves to after pulling
-	mcpStarted  bool   // the new MCP container was started, so it may have written the state
+	appFrom     string                // installed AIquila app version, "" without Nextcloud
+	appTo       string                // "" when the app stays
+	mcpFrom     string                // running MCP version
+	mcpImageID  string                // image the MCP container runs now
+	mcpPulledID string                // image the target tag resolves to after pulling
+	mcpStarted  bool                  // the new MCP container was started, so it may have written the state
+	running     map[string]bool       // compose services running before the upgrade
+	images      []upgrade.ImageChange // third-party images the release pins differently
+	applyImages bool                  // --images: move the appliable ones to the release's pins
+	recreate    []string              // running services whose image changes, recreated after the MCP
+}
+
+// imageApplied says whether this plan moves the service to the release's image.
+func (p *upgradePlan) imageApplied(c upgrade.ImageChange) bool {
+	return p.applyImages && c.Held == ""
 }
 
 func (p *upgradePlan) configChanged() bool {
@@ -110,7 +127,7 @@ func (p *upgradePlan) mcpChanged() bool {
 }
 
 func (p *upgradePlan) empty() bool {
-	return !p.configChanged() && !p.mcpChanged() && p.appTo == ""
+	return !p.configChanged() && !p.mcpChanged() && p.appTo == "" && len(p.recreate) == 0
 }
 
 func runUpgrade(_ *cobra.Command, _ []string) error {
@@ -206,6 +223,14 @@ func runUpgrade(_ *cobra.Command, _ []string) error {
 		}
 	}
 
+	if len(plan.recreate) > 0 {
+		fmt.Printf("\n── Recreating %s on the release's images\n", strings.Join(plan.recreate, ", "))
+		if out, err := plan.recreateCmd(r); err != nil {
+			fmt.Fprintln(os.Stderr, out)
+			return withRollback(fmt.Errorf("recreate %s: %w", strings.Join(plan.recreate, ", "), err), plan, backupDir)
+		}
+	}
+
 	// ── 6. Verify ─────────────────────────────────────────────────────────
 	fmt.Println("\n── Verifying")
 	if err := verify(r, plan); err != nil {
@@ -234,13 +259,19 @@ func preflight(r *remote, tag string) (*upgradePlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &upgradePlan{stack: stack, tag: tag, oldEnv: env, oldCompose: compose}
+	p := &upgradePlan{stack: stack, tag: tag, oldEnv: env, oldCompose: compose, applyImages: upgradeImages}
 	fmt.Printf("  Stack: %s\n", stack)
 
 	if out, _ := r.run(`docker ps --format '{{.Names}}'`); strings.Contains(out, "aiq-prometheus") || strings.Contains(out, "aiq-grafana") {
 		r.profiles = "--profile monitoring"
 		p.profiles = r.profiles
 		fmt.Println("  Monitoring profile in use — every compose call includes it.")
+	}
+	p.running = map[string]bool{}
+	if out, err := r.compose("ps --services --status running 2>/dev/null"); err == nil {
+		for _, s := range strings.Fields(out) {
+			p.running[s] = true
+		}
 	}
 
 	out, err := r.run(`df -Pk ` + stackDir + ` /var/lib/docker | awk 'NR>1 {print $6, $4}'`)
@@ -299,7 +330,16 @@ func preflight(r *remote, tag string) (*upgradePlan, error) {
 
 // planChanges works out the new configuration and which components move.
 func planChanges(r *remote, p *upgradePlan) error {
-	p.newCompose = upgrade.RenderCompose(p.stack, p.tag)
+	var err error
+	tmpl := upgrade.RenderCompose(p.stack, p.tag)
+	p.images, err = upgrade.ImageDrift(p.oldCompose, tmpl)
+	if err != nil {
+		return err
+	}
+	pull, err := p.selectImages(tmpl)
+	if err != nil {
+		return err
+	}
 	m, err := upgrade.MigrateEnv(p.stack, p.oldEnv, p.newCompose)
 	if err != nil {
 		return err
@@ -327,7 +367,50 @@ func planChanges(r *remote, p *upgradePlan) error {
 			p.mcpPulledID = strings.TrimSpace(id)
 		}
 	}
+	if !upgradeDryRun {
+		for _, image := range uniq(pull) {
+			if out, err := r.run("docker pull -q " + shellQuote(image) + " 2>&1"); err != nil {
+				fmt.Fprintln(os.Stderr, out)
+				return fmt.Errorf("pull %s: %w", image, err)
+			}
+		}
+	}
 	return nil
+}
+
+// selectImages sets the new compose file from the template and decides which
+// services get recreated, returning the images to pull. Every image this
+// upgrade does not move keeps its deployed pin, so that a later `deploy`
+// (which pulls what the file names) does not move it either.
+func (p *upgradePlan) selectImages(tmpl string) ([]string, error) {
+	keep := map[string]string{}
+	var pull []string
+	p.recreate = nil
+	for _, c := range p.images {
+		if !p.imageApplied(c) {
+			keep[c.Service] = c.From
+			continue
+		}
+		if p.running[c.Service] {
+			p.recreate = append(p.recreate, c.Service)
+			pull = append(pull, c.To)
+		}
+	}
+	var err error
+	p.newCompose, err = upgrade.PinImages(tmpl, keep)
+	return uniq(pull), err
+}
+
+func uniq(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func printPlan(p *upgradePlan) {
@@ -363,9 +446,39 @@ func printPlan(p *upgradePlan) {
 		}
 		fmt.Println("  Nextcloud core, PostgreSQL, Redis: not touched")
 	}
+	fmt.Print(imagePlan(p))
 	if p.newCompose != p.oldCompose {
-		fmt.Println("  Compose changes to services other than mcp take effect when you next recreate them.")
+		fmt.Println("  Other compose changes to services that are not recreated take effect when you next recreate them.")
 	}
+}
+
+// imagePlan describes the third-party image drift and what this run does
+// with each change.
+func imagePlan(p *upgradePlan) string {
+	if len(p.images) == 0 {
+		return "  Third-party images: on this release's pins\n"
+	}
+	var b strings.Builder
+	b.WriteString("  Third-party images the release pins differently:\n")
+	var appliable bool
+	for _, c := range p.images {
+		var what string
+		switch {
+		case c.Held != "":
+			what = "kept: " + c.Held
+		case !p.applyImages:
+			what, appliable = "kept (--images applies it)", true
+		case p.running[c.Service]:
+			what = "recreated"
+		default:
+			what = "pinned; the service is not running"
+		}
+		fmt.Fprintf(&b, "    %s: %s → %s (%s)\n", c.Service, c.From, c.To, what)
+	}
+	if appliable {
+		b.WriteString("  Run again with --images to apply the kept ones that can be.\n")
+	}
+	return b.String()
 }
 
 // mcpStateSnapshotJS copies the running server's state database with VACUUM
@@ -514,9 +627,21 @@ func restoreApp(r *remote) {
 	}
 }
 
+// recreateCmd recreates only the services whose image changed. --no-deps
+// keeps compose from recreating what they depend on.
+func (p *upgradePlan) recreateCmd(r *remote) (string, error) {
+	return r.compose("up -d --no-deps " + strings.Join(p.recreate, " ") + " 2>&1")
+}
+
 // verify waits for the MCP healthcheck and checks versions, then runs a short
 // MCP smoke test against the server from inside its container.
 func verify(r *remote, p *upgradePlan) error {
+	if len(p.recreate) > 0 {
+		if err := waitRunning(r, p.recreate, 2*time.Minute); err != nil {
+			return err
+		}
+		fmt.Printf("  Recreated: %s, running\n", strings.Join(p.recreate, ", "))
+	}
 	if p.stack.HasMCP() {
 		if err := waitHealthy(r, "aiq-mcp", 3*time.Minute); err != nil {
 			return err
@@ -582,6 +707,42 @@ const call = async (method) => {
   console.log('MCP: protocol ' + d.supportedVersions.join(', ') + '; ' + t.tools.length + ' tools');
 })().catch(e => { console.error(e.message); process.exit(1); });
 `
+
+// waitRunning waits until every service runs and none that has a
+// healthcheck reports unhealthy or is still starting.
+func waitRunning(r *remote, services []string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		out, _ := r.compose("ps --format '{{.Service}} {{.State}} {{.Health}}' " + strings.Join(services, " "))
+		pending := pendingServices(out, services)
+		if len(pending) == 0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%s did not come up within %s — see `docker compose logs %s`", strings.Join(pending, ", "), timeout, pending[0])
+		}
+		time.Sleep(5 * time.Second)
+	}
+}
+
+// pendingServices lists the services `docker compose ps` does not report as
+// running and, where they have a healthcheck, healthy.
+func pendingServices(psOut string, services []string) []string {
+	ok := map[string]bool{}
+	for _, line := range strings.Split(psOut, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 2 && f[1] == "running" && (len(f) == 2 || f[2] == "healthy") {
+			ok[f[0]] = true
+		}
+	}
+	var pending []string
+	for _, s := range services {
+		if !ok[s] {
+			pending = append(pending, s)
+		}
+	}
+	return pending
+}
 
 func waitHealthy(r *remote, container string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
@@ -686,6 +847,10 @@ func rollbackSteps(p *upgradePlan, dir string) string {
 			b.WriteString("  # Devices & sessions (\"AIquila MCP (…)\"), or an admin with\n")
 			b.WriteString("  # occ user:auth-tokens:list <user> and occ user:auth-tokens:delete <user> <id>.\n")
 		}
+	}
+	if len(p.recreate) > 0 {
+		b.WriteString("  # the previous images are still in the local cache:\n")
+		fmt.Fprintf(&b, "  docker compose %sup -d --no-deps %s\n", profileArg(p), strings.Join(p.recreate, " "))
 	}
 	if p.stack.HasNextcloud() && p.appTo != "" {
 		b.WriteString("  docker compose exec -T nc rm -rf /var/www/html/custom_apps/aiquila\n")

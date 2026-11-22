@@ -88,7 +88,7 @@ and tool allowlist.
 
 List the templates (`templateId` values) and the task types the installed app
 supports (`taskType` values, e.g. `vision:classify`, `docs:summarize`,
-`docs:translate`). Templates are the built-in ones plus any an administrator
+`docs:translate`, `docs:ask`, `docs:extract`). Templates are the built-in ones plus any an administrator
 published for the organization; those are marked as such and their ids start
 with `org-`.
 
@@ -219,7 +219,7 @@ Accepted by `create_coworker` and `update_coworker`:
 | `recursive` | boolean | Option: include sub-folders |
 | `effort` | string | Option: reasoning effort, e.g. `low`. `""` uses the default |
 | `thinking` | `auto` \| `on` \| `off` | Option: extended thinking |
-| `options` | object | Any other task-specific option, e.g. `{"targetLanguage": "de"}` for `docs:translate`. The typed option fields above win on conflict |
+| `options` | object | Any other task-specific option, e.g. `{"targetLanguage": "de"}` for `docs:translate`, `{"prompt": "List the deadlines", "outputSuffix": "deadlines"}` for `docs:ask`, or `{"tableName": "invoices", "fields": [{"name": "total", "type": "number"}]}` for `docs:extract`. The typed option fields above win on conflict |
 | `prompt` | string | Agent coworkers: the instruction to run |
 | `promptId` | number | Agent coworkers: a saved prompt to run instead of `prompt` |
 | `tools` | string[] | Agent coworkers: MCP tools the run may call |

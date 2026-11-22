@@ -161,16 +161,20 @@ Over SSH it:
    consistent snapshot even while the server writes. Only the newest `--keep-backups` are kept.
 4. **Migrates the configuration**: adds what the release needs to `.env`, generating values
    where that is safe (`MCP_CREDENTIAL_KEY`), keeps every existing value, and replaces
-   `docker-compose.yml` with this CLI's template, MCP image pinned to the release. A variable
-   the template requires that cannot be generated stops the upgrade before anything changes.
+   `docker-compose.yml` with this CLI's template, MCP image pinned to the release. Every
+   third-party image the run does not move keeps the pin the server already had (see
+   [Third-party images](#third-party-images)). A variable the template requires that cannot
+   be generated stops the upgrade before anything changes.
 5. **Updates** only the components: the AIquila app from the release's `aiquila.tar.gz`
    (old copy moved outside the webroot, put back if `occ upgrade` fails), then
    `docker compose up -d mcp`. Every compose call includes the monitoring profile when it
-   is running, and none uses `--remove-orphans`. Nextcloud core, PostgreSQL, Redis and the
-   proxy containers are not recreated; compose changes to them apply when you next
-   recreate them yourself.
-6. **Verifies**: the MCP healthcheck, both versions, no pending Nextcloud upgrade, and an MCP
-   smoke test (`server/discover`, `tools/list`) from inside the container.
+   is running, and none uses `--remove-orphans`. With `--images`, the running services whose
+   image moves are then recreated with `docker compose up -d --no-deps <service>…`.
+   Nothing else is recreated; other compose changes apply when you next recreate those
+   services yourself.
+6. **Verifies**: the MCP healthcheck, both versions, no pending Nextcloud upgrade, an MCP
+   smoke test (`server/discover`, `tools/list`) from inside the container, and that every
+   recreated service is running (and healthy, where it has a healthcheck).
 
 It ends with the commands that restore the previous configuration, image and app from the
 backup; on a failure it prints them straight away. The MCP state is not restored. A copy
@@ -181,12 +185,35 @@ Nextcloud (see [Upgrades and downgrades](../mcp/oauth.md#upgrades-and-downgrades
 upgrade fails before the MCP container is replaced, the state is left alone. The state
 backup is kept for disaster recovery only.
 
+### Third-party images
+
+Each CLI release pins the third-party images (Traefik, CrowdSec, Redis, the socket proxy,
+PostgreSQL, the monitoring services) to exact tags, per the
+[image tag policy](../dev/ci-cd.md#docker-image-tags). The plan compares every service's
+`image:` on the server with the release's template and lists each one that differs, for
+example `traefik: traefik:v3 → traefik:v3.7.19`.
+
+- **Without `--images`** each of them keeps the image the server runs, also in the new
+  `docker-compose.yml`, so a later `deploy` does not move it either.
+- **With `--images`** they move to the release's pins. The new images are pulled during
+  planning, and only the services that were running are recreated. A service that is
+  defined but not running, such as one of an unused monitoring profile, gets the new pin
+  in the file and stays stopped.
+- **Never moved**, with or without `--images`: Nextcloud core (`nc`, `nc-cron`), which
+  upgrades one major at a time through `occ upgrade`, and a PostgreSQL major, which needs
+  a dump and restore ([Upgrading PostgreSQL to 18](advanced.md#upgrading-postgresql-to-18)).
+  A PostgreSQL minor moves with `--images`.
+
+The rollback commands then also recreate those services from the restored
+`docker-compose.yml`. Their previous images are still in the server's image cache.
+
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--name` | — | Server name (required) |
 | `--version` | this CLI's version | Release to upgrade to (e.g. `0.5.0`); a development build defaults to `latest` |
 | `--dry-run` | `false` | Run the checks and print the plan without changing anything |
 | `--noconfirm` | `false` | Apply the plan without asking |
+| `--images` | `false` | Also move third-party images to this release's pins and recreate the changed services (never Nextcloud core or a PostgreSQL major) |
 | `--keep-backups` | `5` | Backups to keep in `/opt/aiquila/backups` |
 | `--ssh-key` | `~/.ssh/aiquila_ed25519` | SSH private key path |
 | `--token` | `$HCLOUD_TOKEN` | Hetzner API token |
@@ -194,6 +221,7 @@ backup is kept for disaster recovery only.
 ```bash
 aiquila-hetzner upgrade --name my-server --dry-run
 aiquila-hetzner upgrade --name my-server
+aiquila-hetzner upgrade --name my-server --images --dry-run   # what --images would move
 ```
 
 ---

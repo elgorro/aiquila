@@ -4,6 +4,8 @@
 namespace OCA\AIquila\AppInfo;
 
 use OCA\AIquila\Cowork\CoworkerTaskRegistry;
+use OCA\AIquila\Cowork\DocsAskFolderTaskType;
+use OCA\AIquila\Cowork\DocsExtractFolderTaskType;
 use OCA\AIquila\Cowork\DocsSummarizeFolderTaskType;
 use OCA\AIquila\Cowork\DocsTranslateFolderTaskType;
 use OCA\AIquila\Cowork\AgentRunTaskType;
@@ -53,6 +55,9 @@ class Application extends App implements IBootstrap {
         $context->registerDashboardWidget(\OCA\AIquila\Dashboard\UsageWidget::class);
         $context->registerDashboardWidget(\OCA\AIquila\Dashboard\CoworkerOutputWidget::class);
 
+        // A user's token usage travels with their account in the user_migration export.
+        $context->registerUserMigrator(\OCA\AIquila\UserMigration\UsageMigrator::class);
+
         // Cowork task-type registry — the set of jobs coworkers can run
         $context->registerService(CoworkerTaskRegistry::class, function (ContainerInterface $c) {
             $visionClassify = $c->get(VisionClassifyImagesTaskType::class);
@@ -61,11 +66,15 @@ class Application extends App implements IBootstrap {
             assert($docsSummarize instanceof DocsSummarizeFolderTaskType);
             $docsTranslate = $c->get(DocsTranslateFolderTaskType::class);
             assert($docsTranslate instanceof DocsTranslateFolderTaskType);
+            $docsAsk = $c->get(DocsAskFolderTaskType::class);
+            assert($docsAsk instanceof DocsAskFolderTaskType);
+            $docsExtract = $c->get(DocsExtractFolderTaskType::class);
+            assert($docsExtract instanceof DocsExtractFolderTaskType);
 
             $agentRun = $c->get(AgentRunTaskType::class);
             assert($agentRun instanceof AgentRunTaskType);
 
-            return new CoworkerTaskRegistry([$visionClassify, $docsSummarize, $docsTranslate, $agentRun]);
+            return new CoworkerTaskRegistry([$visionClassify, $docsSummarize, $docsTranslate, $docsAsk, $docsExtract, $agentRun]);
         });
 
         // Register AIquila TaskProcessing Providers for Nextcloud Assistant integration

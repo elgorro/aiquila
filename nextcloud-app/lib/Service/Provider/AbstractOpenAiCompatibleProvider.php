@@ -71,7 +71,7 @@ abstract class AbstractOpenAiCompatibleProvider implements LLMProviderInterface 
         return false;
     }
 
-    /** Whether the backend can generate images. No OpenAI-compatible server here does. */
+    /** Whether the backend can generate images. Off unless a provider says otherwise. */
     protected function supportsImageOutput(?string $userId = null): bool {
         return false;
     }

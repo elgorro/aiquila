@@ -20,8 +20,9 @@ AIquila uses GitHub Actions for continuous integration and deployment.
 
 ## Test Workflow (`test.yml`)
 
-Runs on every pull request to `main`. Three component jobs, each of which only does
-work when its component actually changed.
+Runs on every pull request to `main`. Three component jobs, plus an experimental
+run of the Nextcloud app on the next PHP minor, each of which only does work when its
+component actually changed.
 
 A `changes` job diffs the PR against its base commit and publishes one boolean per
 component; each test job then gates its steps on the relevant one.
@@ -31,6 +32,7 @@ component; each test job then gates its steps on the relevant one.
 | `MCP Server Tests` | `mcp-server/**` changed (excluding `*.md`), or `docs/mcp/upstream-apis.md`, which a test checks against the tool registry | `npm ci`, `npm test`, `npm run build` |
 | `Nextcloud App Tests` | `nextcloud-app/**` changed (excluding `*.md`) | Composer install, `composer test`, `composer psalm`, regenerate the OpenAPI spec and fail if it differs |
 | `Hetzner CLI Tests` | `hetzner/**` changed (excluding `*.md`) | `go vet ./...`, `go test ./...` |
+| `Nextcloud App Tests (PHP 8.6, experimental)` | as `Nextcloud App Tests` | `composer test` with `--fail-on-deprecation`, and `composer psalm`, on the next PHP minor. `continue-on-error`, and not a required check |
 
 Two rules worth knowing:
 
@@ -107,23 +109,53 @@ Dependabot runs weekly across every ecosystem in the repo:
 | npm | `/nextcloud-app` | `chore(nextcloud)` |
 | composer | `/nextcloud-app` | `chore(nextcloud)` |
 | gomod | `/hetzner` | `chore(hetzner)` |
-| docker | each `docker/` and `hetzner/docker/` stack | `chore` |
+| docker (Dockerfile `FROM`) | `/docker/installation`, `/mcp-server` | `chore` |
+| docker-compose (`image:` lines) | each `docker/` and `hetzner/docker/` stack | `chore` |
 | github-actions | `/` | `chore` |
 
 Minor and patch updates are grouped into a single PR per ecosystem; majors
 arrive as individual PRs so they can be evaluated on their own. Each ecosystem
 is capped at 5 open PRs.
 
+What Dependabot does not see (floating tags, toolchain lines, CI runtime versions),
+and how an update round or a security release is run, is in
+[Updates and security releases](update-plan.md).
+
+The `docker` ecosystem reads only Dockerfiles; compose files need the separate
+`docker-compose` ecosystem. PostgreSQL majors are ignored there, because they need a
+dump and restore ([Upgrading PostgreSQL to 18](../hetzner/advanced.md#upgrading-postgresql-to-18)).
+
 Two things follow from this:
 
-- **Pin third-party images to a tag.** Dependabot cannot propose an update for
-  a service pinned to `:latest`, so an unpinned image is silently excluded from
-  dependency tracking. First-party images (`aiquila-mcp`, `aiquila-nextcloud`)
-  are the deliberate exception.
+- **Follow the [image tag policy](#docker-image-tags).** Dependabot keeps a tag's
+  precision: it bumps `v3.7.19` to `v3.7.20`, but never proposes anything for a
+  service on `v3` or `:latest`.
 - **Transitive vulnerabilities usually need a lockfile refresh, not a bump.**
   Direct dependencies tend to declare their own dependencies as ranges, so the
   fix is often `npm audit fix` plus committing the lockfile. Check the alert's
   dependency path before assuming a direct dependency is at fault.
+
+### Docker image tags
+
+Every compose and Dockerfile image follows one rule:
+
+- **Exact version tag** (`traefik:v3.7.19`, `redis:8.10.3-alpine`, `postgres:18.7`) for
+  every image whose upstream publishes versions. Dependabot raises the bumps, so each
+  change arrives as a reviewed PR.
+- **Floating tag**, only for images upstream rebuilds in place for security fixes:
+  `nextcloud:35-apache` (PHP), `node:26-alpine` (Node.js) and
+  `tecnativa/docker-socket-proxy:3.4` (HAProxy and Alpine; upstream publishes no
+  version tags). A pull picks up the rebuild: `--pull` in the dev Makefile and the
+  release build, and `aiquila-hetzner deploy` on servers. Dependabot proposes only their
+  major bumps, and the [PHP Images workflow](#php-images-workflow-php-imagesyml) flags
+  the PHP ones when they fall behind.
+- **First-party images** (`aiquila-mcp:latest`, `aiquila-nextcloud`) are the exception.
+  Releases version them, and `aiquila-hetzner upgrade` pins the MCP tag on servers.
+
+Exact pins in a Hetzner server's rendered `docker-compose.yml` change when the stack is
+rebuilt, or through `aiquila-hetzner upgrade --images`, which moves the third-party
+images to the release's pins. Without `--images`, `upgrade` pins only the MCP image and
+lists the rest as drift ([`upgrade` › Third-party images](../hetzner/commands.md#third-party-images)).
 
 ## Code Review Workflows
 
@@ -203,7 +235,7 @@ AIquila uses automated release workflows that trigger when you bump the version 
 4. Packages: `dist/`, `package.json`, `README.md`
 5. Creates GitHub release with `aiquila-mcp-vX.X.X.tar.gz`
 6. In parallel (after release):
-   - Pushes Docker image to GHCR (`ghcr.io/elgorro/aiquila-mcp`)
+   - Pushes Docker image to GHCR (`ghcr.io/elgorro/aiquila-mcp`), pulling `node:26-alpine` afresh so each release ships the latest Node.js patch
    - Publishes npm package (`aiquila-mcp` on npmjs.com)
    - Publishes to MCP Registry (`io.github.elgorro/aiquila-mcp`)
 

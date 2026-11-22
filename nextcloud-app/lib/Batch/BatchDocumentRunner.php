@@ -11,6 +11,7 @@ use OCA\AIquila\Service\ClaudeSDKService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\UsageStatService;
+use OCP\Files\Conversion\IConversionManager;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
@@ -36,8 +37,10 @@ use Psr\Log\LoggerInterface;
  * It knows nothing about coworkers or schedules. The caller owns the run row,
  * passes a {@see BatchContext}, and persists whatever comes back.
  *
- * @psalm-type BatchRunResult = array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, summary: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}
- * @psalm-type BatchSelection = array{files: list<File>, skipped: list<array{item: string, reason: string}>, capped: bool}
+ * @psalm-type BatchSkip = array{item: string, reason: string}
+ * @psalm-type BatchRunResult = array{itemsTotal: int, itemsProcessed: int, itemsFailed?: int, itemsSkipped?: int, summary: string, pending?: bool, state?: array<string, mixed>, outputs?: list<string>}
+ * @psalm-type BatchSelection = array{files: list<File>, skipped: list<BatchSkip>, capped: bool}
+ * @psalm-type BatchDocument = array{kind: 'text'|'pdf', data: string}
  */
 class BatchDocumentRunner {
 
@@ -57,14 +60,80 @@ class BatchDocumentRunner {
     /**
      * Mime prefixes and exact types read by default.
      *
-     * Text only. A PDF's bytes are not text, and inlining them into a prompt
-     * would send the model binary rather than a document — the Messages API
-     * wants a base64 `document` block for that, which a batch request here
-     * does not build. `application/pdf` is therefore deliberately absent.
+     * Text goes into the prompt. A PDF goes as its own `document` block, which
+     * only the Anthropic provider builds; on any other provider a walk passes
+     * PDFs over ({@see pdfUnsupportedReason()}).
      *
      * @var list<string>
      */
-    public const DEFAULT_MIME_TYPES = ['text/', 'application/json'];
+    public const DEFAULT_MIME_TYPES = ['text/', 'application/json', self::PDF_MIME, ...self::OFFICE_MIME_TYPES];
+
+    public const PDF_MIME = 'application/pdf';
+
+    /**
+     * Office documents, read by converting them to PDF through Nextcloud's
+     * file conversion API ({@see IConversionManager}), which Nextcloud Office
+     * (richdocuments, backed by Collabora) provides. The PDF then takes the
+     * PDF path, so the model sees the layout, tables and images as well.
+     *
+     * @var list<string>
+     */
+    public const OFFICE_MIME_TYPES = [
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.template',
+        'application/vnd.oasis.opendocument.text',
+        'application/vnd.oasis.opendocument.text-template',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.template',
+        'application/vnd.oasis.opendocument.spreadsheet',
+        'application/vnd.oasis.opendocument.spreadsheet-template',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.openxmlformats-officedocument.presentationml.template',
+        'application/vnd.oasis.opendocument.presentation',
+        'application/vnd.oasis.opendocument.presentation-template',
+    ];
+
+    /**
+     * Where a conversion's PDF is written, under the app's appdata, and read
+     * back and deleted straight away. The conversion API always writes its
+     * result as a file; the default place, beside the source, would leave a
+     * PDF in the user's folder.
+     */
+    private const CONVERSION_FOLDER = 'aiquila/conversions';
+
+    /** A conversion left behind by a worker that died is removed after this. */
+    private const CONVERSION_STALE_SECONDS = 3600;
+
+    /**
+     * Largest PDF read. A PDF is sent whole, and the API reads at most 600
+     * pages of it (100 under a 1M-token context); past this size a PDF is
+     * almost always longer than that, or mostly images.
+     */
+    public const MAX_PDF_BYTES = 32 * 1048576;
+
+    /**
+     * Most base64 PDF bytes one batch carries inline, when PDFs cannot go
+     * through the Files API. A batch is limited to 256 MB in all, and this
+     * leaves room for the prompts and the request envelopes.
+     */
+    public const MAX_INLINE_PDF_BYTES_PER_BATCH = 192 * 1048576;
+
+    /**
+     * Lifetime of a PDF uploaded for a batch. A batch ends or expires within
+     * 24 hours, and the run deletes its uploads once it collects the results
+     * (or is cancelled); the expiry only covers a run that never comes back.
+     * The Files API accepts 3600 – 7776000 seconds.
+     */
+    public const UPLOAD_TTL_SECONDS = 30 * 3600;
+
+    /** Why a PDF was passed over, per user and provider; null when PDFs are read. */
+    private array $pdfReasons = [];
+
+    /** @var array<string, true>|null source mime types a converter turns into PDF */
+    private ?array $convertible = null;
 
     /**
      * Hidden system tag on every output file. A folder walk skips files that
@@ -85,6 +154,7 @@ class BatchDocumentRunner {
         private readonly ISystemTagObjectMapper $tagObjectMapper,
         private readonly LoggerInterface $logger,
         private readonly UsageStatService $usageStats,
+        private readonly ?IConversionManager $conversions = null,
     ) {
     }
 
@@ -166,6 +236,11 @@ class BatchDocumentRunner {
      * they look like an earlier output. Folders are walked with the same
      * rules as a coworker's input folder. A file reached twice counts once.
      *
+     * Unlike a coworker's nightly walk, every file the walk passes over for
+     * its type is reported in `skipped`: the user picked that folder and
+     * should hear that its images were left alone. Finished files and earlier
+     * outputs are not: leaving those is the walk doing its job.
+     *
      * @param list<File> $files
      * @param list<Folder> $folders
      * @return BatchSelection
@@ -181,7 +256,11 @@ class BatchDocumentRunner {
             }
             $seen[$file->getId()] = true;
             if (!$this->matchesMime($file, $ctx->mimeTypes())) {
-                $skipped[] = ['item' => UserPath::of($file), 'reason' => 'Not a text document'];
+                $skipped[] = ['item' => UserPath::of($file), 'reason' => self::unsupportedType($file)];
+                continue;
+            }
+            if (($reason = $this->unreadableReason($ctx, $file)) !== null) {
+                $skipped[] = ['item' => UserPath::of($file), 'reason' => $reason];
                 continue;
             }
             $matches[] = $file;
@@ -193,7 +272,7 @@ class BatchDocumentRunner {
                 break;
             }
             $found = [];
-            $this->gather($ctx, $folder, $exclude, $found, self::MAX_ITEMS_PER_RUN - count($matches), $seen);
+            $this->gather($ctx, $folder, $exclude, $found, self::MAX_ITEMS_PER_RUN - count($matches), $seen, true, $skipped);
             array_push($matches, ...$found);
         }
 
@@ -244,6 +323,11 @@ class BatchDocumentRunner {
         if (!$this->matchesMime($file, $ctx->mimeTypes())) {
             return false;
         }
+        // A nightly walk that kept listing PDFs it cannot send would spend the
+        // run's quota on them every time; they wait for a provider that can.
+        if ($this->unreadableReason($ctx, $file) !== null) {
+            return false;
+        }
         // Our own output is text too, and it lands in the tree we are walking.
         // Left in, each run would feed the previous run's output back through
         // and grow another generation of a.summary.summary.md every night.
@@ -291,8 +375,10 @@ class BatchDocumentRunner {
     /**
      * @param list<File> $matches
      * @param array<int, true> $seen file ids already taken, by id
+     * @param list<BatchSkip> $skipped collects the files passed over for their type, when $report
+     * @param-out list<BatchSkip> $skipped
      */
-    private function gather(BatchContext $ctx, Folder $folder, ?int $excludeFolderId, array &$matches, int $limit = self::MAX_ITEMS_PER_RUN, array &$seen = []): void {
+    private function gather(BatchContext $ctx, Folder $folder, ?int $excludeFolderId, array &$matches, int $limit = self::MAX_ITEMS_PER_RUN, array &$seen = [], bool $report = false, array &$skipped = []): void {
         $listing = $folder->getDirectoryListing();
         $outputs = $this->outputIds($listing);
         foreach ($listing as $child) {
@@ -300,7 +386,20 @@ class BatchDocumentRunner {
                 return;
             }
             if ($child instanceof File) {
-                if (!isset($seen[$child->getId()]) && !isset($outputs[$child->getId()]) && $this->isCandidate($ctx, $child)) {
+                if (isset($seen[$child->getId()]) || isset($outputs[$child->getId()])) {
+                    continue;
+                }
+                if ($report && !$this->matchesMime($child, $ctx->mimeTypes())) {
+                    $seen[$child->getId()] = true;
+                    $skipped[] = ['item' => UserPath::of($child), 'reason' => self::unsupportedType($child)];
+                    continue;
+                }
+                if ($report && ($reason = $this->unreadableReason($ctx, $child)) !== null) {
+                    $seen[$child->getId()] = true;
+                    $skipped[] = ['item' => UserPath::of($child), 'reason' => $reason];
+                    continue;
+                }
+                if ($this->isCandidate($ctx, $child)) {
                     $seen[$child->getId()] = true;
                     $matches[] = $child;
                 }
@@ -308,12 +407,88 @@ class BatchDocumentRunner {
                 if ($excludeFolderId !== null && $child->getId() === $excludeFolderId) {
                     continue;
                 }
-                $this->gather($ctx, $child, $excludeFolderId, $matches, $limit, $seen);
+                $this->gather($ctx, $child, $excludeFolderId, $matches, $limit, $seen, $report, $skipped);
             }
         }
     }
 
+    private static function unsupportedType(File $file): string {
+        return 'Not a text, PDF or Office document (' . $file->getMimetype() . ')';
+    }
+
+    private static function isPdf(File $file): bool {
+        return $file->getMimetype() === self::PDF_MIME;
+    }
+
+    private static function isOffice(File $file): bool {
+        return in_array($file->getMimetype(), self::OFFICE_MIME_TYPES, true);
+    }
+
+    /**
+     * Why this run cannot read a file that passed the mime filter, or null
+     * when it can: a PDF needs the Anthropic provider, and an Office document
+     * that as well as a converter for its type.
+     */
+    private function unreadableReason(BatchContext $ctx, File $file): ?string {
+        $office = self::isOffice($file);
+        if (!$office && !self::isPdf($file)) {
+            return null;
+        }
+        $reason = $this->pdfUnsupportedReason($ctx);
+        if ($reason !== null) {
+            return $office ? 'Office documents are read as PDF, which needs the Anthropic provider' : $reason;
+        }
+        return $office ? $this->conversionUnavailableReason($file) : null;
+    }
+
+    /** Why an Office document cannot be converted to PDF here, or null when it can. */
+    private function conversionUnavailableReason(File $file): ?string {
+        if ($this->convertible === null) {
+            $this->convertible = [];
+            try {
+                if ($this->conversions?->hasProviders()) {
+                    foreach ($this->conversions->getProviders() as $pair) {
+                        if ($pair->getTo() === self::PDF_MIME) {
+                            $this->convertible[$pair->getFrom()] = true;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                $this->logger->warning('AIquila batch: could not list the file converters', ['error' => $e->getMessage()]);
+            }
+        }
+        if ($this->convertible === []) {
+            return 'Office documents need a file converter; install Nextcloud Office (richdocuments)';
+        }
+        return isset($this->convertible[$file->getMimetype()])
+            ? null
+            : 'No installed converter turns ' . $file->getMimetype() . ' into PDF';
+    }
+
+    /**
+     * Why this run cannot send PDFs, or null when it can: the run's provider
+     * must be the Anthropic one, which takes a PDF as a `document` block.
+     * Asked once per user and provider.
+     */
+    public function pdfUnsupportedReason(BatchContext $ctx): ?string {
+        $key = $ctx->userId . "\0" . ($ctx->providerId ?? '');
+        if (!array_key_exists($key, $this->pdfReasons)) {
+            try {
+                $provider = $this->providerFactory->getProviderForUser($ctx->userId, $ctx->providerId);
+                $this->pdfReasons[$key] = $provider instanceof ClaudeSDKService
+                    ? null
+                    : 'PDF input needs the Anthropic provider; ' . $provider->getLabel() . ' is configured';
+            } catch (\Throwable) {
+                $this->pdfReasons[$key] = 'PDF input needs the Anthropic provider';
+            }
+        }
+        return $this->pdfReasons[$key];
+    }
+
     private function alreadyDone(BatchContext $ctx, File $file): bool {
+        if ($ctx->operation instanceof TableOperation) {
+            return $this->rowIsCurrent($ctx, $file);
+        }
         try {
             $folder = $this->outputFolder($ctx, $file);
             $name = self::outputName($ctx->operation, $file, $ctx->options);
@@ -323,7 +498,11 @@ class BatchDocumentRunner {
             $existing = $folder->get($name);
             // The source is what the output describes, so an output older than
             // its source is stale and the file is worth doing again.
-            return $existing->getMTime() >= $file->getMTime();
+            if ($existing->getMTime() < $file->getMTime()) {
+                return false;
+            }
+            // An answer to an earlier question is not an answer to this one.
+            return !$ctx->operation instanceof PromptScopedOperation || $this->hasDoneTag($ctx, $file);
         } catch (\Throwable) {
             return false;
         }
@@ -337,33 +516,63 @@ class BatchDocumentRunner {
      *
      * @param list<File> $files at least one
      * @param callable(int, int): void $progress
+     * @param list<BatchSkip> $skipped files the caller already passed over
+     *        (and logged), so the summary and `itemsSkipped` account for them
      * @return BatchRunResult
      */
-    public function process(BatchContext $ctx, CoworkerRun $run, array $files, callable $progress): array {
+    public function process(BatchContext $ctx, CoworkerRun $run, array $files, callable $progress, array $skipped = []): array {
         $provider = $this->providerFactory->getProviderForUser($ctx->userId, $ctx->providerId);
 
         if (!$ctx->allowBatch || !$provider instanceof ClaudeSDKService || !$provider->supportsBatch()) {
-            return $this->runSynchronously($ctx, $run, $provider, $files, $progress);
+            return $this->runSynchronously($ctx, $run, $provider, $files, $progress, $skipped);
         }
 
         // One batch for the whole set. custom_id is the file id, which is
         // what results come back keyed by — the API returns them in any order.
         $requests = [];
         $fileIds = [];
-        $skipped = [];
+        $uploaded = [];
+        $inlineBytes = 0;
         $total = count($files);
+        $useFilesApi = $provider->supportsFilesApi();
         foreach ($files as $file) {
-            $content = $this->readContent($ctx, $file);
-            if ($content === null) {
-                $skipped[] = $file->getName();
-                $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: unreadable or too large', UserPath::of($file));
+            $document = $this->readDocument($ctx, $file, $reason);
+            if ($document === null) {
+                $skipped[] = $this->skip($run, $file, $reason);
                 continue;
+            }
+            $source = null;
+            if ($document['kind'] === 'pdf') {
+                if ($useFilesApi) {
+                    // A file_id keeps the batch small whatever the PDFs weigh.
+                    try {
+                        $source = ['type' => 'file', 'file_id' => $provider->uploadFile(
+                            $document['data'],
+                            self::isPdf($file) ? $file->getName() : pathinfo($file->getName(), PATHINFO_FILENAME) . '.pdf',
+                            self::PDF_MIME,
+                            $ctx->userId,
+                            self::UPLOAD_TTL_SECONDS,
+                        )['id']];
+                    } catch (\Throwable $e) {
+                        $skipped[] = $this->skip($run, $file, 'Could not be uploaded: ' . $e->getMessage());
+                        continue;
+                    }
+                    $uploaded[] = $source['file_id'];
+                } else {
+                    $encoded = base64_encode($document['data']);
+                    if ($inlineBytes + strlen($encoded) > self::MAX_INLINE_PDF_BYTES_PER_BATCH) {
+                        $skipped[] = $this->skip($run, $file, 'Left for the next run: this batch is at its size limit');
+                        continue;
+                    }
+                    $inlineBytes += strlen($encoded);
+                    $source = ['type' => 'base64', 'media_type' => self::PDF_MIME, 'data' => $encoded];
+                }
             }
             $customId = 'f' . $file->getId();
             $requests[] = [
                 'custom_id' => $customId,
-                'messages' => [['role' => 'user', 'content' => $ctx->operation->buildPrompt($content, $ctx->options)]],
-                'options' => ($ctx->requestOptions)($provider),
+                'messages' => [['role' => 'user', 'content' => self::userContent($ctx, $document, $source)]],
+                'options' => $this->requestOptionsFor($ctx, $provider),
             ];
             $fileIds[$customId] = $file->getId();
         }
@@ -372,16 +581,23 @@ class BatchDocumentRunner {
             return [
                 'itemsTotal' => $total,
                 'itemsProcessed' => 0,
-                'summary' => sprintf('Read none of the %d document(s): %s.', $total, implode(', ', array_slice($skipped, 0, 20))),
+                'itemsSkipped' => count($skipped),
+                'summary' => sprintf('Read none of the %d document(s).', $total) . self::describeSkips($skipped),
             ];
         }
 
-        $batchId = $provider->submitBatch($requests, $ctx->userId);
+        try {
+            $batchId = $provider->submitBatch($requests, $ctx->userId);
+        } catch (\Throwable $e) {
+            $this->deleteUploads($provider, $uploaded, $ctx->userId);
+            throw $e;
+        }
         $run->appendLog(CoworkerRun::LOG_INFO, sprintf('Submitted %d document(s) to batch %s', count($requests), $batchId));
 
         return [
             'itemsTotal' => count($requests),
             'itemsProcessed' => 0,
+            'itemsSkipped' => count($skipped),
             'summary' => sprintf(
                 'Submitted %d document(s) to batch %s. Results arrive within 24 hours.',
                 count($requests),
@@ -394,6 +610,7 @@ class BatchDocumentRunner {
                 'submitted_at' => time(),
                 'skipped' => $skipped,
                 'options' => $ctx->options,
+                'uploaded_files' => $uploaded,
             ],
         ];
     }
@@ -429,18 +646,70 @@ class BatchDocumentRunner {
             // Anthropic expires a batch at 24 h, so past the deadline the
             // record itself is gone and nothing will ever end this run.
             if ($submittedAt > 0 && (time() - $submittedAt) > self::BATCH_DEADLINE_SECONDS) {
+                $this->deleteUploads($provider, self::uploadsFromState($state), $ctx->userId);
                 throw new \RuntimeException("Batch $batchId did not end within 26 hours");
             }
             return [
                 'itemsTotal' => $total,
                 'itemsProcessed' => 0,
+                'itemsSkipped' => count(self::skipsFromState($state)),
                 'summary' => sprintf('Waiting for batch %s (%s).', $batchId, $status['status']),
                 'pending' => true,
                 'state' => $state,
             ];
         }
 
-        return $this->collectResults($ctx, $run, $provider, $batchId, $fileIds, $state, $progress);
+        try {
+            return $this->collectResults($ctx, $run, $provider, $batchId, $fileIds, $state, $progress);
+        } finally {
+            // The batch has ended, so nothing reads the uploads any more.
+            $this->deleteUploads($provider, self::uploadsFromState($state), $ctx->userId);
+        }
+    }
+
+    /**
+     * The Files API ids a pending run uploaded its PDFs as.
+     *
+     * @param array<string, mixed> $state
+     * @return list<string>
+     */
+    public static function uploadsFromState(array $state): array {
+        $ids = [];
+        foreach (is_array($state['uploaded_files'] ?? null) ? $state['uploaded_files'] : [] as $id) {
+            if (is_string($id) && $id !== '') {
+                $ids[] = $id;
+            }
+        }
+        return $ids;
+    }
+
+    /**
+     * Delete a run's uploads from the Files API. Best effort: a file left
+     * behind expires by itself ({@see UPLOAD_TTL_SECONDS}).
+     *
+     * @param list<string> $fileIds
+     */
+    public function deleteUploads(ClaudeSDKService $provider, array $fileIds, string $userId): void {
+        self::deleteUploadsWith($provider, $fileIds, $userId, $this->logger);
+    }
+
+    /**
+     * {@see deleteUploads()} for a caller that holds no runner, such as a
+     * cancel.
+     *
+     * @param list<string> $fileIds
+     */
+    public static function deleteUploadsWith(ClaudeSDKService $provider, array $fileIds, string $userId, LoggerInterface $logger): void {
+        foreach ($fileIds as $fileId) {
+            try {
+                $provider->deleteFile($fileId, $userId);
+            } catch (\Throwable $e) {
+                $logger->warning('AIquila batch: could not delete an uploaded PDF; it expires by itself', [
+                    'file_id' => $fileId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
     /**
@@ -469,6 +738,7 @@ class BatchDocumentRunner {
         $written = 0;
         $outputs = [];
         $failures = self::emptyFailures();
+        $tables = [];
 
         $progress(0, $total);
 
@@ -500,10 +770,12 @@ class BatchDocumentRunner {
                     continue;
                 }
 
-                $outputs[] = $this->writeOutput($ctx, $file, (string)($result['response'] ?? ''));
-                $this->markDone($ctx, $file);
+                $this->accept($ctx, $file, (string)($result['response'] ?? ''), $outputs, $tables);
                 $written++;
                 $run->appendLog(CoworkerRun::LOG_INFO, $verb, $item);
+            } catch (InvalidAnswerException $e) {
+                $failures['invalid'][] = $name . ' — ' . $e->getMessage();
+                $run->appendLog(CoworkerRun::LOG_ERROR, 'Invalid answer: ' . $e->getMessage(), $item ?? $name);
             } catch (\Throwable $e) {
                 $failures['unsaved'][] = $name . ' — ' . $e->getMessage();
                 $run->appendLog(CoworkerRun::LOG_ERROR, 'Not saved: ' . $e->getMessage(), $item ?? $name);
@@ -516,12 +788,14 @@ class BatchDocumentRunner {
             }
         }
 
-        $skipped = is_array($state['skipped'] ?? null) ? $state['skipped'] : [];
+        $written -= $this->writeTables($ctx, $run, $tables, $outputs, $failures);
+        $skipped = self::skipsFromState($state);
 
         return [
             'itemsTotal' => $total,
             'itemsProcessed' => $written,
             'itemsFailed' => array_sum(array_map('count', $failures)),
+            'itemsSkipped' => count($skipped),
             'summary' => $this->buildSummary($verb, $written, $total, 'anthropic (batch, 50% discount)', $failures, $skipped),
             'outputs' => $outputs,
         ];
@@ -533,6 +807,7 @@ class BatchDocumentRunner {
      *
      * @param list<File> $files
      * @param callable(int, int): void $progress
+     * @param list<BatchSkip> $skipped
      * @return BatchRunResult
      */
     private function runSynchronously(
@@ -541,6 +816,7 @@ class BatchDocumentRunner {
         LLMProviderInterface $provider,
         array $files,
         callable $progress,
+        array $skipped,
     ): array {
         $userId = $ctx->userId;
         $verb = $ctx->operation->summaryVerb();
@@ -548,25 +824,43 @@ class BatchDocumentRunner {
         $written = 0;
         $outputs = [];
         $failures = self::emptyFailures();
-        $skipped = [];
+        $tables = [];
+        $skippedBefore = count($skipped);
 
         $progress(0, $total);
 
         foreach ($files as $file) {
             try {
-                $content = $this->readContent($ctx, $file);
-                if ($content === null) {
-                    $skipped[] = $file->getName();
-                    $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: unreadable or too large', UserPath::of($file));
+                $document = $this->readDocument($ctx, $file, $reason);
+                if ($document === null) {
+                    $skipped[] = $this->skip($run, $file, $reason);
                     continue;
                 }
 
-                $result = $provider->ask(
-                    $ctx->operation->buildPrompt($content, $ctx->options),
-                    '',
-                    $userId,
-                    ($ctx->requestOptions)($provider),
-                );
+                if ($document['kind'] === 'pdf') {
+                    if (!$provider instanceof ClaudeSDKService) {
+                        $skipped[] = $this->skip($run, $file, $this->pdfUnsupportedReason($ctx));
+                        continue;
+                    }
+                    // One request carries one PDF, so it goes inline.
+                    $result = $provider->chat(
+                        [['role' => 'user', 'content' => self::userContent($ctx, $document, [
+                            'type' => 'base64',
+                            'media_type' => self::PDF_MIME,
+                            'data' => base64_encode($document['data']),
+                        ])]],
+                        null,
+                        $userId,
+                        $this->requestOptionsFor($ctx, $provider),
+                    );
+                } else {
+                    $result = $provider->ask(
+                        $ctx->operation->buildPrompt($document['data'], $ctx->options),
+                        '',
+                        $userId,
+                        $this->requestOptionsFor($ctx, $provider),
+                    );
+                }
                 $this->usageStats->record($userId, $provider, $result, $ctx->usageType);
                 if (isset($result['error'])) {
                     // A refusal is reported as such, as on the batch path.
@@ -576,10 +870,12 @@ class BatchDocumentRunner {
                     continue;
                 }
 
-                $outputs[] = $this->writeOutput($ctx, $file, (string)($result['response'] ?? ''));
-                $this->markDone($ctx, $file);
+                $this->accept($ctx, $file, (string)($result['response'] ?? ''), $outputs, $tables);
                 $written++;
                 $run->appendLog(CoworkerRun::LOG_INFO, $verb, UserPath::of($file));
+            } catch (InvalidAnswerException $e) {
+                $failures['invalid'][] = $file->getName() . ' — ' . $e->getMessage();
+                $run->appendLog(CoworkerRun::LOG_ERROR, 'Invalid answer: ' . $e->getMessage(), UserPath::of($file));
             } catch (\Throwable $e) {
                 $failures['unsaved'][] = $file->getName() . ' — ' . $e->getMessage();
                 $run->appendLog(CoworkerRun::LOG_ERROR, 'Not saved: ' . $e->getMessage(), UserPath::of($file));
@@ -592,12 +888,17 @@ class BatchDocumentRunner {
             }
         }
 
+        $written -= $this->writeTables($ctx, $run, $tables, $outputs, $failures);
         $label = method_exists($provider, 'getId') ? $provider->getId() : 'provider';
+        // As on the batch path, the total is what was sent to the model: a
+        // file skipped on reading counts in itemsSkipped, not here as well.
+        $total -= count($skipped) - $skippedBefore;
 
         return [
             'itemsTotal' => $total,
             'itemsProcessed' => $written,
             'itemsFailed' => array_sum(array_map('count', $failures)),
+            'itemsSkipped' => count($skipped),
             'summary' => $this->buildSummary($verb, $written, $total, $label . ($ctx->allowBatch ? ' (no batch API — full price)' : ' (immediate — full price)'), $failures, $skipped),
             'outputs' => $outputs,
         ];
@@ -605,7 +906,7 @@ class BatchDocumentRunner {
 
     /** @return array<string, list<string>> */
     private static function emptyFailures(): array {
-        return ['refused' => [], 'errored' => [], 'expired' => [], 'canceled' => [], 'unsaved' => [], 'missing' => []];
+        return ['refused' => [], 'errored' => [], 'invalid' => [], 'expired' => [], 'canceled' => [], 'unsaved' => [], 'missing' => []];
     }
 
     /**
@@ -620,7 +921,7 @@ class BatchDocumentRunner {
 
     /**
      * @param array<string, list<string>> $failures
-     * @param list<string> $skipped
+     * @param list<BatchSkip> $skipped
      */
     private function buildSummary(string $verb, int $written, int $total, string $via, array $failures, array $skipped): string {
         $summary = sprintf('%s %d/%d document(s) via %s.', $verb, $written, $total, $via);
@@ -632,7 +933,7 @@ class BatchDocumentRunner {
             }
         }
         if ($skipped !== []) {
-            $counts[] = count($skipped) . ' unreadable';
+            $counts[] = count($skipped) . ' skipped';
         }
         if ($counts !== []) {
             $summary .= "\n" . implode(', ', $counts) . '.';
@@ -644,40 +945,240 @@ class BatchDocumentRunner {
                 $lines[] = ucfirst($kind) . ': ' . $entry;
             }
         }
-        foreach ($skipped as $name) {
-            $lines[] = 'Unreadable: ' . $name;
+        foreach ($skipped as $skip) {
+            $lines[] = self::skipLine($skip);
         }
         if ($lines !== []) {
-            $summary .= "\n" . implode("\n", array_slice($lines, 0, 50));
+            $summary .= "\n" . implode("\n", array_slice($lines, 0, self::SUMMARY_LINES));
+            if (count($lines) > self::SUMMARY_LINES) {
+                $summary .= "\n" . sprintf('… and %d more; the run log has them.', count($lines) - self::SUMMARY_LINES);
+            }
         }
 
         return $summary;
     }
 
+    /** Most per-file lines a summary lists; the run log keeps more. */
+    private const SUMMARY_LINES = 50;
+
+    /**
+     * The skip lines a summary ends with, for a caller that has no other
+     * summary to append them to. Empty when nothing was skipped.
+     *
+     * @param list<BatchSkip> $skipped
+     */
+    public static function describeSkips(array $skipped): string {
+        if ($skipped === []) {
+            return '';
+        }
+        $lines = array_map(self::skipLine(...), array_slice($skipped, 0, self::SUMMARY_LINES));
+        $text = "\n" . count($skipped) . ' skipped.' . "\n" . implode("\n", $lines);
+        if (count($skipped) > self::SUMMARY_LINES) {
+            $text .= "\n" . sprintf('… and %d more; the run log has them.', count($skipped) - self::SUMMARY_LINES);
+        }
+        return $text;
+    }
+
+    /** @param BatchSkip $skip */
+    private static function skipLine(array $skip): string {
+        return 'Skipped: ' . basename($skip['item']) . ' — ' . $skip['reason'];
+    }
+
+    /**
+     * Log one file the run passes over and return it for the summary.
+     *
+     * @return BatchSkip
+     */
+    private function skip(CoworkerRun $run, File $file, ?string $reason): array {
+        $skip = ['item' => UserPath::of($file), 'reason' => $reason ?? 'Could not be read'];
+        $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: ' . $skip['reason'], $skip['item']);
+        return $skip;
+    }
+
+    /**
+     * The skips a pending run carried over from submission. Runs submitted
+     * before skips had reasons stored bare file names.
+     *
+     * @param array<string, mixed> $state
+     * @return list<BatchSkip>
+     */
+    private static function skipsFromState(array $state): array {
+        $skips = [];
+        foreach (is_array($state['skipped'] ?? null) ? $state['skipped'] : [] as $entry) {
+            if (is_string($entry)) {
+                $skips[] = ['item' => $entry, 'reason' => 'Unreadable or too large'];
+            } elseif (is_array($entry) && is_string($entry['item'] ?? null) && is_string($entry['reason'] ?? null)) {
+                $skips[] = ['item' => $entry['item'], 'reason' => $entry['reason']];
+            }
+        }
+        return $skips;
+    }
+
     // ── Files ─────────────────────────────────────────────────────────────
 
     /**
-     * Read a document's text, or null when it is too large or not text at all.
+     * Read a document: a PDF's bytes, or a text document's text. Null when it
+     * is too large, unreadable, not what its type says or empty; $reason then
+     * says which, for the run log.
      *
      * Oversized files are skipped rather than truncated: half a contract
      * summarised as if it were the whole thing is worse than no summary.
+     *
+     * @return BatchDocument|null
+     * @param-out string|null $reason
      */
-    private function readContent(BatchContext $ctx, File $file): ?string {
-        if ($file->getSize() > $ctx->maxBytes()) {
+    private function readDocument(BatchContext $ctx, File $file, ?string &$reason = null): ?array {
+        $reason = null;
+        if (self::isOffice($file)) {
+            return $this->readOffice($ctx, $file, $reason);
+        }
+        $pdf = self::isPdf($file);
+        $limit = $pdf ? self::MAX_PDF_BYTES : $ctx->maxBytes();
+        $size = (int)$file->getSize();
+        if ($size > $limit) {
+            $reason = sprintf('Too large (%s; the limit is %s)', self::humanBytes($size), self::humanBytes($limit));
             return null;
         }
         try {
             $content = $file->getContent();
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            $reason = 'Could not be read: ' . $e->getMessage();
             return null;
+        }
+        if ($pdf) {
+            // The type comes from the name. A file that is not a PDF would be
+            // rejected by the API, and in a batch it would fail on its own,
+            // but there is no reason to upload or bill for it.
+            if (!str_starts_with(ltrim(substr($content, 0, 1024)), '%PDF-')) {
+                $reason = 'Not a PDF, although its name says so';
+                return null;
+            }
+            return ['kind' => 'pdf', 'data' => $content];
         }
         // A batch is submitted as one request for the whole set, outside any
         // per-file guard, so one binary file reaching the payload would take
         // the entire run down rather than just itself.
         if (!mb_check_encoding($content, 'UTF-8')) {
+            $reason = 'Not UTF-8 text';
             return null;
         }
-        return trim($content) === '' ? null : $content;
+        if (trim($content) === '') {
+            $reason = 'Empty';
+            return null;
+        }
+        return ['kind' => 'text', 'data' => $content];
+    }
+
+    /**
+     * An Office document as the PDF a converter makes of it.
+     *
+     * @return BatchDocument|null
+     * @param-out string|null $reason
+     */
+    private function readOffice(BatchContext $ctx, File $file, ?string &$reason = null): ?array {
+        $reason = $this->unreadableReason($ctx, $file);
+        if ($reason !== null) {
+            return null;
+        }
+        $size = (int)$file->getSize();
+        if ($size > self::MAX_PDF_BYTES) {
+            $reason = sprintf('Too large (%s; the limit is %s)', self::humanBytes($size), self::humanBytes(self::MAX_PDF_BYTES));
+            return null;
+        }
+        try {
+            $pdf = $this->convertToPdf($file);
+        } catch (\Throwable $e) {
+            $reason = 'Could not be converted to PDF: ' . $e->getMessage();
+            return null;
+        }
+        if (strlen($pdf) > self::MAX_PDF_BYTES) {
+            $reason = sprintf('Too large as PDF (%s; the limit is %s)', self::humanBytes(strlen($pdf)), self::humanBytes(self::MAX_PDF_BYTES));
+            return null;
+        }
+        if (!str_starts_with(ltrim(substr($pdf, 0, 1024)), '%PDF-')) {
+            $reason = 'The converter did not return a PDF';
+            return null;
+        }
+        return ['kind' => 'pdf', 'data' => $pdf];
+    }
+
+    /**
+     * Convert a file to PDF and return the PDF's bytes. The conversion API
+     * writes its result as a file, so it goes to the app's appdata, is read
+     * back, and is deleted whether or not that works.
+     */
+    private function convertToPdf(File $file): string {
+        if ($this->conversions === null) {
+            throw new \RuntimeException('No file converter');
+        }
+        $folder = $this->conversionFolder();
+        $name = 'c' . $file->getId() . '-' . bin2hex(random_bytes(6)) . '.pdf';
+        $path = $this->conversions->convert($file, self::PDF_MIME, $folder->getPath() . '/' . $name);
+        try {
+            $converted = $this->rootFolder->get($path);
+            if (!$converted instanceof File) {
+                throw new \RuntimeException('The converter wrote no file');
+            }
+            return $converted->getContent();
+        } finally {
+            try {
+                $this->rootFolder->get($path)->delete();
+            } catch (\Throwable $e) {
+                $this->logger->warning('AIquila batch: could not delete a converted PDF', ['path' => $path, 'error' => $e->getMessage()]);
+            }
+        }
+    }
+
+    /** The appdata folder conversions are written to, with stale leftovers removed. */
+    private function conversionFolder(): Folder {
+        $path = '/' . $this->rootFolder->getAppDataDirectoryName() . '/' . self::CONVERSION_FOLDER;
+        try {
+            $folder = $this->rootFolder->get($path);
+        } catch (NotFoundException) {
+            $folder = $this->rootFolder->newFolder($path);
+        }
+        if (!$folder instanceof Folder) {
+            throw new \RuntimeException('The conversion folder is not a folder');
+        }
+        $cutoff = time() - self::CONVERSION_STALE_SECONDS;
+        foreach ($folder->getDirectoryListing() as $node) {
+            if ($node->getMTime() < $cutoff) {
+                try {
+                    $node->delete();
+                } catch (\Throwable) {
+                }
+            }
+        }
+        return $folder;
+    }
+
+    /**
+     * The user message for one document: the prompt with the text in it, or
+     * a PDF's `document` block followed by the question about it. The block
+     * comes first, as the PDF guide recommends.
+     *
+     * @param BatchDocument $document
+     * @param array<string, string>|null $source the PDF's `source`
+     * @return string|list<array<string, mixed>>
+     */
+    private static function userContent(BatchContext $ctx, array $document, ?array $source): string|array {
+        if ($document['kind'] === 'text') {
+            return $ctx->operation->buildPrompt($document['data'], $ctx->options);
+        }
+        return [
+            ['type' => 'document', 'source' => $source],
+            ['type' => 'text', 'text' => $ctx->operation->buildDocumentPrompt($ctx->options)],
+        ];
+    }
+
+    private static function humanBytes(int $bytes): string {
+        if ($bytes >= 1048576) {
+            return rtrim(rtrim(number_format($bytes / 1048576, 1, '.', ''), '0'), '.') . ' MB';
+        }
+        if ($bytes >= 1024) {
+            return rtrim(rtrim(number_format($bytes / 1024, 1, '.', ''), '0'), '.') . ' KB';
+        }
+        return $bytes . ' B';
     }
 
     /**
@@ -805,12 +1306,254 @@ class BatchDocumentRunner {
      */
     private function markDone(BatchContext $ctx, File $file): void {
         try {
-            $this->tagObjectMapper->assignTags((string)$file->getId(), 'files', [$this->resolveTag($ctx->operation->doneTag())->getId()]);
+            $this->tagObjectMapper->assignTags((string)$file->getId(), 'files', [$this->resolveTag($ctx->operation->doneTag($ctx->options))->getId()]);
         } catch (\Throwable $e) {
             $this->logger->warning('AIquila batch: could not tag a source file', [
                 'file' => $file->getPath(),
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    // ── Tables ────────────────────────────────────────────────────────────
+
+    /** Header columns around a table operation's fields. */
+    private const TABLE_KEY = 'file_id';
+
+    /** @var array<string, array<array-key, int>> table path => file id => extracted-at (unix), read once per run */
+    private array $tableIndex = [];
+
+    /**
+     * The request options of one call, with the table's JSON Schema for a
+     * provider that constrains answers to one.
+     *
+     * @return array<string, mixed>
+     */
+    private function requestOptionsFor(BatchContext $ctx, LLMProviderInterface $provider): array {
+        $options = ($ctx->requestOptions)($provider);
+        if ($ctx->operation instanceof TableOperation && $provider instanceof ClaudeSDKService) {
+            $options['json_schema'] = $ctx->operation->jsonSchema($ctx->options);
+        }
+        return $options;
+    }
+
+    /**
+     * Take one answer: write its output file, or, for a table operation,
+     * check it and hold its row until the run writes the tables.
+     *
+     * @param list<string> $outputs
+     * @param array<string, array{folder: Folder, rows: array<int, array{file: File, row: array<string, string|int|float|bool|null>}>}> $tables
+     * @param-out list<string> $outputs
+     * @throws InvalidAnswerException when a table operation's answer is not a valid row
+     */
+    private function accept(BatchContext $ctx, File $file, string $response, array &$outputs, array &$tables): void {
+        $op = $ctx->operation;
+        if (!$op instanceof TableOperation) {
+            $outputs[] = $this->writeOutput($ctx, $file, $response);
+            $this->markDone($ctx, $file);
+            return;
+        }
+        try {
+            $row = $op->parseRow($response, $ctx->options);
+        } catch (\InvalidArgumentException $e) {
+            throw new InvalidAnswerException($e->getMessage(), 0, $e);
+        }
+        $folder = $this->outputFolder($ctx, $file);
+        $key = $folder->getPath();
+        $tables[$key] ??= ['folder' => $folder, 'rows' => []];
+        $tables[$key]['rows'][$file->getId()] = ['file' => $file, 'row' => $row];
+    }
+
+    /**
+     * Upsert the held rows into each folder's table, then tag their sources.
+     * A table that cannot be written loses its rows for this run: they are
+     * reported as unsaved, and the number of them is returned.
+     *
+     * @param array<string, array{folder: Folder, rows: array<int, array{file: File, row: array<string, string|int|float|bool|null>}>}> $tables
+     * @param list<string> $outputs
+     * @param array<string, list<string>> $failures
+     * @param-out list<string> $outputs
+     */
+    private function writeTables(BatchContext $ctx, CoworkerRun $run, array $tables, array &$outputs, array &$failures): int {
+        $op = $ctx->operation;
+        if (!$op instanceof TableOperation || $tables === []) {
+            return 0;
+        }
+        $lost = 0;
+        $name = $op->tableFileName($ctx->options);
+        $header = [self::TABLE_KEY, 'file', ...$op->columns($ctx->options), 'extracted_at'];
+        foreach ($tables as $table) {
+            $folder = $table['folder'];
+            try {
+                $existing = null;
+                if ($folder->nodeExists($name)) {
+                    $node = $folder->get($name);
+                    if (!$node instanceof File) {
+                        throw new \RuntimeException("$name in " . UserPath::of($folder) . ' is not a file');
+                    }
+                    $existing = $node;
+                }
+                $rows = $existing !== null ? self::csvRows($existing->getContent()) : [];
+                $now = gmdate('Y-m-d\TH:i:s\Z');
+                foreach ($table['rows'] as $fileId => $entry) {
+                    $cells = [self::TABLE_KEY => (string)$fileId, 'file' => UserPath::of($entry['file']), 'extracted_at' => $now];
+                    foreach ($entry['row'] as $column => $value) {
+                        $cells[$column] = self::cell($value);
+                    }
+                    $rows[(string)$fileId] = $cells;
+                }
+                $csv = self::csvEncode($header, $rows);
+                if ($existing !== null) {
+                    $existing->putContent($csv);
+                    $output = $existing;
+                } else {
+                    $output = $folder->newFile($name, $csv);
+                }
+                $this->markOutput($output);
+                $outputs[] = UserPath::of($output);
+                unset($this->tableIndex[$output->getPath()]);
+                foreach ($table['rows'] as $entry) {
+                    $this->markDone($ctx, $entry['file']);
+                }
+            } catch (\Throwable $e) {
+                foreach ($table['rows'] as $entry) {
+                    $failures['unsaved'][] = $entry['file']->getName() . ' — ' . $e->getMessage();
+                    $lost++;
+                }
+                $run->appendLog(CoworkerRun::LOG_ERROR, 'Table not saved: ' . $e->getMessage(), UserPath::of($folder) . '/' . $name);
+                $this->logger->warning('AIquila batch: could not write a table', $ctx->logContext + ['error' => $e->getMessage()]);
+            }
+        }
+        return $lost;
+    }
+
+    /**
+     * Whether a source's row is in its table, newer than the source, and from
+     * the current schema (the done-tag).
+     */
+    private function rowIsCurrent(BatchContext $ctx, File $file): bool {
+        $op = $ctx->operation;
+        if (!$op instanceof TableOperation || !$this->hasDoneTag($ctx, $file)) {
+            return false;
+        }
+        try {
+            $folder = $this->outputFolder($ctx, $file);
+            $path = $folder->getPath() . '/' . $op->tableFileName($ctx->options);
+            if (!isset($this->tableIndex[$path])) {
+                $index = [];
+                $name = $op->tableFileName($ctx->options);
+                $node = $folder->nodeExists($name) ? $folder->get($name) : null;
+                if ($node instanceof File) {
+                    foreach (self::csvRows($node->getContent()) as $id => $cells) {
+                        $at = strtotime($cells['extracted_at'] ?? '');
+                        if ($at !== false) {
+                            $index[$id] = $at;
+                        }
+                    }
+                }
+                $this->tableIndex[$path] = $index;
+            }
+            $at = $this->tableIndex[$path][(string)$file->getId()] ?? null;
+            return $at !== null && $at >= $file->getMTime();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * A value as a CSV cell. Text that a spreadsheet would run as a formula
+     * (starting with =, +, -, @, tab or carriage return) gets a leading
+     * apostrophe: the documents are not trusted, and the table is opened in
+     * spreadsheets. Numbers are left alone.
+     */
+    public static function cell(string|int|float|bool|null $value): string {
+        if ($value === null) {
+            return '';
+        }
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+        if (is_int($value) || is_float($value)) {
+            return (string)$value;
+        }
+        return self::neutralize($value);
+    }
+
+    private static function neutralize(string $text): string {
+        return $text !== '' && strpbrk($text[0], "=+-@\t\r") !== false ? "'" . $text : $text;
+    }
+
+    /**
+     * A table's rows by file id, each keyed by its header's column names.
+     * Rows without a file id are dropped.
+     *
+     * @return array<array-key, array<string, string>>
+     */
+    public static function csvRows(string $csv): array {
+        $stream = fopen('php://temp', 'r+');
+        if ($stream === false) {
+            return [];
+        }
+        fwrite($stream, $csv);
+        rewind($stream);
+        $header = null;
+        $rows = [];
+        while (is_array($line = fgetcsv($stream, null, ',', '"', ''))) {
+            if ($line === [null]) {
+                continue;
+            }
+            $line = array_map(static fn ($c): string => (string)$c, $line);
+            if ($header === null) {
+                $header = $line;
+                continue;
+            }
+            $cells = [];
+            foreach ($header as $i => $column) {
+                $cells[$column] = $line[$i] ?? '';
+            }
+            if (($cells[self::TABLE_KEY] ?? '') !== '') {
+                $rows[$cells[self::TABLE_KEY]] = $cells;
+            }
+        }
+        fclose($stream);
+        return $rows;
+    }
+
+    /**
+     * RFC 4180 CSV: CRLF line ends, fields with commas, quotes or line breaks
+     * quoted, quotes doubled. Rows are written under the header given; a
+     * column a row lacks (from an older schema) stays empty, and one the
+     * header no longer has is dropped.
+     *
+     * @param list<string> $header
+     * @param array<array-key, array<string, string>> $rows
+     */
+    public static function csvEncode(array $header, array $rows): string {
+        $stream = fopen('php://temp', 'r+');
+        if ($stream === false) {
+            throw new \RuntimeException('Could not open a buffer for the table');
+        }
+        fputcsv($stream, $header, ',', '"', '', "\r\n");
+        foreach ($rows as $cells) {
+            $line = [];
+            foreach ($header as $column) {
+                $line[] = $cells[$column] ?? '';
+            }
+            fputcsv($stream, $line, ',', '"', '', "\r\n");
+        }
+        rewind($stream);
+        $csv = (string)stream_get_contents($stream);
+        fclose($stream);
+        return $csv;
+    }
+
+    /** Whether the source carries the operation's current done-tag. */
+    private function hasDoneTag(BatchContext $ctx, File $file): bool {
+        try {
+            $tag = $this->tagManager->getTag($ctx->operation->doneTag($ctx->options), true, true);
+            return $this->tagObjectMapper->haveTag([(string)$file->getId()], 'files', $tag->getId());
+        } catch (\Throwable) {
+            return false;
         }
     }
 

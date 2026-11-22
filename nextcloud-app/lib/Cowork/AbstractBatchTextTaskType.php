@@ -14,6 +14,7 @@ use OCA\AIquila\Service\InstructionsService;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\UsageStatService;
+use OCP\Files\Conversion\IConversionManager;
 use OCP\Files\File;
 use OCP\Files\IRootFolder;
 use OCP\SystemTag\ISystemTagManager;
@@ -42,8 +43,9 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
         LoggerInterface $logger,
         UsageStatService $usageStats,
         protected readonly ?InstructionsService $instructions = null,
+        ?IConversionManager $conversions = null,
     ) {
-        $this->runner = new BatchDocumentRunner($rootFolder, $providerFactory, $tagManager, $tagObjectMapper, $logger, $usageStats);
+        $this->runner = new BatchDocumentRunner($rootFolder, $providerFactory, $tagManager, $tagObjectMapper, $logger, $usageStats, $conversions);
     }
 
     /** The question this task type asks about each document. */

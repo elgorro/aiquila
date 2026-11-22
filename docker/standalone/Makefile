@@ -1,4 +1,4 @@
-.PHONY: help up down restart logs logs-follow status shell build clean test test-oauth test-tools test-mcp-connector test-mistral
+.PHONY: help up down restart logs logs-follow status shell update build clean test test-oauth test-tools test-mcp-connector test-mistral
 
 COMPOSE := docker compose
 
@@ -22,7 +22,7 @@ help:
 	@echo "  make logs-follow  - Follow logs in real time"
 	@echo "  make status       - Show service status"
 	@echo "  make shell        - Open shell in MCP server container"
-	@echo "  make build        - Rebuild MCP server container"
+	@echo "  make update       - Pull the latest images and recreate changed containers"
 	@echo "  make clean        - Stop and remove containers and volumes"
 	@echo "  make test         - Test MCP server connectivity"
 	@echo "  make test-oauth   - Full OAuth PKCE flow test (auth enabled)"
@@ -77,11 +77,16 @@ status:
 shell:
 	$(COMPOSE) exec mcp-server sh
 
-# Rebuild containers
-build:
-	@echo "🔨 Building MCP server container..."
-	$(COMPOSE) build
-	@echo "✅ Build complete"
+# Pull the latest images (the MCP server runs the published :latest image,
+# Caddy a pinned tag) and recreate the containers whose image changed.
+update:
+	@echo "⬇️  Pulling the latest images..."
+	$(COMPOSE) pull
+	$(COMPOSE) up -d
+	@echo "✅ Update complete"
+
+# Kept for muscle memory: nothing here is built locally, so this is update.
+build: update
 
 # Clean up (stop + remove volumes)
 clean:
@@ -118,11 +123,12 @@ test:
 	@echo "--- MCP endpoint (HTTPS via Caddy) ---"
 	@curl -sfk -X POST https://localhost:3340/mcp \
 		-H "Content-Type: application/json" \
-		-d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}' \
+		-H "Accept: application/json, text/event-stream" \
+		-d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}' \
 		| head -c 200 && echo "" \
 		|| echo "❌ FAIL: MCP server not responding on https://localhost:3340"
 	@echo ""
 	@echo "--- Nextcloud connectivity (from container) ---"
-	@$(COMPOSE) exec mcp-server sh -c 'curl -sf -o /dev/null -w "HTTP %{http_code}" "$$NEXTCLOUD_URL/status.php"' \
+	@$(COMPOSE) exec -T mcp-server node -e 'fetch(process.env.NEXTCLOUD_URL + "/status.php").then(r => { process.stdout.write("HTTP " + r.status); process.exit(r.ok ? 0 : 1) }).catch(e => { process.stdout.write(String(e.cause?.code || e.message)); process.exit(1) })' \
 		&& echo " ✅" \
 		|| echo "❌ FAIL: Cannot reach Nextcloud from MCP container"

@@ -45,14 +45,26 @@ interface BatchOperation {
     public function buildPrompt(string $content, array $options): string;
 
     /**
+     * The question asked about a document that travels as its own content
+     * block (a PDF) rather than as text inside the prompt.
+     *
+     * @param array<string, mixed> $options
+     */
+    public function buildDocumentPrompt(array $options): string;
+
+    /**
      * Suffix appended to the source's base name, e.g. ".summary.md".
      *
      * @param array<string, mixed> $options
      */
     public function outputSuffix(array $options): string;
 
-    /** System tag applied to a source once its output exists. */
-    public function doneTag(): string;
+    /**
+     * System tag applied to a source once its output exists.
+     *
+     * @param array<string, mixed> $options
+     */
+    public function doneTag(array $options = []): string;
 
     /** Verb used in the run summary and log, e.g. "Summarized". */
     public function summaryVerb(): string;

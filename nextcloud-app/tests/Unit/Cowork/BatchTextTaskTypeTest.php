@@ -248,7 +248,8 @@ class BatchTextTaskTypeTest extends TestCase {
         $result = $this->task->run($this->coworker(['maxBytesPerFile' => 2048]), $this->newRun(), $this->progress());
 
         $this->assertSame(['f11' => 11], $result['state']['file_ids']);
-        $this->assertSame(['huge.txt'], $result['state']['skipped']);
+        $this->assertSame([['item' => '/Documents/huge.txt', 'reason' => 'Too large (4.9 KB; the limit is 2 KB)']], $result['state']['skipped']);
+        $this->assertSame(1, $result['itemsSkipped']);
     }
 
     /**
@@ -559,19 +560,20 @@ class BatchTextTaskTypeTest extends TestCase {
         $result = $this->task->run($this->coworker(), $this->newRun(), $this->progress());
 
         $this->assertSame(['f11' => 11], $result['state']['file_ids']);
-        $this->assertSame(['weird.txt'], $result['state']['skipped']);
+        $this->assertSame([['item' => '/Documents/weird.txt', 'reason' => 'Not UTF-8 text']], $result['state']['skipped']);
     }
 
     /** PDF bytes are not text; nothing here builds a document content block. */
-    public function testPdfsAreNotCollectedByDefault(): void {
+    public function testPdfsAreCollectedByDefault(): void {
         $this->inputFolder([
             $this->file(11, 'a.txt', 'text/plain', 'body'),
             $this->file(12, 'report.pdf', 'application/pdf', '%PDF-1.4 binary'),
         ]);
+        $this->provider->method('supportsFilesApi')->willReturn(false);
         $this->provider->method('submitBatch')->willReturn('batch_01ABC');
 
         $result = $this->task->run($this->coworker(), $this->newRun(), $this->progress());
 
-        $this->assertSame(['f11' => 11], $result['state']['file_ids']);
+        $this->assertSame(['f11' => 11, 'f12' => 12], $result['state']['file_ids']);
     }
 }

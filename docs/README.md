@@ -71,7 +71,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[Internal API Guide](internal-api.md)** — integrate AIquila AI (ask/summarize/analyze) into your own Nextcloud apps
 - **[Cowork Management API](cowork-api.md)** — register, steer and verify scheduled cowork jobs from your own Nextcloud app
 - **[Sequences](sequences.md)** — write tool chains in the settings that an MCP client runs in one call
-- **[Monitoring](monitoring.md)** — OpenMetrics / Prometheus export for usage and task metrics
+- **[Monitoring](monitoring.md)** — OpenMetrics / Prometheus export for usage and task metrics, and CSV / JSON usage exports
 - **[Nextcloud compatibility](nextcloud-compatibility.md)** — supported Nextcloud versions and the policy behind the declared window
 
 ## Deployment
@@ -89,6 +89,7 @@ Complete documentation for the AIquila Nextcloud app and MCP server.
 - **[Docker Setup](dev/docker-setup.md)** — development environment (`docker/installation/`)
 - **[Best Practices](dev/best-practices.md)** — code quality and standards
 - **[CI/CD](dev/ci-cd.md)** — continuous integration and deployment
+- **[Updates and security releases](dev/update-plan.md)** — the dependency inventory, routine update rounds and the emergency plan
 - **[MCP Server Architecture](dev/mcp-server-architecture.md)** — technical design
 - **[Provider settings schema](dev/provider-settings.md)** — how providers describe their own configuration, and how to add one
 - **[Claude on cloud platforms](dev/cloud-providers.md)** — Claude through Amazon Bedrock, Google Cloud, Microsoft Foundry and Claude Platform on AWS
@@ -169,6 +170,7 @@ docs/
 │   ├── development.md               # Contributing & workflow
 │   ├── best-practices.md            # Code quality guidelines
 │   ├── ci-cd.md                     # CI/CD setup
+│   ├── update-plan.md               # Updates and security releases
 │   ├── mcp-server-architecture.md   # MCP technical architecture
 │   ├── provider-settings.md         # Provider settings schema
 │   ├── cloud-providers.md           # Claude on Bedrock, Google Cloud, Foundry, AWS

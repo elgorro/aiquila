@@ -37,7 +37,7 @@ class CoworkerRunFinishedEvent extends Event implements IWebhookCompatibleEvent 
     }
 
     /**
-     * @return array{coworkerId: int, title: string, userId: string, teamId: ?string, taskType: string, runId: int, status: string, startedBy: ?string, itemsTotal: int, itemsProcessed: int, itemsFailed: int, summary: ?string, error: ?string, startedAt: int, finishedAt: ?int}
+     * @return array{coworkerId: int, title: string, userId: string, teamId: ?string, taskType: string, runId: int, status: string, startedBy: ?string, itemsTotal: int, itemsProcessed: int, itemsFailed: int, itemsSkipped: int, summary: ?string, error: ?string, startedAt: int, finishedAt: ?int}
      */
     public function getWebhookSerializable(): array {
         return [
@@ -52,6 +52,7 @@ class CoworkerRunFinishedEvent extends Event implements IWebhookCompatibleEvent 
             'itemsTotal' => $this->run->getItemsTotal(),
             'itemsProcessed' => $this->run->getItemsProcessed(),
             'itemsFailed' => $this->run->getItemsFailed(),
+            'itemsSkipped' => $this->run->getItemsSkipped(),
             'summary' => $this->run->getSummary(),
             'error' => $this->run->getError(),
             'startedAt' => $this->run->getStartedAt(),

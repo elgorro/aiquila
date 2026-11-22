@@ -10,7 +10,7 @@
 				{{ selectionText }}
 			</p>
 			<NcNoteCard v-if="nonTextFiles > 0" type="info">
-				{{ n('aiquila', '{count} selected file is not a text document and will be skipped.', '{count} selected files are not text documents and will be skipped.', nonTextFiles, { count: nonTextFiles }) }}
+				{{ n('aiquila', '{count} selected file is not a text, PDF or Office document and will be skipped.', '{count} selected files are not text, PDF or Office documents and will be skipped.', nonTextFiles, { count: nonTextFiles }) }}
 			</NcNoteCard>
 			<NcNoteCard v-if="overCap" type="error">
 				{{ t('aiquila', 'A run processes at most {max} files. Select fewer, or select their folder instead.', { max: limits.maxItems }) }}
@@ -48,6 +48,29 @@
 					:placeholder="t('aiquila', 'For example German')"
 					:error="targetLanguage !== '' && !languageValid"
 					:helper-text="targetLanguage !== '' && !languageValid ? t('aiquila', 'A language name in letters, such as Brazilian Portuguese') : ''" />
+
+				<template v-if="operation === 'extract'">
+					<ExtractFieldsEditor v-model="fields" />
+					<NcTextField v-model="tableName"
+						:label="t('aiquila', 'Table name')"
+						:placeholder="t('aiquila', 'For example invoices')"
+						:error="tableName !== '' && !tableNameValid"
+						:helper-text="tableName !== '' && !tableNameValid ? t('aiquila', 'Lowercase letters, digits and hyphens, such as invoices') : t('aiquila', 'One table per folder, with a row per document; a rerun updates a document\'s row.')" />
+				</template>
+
+				<template v-if="operation === 'ask'">
+					<NcTextArea v-model="prompt"
+						:label="t('aiquila', 'Question for each document')"
+						:placeholder="t('aiquila', 'For example: List every deadline and who it applies to.')"
+						:maxlength="maxPromptLength"
+						resize="vertical"
+						rows="3" />
+					<NcTextField v-model="outputSuffix"
+						:label="t('aiquila', 'Name for the answers')"
+						:placeholder="t('aiquila', 'For example deadlines')"
+						:error="outputSuffix !== '' && !suffixValid"
+						:helper-text="outputSuffix !== '' && !suffixValid ? t('aiquila', 'Lowercase letters, digits and hyphens, such as deadlines') : ''" />
+				</template>
 
 				<fieldset v-if="limits.batchAvailable" class="group">
 					<legend>{{ t('aiquila', 'When') }}</legend>
@@ -118,7 +141,10 @@ import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
+
+import ExtractFieldsEditor, { fieldsValid } from './ExtractFieldsEditor.vue'
 
 import { FilePickerClosed, getFilePickerBuilder, showSuccess } from '@nextcloud/dialogs'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
@@ -126,9 +152,15 @@ import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { batchRunUrl, getBatchRunOperations, startBatchRun } from '../api.js'
 
 // Mirrors BatchDocumentRunner::DEFAULT_MIME_TYPES; the server decides.
-const isText = (mime) => typeof mime === 'string' && (mime.startsWith('text/') || mime === 'application/json')
+// Office documents are read through a converter the server may lack; it then
+// reports them as skipped with the reason.
+const OFFICE = /^application\/(msword|vnd\.ms-(excel|powerpoint)|vnd\.openxmlformats-officedocument\.|vnd\.oasis\.opendocument\.(text|spreadsheet|presentation))/
+const isText = (mime) => typeof mime === 'string' && (mime.startsWith('text/') || mime === 'application/json' || mime === 'application/pdf' || OFFICE.test(mime))
 
 const LANGUAGE = /^[A-Za-z][A-Za-z \-]{1,31}$/
+// Mirrors AskOperation::validateOptions(); the server decides.
+const SUFFIX = /^[a-z0-9][a-z0-9-]{0,31}$/
+const RESERVED_SUFFIXES = ['summary', 'md', 'markdown', 'txt', 'text', 'json', 'csv', 'xml', 'html', 'htm', 'pdf', 'doc', 'docx', 'odt', 'rtf', 'xls', 'xlsx', 'ods', 'ppt', 'pptx', 'odp', 'jpg', 'jpeg', 'png']
 
 export default {
 	name: 'ProcessWithAIquilaModal',
@@ -139,7 +171,9 @@ export default {
 		NcCheckboxRadioSwitch,
 		NcLoadingIcon,
 		NcNoteCard,
+		NcTextArea,
 		NcTextField,
+		ExtractFieldsEditor,
 	},
 
 	props: {
@@ -164,6 +198,11 @@ export default {
 			operation: 'summarize',
 			style: 'brief',
 			targetLanguage: '',
+			prompt: '',
+			outputSuffix: '',
+			fields: [{ name: '', type: 'string', description: '' }],
+			tableName: '',
+			maxPromptLength: 4000,
 			mode: 'immediate',
 			recursive: true,
 			force: false,
@@ -208,7 +247,22 @@ export default {
 		languageValid() {
 			return LANGUAGE.test(this.targetLanguage.trim())
 		},
+		suffixValid() {
+			return SUFFIX.test(this.outputSuffix) && !RESERVED_SUFFIXES.includes(this.outputSuffix)
+		},
+		tableNameValid() {
+			return SUFFIX.test(this.tableName)
+		},
+		promptValid() {
+			return this.prompt.trim() !== '' && this.prompt.length <= this.maxPromptLength
+		},
 		outputExample() {
+			if (this.operation === 'extract') {
+				return `${this.tableNameValid ? this.tableName : 'extracted'}.csv`
+			}
+			if (this.operation === 'ask') {
+				return `report.${this.suffixValid ? this.outputSuffix : 'answer'}.md`
+			}
 			if (this.operation === 'translate') {
 				const lang = this.languageValid ? this.targetLanguage.trim().toLowerCase().replace(/ /g, '-') : 'german'
 				return `report.${lang}.md`
@@ -218,6 +272,12 @@ export default {
 		canStart() {
 			if (this.loading || this.starting || this.overCap || this.operations.length === 0) {
 				return false
+			}
+			if (this.operation === 'ask') {
+				return this.promptValid && this.suffixValid
+			}
+			if (this.operation === 'extract') {
+				return fieldsValid(this.fields) && (this.tableName === '' || this.tableNameValid)
 			}
 			return this.operation !== 'translate' || this.languageValid
 		},
@@ -243,6 +303,8 @@ export default {
 			return {
 				summarize: t('aiquila', 'Summarize'),
 				translate: t('aiquila', 'Translate'),
+				ask: t('aiquila', 'Ask a question'),
+				extract: t('aiquila', 'Extract fields into a table'),
 			}[op.id] || op.label
 		},
 		onSubmit(event) {
@@ -273,6 +335,14 @@ export default {
 			const options = {}
 			if (this.operation === 'summarize') {
 				options.style = this.style
+			} else if (this.operation === 'extract') {
+				options.fields = this.fields.map(f => ({ name: f.name, type: f.type, description: f.description.trim() }))
+				if (this.tableName) {
+					options.tableName = this.tableName
+				}
+			} else if (this.operation === 'ask') {
+				options.prompt = this.prompt.trim()
+				options.outputSuffix = this.outputSuffix
 			} else {
 				options.targetLanguage = this.targetLanguage.trim()
 			}

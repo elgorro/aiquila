@@ -66,8 +66,8 @@ abstract class MapperTestCase extends TestCase {
 
     /** Stub the entire fluent IQueryBuilder chain. */
     private function fluent(IQueryBuilder $qb): IQueryBuilder {
-        foreach (['select', 'selectAlias', 'from', 'where', 'andWhere', 'orderBy',
-                  'groupBy', 'setMaxResults', 'setFirstResult', 'delete'] as $method) {
+        foreach (['select', 'selectAlias', 'selectDistinct', 'addSelect', 'from', 'where', 'andWhere', 'orderBy',
+                  'addOrderBy', 'groupBy', 'addGroupBy', 'setMaxResults', 'setFirstResult', 'delete'] as $method) {
             $qb->method($method)->willReturnSelf();
         }
 

@@ -139,6 +139,12 @@ class DashboardWidgetsTest extends TestCase {
         $this->assertSame('Today', $items[0]->getTitle());
         $this->assertStringContainsString('15', $items[0]->getSubtitle());
         $this->assertStringContainsString('150', $items[2]->getSubtitle());
+
+        // The button points at the export on the personal settings' Usage tab.
+        $buttons = $widget->getWidgetButtons('alice');
+        $this->assertCount(1, $buttons);
+        $this->assertSame(WidgetButton::TYPE_MORE, $buttons[0]->getType());
+        $this->assertStringEndsWith('#usage', $buttons[0]->getLink());
     }
 
     public function testCoworkerOutputWidgetMetadata(): void {

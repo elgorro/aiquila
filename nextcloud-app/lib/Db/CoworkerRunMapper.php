@@ -17,7 +17,7 @@ class CoworkerRunMapper extends ChangeTrackingMapper {
      * Everything but `log`, for run lists: a list never shows the log, and a
      * full log is the largest thing a run row carries.
      */
-    private const LIST_COLUMNS = ['id', 'coworker_id', 'user_id', 'status', 'items_total', 'items_processed', 'items_failed', 'summary', 'error', 'started_at', 'finished_at', 'state', 'started_by', 'task_type', 'outputs'];
+    private const LIST_COLUMNS = ['id', 'coworker_id', 'user_id', 'status', 'items_total', 'items_processed', 'items_failed', 'items_skipped', 'summary', 'error', 'started_at', 'finished_at', 'state', 'started_by', 'task_type', 'outputs'];
 
     public function __construct(IDBConnection $db) {
         parent::__construct($db, 'aiquila_coworker_runs', CoworkerRun::class);

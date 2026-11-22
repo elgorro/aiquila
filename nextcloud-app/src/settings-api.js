@@ -226,3 +226,25 @@ export function sequencesApi(scope) {
 		savePolicy: (policy) => axios.put(url('/api/admin/sequence-policy'), policy),
 	}
 }
+
+// ── Usage export ────────────────────────────────────────────────────────
+
+/**
+ * Download a token usage export as a Blob.
+ *
+ * The server streams the file; the browser still collects it before saving,
+ * which is fine at the sizes a settings page asks for. Large or scheduled
+ * exports belong to `occ aiquila:usage:export`.
+ *
+ * @param {boolean} admin - true for `/api/admin/usage/export` (any user or group)
+ * @param {object} params - format, granularity, from, to, model, provider,
+ *   requestType, and for admins user or group; empty values are dropped
+ * @return {Promise} the axios response, `data` being a Blob
+ */
+export function downloadUsageExport(admin, params) {
+	const query = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ''))
+	return axios.get(url(admin ? '/api/admin/usage/export' : '/api/usage/export'), {
+		params: query,
+		responseType: 'blob',
+	})
+}

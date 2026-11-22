@@ -38,6 +38,19 @@ final class TranslateOperation implements BatchOperation {
             . "Respond with the translation alone — no preamble and no notes.\n\nDocument:\n$content";
     }
 
+    /**
+     * A PDF cannot come back as a PDF, so its translation is Markdown that
+     * keeps the document's structure: headings, lists and tables.
+     */
+    public function buildDocumentPrompt(array $options): string {
+        $language = (string)($options['targetLanguage'] ?? '');
+
+        return "Translate the attached document into $language, as Markdown. Reproduce its "
+            . 'structure with Markdown headings, lists and tables, and keep any code blocks exactly; '
+            . 'translate prose only. Leave out page headers, footers and page numbers. '
+            . 'Respond with the translation alone — no preamble and no notes.';
+    }
+
     public function outputSuffix(array $options): string {
         // Spaces and case would make for awkward filenames, and two runs
         // targeting "Brazilian Portuguese" and "brazilian-portuguese" should
@@ -46,7 +59,7 @@ final class TranslateOperation implements BatchOperation {
         return '.' . $language . '.md';
     }
 
-    public function doneTag(): string {
+    public function doneTag(array $options = []): string {
         return 'aiquila:translated';
     }
 

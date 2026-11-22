@@ -118,6 +118,8 @@ builds the array, so Psalm fails when the code and the spec drift apart.
 - **Status-code description lines** (`200: ...`, `400: ...`) are required for every response code below 500.
 - **`Http::STATUS_*` constants** belong only in the PHPDoc `@return` — not in the method body (avoids needing an OCP import in unit tests).
 - The `download()` method is intentionally excluded — it returns `DataDownloadResponse` (binary), which has no JSON schema.
+- **Streamed downloads** declare `StreamTraversableResponse<Http::STATUS_OK, array{}>` in the `@return`, which the extractor documents as a binary body, and return `OCA\AIquila\Http\DownloadStreamResponse` at runtime (it drains PHP's output buffers so the body really streams). `usage_export#export` and `usage_export#adminExport` work this way: their parameters are checked first and answer `400`/`404` as JSON; once the file starts, the status is `200`.
+- **Fixed value sets** are written as literal unions in the `@param` (`'csv'|'json' $format`) so the spec lists them as an `enum`. The PHP type stays `string`, so validate the value in the method anyway.
 - `messageStream()` is excluded with `#[OpenAPI(scope: OpenAPI::SCOPE_IGNORE)]` for the same reason: its body is a server-sent event stream. Its non-streaming counterpart `message()` is the chat endpoint the spec documents — see [Streaming chat responses](streaming.md).
 
 ## CI enforcement

@@ -141,12 +141,12 @@ Run from `docker/standalone/`:
 | `make logs-follow` | Stream logs in real time |
 | `make status` | Service status |
 | `make shell` | Shell in MCP container |
-| `make build` | Rebuild container |
+| `make update` | Pull the latest images and recreate changed containers |
 | `make clean` | Stop and remove everything |
 | `make test` | Test connectivity |
 | `make test-oauth` | Full OAuth 2.1 flow test, including refresh, revocation and reuse detection (defaults to `https://localhost:3340`) |
 
-Or from `docker/`:
+Or from `docker/installation/`:
 
 | Command | Action |
 |---------|--------|
@@ -155,13 +155,26 @@ Or from `docker/`:
 | `make standalone-logs` | Stream standalone logs |
 | `make standalone-test` | Test standalone connectivity |
 
+## Updating
+
+The stack runs the published `ghcr.io/elgorro/aiquila-mcp:latest` image and builds
+nothing locally. A running container keeps the image it started with, so new
+releases, and rebuilds that pick up a Node.js security release, only take effect
+after a pull:
+
+```bash
+make update
+docker compose exec mcp-server node -v
+```
+
 ## Verification
 
 ```bash
 # Test MCP endpoint
 curl -X POST http://localhost:3339/mcp \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
 
 # Or use the built-in test
 make test

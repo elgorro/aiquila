@@ -18,7 +18,7 @@ rather than putting a batch method on `LLMProviderInterface`.
 | Path | Entry point | Shape |
 |---|---|---|
 | Assistant "Summarize" task | `SummaryProvider` → `summarizeViaBatch()` | one request, blocking poll |
-| Cowork `docs:summarize` / `docs:translate` | `BatchDocumentRunner` via `AbstractBatchTextTaskType` | N requests, submit now, collect later |
+| Cowork `docs:summarize` / `docs:translate` / `docs:ask` / `docs:extract` | `BatchDocumentRunner` via `AbstractBatchTextTaskType` | N requests, submit now, collect later |
 | Manual runs over files and folders | `BatchDocumentRunner` via `BatchRunService` | the same, started once from Files or the API |
 
 Everything else — chat, the agentic tool loop, the other Assistant task types —
@@ -178,11 +178,62 @@ its batch was in flight still writes where the run said it would.
 
 ## The bulk cowork tasks
 
-`docs:summarize` and `docs:translate` walk the coworker's input folder and write
-one output file per document — `<name>.summary.md`, `<name>.<language>.md` —
-into the configured output folder, or beside the source when none is set. The
-source is tagged `aiquila:summarized` / `aiquila:translated` so processed files
-can be filtered in the Files UI.
+`docs:summarize`, `docs:translate` and `docs:ask` walk the coworker's input
+folder and write one output file per document — `<name>.summary.md`,
+`<name>.<language>.md`, `<name>.<outputSuffix>.md` — into the configured output
+folder, or beside the source when none is set. The source is tagged
+`aiquila:summarized` / `aiquila:translated` / `aiquila:asked-<hash>` so
+processed files can be filtered in the Files UI.
+
+`docs:ask` (`AskOperation`) asks a question the user wrote of every document.
+Its options are `prompt` (required, at most 4,000 characters) and
+`outputSuffix` (required: 1–32 lowercase letters, digits or hyphens, and not a
+file type such as `pdf` or another operation's `summary`, so the output is always
+one `.md` file beside its source). The admin's instance instructions are still
+the system prompt.
+
+Its done-tag is **per question**: `aiquila:asked-` and the first 8 hex digits of
+a SHA-256 of the prompt and the suffix. It implements `PromptScopedOperation`, so
+a source counts as done only while its output is fresh *and* it carries the
+current question's tag. Editing the prompt therefore answers every document
+again, where a fresh output alone would leave them. Two coworkers that ask the
+same question share the tag. The fixed operations keep the fresh-output rule.
+
+### Structured extraction (`docs:extract`)
+
+`ExtractOperation` pulls the same fields out of every document into one table.
+It is a `TableOperation`: instead of a file per source, the runner holds one row
+per document and, once the run has its answers, upserts them into
+`<tableName>.csv` (default `extracted.csv`) in the output folder, or in each
+source's folder when none is set. So there is one table per folder.
+
+- **Fields** are a list, not raw JSON Schema: `{name, type, description}`, 1 to
+  30 of them. Names are lowercase `[a-z][a-z0-9_]{0,39}`, unique, and not
+  `file_id`, `file` or `extracted_at`. Types are `string`, `number`, `integer`,
+  `boolean` and `date`. The JSON Schema is built from the list, every property
+  nullable and required, with `additionalProperties: false`.
+- **Structured outputs:** on the Anthropic provider, for models documented to
+  support JSON outputs (`ClaudeModels::supportsStructuredOutputs()`), the schema
+  goes out as `output_config.format`, in batches too. Every other model and
+  provider gets the same prompt asking for JSON only. On every path the answer is
+  then checked in code (`parseRow()`): the outermost object is taken, a value is
+  coerced to its type (`"12.50"` → `12.5`, a real `YYYY-MM-DD` date), and a missing
+  field is empty. An answer that holds no object, or a value of the wrong type,
+  fails that file as *invalid*. It gets no row and is tried again on the next run.
+- **The table** is RFC 4180 CSV (CRLF, fields quoted when needed) with the
+  columns `file_id`, `file`, the fields, and `extracted_at` (UTC). Rows are keyed
+  by file id: a rerun replaces a document's row and keeps the others. After a
+  schema change, older rows keep their values for the columns that remain, and
+  new columns stay empty until the document is extracted again.
+- **Formula injection:** the documents are untrusted, and the table is meant to
+  be opened in a spreadsheet. A text cell starting with `=`, `+`, `-`, `@`, a tab
+  or a carriage return gets a leading `'`. Numbers are written as numbers.
+- **Incremental runs:** a source is done while its row is at least as new as the
+  source *and* it carries the schema's done-tag, `aiquila:extracted-<hash>` (a
+  hash of the field list and the table name). An edited document is extracted
+  again, and a changed field list extracts every document again.
+- **Partial failures:** if the table cannot be written, its rows are reported as
+  *unsaved*, and their sources stay untagged, so the next run does them again.
 
 Files, rather than tags or comments, because a summary or a translation is prose
 that a system tag cannot hold and a Nextcloud comment truncates.
@@ -210,13 +261,56 @@ A run is capped at `MAX_ITEMS_PER_RUN` (200) files, and a file larger than
 `maxBytesPerFile` (1 MiB by default) is skipped rather than truncated — half a
 contract summarised as if it were the whole thing is worse than no summary.
 
-**Text only.** The default mime types are the `text/` family and
-`application/json`; PDFs are deliberately excluded, because their bytes are not
-text and nothing on this path builds the base64 `document` block the Messages
-API wants for them. Content that is not valid UTF-8 is skipped for the same
-reason, and because a batch goes out as one request for the whole folder —
-outside any per-file guard — so one binary file would take the entire run down
-rather than just itself.
+**Text, PDFs and Office documents.** The default mime types are the `text/`
+family, `application/json`, `application/pdf` and the Office types
+(`OFFICE_MIME_TYPES`: Word, Excel, PowerPoint and their OpenDocument
+counterparts, documents and templates). Text goes into the prompt, and content
+that is not valid UTF-8 is skipped: a batch goes out as one request for the whole
+folder, outside any per-file guard, so one binary file would take the entire run
+down rather than just itself.
+
+A PDF travels as its own `document` block, followed by the operation's
+`buildDocumentPrompt()` (a translation comes back as Markdown, not as a PDF):
+
+- **Anthropic provider only.** No other provider builds the block. There, a
+  coworker's walk leaves PDFs out, so they do not take the run's quota every
+  night, and a manual run lists each one as skipped with the reason.
+- **Batch, Files API allowed:** each PDF is uploaded with an expiry of 30 hours
+  and referenced by `file_id`, so the batch stays small whatever the PDFs weigh.
+  The run deletes its uploads once it has collected the results, when the
+  submission fails, when the batch is lost, and when the run is cancelled. The
+  expiry covers a run that never comes back. A PDF whose upload fails is
+  skipped on its own.
+- **Batch, Files API off** (switched off, or zero data retention): the PDF goes
+  inline as base64. A batch holds at most 256 MB, so inline PDFs are capped at
+  192 MB of base64 per batch, and the rest is left for the next run.
+- **Immediate:** one request per PDF, inline.
+- **Limits:** a PDF over 32 MB is skipped (`maxBytesPerFile` applies to text
+  only), as is a file named `.pdf` that does not start with `%PDF-`. The API reads
+  at most 600 pages (100 under a 1M-token context) and 128 MB per request. A PDF
+  over that fails as its own request, reported as *errored*.
+- **Cost:** each page is billed as text (typically 1,500–3,000 tokens) plus an
+  image of the page (at most 1,568 tokens). A PDF costs far more than the same
+  text would.
+
+An Office document is converted to PDF and then takes the PDF path, so the
+model sees its layout, tables and charts too:
+
+- **Converter:** Nextcloud's file conversion API (`IConversionManager`), which
+  Nextcloud Office (`richdocuments`, backed by Collabora) provides for every type
+  above. Without a provider, or for a type no provider turns into PDF, a walk
+  leaves the file out and a manual run lists it as skipped with the reason
+  (*install Nextcloud Office*). AIquila ships no converter of its own: an
+  in-process OOXML/ODF parser would add a dependency and attack surface, and
+  plain text would lose the tables.
+- **Where the PDF goes:** the conversion API always writes its result as a file.
+  It goes to `appdata_<instance>/aiquila/conversions/`, is read back and deleted
+  straight away, and never appears in the user's Files. Leftovers of a worker
+  that died are removed after an hour.
+- **Limits:** the source and the PDF are each held to the 32 MB PDF limit, and
+  Nextcloud's own `max_file_conversion_filesize` (100 MB by default) applies
+  first. A conversion that fails, for example because Collabora is unreachable,
+  skips that file with the converter's message.
 
 On a non-Anthropic provider the same tasks fall back to a synchronous per-file
 loop at full price, and the run summary says which path it took.
@@ -260,8 +354,9 @@ their files, so a file shared with them works like one they own:
   rules: up-to-date sources (unless `force`), outputs of any operation and
   the output folder are skipped.
 - Files picked one by one are always processed, since the user asked for them.
-  Only the text-only mime filter applies, and a picked file that fails it is
-  logged as skipped.
+  Only the mime filter applies, plus the PDF and converter checks.
+- A file that fails the mime filter, picked or found in a folder, is skipped
+  and reported. Up-to-date sources and earlier outputs are left out silently.
 - A file reached twice counts once.
 
 **Output.** Each output goes beside its source, or into `outputFolder`, which
@@ -288,6 +383,39 @@ them with the user's app password. All of them are `NoAdminRequired` and
 | `GET /api/batch-runs` | the user's manual runs, newest first |
 | `GET /api/batch-runs/{id}` | the run with its log |
 | `POST /api/batch-runs/{id}/cancel` | the cancelled run; `409` once it has ended |
+
+**Skips.** A file the run passes over without asking the model counts in
+`itemsSkipped`, neither processed nor failed. Each one gets a `warn` log entry,
+`Skipped: <reason>`, with the file as its item, and a `Skipped: <name> — <reason>`
+line in the summary:
+
+| Reason | When |
+|---|---|
+| `Not a text document (<mime>)` | it fails the mime filter |
+| `Its folder is read-only; choose an output folder` | its output cannot be written beside it |
+| `No longer available` | it was deleted or unshared after the run was started |
+| `Too large (<size>; the limit is <limit>)` | over `maxBytesPerFile` |
+| `Could not be read: <error>` | reading it threw |
+| `Not UTF-8 text` | its content is not valid UTF-8 |
+| `Empty` | only whitespace |
+
+The first 100 skips found while collecting are logged one by one, then a single
+entry gives the count of the rest, so a folder full of photos does not push
+everything else out of the 500-entry log. The summary lists at most 50 per-file
+lines. Skips found before a batch is submitted are kept in the resume state and
+reported when it ends. A model refusal is a failure (`refused`), not a skip.
+Coworker runs over the docs task types count `itemsSkipped` too, for the read
+reasons above. Their nightly walk still passes over other file types silently.
+
+**Notification.** When a manual run ends as `success` or `error`,
+`BatchRunNotifications` sends a Nextcloud notification (`batch_run_success` or
+`batch_run_error`, object `batch_run` / run id) with the counts and, for a
+failure, the error. Its link opens the run in **Cowork → Runs from Files**. A
+**Show results** action opens the outputs' folder when all of them are in one
+folder, and otherwise the first output. The personal task notification switches
+apply: `task_success_notifications` (off by default) for a finished run,
+`task_failure_notifications` (on by default) for a failed one. A cancelled run
+is not announced, and neither is a `pending` one.
 
 A run carries `status`, the item counts, `summary`, `error`, `outputs` (paths
 in the user's Files) and `pollIntervalSeconds`. That interval is 30 while

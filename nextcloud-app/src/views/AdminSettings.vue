@@ -111,6 +111,13 @@
 				</NcSettingsSection>
 			</template>
 
+			<template #usage>
+				<NcSettingsSection :name="t('aiquila', 'Usage export')"
+					:description="t('aiquila', 'Download the tokens AIquila requests used, for accounting or audit: every user, one user or one group, as CSV or JSON, one row per request or summed per day, week or month.')">
+					<UsageExport :admin="true" />
+				</NcSettingsSection>
+			</template>
+
 			<template #advanced>
 				<NcSettingsSection :name="t('aiquila', 'Native MCP connector (beta)')"
 					:description="t('aiquila', 'When enabled, providers that support it call MCP servers directly over HTTPS instead of routing every tool call through this instance. Servers must be reachable from the provider, not just from Nextcloud.')">
@@ -189,6 +196,7 @@ import McpServerList from '../components/settings/McpServerList.vue'
 import ProviderCard from '../components/settings/ProviderCard.vue'
 import SequenceList from '../components/settings/SequenceList.vue'
 import SettingsTabs from '../components/settings/SettingsTabs.vue'
+import UsageExport from '../components/settings/UsageExport.vue'
 import {
 	adminLibrary,
 	getAdminProviders,
@@ -215,6 +223,7 @@ export default {
 		ProviderCard,
 		SequenceList,
 		SettingsTabs,
+		UsageExport,
 	},
 	data() {
 		return {
@@ -249,6 +258,7 @@ export default {
 				{ id: 'prompts', label: t('aiquila', 'Prompts') },
 				{ id: 'sequences', label: t('aiquila', 'Sequences') },
 				{ id: 'mcp', label: t('aiquila', 'MCP servers') },
+				{ id: 'usage', label: t('aiquila', 'Usage') },
 				{ id: 'advanced', label: t('aiquila', 'Advanced') },
 			]
 		},
