@@ -42,7 +42,7 @@ Three deployment configurations are supported via `--stack`:
 - For `--stack mcp`: existing Nextcloud instance with an app password
 - For `--stack nextcloud` / `full`: domain name for the Nextcloud server
 - Domain that points to (or will be pointed to) the server IP
-- Go 1.26.11+ to build from source (the `go` line in `hetzner/go.mod`)
+- Go 1.27.4+ to build from source (the `go` line in `hetzner/go.mod`)
 
 ---
 
