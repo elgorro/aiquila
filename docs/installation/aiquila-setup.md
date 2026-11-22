@@ -596,12 +596,15 @@ file's or folder's **⋯** menu. In the dialog, choose:
 
 Results are Markdown files named like the coworker outputs, `<name>.summary.md` or
 `<name>.<language>.md`, and each processed document gets the `aiquila:summarized`
-or `aiquila:translated` tag. Text documents (`text/*` and JSON) and PDFs are read;
-PDFs need the Claude API provider, and the translation of a PDF is Markdown.
-Every file the run passes over is counted as *skipped* and listed with its reason
-in the run's summary and log: not a text or PDF document, too large (over 1 MB
-for text, 32 MB for a PDF), not UTF-8 text, empty, a PDF on another provider, or
-no longer available. A document the model declines to
+or `aiquila:translated` tag. Text documents (`text/*` and JSON), PDFs and Office
+documents (Word, Excel, PowerPoint, OpenDocument) are read. PDFs need the Claude
+API provider, and Office documents additionally need
+[Nextcloud Office](https://apps.nextcloud.com/apps/richdocuments), which converts
+them to PDF first. The translation of either is Markdown. Every file the run passes
+over is counted as *skipped* and listed with its reason in the run's summary and
+log: not a text, PDF or Office document, too large (over 1 MB for text, 32 MB for a
+PDF or Office document), not UTF-8 text, empty, a PDF or Office document on another
+provider, an Office document with no converter installed, or no longer available. A document the model declines to
 process is reported as *refused*. Results from an earlier run are never processed
 again, so summarizing a folder and then translating it translates only the
 documents; those, and documents whose result is already up to date, are not
@@ -792,7 +795,7 @@ or build a **Custom coworker**. Each coworker has:
 | Task | What it does | Options |
 |---|---|---|
 | `vision:classify` | Labels each image and stores the labels as collaborative tags, so they can be searched and filtered in Files | `maxTags` (1–30, default 8), `recursive` |
-| `docs:summarize` | Writes `<name>.summary.md` beside each document (`text/*`, JSON and PDF by default; PDFs need the Claude API provider and are skipped on others) | `style` (`brief` (default), `detailed`, `bullets`), `recursive`, `force`, `outputFolder`, `mimeTypes`, `maxBytesPerFile` (text files, default 1 MiB; PDFs up to 32 MB) |
+| `docs:summarize` | Writes `<name>.summary.md` beside each document (`text/*`, JSON, PDF and Office by default; PDFs and Office documents need the Claude API provider, Office documents also Nextcloud Office) | `style` (`brief` (default), `detailed`, `bullets`), `recursive`, `force`, `outputFolder`, `mimeTypes`, `maxBytesPerFile` (text files, default 1 MiB; PDFs up to 32 MB) |
 | `docs:translate` | Writes `<name>.<language>.md` beside each document | `targetLanguage`, plus the options of `docs:summarize` except `style` |
 | `agent:run` | Runs a prompt, optionally with MCP tools, and keeps the answer as the run summary or writes it to one file | `tools` (allowlist of MCP tool names), `taskBudget` (tokens, at least 20,000) |
 

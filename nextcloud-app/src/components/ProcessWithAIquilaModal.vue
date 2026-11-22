@@ -10,7 +10,7 @@
 				{{ selectionText }}
 			</p>
 			<NcNoteCard v-if="nonTextFiles > 0" type="info">
-				{{ n('aiquila', '{count} selected file is not a text or PDF document and will be skipped.', '{count} selected files are not text or PDF documents and will be skipped.', nonTextFiles, { count: nonTextFiles }) }}
+				{{ n('aiquila', '{count} selected file is not a text, PDF or Office document and will be skipped.', '{count} selected files are not text, PDF or Office documents and will be skipped.', nonTextFiles, { count: nonTextFiles }) }}
 			</NcNoteCard>
 			<NcNoteCard v-if="overCap" type="error">
 				{{ t('aiquila', 'A run processes at most {max} files. Select fewer, or select their folder instead.', { max: limits.maxItems }) }}
@@ -126,7 +126,10 @@ import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import { batchRunUrl, getBatchRunOperations, startBatchRun } from '../api.js'
 
 // Mirrors BatchDocumentRunner::DEFAULT_MIME_TYPES; the server decides.
-const isText = (mime) => typeof mime === 'string' && (mime.startsWith('text/') || mime === 'application/json' || mime === 'application/pdf')
+// Office documents are read through a converter the server may lack; it then
+// reports them as skipped with the reason.
+const OFFICE = /^application\/(msword|vnd\.ms-(excel|powerpoint)|vnd\.openxmlformats-officedocument\.|vnd\.oasis\.opendocument\.(text|spreadsheet|presentation))/
+const isText = (mime) => typeof mime === 'string' && (mime.startsWith('text/') || mime === 'application/json' || mime === 'application/pdf' || OFFICE.test(mime))
 
 const LANGUAGE = /^[A-Za-z][A-Za-z \-]{1,31}$/
 
