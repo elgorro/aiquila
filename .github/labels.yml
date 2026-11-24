@@ -6,7 +6,9 @@
 #
 # Regenerate from the live set after changing labels via the API:
 #   gh label list --limit 100 --json name,color,description \
-#     --jq '.[] | "- name: component:infrastructure
+#     --jq '.[] | "- name: \(.name)\n  color: \(.color)\n  description: \(.description)\n"'
+
+- name: component:infrastructure
   color: 5319e7
   description: Docker, Hetzner CLI, CI
 
