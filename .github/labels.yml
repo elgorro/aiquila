@@ -6,9 +6,7 @@
 #
 # Regenerate from the live set after changing labels via the API:
 #   gh label list --limit 100 --json name,color,description \
-#     --jq '.[] | "- name: \(.name)\n  color: \(.color)\n  description: \(.description)\n"'
-
-- name: component:infrastructure
+#     --jq '.[] | "- name: component:infrastructure
   color: 5319e7
   description: Docker, Hetzner CLI, CI
 
@@ -56,6 +54,10 @@
   color: 168700
   description: Pull requests that update javascript code
 
+- name: php
+  color: 45229e
+  description: Pull requests that update php code
+
 - name: priority:critical
   color: b60205
   description: Blocker — drop other work
@@ -99,4 +101,3 @@
 - name: wontfix
   color: ffffff
   description: This will not be worked on
-
