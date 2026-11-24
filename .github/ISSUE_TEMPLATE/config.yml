@@ -1,0 +1,12 @@
+# Maintainers can still open a blank issue; everyone else picks a form or a link.
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/elgorro/aiquila/security/advisories/new
+    about: Please report it privately. Only the maintainers can see the report.
+  - name: Question or help with setup
+    url: https://github.com/elgorro/aiquila/discussions/new?category=q-a
+    about: Can't connect, not sure how something works, or not sure if it's a bug? Ask here.
+  - name: Early idea
+    url: https://github.com/elgorro/aiquila/discussions/new?category=ideas
+    about: Not a concrete request yet? Talk it through with others first.

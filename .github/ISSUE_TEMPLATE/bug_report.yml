@@ -1,0 +1,102 @@
+name: Bug report
+description: Something doesn't work the way it should
+labels: ['type:bug', 'priority:medium']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Fill in what you know; a partial report is better than none, and we'll ask if something is missing.
+
+        **Security problem?** Please [report it privately](https://github.com/elgorro/aiquila/security/advisories/new) instead.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      multiple: true
+      options:
+        - MCP server (an AI client uses Nextcloud)
+        - Nextcloud app (AI inside Nextcloud)
+        - Docker or Hetzner deployment
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: For an MCP tool, the tool name and its arguments help most. If it only happens sometimes, or nobody has reproduced it yet, say so.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: worth
+    attributes:
+      label: Why it's worth fixing
+      description: Who runs into it, how bad it is for them, and whether there is a workaround. One sentence is enough.
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: Leave out what doesn't apply. "Latest" is hard to pin down later, so please give numbers.
+      value: |
+        - AIquila:
+        - Nextcloud:
+        - Other Nextcloud app involved (Mail, Deck, Calendar, …):
+        - PHP / Node.js:
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Setup
+      description: How AIquila runs, as far as it matters here.
+      placeholder: |
+        - MCP client or AI provider (Claude.ai, Claude Desktop, Cursor, Mistral, Ollama, …)
+        - How it's installed (npx, Docker, Hetzner CLI, App Store)
+        - Transport and sign-in (stdio or HTTP, OAuth or app password)
+        - Reverse proxy, if any
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Remove passwords, tokens, hostnames, and names or content belonging to other people. Issues are public.
+      render: shell
+  - type: textarea
+    id: approach
+    attributes:
+      label: Possible fix, and why it would work
+      description: Optional. If you have an idea of the cause or the fix, what makes you think so? Point to the code, the log line or the spec.
+  - type: dropdown
+    id: ai
+    attributes:
+      label: AI involvement
+      description: Every answer is fine, it just tells us how to read this.
+      options:
+        - None
+        - Assisted (I did the work, AI helped)
+        - Semi-attended (AI did the work, I checked it)
+        - Unattended (AI did the work, nobody checked it yet)
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I looked for an existing issue about this
+          required: true
+        - label: I removed secrets and private data from this report
+          required: true
+        - label: I'd like to work on a fix

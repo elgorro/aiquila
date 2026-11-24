@@ -61,7 +61,8 @@ most importantly, **open or comment on an issue before writing code**, so we can
 confirm the approach before you invest the effort.
 
 The guide covers branch and commit conventions, the checks CI runs per component,
-and what to expect from CI on a pull request from a fork.
+and what to expect from CI on a pull request from a fork. AI-assisted contributions are
+welcome; coding agents start at [AGENTS.md](AGENTS.md).
 
 ## Support
 
