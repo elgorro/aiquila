@@ -83,7 +83,6 @@ class Sequence extends Entity implements \JsonSerializable {
     public function getDefinitionArray(): array {
         $decoded = json_decode($this->getDefinition(), true);
         $inputs = is_array($decoded) && is_array($decoded['inputs'] ?? null) ? array_values($decoded['inputs']) : [];
-        /** @var list<mixed> $steps */
         $steps = is_array($decoded) && is_array($decoded['steps'] ?? null) ? array_values($decoded['steps']) : [];
         $steps = array_map(static function (mixed $step): mixed {
             if (is_array($step) && ($step['arguments'] ?? []) === []) {

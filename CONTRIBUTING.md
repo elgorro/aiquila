@@ -123,7 +123,10 @@ composer test
 composer psalm
 ```
 
-There is no baseline — fix findings rather than adding one.
+There is no baseline — fix findings rather than adding one. The run includes taint
+analysis, which reports untrusted data reaching an output, query or command.
+
+`composer install` needs `ext-iconv`, which some distributions ship disabled.
 
 After editing a controller annotated with `#[OpenAPI]`, regenerate and commit the
 spec (CI fails on a mismatch):

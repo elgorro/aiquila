@@ -52,6 +52,7 @@ class TeamService {
      * without one. Team folders need Nextcloud 35.
      */
     public function workspacePath(string $teamId): ?string {
+        /** @psalm-suppress TypeDoesNotContainType the analysed OCP is 35; older servers lack the method */
         if (!method_exists($this->teams, 'getTeamFolderProvider')) {
             return null;
         }

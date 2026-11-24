@@ -101,7 +101,7 @@ class AIquilaOperation implements ISpecificOperation {
                 $this->logger->info('AIquila Flow: skipping a rule with invalid settings', ['error' => $e->getMessage()]);
                 continue;
             }
-            $configs[json_encode($config->toArray())] = $config;
+            $configs[serialize($config->toArray())] = $config;
         }
 
         foreach ($configs as $config) {

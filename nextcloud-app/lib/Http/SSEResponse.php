@@ -94,6 +94,11 @@ class SSEResponse extends Response implements ICallbackResponse {
      * — in which case the event is dropped and the stream carries on, since a
      * half-written frame would desynchronise the client's parser.
      *
+     * The frame is JSON in a text/event-stream body, which a browser never
+     * parses as HTML, hence the taint escapes.
+     *
+     * @psalm-taint-escape html
+     * @psalm-taint-escape has_quotes
      * @param array<string, mixed> $event
      */
     public static function frame(array $event): ?string {

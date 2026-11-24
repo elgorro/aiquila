@@ -484,11 +484,9 @@ class ConversationController extends Controller {
             if ($thinking === 'off') {
                 // Some models cannot stop thinking at all. Saying so beats
                 // storing an "off" that every request would quietly ignore.
-                if ($provider instanceof ThinkingProfileInterface) {
-                    $model = $provider->describeThinking($this->userId, $this->conversationOptions($conversation))['model'];
-                    if (!$provider->getThinkingProfile($model)['can_disable']) {
-                        return $this->clientError(400, $model . ' always thinks, so thinking cannot be turned off. Lower the effort with /effort instead.');
-                    }
+                $model = $provider->describeThinking($this->userId, $this->conversationOptions($conversation))['model'];
+                if (!$provider->getThinkingProfile($model)['can_disable']) {
+                    return $this->clientError(400, $model . ' always thinks, so thinking cannot be turned off. Lower the effort with /effort instead.');
                 }
             }
             // "auto" and blank both hand the decision back to the defaults.
