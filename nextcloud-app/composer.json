@@ -15,7 +15,7 @@
         "nextcloud/openapi-extractor": "^1.8",
         "nextcloud/ocp": "^35.0",
         "doctrine/dbal": "^4.4",
-        "vimeo/psalm": "^6.0"
+        "vimeo/psalm": "^7.15"
     },
     "autoload": {
         "psr-4": {
