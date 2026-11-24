@@ -28,7 +28,7 @@ Closes #
 ## AI involvement
 <!-- Keep one line, delete the rest, and add a few words if you like (tool, what it did). Every level is fine. -->
 
-- None
+- No AI
 - Assisted: I did the work, AI helped
 - Semi-attended: AI did the work, I checked it
 - Unattended: AI did the work, nobody checked it yet

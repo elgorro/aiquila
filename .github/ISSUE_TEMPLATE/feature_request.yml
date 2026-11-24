@@ -67,7 +67,7 @@ body:
       label: AI involvement
       description: Every answer is fine, it just tells us how to read this.
       options:
-        - None
+        - No AI
         - Assisted (I did the work, AI helped)
         - Semi-attended (AI did the work, I checked it)
         - Unattended (AI did the work, nobody checked it yet)

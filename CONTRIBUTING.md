@@ -244,7 +244,7 @@ issue forms and the pull request template ask for one of four levels.
 
 | Level | Meaning |
 |---|---|
-| None | No AI, or only autocomplete and spell-checking |
+| No AI | None, or only autocomplete and spell-checking |
 | Assisted | You did the work, AI helped |
 | Semi-attended | AI did the work, you checked it |
 | Unattended | AI did the work, nobody checked it yet |
