@@ -53,7 +53,7 @@ interface BatchOperation {
     public function buildDocumentPrompt(array $options): string;
 
     /**
-     * Suffix appended to the source's base name, e.g. ".summary.md".
+     * Suffix appended to the source's file name, e.g. ".summary.md".
      *
      * @param array<string, mixed> $options
      */

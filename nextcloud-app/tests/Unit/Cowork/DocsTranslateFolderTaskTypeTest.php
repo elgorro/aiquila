@@ -62,7 +62,7 @@ class DocsTranslateFolderTaskTypeTest extends TestCase {
 
         $name = $this->callOutputName($file, ['targetLanguage' => 'German']);
 
-        $this->assertSame('report.german.md', $name);
+        $this->assertSame('report.md.german.md', $name);
     }
 
     /**

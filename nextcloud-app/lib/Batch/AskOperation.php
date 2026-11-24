@@ -7,7 +7,7 @@ namespace OCA\AIquila\Batch;
 
 /**
  * Ask a question the user wrote of each document, writing the answer to
- * `<name>.<outputSuffix>.md`.
+ * `<file>.<outputSuffix>.md`.
  *
  * The done-tag names the question: `aiquila:asked-<hash>`, a hash of the
  * prompt and the suffix. A source counts as done only while it carries the

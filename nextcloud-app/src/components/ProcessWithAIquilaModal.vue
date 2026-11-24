@@ -261,13 +261,13 @@ export default {
 				return `${this.tableNameValid ? this.tableName : 'extracted'}.csv`
 			}
 			if (this.operation === 'ask') {
-				return `report.${this.suffixValid ? this.outputSuffix : 'answer'}.md`
+				return `report.pdf.${this.suffixValid ? this.outputSuffix : 'answer'}.md`
 			}
 			if (this.operation === 'translate') {
 				const lang = this.languageValid ? this.targetLanguage.trim().toLowerCase().replace(/ /g, '-') : 'german'
-				return `report.${lang}.md`
+				return `report.pdf.${lang}.md`
 			}
-			return 'report.summary.md'
+			return 'report.pdf.summary.md'
 		},
 		canStart() {
 			if (this.loading || this.starting || this.overCap || this.operations.length === 0) {
