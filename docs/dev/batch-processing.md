@@ -215,7 +215,12 @@ source's folder when none is set. So there is one table per folder.
 - **Structured outputs:** on the Anthropic provider, for models documented to
   support JSON outputs (`ClaudeModels::supportsStructuredOutputs()`), the schema
   goes out as `output_config.format`, in batches too. Every other model and
-  provider gets the same prompt asking for JSON only. On every path the answer is
+  provider gets the same prompt asking for JSON only, and so does every request
+  while the **Structured outputs for data extraction** admin setting
+  (`structured_outputs`, on by default, one per Claude card) is off. It is there for
+  organisations with customer-managed encryption keys: Anthropic
+  [turns structured outputs off](https://platform.claude.com/docs/en/manage-claude/cmek-coverage-claude-platform)
+  for them on Fable and Mythos models, and the API offers no way to detect it. On every path the answer is
   then checked in code (`parseRow()`): the outermost object is taken, a value is
   coerced to its type (`"12.50"` → `12.5`, a real `YYYY-MM-DD` date), and a missing
   field is empty. An answer that holds no object, or a value of the wrong type,
