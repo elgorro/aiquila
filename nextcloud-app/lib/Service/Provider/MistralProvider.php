@@ -60,6 +60,14 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
     /** Voxtral's documented limit on `context_bias` entries. */
     public const CONTEXT_BIAS_MAX = 100;
     public const DEFAULT_TTS_MODEL = 'voxtral-mini-tts-2603';
+
+    /**
+     * Voice used when none is set: a request must carry a voice or a
+     * reference recording, and the latter is not offered here. One of the
+     * Voxtral 2 presets, which Voxtral 3 models accept too; the Voxtral 3
+     * presets (`voice_…`) get a 400 on the Voxtral 2 model above.
+     */
+    public const DEFAULT_TTS_VOICE = 'gb_jane_neutral';
     /** The conversation model that drives the image_generation tool. */
     public const DEFAULT_IMAGE_MODEL = 'mistral-medium-latest';
 
@@ -172,7 +180,10 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
                 'mistral_tts_voice',
                 'mistral_tts_voice',
                 'Speech voice',
-                'Preset voice id. Left blank, Mistral picks its default.',
+                'A Mistral preset voice, or the id of a voice saved in your Mistral workspace. Each preset speaks one language. '
+                    . 'Presets such as gb_jane_neutral or fr_marie_neutral work on every speech model; those named voice_… '
+                    . '(voice_481 is German) need a Voxtral 3 model. Left blank, a British English voice is used.',
+                placeholder: self::DEFAULT_TTS_VOICE,
             ),
             ProviderSettingsSchema::text(
                 'mistral_image_model',
@@ -1581,16 +1592,18 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
         if (trim($text) === '') {
             return ['error' => 'No text to speak.'];
         }
+        // Mistral answers 400 to a request with neither a voice nor ref_audio.
+        $voice = $options['voice'] ?? '';
+        if (!is_string($voice) || $voice === '') {
+            $voice = $this->settingOr('mistral_tts_voice', self::DEFAULT_TTS_VOICE);
+        }
         $body = [
-            'model' => $this->config->getAppValue(self::APP_NAME, 'mistral_tts_model', self::DEFAULT_TTS_MODEL),
+            'model' => $this->settingOr('mistral_tts_model', self::DEFAULT_TTS_MODEL),
             'input' => $text,
+            'voice_id' => $voice,
             'response_format' => 'mp3',
             'stream' => false,
         ];
-        $voice = $options['voice'] ?? $this->config->getAppValue(self::APP_NAME, 'mistral_tts_voice', '');
-        if (is_string($voice) && $voice !== '') {
-            $body['voice_id'] = $voice;
-        }
 
         try {
             $client = $this->clientService->newClient();
@@ -1607,6 +1620,12 @@ class MistralProvider implements LLMProviderInterface, ModelCatalogInterface {
         } catch (\Throwable $e) {
             return $this->handleException($e, 'synthesizeSpeech');
         }
+    }
+
+    /** An instance setting, or $default when it is unset or was saved blank. */
+    private function settingOr(string $key, string $default): string {
+        $value = trim($this->config->getAppValue(self::APP_NAME, $key, ''));
+        return $value !== '' ? $value : $default;
     }
 
     /** Raw audio bytes, whether they arrived raw or base64 inside a JSON envelope. */
