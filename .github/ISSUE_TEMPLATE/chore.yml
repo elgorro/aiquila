@@ -1,0 +1,66 @@
+name: Chore
+description: Maintenance, tooling, dependencies or refactoring
+labels: ['type:chore', 'priority:medium']
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs doing
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it's worth it now
+      description: An upstream release, a deprecation, a manual step that keeps coming back, a slow build. What happens if we leave it?
+    validations:
+      required: true
+  - type: textarea
+    id: approach
+    attributes:
+      label: Why this approach works
+      description: How you'd do it, and what shows that it works (release notes, a trial run, another project). Not sure yet? Say so.
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      multiple: true
+      options:
+        - MCP server
+        - Nextcloud app
+        - Infrastructure (Docker, Hetzner CLI, CI)
+        - Repository-wide
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Optional. A few checks that would show it's finished.
+      placeholder: |
+        - [ ]
+  - type: textarea
+    id: context
+    attributes:
+      label: Links
+      description: Optional. Upstream release notes or related issues.
+  - type: dropdown
+    id: ai
+    attributes:
+      label: AI involvement
+      description: Every answer is fine, it just tells us how to read this.
+      options:
+        - No AI
+        - Assisted (I did the work, AI helped)
+        - Semi-attended (AI did the work, I checked it)
+        - Unattended (AI did the work, nobody checked it yet)
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I'd like to work on this

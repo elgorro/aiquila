@@ -56,6 +56,10 @@
   color: 168700
   description: Pull requests that update javascript code
 
+- name: php
+  color: 45229e
+  description: Pull requests that update php code
+
 - name: priority:critical
   color: b60205
   description: Blocker — drop other work
@@ -99,4 +103,3 @@
 - name: wontfix
   color: ffffff
   description: This will not be worked on
-

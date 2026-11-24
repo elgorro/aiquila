@@ -20,20 +20,27 @@ what you intend to do lets us confirm the approach before you invest the effort,
 and avoids two people solving the same problem twice. For a one-line typo fix,
 go straight to a pull request.
 
+**Make the case.** An issue says why it's worth doing and, if you have an approach in
+mind, why it would work. A pull request says both. One or two plain sentences are
+enough, backed by something we can check: a reproduction, a log line, an upstream
+reference, a trial run. You don't need a solution to report a problem.
+
 If you comment on an issue, we can assign it to you — GitHub only permits
 assigning people who are repo collaborators or who have commented on that
 specific issue.
 
 ## Labels
 
-Issues are classified on three independent axes. There is a template for each
+Issues are classified on three independent axes. There is a form for each
 type — bug report, feature request, chore, documentation — and each one applies
 its type and a default priority for you, so opening an issue the normal way needs
-no label picking.
+no label picking. Questions and setup help go to
+[Q&A](https://github.com/elgorro/aiquila/discussions/new?category=q-a), early ideas to
+[Ideas](https://github.com/elgorro/aiquila/discussions/new?category=ideas).
 
 | Axis | Labels | Who sets it |
 |------|--------|-------------|
-| Type — what kind of work (exactly one) | `type:bug`, `type:feature`, `type:docs`, `type:chore` | The issue template |
+| Type — what kind of work (exactly one) | `type:bug`, `type:feature`, `type:docs`, `type:chore` | The issue form |
 | Component — what it touches (one or more) | `component:mcp`, `component:nextcloud`, `component:infrastructure` | A maintainer during triage |
 | Priority — how urgent (exactly one) | `priority:critical`, `priority:high`, `priority:medium`, `priority:low` | A maintainer |
 
@@ -41,12 +48,12 @@ Two more labels cut across all three: `security` marks anything with a security
 impact, and `question` marks an issue whose approach is still being decided
 rather than implemented.
 
-**Don't set your own priority.** Templates default every new issue to
+**Don't set your own priority.** Forms default every new issue to
 `priority:medium`; a maintainer adjusts it during triage against everything else
 in flight. Nothing is lost by leaving it — if something is genuinely urgent, say
 so in the issue body, which carries far more than a label does.
 
-`dependencies`, `javascript`, `go`, `docker` and `github_actions` are applied
+`dependencies`, `javascript`, `php`, `go`, `docker` and `github_actions` are applied
 automatically by Dependabot. `good first issue` and `help wanted` mark work we'd
 welcome an outside contributor picking up.
 
@@ -90,12 +97,13 @@ npm run build               # compile TypeScript → dist/
 npm run dev                 # hot reload via tsx
 npm test                    # vitest unit tests
 npm run lint                # eslint (warnings ok, errors fail CI; `any` is an error outside tests)
+npm run typecheck           # tsc --noEmit (the build skips type checking)
 npm run format              # prettier --write src/
 npx prettier --check src/   # check only — run before committing
 npm run catalog             # regenerate nextcloud-app/lib/Resources/sequence-catalog.json after changing a tool
 ```
 
-**CI requires both `npm run lint` and `npx prettier --check src/` to pass.**
+**CI requires `npm run lint`, `npm run typecheck` and `npx prettier --check src/` to pass.**
 Always run `npm run format` after editing TypeScript.
 
 Tests live in `mcp-server/src/__tests__/`. New behaviour needs a test that fails
@@ -106,10 +114,13 @@ Do not use `--no-verify` to skip hooks.
 
 ## Nextcloud app
 
-Psalm runs over `lib/` at `errorLevel=3` and **CI fails on any error**:
+Psalm runs over `lib/` at `errorLevel=3` and **CI fails on any error** from it or from
+the tests:
 
 ```bash
-cd nextcloud-app && composer psalm
+cd nextcloud-app
+composer test
+composer psalm
 ```
 
 There is no baseline — fix findings rather than adding one.
@@ -124,6 +135,14 @@ cd nextcloud-app && composer openapi   # updates openapi.json, openapi-administr
 The specs are OpenAPI 3.1.0. `composer openapi` runs the generator and then rewrites
 its output into 3.1 form. Running `vendor/bin/generate-spec` on its own writes 3.0.3,
 and CI reports a mismatch.
+
+## Hetzner CLI
+
+```bash
+cd hetzner
+go vet ./...
+go test ./...
+```
 
 ## Documentation
 
@@ -183,17 +202,29 @@ copying its contents in.
 
 ## Pull requests
 
-Fill in the pull request template, and put a **closing keyword** in the
-description so the issue closes on merge:
+Fill in the pull request template. A few words per topic is plenty, and a draft is a good
+way to ask for feedback early. It asks for:
+
+| Section | Why |
+|---|---|
+| Why it's worth it | The problem, who has it, and why solving it justifies code someone has to maintain |
+| Why this approach works | How it solves the cause rather than the symptom, what you ruled out, and where its limits are |
+| What users will notice | Someone has to upgrade to your change. Say what is different for them, and what they have to do |
+| How I checked it | Concrete evidence, such as the failing output before your fix and the passing run after, says more than a ticked box |
+| Docs | Which pages changed, or that you looked and none needed to |
+| AI involvement | See [AI-assisted contributions](#ai-assisted-contributions) |
+| Worth a closer look | Where a mistake would cost users most: their data, their access, their setup. A few words on each topic that applies, delete the rest |
+
+The merged commit message is taken from the pull request title and description, so give
+the title the same [Conventional Commits](#branches-and-commits) form.
+
+Put a **closing keyword** in the description so the issue closes on merge:
 
 ```
 Closes #184      (or Fixes #184 / Resolves #184)
 ```
 
 A bare mention like `(#184)` links the issue but does **not** close it.
-
-Describe how you verified the change. Concrete evidence — the failing output
-before your fix, the passing run after — is much more useful than a checked box.
 
 ### A note on CI for external contributions
 
@@ -208,13 +239,28 @@ do about it.
 
 ## AI-assisted contributions
 
-These are welcome. If you used an AI assistant meaningfully, please say so in
-the pull request description or commit trailers — it's useful context, not a
-mark against the contribution.
+These are welcome, from autocomplete to agents working on their own. Just mark it: the
+issue forms and the pull request template ask for one of four levels.
 
-The bar is the same either way: you are responsible for the code you submit.
-Understand what it does, verify it actually works, and don't open a pull request
-you couldn't explain or defend in review.
+| Level | Meaning |
+|---|---|
+| No AI | None, or only autocomplete and spell-checking |
+| Assisted | You did the work, AI helped |
+| Semi-attended | AI did the work, you checked it |
+| Unattended | AI did the work, nobody checked it yet |
+
+The level is context for the reviewer, not a mark against the contribution: it tells us
+how closely to check. A few words on the tool and what it did are a nice extra. Tests,
+docs and review are the same at every level.
+
+Coding agents will find their instructions in [AGENTS.md](AGENTS.md).
+
+## Licence
+
+The Nextcloud app (`nextcloud-app/`) is AGPL-3.0-or-later, everything else is MIT. Your
+contribution is licensed under the terms of the directory it changes, and you keep your
+copyright. There is no CLA to sign. Please only submit work you have the right to
+contribute, and name the source and licence of any code you copied.
 
 ## Supporting the project
 

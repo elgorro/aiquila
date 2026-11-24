@@ -107,7 +107,7 @@ git checkout -b feat/<short-description>   # or fix/, chore/, docs/
 # ... make changes ...
 git add <specific files>
 git commit -m "feat(mcp): ..."
-gh pr create
+gh pr create                   # body follows .github/PULL_REQUEST_TEMPLATE.md; --body skips it
 gh pr checks <N> --watch       # a PR is not delivered until its checks are green
 ```
 
@@ -348,7 +348,7 @@ Three independent axes, all applied as labels:
 
 `security` and `question` cut across all three — `question` means the approach is
 still being decided, not that the issue is a support request. `dependencies`,
-`javascript`, `go`, `docker` and `github_actions` come from Dependabot; do not
+`javascript`, `php`, `go`, `docker` and `github_actions` come from Dependabot; do not
 rename them, `.github/dependabot.yml` sets no `labels:` key so they rely on
 Dependabot's defaults. Renaming `good first issue` or `help wanted` drops the repo
 out of GitHub's contributor-discovery listings.
@@ -357,10 +357,11 @@ GitHub's native **Issue Types** are an organization-only feature and `elgorro` i
 personal account (`gh api orgs/elgorro/issue-types` → 404), so labels are the
 mechanism here. Don't re-propose issue types without also proposing an org transfer.
 
-Every open issue carries a type and a priority. Each of the four templates in
-`.github/ISSUE_TEMPLATE/` applies one type plus a `priority:medium` baseline, so
-every creation path is covered. To find issues missing either axis after a bulk
-import or a manual creation:
+Every open issue carries a type and a priority. Each of the four issue forms in
+`.github/ISSUE_TEMPLATE/` applies one type plus a `priority:medium` baseline. Blank
+issues are off for everyone but maintainers. `gh issue create` and the API bypass the
+forms, so pass the labels with `--label` and use the matching form's headings. To find
+issues missing either axis:
 
 ```bash
 gh issue list --state open --limit 200 --json number,title,labels \
@@ -401,6 +402,8 @@ gh api repos/elgorro/aiquila/compare/main...<owner>:<repo>:<branch> --jq '{ahead
 - Squash-merge to match history (`fix(mcp): ... (#504)`); squash preserves the
   contributor as author.
 - Check `behind_by` is 0 before merging.
+- The squash commit message is the PR description, HTML comments and checklists
+  included. Trim it to what belongs in history before confirming the merge.
 
 **Never put a `paths:` filter on the trigger of a workflow whose job is a required
 status check, and never gate such a job with a job-level `if:`.** Either way the job
