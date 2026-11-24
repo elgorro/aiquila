@@ -164,7 +164,7 @@ It has three steps, and the caller owns the run row in between:
 
 | Method | Does |
 |---|---|
-| `collect($ctx, $root)` | the files under a node that still need work, capped |
+| `collect($ctx, $root, $skipped)` | the files under a node that still need work, capped; due files whose output's name is taken go to `$skipped` |
 | `process($ctx, $run, $files, $progress)` | submits one batch (`pending` + state) or runs the synchronous loop to the end |
 | `resume($ctx, $run, $state, $progress)` | polls the batch, and collects the results once it has ended |
 
@@ -185,7 +185,7 @@ folder, or beside the source when none is set. `<file>` is the source's whole
 name (`report.pdf.summary.md`), so sources that differ only in their extension
 never share an output. Earlier releases left the extension out
 (`report.summary.md`). Such an output stays in use, and is updated in place, while
-it can belong to one source only. With several documents of that base name in the
+it carries the `aiquila:output` tag and can belong to one source only. With several documents of that base name in the
 folder it counts for none of them and is left alone, and each gets an output of
 its own. The source is tagged
 `aiquila:summarized` / `aiquila:translated` / `aiquila:asked-<hash>` so
@@ -249,7 +249,7 @@ source's folder when none is set. So there is one table per folder.
 Files, rather than tags or comments, because a summary or a translation is prose
 that a system tag cannot hold and a Nextcloud comment truncates.
 
-Writing output into the tree being read makes three things load-bearing, all
+Writing output into the tree being read makes four things load-bearing, all
 decided during the walk rather than after it:
 
 - A source whose output is at least as new as itself is skipped, so a nightly
@@ -261,6 +261,14 @@ decided during the walk rather than after it:
   folder would translate its summaries too. A file whose name ends in the
   task's own output suffix is skipped as well, which covers outputs written
   before the tag existed.
+- Only outputs are replaced. A file that has the output's name but not the
+  `aiquila:output` tag is the user's: its source is left out before anything is
+  sent and reported as skipped, `force` or not. The write checks again and fails
+  the item as *unsaved*, since a batch may take a day to end. For `docs:extract`
+  the same goes for the table, where a table's header counts as well as the tag.
+  An untagged file under the name without the extension (`report.summary.md`)
+  may be an output from before the tag existed. It is never written to; it counts
+  as done while it is fresh and its source carries the done-tag.
 - The configured output folder is skipped during the walk, since it is normally
   nested inside the input path.
 
@@ -365,7 +373,8 @@ their files, so a file shared with them works like one they own:
   rules: up-to-date sources (unless `force`), outputs of any operation and
   the output folder are skipped.
 - Files picked one by one are always processed, since the user asked for them.
-  Only the mime filter applies, plus the PDF and converter checks.
+  Only the mime filter applies, plus the PDF and converter checks and the check
+  that their output replaces no file of the user's.
 - A file that fails the mime filter, picked or found in a folder, is skipped
   and reported. Up-to-date sources and earlier outputs are left out silently.
 - A file reached twice counts once.
@@ -402,8 +411,9 @@ line in the summary:
 
 | Reason | When |
 |---|---|
-| `Not a text document (<mime>)` | it fails the mime filter |
+| `Not a text, PDF or Office document (<mime>)` | it fails the mime filter |
 | `Its folder is read-only; choose an output folder` | its output cannot be written beside it |
+| `<name> already exists and was not written by AIquila; rename it or choose an output folder` | a file that is not an earlier output has the output's name |
 | `No longer available` | it was deleted or unshared after the run was started |
 | `Too large (<size>; the limit is <limit>)` | over `maxBytesPerFile` |
 | `Could not be read: <error>` | reading it threw |

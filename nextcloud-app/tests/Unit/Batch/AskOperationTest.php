@@ -109,7 +109,11 @@ class AskOperationTest extends TestCase {
         $mapper->method('haveTag')->willReturnCallback(function (array $ids, string $type, string $tagId) use (&$tagged): bool {
             return isset($tagged[$ids[0]][$tagId]);
         });
-        $mapper->method('getTagIdsForObjects')->willReturn([]);
+        $mapper->method('getTagIdsForObjects')->willReturnCallback(
+            static function (array $ids) use (&$tagged): array {
+                return array_map(array_keys(...), array_intersect_key($tagged, array_flip($ids)));
+            }
+        );
 
         $provider = $this->createStub(ClaudeSDKService::class);
         $provider->method('ask')->willReturn(['response' => 'answer', 'usage' => []]);
@@ -118,6 +122,9 @@ class AskOperationTest extends TestCase {
 
         // An answer file beside the source, newer than it.
         $answer = $this->createStub(File::class);
+        $answer->method('getId')->willReturn(90);
+        $tags->createTag(BatchDocumentRunner::OUTPUT_TAG, false, false);
+        $tagged['90']['t:' . BatchDocumentRunner::OUTPUT_TAG] = true;
         $answer->method('getMTime')->willReturn(200);
         $parent = $this->createStub(Folder::class);
         $parent->method('nodeExists')->willReturn(true);
