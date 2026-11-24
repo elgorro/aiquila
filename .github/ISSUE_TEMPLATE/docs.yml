@@ -1,0 +1,53 @@
+name: Documentation
+description: Something in the docs is wrong, missing or unclear
+labels: ['type:docs', 'priority:medium']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Found a typo? You can skip the issue and open a pull request.
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: A link or path. If the page doesn't exist yet, where would you have looked for it?
+      placeholder: docs/mcp/setup.md
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's wrong
+      description: Missing, out of date, unclear, or different from what the software does.
+    validations:
+      required: true
+  - type: textarea
+    id: worth
+    attributes:
+      label: Why it's worth changing
+      description: What were you trying to do, and where did this leave you? One sentence is enough.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested change, and how you know it's right
+      description: Optional. The wording you'd use, and where you checked it (the code, a run, the spec).
+  - type: dropdown
+    id: ai
+    attributes:
+      label: AI involvement
+      description: Every answer is fine, it just tells us how to read this.
+      options:
+        - None
+        - Assisted (I did the work, AI helped)
+        - Semi-attended (AI did the work, I checked it)
+        - Unattended (AI did the work, nobody checked it yet)
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I'd like to work on this

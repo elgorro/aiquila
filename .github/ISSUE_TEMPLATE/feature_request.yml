@@ -1,0 +1,83 @@
+name: Feature request
+description: Suggest something new, or an improvement to what's there
+labels: ['type:feature', 'priority:medium']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. The problem matters more to us than a finished design. If it's still an early thought, [Ideas](https://github.com/elgorro/aiquila/discussions/new?category=ideas) is a good place for it.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: worth
+    attributes:
+      label: Why it's worth it
+      description: Who benefits, how often, and what it costs them to go without. One sentence is enough.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like to happen
+      description: An example of how you'd use it is ideal.
+    validations:
+      required: true
+  - type: textarea
+    id: approach
+    attributes:
+      label: Why this approach works
+      description: Optional if you only know the problem. What makes you think this can work (an upstream API, another project, a quick try), and why this way rather than another?
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      multiple: true
+      options:
+        - MCP server (an AI client uses Nextcloud)
+        - Nextcloud app (AI inside Nextcloud)
+        - Docker or Hetzner deployment
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Optional. A few checks that would show it works. Whoever builds it, person or AI assistant, will work from these.
+      placeholder: |
+        - [ ]
+  - type: textarea
+    id: impact
+    attributes:
+      label: Effect on users and their data
+      description: Optional. Does it send data somewhere new, need extra permissions, delete or overwrite anything, or change how an existing setup behaves?
+  - type: textarea
+    id: context
+    attributes:
+      label: Links
+      description: Optional. The upstream API documentation, the specification it should follow, or related issues.
+  - type: dropdown
+    id: ai
+    attributes:
+      label: AI involvement
+      description: Every answer is fine, it just tells us how to read this.
+      options:
+        - None
+        - Assisted (I did the work, AI helped)
+        - Semi-attended (AI did the work, I checked it)
+        - Unattended (AI did the work, nobody checked it yet)
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I looked for an existing issue about this
+          required: true
+        - label: I'd like to work on this
