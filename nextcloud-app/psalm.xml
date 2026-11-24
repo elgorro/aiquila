@@ -4,8 +4,16 @@
     environment-dependent: the ext-gd one fires only where gd is missing, so with
     the check on, the run fails either on the constant or on the "unused"
     suppression, depending on the machine.
+
+    markAllNonInternalCodeAsApi: nothing in a Nextcloud app is called from code psalm
+    can see. Services are built by the DI container, controllers by the router,
+    listeners/commands/widgets/jobs by appinfo registration. Psalm finds dead code by
+    reachability from the public API, and suppressing UnusedClass does not make a class
+    reachable, so without this the whole app, private members included, counts as dead.
+    With it, unused private methods, private properties and variables are still reported.
 -->
 <psalm errorLevel="3" findUnusedIssueHandlerSuppression="false"
+       markAllNonInternalCodeAsApi="true"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
        xmlns="https://getpsalm.org/schema/config"
        xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd">
@@ -38,19 +46,7 @@
         <MoreSpecificReturnType errorLevel="error"/>
 
         <!--
-            Nothing in a Nextcloud app is called from code psalm can see: services are
-            built by the DI container, controllers by the router, listeners/commands/
-            widgets/jobs by appinfo registration. Psalm's dead-code detection therefore
-            reports the whole app as unused.
-        -->
-        <UnusedClass errorLevel="suppress"/>
-        <PossiblyUnusedMethod errorLevel="suppress"/>
-        <PossiblyUnusedProperty errorLevel="suppress"/>
-        <PossiblyUnusedParam errorLevel="suppress"/>
-        <PossiblyUnusedReturnValue errorLevel="suppress"/>
-
-        <!--
-            #[Override] is a psalm 6 style default, not something the Nextcloud
+            #[Override] is a psalm style default, not something the Nextcloud
             codebase or its app ecosystem uses.
         -->
         <MissingOverrideAttribute errorLevel="suppress"/>

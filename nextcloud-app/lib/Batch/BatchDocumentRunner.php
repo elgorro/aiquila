@@ -889,7 +889,7 @@ class BatchDocumentRunner {
         }
 
         $written -= $this->writeTables($ctx, $run, $tables, $outputs, $failures);
-        $label = method_exists($provider, 'getId') ? $provider->getId() : 'provider';
+        $label = $provider->getId();
         // As on the batch path, the total is what was sent to the model: a
         // file skipped on reading counts in itemsSkipped, not here as well.
         $total -= count($skipped) - $skippedBefore;

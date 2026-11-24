@@ -175,8 +175,8 @@ jobs:
           php-version: '8.6'
           tools: composer
 
-      # Dependencies may not declare the next minor yet (psalm 6 caps at
-      # ~8.5.0); install anyway so the suite runs.
+      # Dependencies may not declare the next minor yet (nextcloud/ocp
+      # caps at ~8.5); install anyway so the suite runs.
       - name: Install dependencies
         if: needs.changes.outputs.nextcloud == 'true'
         run: composer install --no-progress --prefer-dist --ignore-platform-req=php+
@@ -185,12 +185,11 @@ jobs:
         if: needs.changes.outputs.nextcloud == 'true'
         run: composer test -- --display-deprecations --fail-on-deprecation
 
-      # Psalm 6 cannot target 8.6 (--php-version), so this checks that it runs
-      # on 8.6 and analyses at the composer.json floor. Runs even when the
-      # tests fail, so one run reports both.
+      # Without --php-version psalm targets the composer.json floor. Runs even
+      # when the tests fail, so one run reports both.
       - name: Static analysis (psalm)
         if: ${{ !cancelled() && needs.changes.outputs.nextcloud == 'true' }}
-        run: composer psalm
+        run: composer psalm -- --php-version=8.6
 
       - name: No Nextcloud app changes
         if: needs.changes.outputs.nextcloud != 'true'
