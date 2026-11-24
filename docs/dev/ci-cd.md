@@ -224,6 +224,27 @@ AIquila uses automated release workflows that trigger when you bump the version 
 > `softprops/action-gh-release` create the tag through the Releases API instead, pinned to
 > the right commit with `target_commitish: ${{ github.sha }}`.
 
+### Releasing the MCP server and the Nextcloud app
+
+Both components share one version number and are released together, from one PR:
+
+```bash
+git checkout -b chore/release-X.Y.Z
+
+cd mcp-server
+npm version X.Y.Z --no-git-tag-version   # package.json, package-lock.json
+npm run build                            # syncs the versions in server.json
+vim server.json                          # the ghcr.io image tag is not synced
+
+cd ../nextcloud-app
+npm version X.Y.Z --no-git-tag-version   # package.json, package-lock.json
+vim appinfo/info.xml                     # <version>X.Y.Z</version>
+```
+
+Merging the PR starts both release workflows, which compare the version with the previous
+commit on `main`. The release notes are generated from the commit subjects since the
+component's previous tag.
+
 ### MCP Server Release (`mcp-release.yml`)
 
 **Triggers:** Automatically when version changes in `mcp-server/package.json` on push to `main`
@@ -239,20 +260,7 @@ AIquila uses automated release workflows that trigger when you bump the version 
    - Publishes npm package (`aiquila-mcp` on npmjs.com)
    - Publishes to MCP Registry (`io.github.elgorro/aiquila-mcp`)
 
-**How to release:**
-```bash
-# 1. Update version in mcp-server/package.json
-vim mcp-server/package.json  # Change version to 0.1.1
-
-# 2. Commit and push to main
-git add mcp-server/package.json
-git commit -m "Bump MCP server to v0.1.1"
-git push origin main
-
-# 3. Workflow runs automatically and creates:
-#    - Tag: mcp-v0.1.1
-#    - GitHub Release with tarball
-```
+**How to release:** see [Releasing the MCP server and the Nextcloud app](#releasing-the-mcp-server-and-the-nextcloud-app).
 
 ### Nextcloud App Release (`nc-release.yml`)
 
@@ -270,31 +278,10 @@ git push origin main
 9. **Waits for manual approval** (via GitHub environment protection)
 10. Publishes stable release to Nextcloud App Store
 
-**How to release:**
-```bash
-# 1. Update version in BOTH files
-vim nextcloud-app/appinfo/info.xml     # Change <version>0.1.1</version>
-vim nextcloud-app/package.json         # Change version to 0.1.1
-
-# 2. Update CHANGELOG.md
-vim nextcloud-app/CHANGELOG.md
-
-# 3. Commit and push to main
-git add nextcloud-app/
-git commit -m "Bump Nextcloud app to v0.1.1"
-git push origin main
-
-# 4. Workflow runs automatically:
-#    - Creates tag: nc-v0.1.1
-#    - Creates GitHub Release
-#    - Publishes nightly to App Store beta channel (automatic)
-#    - Waits for your approval to publish stable to App Store
-
-# 5. Approve stable app store publishing:
-#    Go to: https://github.com/YOUR-REPO/actions
-#    Click on the workflow run
-#    Click "Review deployments" and approve "nextcloud-appstore"
-```
+**How to release:** see [Releasing the MCP server and the Nextcloud app](#releasing-the-mcp-server-and-the-nextcloud-app).
+The nightly is published without approval; the stable release waits for it. Open the
+workflow run in [Actions](https://github.com/elgorro/aiquila/actions/workflows/nc-release.yml),
+click **Review deployments** and approve `nextcloud-appstore`.
 
 ### Hetzner CLI Release (`hetzner-release.yml`)
 
@@ -311,20 +298,8 @@ git push origin main
    fails transiently now and then
 5. Creates tag `hetzner-vX.X.X` and GitHub Release
 
-**How to release:**
-```bash
-# 1. Bump version in hetzner/VERSION
-echo "1.2.0" > hetzner/VERSION
-
-# 2. Commit and push to main
-git add hetzner/VERSION
-git commit -m "chore(hetzner): bump CLI to v1.2.0"
-git push origin main
-
-# 3. Workflow runs automatically and creates:
-#    - Tag: hetzner-v1.2.0
-#    - GitHub Release with signed binaries + checksums
-```
+**How to release:** set `hetzner/VERSION` in a PR of its own or with the change that needs
+the release. Merging it starts the workflow.
 
 ### Hetzner Integration Test (`hetzner-integration-test.yml`)
 
