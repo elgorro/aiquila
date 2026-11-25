@@ -10,7 +10,7 @@ use OCA\AIquila\Batch\BatchOperation;
 
 /**
  * Docs task: ask the coworker's question of every document under a folder,
- * writing each answer to `<name>.<outputSuffix>.md` beside the source.
+ * writing each answer to `<file>.<outputSuffix>.md` beside the source.
  */
 class DocsAskFolderTaskType extends AbstractBatchTextTaskType {
 

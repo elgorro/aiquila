@@ -6,7 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\Batch;
 
 /**
- * Translate each document, writing the translation to `<name>.<language>.md`.
+ * Translate each document, writing the translation to `<file>.<language>.md`.
  */
 final class TranslateOperation implements BatchOperation {
     public function getId(): string {
