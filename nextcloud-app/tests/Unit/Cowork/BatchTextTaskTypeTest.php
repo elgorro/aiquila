@@ -367,8 +367,8 @@ class BatchTextTaskTypeTest extends TestCase {
         );
 
         $this->assertSame(2, $result['itemsProcessed']);
-        $this->assertSame('summary of a', $this->written['a.summary.md']);
-        $this->assertSame('summary of b', $this->written['b.summary.md']);
+        $this->assertSame('summary of a', $this->written['a.txt.summary.md']);
+        $this->assertSame('summary of b', $this->written['b.txt.summary.md']);
     }
 
     public function testResumeCountsEachFailureKindSeparately(): void {

@@ -519,10 +519,10 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             $params['outputConfig'] = ['effort' => $plan['effort']];
         }
         // JSON outputs: the answer is constrained to the caller's schema. Only
-        // where the model takes it; elsewhere the caller checks a prompted
-        // answer itself. Citations are incompatible with it (400), and no
+        // where the model takes it and the admin left it on; elsewhere the
+        // caller checks a prompted answer itself. Citations are incompatible with it (400), and no
         // caller asks for both.
-        if (is_array($options['json_schema'] ?? null) && ClaudeModels::supportsStructuredOutputs($model)) {
+        if (is_array($options['json_schema'] ?? null) && $this->structuredOutputsEnabled() && ClaudeModels::supportsStructuredOutputs($model)) {
             $params['outputConfig'] = ($params['outputConfig'] ?? []) + [
                 'format' => ['type' => 'json_schema', 'schema' => $options['json_schema']],
             ];
@@ -626,6 +626,18 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     private function autoCacheEnabled(): bool {
         // Checkboxes have persisted as 'true' or '1' over the app's history.
         return in_array($this->appValue('auto_cache', '1'), ['true', '1'], true);
+    }
+
+    /**
+     * Whether requests may carry `output_config.format` (app config
+     * `structured_outputs`, default on).
+     *
+     * Organisations with customer-managed encryption keys cannot use it on
+     * Fable and Mythos models, and nothing in the API tells them apart, so the
+     * admin says so.
+     */
+    private function structuredOutputsEnabled(): bool {
+        return in_array($this->appValue('structured_outputs', '1'), ['true', '1'], true);
     }
 
     /**
@@ -2859,6 +2871,18 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
                     . 'model. Interactive requests are unaffected and keep the standard ceiling. It lifts a cap '
                     . 'rather than setting one, so it changes nothing until "Max output tokens" is also raised '
                     . 'above 128,000.',
+                storage: ProviderSettingsSchema::STORAGE_BOOL,
+                group: ProviderSettingsSchema::GROUP_ADVANCED,
+            ),
+            ProviderSettingsSchema::checkbox(
+                'structured_outputs',
+                'structured_outputs',
+                'Structured outputs for data extraction',
+                'Lets the API hold extraction answers to their JSON schema. Turn this off if your organisation uses '
+                    . 'customer-managed encryption keys (CMEK): Anthropic turns structured outputs off there for '
+                    . 'Fable and Mythos models, so extraction on them would fail. When off, the model is asked for JSON '
+                    . 'instead. Every answer is checked either way.',
+                default: true,
                 storage: ProviderSettingsSchema::STORAGE_BOOL,
                 group: ProviderSettingsSchema::GROUP_ADVANCED,
             ),

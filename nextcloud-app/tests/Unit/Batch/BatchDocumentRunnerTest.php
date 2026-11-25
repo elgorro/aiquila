@@ -203,7 +203,7 @@ class BatchDocumentRunnerTest extends TestCase {
         );
 
         $this->assertSame(1, $result['itemsProcessed']);
-        $this->assertSame(['a.german.md' => 'Übersetzung'], $this->written);
+        $this->assertSame(['a.txt.german.md' => 'Übersetzung'], $this->written);
         $this->assertSame('flow', $this->usageRecorded[0][3]);
         $this->assertSame('Translated', $run->getDecodedLog()[0]['message']);
         $this->assertSame('/In/a.txt', $run->getDecodedLog()[0]['item']);
@@ -228,6 +228,98 @@ class BatchDocumentRunnerTest extends TestCase {
         $collected = $this->runner->collect($this->ctx(['targetLanguage' => 'German']), $folder);
 
         $this->assertSame([$source], $collected);
+    }
+
+    /** Folder with the given sources; outputs land in $this->written, existing ones have mtime 500. */
+    private function sharedFolder(): Folder {
+        $folder = $this->createStub(Folder::class);
+        $folder->method('nodeExists')->willReturnCallback(fn (string $n): bool => isset($this->written[$n]));
+        $folder->method('get')->willReturnCallback(function (string $n): File {
+            $existing = $this->createStub(File::class);
+            $existing->method('getMTime')->willReturn(500);
+            $existing->method('getPath')->willReturn('/bob/files/In/' . $n);
+            $existing->method('putContent')->willReturnCallback(function ($c) use ($n): void {
+                $this->written[$n] = (string)$c;
+            });
+            return $existing;
+        });
+        $folder->method('newFile')->willReturnCallback(function (string $n, $c = null): File {
+            $this->written[$n] = (string)$c;
+            $out = $this->createStub(File::class);
+            $out->method('getId')->willReturn(900 + count($this->written));
+            $out->method('getPath')->willReturn('/bob/files/In/' . $n);
+            return $out;
+        });
+        return $folder;
+    }
+
+    private function answerSynchronously(): void {
+        $this->provider = $this->createStub(LLMProviderInterface::class);
+        $this->provider->method('getId')->willReturn('local');
+        $this->provider->method('ask')->willReturnCallback(
+            fn (string $prompt): array => ['response' => 'S:' . substr($prompt, -5), 'usage' => []]
+        );
+    }
+
+    /** Sources that differ only in their extension each get their own output, and both are then done. */
+    public function testSourcesSharingABaseNameDoNotShareAnOutput(): void {
+        $this->answerSynchronously();
+        $folder = $this->sharedFolder();
+        $md = $this->file(7, 'report.md', 'alpha', 'text/markdown', $folder);
+        $txt = $this->file(8, 'report.txt', 'bravo', 'text/plain', $folder);
+        $folder->method('getDirectoryListing')->willReturn([$md, $txt]);
+
+        $result = $this->runner->process($this->ctx(), new CoworkerRun(), [$md, $txt], $this->noProgress());
+
+        $this->assertSame(2, $result['itemsProcessed']);
+        $this->assertSame(['report.md.summary.md' => 'S:alpha', 'report.txt.summary.md' => 'S:bravo'], $this->written);
+        $this->assertSame([], $this->runner->collect($this->ctx(), $folder));
+    }
+
+    /** An output from before the extension was kept is still the one source's output. */
+    public function testAnUnambiguousLegacyOutputStaysInUse(): void {
+        $this->answerSynchronously();
+        $folder = $this->sharedFolder();
+        $this->written['report.summary.md'] = 'old';
+        $txt = $this->file(8, 'report.txt', 'bravo', 'text/plain', $folder);
+        $image = $this->file(9, 'report.jpg', 'x', 'image/jpeg', $folder);
+        $folder->method('getDirectoryListing')->willReturn([$txt, $image]);
+
+        $this->assertSame([], $this->runner->collect($this->ctx(), $folder), 'fresh: not billed again');
+
+        $this->runner->process($this->ctx(['force' => true]), new CoworkerRun(), [$txt], $this->noProgress());
+        $this->assertSame(['report.summary.md' => 'S:bravo'], $this->written, 'kept up to date where it is');
+    }
+
+    /** A legacy output two sources may have written counts for neither: both are done again. */
+    public function testAnAmbiguousLegacyOutputCountsForNoSource(): void {
+        $this->answerSynchronously();
+        $folder = $this->sharedFolder();
+        $this->written['report.summary.md'] = 'whichever came last';
+        $md = $this->file(7, 'report.md', 'alpha', 'text/markdown', $folder);
+        $txt = $this->file(8, 'report.txt', 'bravo', 'text/plain', $folder);
+        $folder->method('getDirectoryListing')->willReturn([$md, $txt]);
+
+        $collected = $this->runner->collect($this->ctx(), $folder);
+        $this->assertSame([$md, $txt], $collected);
+
+        $this->runner->process($this->ctx(), new CoworkerRun(), $collected, $this->noProgress());
+        $this->assertSame([
+            'report.summary.md' => 'whichever came last',
+            'report.md.summary.md' => 'S:alpha',
+            'report.txt.summary.md' => 'S:bravo',
+        ], $this->written);
+    }
+
+    /** `foo.md`'s output name is `foo.md.txt`'s legacy one, so it is never taken for the latter's. */
+    public function testALegacyNameThatIsAnotherSourcesOutputIsNotUsed(): void {
+        $folder = $this->sharedFolder();
+        $this->written['foo.md.summary.md'] = 'of foo.md';
+        $md = $this->file(7, 'foo.md', 'alpha', 'text/markdown', $folder);
+        $txt = $this->file(8, 'foo.md.txt', 'bravo', 'text/plain', $folder);
+        $folder->method('getDirectoryListing')->willReturn([$md, $txt]);
+
+        $this->assertSame([$txt], $this->runner->collect($this->ctx(), $folder));
     }
 
     public function testSharedOptionsAreValidatedWithoutAnOperation(): void {

@@ -179,9 +179,15 @@ its batch was in flight still writes where the run said it would.
 ## The bulk cowork tasks
 
 `docs:summarize`, `docs:translate` and `docs:ask` walk the coworker's input
-folder and write one output file per document — `<name>.summary.md`,
-`<name>.<language>.md`, `<name>.<outputSuffix>.md` — into the configured output
-folder, or beside the source when none is set. The source is tagged
+folder and write one output file per document — `<file>.summary.md`,
+`<file>.<language>.md`, `<file>.<outputSuffix>.md` — into the configured output
+folder, or beside the source when none is set. `<file>` is the source's whole
+name (`report.pdf.summary.md`), so sources that differ only in their extension
+never share an output. Earlier releases left the extension out
+(`report.summary.md`). Such an output stays in use, and is updated in place, while
+it can belong to one source only. With several documents of that base name in the
+folder it counts for none of them and is left alone, and each gets an output of
+its own. The source is tagged
 `aiquila:summarized` / `aiquila:translated` / `aiquila:asked-<hash>` so
 processed files can be filtered in the Files UI.
 
@@ -215,7 +221,12 @@ source's folder when none is set. So there is one table per folder.
 - **Structured outputs:** on the Anthropic provider, for models documented to
   support JSON outputs (`ClaudeModels::supportsStructuredOutputs()`), the schema
   goes out as `output_config.format`, in batches too. Every other model and
-  provider gets the same prompt asking for JSON only. On every path the answer is
+  provider gets the same prompt asking for JSON only, and so does every request
+  while the **Structured outputs for data extraction** admin setting
+  (`structured_outputs`, on by default, one per Claude card) is off. It is there for
+  organisations with customer-managed encryption keys: Anthropic
+  [turns structured outputs off](https://platform.claude.com/docs/en/manage-claude/cmek-coverage-claude-platform)
+  for them on Fable and Mythos models, and the API offers no way to detect it. On every path the answer is
   then checked in code (`parseRow()`): the outermost object is taken, a value is
   coerced to its type (`"12.50"` → `12.5`, a real `YYYY-MM-DD` date), and a missing
   field is empty. An answer that holds no object, or a value of the wrong type,
@@ -246,7 +257,7 @@ decided during the walk rather than after it:
 - An output is never a source. Every output file carries the hidden system tag
   `aiquila:output`, and the walk skips files that have it, checked in one query
   per folder. Otherwise each run would summarise the last run's summaries and
-  grow another `.summary.summary.md` generation every night, and translating a
+  grow another `.summary.md.summary.md` generation every night, and translating a
   folder would translate its summaries too. A file whose name ends in the
   task's own output suffix is skipped as well, which covers outputs written
   before the tag existed.

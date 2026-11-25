@@ -10,7 +10,7 @@ use OCA\AIquila\Batch\TranslateOperation;
 
 /**
  * Docs task: translate every document under a folder, writing each translation
- * to `<name>.<language>.md` beside the source.
+ * to `<file>.<language>.md` beside the source.
  */
 class DocsTranslateFolderTaskType extends AbstractBatchTextTaskType {
 

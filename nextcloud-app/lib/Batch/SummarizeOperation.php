@@ -6,7 +6,7 @@ declare(strict_types=1);
 namespace OCA\AIquila\Batch;
 
 /**
- * Summarize each document, writing the summary to `<name>.summary.md`.
+ * Summarize each document, writing the summary to `<file>.summary.md`.
  */
 final class SummarizeOperation implements BatchOperation {
     public const STYLES = ['brief', 'detailed', 'bullets'];
