@@ -179,9 +179,15 @@ its batch was in flight still writes where the run said it would.
 ## The bulk cowork tasks
 
 `docs:summarize`, `docs:translate` and `docs:ask` walk the coworker's input
-folder and write one output file per document — `<name>.summary.md`,
-`<name>.<language>.md`, `<name>.<outputSuffix>.md` — into the configured output
-folder, or beside the source when none is set. The source is tagged
+folder and write one output file per document — `<file>.summary.md`,
+`<file>.<language>.md`, `<file>.<outputSuffix>.md` — into the configured output
+folder, or beside the source when none is set. `<file>` is the source's whole
+name (`report.pdf.summary.md`), so sources that differ only in their extension
+never share an output. Earlier releases left the extension out
+(`report.summary.md`). Such an output stays in use, and is updated in place, while
+it can belong to one source only. With several documents of that base name in the
+folder it counts for none of them and is left alone, and each gets an output of
+its own. The source is tagged
 `aiquila:summarized` / `aiquila:translated` / `aiquila:asked-<hash>` so
 processed files can be filtered in the Files UI.
 
@@ -246,7 +252,7 @@ decided during the walk rather than after it:
 - An output is never a source. Every output file carries the hidden system tag
   `aiquila:output`, and the walk skips files that have it, checked in one query
   per folder. Otherwise each run would summarise the last run's summaries and
-  grow another `.summary.summary.md` generation every night, and translating a
+  grow another `.summary.md.summary.md` generation every night, and translating a
   folder would translate its summaries too. A file whose name ends in the
   task's own output suffix is skipped as well, which covers outputs written
   before the tag existed.

@@ -597,8 +597,9 @@ file's or folder's **⋯** menu. In the dialog, choose:
 - where to **save results**: beside each document (the default), or in a folder you
   pick. Choose a folder when the documents are in a share you can only read.
 
-Results are Markdown files named like the coworker outputs, `<name>.summary.md`,
-`<name>.<language>.md` or `<name>.<name for the answers>.md`, and each processed
+Results are Markdown files named like the coworker outputs, `<file>.summary.md`,
+`<file>.<language>.md` or `<file>.<name for the answers>.md`, where `<file>` is the
+document's full name (`report.pdf.summary.md`), and each processed
 document gets the `aiquila:summarized`, `aiquila:translated` or
 `aiquila:asked-<code>` tag (one code per question). Text documents (`text/*` and JSON), PDFs and Office
 documents (Word, Excel, PowerPoint, OpenDocument) are read. PDFs need the Claude
@@ -802,10 +803,10 @@ or build a **Custom coworker**. Each coworker has:
 | Task | What it does | Options |
 |---|---|---|
 | `vision:classify` | Labels each image and stores the labels as collaborative tags, so they can be searched and filtered in Files | `maxTags` (1–30, default 8), `recursive` |
-| `docs:summarize` | Writes `<name>.summary.md` beside each document (`text/*`, JSON, PDF and Office by default; PDFs and Office documents need the Claude API provider, Office documents also Nextcloud Office) | `style` (`brief` (default), `detailed`, `bullets`), `recursive`, `force`, `outputFolder`, `mimeTypes`, `maxBytesPerFile` (text files, default 1 MiB; PDFs up to 32 MB) |
-| `docs:translate` | Writes `<name>.<language>.md` beside each document | `targetLanguage`, plus the options of `docs:summarize` except `style` |
+| `docs:summarize` | Writes `<file>.summary.md` beside each document, for example `report.pdf.summary.md` (`text/*`, JSON, PDF and Office by default; PDFs and Office documents need the Claude API provider, Office documents also Nextcloud Office) | `style` (`brief` (default), `detailed`, `bullets`), `recursive`, `force`, `outputFolder`, `mimeTypes`, `maxBytesPerFile` (text files, default 1 MiB; PDFs up to 32 MB) |
+| `docs:translate` | Writes `<file>.<language>.md` beside each document | `targetLanguage`, plus the options of `docs:summarize` except `style` |
 | `docs:extract` | Extracts the fields you list into one table, `<tableName>.csv` (default `extracted.csv`), with a row per document, in the output folder or in each document's folder. A rerun updates the rows of documents that changed; changing the fields extracts every document again. A document whose answer does not fit the fields is reported as invalid and tried again next run | `fields` (1–30 of `{name, type, description}`; type `string`, `number`, `integer`, `boolean` or `date`), `tableName`, plus the options of `docs:summarize` except `style` |
-| `docs:ask` | Asks your question of each document and writes the answer to `<name>.<outputSuffix>.md`. Changing the question answers every document again | `prompt` (up to 4,000 characters), `outputSuffix` (lowercase letters, digits and hyphens, e.g. `deadlines`), plus the options of `docs:summarize` except `style` |
+| `docs:ask` | Asks your question of each document and writes the answer to `<file>.<outputSuffix>.md`. Changing the question answers every document again | `prompt` (up to 4,000 characters), `outputSuffix` (lowercase letters, digits and hyphens, e.g. `deadlines`), plus the options of `docs:summarize` except `style` |
 | `agent:run` | Runs a prompt, optionally with MCP tools, and keeps the answer as the run summary or writes it to one file | `tools` (allowlist of MCP tool names), `taskBudget` (tokens, at least 20,000) |
 
 An `agent:run` coworker has a **prompt** instead of a source folder: its own text,

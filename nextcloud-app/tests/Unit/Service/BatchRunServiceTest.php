@@ -294,8 +294,8 @@ class BatchRunServiceTest extends TestCase {
 
         $this->assertSame(CoworkerRun::STATUS_SUCCESS, $run->getStatus());
         $this->assertSame(2, $run->getItemsProcessed());
-        $this->assertSame(['/Docs/a.summary.md', '/Docs/b.summary.md'], $run->getDecodedOutputs());
-        $this->assertSame('S:alpha', $this->written['a.summary.md']);
+        $this->assertSame(['/Docs/a.txt.summary.md', '/Docs/b.txt.summary.md'], $run->getDecodedOutputs());
+        $this->assertSame('S:alpha', $this->written['a.txt.summary.md']);
         $this->assertStringContainsString('immediate — full price', (string)$run->getSummary());
         $this->assertNull($run->getState());
         $this->assertNull(BatchRunService::serialize($run)['pollIntervalSeconds']);
@@ -366,8 +366,8 @@ class BatchRunServiceTest extends TestCase {
         $this->assertSame(1, $run->getItemsProcessed());
         $this->assertSame(1, $run->getItemsFailed());
         $this->assertSame('1 of 2 item(s) failed', $run->getError());
-        $this->assertSame(['/Docs/b.summary.md'], $run->getDecodedOutputs());
-        $this->assertSame(['b.summary.md' => 'sum b'], $this->written);
+        $this->assertSame(['/Docs/b.txt.summary.md'], $run->getDecodedOutputs());
+        $this->assertSame(['b.txt.summary.md' => 'sum b'], $this->written);
         // Announced once, when it ended; not while it was pending.
         $this->assertSame([CoworkerRun::STATUS_SUCCESS], $this->notified);
     }

@@ -10,7 +10,7 @@ use OCA\AIquila\Batch\SummarizeOperation;
 
 /**
  * Docs task: summarize every document under a folder, writing each summary to
- * `<name>.summary.md` beside the source.
+ * `<file>.summary.md` beside the source.
  */
 class DocsSummarizeFolderTaskType extends AbstractBatchTextTaskType {
 

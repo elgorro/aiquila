@@ -138,8 +138,8 @@ class BatchDocumentRunner {
     /**
      * Hidden system tag on every output file. A folder walk skips files that
      * carry it, so one operation's output is never another's input: without
-     * it, translating a folder that holds `a.summary.md` writes
-     * `a.summary.german.md`, and the next summary run summarises both.
+     * it, translating a folder that holds `a.txt.summary.md` writes
+     * `a.txt.summary.md.german.md`, and the next summary run summarises both.
      * The own-suffix check still covers outputs written before this tag.
      */
     public const OUTPUT_TAG = 'aiquila:output';
@@ -195,10 +195,61 @@ class BatchDocumentRunner {
         }
     }
 
-    /** The output file's name for a source, e.g. `report.summary.md`. */
+    /**
+     * The output file's name for a source, e.g. `report.pdf.summary.md`. The
+     * source's extension stays in it, so `report.pdf` and `report.docx` beside
+     * each other never share an output.
+     */
     public static function outputName(BatchOperation $operation, File $source, array $options): string {
+        return $source->getName() . $operation->outputSuffix($options);
+    }
+
+    /** The name outputs had before they kept the source's extension, e.g. `report.summary.md`. */
+    private static function legacyOutputName(BatchContext $ctx, File $source): string {
+        return pathinfo($source->getName(), PATHINFO_FILENAME) . $ctx->suffix();
+    }
+
+    /**
+     * The name a source's output has in $folder: {@see outputName()}, unless
+     * only an output under the legacy name exists and can be no other file's.
+     * That one is kept up to date where it is, so folders processed before are
+     * neither billed again nor left with a second, stale output.
+     *
+     * Every place that reads or writes an output must ask here, so the skip
+     * check and the write agree.
+     */
+    private function resolveOutputName(BatchContext $ctx, Folder $folder, File $source): string {
+        $name = self::outputName($ctx->operation, $source, $ctx->options);
+        $legacy = self::legacyOutputName($ctx, $source);
+        if ($legacy === $name || $folder->nodeExists($name) || !$folder->nodeExists($legacy)) {
+            return $name;
+        }
+        return $this->sharesLegacyName($ctx, $source) ? $name : $legacy;
+    }
+
+    /**
+     * Whether another document beside the source maps to the same legacy name,
+     * so that nothing says which of them an output under it describes: one
+     * with the same base name, or one whose whole name is that base name.
+     */
+    private function sharesLegacyName(BatchContext $ctx, File $source): bool {
         $base = pathinfo($source->getName(), PATHINFO_FILENAME);
-        return $base . $operation->outputSuffix($options);
+        $parent = $source->getParent();
+        if (!$parent instanceof Folder) {
+            return false;
+        }
+        foreach ($parent->getDirectoryListing() as $sibling) {
+            if (!$sibling instanceof File || $sibling->getId() === $source->getId()) {
+                continue;
+            }
+            if ($sibling->getName() !== $base && pathinfo($sibling->getName(), PATHINFO_FILENAME) !== $base) {
+                continue;
+            }
+            if ($this->matchesMime($sibling, $ctx->mimeTypes())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ── Collection ────────────────────────────────────────────────────────
@@ -330,7 +381,7 @@ class BatchDocumentRunner {
         }
         // Our own output is text too, and it lands in the tree we are walking.
         // Left in, each run would feed the previous run's output back through
-        // and grow another generation of a.summary.summary.md every night.
+        // and grow another generation of a.txt.summary.md.summary.md every night.
         $suffix = $ctx->suffix();
         if ($suffix !== '' && str_ends_with($file->getName(), $suffix)) {
             return false;
@@ -491,7 +542,7 @@ class BatchDocumentRunner {
         }
         try {
             $folder = $this->outputFolder($ctx, $file);
-            $name = self::outputName($ctx->operation, $file, $ctx->options);
+            $name = $this->resolveOutputName($ctx, $folder, $file);
             if (!$folder->nodeExists($name)) {
                 return false;
             }
@@ -1189,7 +1240,7 @@ class BatchDocumentRunner {
      */
     private function writeOutput(BatchContext $ctx, File $source, string $response): string {
         $folder = $this->outputFolder($ctx, $source);
-        $name = self::outputName($ctx->operation, $source, $ctx->options);
+        $name = $this->resolveOutputName($ctx, $folder, $source);
 
         $output = null;
         if ($folder->nodeExists($name)) {
