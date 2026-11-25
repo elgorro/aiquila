@@ -175,7 +175,7 @@ the chat model:
 |---|---|---|
 | `mistral_transcribe_model` | `voxtral-mini-latest` | `core:audio2text`, subtitles, and the listening half of voice chat and audio translation |
 | `mistral_tts_model` | `voxtral-mini-tts-2603` | `core:text2speech`, and the speaking half of voice chat and audio translation |
-| `mistral_tts_voice` | — | Preset voice id; blank lets Mistral choose |
+| `mistral_tts_voice` | `gb_jane_neutral` (British English) | The voice: a preset, or the id of a voice saved in the Mistral workspace. The Assistant task's `voice` input overrides it |
 | `mistral_image_model` | `mistral-medium-latest` | The conversation model that drives image generation |
 
 All four are admin-scope. Audio calls do not use the shared `api_timeout`, because
@@ -265,7 +265,28 @@ window together with the audio, and tunes biasing for English.
 
 ### Speech
 
-`POST /v1/audio/speech`, asking for `mp3`. Mistral documents a JSON body
+`POST /v1/audio/speech`, asking for `mp3`. Mistral requires a voice: a request with
+neither `voice_id` nor `ref_audio` gets a `400`. The app offers no reference
+recordings, so it always sends `voice_id`, falling back to the default when the
+setting is blank.
+
+A preset voice speaks the language it was made for; there is no language
+parameter. An instance that is not English should therefore set one of the
+[presets](https://docs.mistral.ai/studio/audio/text-to-speech/voices) for its
+language. The setting is free text because saved voices are allowed as well.
+
+Voice and model have to match:
+
+| Presets | Voxtral 2 (`voxtral-mini-tts-2603`) | Voxtral 3 (`voxtral-mini-tts-3-0`) |
+|---|---|---|
+| Voxtral 2: `gb_jane_neutral`, `en_paul_neutral`, `fr_marie_neutral`, … (English and French) | ✓ | ✓ |
+| Voxtral 3: `voice_447`, `voice_481`, … (more languages) | `400`, `voice is not supported` | ✓ |
+
+That is why the default voice is a Voxtral 2 preset. A `429` with code `1300` and
+`x-ratelimit-limit-req-minute: 0` means the workspace's plan does not include the
+model.
+
+Mistral documents a JSON body
 carrying base64 under `audio_data`, while the OpenAI-shaped route it mirrors
 answers with the bytes directly; `decodeSpeechBody()` accepts either. The result
 is raw bytes, which is what TaskProcessing wants — file outputs are returned as

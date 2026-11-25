@@ -21,6 +21,9 @@ class MistralProviderTest extends TestCase {
     private $logger;
     private MistralProvider $provider;
 
+    /** @var array<string, string> app config */
+    private array $appConfig = [];
+
     protected function setUp(): void {
         $this->clientService = $this->createStub(IClientService::class);
         $this->client        = $this->createStub(IClient::class);
@@ -31,7 +34,9 @@ class MistralProviderTest extends TestCase {
         $this->clientService->method('newClient')->willReturnCallback(fn () => $this->client);
         $this->credentials->method('getApiKey')->willReturn('test-key');
         // Config defaults: getAppValue($app, $key, $default) -> $default; getUserValue -> ''.
-        $this->config->method('getAppValue')->willReturnArgument(2);
+        $this->config->method('getAppValue')->willReturnCallback(
+            fn (string $app, string $key, string $default = ''): string => $this->appConfig[$key] ?? $default
+        );
         $this->config->method('getUserValue')->willReturn('');
 
         $this->provider = new MistralProvider(
@@ -862,6 +867,32 @@ class MistralProviderTest extends TestCase {
         $this->client->method('post')->willReturn($response);
 
         $this->assertSame("ID3\x03 raw mp3", $this->provider->synthesizeSpeech('Hello', 'u')['audio']);
+    }
+
+    /** Mistral refuses a request with no voice, so one always goes out. */
+    public function testSynthesizeSpeechAlwaysNamesAModelAndAVoice(): void {
+        $bodies = [];
+        $this->client->method('post')->willReturnCallback(
+            function (string $u, array $o) use (&$bodies): IResponse {
+                $bodies[] = json_decode($o['body'], true);
+                return $this->jsonResponse(['audio_data' => base64_encode('mp3')]);
+            }
+        );
+
+        // Nothing set, saved blank, a blank task option, then a configured voice and model.
+        $this->provider->synthesizeSpeech('Hello', 'u');
+        $this->appConfig['mistral_tts_model'] = '';
+        $this->appConfig['mistral_tts_voice'] = '';
+        $this->provider->synthesizeSpeech('Hello', 'u', ['voice' => '']);
+        $this->appConfig['mistral_tts_model'] = 'voxtral-mini-tts-latest';
+        $this->appConfig['mistral_tts_voice'] = 'voice_481';
+        $this->provider->synthesizeSpeech('Hallo', 'u');
+
+        $this->assertSame([
+            [MistralProvider::DEFAULT_TTS_MODEL, MistralProvider::DEFAULT_TTS_VOICE],
+            [MistralProvider::DEFAULT_TTS_MODEL, MistralProvider::DEFAULT_TTS_VOICE],
+            ['voxtral-mini-tts-latest', 'voice_481'],
+        ], array_map(static fn (array $b): array => [$b['model'], $b['voice_id']], $bodies));
     }
 
     public function testSynthesizeSpeechRejectsBlankTextWithoutCallingTheApi(): void {
