@@ -51,7 +51,7 @@ abstract class AbstractCloudClaudeProvider extends ClaudeSDKService {
     public const AUTH_ADC = 'adc';
 
     /** Settings inherited from the Claude API card, re-keyed per provider. */
-    private const INHERITED_FIELDS = ['effort', 'thinking', 'thinking_budget', 'task_budget', 'task_effort', 'task_thinking', 'max_tokens'];
+    private const INHERITED_FIELDS = ['effort', 'thinking', 'thinking_budget', 'task_budget', 'task_effort', 'task_thinking', 'structured_outputs', 'max_tokens'];
 
     private ?BaseClient $client = null;
 
@@ -332,7 +332,7 @@ abstract class AbstractCloudClaudeProvider extends ClaudeSDKService {
         }
         $fields[] = $model;
 
-        // Thinking, effort and the token cap mean exactly what they mean on the
+        // Thinking, effort, structured outputs and the token cap mean exactly what they mean on the
         // Claude API card, so they are taken from there and only re-keyed.
         foreach (parent::getSettingsSchema() as $field) {
             if (!in_array($field['id'] ?? null, self::INHERITED_FIELDS, true)) {

@@ -301,6 +301,19 @@ class ClaudeSDKServiceBatchTest extends TestCase {
         $this->assertArrayNotHasKey('format', $svc->lastBatchRequests[0]['params']['outputConfig'] ?? []);
     }
 
+    /**
+     * Switched off (an organisation with CMEK), the schema stays out on every
+     * model; "true" and "1" both mean on, and unset is on.
+     */
+    public function testTheStructuredOutputsSettingKeepsTheSchemaOut(): void {
+        foreach (['0' => false, 'false' => false, '1' => true, 'true' => true] as $value => $expected) {
+            $svc = $this->makeService(['model' => 'claude-fable-5-2', 'structured_outputs' => (string)$value]);
+            $svc->submitBatch([['custom_id' => 'f1', 'messages' => [['role' => 'user', 'content' => 'q']], 'options' => ['json_schema' => ['type' => 'object']]]]);
+
+            $this->assertSame($expected, isset($svc->lastBatchRequests[0]['params']['outputConfig']['format']), "structured_outputs = $value");
+        }
+    }
+
     // ── Multi-request transport ───────────────────────────────────────────
 
     public function testSubmitBatchBuildsOneEntryPerRequest(): void {

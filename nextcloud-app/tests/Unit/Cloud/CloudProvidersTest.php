@@ -192,7 +192,7 @@ class CloudProvidersTest extends TestCase {
                 $this->assertStringStartsWith($id . '_', $field['secret'], $field['id']);
             }
         }
-        foreach (['auth_mode', 'model', 'effort', 'thinking', 'max_tokens'] as $expected) {
+        foreach (['auth_mode', 'model', 'effort', 'thinking', 'structured_outputs', 'max_tokens'] as $expected) {
             $this->assertContains($expected, $ids);
         }
         foreach (['service_tier', 'speed_fast', 'batch_output_300k', RequestMetadataService::ENABLED_KEY] as $absent) {

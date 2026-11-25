@@ -818,6 +818,11 @@ runs, allow only what the job needs, and prefer read-only tools. The run log lis
 each tool call. With **Save the answer to** set, the answer replaces that file on
 every run.
 
+If your Anthropic organisation uses customer-managed encryption keys (CMEK), turn off
+**Structured outputs for data extraction** on the Claude card before using
+`docs:extract` with a Fable or Mythos model: Anthropic refuses structured outputs on
+them there. Extraction then asks for JSON instead, and checks every answer as before.
+
 The document tasks only redo a file when it changed since its result was written,
 unless `force` is set, and never process a result that a document task wrote. A run handles up to 200
 documents; the rest wait for the next run. `vision:classify` needs a `vision` provider.
