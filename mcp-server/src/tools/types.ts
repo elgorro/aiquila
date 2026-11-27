@@ -65,12 +65,18 @@ export const FolderPathSchema = z.object({
 });
 
 const MAX_FILE_SIZE = parseInt(process.env.MCP_MAX_FILE_SIZE || '', 10) || 1024 * 1024 * 1024;
+const FILE_TOO_LARGE = `File content exceeds maximum size of ${MAX_FILE_SIZE} bytes`;
 
 export const FileContentSchema = z.object({
   path: z.string().describe('The file path in Nextcloud'),
   content: z
     .string()
-    .max(MAX_FILE_SIZE, `File content exceeds maximum size of ${MAX_FILE_SIZE} bytes`)
+    // A string's length counts UTF-16 code units, and its UTF-8 encoding is never shorter,
+    // so this cheap check only rejects what the byte check below would reject too. It also
+    // advertises the bound as `maxLength` in the tool's input schema.
+    .max(MAX_FILE_SIZE, FILE_TOO_LARGE)
+    // The limit is in bytes of the UTF-8 the content is sent and stored as.
+    .refine((content) => Buffer.byteLength(content, 'utf8') <= MAX_FILE_SIZE, FILE_TOO_LARGE)
     .describe(
       'The content to write to the file: its text, or its bytes in base64 when encoding is "base64"'
     ),

@@ -344,6 +344,27 @@ describe('MCP Tools', () => {
       vi.resetModules();
     });
 
+    it('counts MCP_MAX_FILE_SIZE in UTF-8 bytes, not characters', async () => {
+      process.env.MCP_MAX_FILE_SIZE = '10';
+      vi.resetModules();
+      const { FileContentSchema } = await import('../tools/types.js');
+
+      // 6 UTF-16 code units but 12 bytes: 'ä' is 2, '€' is 3, '😀' is 4 (2 code units)
+      const tooLarge = FileContentSchema.safeParse({ path: '/t.txt', content: 'ä€😀abc' });
+      expect(tooLarge.success).toBe(false);
+      expect(tooLarge.error?.issues[0].message).toBe(
+        'File content exceeds maximum size of 10 bytes'
+      );
+      // An emoji counts as 4 bytes, not 2 code units: 10 bytes fit, 11 do not
+      const fits = FileContentSchema.safeParse({ path: '/t.txt', content: '😀😀ab' });
+      expect(fits.success).toBe(true);
+      const over = FileContentSchema.safeParse({ path: '/t.txt', content: '😀😀abc' });
+      expect(over.success).toBe(false);
+
+      delete process.env.MCP_MAX_FILE_SIZE;
+      vi.resetModules();
+    });
+
     it('should accept content within MCP_MAX_FILE_SIZE', async () => {
       process.env.MCP_MAX_FILE_SIZE = '10';
       vi.resetModules();

@@ -44,7 +44,7 @@ acts as them, so `NEXTCLOUD_USER` and `NEXTCLOUD_PASSWORD` are not needed; set
 
 Optional:
 
-- `MCP_MAX_FILE_SIZE` - Maximum `write_file` content length in bytes (default `1073741824` = 1 GB)
+- `MCP_MAX_FILE_SIZE` - Maximum `write_file` content length in UTF-8 bytes (default `1073741824` = 1 GB)
 - `MCP_MAX_EMBEDDED_FILE_SIZE` - Largest binary file or image `read_file`, `get_file_content`, `analyze_image` and `mail_get_attachment` return (as an [embedded resource](tools/system-tools.md#binary-files) or an image block), and largest file `resources/read` returns, in bytes (default `20971520` = 20 MB). A positive integer; any other value is ignored for the default
 - `LOG_LEVEL` - Log verbosity sent to stderr: `trace`, `debug`, `info` (default), `warn`, `error`, `fatal`
 - `MCP_RATE_LIMIT` - HTTP only: `tools/call` and `resources/read` messages per minute per signed-in user, or per client address without OAuth (default `300`; `0` disables). Over the limit the server answers `429` with `Retry-After`
