@@ -1,6 +1,6 @@
 name: Documentation
 description: Something in the docs is wrong, missing or unclear
-labels: ['type:docs', 'priority:medium']
+type: Docs
 body:
   - type: markdown
     attributes:

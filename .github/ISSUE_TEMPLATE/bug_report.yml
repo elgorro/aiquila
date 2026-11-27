@@ -1,6 +1,6 @@
 name: Bug report
 description: Something doesn't work the way it should
-labels: ['type:bug', 'priority:medium']
+type: Bug
 body:
   - type: markdown
     attributes:

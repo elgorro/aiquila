@@ -152,7 +152,8 @@ in the same PR — not a follow-up.
 Work turns up things outside the task: bugs, stale docs, missing tests, upstream
 drift, follow-up ideas. Don't leave them in the chat transcript. For each one, offer to:
 
-- **create** an issue, labelled per **Issue labels** below, with a milestone;
+- **create** an issue with a type and component labels per **Issue types, fields and
+  labels** below, and a milestone;
 - **update** an existing issue that already covers it, with a comment that adds the
   new evidence;
 - **link** related issues and PRs (`Related to #N`, or a closing keyword when the PR
@@ -336,39 +337,72 @@ much harder.
 (`.github/workflows/claude-code-review.yml`). `dependabot[bot]` is allow-listed; a new
 bot needs adding there or it fails with `Workflow initiated by non-human actor`.
 
-### Issue labels
+### Issue types, fields and labels
 
-Three independent axes, all applied as labels:
+Each issue is classified on three axes, each with its own mechanism:
 
-| Axis | Labels |
-|---|---|
-| Type (exactly one) | `type:bug`, `type:feature`, `type:docs`, `type:chore` |
-| Component (one or more) | `component:mcp`, `component:nextcloud`, `component:infrastructure` |
-| Priority (exactly one) | `priority:critical`, `priority:high`, `priority:medium`, `priority:low` |
+| Axis | Mechanism | Values |
+|---|---|---|
+| Kind of work (exactly one) | Issue type | `Bug`, `Feature`, `Docs`, `Chore` |
+| Component (one or more) | Labels | `component:mcp`, `component:nextcloud`, `component:infrastructure` |
+| Urgency (exactly one, set at triage) | `Priority` issue field | `Urgent`, `High`, `Medium`, `Low` |
 
-`security` and `question` cut across all three — `question` means the approach is
-still being decided, not that the issue is a support request. `dependencies`,
+Pick the type by how the issue gets handled: a `Bug` needs a repro and a regression
+test, a `Feature` needs design and docs, `Docs` follows the documentation rules above,
+and a `Chore` (tooling, CI, dependencies, refactoring, releases) needs neither. Types
+and fields are defined on the `elgorro` account, so they apply to all its repos.
+Changing them needs the `user` token scope (`gh auth refresh -s user`). Don't add a type
+for anything that cuts across the others. That belongs in a label.
+
+The other issue fields are optional:
+
+- **Effort** (`High`, `Medium`, `Low`) is a rough size estimate. Read it next to
+  Priority when choosing what goes into a milestone.
+- **Target date** is for work tied to an outside date, such as an upstream release or
+  end of life. It is a soft target, not a deadline. Milestones carry no due dates.
+- **Start date** is left unset.
+
+Types and fields exist on issues only. PRs carry the component labels and take their
+type from the Conventional Commits prefix in the title.
+
+`security` and `question` are labels that cut across all three axes. `question` means
+the approach is still being decided, not that the issue is a support request (support
+requests belong in Discussions). `dependencies`,
 `javascript`, `php`, `go`, `docker` and `github_actions` come from Dependabot; do not
 rename them, `.github/dependabot.yml` sets no `labels:` key so they rely on
 Dependabot's defaults. Renaming `good first issue` or `help wanted` drops the repo
 out of GitHub's contributor-discovery listings.
 
-GitHub's native **Issue Types** are an organization-only feature and `elgorro` is a
-personal account (`gh api orgs/elgorro/issue-types` → 404), so labels are the
-mechanism here. Don't re-propose issue types without also proposing an org transfer.
-
-Every open issue carries a type and a priority. Each of the four issue forms in
-`.github/ISSUE_TEMPLATE/` applies one type plus a `priority:medium` baseline. Blank
-issues are off for everyone but maintainers. `gh issue create` and the API bypass the
-forms, so pass the labels with `--label` and use the matching form's headings. To find
-issues missing either axis:
+Each of the four issue forms in `.github/ISSUE_TEMPLATE/` sets its type with the
+top-level `type:` key. A form cannot set an issue field, so a new issue arrives with
+no Priority, and an empty Priority means the issue is untriaged. Blank issues are off
+for everyone but maintainers. `gh issue create` and the API bypass the forms, so pass
+`--type` and use the matching form's headings. `gh` has no flag for issue fields, so set
+Priority in the sidebar or through GraphQL:
 
 ```bash
-gh issue list --state open --limit 200 --json number,title,labels \
-  --jq '.[] | select(([.labels[].name] | any(startswith("type:")) | not)
-               or ([.labels[].name] | any(startswith("priority:")) | not))
+# Field and option IDs
+gh api graphql -f query='{repository(owner:"elgorro",name:"aiquila"){issueFields(first:10){nodes{
+  ... on IssueFieldSingleSelect{id name options{id name}} ... on IssueFieldDate{id name}}}}}'
+# Set a single-select field on one issue (issue node ID from `gh issue view <N> --json id`)
+gh api graphql -f query='mutation{setIssueFieldValue(input:{issueId:"<issue id>",
+  issueFields:[{fieldId:"<field id>",singleSelectOptionId:"<option id>"}]}){clientMutationId}}'
+```
+
+Triage: every open issue has a type and a Priority. To find the ones that don't:
+
+```bash
+gh api graphql --paginate -f query='query($endCursor:String){repository(owner:"elgorro",name:"aiquila"){
+  issues(states:OPEN,first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{number title
+  issueType{name} issueFieldValues(first:10){nodes{... on IssueFieldSingleSelectValue{
+  field{... on IssueFieldSingleSelect{name}}}}}}}}}' \
+  --jq '.data.repository.issues.nodes[]
+        | select(.issueType == null or ([.issueFieldValues.nodes[].field.name] | index("Priority") | not))
         | "\(.number) \(.title)"'
 ```
+
+Search with `type:Bug`, and use the `Priority` field in a project view or the issue
+list's filter bar.
 
 To rename a label, use `gh label edit <old> --name <new>` — it preserves every
 existing assignment. Creating a new label and deleting the old one loses them all.
