@@ -327,6 +327,78 @@ class McpClientServiceTest extends TestCase {
         $this->assertSame('sse-session-456', $this->headerValue($captured[2], 'Mcp-Session-Id'));
     }
 
+    /**
+     * A JSON-answering fake server: initialize, the initialized notification,
+     * then each tools/list request is answered by $page with its params.
+     *
+     * @param \Closure(array<string, mixed>): array<string, mixed> $page params => JSON-RPC response members
+     * @param list<array<string, mixed>> $listParams collects each tools/list request's params
+     */
+    private function pagingService(\Closure $page, array &$listParams): McpClientService {
+        $service = new McpClientService($this->mapper, $this->logger, $this->credentials, $this->urlGenerator, $this->locking, $this->appManager);
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use ($page, &$listParams): MockResponse {
+            $body = $this->requestBody($options);
+            if (!isset($body['id'])) {
+                return new MockResponse('', ['http_code' => 202]);
+            }
+            $members = $body['method'] === 'initialize'
+                ? ['result' => ['protocolVersion' => '2025-06-18']]
+                : $page($listParams[] = $body['params'] ?? []);
+            return new MockResponse(
+                json_encode(['jsonrpc' => '2.0', 'id' => $body['id']] + $members),
+                ['http_code' => 200, 'response_headers' => ['content-type' => ['application/json']]]
+            );
+        });
+        (new \ReflectionProperty(McpClientService::class, 'httpClient'))->setValue($service, $client);
+        return $service;
+    }
+
+    /** MCP Pagination: nextCursor is followed until absent, an empty string included. */
+    public function testListToolsReadsEveryPage(): void {
+        $params = [];
+        $service = $this->pagingService(fn (array $p): array => ['result' => match ($p['cursor'] ?? null) {
+            null => ['tools' => [['name' => 'a']], 'nextCursor' => 'opaque=='],
+            'opaque==' => ['tools' => [['name' => 'b']], 'nextCursor' => ''],
+            '' => ['tools' => [['name' => 'c']]],
+        }], $params);
+
+        $tools = $service->listTools($this->makeServer());
+
+        $this->assertSame(['a', 'b', 'c'], array_column($tools, 'name'));
+        $this->assertSame([[], ['cursor' => 'opaque=='], ['cursor' => '']], $params);
+    }
+
+    public function testAnInvalidCursorOnALaterPageFailsTheList(): void {
+        $params = [];
+        $service = $this->pagingService(fn (array $p): array => isset($p['cursor'])
+            ? ['error' => ['code' => -32602, 'message' => 'Invalid cursor']]
+            : ['result' => ['tools' => [['name' => 'a']], 'nextCursor' => 'x']], $params);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageIs('tools/list page 2: JSON-RPC error -32602: Invalid cursor');
+        $service->listTools($this->makeServer());
+    }
+
+    public function testAServerThatKeepsPagingIsCutOff(): void {
+        $params = [];
+        $n = 0;
+        $service = $this->pagingService(function () use (&$n): array {
+            return ['result' => ['tools' => [], 'nextCursor' => 'c' . ++$n]];
+        }, $params);
+
+        try {
+            $service->listTools($this->makeServer());
+            $this->fail('expected the list to fail');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('more than ' . McpClientService::MAX_TOOL_PAGES . ' pages', $e->getMessage());
+        }
+        $this->assertCount(McpClientService::MAX_TOOL_PAGES, $params);
+
+        $looping = $this->pagingService(fn (): array => ['result' => ['tools' => [], 'nextCursor' => 'same']], $params);
+        $this->expectExceptionMessageIsOrContains('the same cursor twice');
+        $looping->listTools($this->makeServer());
+    }
+
     public function testTestConnectionSuccess(): void {
         $server = $this->makeServer();
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace OCA\AIquila\Flow;
 
+use OCA\AIquila\Batch\BatchDocumentRunner;
 use OCA\AIquila\Service\ImageOptimizer;
 use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
@@ -13,6 +14,9 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
+use OCP\SystemTag\ISystemTagManager;
+use OCP\SystemTag\ISystemTagObjectMapper;
+use OCP\SystemTag\TagNotFoundException;
 use Psr\Log\LoggerInterface;
 use OCA\AIquila\Service\UsageStatService;
 
@@ -23,6 +27,11 @@ use OCA\AIquila\Service\UsageStatService;
  * user has selected, within the admin's access rules — the same as a chat. The
  * answer goes to `<name>.aiquila.md` in the same folder, replacing an earlier
  * one, so re-running a rule refreshes rather than piles up.
+ *
+ * Only an earlier answer is replaced. Answers carry the batch runner's hidden
+ * output tag; a file of that name without it is the user's, and the rule is
+ * skipped before anything is sent. Answers written before the tag existed are
+ * recognised by their own heading and footer.
  */
 class FlowProcessor {
     /** Text beyond this is cut off before it reaches the model. */
@@ -38,6 +47,8 @@ class FlowProcessor {
         private ITimeFactory $time,
         private UsageStatService $usageStats,
         private LoggerInterface $logger,
+        private ISystemTagManager $tagManager,
+        private ISystemTagObjectMapper $tagObjectMapper,
     ) {
     }
 
@@ -59,6 +70,18 @@ class FlowProcessor {
         };
         if ($kind === null) {
             $this->logger->info('AIquila Flow: file type not supported', ['fileId' => $fileId, 'mime' => $mime]);
+            return null;
+        }
+
+        $parent = $file->getParent();
+        if (!$parent instanceof Folder || !$parent->isCreatable()) {
+            $this->logger->info('AIquila Flow: cannot write next to the file', ['fileId' => $fileId]);
+            return null;
+        }
+        $name = $file->getName() . AIquilaOperation::RESULT_SUFFIX;
+        if (!$this->isWritable($parent, $name, $file)) {
+            // Checked before the model call, so the user's file costs no request.
+            $this->logger->info('AIquila Flow: ' . $name . ' already exists and was not written by AIquila; skipped', ['fileId' => $fileId]);
             return null;
         }
 
@@ -87,7 +110,7 @@ class FlowProcessor {
             return null;
         }
 
-        return $this->write($file, (string)($result['response'] ?? ''), $config, $provider);
+        return $this->write($file, $parent, $name, (string)($result['response'] ?? ''), $config, $provider);
     }
 
     private function prompt(FlowConfig $config, string $kind): string {
@@ -119,18 +142,16 @@ class FlowProcessor {
         return $provider->askWithDocument($prompt, base64_encode($file->getContent()), 'application/pdf', $file->getName(), $userId);
     }
 
-    private function write(File $file, string $answer, FlowConfig $config, LLMProviderInterface $provider): ?string {
-        $parent = $file->getParent();
-        if (!$parent instanceof Folder || !$parent->isCreatable()) {
-            $this->logger->info('AIquila Flow: cannot write next to the file', ['fileId' => $file->getId()]);
-            return null;
-        }
-
-        $name = $file->getName() . AIquilaOperation::RESULT_SUFFIX;
+    private function write(File $file, Folder $parent, string $name, string $answer, FlowConfig $config, LLMProviderInterface $provider): ?string {
         $heading = $config->action === FlowConfig::ACTION_ASK ? '> ' . str_replace("\n", "\n> ", $config->prompt) . "\n\n" : '';
         $content = '# ' . $file->getName() . "\n\n" . $heading . trim($answer) . "\n\n---\n"
             . '*Written by AIquila (' . $provider->getLabel() . ') on ' . gmdate('Y-m-d H:i') . " UTC.*\n";
 
+        // Asked again: the model call may have taken a while.
+        if (!$this->isWritable($parent, $name, $file)) {
+            $this->logger->info('AIquila Flow: ' . $name . ' already exists and was not written by AIquila; skipped', ['fileId' => $file->getId()]);
+            return null;
+        }
         if ($parent->nodeExists($name)) {
             $target = $parent->get($name);
             if (!$target instanceof File) {
@@ -140,6 +161,52 @@ class FlowProcessor {
         } else {
             $target = $parent->newFile($name, $content);
         }
+        $this->markOutput($target);
         return $target->getPath();
+    }
+
+    /**
+     * Whether $name in $parent is free or holds an earlier answer: it carries
+     * the output tag, or, written before the tag existed, starts with the
+     * source's heading and ends with AIquila's footer.
+     */
+    private function isWritable(Folder $parent, string $name, File $source): bool {
+        if (!$parent->nodeExists($name)) {
+            return true;
+        }
+        $target = $parent->get($name);
+        if (!$target instanceof File) {
+            return false;
+        }
+        $tagId = $this->outputTagId(false);
+        if ($tagId !== '' && $this->tagObjectMapper->haveTag([(string)$target->getId()], 'files', $tagId)) {
+            return true;
+        }
+        return self::isLegacyAnswer($target->getContent(), $source->getName());
+    }
+
+    /** Whether content has the shape of an answer this class wrote for $sourceName. */
+    public static function isLegacyAnswer(string $content, string $sourceName): bool {
+        return str_starts_with($content, '# ' . $sourceName . "\n\n")
+            && preg_match('/\n---\n\*Written by AIquila \(.*\) on \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC\.\*\n?$/', $content) === 1;
+    }
+
+    /** Tag an answer as an output, so a batch walk skips it and the next run may replace it. */
+    private function markOutput(File $target): void {
+        try {
+            $tagId = $this->outputTagId(true);
+            $this->tagObjectMapper->assignTags((string)$target->getId(), 'files', [$tagId]);
+        } catch (\Throwable $e) {
+            $this->logger->warning('AIquila Flow: could not tag the result file', ['file' => $target->getPath(), 'error' => $e->getMessage()]);
+        }
+    }
+
+    /** The output tag's id; '' when it does not exist and $create is false. */
+    private function outputTagId(bool $create): string {
+        try {
+            return $this->tagManager->getTag(BatchDocumentRunner::OUTPUT_TAG, false, false)->getId();
+        } catch (TagNotFoundException) {
+            return $create ? $this->tagManager->createTag(BatchDocumentRunner::OUTPUT_TAG, false, false)->getId() : '';
+        }
     }
 }

@@ -190,6 +190,14 @@ after the first user message, `available_tools_limit_exceeded`). It starts over,
 when the conversation moves to a model or provider without the feature. There the
 tools go out as they are, and earlier changes are replayed as text.
 
+Two turns of one conversation can run at once (two tabs, or a retry while a stream
+is still running). Every write of `tool_state` is a compare-and-swap on
+`aiquila_conversations.tool_state_version`, so a turn that planned from a state
+another turn has since replaced reads the new state and plans again. After three
+lost attempts it leaves the state alone and goes out as if there were none: its
+tools as they are and the history as text, which is always correct and only misses
+the cache.
+
 ## Turning it off
 
 Admin settings → **AIquila** → **Defaults** → *Automatic prompt caching*. On by

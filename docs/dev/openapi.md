@@ -27,7 +27,12 @@ composer openapi
 version field: its schemas still use the OpenAPI 3.0 `nullable` keyword, which 3.1 removed
 in favour of JSON Schema 2020-12. The script rewrites `nullable: true` as
 `type: [T, "null"]` (or an `anyOf` with `{"type": "null"}`), and turns an empty
-`components.schemas` into an object. Running `vendor/bin/generate-spec` alone writes a 3.0.3
+`components.schemas` into an object. The extractor also writes PHPDoc `mixed` as
+`{"type": "object"}`, which accepts objects only. The script replaces each schema that is
+exactly that with `{}`, the JSON Schema for any value. Only `mixed` produces it: `object`
+and `stdClass` come out with `additionalProperties: true`, and a bare `array` is an
+extractor error. So `array<string, mixed>` is a map whose values can be anything. Use a
+`@psalm-type` shape where the value has a known structure. Running `vendor/bin/generate-spec` alone writes a 3.0.3
 spec that CI rejects as out of date.
 
 Commit all three output files together with any annotation changes.

@@ -147,6 +147,11 @@ shows, and why, is in
 - **Claude Platform on AWS and on Google Cloud** use the Claude Models API, with
   the same fields as the Claude API card. A 403 on the listing names the IAM
   permission (`aws-external-anthropic:ListModels`) or role (`roles/claude.user`).
+  On Google Cloud, a request whose error says the model "is not available for this
+  organization's inference configuration" is shown as a sentence that names the
+  model and says to pick another or ask the Anthropic organization's
+  administrator. It is matched on that text, whatever status comes with it
+  (`ClaudeSDKService::platformErrorMessage()`).
 - **Both Bedrock cards** ask the Bedrock control plane
   (`bedrock.{region}.amazonaws.com`) with the card's credentials:
   `ListFoundationModels` for the Anthropic models and `ListInferenceProfiles` for

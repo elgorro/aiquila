@@ -775,7 +775,10 @@ with any file trigger and conditions, for example *File created* with
 
 The answer is saved as `<file name>.aiquila.md` in the same folder, replacing the
 previous one, with the prompt quoted for **Ask a question**. These result files never
-trigger the operation themselves.
+trigger the operation themselves, and batch runs and coworkers do not read them. A
+file of that name that AIquila did not write is left alone: the rule is skipped for
+that file before anything is sent, and the reason is logged. Rename the file to let
+the rule write its answer.
 
 The work runs in a background job, so cron has to be running, and results arrive
 on the next cron run rather than during the upload. The file is processed as its
@@ -807,7 +810,7 @@ or build a **Custom coworker**. Each coworker has:
 | `vision:classify` | Labels each image and stores the labels as collaborative tags, so they can be searched and filtered in Files | `maxTags` (1–30, default 8), `recursive` |
 | `docs:summarize` | Writes `<file>.summary.md` beside each document, for example `report.pdf.summary.md` (`text/*`, JSON, PDF and Office by default; PDFs and Office documents need the Claude API provider, Office documents also Nextcloud Office) | `style` (`brief` (default), `detailed`, `bullets`), `recursive`, `force`, `outputFolder`, `mimeTypes`, `maxBytesPerFile` (text files, default 1 MiB; PDFs up to 32 MB) |
 | `docs:translate` | Writes `<file>.<language>.md` beside each document | `targetLanguage`, plus the options of `docs:summarize` except `style` |
-| `docs:extract` | Extracts the fields you list into one table, `<tableName>.csv` (default `extracted.csv`), with a row per document, in the output folder or in each document's folder. A rerun updates the rows of documents that changed; changing the fields extracts every document again. A document whose answer does not fit the fields is reported as invalid and tried again next run | `fields` (1–30 of `{name, type, description}`; type `string`, `number`, `integer`, `boolean` or `date`), `tableName`, plus the options of `docs:summarize` except `style` |
+| `docs:extract` | Extracts the fields you list into one table, `<tableName>.csv` (default `extracted.csv`), with a row per document, in the output folder or in each document's folder. A rerun updates the rows of documents that changed; changing the fields extracts every document again. A document whose answer does not fit the fields is reported as invalid and gets a row with no values and the reason in an `_error` column; it is tried again once the document or the fields change | `fields` (1–30 of `{name, type, description}`; type `string`, `number`, `integer`, `boolean` or `date`), `tableName`, plus the options of `docs:summarize` except `style` |
 | `docs:ask` | Asks your question of each document and writes the answer to `<file>.<outputSuffix>.md`. Changing the question answers every document again | `prompt` (up to 4,000 characters), `outputSuffix` (lowercase letters, digits and hyphens, e.g. `deadlines`), plus the options of `docs:summarize` except `style` |
 | `agent:run` | Runs a prompt, optionally with MCP tools, and keeps the answer as the run summary or writes it to one file | `tools` (allowlist of MCP tool names), `taskBudget` (tokens, at least 20,000) |
 
@@ -828,6 +831,8 @@ them there. Extraction then asks for JSON instead, and checks every answer as be
 The document tasks only redo a file when it changed since its result was written,
 unless `force` is set, and never process a result that a document task wrote. A run handles up to 200
 documents; the rest wait for the next run. `vision:classify` needs a `vision` provider.
+On one that cannot see images, the run stops at the first image with one error,
+instead of failing every image.
 
 Each coworker can be paused, run immediately with **Run now**, and keeps a run
 history with a summary of what it did. Open a run in the history to see its full

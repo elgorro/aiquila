@@ -414,9 +414,7 @@
                     "description": {
                         "type": "string"
                     },
-                    "default": {
-                        "type": "object"
-                    }
+                    "default": {}
                 }
             },
             "SequencePolicy": {
@@ -462,9 +460,7 @@
                     },
                     "arguments": {
                         "type": "object",
-                        "additionalProperties": {
-                            "type": "object"
-                        }
+                        "additionalProperties": {}
                     },
                     "onFailure": {
                         "type": "string",
@@ -1023,18 +1019,14 @@
                                                             "object",
                                                             "null"
                                                         ],
-                                                        "additionalProperties": {
-                                                            "type": "object"
-                                                        }
+                                                        "additionalProperties": {}
                                                     },
                                                     "documents": {
                                                         "type": [
                                                             "object",
                                                             "null"
                                                         ],
-                                                        "additionalProperties": {
-                                                            "type": "object"
-                                                        }
+                                                        "additionalProperties": {}
                                                     },
                                                     "thinkingSummary": {
                                                         "type": [
@@ -1587,21 +1579,15 @@
                                     "properties": {
                                         "userMessage": {
                                             "type": "object",
-                                            "additionalProperties": {
-                                                "type": "object"
-                                            }
+                                            "additionalProperties": {}
                                         },
                                         "assistantMessage": {
                                             "type": "object",
-                                            "additionalProperties": {
-                                                "type": "object"
-                                            }
+                                            "additionalProperties": {}
                                         },
                                         "conversation": {
                                             "type": "object",
-                                            "additionalProperties": {
-                                                "type": "object"
-                                            }
+                                            "additionalProperties": {}
                                         }
                                     }
                                 }
@@ -2327,9 +2313,7 @@
                                     "type": "array",
                                     "items": {
                                         "type": "object",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     }
                                 }
                             }
@@ -2392,9 +2376,7 @@
                                     "type": "array",
                                     "items": {
                                         "type": "object",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     }
                                 }
                             }
@@ -2490,9 +2472,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -2584,9 +2564,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -2721,9 +2699,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -2961,9 +2937,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -3906,9 +3880,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -4632,9 +4604,7 @@
                                     "definition": {
                                         "type": "object",
                                         "description": "`{inputs, steps}`",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     },
                                     "description": {
                                         "type": [
@@ -4803,9 +4773,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -5096,9 +5064,7 @@
                                         ],
                                         "default": null,
                                         "description": "New `{inputs, steps}`",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     },
                                     "description": {
                                         "type": [
@@ -5676,9 +5642,7 @@
                                         "type": "object",
                                         "default": {},
                                         "description": "Optional model parameters (stop_sequences; temperature, top_p and top_k reach only the OpenAI-compatible providers)",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     }
                                 }
                             }
@@ -6716,9 +6680,7 @@
                                             "type": "array",
                                             "items": {
                                                 "type": "object",
-                                                "additionalProperties": {
-                                                    "type": "object"
-                                                }
+                                                "additionalProperties": {}
                                             }
                                         }
                                     }
@@ -6774,9 +6736,7 @@
                                         "type": "object",
                                         "default": {},
                                         "description": "Field id => value pairs",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     },
                                     "makeDefault": {
                                         "type": [
@@ -7477,9 +7437,7 @@
                                         "type": "object",
                                         "default": {},
                                         "description": "Shared options (`recursive`, `force`, `outputFolder`, `maxBytesPerFile`, `mimeTypes`) plus the operation's own (`style` for summarize, `targetLanguage` for translate)",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     },
                                     "mode": {
                                         "type": [
@@ -7828,9 +7786,7 @@
                                     "type": "array",
                                     "items": {
                                         "type": "object",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     }
                                 }
                             }
@@ -7877,9 +7833,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -7959,9 +7913,7 @@
                                             "type": "array",
                                             "items": {
                                                 "type": "object",
-                                                "additionalProperties": {
-                                                    "type": "object"
-                                                }
+                                                "additionalProperties": {}
                                             }
                                         },
                                         "taskTypes": {
@@ -8049,9 +8001,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -8284,9 +8234,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -8366,9 +8314,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -8559,9 +8505,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -8643,9 +8587,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -8727,9 +8669,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -8811,9 +8751,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -8895,9 +8833,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -8991,9 +8927,7 @@
                                     "type": "array",
                                     "items": {
                                         "type": "object",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     }
                                 }
                             }
@@ -9276,9 +9210,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }
@@ -9474,9 +9406,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }

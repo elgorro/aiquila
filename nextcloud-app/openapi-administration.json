@@ -154,9 +154,7 @@
                     "description": {
                         "type": "string"
                     },
-                    "default": {
-                        "type": "object"
-                    }
+                    "default": {}
                 }
             },
             "SequencePolicy": {
@@ -202,9 +200,7 @@
                     },
                     "arguments": {
                         "type": "object",
-                        "additionalProperties": {
-                            "type": "object"
-                        }
+                        "additionalProperties": {}
                     },
                     "onFailure": {
                         "type": "string",
@@ -1736,9 +1732,7 @@
                                     "definition": {
                                         "type": "object",
                                         "description": "`{inputs, steps}`",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     },
                                     "description": {
                                         "type": [
@@ -1934,9 +1928,7 @@
                                         ],
                                         "default": null,
                                         "description": "New `{inputs, steps}`",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     },
                                     "description": {
                                         "type": [
@@ -3076,9 +3068,7 @@
                                             "type": "array",
                                             "items": {
                                                 "type": "object",
-                                                "additionalProperties": {
-                                                    "type": "object"
-                                                }
+                                                "additionalProperties": {}
                                             }
                                         }
                                     }
@@ -3152,9 +3142,7 @@
                                         "type": "object",
                                         "default": {},
                                         "description": "Field id => value pairs",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     },
                                     "makeDefault": {
                                         "type": [
@@ -5650,9 +5638,7 @@
                                     "type": "array",
                                     "items": {
                                         "type": "object",
-                                        "additionalProperties": {
-                                            "type": "object"
-                                        }
+                                        "additionalProperties": {}
                                     }
                                 }
                             }
@@ -5766,9 +5752,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "object",
-                                    "additionalProperties": {
-                                        "type": "object"
-                                    }
+                                    "additionalProperties": {}
                                 }
                             }
                         }

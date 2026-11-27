@@ -187,7 +187,11 @@ never share an output. Earlier releases left the extension out
 (`report.summary.md`). Such an output stays in use, and is updated in place, while
 it carries the `aiquila:output` tag and can belong to one source only. With several documents of that base name in the
 folder it counts for none of them and is left alone, and each gets an output of
-its own. The source is tagged
+its own. Each output records the id of the source it was written for, in the
+file metadata key `aiquila-source`. One output folder can gather documents from
+several folders, so `A/notes.md` and `B/notes.md` map to the same name: whichever
+is written first keeps it, and the other's output is `notes.md.<file id>.summary.md`.
+Outputs written before the key existed count as any source's. The source is tagged
 `aiquila:summarized` / `aiquila:translated` / `aiquila:asked-<hash>` so
 processed files can be filtered in the Files UI.
 
@@ -230,9 +234,15 @@ source's folder when none is set. So there is one table per folder.
   then checked in code (`parseRow()`): the outermost object is taken, a value is
   coerced to its type (`"12.50"` → `12.5`, a real `YYYY-MM-DD` date), and a missing
   field is empty. An answer that holds no object, or a value of the wrong type,
-  fails that file as *invalid*. It gets no row and is tried again on the next run.
+  fails that file as *invalid*. It still gets a row, with every field empty and
+  the reason in `_error`, and the done-tag, so the next run passes it over like a
+  finished document. Without that, a document the model reliably answers wrongly
+  would be sent, and billed, on every run. It is tried again once the document or
+  the fields change.
 - **The table** is RFC 4180 CSV (CRLF, fields quoted when needed) with the
-  columns `file_id`, `file`, the fields, and `extracted_at` (UTC). Rows are keyed
+  columns `file_id`, `file`, the fields, `_error` while any row has a reason in it,
+  and `extracted_at` (UTC). Field names start with a letter, so none can be
+  `_error`. Rows are keyed
   by file id: a rerun replaces a document's row and keeps the others. After a
   schema change, older rows keep their values for the columns that remain, and
   new columns stay empty until the document is extracted again.
@@ -255,7 +265,8 @@ decided during the walk rather than after it:
 - A source whose output is at least as new as itself is skipped, so a nightly
   coworker does not re-bill the whole folder every night. `force` overrides it.
 - An output is never a source. Every output file carries the hidden system tag
-  `aiquila:output`, and the walk skips files that have it, checked in one query
+  `aiquila:output` (so do the `<file>.aiquila.md` answers of Flow rules, which
+  replace only files that have it), and the walk skips files that have it, checked in one query
   per folder. Otherwise each run would summarise the last run's summaries and
   grow another `.summary.md.summary.md` generation every night, and translating a
   folder would translate its summaries too. A file whose name ends in the

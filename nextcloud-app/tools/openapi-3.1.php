@@ -13,6 +13,14 @@ declare(strict_types=1);
  * "null", or an anyOf with a null schema when there is no plain type. An
  * empty components.schemas, written as [] by the extractor, becomes {}.
  *
+ * The extractor also writes PHPDoc `mixed` as {"type": "object"}, which
+ * accepts objects only (JSON Schema Validation 2020-12 §6.1.1), so an
+ * `array<string, mixed>` claimed every value in it was an object. "Any
+ * value" is the empty schema (JSON Schema Core 2020-12 §4.3.2). Only `mixed`
+ * comes out as exactly {"type": "object"}: `object` and `stdClass` carry
+ * `additionalProperties: true`, shapes carry `properties`, and a bare `array`
+ * is an extractor error. So each schema that is exactly that becomes {}.
+ *
  * Usage: php tools/openapi-3.1.php openapi.json [more.json ...]
  */
 
@@ -22,6 +30,9 @@ function convert(mixed $node): mixed {
 	}
 	if (!$node instanceof stdClass) {
 		return $node;
+	}
+	if (get_object_vars($node) === ['type' => 'object']) {
+		return new stdClass();
 	}
 	foreach (get_object_vars($node) as $key => $value) {
 		$node->{$key} = convert($value);

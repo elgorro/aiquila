@@ -221,7 +221,7 @@ class McpClientService {
             $result = $response->toArray(false);
 
             if (isset($result['error'])) {
-                throw new \RuntimeException('JSON-RPC error: ' . ($result['error']['message'] ?? 'unknown'));
+                throw new \RuntimeException('JSON-RPC error' . (isset($result['error']['code']) && is_int($result['error']['code']) ? ' ' . $result['error']['code'] : '') . ': ' . ($result['error']['message'] ?? 'unknown'));
             }
 
             return $result['result'] ?? [];
@@ -424,15 +424,49 @@ class McpClientService {
         ];
     }
 
+    /** Most `tools/list` pages read from one server, so one that never ends cannot hang a request. */
+    public const MAX_TOOL_PAGES = 50;
+
     /**
-     * List tools from a single MCP server.
+     * List tools from a single MCP server, every page of them.
+     *
+     * MCP Pagination (2025-06-18 and 2026-07-28): the page size is the
+     * server's, and `nextCursor` is present while more results exist. Cursors
+     * are opaque; only whether one was sent counts, and an empty string is a
+     * cursor too (2026-07-28). A failed later page (-32602 for an invalid
+     * cursor) fails the whole list instead of leaving it short.
      *
      * @return array Tool definitions
+     * @throws \RuntimeException when a page fails, or the server keeps paging
      */
     public function listTools(McpServer $server): array {
         $this->initialize($server);
-        $result = $this->jsonRpc($server, 'tools/list');
-        return $result['tools'] ?? [];
+        $tools = [];
+        $cursor = null;
+        $seen = [];
+        for ($page = 1; $page <= self::MAX_TOOL_PAGES; $page++) {
+            try {
+                $result = $this->jsonRpc($server, 'tools/list', $cursor === null ? [] : ['cursor' => $cursor]);
+            } catch (\RuntimeException $e) {
+                if ($page === 1) {
+                    throw $e;
+                }
+                throw new \RuntimeException("tools/list page $page: " . $e->getMessage(), 0, $e);
+            }
+            foreach (is_array($result['tools'] ?? null) ? $result['tools'] : [] as $tool) {
+                $tools[] = $tool;
+            }
+            $next = $result['nextCursor'] ?? null;
+            if (!is_string($next)) {
+                return $tools;
+            }
+            if (isset($seen[$next])) {
+                throw new \RuntimeException('tools/list: the server sent the same cursor twice');
+            }
+            $seen[$next] = true;
+            $cursor = $next;
+        }
+        throw new \RuntimeException('tools/list: the server sent more than ' . self::MAX_TOOL_PAGES . ' pages');
     }
 
     /**

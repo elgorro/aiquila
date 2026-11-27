@@ -50,6 +50,9 @@ class ConversationController extends Controller {
     use RequiresUserIdTrait;
     use ErrorResponseTrait;
 
+    /** Plans of one turn's tools against a tool state other turns keep replacing, before it gives up on the state. */
+    private const TOOL_STATE_ATTEMPTS = 3;
+
     private ConversationMapper $conversationMapper;
     private MessageMapper $messageMapper;
     private MessageFileMapper $messageFileMapper;
@@ -1423,45 +1426,65 @@ class ConversationController extends Controller {
         $supported = $tools !== []
             && $provider instanceof ClaudeSDKService
             && $provider->supportsMidConversationToolChanges($this->userId, $options);
-        $state = ToolChanges::decodeState($conversation->getToolState());
+        $byValue = $supported && $provider instanceof ClaudeSDKService && $provider->supportsInlineTools($this->userId, $options);
 
-        if (!$supported) {
-            if ($state !== null) {
-                $this->retireToolChanges($conversation);
+        // Another turn of the same conversation may write the state between
+        // this one's read and write. Each write is a compare-and-swap, so
+        // the loser reads the winner's state and plans again.
+        for ($attempt = 1; $attempt <= self::TOOL_STATE_ATTEMPTS; $attempt++) {
+            if ($attempt > 1) {
+                $this->conversationMapper->reloadToolState($conversation);
             }
-            return ['tools' => $tools, 'messages' => ToolChanges::describeAll($messages)];
+            $state = ToolChanges::decodeState($conversation->getToolState());
+
+            if (!$supported) {
+                if ($state !== null) {
+                    if (!$this->conversationMapper->swapToolState($conversation, null)) {
+                        continue;
+                    }
+                    $this->retireToolChanges($conversation);
+                }
+                return ['tools' => $tools, 'messages' => ToolChanges::describeAll($messages)];
+            }
+
+            $plan = ToolChanges::plan($state, $tools, $byValue);
+            if (!$this->conversationMapper->swapToolState($conversation, ToolChanges::encodeState($plan['state']))) {
+                continue;
+            }
+            if ($plan['reset']) {
+                // A tool was redefined where it cannot be in place, or the
+                // by-value definitions reached their cap: the declared list
+                // starts over and this request rebuilds the cache once. Earlier
+                // changes become text.
+                $this->logger->info('AIquila: conversation tools redefined, starting their state over', ['conversationId' => $conversation->getId()]);
+                $this->retireToolChanges($conversation);
+                $messages = ToolChanges::describeAll($messages);
+            }
+
+            if ($plan['blocks'] !== []) {
+                $row = new MessageEntity();
+                $row->setConversationId($conversation->getId());
+                $row->setRole('system');
+                $row->setContent('');
+                $row->setToolTrace(ToolChanges::encodeBlocks($plan['blocks']));
+                $row->setCreatedAt(time());
+                $this->messageMapper->insert($row);
+                $messages[] = ['role' => 'system', 'content' => $plan['blocks']];
+            }
+            return ['tools' => $plan['tools'], 'messages' => $messages];
         }
 
-        $plan = ToolChanges::plan($state, $tools, $provider->supportsInlineTools($this->userId, $options));
-        if ($plan['reset']) {
-            // A tool was redefined where it cannot be in place, or the
-            // by-value definitions reached their cap: the declared list
-            // starts over and this request rebuilds the cache once. Earlier
-            // changes become text.
-            $this->logger->info('AIquila: conversation tools redefined, starting their state over', ['conversationId' => $conversation->getId()]);
-            $this->retireToolChanges($conversation);
-            $messages = ToolChanges::describeAll($messages);
-        }
-        $conversation->setToolState(ToolChanges::encodeState($plan['state']));
-        $this->conversationMapper->update($conversation);
-
-        if ($plan['blocks'] !== []) {
-            $row = new MessageEntity();
-            $row->setConversationId($conversation->getId());
-            $row->setRole('system');
-            $row->setContent('');
-            $row->setToolTrace(ToolChanges::encodeBlocks($plan['blocks']));
-            $row->setCreatedAt(time());
-            $this->messageMapper->insert($row);
-            $messages[] = ['role' => 'system', 'content' => $plan['blocks']];
-        }
-        return ['tools' => $plan['tools'], 'messages' => $messages];
+        // Other turns kept winning. This turn leaves the state to them and
+        // goes out as if there were none: always correct, just uncached.
+        $this->logger->info('AIquila: conversation tool state kept changing, sending this turn without it', ['conversationId' => $conversation->getId()]);
+        return ['tools' => $tools, 'messages' => ToolChanges::describeAll($messages)];
     }
 
     /**
-     * End a conversation's tool state: its stored change rows become text,
-     * once, so later turns replay what happened without blocks that refer to
-     * a declared list that no longer exists.
+     * Turn a conversation's stored change rows into text, once, so later
+     * turns replay what happened without blocks that refer to a declared
+     * list that no longer exists. Called once the state has been ended or
+     * restarted; the rows are not the state, so no swap guards them.
      */
     private function retireToolChanges(Conversation $conversation): void {
         foreach ($this->messageMapper->findByConversation($conversation->getId(), true) as $msg) {
@@ -1473,8 +1496,6 @@ class ConversationController extends Controller {
             $msg->setToolTrace(null);
             $this->messageMapper->update($msg);
         }
-        $conversation->setToolState(null);
-        $this->conversationMapper->update($conversation);
     }
 
     /**
