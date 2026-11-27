@@ -1524,6 +1524,15 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
     }
 
     /**
+     * A platform's own sentence for an API error only it sends, matched on
+     * the error itself rather than its status, or null. Checked before the
+     * generic sentences, so a 403 or 400 that has a better one gets it.
+     */
+    protected function platformErrorMessage(APIStatusException $e): ?string {
+        return null;
+    }
+
+    /**
      * A 404 on a Messages request means the model: the path is fixed, so the
      * model is the only resource the request names. Rethrown as a
      * ModelUnavailableException carrying the sentence the picker would show.
@@ -1533,7 +1542,7 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
             return;
         }
         $this->logger->warning('AIquila SDK: model not found', ['provider' => $this->getId(), 'model' => $model] + $this->buildErrorLogContext($e));
-        throw new ModelUnavailableException($this->modelNotFoundMessage($model), $model, $e);
+        throw new ModelUnavailableException($this->platformErrorMessage($e) ?? $this->modelNotFoundMessage($model), $model, $e);
     }
 
     /**
@@ -1756,7 +1765,9 @@ class ClaudeSDKService implements LLMProviderInterface, ProviderActionsInterface
      * @return array{string, string}|null
      */
     private function describeSdkException(\Throwable $e): ?array {
+        $platform = $e instanceof APIStatusException ? $this->platformErrorMessage($e) : null;
         return match (true) {
+            $platform !== null => ['Platform error', $platform],
             $e instanceof ModelUnavailableException => ['Model unavailable', $e->getMessage()],
             $e instanceof AuthenticationException => ['Authentication error', 'Invalid API key. Please check your configuration.'],
             $e instanceof PermissionDeniedException => ['Permission denied', $this->permissionDeniedMessage()],

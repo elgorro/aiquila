@@ -6,9 +6,11 @@ declare(strict_types=1);
 namespace OCA\AIquila\Service\Provider\Cloud;
 
 use Anthropic\Core\BaseClient;
+use Anthropic\Core\Exceptions\APIStatusException;
 use Anthropic\Core\Exceptions\PermissionDeniedException;
 use Anthropic\GoogleCloud\Client as GoogleCloudClient;
 use OCA\AIquila\Service\ClaudeModels;
+use OCA\AIquila\Service\Provider\ModelCompatibility;
 use OCA\AIquila\Service\Provider\ProviderSettingsSchema;
 
 /**
@@ -100,6 +102,28 @@ class ClaudePlatformGoogleCloudProvider extends AbstractGoogleClaudeProvider {
      * Access on this platform is the IAM role roles/claude.user (or
      * claude.admin) on the project, so a 403 names the role to grant.
      */
+    /**
+     * "Model {model} is not available for this organization's inference
+     * configuration." The status that comes with it is not documented, so it
+     * is matched on the text: as a 400 it would otherwise reach the user as
+     * the raw API message, and as a 403 or 404 as a sentence about
+     * permissions or a missing model.
+     */
+    protected function platformErrorMessage(APIStatusException $e): ?string {
+        $message = $e->getAPIMessage() ?? '';
+        if (preg_match('/Model\s+(\S*)\s+is not available for this organi[sz]ation[\'’]s inference configuration/i', $message, $m) !== 1) {
+            return null;
+        }
+        $model = trim($m[1], '"\'`') ?: $this->getModel();
+        return ModelCompatibility::unavailable(
+            $model,
+            '',
+            'is not available to this organization on Claude on Google Cloud: its inference configuration does not include the model.',
+            [],
+            'Pick another model on the provider card, or ask an administrator of the Anthropic organization which models it allows.',
+        )->message;
+    }
+
     protected function listingErrorMessage(\Throwable $e): string {
         if ($e instanceof PermissionDeniedException) {
             return 'the Google credentials lack the Claude User role (roles/claude.user) on the project.';

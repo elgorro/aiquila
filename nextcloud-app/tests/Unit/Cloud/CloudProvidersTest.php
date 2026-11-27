@@ -283,6 +283,41 @@ class CloudProvidersTest extends TestCase {
         );
     }
 
+    /**
+     * The inference-configuration error names the model and what to do,
+     * whatever status it comes with, on Claude on Google Cloud only.
+     */
+    public function testGoogleCloudExplainsAModelOutsideTheInferenceConfiguration(): void {
+        $describe = static function (AbstractCloudClaudeProvider $provider, \Throwable $e): ?array {
+            return (new \ReflectionMethod(\OCA\AIquila\Service\ClaudeSDKService::class, 'describeSdkException'))->invoke($provider, $e);
+        };
+        $google = $this->provider(ClaudePlatformGoogleCloudProvider::class);
+        foreach ([400, 403, 404] as $status) {
+            $e = $this->apiError($status, "Model claude-fable-5-2 is not available for this organization's inference configuration.");
+            $described = $describe($google, $e);
+            $this->assertNotNull($described, "status $status");
+            $this->assertSame(
+                'claude-fable-5-2 is not available to this organization on Claude on Google Cloud: its inference configuration does not include the model. '
+                . 'Pick another model on the provider card, or ask an administrator of the Anthropic organization which models it allows.',
+                $described[1],
+                "status $status",
+            );
+        }
+
+        $this->assertNotSame($described[1], $describe($google, $this->apiError(403, 'Permission denied on resource project x.'))[1] ?? null);
+        $this->assertNull($describe($this->provider(VertexProvider::class), $this->apiError(400, "Model x is not available for this organization's inference configuration.")));
+    }
+
+    /** An API error built the way the SDK builds one from a response. */
+    private function apiError(int $status, string $message): \Anthropic\Core\Exceptions\APIStatusException {
+        $body = $this->createStub(\Psr\Http\Message\StreamInterface::class);
+        $body->method('__toString')->willReturn(json_encode(['type' => 'error', 'error' => ['type' => 'invalid_request_error', 'message' => $message]]));
+        $response = $this->createStub(\Psr\Http\Message\ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn($status);
+        $response->method('getBody')->willReturn($body);
+        return \Anthropic\Core\Exceptions\APIStatusException::from(request: $this->createStub(\Psr\Http\Message\RequestInterface::class), response: $response);
+    }
+
     public function testFoundryBuildsTheResourceUrl(): void {
         $this->app['resource_foundry'] = 'my-res';
         $this->keys['foundry'] = 'azure-key';
