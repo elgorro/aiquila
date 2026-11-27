@@ -775,7 +775,10 @@ with any file trigger and conditions, for example *File created* with
 
 The answer is saved as `<file name>.aiquila.md` in the same folder, replacing the
 previous one, with the prompt quoted for **Ask a question**. These result files never
-trigger the operation themselves.
+trigger the operation themselves, and batch runs and coworkers do not read them. A
+file of that name that AIquila did not write is left alone: the rule is skipped for
+that file before anything is sent, and the reason is logged. Rename the file to let
+the rule write its answer.
 
 The work runs in a background job, so cron has to be running, and results arrive
 on the next cron run rather than during the upload. The file is processed as its

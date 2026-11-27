@@ -255,7 +255,8 @@ decided during the walk rather than after it:
 - A source whose output is at least as new as itself is skipped, so a nightly
   coworker does not re-bill the whole folder every night. `force` overrides it.
 - An output is never a source. Every output file carries the hidden system tag
-  `aiquila:output`, and the walk skips files that have it, checked in one query
+  `aiquila:output` (so do the `<file>.aiquila.md` answers of Flow rules, which
+  replace only files that have it), and the walk skips files that have it, checked in one query
   per folder. Otherwise each run would summarise the last run's summaries and
   grow another `.summary.md.summary.md` generation every night, and translating a
   folder would translate its summaries too. A file whose name ends in the

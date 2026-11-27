@@ -20,6 +20,9 @@ use OCP\Files\IRootFolder;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\IUser;
+use OCP\SystemTag\ISystemTag;
+use OCP\SystemTag\ISystemTagManager;
+use OCP\SystemTag\ISystemTagObjectMapper;
 use OCP\WorkflowEngine\IRuleMatcher;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -141,13 +144,28 @@ class FlowTest extends TestCase {
 
     /**
      * @param array<string, bool> $capabilities
+     * @param File|null $existing a file already under the result's name
+     * @param bool $tagged whether $existing carries the output tag
+     * @param ISystemTagObjectMapper|null $tagMapper a mock to set expectations on
      * @return array{FlowProcessor, LLMProviderInterface, Folder}
      */
-    private function processor(File $file, array $capabilities = []): array {
+    private function processor(File $file, array $capabilities = [], ?File $existing = null, bool $tagged = false, ?ISystemTagObjectMapper $tagMapper = null): array {
         $parent = $this->createMock(Folder::class);
         $parent->method('isCreatable')->willReturn(true);
-        $parent->method('nodeExists')->willReturn(false);
+        $parent->method('nodeExists')->willReturn($existing !== null);
+        if ($existing !== null) {
+            $parent->method('get')->willReturn($existing);
+        }
         $file->method('getParent')->willReturn($parent);
+
+        $tag = $this->createStub(ISystemTag::class);
+        $tag->method('getId')->willReturn('7');
+        $tags = $this->createStub(ISystemTagManager::class);
+        $tags->method('getTag')->willReturn($tag);
+        if ($tagMapper === null) {
+            $tagMapper = $this->createStub(ISystemTagObjectMapper::class);
+            $tagMapper->method('haveTag')->willReturn($tagged);
+        }
 
         $userFolder = $this->createStub(Folder::class);
         $userFolder->method('getFirstNodeById')->willReturn($file);
@@ -165,7 +183,7 @@ class FlowTest extends TestCase {
         $context->method('note')->willReturn('Today is Sunday, 1 November 2026.');
 
         return [
-            new FlowProcessor($root, $factory, new ImageOptimizer($this->createStub(LoggerInterface::class)), $context, $time, $this->usageRecorder(), $this->createStub(LoggerInterface::class)),
+            new FlowProcessor($root, $factory, new ImageOptimizer($this->createStub(LoggerInterface::class)), $context, $time, $this->usageRecorder(), $this->createStub(LoggerInterface::class), $tags, $tagMapper),
             $llm,
             $parent,
         ];
@@ -244,5 +262,62 @@ class FlowTest extends TestCase {
         $parent->expects($this->never())->method('newFile');
 
         $this->assertNull($processor->process(42, 'alice', FlowConfig::parse('')));
+    }
+
+    public function testResultFileIsTaggedAsAnOutput(): void {
+        $tagMapper = $this->createMock(ISystemTagObjectMapper::class);
+        $tagMapper->expects($this->once())->method('assignTags')->with('99', 'files', ['7']);
+        [$processor, $llm, $parent] = $this->processor($this->sourceFile('notes.txt', 'text/plain', 'x'), tagMapper: $tagMapper);
+        $llm->expects($this->once())->method('ask')->willReturn(['response' => 'Done.']);
+        $result = $this->createStub(File::class);
+        $result->method('getId')->willReturn(99);
+        $parent->expects($this->once())->method('newFile')->willReturn($result);
+
+        $processor->process(42, 'alice', FlowConfig::parse(''));
+    }
+
+    public function testAFileTheUserWroteIsNeitherSentNorReplaced(): void {
+        $own = $this->createMock(File::class);
+        $own->method('getContent')->willReturn("My own notes about the report.\n");
+        $own->expects($this->never())->method('putContent');
+        [$processor, $llm, $parent] = $this->processor($this->sourceFile('report.txt', 'text/plain', 'x'), [], $own);
+        $llm->expects($this->never())->method('ask');
+        $parent->expects($this->never())->method('newFile');
+
+        $this->assertNull($processor->process(42, 'alice', FlowConfig::parse('')));
+    }
+
+    public function testAnEarlierTaggedAnswerIsReplaced(): void {
+        $earlier = $this->createMock(File::class);
+        $earlier->method('getPath')->willReturn('/alice/files/report.txt.aiquila.md');
+        $earlier->expects($this->once())->method('putContent')->with($this->stringContains('Fresh.'));
+        [$processor, $llm, $parent] = $this->processor($this->sourceFile('report.txt', 'text/plain', 'x'), [], $earlier, true);
+        $llm->expects($this->once())->method('ask')->willReturn(['response' => 'Fresh.']);
+        $parent->expects($this->never())->method('newFile');
+
+        $this->assertSame('/alice/files/report.txt.aiquila.md', $processor->process(42, 'alice', FlowConfig::parse('')));
+    }
+
+    public function testAnUntaggedAnswerFromAnEarlierReleaseIsReplacedAndTagged(): void {
+        $earlier = $this->createMock(File::class);
+        $earlier->method('getId')->willReturn(99);
+        $earlier->method('getContent')->willReturn("# report.txt\n\nOld.\n\n---\n*Written by AIquila (Claude) on 2026-03-01 08:15 UTC.*\n");
+        $earlier->expects($this->once())->method('putContent');
+        $tagMapper = $this->createMock(ISystemTagObjectMapper::class);
+        $tagMapper->method('haveTag')->willReturn(false);
+        $tagMapper->expects($this->once())->method('assignTags')->with('99', 'files', ['7']);
+        [$processor, $llm, $parent] = $this->processor($this->sourceFile('report.txt', 'text/plain', 'x'), [], $earlier, false, $tagMapper);
+        $llm->expects($this->once())->method('ask')->willReturn(['response' => 'Fresh.']);
+        $parent->expects($this->never())->method('newFile');
+
+        $processor->process(42, 'alice', FlowConfig::parse(''));
+    }
+
+    public function testLegacyAnswerShapeNeedsTheSourcesHeadingAndTheFooter(): void {
+        $answer = "# a.txt\n\nText.\n\n---\n*Written by AIquila (Claude) on 2026-03-01 08:15 UTC.*\n";
+        $this->assertTrue(FlowProcessor::isLegacyAnswer($answer, 'a.txt'));
+        $this->assertFalse(FlowProcessor::isLegacyAnswer($answer, 'b.txt'));
+        $this->assertFalse(FlowProcessor::isLegacyAnswer("# a.txt\n\nMy notes, no footer.\n", 'a.txt'));
+        $this->assertFalse(FlowProcessor::isLegacyAnswer($answer . "\nMy own addition.\n", 'a.txt'));
     }
 }
