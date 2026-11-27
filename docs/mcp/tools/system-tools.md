@@ -342,7 +342,8 @@ Replace the personal tags on a file or folder.
 
 **Parameters:**
 - `path` (string, required)
-- `tags` (string[], required): the complete new set; `[]` clears them
+- `tags` (string[], required): the complete new set; `[]` clears them. Favorites are not
+  personal tags here: setting or clearing tags leaves a file's favorite state as it is
 
 **Returns:** `Tags set on <path>: …` or `All tags cleared from <path>`.
 

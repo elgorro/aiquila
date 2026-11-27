@@ -353,7 +353,9 @@ check_ok && step_ok || step_fail "get_file_info returned an error"
 FILE_ID=$(extract_text '"id":\s*(\d+)')
 echo "  file_id: $FILE_ID"
 
-mcp_tool $((RPC_ID++)) "set_file_tags" "{\"path\":\"$TAG_TEST_FILE\",\"tags\":[]}" >/dev/null 2>&1
+sep "Step 27b — set_file_tags (clear)"
+mcp_tool $((RPC_ID++)) "set_file_tags" "{\"path\":\"$TAG_TEST_FILE\",\"tags\":[]}"
+check_text "All tags cleared" && step_ok || step_fail "set_file_tags could not clear the tags"
 
 sep "Step 28 — assign_system_tag (by fileId)"
 mcp_tool $((RPC_ID++)) "assign_system_tag" "{\"fileId\":$FILE_ID,\"tagId\":$TAG_ID}"
