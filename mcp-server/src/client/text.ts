@@ -79,7 +79,7 @@ export async function fetchTextAPI<T = unknown>(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiError(response.status, response.statusText, text);
+    throw new ApiError(response.status, response.statusText, text, { api: 'Text' });
   }
 
   if (response.status === 204) {
@@ -94,7 +94,9 @@ export async function fetchTextAPI<T = unknown>(
   const json = (await response.json()) as OcsEnvelope<T>;
   const code = json?.ocs?.meta?.statuscode;
   if (code !== undefined && code !== 200 && code !== 100) {
-    throw new ApiError(code, json.ocs.meta.status ?? 'error', json.ocs.meta.message ?? '');
+    throw new ApiError(code, json.ocs.meta.status ?? 'error', json.ocs.meta.message ?? '', {
+      api: 'Text',
+    });
   }
   return json.ocs.data;
 }

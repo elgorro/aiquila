@@ -245,7 +245,9 @@ describe('OCS-based Tools', () => {
     it('should pass on the reason when Nextcloud refuses an allowlisted command', async () => {
       const { ApiError } = await import('../client/aiquila.js');
       mockExecuteOCC.mockRejectedValue(
-        new ApiError(403, 'Forbidden', '', 'Command and arguments are not in the OCC allowlist')
+        new ApiError(403, 'Forbidden', '', {
+          detail: 'Command and arguments are not in the OCC allowlist',
+        })
       );
 
       const { runOccTool } = await import('../tools/system/occ.js');

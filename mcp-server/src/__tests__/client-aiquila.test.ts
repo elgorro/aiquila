@@ -74,6 +74,18 @@ describe('fetchAiquilaAPI errors', () => {
   });
 });
 
+describe('ApiError', () => {
+  it('names the API that answered', () => {
+    const e = new ApiError(500, 'Internal Server Error', '', { api: 'Tables', detail: 'Boom' });
+    expect(e.message).toBe('Tables API error: 500 Internal Server Error: Boom');
+    expect(e.api).toBe('Tables');
+  });
+
+  it('defaults to the AIquila API', () => {
+    expect(new ApiError(404, 'Not Found', '').message).toBe('AIquila API error: 404 Not Found');
+  });
+});
+
 describe('aiquilaErrorDetail', () => {
   it('ignores JSON that is not the app error shape', () => {
     expect(aiquilaErrorDetail('{"message":"Trace: /var/www/html/lib/x.php"}')).toBeUndefined();
@@ -97,7 +109,7 @@ describe('aiquilaErrorDetail', () => {
 
 describe('formatOccError', () => {
   it('adds the app reason to the generic fallback', () => {
-    const e = new ApiError(400, 'Bad Request', '', 'No command provided');
+    const e = new ApiError(400, 'Bad Request', '', { detail: 'No command provided' });
     expect(formatOccError(e)).toBe('Request failed (HTTP 400 Bad Request): No command provided');
   });
 

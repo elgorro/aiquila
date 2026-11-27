@@ -90,6 +90,9 @@ export const getFileTagsTool = {
   },
 };
 
+/** The name Nextcloud's TagsPlugin keeps favorites under (`TagsPlugin::TAG_FAVORITE`). */
+const FAVORITE_TAG = '_$!<Favorite>!$_';
+
 /**
  * Set personal tags on a file (replaces all existing personal tags)
  */
@@ -115,12 +118,15 @@ export const setFileTagsTool = {
       const config = getNextcloudConfig();
       const url = `${config.url}${davPath('files', config.user)}/${davFilePath(args.path)}`;
 
-      const tagElements =
-        args.tags.length > 0
-          ? args.tags
-              .map((t) => `<oc:tag>${encodeXmlEntities(t)}</oc:tag>`)
-              .join('\n                ')
-          : '';
+      // Nextcloud's TagList::xmlDeserialize turns an <oc:tags> with no children into
+      // null, and TagsPlugin then calls getTags() on it: an empty set, like a
+      // <d:remove> of the property (RFC 4918 §14.23), fails with a 500. The plugin
+      // never adds or removes the favorite tag through this property, so a list
+      // holding only it removes every other tag and leaves the favorite as it is.
+      const tags = args.tags.length > 0 ? args.tags : [FAVORITE_TAG];
+      const tagElements = tags
+        .map((t) => `<oc:tag>${encodeXmlEntities(t)}</oc:tag>`)
+        .join('\n                ');
 
       const body = `<?xml version="1.0"?>
 <d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
@@ -138,13 +144,32 @@ export const setFileTagsTool = {
         body,
       });
 
-      if (!response.ok && response.status !== 207) {
+      if (!response.ok) {
         const text = await response.text();
         return {
           content: [
             {
               type: 'text' as const,
               text: `Error setting tags: ${response.status} ${response.statusText} - ${text}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // A 207 reports each property's own status; PROPPATCH is all or nothing, so
+      // one failed property means nothing was changed (RFC 4918 §9.2, §9.2.1).
+      const failed = [
+        ...(await response.text()).matchAll(/<(?:[\w-]+:)?status>\s*HTTP\/[\d.]+ (\d{3})/gi),
+      ]
+        .map((m) => Number(m[1]))
+        .find((status) => status < 200 || status > 299);
+      if (failed !== undefined) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error setting tags: Nextcloud refused the change (${failed})`,
             },
           ],
           isError: true,

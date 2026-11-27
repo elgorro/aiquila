@@ -249,7 +249,7 @@ the number of grants. WAL mode lets several server processes on the same host sh
 
 The schema is versioned with `PRAGMA user_version`. On first start the JSON files of
 earlier versions (`clients.json`, `refresh-tokens.json`, `revoked.json`, `credentials.json`)
-are imported in one transaction and renamed `*.migrated`. Nothing ever writes state back
+are imported in one transaction and deleted. Nothing ever writes state back
 in the old format, so a downgrade starts from an empty directory; see
 [Upgrades and downgrades](../mcp/oauth.md#upgrades-and-downgrades). When the directory
 cannot be written, the server runs on an in-memory database and logs how to fix the volume. A write that fails later (disk full) is logged and skipped
@@ -344,7 +344,7 @@ MCP_CLIENT_REDIRECT_URIS=<client-callback-url>
 | `MCP_CREDENTIAL_KEY` | With OAuth, unless OpenBao | — | Hex, ≥ 32 bytes (`openssl rand -hex 64`); encrypts stored app passwords |
 | `MCP_OPENBAO_ADDR` / `MCP_OPENBAO_TOKEN` | No | — | Keep the credential key in OpenBao Transit instead; see [OAuth](../mcp/oauth.md#keeping-the-key-in-openbao) |
 | `MCP_TRANSPORT` | No | `stdio` | `stdio` or `http` |
-| `MCP_MAX_FILE_SIZE` | No | `1073741824` | Max `write_file` content length in bytes (1 GB) |
+| `MCP_MAX_FILE_SIZE` | No | `1073741824` | Max `write_file` content length in UTF-8 bytes (1 GB) |
 | `LOG_LEVEL` | No | `info` | `trace` / `debug` / `info` / `warn` / `error` / `fatal` |
 | `MCP_OCC_ALLOWLIST` | No | *(built-in)* | Comma-separated allowlist entries for `run_occ` (`cmd` = no arguments, `cmd *` = any) |
 | `MCP_TOOLS` | No | *(auto-detect)* | Comma-separated tool categories (see [upstream APIs](../mcp/upstream-apis.md)) and/or tool names to expose. Unset or empty registers the categories whose Nextcloud app is installed |

@@ -245,7 +245,9 @@ describe('Tables tools', () => {
 
       const result = await deleteTableRowTool.handler({ rowId: 1 });
 
-      expect(result.content[0].text).toContain('Relation value does not exist');
+      expect(result.content[0].text).toBe(
+        'Error deleting row: Tables API error: 400 Bad request: Relation value does not exist'
+      );
     });
   });
 

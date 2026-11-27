@@ -502,7 +502,7 @@ See `docs/dev/mcp-server-architecture.md` for full architecture details.
 | `MCP_RATE_LIMIT` | No | `tools/call` and `resources/read` messages per minute per signed-in user (per client address without OAuth); `429` + `Retry-After` over it. Default `300`, `0` disables |
 | `MCP_RATE_LIMIT_ANONYMOUS` | No | Unauthenticated (lazy-auth) requests per minute per client address. Default `60`, `0` disables |
 | `MCP_LOCALE` | No | BCP 47 locale tag for `localTime` in `get_local_time` (e.g. `sv-SE`); defaults to system locale |
-| `MCP_MAX_FILE_SIZE` | No | Max `write_file` content length in bytes (default `1073741824` = 1 GB) |
+| `MCP_MAX_FILE_SIZE` | No | Max `write_file` content length in UTF-8 bytes (default `1073741824` = 1 GB) |
 | `MCP_MAX_EMBEDDED_FILE_SIZE` | No | Largest binary file or image returned (as an embedded resource or an image block) by `read_file`, `get_file_content`, `analyze_image` and `mail_get_attachment`, in bytes (default `20971520` = 20 MB). A positive integer; any other value falls back to the default |
 | `MCP_ALLOWED_HOSTS` | No | Comma-separated extra hostnames for DNS rebinding protection (e.g. `mcp` for Docker service name) |
 | `MCP_CORS_ORIGINS` | No | Comma-separated extra origins allowed to make browser requests. The `MCP_AUTH_ISSUER` origin is always allowed when auth is on. Any other `Origin` on `/mcp` gets `403` |

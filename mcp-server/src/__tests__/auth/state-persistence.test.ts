@@ -180,7 +180,7 @@ describe('state persistence (real filesystem)', () => {
   });
 
   describe('import of the JSON files of earlier versions', () => {
-    it('imports every file once, applies the load rules, and renames them *.migrated', async () => {
+    it('imports every file once, applies the load rules, and deletes them', async () => {
       const legacyToken = '3f2b8c1e-7d4a-4e5f-9a6b-0c1d2e3f4a5b';
       const hashedToken = 'x'.repeat(43);
       writeFileSync(
@@ -258,7 +258,7 @@ describe('state persistence (real filesystem)', () => {
 
       for (const f of ['refresh-tokens.json', 'clients.json', 'revoked.json', 'credentials.json']) {
         expect(existsSync(join(dir, f))).toBe(false);
-        expect(existsSync(join(dir, `${f}.migrated`))).toBe(true);
+        expect(existsSync(join(dir, `${f}.migrated`))).toBe(false);
       }
       expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -284,6 +284,33 @@ describe('state persistence (real filesystem)', () => {
       expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
         expect.objectContaining({ file: join(dir, 'clients.json') }),
         expect.stringContaining('legacy state file')
+      );
+      // The broken file is left for the admin; the imported one is gone.
+      expect(existsSync(join(dir, 'clients.json'))).toBe(true);
+      expect(existsSync(join(dir, 'revoked.json'))).toBe(false);
+    });
+
+    it('deletes the *.migrated copies an earlier version left behind', () => {
+      for (const f of ['credentials.json', 'clients.json', 'refresh-tokens.json']) {
+        writeFileSync(join(dir, `${f}.migrated`), '{}', { mode: 0o644 });
+      }
+      writeFileSync(join(dir, 'unrelated.migrated'), '{}');
+
+      boot();
+
+      for (const f of ['credentials.json', 'clients.json', 'refresh-tokens.json']) {
+        expect(existsSync(join(dir, `${f}.migrated`))).toBe(false);
+      }
+      expect(existsSync(join(dir, 'unrelated.migrated'))).toBe(true);
+      expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+        {
+          files: [
+            'clients.json.migrated',
+            'refresh-tokens.json.migrated',
+            'credentials.json.migrated',
+          ],
+        },
+        expect.stringContaining('Deleted the copies')
       );
     });
   });

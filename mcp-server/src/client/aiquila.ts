@@ -11,18 +11,29 @@ export class ApiError extends Error {
   public readonly statusText: string;
   public readonly responseBody: string;
   public readonly detail: string | undefined;
+  /** The API that answered, e.g. `Tables`; it opens the message. */
+  public readonly api: string;
 
   /**
-   * @param detail Optional reason safe to show the caller, appended to the message.
-   *               Never pass a raw response body here — see {@link aiquilaErrorDetail}.
+   * @param options.api    Name of the API that answered, used in the message (default `AIquila`).
+   * @param options.detail Optional reason safe to show the caller, appended to the message.
+   *                       Never pass a raw response body here — see {@link aiquilaErrorDetail}.
    */
-  constructor(statusCode: number, statusText: string, responseBody: string, detail?: string) {
-    super(`AIquila API error: ${statusCode} ${statusText}${detail ? `: ${detail}` : ''}`);
+  constructor(
+    statusCode: number,
+    statusText: string,
+    responseBody: string,
+    options: { api?: string; detail?: string } = {}
+  ) {
+    const api = options.api ?? 'AIquila';
+    const detail = options.detail;
+    super(`${api} API error: ${statusCode} ${statusText}${detail ? `: ${detail}` : ''}`);
     this.name = 'ApiError';
     this.statusCode = statusCode;
     this.statusText = statusText;
     this.responseBody = responseBody;
     this.detail = detail;
+    this.api = api;
   }
 }
 
@@ -140,7 +151,9 @@ export async function fetchAiquilaAPI<T = unknown>(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiError(response.status, response.statusText, text, aiquilaErrorDetail(text));
+    throw new ApiError(response.status, response.statusText, text, {
+      detail: aiquilaErrorDetail(text),
+    });
   }
 
   return (await response.json()) as T;

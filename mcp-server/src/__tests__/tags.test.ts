@@ -200,6 +200,30 @@ describe('Tag Tools', () => {
       });
 
       expect(result.content[0].text).toContain('All tags cleared');
+      // An empty <oc:tags> makes Nextcloud fail; only the favorite tag clears the rest
+      const body = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body as string;
+      expect(body).toContain('<oc:tags>');
+      expect(body).toContain('<oc:tag>_$!&lt;Favorite&gt;!$_</oc:tag>');
+      expect(body.match(/<oc:tag>/g)).toHaveLength(1);
+    });
+
+    it('reports a property the multistatus refused', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        status: 207,
+        text: () =>
+          Promise.resolve(
+            '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"><d:response><d:href>/x</d:href>' +
+              '<d:propstat><d:prop><oc:tags xmlns:oc="http://owncloud.org/ns"/></d:prop>' +
+              '<d:status>HTTP/1.1 403 Forbidden</d:status></d:propstat></d:response></d:multistatus>'
+          ),
+      });
+
+      const { setFileTagsTool } = await import('../tools/system/tags.js');
+      const result = await setFileTagsTool.handler({ path: '/a.txt', tags: ['A'] });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toBe('Error setting tags: Nextcloud refused the change (403)');
     });
 
     it('should return error on HTTP failure', async () => {

@@ -179,7 +179,7 @@ export async function fetchFormsAPI<T = unknown>(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiError(response.status, response.statusText, text);
+    throw new ApiError(response.status, response.statusText, text, { api: 'Forms' });
   }
 
   if (response.status === 204) {
@@ -195,7 +195,9 @@ export async function fetchFormsAPI<T = unknown>(
   const code = json?.ocs?.meta?.statuscode;
   // OCS v2 mirrors the HTTP status, so a create answers 201; 100 is OCS v1 success
   if (code !== undefined && code !== 100 && (code < 200 || code > 299)) {
-    throw new ApiError(code, json.ocs.meta.status ?? 'error', json.ocs.meta.message ?? '');
+    throw new ApiError(code, json.ocs.meta.status ?? 'error', json.ocs.meta.message ?? '', {
+      api: 'Forms',
+    });
   }
   return json.ocs.data;
 }

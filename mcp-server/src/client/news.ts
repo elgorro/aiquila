@@ -90,7 +90,7 @@ export async function fetchNewsAPI<T = unknown>(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiError(response.status, response.statusText, text);
+    throw new ApiError(response.status, response.statusText, text, { api: 'News' });
   }
 
   if (

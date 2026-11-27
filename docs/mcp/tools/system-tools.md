@@ -102,9 +102,10 @@ Create a file or replace its contents.
 **Parameters:**
 - `path` (string, required): file to write
 - `content` (string, required): the text to store, or the file's bytes in base64 when
-  `encoding` is `base64`. Limited to `MCP_MAX_FILE_SIZE` characters (default 1 GB). The limit
-  counts characters, not decoded bytes, so the largest file that fits as base64 is about
-  three quarters of it
+  `encoding` is `base64`. Limited to `MCP_MAX_FILE_SIZE` bytes of UTF-8 (default 1 GB), so
+  non-ASCII text takes two to four bytes per character. For base64 the limit counts the
+  encoded text, not the decoded bytes, so the largest file that fits is about three quarters
+  of it
 - `encoding` (string, optional): `text` (default) stores `content` as it is; `base64` decodes
   it first, to write a binary file such as a PDF, an image or an office document
 
@@ -341,7 +342,8 @@ Replace the personal tags on a file or folder.
 
 **Parameters:**
 - `path` (string, required)
-- `tags` (string[], required): the complete new set; `[]` clears them
+- `tags` (string[], required): the complete new set; `[]` clears them. Favorites are not
+  personal tags here: setting or clearing tags leaves a file's favorite state as it is
 
 **Returns:** `Tags set on <path>: …` or `All tags cleared from <path>`.
 
