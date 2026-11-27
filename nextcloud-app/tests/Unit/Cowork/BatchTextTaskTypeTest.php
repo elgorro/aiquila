@@ -46,11 +46,24 @@ class BatchTextTaskTypeTest extends TestCase {
         return $usage;
     }
 
+    /** Every file with this id is an earlier output, so it carries the output tag. */
+    private const OUTPUT_ID = 900;
+
+    private function tagOutputs(ISystemTagManager&\PHPUnit\Framework\MockObject\Stub $tags, ISystemTagObjectMapper&\PHPUnit\Framework\MockObject\Stub $mapper): void {
+        $tag = $this->createStub(\OCP\SystemTag\ISystemTag::class);
+        $tag->method('getId')->willReturn('77');
+        $tags->method('getTag')->willReturn($tag);
+        $mapper->method('getTagIdsForObjects')->willReturnCallback(
+            static fn (array $ids): array => in_array((string)self::OUTPUT_ID, $ids, true) ? [(string)self::OUTPUT_ID => ['77']] : []
+        );
+    }
+
     protected function setUp(): void {
         $this->rootFolder = $this->createStub(IRootFolder::class);
         $this->providerFactory = $this->createStub(LLMProviderFactory::class);
         $this->tagManager = $this->createStub(ISystemTagManager::class);
         $this->tagObjectMapper = $this->createStub(ISystemTagObjectMapper::class);
+        $this->tagOutputs($this->tagManager, $this->tagObjectMapper);
         $this->logger = $this->createStub(LoggerInterface::class);
 
         // The service is only ever reached through the four batch methods.
@@ -123,6 +136,7 @@ class BatchTextTaskTypeTest extends TestCase {
         );
         $parent->method('get')->willReturnCallback(function (string $name) {
             $existing = $this->createStub(File::class);
+            $existing->method('getId')->willReturn(self::OUTPUT_ID);
             $existing->method('getMTime')->willReturn(0);
             $existing->method('putContent')->willReturnCallback(function ($c) use ($name) {
                 $this->written[$name] = $c;
@@ -278,6 +292,28 @@ class BatchTextTaskTypeTest extends TestCase {
         $result = $this->task->run($this->coworker(['force' => true]), $this->newRun(), $this->progress());
 
         $this->assertSame(['f11' => 11], $result['state']['file_ids']);
+    }
+
+    /** A due document whose output's name is the user's own file is reported, not billed. */
+    public function testAUsersFileWithTheOutputsNameIsReportedAndNothingIsSubmitted(): void {
+        $this->mockProvider();
+        $this->provider->expects($this->never())->method('submitBatch');
+        $mine = $this->createStub(File::class);
+        $mine->method('getId')->willReturn(50);
+        $mine->method('getMTime')->willReturn(500);
+        $this->parent = $this->createStub(Folder::class);
+        $this->parent->method('nodeExists')->willReturnCallback(static fn (string $n): bool => $n === 'a.txt.summary.md');
+        $this->parent->method('get')->willReturn($mine);
+        $this->inputFolder([$this->file(11, 'a.txt', 'text/plain', 'body')]);
+
+        $run = $this->newRun();
+        $result = $this->task->run($this->coworker(), $run, $this->progress());
+
+        $this->assertSame(0, $result['itemsTotal']);
+        $this->assertSame(1, $result['itemsSkipped']);
+        $this->assertStringContainsString('Skipped: a.txt — a.txt.summary.md already exists and was not written by AIquila', $result['summary']);
+        $this->assertSame('warn', $run->getDecodedLog()[0]['level']);
+        $this->assertSame('/a.txt', substr((string)$run->getDecodedLog()[0]['item'], -6));
     }
 
     public function testAnEmptyFolderFinishesWithoutSubmittingAnything(): void {

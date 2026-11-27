@@ -29,6 +29,7 @@ class BatchDocumentRunnerTest extends TestCase {
     private $provider;
     private $userFolder;
     private BatchDocumentRunner $runner;
+    private ISystemTagManager $tagManager;
     /** @var list<array{0: ?string, 1: string}> getProviderForUser() calls */
     private array $providerCalls = [];
     /** @var list<array<int, mixed>> */
@@ -57,10 +58,11 @@ class BatchDocumentRunnerTest extends TestCase {
             $this->usageRecorded[] = $args;
         });
 
+        $this->tagManager = $this->tagManager();
         $this->runner = new BatchDocumentRunner(
             $root,
             $factory,
-            $this->tagManager(),
+            $this->tagManager,
             $this->tagMapper(),
             $this->createStub(LoggerInterface::class),
             $usage,
@@ -94,6 +96,9 @@ class BatchDocumentRunnerTest extends TestCase {
         $mapper->method('assignTags')->willReturnCallback(function (string $id, string $type, $tagIds): void {
             $this->tags[$id] = array_merge($this->tags[$id] ?? [], (array)$tagIds);
         });
+        $mapper->method('haveTag')->willReturnCallback(
+            fn (array $ids, string $type, string $tagId): bool => in_array($tagId, $this->tags[$ids[0]] ?? [], true)
+        );
         $mapper->method('getTagIdsForObjects')->willReturnCallback(
             fn (array $ids): array => array_intersect_key($this->tags, array_flip($ids))
         );
@@ -230,12 +235,27 @@ class BatchDocumentRunnerTest extends TestCase {
         $this->assertSame([$source], $collected);
     }
 
+    /** @var array<string, int> file id of each file in {@see sharedFolder()} */
+    private array $ids = [];
+
+    private function idOf(string $name): int {
+        return $this->ids[$name] ??= 901 + count($this->ids);
+    }
+
+    /** An earlier output in {@see sharedFolder()}, tagged as the runner does. */
+    private function earlierOutput(string $name, string $content): void {
+        $this->written[$name] = $content;
+        $this->tagManager->createTag(BatchDocumentRunner::OUTPUT_TAG, false, false);
+        $this->tags[(string)$this->idOf($name)][] = 't:' . BatchDocumentRunner::OUTPUT_TAG;
+    }
+
     /** Folder with the given sources; outputs land in $this->written, existing ones have mtime 500. */
     private function sharedFolder(): Folder {
         $folder = $this->createStub(Folder::class);
         $folder->method('nodeExists')->willReturnCallback(fn (string $n): bool => isset($this->written[$n]));
         $folder->method('get')->willReturnCallback(function (string $n): File {
             $existing = $this->createStub(File::class);
+            $existing->method('getId')->willReturn($this->idOf($n));
             $existing->method('getMTime')->willReturn(500);
             $existing->method('getPath')->willReturn('/bob/files/In/' . $n);
             $existing->method('putContent')->willReturnCallback(function ($c) use ($n): void {
@@ -246,7 +266,7 @@ class BatchDocumentRunnerTest extends TestCase {
         $folder->method('newFile')->willReturnCallback(function (string $n, $c = null): File {
             $this->written[$n] = (string)$c;
             $out = $this->createStub(File::class);
-            $out->method('getId')->willReturn(900 + count($this->written));
+            $out->method('getId')->willReturn($this->idOf($n));
             $out->method('getPath')->willReturn('/bob/files/In/' . $n);
             return $out;
         });
@@ -280,7 +300,7 @@ class BatchDocumentRunnerTest extends TestCase {
     public function testAnUnambiguousLegacyOutputStaysInUse(): void {
         $this->answerSynchronously();
         $folder = $this->sharedFolder();
-        $this->written['report.summary.md'] = 'old';
+        $this->earlierOutput('report.summary.md', 'old');
         $txt = $this->file(8, 'report.txt', 'bravo', 'text/plain', $folder);
         $image = $this->file(9, 'report.jpg', 'x', 'image/jpeg', $folder);
         $folder->method('getDirectoryListing')->willReturn([$txt, $image]);
@@ -295,7 +315,7 @@ class BatchDocumentRunnerTest extends TestCase {
     public function testAnAmbiguousLegacyOutputCountsForNoSource(): void {
         $this->answerSynchronously();
         $folder = $this->sharedFolder();
-        $this->written['report.summary.md'] = 'whichever came last';
+        $this->earlierOutput('report.summary.md', 'whichever came last');
         $md = $this->file(7, 'report.md', 'alpha', 'text/markdown', $folder);
         $txt = $this->file(8, 'report.txt', 'bravo', 'text/plain', $folder);
         $folder->method('getDirectoryListing')->willReturn([$md, $txt]);
@@ -314,12 +334,76 @@ class BatchDocumentRunnerTest extends TestCase {
     /** `foo.md`'s output name is `foo.md.txt`'s legacy one, so it is never taken for the latter's. */
     public function testALegacyNameThatIsAnotherSourcesOutputIsNotUsed(): void {
         $folder = $this->sharedFolder();
-        $this->written['foo.md.summary.md'] = 'of foo.md';
+        $this->earlierOutput('foo.md.summary.md', 'of foo.md');
         $md = $this->file(7, 'foo.md', 'alpha', 'text/markdown', $folder);
         $txt = $this->file(8, 'foo.md.txt', 'bravo', 'text/plain', $folder);
         $folder->method('getDirectoryListing')->willReturn([$md, $txt]);
 
         $this->assertSame([$txt], $this->runner->collect($this->ctx(), $folder));
+    }
+
+    /**
+     * A file the runner did not write is never replaced: the source is skipped
+     * before it is sent, however it was chosen, and the write refuses as well.
+     */
+    public function testAUsersFileWithTheOutputsNameIsNeverReplaced(): void {
+        $this->answerSynchronously();
+        $folder = $this->sharedFolder();
+        $this->written['notes.txt.summary.md'] = 'mine';
+        $notes = $this->file(8, 'notes.txt', 'bravo', 'text/plain', $folder);
+        $folder->method('getDirectoryListing')->willReturn([$notes]);
+        $expected = [['item' => '/In/notes.txt', 'reason' => 'notes.txt.summary.md already exists and was not written by AIquila; rename it or choose an output folder']];
+
+        foreach ([[], ['force' => true]] as $options) {
+            $skipped = [];
+            $this->assertSame([], $this->runner->collect($this->ctx($options), $folder, $skipped));
+            $this->assertSame($expected, $skipped);
+
+            $picked = $this->runner->collectSelection($this->ctx($options), [$notes], []);
+            $this->assertSame([], $picked['files']);
+            $this->assertSame($expected, $picked['skipped']);
+        }
+
+        // It appeared after the walk.
+        $result = $this->runner->process($this->ctx(), new CoworkerRun(), [$notes], $this->noProgress());
+        $this->assertSame(0, $result['itemsProcessed']);
+        $this->assertSame(1, $result['itemsFailed']);
+        $this->assertStringContainsString('Unsaved: notes.txt — notes.txt.summary.md already exists', $result['summary']);
+        $this->assertSame(['notes.txt.summary.md' => 'mine'], $this->written);
+    }
+
+    public function testAnEarlierOutputIsRefreshed(): void {
+        $this->answerSynchronously();
+        $folder = $this->sharedFolder();
+        $this->earlierOutput('notes.txt.summary.md', 'old');
+        $notes = $this->file(8, 'notes.txt', 'bravo', 'text/plain', $folder);
+
+        $collected = $this->runner->collect($this->ctx(['force' => true]), $notes);
+        $this->runner->process($this->ctx(), new CoworkerRun(), $collected, $this->noProgress());
+
+        $this->assertSame(['notes.txt.summary.md' => 'S:bravo'], $this->written);
+    }
+
+    /**
+     * An untagged file under the legacy name is an output from before the tag
+     * when its source has the done-tag: not billed again, but not written to.
+     * Without the done-tag it is the user's own, and no reason to skip.
+     */
+    public function testAnUntaggedLegacyFileIsNeverWrittenTo(): void {
+        $this->answerSynchronously();
+        $folder = $this->sharedFolder();
+        $this->written['report.summary.md'] = 'mine or an old output';
+        $txt = $this->file(8, 'report.txt', 'bravo', 'text/plain', $folder);
+        $folder->method('getDirectoryListing')->willReturn([$txt]);
+
+        $this->assertSame([$txt], $this->runner->collect($this->ctx(), $folder));
+
+        $this->tagManager->createTag('aiquila:summarized', true, true);
+        $this->tags['8'] = ['t:aiquila:summarized'];
+        $this->assertSame([], $this->runner->collect($this->ctx(), $folder));
+
+        $this->runner->process($this->ctx(), new CoworkerRun(), [$txt], $this->noProgress());
+        $this->assertSame(['report.summary.md' => 'mine or an old output', 'report.txt.summary.md' => 'S:bravo'], $this->written);
     }
 
     public function testSharedOptionsAreValidatedWithoutAnOperation(): void {

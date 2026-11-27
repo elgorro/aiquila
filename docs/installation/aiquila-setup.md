@@ -609,7 +609,9 @@ them to PDF first. The translation of either is Markdown. Every file the run pas
 over is counted as *skipped* and listed with its reason in the run's summary and
 log: not a text, PDF or Office document, too large (over 1 MB for text, 32 MB for a
 PDF or Office document), not UTF-8 text, empty, a PDF or Office document on another
-provider, an Office document with no converter installed, or no longer available. A document the model declines to
+provider, an Office document with no converter installed, a file of your own that has the
+result's name (it is never replaced; rename it or choose another folder), or no longer
+available. A document the model declines to
 process is reported as *refused*. Results from an earlier run are never processed
 again, so summarizing a folder and then translating it translates only the
 documents; those, and documents whose result is already up to date, are not

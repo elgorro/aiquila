@@ -50,6 +50,18 @@ class BatchRunServiceTest extends TestCase {
     /** @var list<string> the status of each run announced, in order */
     private array $notified = [];
 
+    /** Every file with this id is an earlier output, so it carries the output tag. */
+    private const OUTPUT_ID = 900;
+
+    private function tagOutputs(ISystemTagManager&\PHPUnit\Framework\MockObject\Stub $tags, ISystemTagObjectMapper&\PHPUnit\Framework\MockObject\Stub $mapper): void {
+        $tag = $this->createStub(\OCP\SystemTag\ISystemTag::class);
+        $tag->method('getId')->willReturn('77');
+        $tags->method('getTag')->willReturn($tag);
+        $mapper->method('getTagIdsForObjects')->willReturnCallback(
+            static fn (array $ids): array => in_array((string)self::OUTPUT_ID, $ids, true) ? [(string)self::OUTPUT_ID => ['77']] : []
+        );
+    }
+
     protected function setUp(): void {
         $this->provider = $this->createStub(ClaudeSDKService::class);
         $this->provider->method('supportsBatch')->willReturn(true);
@@ -91,11 +103,14 @@ class BatchRunServiceTest extends TestCase {
         $time->method('getTime')->willReturn(1_800_000_000);
 
         $logger = $this->createStub(LoggerInterface::class);
+        $tags = $this->createStub(ISystemTagManager::class);
+        $tagMapper = $this->createStub(ISystemTagObjectMapper::class);
+        $this->tagOutputs($tags, $tagMapper);
         $runner = new BatchDocumentRunner(
             $root,
             $factory,
-            $this->createStub(ISystemTagManager::class),
-            $this->createStub(ISystemTagObjectMapper::class),
+            $tags,
+            $tagMapper,
             $logger,
             $this->createStub(UsageStatService::class),
         );
@@ -122,6 +137,7 @@ class BatchRunServiceTest extends TestCase {
         $parent->method('nodeExists')->willReturnCallback(fn (string $n): bool => isset($this->written[$n]));
         $parent->method('get')->willReturnCallback(function (string $n) {
             $existing = $this->createStub(File::class);
+            $existing->method('getId')->willReturn(self::OUTPUT_ID);
             $existing->method('getMTime')->willReturn(500);
             return $existing;
         });

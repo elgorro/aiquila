@@ -341,6 +341,25 @@ class ExtractOperationTest extends TestCase {
         $this->assertSame([$source], $runner->collect($this->ctx($schema), $source), 'the schema changed');
     }
 
+    /** A CSV of the user's own that has the table's name is neither read nor replaced. */
+    public function testAUsersCsvWithTheTablesNameIsLeftAlone(): void {
+        $this->folderFiles['invoices.csv'] = $mine = "date,amount\r\n2026-01-01,12\r\n";
+        $folder = $this->folder();
+        $runner = $this->runner($this->provider(['invoice 1' => '{"vendor": "A"}']));
+        $source = $this->source(1, 'a.txt', $folder);
+
+        $skipped = [];
+        $this->assertSame([], $runner->collect($this->ctx(), $source, $skipped));
+        $this->assertSame([['item' => '/In/a.txt', 'reason' => 'invoices.csv already exists and was not written by AIquila; rename it or choose an output folder']], $skipped);
+
+        // It appeared after the run was submitted.
+        $result = $runner->process($this->ctx(), new CoworkerRun(), [$source], static function (): void {
+        });
+        $this->assertSame(0, $result['itemsProcessed']);
+        $this->assertStringContainsString('Unsaved: a.txt — invoices.csv already exists', $result['summary']);
+        $this->assertSame($mine, $this->folderFiles['invoices.csv']);
+    }
+
     public function testATableThatCannotBeWrittenLosesItsRows(): void {
         $this->failWrites = true;
         $folder = $this->folder();

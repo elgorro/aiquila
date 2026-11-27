@@ -147,6 +147,14 @@ class BatchDocumentRunner {
     /** The output tag's id once looked up; '' when it does not exist yet. */
     private ?string $outputTagId = null;
 
+    /**
+     * Which files a walk found to be outputs, by file id, so the check beside
+     * each source costs no query of its own. A write never trusts it.
+     *
+     * @var array<int, bool>
+     */
+    private array $knownOutputs = [];
+
     public function __construct(
         private readonly IRootFolder $rootFolder,
         private readonly LLMProviderFactory $providerFactory,
@@ -224,7 +232,56 @@ class BatchDocumentRunner {
         if ($legacy === $name || $folder->nodeExists($name) || !$folder->nodeExists($legacy)) {
             return $name;
         }
-        return $this->sharesLegacyName($ctx, $source) ? $name : $legacy;
+        $existing = $folder->get($legacy);
+        return $existing instanceof File && $this->isOutput($existing) && !$this->sharesLegacyName($ctx, $source) ? $legacy : $name;
+    }
+
+    /**
+     * Whether a source has an output from before outputs carried the output
+     * tag: a file under the legacy name that can be no other source's, beside
+     * the done-tag the run left on the source. It counts as done, so an
+     * upgrade bills nothing again, but nothing proves the user did not replace
+     * it since, so it is never written to.
+     */
+    private function hasUntaggedLegacyOutput(BatchContext $ctx, Folder $folder, File $source): bool {
+        $legacy = self::legacyOutputName($ctx, $source);
+        return $folder->nodeExists($legacy)
+            && $folder->get($legacy)->getMTime() >= $source->getMTime()
+            && !$this->sharesLegacyName($ctx, $source)
+            && $this->hasDoneTag($ctx, $source);
+    }
+
+    /**
+     * Why a source's output cannot be written without replacing something the
+     * runner did not write, or null when it can. Asked before anything is
+     * sent, so a file the user owns costs neither its content nor a request.
+     */
+    private function occupiedReason(BatchContext $ctx, File $source): ?string {
+        try {
+            $folder = $this->outputFolder($ctx, $source);
+            if ($ctx->operation instanceof TableOperation) {
+                $name = $ctx->operation->tableFileName($ctx->options);
+                $path = $folder->getPath() . '/' . $name;
+                if (!isset($this->tableOccupied[$path])) {
+                    $node = $folder->nodeExists($name) ? $folder->get($name) : null;
+                    $this->tableOccupied[$path] = $node !== null && !($node instanceof File && $this->isTable($node));
+                }
+                return $this->tableOccupied[$path] ? self::occupied($name) : null;
+            }
+            $name = $this->resolveOutputName($ctx, $folder, $source);
+            if (!$folder->nodeExists($name)) {
+                return null;
+            }
+            $node = $folder->get($name);
+            return $node instanceof File && $this->isOutput($node) ? null : self::occupied($name);
+        } catch (\Throwable) {
+            // Whatever is wrong here, the write reports it.
+            return null;
+        }
+    }
+
+    private static function occupied(string $name): string {
+        return "$name already exists and was not written by AIquila; rename it or choose an output folder";
     }
 
     /**
@@ -263,16 +320,23 @@ class BatchDocumentRunner {
      * would re-bill the whole folder and then start summarising its own
      * summaries.
      *
+     * A source that is due but whose output's name is taken by a file the
+     * runner did not write is left out and reported in $skipped.
+     *
+     * @param list<BatchSkip> $skipped
+     * @param-out list<BatchSkip> $skipped
      * @return list<File>
      */
-    public function collect(BatchContext $ctx, Node $root): array {
+    public function collect(BatchContext $ctx, Node $root, array &$skipped = []): array {
         $matches = [];
+        $this->startWalk($ctx);
         if ($root instanceof File) {
-            if ($this->isCandidate($ctx, $root)) {
+            if ($this->isCandidate($ctx, $root, $skipped)) {
                 $matches[] = $root;
             }
         } elseif ($root instanceof Folder) {
-            $this->gather($ctx, $root, $this->configuredOutputFolderId($ctx), $matches);
+            $seen = [];
+            $this->gather($ctx, $root, $this->configuredOutputFolderId($ctx), $matches, self::MAX_ITEMS_PER_RUN, $seen, false, $skipped);
         }
 
         return $matches;
@@ -300,6 +364,7 @@ class BatchDocumentRunner {
         $matches = [];
         $skipped = [];
         $seen = [];
+        $this->startWalk($ctx);
 
         foreach ($files as $file) {
             if (isset($seen[$file->getId()])) {
@@ -311,6 +376,10 @@ class BatchDocumentRunner {
                 continue;
             }
             if (($reason = $this->unreadableReason($ctx, $file)) !== null) {
+                $skipped[] = ['item' => UserPath::of($file), 'reason' => $reason];
+                continue;
+            }
+            if (($reason = $this->occupiedReason($ctx, $file)) !== null) {
                 $skipped[] = ['item' => UserPath::of($file), 'reason' => $reason];
                 continue;
             }
@@ -369,8 +438,11 @@ class BatchDocumentRunner {
      * than after the walk, because the walk stops at MAX_ITEMS_PER_RUN: a
      * filter applied afterwards would let the first 200 already-finished files
      * fill the quota and permanently starve everything after them.
+     *
+     * @param list<BatchSkip> $skipped collects a due file whose output's name is taken
+     * @param-out list<BatchSkip> $skipped
      */
-    private function isCandidate(BatchContext $ctx, File $file): bool {
+    private function isCandidate(BatchContext $ctx, File $file, array &$skipped): bool {
         if (!$this->matchesMime($file, $ctx->mimeTypes())) {
             return false;
         }
@@ -386,10 +458,35 @@ class BatchDocumentRunner {
         if ($suffix !== '' && str_ends_with($file->getName(), $suffix)) {
             return false;
         }
-        if ($ctx->force()) {
-            return true;
+        if (!$ctx->force() && $this->alreadyDone($ctx, $file)) {
+            return false;
         }
-        return !$this->alreadyDone($ctx, $file);
+        $reason = $this->occupiedReason($ctx, $file);
+        if ($reason !== null) {
+            $skipped[] = ['item' => UserPath::of($file), 'reason' => $reason];
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Forget what an earlier walk found, and look up the configured output
+     * folder's outputs in one query: the walk itself passes that folder over.
+     */
+    private function startWalk(BatchContext $ctx): void {
+        $this->knownOutputs = [];
+        $this->tableOccupied = [];
+        if ($ctx->outputFolder === '') {
+            return;
+        }
+        try {
+            $node = $this->rootFolder->getUserFolder($ctx->userId)->get($ctx->outputFolder);
+            if ($node instanceof Folder) {
+                $this->outputIds($node->getDirectoryListing());
+            }
+        } catch (\Throwable) {
+            // Not there yet, so it holds no outputs.
+        }
     }
 
     /** @param list<string> $mimeTypes */
@@ -426,7 +523,8 @@ class BatchDocumentRunner {
     /**
      * @param list<File> $matches
      * @param array<int, true> $seen file ids already taken, by id
-     * @param list<BatchSkip> $skipped collects the files passed over for their type, when $report
+     * @param list<BatchSkip> $skipped collects the files passed over: due ones whose output's
+     *        name is taken, and with $report those of a type the run does not read
      * @param-out list<BatchSkip> $skipped
      */
     private function gather(BatchContext $ctx, Folder $folder, ?int $excludeFolderId, array &$matches, int $limit = self::MAX_ITEMS_PER_RUN, array &$seen = [], bool $report = false, array &$skipped = []): void {
@@ -450,7 +548,7 @@ class BatchDocumentRunner {
                     $skipped[] = ['item' => UserPath::of($child), 'reason' => $reason];
                     continue;
                 }
-                if ($this->isCandidate($ctx, $child)) {
+                if ($this->isCandidate($ctx, $child, $skipped)) {
                     $seen[$child->getId()] = true;
                     $matches[] = $child;
                 }
@@ -544,9 +642,12 @@ class BatchDocumentRunner {
             $folder = $this->outputFolder($ctx, $file);
             $name = $this->resolveOutputName($ctx, $folder, $file);
             if (!$folder->nodeExists($name)) {
-                return false;
+                return $this->hasUntaggedLegacyOutput($ctx, $folder, $file);
             }
             $existing = $folder->get($name);
+            if (!$existing instanceof File || !$this->isOutput($existing)) {
+                return false;
+            }
             // The source is what the output describes, so an output older than
             // its source is stale and the file is worth doing again.
             if ($existing->getMTime() < $file->getMTime()) {
@@ -1234,8 +1335,10 @@ class BatchDocumentRunner {
 
     /**
      * Write the model's answer beside the source (or into the configured
-     * output folder), creating the folder if it does not exist.
+     * output folder), creating the folder if it does not exist. An earlier
+     * output is replaced; any other file is left alone.
      *
+     * @throws \RuntimeException when a file the runner did not write has the name
      * @return string the output's path in the user's Files
      */
     private function writeOutput(BatchContext $ctx, File $source, string $response): string {
@@ -1245,10 +1348,12 @@ class BatchDocumentRunner {
         $output = null;
         if ($folder->nodeExists($name)) {
             $existing = $folder->get($name);
-            if ($existing instanceof File) {
-                $existing->putContent($response);
-                $output = $existing;
+            // The walk checked this too, but a batch may take a day to end.
+            if (!$existing instanceof File || !$this->isOutput($existing, true)) {
+                throw new \RuntimeException(self::occupied($name));
             }
+            $existing->putContent($response);
+            $output = $existing;
         }
         $output ??= $folder->newFile($name, $response);
         $this->markOutput($output);
@@ -1264,6 +1369,7 @@ class BatchDocumentRunner {
             $tagId = $this->outputTagId(true);
             if ($tagId !== '') {
                 $this->tagObjectMapper->assignTags((string)$output->getId(), 'files', [$tagId]);
+                $this->knownOutputs[(int)$output->getId()] = true;
             }
         } catch (\Throwable $e) {
             $this->logger->warning('AIquila batch: could not tag an output file', [
@@ -1305,7 +1411,36 @@ class BatchDocumentRunner {
                 $outputs[(int)$objectId] = true;
             }
         }
+        foreach ($ids as $id) {
+            $this->knownOutputs[(int)$id] = isset($outputs[(int)$id]);
+        }
         return $outputs;
+    }
+
+    /**
+     * Whether the runner wrote a file, which the output tag says.
+     *
+     * @param bool $fresh ask again instead of using what the walk found
+     */
+    private function isOutput(File $file, bool $fresh = false): bool {
+        $id = (int)$file->getId();
+        if ($fresh || !isset($this->knownOutputs[$id])) {
+            return isset($this->outputIds([$file])[$id]);
+        }
+        return $this->knownOutputs[$id];
+    }
+
+    /**
+     * Whether a file is one of the runner's tables: it is tagged as an output,
+     * or, should tagging have failed, it has a table's header.
+     */
+    private function isTable(File $file): bool {
+        if ($this->isOutput($file, true)) {
+            return true;
+        }
+        $line = strtok($file->getContent(), "\r\n");
+        $header = str_getcsv($line === false ? '' : $line, ',', '"', '');
+        return array_slice($header, 0, 2) === [self::TABLE_KEY, 'file'] && end($header) === 'extracted_at';
     }
 
     /**
@@ -1370,6 +1505,9 @@ class BatchDocumentRunner {
 
     /** Header columns around a table operation's fields. */
     private const TABLE_KEY = 'file_id';
+
+    /** @var array<string, bool> table path => a file that is no table has its name, read once per walk */
+    private array $tableOccupied = [];
 
     /** @var array<string, array<array-key, int>> table path => file id => extracted-at (unix), read once per run */
     private array $tableIndex = [];
@@ -1441,6 +1579,9 @@ class BatchDocumentRunner {
                     $node = $folder->get($name);
                     if (!$node instanceof File) {
                         throw new \RuntimeException("$name in " . UserPath::of($folder) . ' is not a file');
+                    }
+                    if (!$this->isTable($node)) {
+                        throw new \RuntimeException(self::occupied($name));
                     }
                     $existing = $node;
                 }

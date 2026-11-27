@@ -64,18 +64,24 @@ abstract class AbstractBatchTextTaskType implements ResumableCoworkerTaskType {
         $ctx = $this->context($coworker, $this->decodeOptions($coworker));
         $root = $this->rootFolder->getUserFolder($coworker->getUserId())->get($coworker->getInputPath() ?: '/');
 
-        $files = $this->runner->collect($ctx, $root);
+        $skipped = [];
+        $files = $this->runner->collect($ctx, $root, $skipped);
+        foreach ($skipped as $skip) {
+            $run->appendLog(CoworkerRun::LOG_WARN, 'Skipped: ' . $skip['reason'], $skip['item']);
+        }
         $progress(0, count($files));
 
         if ($files === []) {
             return [
                 'itemsTotal' => 0,
                 'itemsProcessed' => 0,
-                'summary' => 'Nothing to do — no new documents under ' . ($coworker->getInputPath() ?: '/') . '.',
+                'itemsSkipped' => count($skipped),
+                'summary' => 'Nothing to do — no new documents under ' . ($coworker->getInputPath() ?: '/') . '.'
+                    . BatchDocumentRunner::describeSkips($skipped),
             ];
         }
 
-        return $this->runner->process($ctx, $run, $files, $progress);
+        return $this->runner->process($ctx, $run, $files, $progress, $skipped);
     }
 
     public function resume(Coworker $coworker, CoworkerRun $run, array $state, callable $progress): array {
