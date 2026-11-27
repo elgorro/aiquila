@@ -375,7 +375,7 @@ class McpClientServiceTest extends TestCase {
             : ['result' => ['tools' => [['name' => 'a']], 'nextCursor' => 'x']], $params);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('tools/list page 2: JSON-RPC error -32602: Invalid cursor');
+        $this->expectExceptionMessageIs('tools/list page 2: JSON-RPC error -32602: Invalid cursor');
         $service->listTools($this->makeServer());
     }
 
@@ -395,7 +395,7 @@ class McpClientServiceTest extends TestCase {
         $this->assertCount(McpClientService::MAX_TOOL_PAGES, $params);
 
         $looping = $this->pagingService(fn (): array => ['result' => ['tools' => [], 'nextCursor' => 'same']], $params);
-        $this->expectExceptionMessage('the same cursor twice');
+        $this->expectExceptionMessageIsOrContains('the same cursor twice');
         $looping->listTools($this->makeServer());
     }
 
