@@ -12,6 +12,7 @@ use OCA\AIquila\Service\Provider\LLMProviderFactory;
 use OCA\AIquila\Service\Provider\LLMProviderInterface;
 use OCA\AIquila\Service\UsageStatService;
 use OCP\Files\Conversion\IConversionManager;
+use OCP\FilesMetadata\IFilesMetadataManager;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
@@ -144,6 +145,13 @@ class BatchDocumentRunner {
      */
     public const OUTPUT_TAG = 'aiquila:output';
 
+    /**
+     * File metadata key on an output: the id of the source it was written
+     * for. With one output folder for many input folders, `A/notes.md` and
+     * `B/notes.md` map to the same name, and this says whose it is.
+     */
+    public const SOURCE_METADATA_KEY = 'aiquila-source';
+
     /** The output tag's id once looked up; '' when it does not exist yet. */
     private ?string $outputTagId = null;
 
@@ -163,6 +171,7 @@ class BatchDocumentRunner {
         private readonly LoggerInterface $logger,
         private readonly UsageStatService $usageStats,
         private readonly ?IConversionManager $conversions = null,
+        private readonly ?IFilesMetadataManager $metadata = null,
     ) {
     }
 
@@ -228,12 +237,76 @@ class BatchDocumentRunner {
      */
     private function resolveOutputName(BatchContext $ctx, Folder $folder, File $source): string {
         $name = self::outputName($ctx->operation, $source, $ctx->options);
+        if ($this->belongsToAnotherSource($ctx, $folder, $name, $source)) {
+            return self::distinctOutputName($ctx, $source);
+        }
         $legacy = self::legacyOutputName($ctx, $source);
         if ($legacy === $name || $folder->nodeExists($name) || !$folder->nodeExists($legacy)) {
             return $name;
         }
+        if ($this->belongsToAnotherSource($ctx, $folder, $legacy, $source)) {
+            return $name;
+        }
         $existing = $folder->get($legacy);
         return $existing instanceof File && $this->isOutput($existing) && !$this->sharesLegacyName($ctx, $source) ? $legacy : $name;
+    }
+
+    /**
+     * The name a source's output takes when its usual one is another
+     * source's, e.g. `notes.md.1234.summary.md`: the file id keeps it stable
+     * from run to run and unique in the folder.
+     */
+    private static function distinctOutputName(BatchContext $ctx, File $source): string {
+        return $source->getName() . '.' . $source->getId() . $ctx->suffix();
+    }
+
+    /**
+     * Whether $name in a configured output folder is an output written for
+     * another source. Only a configured folder gathers sources from several
+     * folders; beside the source, names cannot clash this way. An output with
+     * no source recorded (written by an earlier release) counts as anyone's,
+     * as it did then.
+     */
+    private function belongsToAnotherSource(BatchContext $ctx, Folder $folder, string $name, File $source): bool {
+        if ($ctx->outputFolder === '' || !$folder->nodeExists($name)) {
+            return false;
+        }
+        $existing = $folder->get($name);
+        if (!$existing instanceof File || !$this->isOutput($existing)) {
+            return false;
+        }
+        $owner = $this->sourceOf($existing);
+        return $owner !== null && $owner !== (int)$source->getId();
+    }
+
+    /** The source an output was written for, or null when none is recorded. */
+    private function sourceOf(File $output): ?int {
+        if ($this->metadata === null) {
+            return null;
+        }
+        try {
+            $metadata = $this->metadata->getMetadata((int)$output->getId());
+            return $metadata->hasKey(self::SOURCE_METADATA_KEY) ? $metadata->getInt(self::SOURCE_METADATA_KEY) : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /** Record which source an output was written for. Best effort, like the tags. */
+    private function recordSource(File $output, File $source): void {
+        if ($this->metadata === null) {
+            return;
+        }
+        try {
+            $metadata = $this->metadata->getMetadata((int)$output->getId(), true);
+            $metadata->setInt(self::SOURCE_METADATA_KEY, (int)$source->getId());
+            $this->metadata->saveMetadata($metadata);
+        } catch (\Throwable $e) {
+            $this->logger->warning('AIquila batch: could not record an output\'s source', [
+                'file' => $output->getPath(),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -1357,6 +1430,7 @@ class BatchDocumentRunner {
         }
         $output ??= $folder->newFile($name, $response);
         $this->markOutput($output);
+        $this->recordSource($output, $source);
         return UserPath::of($output);
     }
 

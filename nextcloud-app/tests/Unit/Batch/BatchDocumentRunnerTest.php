@@ -16,6 +16,9 @@ use OCA\AIquila\Service\UsageStatService;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
+use OCP\FilesMetadata\Exceptions\FilesMetadataNotFoundException;
+use OCP\FilesMetadata\IFilesMetadataManager;
+use OCP\FilesMetadata\Model\IFilesMetadata;
 use OCP\SystemTag\ISystemTagManager;
 use OCP\SystemTag\ISystemTagObjectMapper;
 use PHPUnit\Framework\TestCase;
@@ -66,7 +69,32 @@ class BatchDocumentRunnerTest extends TestCase {
             $this->tagMapper(),
             $this->createStub(LoggerInterface::class),
             $usage,
+            null,
+            $this->metadataManager(),
         );
+    }
+
+    /** @var array<int, array<string, int>> file metadata by file id */
+    private array $metadata = [];
+
+    /** Integer file metadata kept in $this->metadata. */
+    private function metadataManager(): IFilesMetadataManager {
+        $manager = $this->createStub(IFilesMetadataManager::class);
+        $manager->method('getMetadata')->willReturnCallback(function (int $fileId, bool $generate = false): IFilesMetadata {
+            if (!$generate && !isset($this->metadata[$fileId])) {
+                throw new FilesMetadataNotFoundException();
+            }
+            $this->metadata[$fileId] ??= [];
+            $metadata = $this->createStub(IFilesMetadata::class);
+            $metadata->method('hasKey')->willReturnCallback(fn (string $k): bool => isset($this->metadata[$fileId][$k]));
+            $metadata->method('getInt')->willReturnCallback(fn (string $k): int => $this->metadata[$fileId][$k]);
+            $metadata->method('setInt')->willReturnCallback(function (string $k, int $v) use ($fileId, &$metadata): IFilesMetadata {
+                $this->metadata[$fileId][$k] = $v;
+                return $metadata;
+            });
+            return $metadata;
+        });
+        return $manager;
     }
 
     /** One system tag per name, created on first use, id = "t:<name>". */
@@ -404,6 +432,39 @@ class BatchDocumentRunnerTest extends TestCase {
 
         $this->runner->process($this->ctx(), new CoworkerRun(), [$txt], $this->noProgress());
         $this->assertSame(['report.summary.md' => 'mine or an old output', 'report.txt.summary.md' => 'S:bravo'], $this->written);
+    }
+
+    /**
+     * With one output folder, sources of the same name in different input
+     * folders each get an output, and the next walk finds both done.
+     */
+    public function testSameNamedSourcesInDifferentFoldersDoNotShareAnOutput(): void {
+        $this->answerSynchronously();
+        $out = $this->sharedFolder();
+        $out->method('getId')->willReturn(50);
+        $out->method('getDirectoryListing')->willReturn([]);
+        $this->userFolder->method('get')->willReturnCallback(fn (string $p) => $p === '/Out' ? $out : throw new \OCP\Files\NotFoundException());
+
+        $a = $this->createStub(Folder::class);
+        $a->method('getId')->willReturn(51);
+        $b = $this->createStub(Folder::class);
+        $b->method('getId')->willReturn(52);
+        $inA = $this->file(7, 'notes.md', 'alpha', 'text/markdown', $a);
+        $inB = $this->file(8, 'notes.md', 'bravo', 'text/markdown', $b);
+        $a->method('getDirectoryListing')->willReturn([$inA]);
+        $b->method('getDirectoryListing')->willReturn([$inB]);
+        $root = $this->createStub(Folder::class);
+        $root->method('getId')->willReturn(53);
+        $root->method('getDirectoryListing')->willReturn([$a, $b]);
+
+        $result = $this->runner->process($this->ctx([], '/Out'), new CoworkerRun(), [$inA, $inB], $this->noProgress());
+
+        $this->assertSame(2, $result['itemsProcessed']);
+        $this->assertSame(['notes.md.summary.md' => 'S:alpha', 'notes.md.8.summary.md' => 'S:bravo'], $this->written);
+        $this->assertSame([], $this->runner->collect($this->ctx([], '/Out'), $root), 'both are done');
+
+        $this->runner->process($this->ctx(['force' => true], '/Out'), new CoworkerRun(), [$inB, $inA], $this->noProgress());
+        $this->assertSame(['notes.md.summary.md' => 'S:alpha', 'notes.md.8.summary.md' => 'S:bravo'], $this->written, 'each keeps its own output');
     }
 
     public function testSharedOptionsAreValidatedWithoutAnOperation(): void {

@@ -187,7 +187,11 @@ never share an output. Earlier releases left the extension out
 (`report.summary.md`). Such an output stays in use, and is updated in place, while
 it carries the `aiquila:output` tag and can belong to one source only. With several documents of that base name in the
 folder it counts for none of them and is left alone, and each gets an output of
-its own. The source is tagged
+its own. Each output records the id of the source it was written for, in the
+file metadata key `aiquila-source`. One output folder can gather documents from
+several folders, so `A/notes.md` and `B/notes.md` map to the same name: whichever
+is written first keeps it, and the other's output is `notes.md.<file id>.summary.md`.
+Outputs written before the key existed count as any source's. The source is tagged
 `aiquila:summarized` / `aiquila:translated` / `aiquila:asked-<hash>` so
 processed files can be filtered in the Files UI.
 
