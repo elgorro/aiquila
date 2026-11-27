@@ -1580,6 +1580,12 @@ class BatchDocumentRunner {
     /** Header columns around a table operation's fields. */
     private const TABLE_KEY = 'file_id';
 
+    /**
+     * Column with the reason a row has no values: the answer did not fit the
+     * fields. Field names start with a letter, so none can be this one.
+     */
+    public const TABLE_ERROR = '_error';
+
     /** @var array<string, bool> table path => a file that is no table has its name, read once per walk */
     private array $tableOccupied = [];
 
@@ -1605,9 +1611,13 @@ class BatchDocumentRunner {
      * check it and hold its row until the run writes the tables.
      *
      * @param list<string> $outputs
-     * @param array<string, array{folder: Folder, rows: array<int, array{file: File, row: array<string, string|int|float|bool|null>}>}> $tables
+     * @param array<string, array{folder: Folder, rows: array<int, array{file: File, row: array<string, string|int|float|bool|null>, error?: string}>}> $tables
      * @param-out list<string> $outputs
-     * @throws InvalidAnswerException when a table operation's answer is not a valid row
+     * @throws InvalidAnswerException when a table operation's answer is not a valid row.
+     *         Its row is held all the same, empty but for the reason in
+     *         {@see TABLE_ERROR}: the next run then passes the source over
+     *         until the source or the fields change, instead of billing a
+     *         document the model keeps answering wrongly every night.
      */
     private function accept(BatchContext $ctx, File $file, string $response, array &$outputs, array &$tables): void {
         $op = $ctx->operation;
@@ -1616,14 +1626,15 @@ class BatchDocumentRunner {
             $this->markDone($ctx, $file);
             return;
         }
-        try {
-            $row = $op->parseRow($response, $ctx->options);
-        } catch (\InvalidArgumentException $e) {
-            throw new InvalidAnswerException($e->getMessage(), 0, $e);
-        }
         $folder = $this->outputFolder($ctx, $file);
         $key = $folder->getPath();
         $tables[$key] ??= ['folder' => $folder, 'rows' => []];
+        try {
+            $row = $op->parseRow($response, $ctx->options);
+        } catch (\InvalidArgumentException $e) {
+            $tables[$key]['rows'][$file->getId()] = ['file' => $file, 'row' => [], 'error' => $e->getMessage()];
+            throw new InvalidAnswerException($e->getMessage(), 0, $e);
+        }
         $tables[$key]['rows'][$file->getId()] = ['file' => $file, 'row' => $row];
     }
 
@@ -1632,7 +1643,10 @@ class BatchDocumentRunner {
      * A table that cannot be written loses its rows for this run: they are
      * reported as unsaved, and the number of them is returned.
      *
-     * @param array<string, array{folder: Folder, rows: array<int, array{file: File, row: array<string, string|int|float|bool|null>}>}> $tables
+     * Rows of invalid answers are written too, with their reason; they were
+     * reported as invalid already, so a lost table does not count them again.
+     *
+     * @param array<string, array{folder: Folder, rows: array<int, array{file: File, row: array<string, string|int|float|bool|null>, error?: string}>}> $tables
      * @param list<string> $outputs
      * @param array<string, list<string>> $failures
      * @param-out list<string> $outputs
@@ -1644,7 +1658,7 @@ class BatchDocumentRunner {
         }
         $lost = 0;
         $name = $op->tableFileName($ctx->options);
-        $header = [self::TABLE_KEY, 'file', ...$op->columns($ctx->options), 'extracted_at'];
+        $columns = [self::TABLE_KEY, 'file', ...$op->columns($ctx->options)];
         foreach ($tables as $table) {
             $folder = $table['folder'];
             try {
@@ -1666,8 +1680,17 @@ class BatchDocumentRunner {
                     foreach ($entry['row'] as $column => $value) {
                         $cells[$column] = self::cell($value);
                     }
+                    if (isset($entry['error'])) {
+                        $cells[self::TABLE_ERROR] = self::neutralize($entry['error']);
+                    }
                     $rows[(string)$fileId] = $cells;
                 }
+                // The reason column is there only while a row has one.
+                $hasErrors = false;
+                foreach ($rows as $cells) {
+                    $hasErrors = $hasErrors || ($cells[self::TABLE_ERROR] ?? '') !== '';
+                }
+                $header = [...$columns, ...($hasErrors ? [self::TABLE_ERROR] : []), 'extracted_at'];
                 $csv = self::csvEncode($header, $rows);
                 if ($existing !== null) {
                     $existing->putContent($csv);
@@ -1683,6 +1706,9 @@ class BatchDocumentRunner {
                 }
             } catch (\Throwable $e) {
                 foreach ($table['rows'] as $entry) {
+                    if (isset($entry['error'])) {
+                        continue;
+                    }
                     $failures['unsaved'][] = $entry['file']->getName() . ' — ' . $e->getMessage();
                     $lost++;
                 }

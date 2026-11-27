@@ -295,14 +295,52 @@ class ExtractOperationTest extends TestCase {
         $this->assertSame('s', $seen[0]['system']);
 
         $rows = BatchDocumentRunner::csvRows($this->folderFiles['invoices.csv']);
-        $this->assertSame([1, 3], array_keys($rows));
+        $this->assertSame([1, 2, 3], array_keys($rows));
+        $this->assertSame('', $rows['2']['vendor'], 'an invalid answer leaves no values');
+        $this->assertStringContainsString('total: expected number', $rows['2'][BatchDocumentRunner::TABLE_ERROR]);
+        $this->assertSame('', $rows['1'][BatchDocumentRunner::TABLE_ERROR]);
         $this->assertSame("'=cmd", $rows['1']['vendor']);
         $this->assertSame('true', $rows['1']['paid']);
         $this->assertSame('Gamma, Ltd', $rows['3']['vendor']);
         $this->assertSame('30.25', $rows['3']['total']);
         $this->assertSame('', $rows['3']['issued']);
         $this->assertSame('/In/c.txt', $rows['3']['file']);
+        $this->assertStringStartsWith("file_id,file,vendor,total,issued,paid,items,_error,extracted_at\r\n", $this->folderFiles['invoices.csv']);
+    }
+
+    /**
+     * A document answered wrongly is not sent again on the next run, only
+     * once it or the fields change; a valid answer then clears its reason,
+     * and the reason column goes once no row has one.
+     */
+    public function testAnInvalidAnswerIsNotRetriedUntilTheSourceOrTheFieldsChange(): void {
+        $folder = $this->folder();
+        $calls = 0;
+        $answer = '{"vendor": "Beta", "total": "x"}';
+        $p = $this->createStub(ClaudeSDKService::class);
+        $p->method('ask')->willReturnCallback(function () use (&$calls, &$answer): array {
+            $calls++;
+            return ['response' => $answer, 'usage' => []];
+        });
+        $runner = $this->runner($p);
+        $source = $this->source(2, 'b.txt', $folder, time() - 60);
+
+        $runner->process($this->ctx(), new CoworkerRun(), [$source], static function (): void {
+        });
+        $this->assertSame(1, $calls);
+        $this->assertSame([], $runner->collect($this->ctx(), $source), 'not billed again');
+
+        $edited = $this->source(2, 'b.txt', $folder, time() + 3600);
+        $this->assertSame([$edited], $runner->collect($this->ctx(), $edited), 'the source changed');
+        $schema = self::OPTIONS;
+        $schema['fields'][] = ['name' => 'currency', 'type' => 'string'];
+        $this->assertSame([$source], $runner->collect($this->ctx($schema), $source), 'the fields changed');
+
+        $answer = '{"vendor": "Beta", "total": 20}';
+        $runner->process($this->ctx(), new CoworkerRun(), [$edited], static function (): void {
+        });
         $this->assertStringStartsWith("file_id,file,vendor,total,issued,paid,items,extracted_at\r\n", $this->folderFiles['invoices.csv']);
+        $this->assertSame('20', BatchDocumentRunner::csvRows($this->folderFiles['invoices.csv'])['2']['total']);
     }
 
     /** A rerun replaces a document's row and keeps the others, including rows of an older schema. */

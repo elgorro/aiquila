@@ -234,9 +234,15 @@ source's folder when none is set. So there is one table per folder.
   then checked in code (`parseRow()`): the outermost object is taken, a value is
   coerced to its type (`"12.50"` → `12.5`, a real `YYYY-MM-DD` date), and a missing
   field is empty. An answer that holds no object, or a value of the wrong type,
-  fails that file as *invalid*. It gets no row and is tried again on the next run.
+  fails that file as *invalid*. It still gets a row, with every field empty and
+  the reason in `_error`, and the done-tag, so the next run passes it over like a
+  finished document. Without that, a document the model reliably answers wrongly
+  would be sent, and billed, on every run. It is tried again once the document or
+  the fields change.
 - **The table** is RFC 4180 CSV (CRLF, fields quoted when needed) with the
-  columns `file_id`, `file`, the fields, and `extracted_at` (UTC). Rows are keyed
+  columns `file_id`, `file`, the fields, `_error` while any row has a reason in it,
+  and `extracted_at` (UTC). Field names start with a letter, so none can be
+  `_error`. Rows are keyed
   by file id: a rerun replaces a document's row and keeps the others. After a
   schema change, older rows keep their values for the columns that remain, and
   new columns stay empty until the document is extracted again.
