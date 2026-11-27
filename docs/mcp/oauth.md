@@ -507,22 +507,15 @@ writes it back in an older format.
 
 **Upgrading from JSON state.** Earlier versions kept the state in `clients.json`,
 `refresh-tokens.json`, `revoked.json` and `credentials.json`. On first start the server
-imports them into `state.db` and renames each one `*.migrated`. Once the server is up,
-delete those files. The compose service is `mcp-server` in `docker/standalone/`, and
-`mcp` in the Hetzner stacks:
+imports them into `state.db` and deletes them. A file that is not valid JSON is not
+imported: the server logs a warning on every start and leaves it in place, to fix or
+delete. Versions that renamed the imported files `*.migrated` instead left a frozen copy
+of the state behind (refresh-token keys, sealed app passwords, grants that no longer
+exist); the server deletes those copies on start too.
 
-```bash
-docker compose exec mcp-server sh -c 'rm -f "${MCP_AUTH_STATE_DIR:-/app/state}"/*.migrated'
-```
-
-They are a frozen copy of the state at the upgrade. They hold refresh-token keys,
-sometimes the tokens themselves (files from versions before hashing kept them in the
-clear), sealed app passwords, and grants that no longer exist.
-
-**Downgrading below the database.** Do not hand an older server old state. That means
-renaming the `*.migrated` files back, or restoring a copy of `MCP_AUTH_STATE_DIR` from
-before the upgrade. A token rotated or revoked since then would come back as unspent and
-valid, and reuse detection could not catch it, because the record that it was spent is
+**Downgrading below the database.** Do not hand an older server old state, such as a
+copy of `MCP_AUTH_STATE_DIR` from before the upgrade. A token rotated or revoked since
+then would come back as unspent and valid, and reuse detection could not catch it, because the record that it was spent is
 gone. Start the older version on an empty state directory instead:
 
 1. Stop the MCP server.

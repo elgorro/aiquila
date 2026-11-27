@@ -7,14 +7,14 @@
 // the file on a local volume.
 
 import { createHash, randomUUID } from 'node:crypto';
-import { closeSync, existsSync, openSync, readFileSync, renameSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { logger } from '../logger.js';
 
 export const STATE_DB_FILE = 'state.db';
 
-/** The JSON files earlier versions kept, imported once and then renamed `*.migrated`. */
+/** The JSON files earlier versions kept, imported once and then deleted. */
 export const LEGACY_FILES = {
   clients: 'clients.json',
   refreshTokens: 'refresh-tokens.json',
@@ -248,14 +248,48 @@ function migrate(db: DatabaseSync): void {
   }
 }
 
-function readLegacy<T>(dir: string, name: string): T | undefined {
+function readLegacy<T>(dir: string, name: string, unreadable: Set<string>): T | undefined {
   const path = join(dir, name);
   if (!existsSync(path)) return undefined;
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as T;
   } catch (err) {
-    logger.warn({ file: path, err }, '[state] Could not read a legacy state file — skipping it');
+    unreadable.add(name);
+    logger.warn(
+      { file: path, err },
+      '[state] Could not read a legacy state file — skipping it and leaving it in place; fix or delete it'
+    );
     return undefined;
+  }
+}
+
+/** Removes a state file, warning instead of failing when it cannot. */
+function removeStateFile(path: string): boolean {
+  try {
+    unlinkSync(path);
+    return true;
+  } catch (err) {
+    logger.warn(
+      { file: path, err },
+      '[state] Could not delete an old state file; delete it by hand'
+    );
+    return false;
+  }
+}
+
+/**
+ * Deletes the `*.migrated` copies that versions up to 0.6 left after importing
+ * the JSON state. They were a frozen copy of it: refresh-token keys (in the
+ * clear before hashing), the sealed app passwords of grants that have ended
+ * since, and modes as loose as 0644. Nothing reads them, and handing them back
+ * to an older server would revive spent and revoked tokens.
+ */
+function removeMigratedCopies(dir: string): void {
+  const removed = Object.values(LEGACY_FILES)
+    .map((f) => `${f}.migrated`)
+    .filter((f) => existsSync(join(dir, f)) && removeStateFile(join(dir, f)));
+  if (removed.length > 0) {
+    logger.info({ files: removed }, '[state] Deleted the copies left by an earlier JSON import');
   }
 }
 
@@ -270,20 +304,25 @@ function insert(db: DatabaseSync, table: string, row: Row): void {
 
 /**
  * Imports the JSON state files of earlier versions in one transaction, then
- * renames each to `<name>.migrated` so it is not read again. The stores apply
+ * deletes them: `state.db` holds everything they did, and a copy left behind
+ * would keep sealed app passwords and token keys after their grants end. A file
+ * that is not valid JSON is not imported and stays in place. The stores apply
  * their load-time rules (expiry, MCP_AUTH_SECRET rotation, redirect policy)
  * to the imported rows like to any other.
  */
 function importLegacyFiles(db: DatabaseSync, dir: string): void {
+  removeMigratedCopies(dir);
   const present = Object.values(LEGACY_FILES).filter((f) => existsSync(join(dir, f)));
   if (present.length === 0) return;
 
   const counts: Record<string, number> = {};
+  const unreadable = new Set<string>();
   db.exec('BEGIN IMMEDIATE');
   try {
     const clients = readLegacy<(Row & { client_id?: string; last_used_at?: number })[]>(
       dir,
-      LEGACY_FILES.clients
+      LEGACY_FILES.clients,
+      unreadable
     );
     for (const c of Array.isArray(clients) ? clients : []) {
       if (typeof c.client_id !== 'string') continue;
@@ -300,7 +339,8 @@ function importLegacyFiles(db: DatabaseSync, dir: string): void {
 
     const tokens = readLegacy<Record<string, Record<string, unknown>>>(
       dir,
-      LEGACY_FILES.refreshTokens
+      LEGACY_FILES.refreshTokens,
+      unreadable
     );
     for (const [key, e] of Object.entries(tokens ?? {})) {
       if (!e || typeof e.expiresAt !== 'number' || typeof e.userId !== 'string') continue;
@@ -319,7 +359,7 @@ function importLegacyFiles(db: DatabaseSync, dir: string): void {
       counts.refreshTokens = (counts.refreshTokens ?? 0) + 1;
     }
 
-    const revoked = readLegacy<Record<string, unknown>>(dir, LEGACY_FILES.revocations);
+    const revoked = readLegacy<Record<string, unknown>>(dir, LEGACY_FILES.revocations, unreadable);
     for (const [key, expiresAt] of Object.entries(revoked ?? {})) {
       if (typeof expiresAt !== 'number') continue;
       insert(db, 'revocations', { key, expires_at: expiresAt });
@@ -328,7 +368,8 @@ function importLegacyFiles(db: DatabaseSync, dir: string): void {
 
     const creds = readLegacy<Record<string, Record<string, unknown>>>(
       dir,
-      LEGACY_FILES.credentials
+      LEGACY_FILES.credentials,
+      unreadable
     );
     for (const [grantId, e] of Object.entries(creds ?? {})) {
       if (
@@ -353,10 +394,11 @@ function importLegacyFiles(db: DatabaseSync, dir: string): void {
     throw err;
   }
 
-  for (const f of present) renameSync(join(dir, f), join(dir, `${f}.migrated`));
+  const imported = present.filter((f) => !unreadable.has(f));
+  for (const f of imported) removeStateFile(join(dir, f));
   logger.info(
-    { counts, files: present },
-    '[state] Imported JSON state into state.db; the old files were renamed *.migrated'
+    { counts, files: imported },
+    '[state] Imported JSON state into state.db and deleted the old files'
   );
 }
 

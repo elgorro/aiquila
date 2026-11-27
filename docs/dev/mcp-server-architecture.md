@@ -249,7 +249,7 @@ the number of grants. WAL mode lets several server processes on the same host sh
 
 The schema is versioned with `PRAGMA user_version`. On first start the JSON files of
 earlier versions (`clients.json`, `refresh-tokens.json`, `revoked.json`, `credentials.json`)
-are imported in one transaction and renamed `*.migrated`. Nothing ever writes state back
+are imported in one transaction and deleted. Nothing ever writes state back
 in the old format, so a downgrade starts from an empty directory; see
 [Upgrades and downgrades](../mcp/oauth.md#upgrades-and-downgrades). When the directory
 cannot be written, the server runs on an in-memory database and logs how to fix the volume. A write that fails later (disk full) is logged and skipped
