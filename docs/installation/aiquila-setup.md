@@ -831,6 +831,8 @@ them there. Extraction then asks for JSON instead, and checks every answer as be
 The document tasks only redo a file when it changed since its result was written,
 unless `force` is set, and never process a result that a document task wrote. A run handles up to 200
 documents; the rest wait for the next run. `vision:classify` needs a `vision` provider.
+On one that cannot see images, the run stops at the first image with one error,
+instead of failing every image.
 
 Each coworker can be paused, run immediately with **Run now**, and keeps a run
 history with a summary of what it did. Open a run in the history to see its full

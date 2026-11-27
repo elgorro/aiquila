@@ -29,6 +29,13 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
     /** Hard cap on files processed in a single run to bound cost/runtime. */
     protected const MAX_ITEMS_PER_RUN = 200;
 
+    /**
+     * A provider's answer that it cannot take images at all, as opposed to a
+     * failure of one file. Asked of the answer, not of getCapabilities(): that
+     * one ignores a user's own model choice, which may well see images.
+     */
+    private const NO_VISION = '/vision-capable|cannot process images/i';
+
     public function __construct(
         protected readonly IRootFolder $rootFolder,
         protected readonly ImageOptimizer $imageOptimizer,
@@ -92,6 +99,7 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
         $fragments = [];
 
         $progress(0, $total);
+        $noVision = null;
 
         foreach ($files as $file) {
             try {
@@ -100,6 +108,13 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
                 $result = $provider->askWithImage($prompt, $image['base64'], $image['mimeType'], $userId, (string)$file->getId(), $requestOptions);
                 $this->usageStats->record($userId, $provider, $result, UsageStatService::TYPE_COWORKER);
                 if (isset($result['error'])) {
+                    if (preg_match(self::NO_VISION, (string)$result['error']) === 1) {
+                        // Every other file would fail the same way: say so once
+                        // and end the run, rather than once per file.
+                        $noVision = (string)$result['error'];
+                        $run->appendLog(CoworkerRun::LOG_ERROR, $noVision, UserPath::of($file));
+                        break;
+                    }
                     throw new \RuntimeException($result['error']);
                 }
 
@@ -120,6 +135,15 @@ abstract class AbstractVisionTaskType implements CoworkerTaskType {
 
             $processed++;
             $progress($processed, $total);
+        }
+
+        if ($noVision !== null) {
+            throw new \RuntimeException(sprintf(
+                '%s Stopped after %d of %d file(s); pick a vision-capable provider for this coworker.',
+                $noVision,
+                $processed - $errors,
+                $total,
+            ));
         }
 
         $summary = sprintf(
