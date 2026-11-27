@@ -373,8 +373,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 ### HTTP API Errors
 
 The HTTP clients in `mcp-server/src/client/` throw `ApiError` on a non-2xx response.
-It keeps the status code, status text and raw body (`responseBody`). Tools can map a
-status to a friendly message through `handleAppError`.
+It keeps the status code, status text and raw body (`responseBody`). Its message opens
+with the name of the API that answered (`Tables API error: …`, `Deck API error: …`), so
+a failure is attributed to the right app. Tools can map a status to a friendly message
+through `handleAppError`.
 
 Requests to the AIquila app's own REST API (`fetchAiquilaAPI`) add the app's reason to
 the message: `AIquila API error: 400 Bad Request: Invalid cron schedule: nope`. The app

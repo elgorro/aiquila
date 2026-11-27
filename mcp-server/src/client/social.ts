@@ -245,7 +245,7 @@ async function request<T>(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiError(response.status, response.statusText, text);
+    throw new ApiError(response.status, response.statusText, text, { api: 'Social' });
   }
 
   if (response.headers.get('content-type')?.includes('application/json')) {

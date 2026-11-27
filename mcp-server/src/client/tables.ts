@@ -55,12 +55,10 @@ export async function fetchTablesAPI<T = unknown>(
 
   if (!response.ok) {
     const responseBody = await response.text();
-    throw new ApiError(
-      response.status,
-      response.statusText,
-      responseBody,
-      tablesErrorMessage(responseBody)
-    );
+    throw new ApiError(response.status, response.statusText, responseBody, {
+      api: 'Tables',
+      detail: tablesErrorMessage(responseBody),
+    });
   }
   return (await response.json()) as T;
 }

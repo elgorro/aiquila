@@ -150,7 +150,7 @@ export async function fetchPollsAPI<T = unknown>(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiError(response.status, response.statusText, text);
+    throw new ApiError(response.status, response.statusText, text, { api: 'Polls' });
   }
 
   if (response.status === 204) {
