@@ -201,6 +201,10 @@ The server starts independently of Nextcloud connectivity. Tools will fail if:
 
 Test connectivity: `make test`
 
+### Claude.ai connector lists no tools
+
+See [Claude.ai shows "This connector has no tools available"](oauth.md#claudeai-shows-this-connector-has-no-tools-available).
+
 ### External Nextcloud uses self-signed certificate
 
 If your Nextcloud instance uses a self-signed certificate, add to `docker-compose.yml` under `mcp-server.environment`:

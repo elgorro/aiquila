@@ -222,6 +222,9 @@ node --version
 2. Verify the MCP server path in config is absolute
 3. Restart your MCP client completely
 
+For a remote connector in Claude.ai that signs in but lists no tools, see
+[Claude.ai shows "This connector has no tools available"](oauth.md#claudeai-shows-this-connector-has-no-tools-available).
+
 ---
 
 **Problem**: `Permission denied. OCC commands require admin rights…` from `run_setup_checks`, `install_app`, the integrity checks or the `aiquila_*` tools
