@@ -6,6 +6,10 @@ AIquila's default tool-execution path runs an agentic loop in PHP:
 `ClaudeSDKService::chatWithTools()` / `chatWithToolsStream()`, and dispatch
 each `tool_use` block back to MCP via `McpClientService::executeTool()`
 until the model emits `end_turn`.
+`listTools()` follows `nextCursor` through every page of `tools/list`, as MCP
+[pagination](https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/pagination)
+requires, up to 50 pages. A failed page, a repeated cursor or a 51st page fails
+that server's list rather than leaving it short.
 
 The **native MCP connector** short-circuits that loop: the provider's cloud
 connects to the MCP servers itself. AIquila makes one API call and persists
