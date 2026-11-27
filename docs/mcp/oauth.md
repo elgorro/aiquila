@@ -370,7 +370,7 @@ Claude uses Client ID Metadata Documents when the server advertises them, which 
 default — no registration settings are needed. With CIMD disabled, enable dynamic
 registration instead (`MCP_REGISTRATION_ENABLED=true`).
 
-In Claude.ai, go to **Settings** → **Integrations** → **Add MCP Server** and enter:
+In Claude.ai, go to **Customize** → **Connectors** → **Add custom connector** and enter:
 
 ```
 https://mcp.example.com/mcp
@@ -640,6 +640,66 @@ Error: MCP_CREDENTIAL_KEY must be set when MCP_AUTH_ENABLED=true (openssl rand -
 ```
 
 Set the missing variable in `.env` and restart.
+
+### Claude.ai shows "This connector has no tools available"
+
+Sign-in and `initialize` succeed, but the connector lists no tools. Work through these in
+order.
+
+**Ignore a `405` on `GET /mcp`.** The browser console may show a `GET` to
+`claude.ai/v1/toolbox/shttp/mcp/…` failing with `405 Method Not Allowed`. That is expected,
+not the fault. Protocol `2026-07-28` has no standalone GET stream. For traffic from clients
+of earlier revisions, the server SHOULD answer `GET` and `DELETE` on the MCP endpoint with
+`405` ([Streamable HTTP, *Backward Compatibility → Earlier Streamable HTTP
+Revisions*](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http)),
+and AIquila does. Anthropic's [connector troubleshooting
+checklist](https://claude.com/docs/connectors/building/troubleshooting) also treats a `401` or
+`405` on the MCP path as fine. Leave the reverse proxy, SSE and buffering settings alone on
+account of it.
+
+**Check what the server registered.** When the server builds an account's tool list, it
+logs which tools it chose and why:
+
+```
+[tools] Tool filtering applied  {"tools": …, "source": "…"}
+```
+
+| `source` | Meaning |
+|----------|---------|
+| `app-detection` | Tools for the apps enabled on Nextcloud, detected as the signed-in account |
+| `MCP_TOOLS` | The explicit list in `MCP_TOOLS` |
+| `all (not signed in)` | An anonymous `tools/list` (see [Lazy authentication](#lazy-authentication)); the list narrows once you sign in |
+| `all (fallback)` | App detection failed, so every tool was registered. The preceding warning `Could not detect enabled apps` gives the reason |
+
+A large tool list is unlikely to be the cause, because Claude documents no limit on the
+number of tools ([size and timeout
+limits](https://claude.com/docs/connectors/building/index#design-within-the-size-and-timeout-limits)).
+With `all (fallback)`, fix the detection error, or set
+`MCP_TOOLS=files,status,search,shares,calendar,contacts,notes` (any list of
+[categories](upstream-apis.md)), so you are not debugging two problems at once.
+
+**If the server registered tools, the empty list comes from Claude.ai.** Claude.ai fetches
+the tool list and caches it, and that cache can stay empty or out of date even though the
+server returns the current list. Try these in order:
+
+1. In Claude.ai, open **Customize** → **Connectors**, select the connector and refresh its
+   tools, or disconnect it and connect again.
+2. If the list stays empty, remove the connector and add it again with the same URL. Don't
+   add a query parameter to the URL to force a fresh connector. AIquila's protected resource
+   metadata names the endpoint without a query, and RFC 9728 §3.3 requires the client to
+   reject metadata whose `resource` differs from the URL it used. The token endpoint also
+   refuses a `resource` carrying that query (RFC 8707 §2), so sign-in fails.
+3. Set `MCP_LAZY_AUTH=false` and restart. Every request then needs a token, so Claude.ai
+   has to finish sign-in before it lists tools. This rules out lazy authentication as the
+   cause.
+
+**Report it upstream if no tool list is ever requested.** Watch the server log while you
+connect. If `initialize` or `server/discover` arrives but no `tools/list` follows, the
+request never left Claude.ai. Report it on
+[`anthropics/claude-ai-mcp`](https://github.com/anthropics/claude-ai-mcp/issues) with your
+server URL, UTC timestamps from your access log and, if Claude.ai showed an error page, the
+`ofid_…` reference ID from its URL (`…/settings/connectors?step=start_error&flow_id=ofid_…`).
+That ID is what lets Anthropic trace the attempt.
 
 ### Client reconnects frequently
 
