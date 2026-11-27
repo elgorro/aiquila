@@ -3,6 +3,7 @@
 namespace OCA\AIquila\Tests\Unit;
 
 use OCA\AIquila\Controller\ConversationController;
+use OCA\AIquila\Service\ToolChanges;
 use OCA\AIquila\Db\Conversation;
 use OCA\AIquila\Db\ConversationMapper;
 use OCA\AIquila\Db\Message as MessageEntity;
@@ -48,6 +49,10 @@ class ConversationControllerFileHistoryTest extends TestCase {
     /** The tools the MCP servers list right now, and the tools last sent. */
     private ?array $currentTools = null;
     private array $sentTools = [];
+    /** @var array{state: ?string, version: int} the conversation row's tool state */
+    private array $row = ['state' => null, 'version' => 0];
+    /** Runs once inside the next swap, before it compares: another turn's write. */
+    private ?\Closure $beforeSwap = null;
 
     /**
      * @param array<string, array{name: string, mimeType: string, size: int, content: string}> $nextcloudFiles
@@ -62,6 +67,22 @@ class ConversationControllerFileHistoryTest extends TestCase {
         $conversationMapper = $this->createStub(ConversationMapper::class);
         $conversationMapper->method('findByIdAndUser')->willReturn($conversation);
         $conversationMapper->method('update')->willReturnArgument(0);
+        // The row's tool state, written by compare-and-swap as the database does.
+        $conversationMapper->method('swapToolState')->willReturnCallback(function (Conversation $c, ?string $state): bool {
+            if ($this->beforeSwap !== null) {
+                ($this->beforeSwap)();
+                $this->beforeSwap = null;
+            }
+            if ($c->getToolStateVersion() !== $this->row['version']) {
+                return false;
+            }
+            $this->row = ['state' => $state, 'version' => $this->row['version'] + 1];
+            $c->adoptToolState($state, $this->row['version']);
+            return true;
+        });
+        $conversationMapper->method('reloadToolState')->willReturnCallback(function (Conversation $c): void {
+            $c->adoptToolState($this->row['state'], $this->row['version']);
+        });
 
         $messageMapper = $this->createStub(MessageMapper::class);
         $messageMapper->method('insert')->willReturnCallback(function (MessageEntity $m): MessageEntity {
@@ -348,5 +369,27 @@ class ConversationControllerFileHistoryTest extends TestCase {
 
         $this->assertSame([self::namedTool('b')], $this->sentTools);
         $this->assertSame([], array_filter($this->messages, static fn($m): bool => $m->getRole() === 'system'));
+    }
+
+    /**
+     * Two turns plan from the same state; the one that writes second loses
+     * the swap, plans again from the winner's state, and keeps its tool.
+     */
+    public function testAConcurrentTurnsToolIsNotDropped(): void {
+        $controller = $this->makeController([], claude: true);
+        $this->currentTools = [self::namedTool('a')];
+        $controller->message(1, 'First');
+        $start = $this->row;
+
+        // While this turn plans "a, c", another one adds "b" and writes first.
+        $this->beforeSwap = function () use ($start): void {
+            $other = ToolChanges::plan(ToolChanges::decodeState($start['state']), [self::namedTool('a'), self::namedTool('b')]);
+            $this->row = ['state' => ToolChanges::encodeState($other['state']), 'version' => $start['version'] + 1];
+        };
+        $this->currentTools = [self::namedTool('a'), self::namedTool('c')];
+        $controller->message(1, 'Second');
+
+        $this->assertSame($start['version'] + 2, $this->row['version'], 'written once more, after the other turn');
+        $this->assertSame(['a', 'b', 'c'], array_column($this->sentTools, 'name'), 'the declared list keeps the other turn\'s tool');
     }
 }

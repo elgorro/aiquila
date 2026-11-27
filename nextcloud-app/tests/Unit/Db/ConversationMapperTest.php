@@ -95,4 +95,32 @@ class ConversationMapperTest extends MapperTestCase {
         $mapper = new ConversationMapper($this->db);
         $this->assertSame(0, $mapper->countAll());
     }
+
+    /** The swap writes only against the version it read, and the entity follows only a won swap. */
+    public function testSwapToolStateIsACompareAndSwapOnTheVersion(): void {
+        $this->mockQueryBuilder();
+        $this->qb->method('update')->willReturnSelf();
+        $this->qb->method('set')->willReturnSelf();
+        $this->qb->expects($this->exactly(2))->method('executeStatement')->willReturnOnConsecutiveCalls(1, 0);
+        $this->expr = $this->createStub(\OCP\DB\QueryBuilder\IExpressionBuilder::class);
+        $compared = [];
+        $this->expr->method('eq')->willReturnCallback(function (string $column, $value) use (&$compared): string {
+            $compared[$column] = $value;
+            return "$column = $value";
+        });
+
+        $conv = new Conversation();
+        $conv->setId(5);
+        $mapper = new ConversationMapper($this->db);
+
+        $this->assertTrue($mapper->swapToolState($conv, '{"declared":[]}'));
+        $this->assertSame(['id' => '5', 'tool_state_version' => '0'], $compared);
+        $this->assertSame('{"declared":[]}', $conv->getToolState());
+        $this->assertSame(1, $conv->getToolStateVersion());
+        $this->assertArrayNotHasKey('toolState', $conv->getUpdatedFields(), 'a later update() does not write it back');
+
+        $this->assertFalse($mapper->swapToolState($conv, null));
+        $this->assertSame('{"declared":[]}', $conv->getToolState(), 'a lost swap leaves the entity as it was');
+        $this->assertSame(1, $conv->getToolStateVersion());
+    }
 }

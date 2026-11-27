@@ -33,6 +33,7 @@ use OCP\AppFramework\Db\Entity;
  * @method void setSpeedFast(?bool $speedFast)
  * @method string|null getToolState()
  * @method void setToolState(?string $toolState)
+ * @method int getToolStateVersion()
  */
 class Conversation extends Entity implements \JsonSerializable {
     use InsertsFullRow;
@@ -53,6 +54,8 @@ class Conversation extends Entity implements \JsonSerializable {
     protected ?bool $speedFast = null;
     /** Declared and offered tools, see Service\ToolChanges. Server-side only. */
     protected ?string $toolState = null;
+    /** Bumped by every write of $toolState, see ConversationMapper::swapToolState(). */
+    protected int $toolStateVersion = 0;
 
     public function __construct() {
         $this->addType('userId', 'string');
@@ -67,7 +70,18 @@ class Conversation extends Entity implements \JsonSerializable {
         $this->addType('thinkingBudget', 'integer');
         $this->addType('speedFast', 'boolean');
         $this->addType('toolState', 'string');
+        $this->addType('toolStateVersion', 'integer');
         $this->markFieldsForInsert();
+    }
+
+    /**
+     * Take the tool state the row has now, without marking it for the next
+     * update(): only ConversationMapper::swapToolState() writes it, so a
+     * plain update() never puts back a state another turn has replaced.
+     */
+    public function adoptToolState(?string $state, int $version): void {
+        $this->toolState = $state;
+        $this->toolStateVersion = $version;
     }
 
     /**
