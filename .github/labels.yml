@@ -1,12 +1,13 @@
 # GitHub label registry — the source of truth for this repo's labels.
 # Apply with: gh label import .github/labels.yml
 #
-# Three axes: type:* (exactly one per issue), component:* (one or more),
-# priority:* (exactly one). See CONTRIBUTING.md for what they mean.
+# Labels carry the component:* axis (one or more per issue or PR) and the
+# cross-cutting markers. The kind of work is the issue type and the urgency is the
+# Priority issue field, neither of which is a label. See CONTRIBUTING.md.
 #
 # Regenerate from the live set after changing labels via the API:
 #   gh label list --limit 100 --json name,color,description \
-#     --jq '.[] | "- name: \(.name)\n  color: \(.color)\n  description: \(.description)\n"'
+#     --jq 'sort_by(.name) | .[] | "- name: \(.name)\n  color: \(.color)\n  description: \(.description)\n"'
 
 - name: component:infrastructure
   color: 5319e7
@@ -60,22 +61,6 @@
   color: 45229e
   description: Pull requests that update php code
 
-- name: priority:critical
-  color: b60205
-  description: Blocker — drop other work
-
-- name: priority:high
-  color: d93f0b
-  description: Next up — targeted at the current milestone
-
-- name: priority:low
-  color: 0e8a16
-  description: Nice to have — no committed timeline
-
-- name: priority:medium
-  color: fbca04
-  description: Normal — scheduled, not urgent
-
 - name: question
   color: d876e3
   description: Approach still being decided, not yet implementation
@@ -84,22 +69,7 @@
   color: b60205
   description: Security vulnerability or hardening
 
-- name: type:bug
-  color: d73a4a
-  description: Something isn't working
-
-- name: type:chore
-  color: ededed
-  description: Maintenance, tooling, dependencies, refactors
-
-- name: type:docs
-  color: 0075ca
-  description: Documentation improvements
-
-- name: type:feature
-  color: a2eeef
-  description: New feature or request
-
 - name: wontfix
   color: ffffff
   description: This will not be worked on
+

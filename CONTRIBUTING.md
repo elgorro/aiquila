@@ -29,29 +29,31 @@ If you comment on an issue, we can assign it to you — GitHub only permits
 assigning people who are repo collaborators or who have commented on that
 specific issue.
 
-## Labels
+## Issue types and labels
 
 Issues are classified on three independent axes. There is a form for each
-type — bug report, feature request, chore, documentation — and each one applies
-its type and a default priority for you, so opening an issue the normal way needs
-no label picking. Questions and setup help go to
+type — bug report, feature request, chore, documentation — and each one sets
+the type for you, so opening an issue the normal way needs no picking. Questions
+and setup help go to
 [Q&A](https://github.com/elgorro/aiquila/discussions/new?category=q-a), early ideas to
 [Ideas](https://github.com/elgorro/aiquila/discussions/new?category=ideas).
 
-| Axis | Labels | Who sets it |
+| Axis | Values | Who sets it |
 |------|--------|-------------|
-| Type — what kind of work (exactly one) | `type:bug`, `type:feature`, `type:docs`, `type:chore` | The issue form |
-| Component — what it touches (one or more) | `component:mcp`, `component:nextcloud`, `component:infrastructure` | A maintainer during triage |
-| Priority — how urgent (exactly one) | `priority:critical`, `priority:high`, `priority:medium`, `priority:low` | A maintainer |
+| Type — what kind of work (exactly one) | Issue type `Bug`, `Feature`, `Docs`, `Chore` | The issue form |
+| Component — what it touches (one or more) | Labels `component:mcp`, `component:nextcloud`, `component:infrastructure` | A maintainer during triage |
+| Priority — how urgent (exactly one) | `Priority` field: `Urgent`, `High`, `Medium`, `Low` | A maintainer during triage |
 
-Two more labels cut across all three: `security` marks anything with a security
+Maintainers may also set an **Effort** estimate. They set a **Target date** only
+when outside work, such as an upstream release, depends on it. It is a soft target.
+
+Two labels cut across all three axes: `security` marks anything with a security
 impact, and `question` marks an issue whose approach is still being decided
 rather than implemented.
 
-**Don't set your own priority.** Forms default every new issue to
-`priority:medium`; a maintainer adjusts it during triage against everything else
-in flight. Nothing is lost by leaving it — if something is genuinely urgent, say
-so in the issue body, which carries far more than a label does.
+**Don't set your own priority.** A new issue starts without one, and a maintainer
+sets it during triage against everything else in flight. If something is genuinely
+urgent, say so in the issue body, which carries far more than a field does.
 
 `dependencies`, `javascript`, `php`, `go`, `docker` and `github_actions` are applied
 automatically by Dependabot. `good first issue` and `help wanted` mark work we'd
