@@ -2,6 +2,13 @@
 
 ## Overview
 
+This page covers the integration test against real servers. The unit tests
+(`cd hetzner && go test ./...`) need no credentials or network: `internal/hcloudtest`
+fakes the Hetzner Cloud API on loopback and the real hcloud-go client talks to it, and
+`internal/sshtest` runs an in-process SSH server that records each command and serves
+SFTP from memory. Commands reach both fakes through `HCLOUD_ENDPOINT` and
+`provision.Dial`.
+
 The integration test provisions two real Hetzner Cloud servers — a Nextcloud server with the
 AIquila app installed and an MCP server pointing at it — runs a full test suite against the live
 HTTPS endpoint, then destroys both servers.
