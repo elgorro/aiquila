@@ -84,7 +84,7 @@ aiquila.tar.gz:
 # land; without it a cached base is reused indefinitely.
 up: check-buildx aiquila.tar.gz
 	$(COMPOSE) build --pull nextcloud
-	$(COMPOSE) up -d --build
+	$(COMPOSE) up -d --build --remove-orphans
 	@echo ""
 	@echo "=== Starting... ==="
 	@echo "Follow logs:  make logs-follow"
@@ -96,13 +96,13 @@ up: check-buildx aiquila.tar.gz
 # Start everything plus the opt-in tools (Adminer)
 up-tools: check-buildx aiquila.tar.gz
 	$(COMPOSE) build --pull nextcloud
-	$(COMPOSE) --profile tools up -d --build
+	$(COMPOSE) --profile tools up -d --build --remove-orphans
 	@echo "Adminer:      http://localhost:8081"
 
 # Start everything plus Collabora, and connect Nextcloud to it
 up-office: check-buildx aiquila.tar.gz
 	$(COMPOSE) build --pull nextcloud
-	$(COMPOSE) --profile office up -d --build
+	$(COMPOSE) --profile office up -d --build --remove-orphans
 	./scripts/connect-collabora.sh
 
 # Stop all services (including opt-in ones)
@@ -166,7 +166,7 @@ clean:
 # Full reset: rebuild everything from scratch
 reset: check-buildx clean build-tarball
 	$(COMPOSE) build --pull nextcloud
-	$(COMPOSE) up -d --build
+	$(COMPOSE) up -d --build --remove-orphans
 	@echo ""
 	@echo "Full reset complete. Follow logs: make logs-follow"
 

@@ -34,5 +34,11 @@ func NewClient(flagToken, profileName string) (*hcloud.Client, error) {
 			"no Hetzner API token: use --token, $HCLOUD_TOKEN, or configure a profile with 'aiquila-hetzner profile add'",
 		)
 	}
-	return hcloud.NewClient(hcloud.WithToken(token)), nil
+	opts := []hcloud.ClientOption{hcloud.WithToken(token)}
+	// HCLOUD_ENDPOINT points the client at another API URL (a proxy or a
+	// mock), as it does for Hetzner's own hcloud CLI.
+	if endpoint := os.Getenv("HCLOUD_ENDPOINT"); endpoint != "" {
+		opts = append(opts, hcloud.WithEndpoint(endpoint))
+	}
+	return hcloud.NewClient(opts...), nil
 }

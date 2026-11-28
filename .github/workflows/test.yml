@@ -91,13 +91,31 @@ jobs:
         if: needs.changes.outputs.mcp == 'true'
         run: npm ci
 
-      - name: Run tests
+      # Fails below the statements threshold in vitest.config.ts (a ratchet;
+      # see docs/dev/ci-cd.md#coverage).
+      - name: Run tests with coverage
         if: needs.changes.outputs.mcp == 'true'
-        run: npm test
+        run: npm run test:coverage
+
+      - name: Coverage summary
+        if: ${{ !cancelled() && needs.changes.outputs.mcp == 'true' }}
+        run: |
+          [ -f coverage/coverage-summary.json ] || exit 0
+          node -e '
+            const t = require("./coverage/coverage-summary.json").total.statements;
+            const { thresholds } = require("./vitest.config.ts").default.test.coverage;
+            console.log(`**MCP server coverage:** ${t.pct}% of statements (baseline ${thresholds.statements}%)`);
+          ' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build
         if: needs.changes.outputs.mcp == 'true'
         run: npm run build
+
+      # Dev dependencies included: the build and the tests run them. Runs even
+      # when the tests fail, so one run reports both. Policy: docs/dev/ci-cd.md.
+      - name: Audit npm dependencies
+        if: ${{ !cancelled() && needs.changes.outputs.mcp == 'true' }}
+        run: node ../.github/scripts/npm-audit.mjs --level=high
 
       - name: No MCP server changes
         if: needs.changes.outputs.mcp != 'true'
@@ -122,14 +140,17 @@ jobs:
         with:
           php-version: '8.5'
           tools: composer
+          coverage: pcov
 
       - name: Install dependencies
         if: needs.changes.outputs.nextcloud == 'true'
         run: composer install --no-progress --prefer-dist
 
-      - name: Run tests
+      # Fails below tests/coverage-baseline.txt (a ratchet; see
+      # docs/dev/ci-cd.md#coverage).
+      - name: Run tests with coverage
         if: needs.changes.outputs.nextcloud == 'true'
-        run: composer test
+        run: composer coverage
 
       - name: Static analysis (psalm)
         if: needs.changes.outputs.nextcloud == 'true'
@@ -146,6 +167,25 @@ jobs:
             echo "::error::OpenAPI spec is out of date. Run 'make openapi' and commit the result."
             exit 1
           }
+
+      # Every advisory fails, dev packages included: Packagist often publishes
+      # one without a severity, so a threshold would let it through. Accept one
+      # under config.audit.ignore in composer.json. Policy: docs/dev/ci-cd.md.
+      - name: Audit Composer dependencies
+        if: ${{ !cancelled() && needs.changes.outputs.nextcloud == 'true' }}
+        run: composer audit --locked
+
+      - name: Setup Node.js
+        if: ${{ !cancelled() && needs.changes.outputs.nextcloud == 'true' }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+
+      # The frontend's dev dependencies only build the bundle; the shipped
+      # bundle carries the production ones.
+      - name: Audit npm dependencies
+        if: ${{ !cancelled() && needs.changes.outputs.nextcloud == 'true' }}
+        run: node ../.github/scripts/npm-audit.mjs --level=high --omit=dev
 
       - name: No Nextcloud app changes
         if: needs.changes.outputs.nextcloud != 'true'
@@ -219,9 +259,21 @@ jobs:
         if: needs.changes.outputs.hetzner == 'true'
         run: go vet ./...
 
-      - name: Run tests
+      - name: Check gofmt
         if: needs.changes.outputs.hetzner == 'true'
-        run: go test ./...
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-formatted. Run 'gofmt -w .' in hetzner/ and commit the result."
+            echo "$unformatted"
+            exit 1
+          fi
+
+      # Fails below coverage-baseline.txt (a ratchet; see
+      # docs/dev/ci-cd.md#coverage).
+      - name: Run tests with coverage
+        if: needs.changes.outputs.hetzner == 'true'
+        run: ./scripts/coverage.sh
 
       - name: No Hetzner CLI changes
         if: needs.changes.outputs.hetzner != 'true'

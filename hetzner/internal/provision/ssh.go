@@ -23,6 +23,10 @@ const (
 	sshPort          = "22"
 )
 
+// Dial opens the SSH connection for WaitAndDial. Tests replace it with an
+// in-process server (see internal/sshtest).
+var Dial = xssh.Dial
+
 // KeyPair holds paths to the generated Ed25519 SSH key pair.
 type KeyPair struct {
 	PrivatePath string
@@ -145,7 +149,7 @@ func WaitAndDial(host, privKeyPath string) (*xssh.Client, error) {
 
 	fmt.Printf("  Waiting for SSH on %s", addr)
 	for {
-		client, err := xssh.Dial("tcp", addr, cfg)
+		client, err := Dial("tcp", addr, cfg)
 		if err == nil {
 			fmt.Println(" connected.")
 			return client, nil

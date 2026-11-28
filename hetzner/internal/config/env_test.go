@@ -61,3 +61,95 @@ func TestRenderOmitsVariablesTheStackIgnores(t *testing.T) {
 		}
 	}
 }
+
+// parseEnv reads KEY=value lines, ignoring comments and blank lines.
+func parseEnv(t *testing.T, s string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	for _, line := range strings.Split(s, "\n") {
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			t.Fatalf("line without '=': %q", line)
+		}
+		if _, dup := out[k]; dup {
+			t.Fatalf("%s set twice", k)
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func isHex(s string, n int) bool {
+	if len(s) != n {
+		return false
+	}
+	for _, c := range s {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return false
+		}
+	}
+	return true
+}
+
+func TestGenerateNCRendersFreshSecrets(t *testing.T) {
+	a, err := GenerateNC("cloud.example.com", "admin", "pw", "ops@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := GenerateNC("cloud.example.com", "admin", "pw", "ops@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := parseEnv(t, a.Render())
+
+	for k, want := range map[string]string{
+		"NC_DOMAIN": "cloud.example.com", "ACME_EMAIL": "ops@example.com",
+		"NC_ADMIN_USER": "admin", "NC_ADMIN_PASSWORD": "pw",
+	} {
+		if env[k] != want {
+			t.Errorf("%s = %q, want %q", k, env[k], want)
+		}
+	}
+	for k, n := range map[string]int{"POSTGRES_PASSWORD": 64, "CROWDSEC_BOUNCER_KEY": 64, "NC_METRICS_TOKEN": 32} {
+		if !isHex(env[k], n) {
+			t.Errorf("%s = %q, want %d hex chars", k, env[k], n)
+		}
+	}
+	if a.PostgresPassword == b.PostgresPassword || a.NCMetricsToken == b.NCMetricsToken {
+		t.Error("two runs generated the same secret")
+	}
+}
+
+func TestGenerateMCPRendersAGrafanaPassword(t *testing.T) {
+	e, err := Generate("https://nc.example.com", "mcp", "app-pw", "mcp.example.com", "ops@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := parseEnv(t, e.Render())
+	if env["GRAFANA_PASSWORD"] == "" || env["GRAFANA_PASSWORD"] != e.GrafanaPassword {
+		t.Errorf("GRAFANA_PASSWORD = %q", env["GRAFANA_PASSWORD"])
+	}
+	if env["NEXTCLOUD_USER"] != "mcp" || env["MCP_DOMAIN"] != "mcp.example.com" {
+		t.Errorf("env = %v", env)
+	}
+}
+
+func TestGenerateFullSharesTheMetricsTokenAndIssuer(t *testing.T) {
+	e, err := GenerateFull("cloud.example.com", "mcp.example.com", "admin", "pw", "mcp", "app-pw", "ops@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := parseEnv(t, e.Render())
+	if env["MCP_AUTH_ISSUER"] != "https://mcp.example.com" {
+		t.Errorf("MCP_AUTH_ISSUER = %q", env["MCP_AUTH_ISSUER"])
+	}
+	if !isHex(env["NC_METRICS_TOKEN"], 32) || env["NC_METRICS_TOKEN"] != e.NCMetricsToken {
+		t.Errorf("NC_METRICS_TOKEN = %q", env["NC_METRICS_TOKEN"])
+	}
+	if !isHex(env["MCP_CREDENTIAL_KEY"], 128) {
+		t.Errorf("MCP_CREDENTIAL_KEY = %q", env["MCP_CREDENTIAL_KEY"])
+	}
+}

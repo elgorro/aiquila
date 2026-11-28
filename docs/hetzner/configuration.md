@@ -96,6 +96,10 @@ The CLI resolves each value in this order (first non-empty wins):
 2. Environment variable (e.g. `$HCLOUD_TOKEN`)
 3. Active profile (`~/.config/aiquila-hetzner/config.json`)
 
+`HCLOUD_ENDPOINT` points the CLI at another Hetzner Cloud API URL, such as a proxy or a
+mock, as it does for Hetzner's own `hcloud` CLI. Leave it unset to use
+`https://api.hetzner.cloud/v1`.
+
 ### Setting env vars for the current shell session
 
 ```bash

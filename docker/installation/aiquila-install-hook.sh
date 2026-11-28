@@ -66,6 +66,14 @@ echo "[OK] Background jobs set to cron"
 if [ -n "${AIQUILA_TEST_USER:-}" ] && [ -n "${AIQUILA_TEST_PASSWORD:-}" ]; then
     echo "[SETUP] Creating test user: $AIQUILA_TEST_USER"
     OC_PASS="$AIQUILA_TEST_PASSWORD" occ user:add --password-from-env --display-name "Test User" --group users "$AIQUILA_TEST_USER" || true
+
+    # The default "Personal" calendar holds events only, and Deck's lists are
+    # read-only, so give the account a task list the test suites can write to.
+    # The command fails when "tasks" exists already, also when it is in the
+    # trash bin, which dav:list-calendars does not tell apart.
+    if occ dav:create-calendar "$AIQUILA_TEST_USER" tasks >/dev/null 2>&1; then
+        echo "[OK] Task list 'tasks' created for $AIQUILA_TEST_USER"
+    fi
 fi
 
 # --- Optional: configure Claude API key ---

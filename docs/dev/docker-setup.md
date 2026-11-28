@@ -47,12 +47,24 @@ make build-tarball
 make up
 ```
 
-On first run, Docker downloads images (~2-3 GB) and the entrypoint script automatically:
-1. Waits for Nextcloud to initialize
-2. Extracts and installs the AIquila app from the tarball
-3. Creates the test user
+On first run, Docker downloads images (~2-3 GB). Once Nextcloud has initialised, the
+post-installation hook (`aiquila-install-hook.sh`) automatically:
+1. Extracts and enables the AIquila app from the tarball
+2. Installs Talk, Notes, Tasks, Tables, Team folders and Calendar resources, and seeds
+   rooms for the room finder
+3. Creates the test user, with a task list `tasks` for the task tools (the default
+   *Personal* calendar holds events only)
 4. Configures the AI provider API key
 5. Enables debug mode
+
+`make test` runs `scripts/test.sh` against the stack: Nextcloud checks, then the MCP
+tools as the test user. Steps that need something the account lacks, such as admin
+rights or a task list of its own, are skipped rather than failed.
+
+`make up`, `make up-tools` and `make up-office` pass `--remove-orphans`: a container left
+over from a service that was renamed or dropped from `docker-compose.yml` is removed, so it
+cannot hold a port the new service needs. Opt-in services you did not start this time
+(Adminer, Collabora) stay as they are.
 
 Watch progress:
 ```bash

@@ -13,15 +13,15 @@ import (
 )
 
 var (
-	profileAddName     string
-	profileAddToken    string
-	profileAddNCURL string
-	profileAddNCUser   string
-	profileAddNCPass   string
-	profileAddEmail    string
-	profileShowName    string
-	profileDeleteName  string
-	profileUseName     string
+	profileAddName    string
+	profileAddToken   string
+	profileAddNCURL   string
+	profileAddNCUser  string
+	profileAddNCPass  string
+	profileAddEmail   string
+	profileShowName   string
+	profileDeleteName string
+	profileUseName    string
 )
 
 // buildProfileCmd returns the 'profile' parent command with all subcommands.

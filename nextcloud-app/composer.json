@@ -29,6 +29,10 @@
     },
     "scripts": {
         "test": "phpunit",
+        "coverage": [
+            "@php -d pcov.directory=lib vendor/bin/phpunit --coverage-clover build/coverage/clover.xml --coverage-text --only-summary-for-coverage-text",
+            "@php tools/coverage-check.php build/coverage/clover.xml tests/coverage-baseline.txt"
+        ],
         "psalm": "psalm --no-cache",
         "openapi": [
             "generate-spec --openapi-version 3.1.0",

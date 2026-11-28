@@ -43,7 +43,7 @@ up:
 		exit 1; \
 	fi
 	@echo "🚀 Starting AIquila MCP server (standalone)..."
-	$(COMPOSE) up -d
+	$(COMPOSE) up -d --remove-orphans
 	@echo "✅ MCP server started!"
 	@echo ""
 	@echo "Access points:"
@@ -82,7 +82,7 @@ shell:
 update:
 	@echo "⬇️  Pulling the latest images..."
 	$(COMPOSE) pull
-	$(COMPOSE) up -d
+	$(COMPOSE) up -d --remove-orphans
 	@echo "✅ Update complete"
 
 # Kept for muscle memory: nothing here is built locally, so this is update.
