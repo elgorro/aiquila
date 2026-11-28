@@ -230,7 +230,8 @@ aiquila-hetzner upgrade --name my-server --images --dry-run   # what --images wo
 
 Pull the latest images of **every** service and recreate the stack on a running server.
 This can upgrade Nextcloud core along the way; to move to a new AIquila release, use
-[`upgrade`](#upgrade).
+[`upgrade`](#upgrade). It does not pass `--remove-orphans`, so containers you run on the
+server from extra compose files stay up.
 
 | Flag | Default | Description |
 |------|---------|-------------|

@@ -54,6 +54,11 @@ On first run, Docker downloads images (~2-3 GB) and the entrypoint script automa
 4. Configures the AI provider API key
 5. Enables debug mode
 
+`make up`, `make up-tools` and `make up-office` pass `--remove-orphans`: a container left
+over from a service that was renamed or dropped from `docker-compose.yml` is removed, so it
+cannot hold a port the new service needs. Opt-in services you did not start this time
+(Adminer, Collabora) stay as they are.
+
 Watch progress:
 ```bash
 make logs-follow

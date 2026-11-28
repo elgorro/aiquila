@@ -134,14 +134,14 @@ Run from `docker/standalone/`:
 | Command | Action |
 |---------|--------|
 | `make help` | Show all commands |
-| `make up` | Start MCP server + Caddy |
+| `make up` | Start MCP server + Caddy, removing containers of services no longer in the compose file |
 | `make down` | Stop services |
 | `make restart` | Restart services |
 | `make logs` | Recent logs (last 100 lines) |
 | `make logs-follow` | Stream logs in real time |
 | `make status` | Service status |
 | `make shell` | Shell in MCP container |
-| `make update` | Pull the latest images and recreate changed containers |
+| `make update` | Pull the latest images, recreate changed containers and remove orphaned ones |
 | `make clean` | Stop and remove everything |
 | `make test` | Test connectivity |
 | `make test-oauth` | Full OAuth 2.1 flow test, including refresh, revocation and reuse detection (defaults to `https://localhost:3340`) |
