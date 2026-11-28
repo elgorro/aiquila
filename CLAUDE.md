@@ -88,11 +88,14 @@ Gotchas:
 Check logs / status codes (level 3 = ERROR, 4 = FATAL; `serverDI` level-0 lines are noise).
 The dev stack runs with `debug` on, so the News app logs an ERROR
 `App class OCA\News\AppInfo\Application is not setup via query()` on every `user:delete`.
-It is upstream and not ours, and the check below filters it out:
+The Social app's cron job logs `Could not verify fediverse account` for every local user: the
+app looks each one up over WebFinger at `https://localhost`, and the dev stack serves
+plain HTTP on 8080. Social stays enabled because the `social` tool category tests against it.
+Both are upstream and not ours, and the check below filters them out:
 
 ```bash
 make nc-log                   # tail data/nextcloud.log
-docker compose exec -T nextcloud sh -c "grep '\"level\":[34]' /var/www/html/data/nextcloud.log | grep -v 'News.*Application is not setup via query' | tail"
+docker compose exec -T nextcloud sh -c "grep '\"level\":[34]' /var/www/html/data/nextcloud.log | grep -v -e 'News.*Application is not setup via query' -e 'Could not verify fediverse account' | tail"
 # Exercise dashboard widgets (server-rendered get_items):
 curl -s -u testuser:'AIquila2026!dev' -H 'OCS-APIRequest: true' \
   "http://localhost:8080/ocs/v2.php/apps/dashboard/api/v2/widget-items?widgets[]=aiquila_usage"
