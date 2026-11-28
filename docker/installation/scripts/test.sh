@@ -166,7 +166,7 @@ set +e
 # ── NC 1: App status ────────────────────────────────────────────────────────
 sep "NC 1 — App status"
 APP_LIST=$(occ "app:list" 2>/dev/null)
-if echo "$APP_LIST" | grep -q "aiquila"; then
+if grep -q "aiquila" <<<"$APP_LIST"; then
   VERSION=$(echo "$APP_LIST" | grep "aiquila" | head -1 | sed 's/.*: *//')
   echo "  aiquila version: $VERSION"
   step_ok
@@ -180,7 +180,7 @@ NC_FAIL=0
 for f in \
   appinfo/info.xml \
   lib/AppInfo/Application.php \
-  js/aiquila-main.js \
+  js/dist/aiquila-main.js \
   vendor/autoload.php; do
   if $COMPOSE -f "$INSTALL_DIR/docker-compose.yml" exec -T nextcloud \
     test -f "/var/www/html/custom_apps/aiquila/$f"; then
@@ -217,7 +217,9 @@ APP_BODY=$(echo "$APP_PAGE" | sed '$d')
 echo "  /apps/aiquila/ → HTTP $APP_HTTP"
 if [ "$APP_HTTP" != "200" ]; then
   step_fail "expected HTTP 200, got $APP_HTTP"
-elif ! echo "$APP_BODY" | grep -q "aiquila-main"; then
+# A here-string, not `echo | grep -q`: the page outgrows the pipe buffer, grep
+# exits on the first match, and under pipefail echo's SIGPIPE fails the check.
+elif ! grep -q "aiquila-main" <<<"$APP_BODY"; then
   step_fail "page loaded but aiquila-main.js bundle not found in HTML"
 else
   step_ok
@@ -235,7 +237,7 @@ INIT_RESP=$(curl -sf -D - -X POST "$MCP_URL/mcp" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"dev-test","version":"1.0"}}}')
 SESSION_ID=$(echo "$INIT_RESP" | grep -i '^mcp-session-id:' | tr -d '\r' | sed 's/[Mm]cp-[Ss]ession-[Ii]d: //') || SESSION_ID=""
 echo "  session: ${SESSION_ID:-(none — stateless)}"
-if echo "$INIT_RESP" | grep -q '"serverInfo"'; then
+if grep -q '"serverInfo"' <<<"$INIT_RESP"; then
   step_ok
 else
   step_fail "initialize: no serverInfo in response"
@@ -577,7 +579,7 @@ check_ok && step_ok || step_fail "talk_list_conversations returned an error"
 
 ROOM_NAME="Test Room $TIMESTAMP"
 sep "MCP 55 — talk_create_conversation"
-mcp_tool $((RPC_ID++)) "talk_create_conversation" "{\"roomType\":3,\"roomName\":\"$ROOM_NAME\"}"
+mcp_tool $((RPC_ID++)) "talk_create_conversation" "{\"roomType\":\"public\",\"roomName\":\"$ROOM_NAME\"}"
 check_text "Conversation created" && step_ok || step_fail "talk_create_conversation failed"
 ROOM_TOKEN=$(extract_text '\[([a-zA-Z0-9]+)\]')
 echo "  room_token: $ROOM_TOKEN"
@@ -621,32 +623,44 @@ check_text "deleted" && step_ok || step_fail "delete_note failed"
 
 # ── Group J: Tasks CRUD ──────────────────────────────────────────────────────
 
-sep "MCP 64 — list_tasks"
-mcp_tool $((RPC_ID++)) "list_tasks" '{"calendarName":"tasks"}'
-check_ok && step_ok || step_fail "list_tasks returned an error"
+# The install hook gives the test account a "tasks" list; take the first list
+# of its own either way. App-generated lists (Deck boards) are read-only.
+sep "MCP 63a — list_task_lists"
+mcp_tool $((RPC_ID++)) "list_task_lists" '{}'
+TASK_LIST=$(extract_text 'calendarName: (?!app-generated--)(\S+)' 2>/dev/null || true)
+if [ -z "$TASK_LIST" ]; then
+  check_ok && step_skip "tasks: $NC_USER has no task list of its own to write to" || step_fail "list_task_lists failed"
+else
+  step_ok
+  echo "  task_list: $TASK_LIST"
 
-TASK_SUMMARY="Test Task $TIMESTAMP"
-sep "MCP 65 — create_task"
-mcp_tool $((RPC_ID++)) "create_task" "{\"calendarName\":\"tasks\",\"summary\":\"$TASK_SUMMARY\"}"
-check_text "Task created successfully" && step_ok || step_fail "create_task failed"
-TASK_UID=$(extract_text 'UID: ([^)\s]+)')
-echo "  task_uid: $TASK_UID"
+  sep "MCP 64 — list_tasks"
+  mcp_tool $((RPC_ID++)) "list_tasks" "{\"calendarName\":\"$TASK_LIST\"}"
+  check_ok && step_ok || step_fail "list_tasks returned an error"
 
-sep "MCP 66 — list_tasks"
-mcp_tool $((RPC_ID++)) "list_tasks" '{"calendarName":"tasks"}'
-check_text "$TASK_SUMMARY" && step_ok || step_fail "list_tasks: task not found"
+  TASK_SUMMARY="Test Task $TIMESTAMP"
+  sep "MCP 65 — create_task"
+  mcp_tool $((RPC_ID++)) "create_task" "{\"calendarName\":\"$TASK_LIST\",\"summary\":\"$TASK_SUMMARY\"}"
+  check_text "Task created successfully" && step_ok || step_fail "create_task failed"
+  TASK_UID=$(extract_text 'UID: ([^)\s]+)')
+  echo "  task_uid: $TASK_UID"
 
-sep "MCP 67 — update_task"
-mcp_tool $((RPC_ID++)) "update_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\",\"summary\":\"$TASK_SUMMARY Updated\"}"
-check_text "Task updated successfully" && step_ok || step_fail "update_task failed"
+  sep "MCP 66 — list_tasks"
+  mcp_tool $((RPC_ID++)) "list_tasks" "{\"calendarName\":\"$TASK_LIST\"}"
+  check_text "$TASK_SUMMARY" && step_ok || step_fail "list_tasks: task not found"
 
-sep "MCP 68 — complete_task"
-mcp_tool $((RPC_ID++)) "complete_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\"}"
-check_text "completed successfully" && step_ok || step_fail "complete_task failed"
+  sep "MCP 67 — update_task"
+  mcp_tool $((RPC_ID++)) "update_task" "{\"calendarName\":\"$TASK_LIST\",\"uid\":\"$TASK_UID\",\"summary\":\"$TASK_SUMMARY Updated\"}"
+  check_text "Task updated successfully" && step_ok || step_fail "update_task failed"
 
-sep "MCP 69 — delete_task"
-mcp_tool $((RPC_ID++)) "delete_task" "{\"calendarName\":\"tasks\",\"uid\":\"$TASK_UID\"}"
-check_text "Task deleted successfully" && step_ok || step_fail "delete_task failed"
+  sep "MCP 68 — complete_task"
+  mcp_tool $((RPC_ID++)) "complete_task" "{\"calendarName\":\"$TASK_LIST\",\"uid\":\"$TASK_UID\"}"
+  check_text "completed successfully" && step_ok || step_fail "complete_task failed"
+
+  sep "MCP 69 — delete_task"
+  mcp_tool $((RPC_ID++)) "delete_task" "{\"calendarName\":\"$TASK_LIST\",\"uid\":\"$TASK_UID\"}"
+  check_text "Task deleted successfully" && step_ok || step_fail "delete_task failed"
+fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
