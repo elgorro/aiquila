@@ -16,9 +16,9 @@ import (
 
 var (
 	// deploy flags
-	deployName    string
-	deployToken   string
-	deploySSHKey  string
+	deployName   string
+	deployToken  string
+	deploySSHKey string
 
 	// logs flags
 	logsName    string

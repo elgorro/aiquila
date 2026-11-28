@@ -34,8 +34,8 @@ var (
 	restartHard  bool
 
 	// delete flags
-	deleteName     string
-	deleteToken    string
+	deleteName    string
+	deleteToken   string
 	deleteDNSZone string
 )
 

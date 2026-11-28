@@ -63,4 +63,3 @@ var FullTraefik string
 //
 //go:embed full/crowdsec/acquis.yml
 var FullCrowdSecAcquis string
-

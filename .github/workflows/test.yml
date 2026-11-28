@@ -219,6 +219,16 @@ jobs:
         if: needs.changes.outputs.hetzner == 'true'
         run: go vet ./...
 
+      - name: Check gofmt
+        if: needs.changes.outputs.hetzner == 'true'
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-formatted. Run 'gofmt -w .' in hetzner/ and commit the result."
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: Run tests
         if: needs.changes.outputs.hetzner == 'true'
         run: go test ./...
