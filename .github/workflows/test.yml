@@ -99,6 +99,12 @@ jobs:
         if: needs.changes.outputs.mcp == 'true'
         run: npm run build
 
+      # Dev dependencies included: the build and the tests run them. Runs even
+      # when the tests fail, so one run reports both. Policy: docs/dev/ci-cd.md.
+      - name: Audit npm dependencies
+        if: ${{ !cancelled() && needs.changes.outputs.mcp == 'true' }}
+        run: node ../.github/scripts/npm-audit.mjs --level=high
+
       - name: No MCP server changes
         if: needs.changes.outputs.mcp != 'true'
         working-directory: ${{ github.workspace }}
@@ -146,6 +152,25 @@ jobs:
             echo "::error::OpenAPI spec is out of date. Run 'make openapi' and commit the result."
             exit 1
           }
+
+      # Every advisory fails, dev packages included: Packagist often publishes
+      # one without a severity, so a threshold would let it through. Accept one
+      # under config.audit.ignore in composer.json. Policy: docs/dev/ci-cd.md.
+      - name: Audit Composer dependencies
+        if: ${{ !cancelled() && needs.changes.outputs.nextcloud == 'true' }}
+        run: composer audit --locked
+
+      - name: Setup Node.js
+        if: ${{ !cancelled() && needs.changes.outputs.nextcloud == 'true' }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+
+      # The frontend's dev dependencies only build the bundle; the shipped
+      # bundle carries the production ones.
+      - name: Audit npm dependencies
+        if: ${{ !cancelled() && needs.changes.outputs.nextcloud == 'true' }}
+        run: node ../.github/scripts/npm-audit.mjs --level=high --omit=dev
 
       - name: No Nextcloud app changes
         if: needs.changes.outputs.nextcloud != 'true'

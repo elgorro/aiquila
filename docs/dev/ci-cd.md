@@ -29,8 +29,8 @@ component; each test job then gates its steps on the relevant one.
 
 | Job (status check) | Runs when | Does |
 |---|---|---|
-| `MCP Server Tests` | `mcp-server/**` changed (excluding `*.md`), or `docs/mcp/upstream-apis.md`, which a test checks against the tool registry | `npm ci`, `npm test`, `npm run build` |
-| `Nextcloud App Tests` | `nextcloud-app/**` changed (excluding `*.md`) | Composer install, `composer test`, `composer psalm`, regenerate the OpenAPI spec and fail if it differs |
+| `MCP Server Tests` | `mcp-server/**` changed (excluding `*.md`), or `docs/mcp/upstream-apis.md`, which a test checks against the tool registry | `npm ci`, `npm test`, `npm run build`, [dependency audit](#dependency-audit) |
+| `Nextcloud App Tests` | `nextcloud-app/**` changed (excluding `*.md`) | Composer install, `composer test`, `composer psalm`, regenerate the OpenAPI spec and fail if it differs, [dependency audit](#dependency-audit) |
 | `Hetzner CLI Tests` | `hetzner/**` changed (excluding `*.md`) | `go vet ./...`, fail if `gofmt -l .` lists any file (fix with `gofmt -w .` in `hetzner/`), `go test ./...` |
 | `Nextcloud App Tests (PHP 8.6, experimental)` | as `Nextcloud App Tests` | `composer test` with `--fail-on-deprecation`, and `composer psalm` targeting that version, on the next PHP minor. `continue-on-error`, and not a required check |
 
@@ -55,6 +55,35 @@ List the current required checks with:
 ```bash
 gh api repos/elgorro/aiquila/branches/main/protection --jq '.required_status_checks.contexts'
 ```
+
+### Dependency audit
+
+The last steps of `MCP Server Tests` and `Nextcloud App Tests` check the committed lock
+files against known advisories. They run even when the tests failed, so one run reports
+both.
+
+| Component | Command | Fails on |
+|---|---|---|
+| MCP server | `node ../.github/scripts/npm-audit.mjs --level=high` | npm advisories rated high or critical, dev dependencies included: the build and the tests run them |
+| Nextcloud app | `composer audit --locked` | any Composer advisory, dev packages included. Packagist often publishes an advisory without a severity, so a threshold would let it through |
+| Nextcloud app | `node ../.github/scripts/npm-audit.mjs --level=high --omit=dev` | npm advisories rated high or critical in production dependencies, the ones in the shipped bundle |
+
+Run the same commands from the component directory before pushing a dependency change.
+
+The fix for a failing audit is to update the dependency. For a transitive npm package,
+an `overrides` entry in `package.json` pins a fixed version. When no fixed release exists,
+or the advisory cannot apply (a dev-only tool that never sees the vulnerable input), accept
+it with the reason in the same PR:
+
+- **Composer:** `config.audit.ignore` in `composer.json`, mapping the advisory ID
+  (`PKSA-…` or `GHSA-…`) or CVE to the reason.
+- **npm:** `auditIgnore` in `package.json`, mapping the `GHSA-…` ID to the reason. npm has
+  no ignore list of its own; `npm-audit.mjs` reads this one, prints each accepted
+  advisory with its reason, and warns about entries npm no longer reports.
+
+Remove the entry once a fixed release lands. The audit runs only on pull requests that
+change the component, so an advisory published against code already on `main` surfaces
+through Dependabot alerts first, then fails the next PR that touches the component.
 
 ## Lint Workflow (`lint.yml`)
 

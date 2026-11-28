@@ -81,9 +81,9 @@ not need a release.
 
 | Component | Checks |
 |---|---|
-| MCP server | CI (`npm run lint`, `typecheck`, `npm test`); `npm audit`; for image changes, `make test-tools` against the standalone stack |
-| Nextcloud app | CI (PHPUnit, Psalm); `composer audit`; reinstall in the dev stack ([Updating the Nextcloud App](docker-setup.md#updating-the-nextcloud-app)) and check `make nc-log` for level 3/4 entries |
-| Hetzner CLI | `go vet ./...`, `go test ./...`, `govulncheck ./...`; the [Hetzner Integration Test](ci-cd.md#hetzner-integration-test-hetzner-integration-testyml) for toolchain or compose changes |
+| MCP server | CI (`npm run lint`, `typecheck`, `npm test`, the [dependency audit](ci-cd.md#dependency-audit)); for image changes, `make test-tools` against the standalone stack |
+| Nextcloud app | CI (PHPUnit, Psalm, the [dependency audit](ci-cd.md#dependency-audit)); reinstall in the dev stack ([Updating the Nextcloud App](docker-setup.md#updating-the-nextcloud-app)) and check `make nc-log` for level 3/4 entries |
+| Hetzner CLI | `go vet ./...`, `gofmt -l .`, `go test ./...`, `govulncheck ./...`; the [Hetzner Integration Test](ci-cd.md#hetzner-integration-test-hetzner-integration-testyml) for toolchain or compose changes |
 | Images | PHP Images workflow; `node -v` / `php -v` inside the rebuilt containers; the [Docker E2E](ci-cd.md#docker-e2e-e2eyml) run |
 
 ## Emergency plan
