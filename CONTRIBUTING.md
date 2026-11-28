@@ -98,6 +98,7 @@ All commands run from `mcp-server/`:
 npm run build               # compile TypeScript → dist/
 npm run dev                 # hot reload via tsx
 npm test                    # vitest unit tests
+npm run test:coverage       # the same with coverage; fails below the recorded baseline
 npm run lint                # eslint (warnings ok, errors fail CI; `any` is an error outside tests)
 npm run typecheck           # tsc --noEmit (the build skips type checking)
 npm run format              # prettier --write src/
@@ -112,6 +113,10 @@ Tests live in `mcp-server/src/__tests__/`. New behaviour needs a test that fails
 without your change — if a test passes both before and after, it isn't testing
 your fix.
 
+CI measures statement coverage in all three components and fails when it drops below
+the recorded baseline; see [Coverage](docs/dev/ci-cd.md#coverage). It also audits the
+lock files for known advisories ([Dependency audit](docs/dev/ci-cd.md#dependency-audit)).
+
 Do not use `--no-verify` to skip hooks.
 
 ## Nextcloud app
@@ -123,6 +128,7 @@ the tests:
 cd nextcloud-app
 composer test
 composer psalm
+composer coverage   # tests with coverage; needs the pcov (or Xdebug) extension
 ```
 
 There is no baseline — fix findings rather than adding one. The run includes taint
@@ -146,7 +152,9 @@ and CI reports a mismatch.
 ```bash
 cd hetzner
 go vet ./...
+gofmt -l .      # CI fails if this lists a file; fix with gofmt -w .
 go test ./...
+make coverage   # tests with coverage; fails below coverage-baseline.txt
 ```
 
 ## Documentation

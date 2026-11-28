@@ -1,4 +1,4 @@
-.PHONY: build install lint tidy clean help
+.PHONY: build install lint test coverage tidy clean help
 
 BINARY   := aiquila-hetzner
 CMD_PATH := ./cmd/aiquila-hetzner
@@ -18,6 +18,14 @@ install: build
 lint:
 	go vet ./...
 
+## test: Run the unit tests
+test:
+	go test ./...
+
+## coverage: Run the tests with coverage; fails below coverage-baseline.txt
+coverage:
+	./scripts/coverage.sh
+
 ## tidy: Tidy and verify Go modules
 tidy:
 	go mod tidy
@@ -26,6 +34,7 @@ tidy:
 ## clean: Remove built binary
 clean:
 	rm -f $(BINARY)
+	rm -rf coverage
 
 ## help: Show available targets
 help:

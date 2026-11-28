@@ -10,4 +10,10 @@
             <directory>tests/Unit</directory>
         </testsuite>
     </testsuites>
+    <!-- What coverage measures (composer coverage). -->
+    <source>
+        <include>
+            <directory suffix=".php">lib</directory>
+        </include>
+    </source>
 </phpunit>

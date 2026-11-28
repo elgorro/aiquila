@@ -16,6 +16,7 @@ All MCP server commands run from `mcp-server/`:
 npm run build      # compile TypeScript → dist/
 npm run dev        # hot reload via tsx (stdio transport by default)
 npm test           # vitest unit tests
+npm run test:coverage  # with coverage; fails below the threshold in vitest.config.ts (CI runs this)
 npm run lint       # eslint (warnings ok, errors fail CI; `any` is an error outside src/__tests__)
 npm run typecheck  # tsc --noEmit (build skips type checking; CI runs this)
 npm run format     # prettier --write src/  (auto-fix formatting)
