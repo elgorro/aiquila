@@ -552,11 +552,12 @@ check_text "deleted" && step_ok || step_fail "delete_note failed"
 # ── Group J: Tasks CRUD ──────────────────────────────────────────────────────
 
 # Task lists are named per user; use the first one rather than assuming "tasks".
+# App-generated lists (Deck boards) are read-only, so skip those.
 sep "Step 63a — list_task_lists"
 mcp_tool $((RPC_ID++)) "list_task_lists" '{}'
-TASK_LIST=$(extract_text 'calendarName: (\S+)' 2>/dev/null || true)
+TASK_LIST=$(extract_text 'calendarName: (?!app-generated--)(\S+)' 2>/dev/null || true)
 if [ -z "$TASK_LIST" ]; then
-  check_ok && step_skip "tasks: $NC_USER has no task list" || step_fail "list_task_lists failed"
+  check_ok && step_skip "tasks: $NC_USER has no task list of its own to write to" || step_fail "list_task_lists failed"
 else
   step_ok
   echo "  task_list: $TASK_LIST"
